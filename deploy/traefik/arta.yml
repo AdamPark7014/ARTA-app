@@ -4,7 +4,7 @@
 ##   arta.artaproducciones.com       → panel ARTA + sitio /p/arta
 ##   auditorio.artaproducciones.com  → panel Auditorio (EXPLANADA)
 ##
-## Next.js reescribe /api y /uploads al contenedor arta-api.
+## /api y /uploads van directo a arta-api (evita Invalid host header en rewrite).
 
 http:
   routers:
@@ -14,10 +14,28 @@ http:
       middlewares: [redirect-https-arta]
       service: dummy-arta
 
+    arta-api:
+      rule: 'Host(`arta.artaproducciones.com`,`auditorio.artaproducciones.com`) && PathPrefix(`/api`)'
+      entryPoints: [websecure]
+      service: arta-api
+      priority: 200
+      middlewares: [arta-strip-api]
+      tls:
+        certResolver: letsencrypt
+
+    arta-uploads:
+      rule: 'Host(`arta.artaproducciones.com`,`auditorio.artaproducciones.com`) && PathPrefix(`/uploads`)'
+      entryPoints: [websecure]
+      service: arta-api
+      priority: 200
+      tls:
+        certResolver: letsencrypt
+
     arta-https:
       rule: 'Host(`arta.artaproducciones.com`,`auditorio.artaproducciones.com`)'
       service: arta-web
       entryPoints: [websecure]
+      priority: 50
       tls:
         certResolver: letsencrypt
         domains:
@@ -30,12 +48,22 @@ http:
       redirectScheme:
         scheme: https
         permanent: true
+    # Browser calls /api/... ; Nest listens on /...
+    arta-strip-api:
+      stripPrefix:
+        prefixes:
+          - /api
 
   services:
     arta-web:
       loadBalancer:
         servers:
           - url: 'http://arta-web:3000'
+
+    arta-api:
+      loadBalancer:
+        servers:
+          - url: 'http://arta-api:4000'
 
     dummy-arta:
       loadBalancer:
