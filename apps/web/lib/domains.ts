@@ -1,0 +1,57 @@
+export type EntityKey = 'ARTA' | 'EXPLANADA';
+
+export const ROOT_DOMAIN =
+  process.env.NEXT_PUBLIC_ROOT_DOMAIN || 'artaproducciones.com';
+
+export const ARTA_HOST =
+  process.env.NEXT_PUBLIC_ARTA_HOST || `arta.${ROOT_DOMAIN}`;
+
+export const AUDITORIO_HOST =
+  process.env.NEXT_PUBLIC_AUDITORIO_HOST || `auditorio.${ROOT_DOMAIN}`;
+
+export const SESSION_COOKIE = 'arta_session';
+export const ENTITY_COOKIE = 'arta_host_entity';
+export const HANDOFF_PARAM = '_nxt';
+
+/** Hostnames that map to a fixed entity panel. */
+export function entityFromHost(hostname: string): EntityKey | null {
+  const host = hostname.toLowerCase().split(':')[0];
+  if (host === ARTA_HOST.toLowerCase() || host === `arta.localhost`) return 'ARTA';
+  if (host === AUDITORIO_HOST.toLowerCase() || host === `auditorio.localhost`) {
+    return 'EXPLANADA';
+  }
+  if (host.startsWith('arta.') && host.endsWith(`.${ROOT_DOMAIN}`)) return 'ARTA';
+  if (host.startsWith('auditorio.') && host.endsWith(`.${ROOT_DOMAIN}`)) return 'EXPLANADA';
+  return null;
+}
+
+export function hostForEntity(entity: EntityKey): string {
+  return entity === 'ARTA' ? ARTA_HOST : AUDITORIO_HOST;
+}
+
+export function isLocalHostname(hostname: string): boolean {
+  const host = hostname.toLowerCase().split(':')[0];
+  return (
+    host === 'localhost' ||
+    host === '127.0.0.1' ||
+    host.endsWith('.localhost') ||
+    host.endsWith('.local')
+  );
+}
+
+/** True when we are on a dedicated entity subdomain (prod or hosts-file). */
+export function isEntitySubdomain(hostname: string): boolean {
+  return entityFromHost(hostname) !== null;
+}
+
+export function isPublicPath(pathname: string): boolean {
+  if (pathname === '/login') return true;
+  if (pathname.startsWith('/p/')) return true;
+  if (pathname.startsWith('/v/')) return true;
+  if (pathname.startsWith('/_next')) return true;
+  if (pathname.startsWith('/brand')) return true;
+  if (pathname.startsWith('/uploads')) return true;
+  if (pathname.startsWith('/api')) return true;
+  if (pathname === '/favicon.ico') return true;
+  return false;
+}

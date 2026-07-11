@@ -1,0 +1,43 @@
+## Traefik routing for ARTA Operaciones
+##
+## Hosts:
+##   arta.artaproducciones.com       → panel ARTA + sitio /p/arta
+##   auditorio.artaproducciones.com  → panel Auditorio (EXPLANADA)
+##
+## Next.js reescribe /api y /uploads al contenedor arta-api.
+
+http:
+  routers:
+    arta-http:
+      rule: 'Host(`arta.artaproducciones.com`) || Host(`auditorio.artaproducciones.com`)'
+      entryPoints: [web]
+      middlewares: [redirect-https-arta]
+      service: dummy-arta
+
+    arta-https:
+      rule: 'Host(`arta.artaproducciones.com`,`auditorio.artaproducciones.com`)'
+      service: arta-web
+      entryPoints: [websecure]
+      tls:
+        certResolver: letsencrypt
+        domains:
+          - main: arta.artaproducciones.com
+            sans:
+              - auditorio.artaproducciones.com
+
+  middlewares:
+    redirect-https-arta:
+      redirectScheme:
+        scheme: https
+        permanent: true
+
+  services:
+    arta-web:
+      loadBalancer:
+        servers:
+          - url: 'http://arta-web:3000'
+
+    dummy-arta:
+      loadBalancer:
+        servers:
+          - url: 'http://localhost'

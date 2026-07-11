@@ -1,0 +1,191 @@
+import {
+  Body,
+  Controller,
+  ForbiddenException,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
+import { IsEmail, IsOptional, IsString, MinLength } from 'class-validator';
+import * as bcrypt from 'bcryptjs';
+import { EntityKey } from '@prisma/client';
+import { PrismaService } from '../common/prisma/prisma.service';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import {
+  ASSIGNABLE_PERMISSIONS,
+  ALL_ROLES,
+  hasPermission,
+  PERMISSIONS,
+  ROLE_LABELS,
+  type RoleKey,
+} from '../common/rbac/roles';
+
+class CreateUserDto {
+  @IsEmail() email!: string;
+  @IsString() fullName!: string;
+  @IsOptional() @IsString() title?: string;
+  @IsString() roleKey!: string;
+  entities!: EntityKey[];
+  @IsString() @MinLength(6) password!: string;
+}
+
+@Controller('users')
+@UseGuards(JwtAuthGuard)
+export class UsersController {
+  constructor(private prisma: PrismaService) {}
+
+  /** Directorio ligero para asignar tareas (cualquier autenticado) */
+  @Get('directory')
+  directory(@Req() req: { user: { entities: string[] } }) {
+    return this.prisma.user.findMany({
+      where: {
+        active: true,
+        entities: { hasSome: req.user.entities as EntityKey[] },
+      },
+      select: { id: true, fullName: true, email: true, title: true, roleKey: true, entities: true },
+      orderBy: { fullName: 'asc' },
+    });
+  }
+
+  @Get()
+  async list(@Req() req: { user: { roleKey: string; permissions: string[] } }) {
+    if (!hasPermission(req.user.roleKey as RoleKey, req.user.permissions, PERMISSIONS.USERS_MANAGE)) {
+      throw new ForbiddenException('Solo Arturo y Chacho gestionan usuarios');
+    }
+    const users = await this.prisma.user.findMany({
+      select: {
+        id: true,
+        email: true,
+        fullName: true,
+        title: true,
+        roleKey: true,
+        entities: true,
+        permissions: true,
+        active: true,
+        lastLoginAt: true,
+      },
+      orderBy: { fullName: 'asc' },
+    });
+    return users.map((u) => ({
+      ...u,
+      roleLabel: ROLE_LABELS[u.roleKey as RoleKey] ?? u.roleKey,
+    }));
+  }
+
+  @Post()
+  async create(
+    @Req() req: { user: { roleKey: string; permissions: string[] } },
+    @Body() dto: CreateUserDto,
+  ) {
+    if (!hasPermission(req.user.roleKey as RoleKey, req.user.permissions, PERMISSIONS.USERS_MANAGE)) {
+      throw new ForbiddenException();
+    }
+    if (!ALL_ROLES.includes(dto.roleKey as RoleKey)) {
+      throw new ForbiddenException('Rol inválido');
+    }
+    const passwordHash = await bcrypt.hash(dto.password, 12);
+    return this.prisma.user.create({
+      data: {
+        email: dto.email.toLowerCase(),
+        fullName: dto.fullName,
+        title: dto.title,
+        roleKey: dto.roleKey,
+        entities: dto.entities,
+        passwordHash,
+        active: true,
+      },
+      select: {
+        id: true,
+        email: true,
+        fullName: true,
+        title: true,
+        roleKey: true,
+        entities: true,
+        active: true,
+      },
+    });
+  }
+
+  @Get('roles')
+  roles(@Req() req: { user: { roleKey: string; permissions: string[] } }) {
+    if (!hasPermission(req.user.roleKey as RoleKey, req.user.permissions, PERMISSIONS.USERS_MANAGE)) {
+      throw new ForbiddenException();
+    }
+    return ALL_ROLES.map((r) => ({ key: r, label: ROLE_LABELS[r] }));
+  }
+
+  @Get('permissions/catalog')
+  permissionsCatalog(@Req() req: { user: { roleKey: string; permissions: string[] } }) {
+    if (!hasPermission(req.user.roleKey as RoleKey, req.user.permissions, PERMISSIONS.USERS_MANAGE)) {
+      throw new ForbiddenException();
+    }
+    return ASSIGNABLE_PERMISSIONS.map((key) => ({ key, label: key }));
+  }
+
+  @Patch(':id')
+  async update(
+    @Req() req: { user: { roleKey: string; permissions: string[] } },
+    @Param('id') id: string,
+    @Body()
+    body: {
+      fullName?: string;
+      title?: string;
+      roleKey?: string;
+      entities?: EntityKey[];
+      active?: boolean;
+      password?: string;
+      permissions?: string[];
+    },
+  ) {
+    if (!hasPermission(req.user.roleKey as RoleKey, req.user.permissions, PERMISSIONS.USERS_MANAGE)) {
+      throw new ForbiddenException();
+    }
+    const data: Record<string, unknown> = {
+      fullName: body.fullName,
+      title: body.title,
+      roleKey: body.roleKey,
+      entities: body.entities,
+      active: body.active,
+    };
+    if (body.permissions) {
+      const allowed = new Set(ASSIGNABLE_PERMISSIONS as string[]);
+      data.permissions = body.permissions.filter((p) => allowed.has(p));
+    }
+    if (body.password && body.password.length >= 6) {
+      data.passwordHash = await bcrypt.hash(body.password, 12);
+    }
+    return this.prisma.user.update({
+      where: { id },
+      data,
+      select: {
+        id: true,
+        email: true,
+        fullName: true,
+        title: true,
+        roleKey: true,
+        entities: true,
+        permissions: true,
+        active: true,
+      },
+    });
+  }
+
+  @Get('me/summary')
+  async mySummary(@Req() req: { user: { id: string } }) {
+    return this.prisma.user.findUnique({
+      where: { id: req.user.id },
+      select: {
+        id: true,
+        email: true,
+        fullName: true,
+        title: true,
+        roleKey: true,
+        entities: true,
+        permissions: true,
+      },
+    });
+  }
+}

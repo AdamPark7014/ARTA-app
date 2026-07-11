@@ -1,0 +1,165 @@
+import {
+  Body,
+  Controller,
+  Delete,
+  ForbiddenException,
+  Get,
+  NotFoundException,
+  Param,
+  Patch,
+  Post,
+  Query,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
+import { EntityKey } from '@prisma/client';
+import { IsArray, IsOptional, IsString } from 'class-validator';
+import { PrismaService } from '../common/prisma/prisma.service';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import {
+  canAccessEntity,
+  hasPermission,
+  PERMISSIONS,
+  type EntityKey as EK,
+  type RoleKey,
+} from '../common/rbac/roles';
+
+type AuthUser = { id: string; roleKey: string; entities: string[]; permissions: string[] };
+
+class FolderDto {
+  @IsString() name!: string;
+  @IsOptional() @IsString() description?: string;
+  @IsOptional() @IsArray() allowedRoles?: string[];
+}
+
+class FileDto {
+  @IsString() fileName!: string;
+  @IsString() url!: string;
+  @IsOptional() @IsString() mimeType?: string;
+  @IsOptional() sizeBytes?: number;
+}
+
+@Controller('folders')
+@UseGuards(JwtAuthGuard)
+export class FoldersController {
+  constructor(private prisma: PrismaService) {}
+
+  private assertEntity(user: AuthUser, entity: EntityKey) {
+    if (!canAccessEntity(user.entities as EK[], user.roleKey as RoleKey, entity as EK)) {
+      throw new ForbiddenException();
+    }
+  }
+
+  private canEdit(user: AuthUser) {
+    return hasPermission(user.roleKey as RoleKey, user.permissions, PERMISSIONS.FOLDERS_EDIT);
+  }
+
+  private canSeeFolder(user: AuthUser, allowedRoles: string[]) {
+    if (!allowedRoles.length) return true;
+    if (user.roleKey === 'dir_general' || user.roleKey === 'super_admin') return true;
+    return allowedRoles.includes(user.roleKey);
+  }
+
+  @Get()
+  async list(@Req() req: { user: AuthUser }, @Query('entity') entity?: EntityKey) {
+    const ent = (entity && req.user.entities.includes(entity) ? entity : req.user.entities[0]) as EntityKey;
+    this.assertEntity(req.user, ent);
+    const folders = await this.prisma.sharedFolder.findMany({
+      where: { entity: ent },
+      include: { _count: { select: { files: true } } },
+      orderBy: { name: 'asc' },
+    });
+    return folders.filter((f) => this.canSeeFolder(req.user, f.allowedRoles));
+  }
+
+  @Get(':id')
+  async one(@Req() req: { user: AuthUser }, @Param('id') id: string) {
+    const folder = await this.prisma.sharedFolder.findUnique({
+      where: { id },
+      include: { files: { orderBy: { createdAt: 'desc' } } },
+    });
+    if (!folder) throw new NotFoundException();
+    this.assertEntity(req.user, folder.entity);
+    if (!this.canSeeFolder(req.user, folder.allowedRoles)) throw new ForbiddenException();
+    return folder;
+  }
+
+  @Post()
+  async create(
+    @Req() req: { user: AuthUser },
+    @Body() body: FolderDto & { entity: EntityKey },
+  ) {
+    if (!this.canEdit(req.user)) throw new ForbiddenException();
+    this.assertEntity(req.user, body.entity);
+    return this.prisma.sharedFolder.create({
+      data: {
+        entity: body.entity,
+        name: body.name,
+        description: body.description,
+        allowedRoles: body.allowedRoles || [],
+        createdById: req.user.id,
+      },
+    });
+  }
+
+  @Patch(':id')
+  async update(@Req() req: { user: AuthUser }, @Param('id') id: string, @Body() body: FolderDto) {
+    if (!this.canEdit(req.user)) throw new ForbiddenException();
+    const folder = await this.prisma.sharedFolder.findUnique({ where: { id } });
+    if (!folder) throw new NotFoundException();
+    this.assertEntity(req.user, folder.entity);
+    return this.prisma.sharedFolder.update({
+      where: { id },
+      data: {
+        name: body.name,
+        description: body.description,
+        allowedRoles: body.allowedRoles,
+      },
+    });
+  }
+
+  @Delete(':id')
+  async remove(@Req() req: { user: AuthUser }, @Param('id') id: string) {
+    if (!this.canEdit(req.user)) throw new ForbiddenException();
+    const folder = await this.prisma.sharedFolder.findUnique({ where: { id } });
+    if (!folder) throw new NotFoundException();
+    this.assertEntity(req.user, folder.entity);
+    await this.prisma.sharedFolder.delete({ where: { id } });
+    return { ok: true };
+  }
+
+  @Post(':id/files')
+  async addFile(@Req() req: { user: AuthUser }, @Param('id') id: string, @Body() body: FileDto) {
+    if (!this.canEdit(req.user)) throw new ForbiddenException();
+    const folder = await this.prisma.sharedFolder.findUnique({ where: { id } });
+    if (!folder) throw new NotFoundException();
+    this.assertEntity(req.user, folder.entity);
+    return this.prisma.sharedFile.create({
+      data: {
+        folderId: id,
+        fileName: body.fileName,
+        url: body.url,
+        mimeType: body.mimeType,
+        sizeBytes: body.sizeBytes,
+        uploadedById: req.user.id,
+      },
+    });
+  }
+
+  @Delete(':id/files/:fileId')
+  async removeFile(
+    @Req() req: { user: AuthUser },
+    @Param('id') id: string,
+    @Param('fileId') fileId: string,
+  ) {
+    if (!this.canEdit(req.user)) throw new ForbiddenException();
+    const file = await this.prisma.sharedFile.findUnique({
+      where: { id: fileId },
+      include: { folder: true },
+    });
+    if (!file || file.folderId !== id) throw new NotFoundException();
+    this.assertEntity(req.user, file.folder.entity);
+    await this.prisma.sharedFile.delete({ where: { id: fileId } });
+    return { ok: true };
+  }
+}

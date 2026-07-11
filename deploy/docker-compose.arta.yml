@@ -1,0 +1,82 @@
+name: arta
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: arta-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - arta_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - internal
+
+  api:
+    build:
+      context: ..
+      dockerfile: apps/api/Dockerfile
+    container_name: arta-api
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}?schema=public
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
+      API_PORT: '4000'
+      UPLOAD_DIR: /app/uploads
+      SEED_PASSWORD: ${SEED_PASSWORD}
+      SEED_PASS_ARTURO: ${SEED_PASS_ARTURO:-}
+      SEED_PASS_CHACHO: ${SEED_PASS_CHACHO:-}
+      SEED_PASS_MELISSA: ${SEED_PASS_MELISSA:-}
+      SEED_PASS_RODRIGO: ${SEED_PASS_RODRIGO:-}
+      SEED_PASS_WILLIAMS: ${SEED_PASS_WILLIAMS:-}
+      SEED_PASS_LEIDA: ${SEED_PASS_LEIDA:-}
+      SEED_PASS_JP: ${SEED_PASS_JP:-}
+    volumes:
+      - arta_uploads:/app/uploads
+    networks:
+      - internal
+      - proxy
+
+  web:
+    build:
+      context: ..
+      dockerfile: apps/web/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: http://arta-api:4000
+        NEXT_PUBLIC_ROOT_DOMAIN: ${NEXT_PUBLIC_ROOT_DOMAIN:-artaproducciones.com}
+        NEXT_PUBLIC_ARTA_HOST: ${NEXT_PUBLIC_ARTA_HOST:-arta.artaproducciones.com}
+        NEXT_PUBLIC_AUDITORIO_HOST: ${NEXT_PUBLIC_AUDITORIO_HOST:-auditorio.artaproducciones.com}
+    container_name: arta-web
+    restart: unless-stopped
+    depends_on:
+      - api
+    environment:
+      NEXT_PUBLIC_API_URL: http://arta-api:4000
+      NEXT_PUBLIC_ROOT_DOMAIN: ${NEXT_PUBLIC_ROOT_DOMAIN:-artaproducciones.com}
+      NEXT_PUBLIC_ARTA_HOST: ${NEXT_PUBLIC_ARTA_HOST:-arta.artaproducciones.com}
+      NEXT_PUBLIC_AUDITORIO_HOST: ${NEXT_PUBLIC_AUDITORIO_HOST:-auditorio.artaproducciones.com}
+      PORT: '3000'
+      HOSTNAME: 0.0.0.0
+    networks:
+      - internal
+      - proxy
+
+volumes:
+  arta_pg:
+  arta_uploads:
+
+networks:
+  internal:
+  proxy:
+    external: true

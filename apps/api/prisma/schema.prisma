@@ -1,0 +1,472 @@
+// ARTA · Prisma schema
+// Dos entidades operativas: ARTA (productora) + EXPLANADA (Auditorio Arema)
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Entidad (Arta vs Auditorio) ─────────────────────────────────────────────
+enum EntityKey {
+  ARTA
+  EXPLANADA
+}
+
+enum EventStatus {
+  DRAFT
+  ACTIVE
+  CLOSED
+  CANCELLED
+}
+
+enum CampaignType {
+  INTERNAL
+  EXTERNAL
+  NONE
+}
+
+enum PoStatus {
+  DRAFT
+  PENDING_AUTH
+  AUTHORIZED
+  PAID
+  REJECTED
+  CANCELLED
+}
+
+enum TaskStatus {
+  OPEN
+  IN_PROGRESS
+  DONE
+  BLOCKED
+}
+
+enum ChecklistTemplateKey {
+  EVENTO_GENERAL
+  PRODUCCION
+  HOSPEDAJE
+  TRANSPORTACION
+  RUEDA_PRENSA
+  ARTES_SHOWS
+  BOLETERA
+  PENDONES
+  ORDEN_COMPRA
+  CATERING
+  CORRIDA_FINANCIERA
+  CAMPANA
+  ANTICIPOS
+  MANTENIMIENTO
+  CUSTOM
+}
+
+// ─── Usuarios / RBAC ─────────────────────────────────────────────────────────
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  fullName     String
+  title        String?
+  phone        String?
+  active       Boolean  @default(true)
+  roleKey      String // ver roles.ts
+  /// Entidades a las que puede entrar: ["ARTA"], ["EXPLANADA"], ["ARTA","EXPLANADA"]
+  entities     EntityKey[]
+  /// Permisos finos opcionales (campaña, corrida, usuarios, studio…)
+  permissions  String[] @default([])
+  /// Anti-brute force persistente
+  failedLoginCount Int       @default(0)
+  lockedUntil      DateTime?
+  lastLoginAt  DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  eventsCreated     Event[]              @relation("EventCreator")
+  checklistEdits    ChecklistInstance[]  @relation("ChecklistLastEditor")
+  checklistDelivered ChecklistInstance[] @relation("ChecklistDelivered")
+  checklistAuthorized ChecklistInstance[] @relation("ChecklistAuthorized")
+  checklistVersions ChecklistVersion[]
+  templateVersions  ChecklistTemplateVersion[]
+  assignedTasks     TaskAssignment[]
+  auditLogs         AuditLog[]
+  purchaseOrders    PurchaseOrder[]      @relation("PoCreator")
+  poAuthorizations  PurchaseOrder[]      @relation("PoAuthorizer")
+  paymentsUploaded  PaymentProof[]
+}
+
+// ─── Eventos ─────────────────────────────────────────────────────────────────
+model Event {
+  id           String       @id @default(cuid())
+  entity       EntityKey
+  name         String
+  artist       String?
+  promoter     String?
+  venue        String?
+  city         String?
+  startsAt     DateTime?
+  endsAt       DateTime?
+  status       EventStatus  @default(DRAFT)
+  campaignType CampaignType @default(NONE)
+  notes        String?
+  createdById  String?
+  createdBy    User?        @relation("EventCreator", fields: [createdById], references: [id])
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  checklists      ChecklistInstance[]
+  purchaseOrders  PurchaseOrder[]
+  financeRuns     FinanceRun[]
+  ticketingSetups TicketingSetup[]
+  tasks           TaskAssignment[]
+  files           EventFile[]
+  campaign        Campaign?
+  sponsors        Sponsor[]
+  vendorPins      VendorPin[]
+}
+
+// ─── Patrocinadores ──────────────────────────────────────────────────────────
+model Sponsor {
+  id           String   @id @default(cuid())
+  eventId      String
+  event        Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  name         String
+  contact      String?
+  contribution String?
+  amount       Decimal? @db.Decimal(14, 2)
+  notes        String?
+  createdById  String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([eventId])
+}
+
+// ─── Plantillas de checklist (jerárquicas) ───────────────────────────────────
+model ChecklistTemplate {
+  id          String               @id @default(cuid())
+  key         ChecklistTemplateKey
+  name        String
+  description String?
+  /// Aplica a qué entidad(es); vacío = ambas
+  entities    EntityKey[]
+  /// Árbol de secciones/ítems en JSON (labels, tipos, hijos)
+  schemaJson  Json
+  version     Int                  @default(1)
+  active      Boolean              @default(true)
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+
+  instances ChecklistInstance[]
+  versions  ChecklistTemplateVersion[]
+}
+
+model ChecklistTemplateVersion {
+  id          String            @id @default(cuid())
+  templateId  String
+  template    ChecklistTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  schemaJson  Json
+  version     Int
+  note        String?
+  editedById  String?
+  editedBy    User?             @relation(fields: [editedById], references: [id])
+  createdAt   DateTime          @default(now())
+
+  @@index([templateId])
+}
+
+model ChecklistInstance {
+  id              String             @id @default(cuid())
+  eventId         String
+  event           Event              @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  templateId      String
+  template        ChecklistTemplate  @relation(fields: [templateId], references: [id])
+  title           String
+  /// Datos llenados (mismo shape que schemaJson) — plantilla editable en web
+  dataJson        Json
+  progressPct     Int                @default(0)
+  lastEditedById  String?
+  lastEditedBy    User?              @relation("ChecklistLastEditor", fields: [lastEditedById], references: [id])
+  lastEditedAt    DateTime?
+  /// PDF generado desde la plantilla (se regenera al guardar)
+  pdfUrl          String?
+  pdfGeneratedAt  DateTime?
+  /// Firma digital "Entregado"
+  deliveredAt         DateTime?
+  deliveredById       String?
+  deliveredBy         User?     @relation("ChecklistDelivered", fields: [deliveredById], references: [id])
+  deliveredSignature  Json?
+  /// Firma digital "Autorizado"
+  authorizedAt        DateTime?
+  authorizedById      String?
+  authorizedBy        User?     @relation("ChecklistAuthorized", fields: [authorizedById], references: [id])
+  authorizedSignature Json?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  versions   ChecklistVersion[]
+  files      EventFile[]
+  signatures DigitalSignature[]
+
+  @@index([eventId])
+}
+
+model DigitalSignature {
+  id          String             @id @default(cuid())
+  checklistId String
+  checklist   ChecklistInstance  @relation(fields: [checklistId], references: [id], onDelete: Cascade)
+  kind        String // ENTREGADO | AUTORIZADO
+  signerName  String
+  signerUserId String?
+  imageDataUrl String            @db.Text
+  signedAt    DateTime           @default(now())
+  ip          String?
+  userAgent   String?
+  metaJson    Json?
+
+  @@index([checklistId, kind])
+}
+
+model ChecklistVersion {
+  id          String             @id @default(cuid())
+  instanceId  String
+  instance    ChecklistInstance  @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+  dataJson    Json
+  editedById  String?
+  editedBy    User?              @relation(fields: [editedById], references: [id])
+  note        String?
+  createdAt   DateTime           @default(now())
+
+  @@index([instanceId])
+}
+
+// ─── Órdenes de compra ───────────────────────────────────────────────────────
+model PurchaseOrder {
+  id             String   @id @default(cuid())
+  eventId        String
+  event          Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  rubro          String // audio, luces, hospedaje, catering…
+  vendorName     String?
+  description    String?
+  amount         Decimal  @db.Decimal(14, 2)
+  currency       String   @default("MXN")
+  status         PoStatus @default(DRAFT)
+  createdById    String?
+  createdBy      User?    @relation("PoCreator", fields: [createdById], references: [id])
+  authorizedById String?
+  authorizedBy   User?    @relation("PoAuthorizer", fields: [authorizedById], references: [id])
+  authorizedAt   DateTime?
+  paidAt         DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  lines  PurchaseOrderLine[]
+  proofs PaymentProof[]
+}
+
+model PurchaseOrderLine {
+  id          String        @id @default(cuid())
+  orderId     String
+  order       PurchaseOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  concept     String
+  qty         Decimal       @default(1) @db.Decimal(12, 2)
+  unitPrice   Decimal       @db.Decimal(14, 2)
+  total       Decimal       @db.Decimal(14, 2)
+}
+
+model PaymentProof {
+  id             String         @id @default(cuid())
+  purchaseOrderId String?
+  purchaseOrder  PurchaseOrder? @relation(fields: [purchaseOrderId], references: [id])
+  eventId        String?
+  label          String?
+  fileUrl        String
+  amount         Decimal?       @db.Decimal(14, 2)
+  uploadedById   String?
+  uploadedBy     User?          @relation(fields: [uploadedById], references: [id])
+  createdAt      DateTime       @default(now())
+}
+
+// ─── Corrida financiera ──────────────────────────────────────────────────────
+model FinanceRun {
+  id          String   @id @default(cuid())
+  eventId     String
+  event       Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  title       String   @default("Corrida financiera")
+  /// Filas/budget embebido (compatible con Excel import)
+  dataJson    Json
+  locked      Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([eventId])
+}
+
+// ─── Campaña publicitaria ────────────────────────────────────────────────────
+model Campaign {
+  id           String   @id @default(cuid())
+  eventId      String   @unique
+  event        Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  type         CampaignType @default(INTERNAL)
+  authorized   Boolean  @default(false)
+  authorizedAt DateTime?
+  notes        String?
+  dataJson     Json?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+// ─── Boletera ────────────────────────────────────────────────────────────────
+model TicketingSetup {
+  id          String   @id @default(cuid())
+  eventId     String
+  event       Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  boletera    String // arema | eticket | custom
+  holdUntil   DateTime?
+  artist      String?
+  promoter    String?
+  venue       String?
+  /// Zonas: [{zona, aforo, precio}]
+  zonesJson   Json
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// ─── Tareas ──────────────────────────────────────────────────────────────────
+model TaskAssignment {
+  id          String     @id @default(cuid())
+  eventId     String
+  event       Event      @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  assigneeId  String?
+  assignee    User?      @relation(fields: [assigneeId], references: [id])
+  title       String
+  module      String?
+  status      TaskStatus @default(OPEN)
+  dueAt       DateTime?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+}
+
+// ─── Archivos / Excel-PDF embebidos ──────────────────────────────────────────
+model EventFile {
+  id          String             @id @default(cuid())
+  eventId     String?
+  event       Event?             @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  checklistId String?
+  checklist   ChecklistInstance? @relation(fields: [checklistId], references: [id], onDelete: SetNull)
+  fileName    String
+  mimeType    String
+  url         String
+  sizeBytes   Int?
+  kind        String? // pdf | excel | image | other
+  createdAt   DateTime           @default(now())
+}
+
+// ─── Studio (CMS pages) ──────────────────────────────────────────────────────
+model PageContent {
+  id          String    @id @default(cuid())
+  entity      EntityKey
+  sectionKey  String
+  title       String?
+  contentJson Json
+  published   Boolean   @default(false)
+  updatedAt   DateTime  @updatedAt
+  createdAt   DateTime  @default(now())
+
+  @@unique([entity, sectionKey])
+}
+
+model HeroSlide {
+  id        String    @id @default(cuid())
+  entity    EntityKey @default(ARTA)
+  title     String?
+  subtitle  String?
+  imageUrl  String
+  ctaLabel  String?
+  ctaHref   String?
+  sortOrder Int       @default(0)
+  active    Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}
+
+model NewsPost {
+  id          String    @id @default(cuid())
+  entity      EntityKey @default(ARTA)
+  slug        String
+  title       String
+  excerpt     String?
+  body        String?
+  coverUrl    String?
+  published   Boolean   @default(false)
+  publishedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([entity, slug])
+  @@index([entity, published])
+}
+
+// ─── Carpetas generales (ACL ligero) ─────────────────────────────────────────
+model SharedFolder {
+  id          String    @id @default(cuid())
+  entity      EntityKey
+  name        String
+  description String?
+  /// Roles que pueden ver/editar (vacío = todos los de la entidad)
+  allowedRoles String[]
+  createdById String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  files       SharedFile[]
+
+  @@index([entity])
+}
+
+model SharedFile {
+  id          String       @id @default(cuid())
+  folderId    String
+  folder      SharedFolder @relation(fields: [folderId], references: [id], onDelete: Cascade)
+  fileName    String
+  mimeType    String?
+  url         String
+  sizeBytes   Int?
+  uploadedById String?
+  createdAt   DateTime     @default(now())
+
+  @@index([folderId])
+}
+
+// ─── Acceso vendor por PIN ───────────────────────────────────────────────────
+model VendorPin {
+  id          String    @id @default(cuid())
+  eventId     String
+  event       Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  label       String
+  pinHash     String
+  /// scopes: files | checklists | hospitality
+  scopes      String[]
+  expiresAt   DateTime?
+  active      Boolean   @default(true)
+  createdById String?
+  createdAt   DateTime  @default(now())
+  lastUsedAt  DateTime?
+
+  @@index([eventId])
+}
+
+// ─── Audit ───────────────────────────────────────────────────────────────────
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String?
+  user       User?    @relation(fields: [userId], references: [id])
+  action     String
+  resource   String
+  resourceId String?
+  metaJson   Json?
+  createdAt  DateTime @default(now())
+
+  @@index([resource, resourceId])
+}

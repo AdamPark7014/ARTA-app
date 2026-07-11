@@ -1,0 +1,17 @@
+node_modules
+**/node_modules
+.next
+**/.next
+dist
+**/dist
+.git
+.gitignore
+/uploads
+apps/api/uploads
+*.md
+.env
+apps/api/.env
+apps/web/.env.local
+.turbo
+**/.turbo
+*.log

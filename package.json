@@ -1,0 +1,23 @@
+{
+  "name": "arta-monorepo",
+  "private": true,
+  "workspaces": [
+    "apps/api",
+    "apps/web"
+  ],
+  "scripts": {
+    "dev": "turbo run dev --parallel --filter=api --filter=web",
+    "dev:web": "npm run dev --workspace=apps/web",
+    "dev:api": "npm run dev --workspace=apps/api",
+    "build": "turbo run build --filter=api --filter=web",
+    "local:setup": "npm run prisma:generate --workspace=apps/api && npm run prisma:migrate --workspace=apps/api && npm run prisma:seed --workspace=apps/api",
+    "prisma:generate": "npm run prisma:generate --workspace=apps/api",
+    "prisma:seed": "npm run prisma:seed --workspace=apps/api"
+  },
+  "devDependencies": {
+    "turbo": "^1.13.0"
+  },
+  "prisma": {
+    "seed": "ts-node --transpile-only apps/api/prisma/seed.ts"
+  }
+}

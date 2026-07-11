@@ -1,0 +1,239 @@
+'use client';
+
+import { FormEvent, useEffect, useState } from 'react';
+import { AppShell } from '@/components/app-shell/AppShell';
+import { api } from '@/lib/api';
+import { useUser } from '@/lib/user-context';
+import { userHasPermission } from '@/lib/access-matrix';
+
+type Folder = {
+  id: string;
+  name: string;
+  description?: string | null;
+  allowedRoles: string[];
+  entity: string;
+  _count?: { files: number };
+};
+
+type FolderDetail = Folder & {
+  files: Array<{ id: string; fileName: string; url: string; createdAt: string }>;
+};
+
+export default function FoldersPage() {
+  const { entity, user } = useUser();
+  const [folders, setFolders] = useState<Folder[]>([]);
+  const [active, setActive] = useState<FolderDetail | null>(null);
+  const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
+  const [msg, setMsg] = useState('');
+  const canEdit = user
+    ? userHasPermission(user.roleKey, user.permissions, ['folders.edit', 'everything'])
+    : false;
+
+  async function load() {
+    const list = await api<Folder[]>(`/folders?entity=${entity}`);
+    setFolders(list);
+  }
+
+  useEffect(() => {
+    load().catch(console.error);
+    setActive(null);
+  }, [entity]);
+
+  async function openFolder(id: string) {
+    const detail = await api<FolderDetail>(`/folders/${id}`);
+    setActive(detail);
+  }
+
+  async function createFolder(e: FormEvent) {
+    e.preventDefault();
+    if (!name.trim()) return;
+    await api('/folders', {
+      method: 'POST',
+      body: JSON.stringify({ entity, name, description: description || undefined, allowedRoles: [] }),
+    });
+    setName('');
+    setDescription('');
+    setMsg('Carpeta creada');
+    await load();
+  }
+
+  async function uploadToFolder(file: File) {
+    if (!active) return;
+    const fd = new FormData();
+    fd.append('file', file);
+    const uploaded = await api<{ url: string; fileName: string; mimeType?: string; sizeBytes?: number }>(
+      '/uploads',
+      { method: 'POST', body: fd },
+    );
+    await api(`/folders/${active.id}/files`, {
+      method: 'POST',
+      body: JSON.stringify({
+        fileName: uploaded.fileName || file.name,
+        url: uploaded.url,
+        mimeType: uploaded.mimeType,
+        sizeBytes: uploaded.sizeBytes,
+      }),
+    });
+    await openFolder(active.id);
+    setMsg('Archivo agregado a la carpeta');
+  }
+
+  async function removeFile(fileId: string) {
+    if (!active) return;
+    await api(`/folders/${active.id}/files/${fileId}`, { method: 'DELETE' });
+    await openFolder(active.id);
+  }
+
+  async function removeFolder(id: string) {
+    if (!confirm('¿Eliminar carpeta y sus archivos?')) return;
+    await api(`/folders/${id}`, { method: 'DELETE' });
+    if (active?.id === id) setActive(null);
+    await load();
+  }
+
+  return (
+    <AppShell title="Carpetas generales">
+      <div className="stack">
+        <p className="muted">
+          Documentos compartidos por entidad (no ligados a un evento). Roles con acceso a {entity}.
+        </p>
+        {msg ? <div className="muted">{msg}</div> : null}
+
+        <div style={{ display: 'grid', gridTemplateColumns: active ? '1fr 1.2fr' : '1fr', gap: 16 }}>
+          <div className="stack">
+            {canEdit ? (
+              <div className="panel">
+                <div className="panel-head">
+                  <h2>Nueva carpeta · {entity}</h2>
+                </div>
+                <div className="panel-body">
+                  <form className="form" onSubmit={createFolder}>
+                    <label>
+                      Nombre
+                      <input value={name} onChange={(e) => setName(e.target.value)} required />
+                    </label>
+                    <label>
+                      Descripción
+                      <input value={description} onChange={(e) => setDescription(e.target.value)} />
+                    </label>
+                    <button className="btn" type="submit">
+                      Crear
+                    </button>
+                  </form>
+                </div>
+              </div>
+            ) : null}
+
+            <div className="panel">
+              <div className="panel-head">
+                <h2>Carpetas</h2>
+              </div>
+              <div className="panel-body">
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>Nombre</th>
+                      <th>Archivos</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {folders.map((f) => (
+                      <tr key={f.id}>
+                        <td>
+                          <button className="btn ghost" type="button" onClick={() => openFolder(f.id)}>
+                            {f.name}
+                          </button>
+                          <div className="muted" style={{ fontSize: 12 }}>
+                            {f.description || '—'}
+                          </div>
+                        </td>
+                        <td>{f._count?.files ?? 0}</td>
+                        <td>
+                          {canEdit ? (
+                            <button className="btn ghost" type="button" onClick={() => removeFolder(f.id)}>
+                              Eliminar
+                            </button>
+                          ) : null}
+                        </td>
+                      </tr>
+                    ))}
+                    {!folders.length ? (
+                      <tr>
+                        <td colSpan={3} className="muted">
+                          Sin carpetas en {entity}.
+                        </td>
+                      </tr>
+                    ) : null}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          {active ? (
+            <div className="panel">
+              <div className="panel-head">
+                <h2>{active.name}</h2>
+                <button className="btn ghost" type="button" onClick={() => setActive(null)}>
+                  Cerrar
+                </button>
+              </div>
+              <div className="panel-body stack">
+                {canEdit ? (
+                  <label className="btn" style={{ cursor: 'pointer', width: 'fit-content' }}>
+                    Subir archivo
+                    <input
+                      type="file"
+                      hidden
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        if (f) uploadToFolder(f);
+                        e.target.value = '';
+                      }}
+                    />
+                  </label>
+                ) : null}
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>Archivo</th>
+                      <th>Fecha</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {active.files.map((file) => (
+                      <tr key={file.id}>
+                        <td>{file.fileName}</td>
+                        <td className="muted">{new Date(file.createdAt).toLocaleString('es-MX')}</td>
+                        <td className="row">
+                          <a href={file.url} target="_blank" rel="noreferrer">
+                            Abrir
+                          </a>
+                          {canEdit ? (
+                            <button className="btn ghost" type="button" onClick={() => removeFile(file.id)}>
+                              Quitar
+                            </button>
+                          ) : null}
+                        </td>
+                      </tr>
+                    ))}
+                    {!active.files.length ? (
+                      <tr>
+                        <td colSpan={3} className="muted">
+                          Carpeta vacía.
+                        </td>
+                      </tr>
+                    ) : null}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ) : null}
+        </div>
+      </div>
+    </AppShell>
+  );
+}

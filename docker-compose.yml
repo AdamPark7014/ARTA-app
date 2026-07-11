@@ -1,0 +1,70 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: arta-db
+    environment:
+      POSTGRES_USER: arta
+      POSTGRES_PASSWORD: arta
+      POSTGRES_DB: arta
+    ports:
+      - "5433:5432"
+    volumes:
+      - arta_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U arta -d arta"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    container_name: arta-api
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://arta:arta@db:5432/arta?schema=public
+      JWT_SECRET: arta-docker-dev-secret
+      JWT_EXPIRES_IN: 7d
+      API_PORT: "4000"
+      UPLOAD_DIR: /app/uploads
+      SEED_PASSWORD: ArtaDevLocal-1
+      SEED_PASS_ARTURO: CambiaEsto-Arturo
+      SEED_PASS_CHACHO: CambiaEsto-Chacho
+      SEED_PASS_MELISSA: CambiaEsto-Melissa
+      SEED_PASS_RODRIGO: CambiaEsto-Rodrigo
+      SEED_PASS_WILLIAMS: CambiaEsto-Williams
+      SEED_PASS_LEIDA: CambiaEsto-Leida
+      SEED_PASS_JP: CambiaEsto-Jp
+    ports:
+      - "4000:4000"
+    volumes:
+      - arta_uploads:/app/uploads
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: http://api:4000
+        NEXT_PUBLIC_ROOT_DOMAIN: artaproducciones.com
+        NEXT_PUBLIC_ARTA_HOST: arta.artaproducciones.com
+        NEXT_PUBLIC_AUDITORIO_HOST: auditorio.artaproducciones.com
+    container_name: arta-web
+    depends_on:
+      - api
+    environment:
+      NEXT_PUBLIC_API_URL: http://api:4000
+      NEXT_PUBLIC_ROOT_DOMAIN: artaproducciones.com
+      NEXT_PUBLIC_ARTA_HOST: arta.artaproducciones.com
+      NEXT_PUBLIC_AUDITORIO_HOST: auditorio.artaproducciones.com
+      PORT: "3000"
+      HOSTNAME: 0.0.0.0
+    ports:
+      - "3000:3000"
+
+volumes:
+  arta_pg:
+  arta_uploads:
