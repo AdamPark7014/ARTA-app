@@ -27,6 +27,7 @@ RUN apt-get update -y && apt-get install -y openssl ca-certificates && rm -rf /v
   && mkdir -p /app/uploads
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./package.json
+COPY --from=builder /app/packages ./packages
 COPY --from=builder /app/apps/api ./apps/api
 COPY docker/api-entrypoint.sh /entrypoint.sh
 RUN sed -i 's/\r$//' /entrypoint.sh && chmod +x /entrypoint.sh
