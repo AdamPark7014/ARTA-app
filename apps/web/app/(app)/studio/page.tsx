@@ -1,9 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { AppShell } from '@/components/app-shell/AppShell';
+import { EmptyState } from '@/components/ui/EmptyState';
+import { LoadingBlock, LoadingKpis } from '@/components/ui/LoadingBlock';
 import { api } from '@/lib/api';
 import { useUser } from '@/lib/user-context';
 
@@ -31,6 +33,7 @@ type News = {
   slug: string;
   title: string;
   excerpt?: string | null;
+  body?: string | null;
   coverUrl?: string | null;
   published: boolean;
 };
@@ -48,6 +51,8 @@ export default function StudioPage() {
   const { entity, setEntity, user } = useUser();
   const router = useRouter();
   const [tab, setTab] = useState<Tab>('carousel');
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [pages, setPages] = useState<Page[]>([]);
   const [slides, setSlides] = useState<Slide[]>([]);
   const [news, setNews] = useState<News[]>([]);
@@ -71,6 +76,14 @@ export default function StudioPage() {
     published: true,
   });
   const [uploading, setUploading] = useState(false);
+
+  const draftsCount = useMemo(
+    () =>
+      pages.filter((p) => !p.published).length +
+      news.filter((n) => !n.published).length +
+      slides.filter((s) => !s.active).length,
+    [pages, news, slides],
+  );
 
   async function uploadAsset(file: File): Promise<string> {
     const fd = new FormData();
@@ -117,7 +130,10 @@ export default function StudioPage() {
       router.replace('/dashboard');
       return;
     }
-    load().catch(console.error);
+    setLoading(true);
+    load()
+      .catch(console.error)
+      .finally(() => setLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
@@ -140,6 +156,7 @@ export default function StudioPage() {
 
   async function saveSection() {
     setMsg('');
+    setSaving(true);
     try {
       await api('/studio/pages', {
         method: 'PUT',
@@ -161,21 +178,49 @@ export default function StudioPage() {
           },
         }),
       });
-      setMsg('Sección guardada');
+      setMsg(published ? 'Sección publicada' : 'Borrador guardado');
       await load();
     } catch (e) {
       setMsg(e instanceof Error ? e.message : 'Error');
+    } finally {
+      setSaving(false);
     }
   }
 
   async function addSlide() {
-    if (!slideForm.imageUrl) return;
-    await api('/studio/slides', {
-      method: 'POST',
-      body: JSON.stringify({ ...slideForm, sortOrder: slides.length, active: true }),
+    if (!slideForm.imageUrl) {
+      setMsg('Agrega una imagen antes de publicar el slide');
+      return;
+    }
+    setSaving(true);
+    try {
+      await api('/studio/slides', {
+        method: 'POST',
+        body: JSON.stringify({ ...slideForm, sortOrder: slides.length, active: true }),
+      });
+      setSlideForm({ title: '', subtitle: '', imageUrl: '', ctaLabel: 'Ver más', ctaHref: '#modulos' });
+      setMsg('Slide agregado al carrusel');
+      await load();
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : 'Error');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function toggleSlide(s: Slide) {
+    await api(`/studio/slides/${s.id}`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        title: s.title,
+        subtitle: s.subtitle,
+        imageUrl: s.imageUrl,
+        ctaLabel: s.ctaLabel,
+        ctaHref: s.ctaHref,
+        sortOrder: s.sortOrder,
+        active: !s.active,
+      }),
     });
-    setSlideForm({ title: '', subtitle: '', imageUrl: '', ctaLabel: 'Ver más', ctaHref: '#modulos' });
-    setMsg('Slide agregado al carrusel');
     await load();
   }
 
@@ -186,12 +231,34 @@ export default function StudioPage() {
 
   async function addNews() {
     if (!newsForm.title || !newsForm.slug) return;
-    await api('/studio/news', {
-      method: 'POST',
-      body: JSON.stringify(newsForm),
+    setSaving(true);
+    try {
+      await api('/studio/news', {
+        method: 'POST',
+        body: JSON.stringify(newsForm),
+      });
+      setNewsForm({ slug: '', title: '', excerpt: '', body: '', coverUrl: '', published: true });
+      setMsg(newsForm.published ? 'Noticia publicada' : 'Borrador de noticia guardado');
+      await load();
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : 'Error');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function toggleNews(n: News) {
+    await api(`/studio/news/${n.id}`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        slug: n.slug,
+        title: n.title,
+        excerpt: n.excerpt,
+        body: n.body,
+        coverUrl: n.coverUrl,
+        published: !n.published,
+      }),
     });
-    setNewsForm({ slug: '', title: '', excerpt: '', body: '', coverUrl: '', published: true });
-    setMsg('Noticia publicada');
     await load();
   }
 
@@ -200,320 +267,500 @@ export default function StudioPage() {
     await load();
   }
 
+  const previewHeadline = draft.headline || 'Headline del sitio';
+  const previewBody = draft.body || draft.sub || 'Texto de apoyo editable en Studio.';
+  const previewCta = draft.cta || 'CTA';
+
   return (
     <AppShell title="Studio · Sitio Arta">
-      <div className="stack">
-        <p className="muted">
-          Único sitio público: <strong>arta PRODUCCIONES</strong>. Edita carrusel, noticias y secciones.
-        </p>
-        <div className="row">
-          {(
-            [
-              ['carousel', 'Carrusel'],
-              ['news', 'Noticias'],
-              ['sections', 'Secciones'],
-            ] as const
-          ).map(([k, label]) => (
-            <button
-              key={k}
-              type="button"
-              className={`btn ${tab === k ? '' : 'ghost'}`}
-              onClick={() => setTab(k)}
-            >
-              {label}
-            </button>
-          ))}
-          <Link className="btn ghost" href="/p/arta" style={{ marginLeft: 'auto' }}>
-            Ver sitio Arta
-          </Link>
+      <div className="stack page-workspace">
+        <div className="page-intro">
+          <p className="muted">
+            CMS del sitio público <strong>arta PRODUCCIONES</strong>. Preview en vivo, publicar /
+            borrador y enlace permanente al site.
+          </p>
+          <div className="row" style={{ gap: 8 }}>
+            <Link className="btn" href="/p/arta" target="_blank">
+              Ver sitio live
+            </Link>
+            <Link className="btn ghost" href="/site">
+              Guía sitio
+            </Link>
+          </div>
         </div>
-        {msg ? <div className="muted">{msg}</div> : null}
 
-        {tab === 'carousel' && (
-          <div className="stack">
-            <div className="panel">
-              <div className="panel-head">
-                <h2>Nuevo slide</h2>
+        {loading ? (
+          <>
+            <LoadingKpis count={4} />
+            <LoadingBlock rows={5} label="Cargando Studio…" />
+          </>
+        ) : (
+          <>
+            <div className="grid-cards kpi-grid-dense">
+              <div className="kpi">
+                <div className="label">Secciones</div>
+                <div className="value">{pages.length}</div>
+                <div className="kpi-sub muted">{pages.filter((p) => p.published).length} publicadas</div>
               </div>
-              <div className="panel-body">
-                <div className="form">
-                  <label>
-                    URL de imagen (full-bleed)
-                    <input
-                      value={slideForm.imageUrl}
-                      onChange={(e) => setSlideForm({ ...slideForm, imageUrl: e.target.value })}
-                      placeholder="https://... o sube abajo"
-                    />
-                  </label>
-                  <label className="btn ghost" style={{ cursor: 'pointer', width: 'fit-content' }}>
-                    {uploading ? 'Subiendo…' : 'Subir imagen'}
-                    <input
-                      type="file"
-                      hidden
-                      accept="image/*"
-                      onChange={async (e) => {
-                        const f = e.target.files?.[0];
-                        if (!f) return;
-                        setUploading(true);
-                        try {
-                          const url = await uploadAsset(f);
-                          setSlideForm((s) => ({ ...s, imageUrl: url }));
-                          setMsg('Imagen subida');
-                        } catch (err) {
-                          setMsg(err instanceof Error ? err.message : 'Error upload');
-                        } finally {
-                          setUploading(false);
-                        }
-                      }}
-                    />
-                  </label>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                    <label>
-                      Título
-                      <input
-                        value={slideForm.title}
-                        onChange={(e) => setSlideForm({ ...slideForm, title: e.target.value })}
-                      />
-                    </label>
-                    <label>
-                      Subtítulo
-                      <input
-                        value={slideForm.subtitle}
-                        onChange={(e) => setSlideForm({ ...slideForm, subtitle: e.target.value })}
-                      />
-                    </label>
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                    <label>
-                      CTA
-                      <input
-                        value={slideForm.ctaLabel}
-                        onChange={(e) => setSlideForm({ ...slideForm, ctaLabel: e.target.value })}
-                      />
-                    </label>
-                    <label>
-                      CTA link
-                      <input
-                        value={slideForm.ctaHref}
-                        onChange={(e) => setSlideForm({ ...slideForm, ctaHref: e.target.value })}
-                      />
-                    </label>
-                  </div>
-                  <button className="btn" type="button" onClick={addSlide}>
-                    Agregar al carrusel
-                  </button>
-                </div>
+              <div className="kpi">
+                <div className="label">Slides</div>
+                <div className="value">{slides.length}</div>
+                <div className="kpi-sub muted">{slides.filter((s) => s.active).length} activos</div>
+              </div>
+              <div className="kpi">
+                <div className="label">Noticias</div>
+                <div className="value">{news.length}</div>
+                <div className="kpi-sub muted">{news.filter((n) => n.published).length} publicadas</div>
+              </div>
+              <div className={`kpi ${draftsCount ? 'kpi--danger' : ''}`}>
+                <div className="label">Off / borradores</div>
+                <div className="value">{draftsCount}</div>
+                <div className="kpi-sub muted">Incluye slides inactivos</div>
               </div>
             </div>
-            <div className="grid-cards">
-              {slides.map((s) => (
-                <div className="kpi" key={s.id} style={{ padding: 0, overflow: 'hidden' }}>
-                  <div
-                    style={{
-                      height: 120,
-                      backgroundImage: `url(${s.imageUrl})`,
-                      backgroundSize: 'cover',
-                      backgroundPosition: 'center',
-                    }}
-                  />
-                  <div style={{ padding: '0.85rem 1rem' }}>
-                    <strong>{s.title || 'Sin título'}</strong>
-                    <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
-                      {s.subtitle}
-                    </div>
-                    <button
-                      className="btn ghost"
-                      type="button"
-                      style={{ marginTop: 10 }}
-                      onClick={() => removeSlide(s.id)}
-                    >
-                      Eliminar
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
 
-        {tab === 'news' && (
-          <div className="stack">
-            <div className="panel">
-              <div className="panel-head">
-                <h2>Nueva noticia</h2>
-              </div>
-              <div className="panel-body">
-                <div className="form">
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                    <label>
-                      Título
-                      <input
-                        value={newsForm.title}
-                        onChange={(e) =>
-                          setNewsForm({
-                            ...newsForm,
-                            title: e.target.value,
-                            slug:
-                              newsForm.slug ||
-                              e.target.value
-                                .toLowerCase()
-                                .normalize('NFD')
-                                .replace(/[\u0300-\u036f]/g, '')
-                                .replace(/[^a-z0-9]+/g, '-')
-                                .replace(/(^-|-$)/g, ''),
-                          })
-                        }
-                      />
-                    </label>
-                    <label>
-                      Slug
-                      <input
-                        value={newsForm.slug}
-                        onChange={(e) => setNewsForm({ ...newsForm, slug: e.target.value })}
-                      />
-                    </label>
-                  </div>
-                  <label>
-                    Extracto
-                    <textarea
-                      rows={2}
-                      value={newsForm.excerpt}
-                      onChange={(e) => setNewsForm({ ...newsForm, excerpt: e.target.value })}
-                    />
-                  </label>
-                  <label>
-                    Cuerpo
-                    <textarea
-                      rows={5}
-                      value={newsForm.body}
-                      onChange={(e) => setNewsForm({ ...newsForm, body: e.target.value })}
-                    />
-                  </label>
-                  <label>
-                    Cover URL
-                    <input
-                      value={newsForm.coverUrl}
-                      onChange={(e) => setNewsForm({ ...newsForm, coverUrl: e.target.value })}
-                    />
-                  </label>
-                  <label className="btn ghost" style={{ cursor: 'pointer', width: 'fit-content' }}>
-                    {uploading ? 'Subiendo…' : 'Subir cover'}
-                    <input
-                      type="file"
-                      hidden
-                      accept="image/*"
-                      onChange={async (e) => {
-                        const f = e.target.files?.[0];
-                        if (!f) return;
-                        setUploading(true);
-                        try {
-                          const url = await uploadAsset(f);
-                          setNewsForm((n) => ({ ...n, coverUrl: url }));
-                          setMsg('Cover subido');
-                        } catch (err) {
-                          setMsg(err instanceof Error ? err.message : 'Error upload');
-                        } finally {
-                          setUploading(false);
-                        }
-                      }}
-                    />
-                  </label>
-                  <button className="btn" type="button" onClick={addNews}>
-                    Publicar noticia
-                  </button>
-                </div>
-              </div>
-            </div>
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>Título</th>
-                  <th>Slug</th>
-                  <th>Estado</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {news.map((n) => (
-                  <tr key={n.id}>
-                    <td>{n.title}</td>
-                    <td className="muted">{n.slug}</td>
-                    <td>
-                      <span className={`badge ${n.published ? 'ok' : 'warn'}`}>
-                        {n.published ? 'Publicada' : 'Borrador'}
-                      </span>
-                    </td>
-                    <td>
-                      <button className="btn ghost" type="button" onClick={() => removeNews(n.id)}>
-                        Eliminar
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        {tab === 'sections' && (
-          <div className="stack">
-            <div className="row">
-              {Object.keys(SECTION_META).map((key) => (
+            <nav className="tab-bar" aria-label="Studio">
+              {(
+                [
+                  ['carousel', 'Carrusel', slides.length],
+                  ['news', 'Noticias', news.length],
+                  ['sections', 'Secciones', pages.length],
+                ] as const
+              ).map(([k, label, count]) => (
                 <button
-                  key={key}
+                  key={k}
                   type="button"
-                  className={`btn ${sectionKey === key ? '' : 'ghost'}`}
-                  onClick={() => setSectionKey(key)}
+                  className={`tab-bar__btn ${tab === k ? 'is-active' : ''}`}
+                  onClick={() => setTab(k)}
                 >
-                  {SECTION_META[key]}
+                  {label}
+                  <span className="tab-bar__count">{count}</span>
                 </button>
               ))}
-            </div>
-            <div className="panel">
-              <div className="panel-head">
-                <h2>{SECTION_META[sectionKey]}</h2>
-              </div>
-              <div className="panel-body">
-                <div className="form" style={{ maxWidth: 640 }}>
-                  <label>
-                    Headline
-                    <input
-                      value={draft.headline || ''}
-                      onChange={(e) => setDraft({ ...draft, headline: e.target.value })}
-                    />
-                  </label>
-                  <label>
-                    Texto
-                    <textarea
-                      rows={4}
-                      value={draft.body || draft.sub || ''}
-                      onChange={(e) =>
-                        setDraft({ ...draft, body: e.target.value, sub: e.target.value, lead: e.target.value })
-                      }
-                    />
-                  </label>
-                  <label>
-                    CTA
-                    <input
-                      value={draft.cta || ''}
-                      onChange={(e) => setDraft({ ...draft, cta: e.target.value })}
-                    />
-                  </label>
-                  <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                    <input
-                      type="checkbox"
-                      checked={published}
-                      onChange={(e) => setPublished(e.target.checked)}
-                    />
-                    Publicado
-                  </label>
-                  <button className="btn" type="button" onClick={saveSection}>
-                    Guardar sección
-                  </button>
+            </nav>
+
+            {msg ? <div className="muted">{msg}</div> : null}
+
+            {tab === 'carousel' && (
+              <div className="dash-split">
+                <div className="panel">
+                  <div className="panel-head">
+                    <h2>Nuevo slide</h2>
+                  </div>
+                  <div className="panel-body">
+                    <div className="form">
+                      <label>
+                        URL de imagen (full-bleed)
+                        <input
+                          value={slideForm.imageUrl}
+                          onChange={(e) => setSlideForm({ ...slideForm, imageUrl: e.target.value })}
+                          placeholder="https://… o sube abajo"
+                        />
+                      </label>
+                      {slideForm.imageUrl ? (
+                        <div
+                          className="studio-preview__thumb"
+                          style={{ backgroundImage: `url(${slideForm.imageUrl})` }}
+                          aria-hidden
+                        />
+                      ) : null}
+                      <label className="btn ghost" style={{ cursor: 'pointer', width: 'fit-content' }}>
+                        {uploading ? 'Subiendo…' : 'Subir imagen'}
+                        <input
+                          type="file"
+                          hidden
+                          accept="image/*"
+                          onChange={async (e) => {
+                            const f = e.target.files?.[0];
+                            if (!f) return;
+                            setUploading(true);
+                            try {
+                              const url = await uploadAsset(f);
+                              setSlideForm((s) => ({ ...s, imageUrl: url }));
+                              setMsg('Imagen subida');
+                            } catch (err) {
+                              setMsg(err instanceof Error ? err.message : 'Error upload');
+                            } finally {
+                              setUploading(false);
+                            }
+                          }}
+                        />
+                      </label>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                        <label>
+                          Título
+                          <input
+                            value={slideForm.title}
+                            onChange={(e) => setSlideForm({ ...slideForm, title: e.target.value })}
+                          />
+                        </label>
+                        <label>
+                          Subtítulo
+                          <input
+                            value={slideForm.subtitle}
+                            onChange={(e) => setSlideForm({ ...slideForm, subtitle: e.target.value })}
+                          />
+                        </label>
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                        <label>
+                          CTA
+                          <input
+                            value={slideForm.ctaLabel}
+                            onChange={(e) => setSlideForm({ ...slideForm, ctaLabel: e.target.value })}
+                          />
+                        </label>
+                        <label>
+                          CTA link
+                          <input
+                            value={slideForm.ctaHref}
+                            onChange={(e) => setSlideForm({ ...slideForm, ctaHref: e.target.value })}
+                          />
+                        </label>
+                      </div>
+                      <button className="btn" type="button" disabled={saving} onClick={addSlide}>
+                        {saving ? 'Guardando…' : 'Agregar al carrusel'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="panel">
+                  <div className="panel-head">
+                    <h2>Carrusel · {slides.length}</h2>
+                  </div>
+                  <div className="panel-body">
+                    {!slides.length ? (
+                      <EmptyState
+                        title="Carrusel vacío"
+                        description="Sube una imagen full-bleed y define título + CTA."
+                        steps={['Sube o pega URL', 'Título / subtítulo', 'Agregar al carrusel']}
+                      />
+                    ) : (
+                      <div className="studio-slide-grid">
+                        {slides.map((s) => (
+                          <div className={`studio-slide-card ${s.active ? '' : 'is-off'}`} key={s.id}>
+                            <div
+                              className="studio-slide-card__media"
+                              style={{ backgroundImage: `url(${s.imageUrl})` }}
+                            />
+                            <div className="studio-slide-card__body">
+                              <div className="row" style={{ justifyContent: 'space-between', gap: 8 }}>
+                                <strong>{s.title || 'Sin título'}</strong>
+                                <span className={`badge ${s.active ? 'ok' : 'warn'}`}>
+                                  {s.active ? 'Activo' : 'Off'}
+                                </span>
+                              </div>
+                              <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+                                {s.subtitle || '—'}
+                              </div>
+                              <div className="row" style={{ marginTop: 10, gap: 6 }}>
+                                <button className="btn ghost" type="button" onClick={() => toggleSlide(s)}>
+                                  {s.active ? 'Desactivar' : 'Activar'}
+                                </button>
+                                <button className="btn ghost" type="button" onClick={() => removeSlide(s.id)}>
+                                  Eliminar
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
-          </div>
+            )}
+
+            {tab === 'news' && (
+              <div className="dash-split">
+                <div className="panel">
+                  <div className="panel-head">
+                    <h2>Nueva noticia</h2>
+                  </div>
+                  <div className="panel-body">
+                    <div className="form">
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                        <label>
+                          Título
+                          <input
+                            value={newsForm.title}
+                            onChange={(e) =>
+                              setNewsForm({
+                                ...newsForm,
+                                title: e.target.value,
+                                slug:
+                                  newsForm.slug ||
+                                  e.target.value
+                                    .toLowerCase()
+                                    .normalize('NFD')
+                                    .replace(/[\u0300-\u036f]/g, '')
+                                    .replace(/[^a-z0-9]+/g, '-')
+                                    .replace(/(^-|-$)/g, ''),
+                              })
+                            }
+                          />
+                        </label>
+                        <label>
+                          Slug
+                          <input
+                            value={newsForm.slug}
+                            onChange={(e) => setNewsForm({ ...newsForm, slug: e.target.value })}
+                          />
+                        </label>
+                      </div>
+                      <label>
+                        Extracto
+                        <textarea
+                          rows={2}
+                          value={newsForm.excerpt}
+                          onChange={(e) => setNewsForm({ ...newsForm, excerpt: e.target.value })}
+                        />
+                      </label>
+                      <label>
+                        Cuerpo
+                        <textarea
+                          rows={5}
+                          value={newsForm.body}
+                          onChange={(e) => setNewsForm({ ...newsForm, body: e.target.value })}
+                        />
+                      </label>
+                      <label>
+                        Cover URL
+                        <input
+                          value={newsForm.coverUrl}
+                          onChange={(e) => setNewsForm({ ...newsForm, coverUrl: e.target.value })}
+                        />
+                      </label>
+                      <label className="btn ghost" style={{ cursor: 'pointer', width: 'fit-content' }}>
+                        {uploading ? 'Subiendo…' : 'Subir cover'}
+                        <input
+                          type="file"
+                          hidden
+                          accept="image/*"
+                          onChange={async (e) => {
+                            const f = e.target.files?.[0];
+                            if (!f) return;
+                            setUploading(true);
+                            try {
+                              const url = await uploadAsset(f);
+                              setNewsForm((n) => ({ ...n, coverUrl: url }));
+                              setMsg('Cover subido');
+                            } catch (err) {
+                              setMsg(err instanceof Error ? err.message : 'Error upload');
+                            } finally {
+                              setUploading(false);
+                            }
+                          }}
+                        />
+                      </label>
+                      <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                        <input
+                          type="checkbox"
+                          checked={newsForm.published}
+                          onChange={(e) => setNewsForm({ ...newsForm, published: e.target.checked })}
+                        />
+                        Publicar al crear
+                      </label>
+                      <button className="btn" type="button" disabled={saving} onClick={addNews}>
+                        {saving ? 'Guardando…' : newsForm.published ? 'Publicar noticia' : 'Guardar borrador'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="panel">
+                  <div className="panel-head">
+                    <h2>Directorio · {news.length}</h2>
+                  </div>
+                  <div className="panel-body">
+                    {!news.length ? (
+                      <EmptyState
+                        title="Sin noticias"
+                        description="Crea la primera nota para el sitio público."
+                      />
+                    ) : (
+                      <div className="table-wrap">
+                        <table className="table table-sticky">
+                          <thead>
+                            <tr>
+                              <th>Título</th>
+                              <th>Slug</th>
+                              <th>Estado</th>
+                              <th></th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {news.map((n) => (
+                              <tr key={n.id}>
+                                <td>
+                                  <strong>{n.title}</strong>
+                                  {n.excerpt ? (
+                                    <div className="muted" style={{ fontSize: 12 }}>
+                                      {n.excerpt.slice(0, 80)}
+                                      {n.excerpt.length > 80 ? '…' : ''}
+                                    </div>
+                                  ) : null}
+                                </td>
+                                <td className="muted">{n.slug}</td>
+                                <td>
+                                  <span className={`badge ${n.published ? 'ok' : 'warn'}`}>
+                                    {n.published ? 'Publicada' : 'Borrador'}
+                                  </span>
+                                </td>
+                                <td>
+                                  <div className="row" style={{ gap: 6 }}>
+                                    <button className="btn ghost" type="button" onClick={() => toggleNews(n)}>
+                                      {n.published ? 'Despublicar' : 'Publicar'}
+                                    </button>
+                                    {n.published ? (
+                                      <Link className="btn ghost" href={`/p/arta/noticias/${n.slug}`} target="_blank">
+                                        Ver
+                                      </Link>
+                                    ) : null}
+                                    <button className="btn ghost" type="button" onClick={() => removeNews(n.id)}>
+                                      Eliminar
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {tab === 'sections' && (
+              <div className="stack">
+                <nav className="tab-bar" aria-label="Secciones del home">
+                  {Object.keys(SECTION_META).map((key) => {
+                    const page = pages.find((p) => p.sectionKey === key);
+                    return (
+                      <button
+                        key={key}
+                        type="button"
+                        className={`tab-bar__btn ${sectionKey === key ? 'is-active' : ''}`}
+                        onClick={() => setSectionKey(key)}
+                      >
+                        {SECTION_META[key]}
+                        {page ? (
+                          <span className="tab-bar__count">{page.published ? 'on' : 'off'}</span>
+                        ) : null}
+                      </button>
+                    );
+                  })}
+                </nav>
+
+                <div className="studio-split">
+                  <div className="panel">
+                    <div className="panel-head">
+                      <h2>Editor · {SECTION_META[sectionKey]}</h2>
+                      <span className={`badge ${published ? 'ok' : 'warn'}`}>
+                        {published ? 'Publicado' : 'Borrador'}
+                      </span>
+                    </div>
+                    <div className="panel-body">
+                      <div className="form">
+                        {sectionKey === 'home_hero' ? (
+                          <>
+                            <label>
+                              Brand
+                              <input
+                                value={draft.brand || ''}
+                                onChange={(e) => setDraft({ ...draft, brand: e.target.value })}
+                              />
+                            </label>
+                            <label>
+                              Brand sub
+                              <input
+                                value={draft.brandSub || ''}
+                                onChange={(e) => setDraft({ ...draft, brandSub: e.target.value })}
+                              />
+                            </label>
+                          </>
+                        ) : null}
+                        <label>
+                          Headline
+                          <input
+                            value={draft.headline || ''}
+                            onChange={(e) => setDraft({ ...draft, headline: e.target.value })}
+                          />
+                        </label>
+                        <label>
+                          Texto
+                          <textarea
+                            rows={5}
+                            value={draft.body || draft.sub || ''}
+                            onChange={(e) =>
+                              setDraft({
+                                ...draft,
+                                body: e.target.value,
+                                sub: e.target.value,
+                                lead: e.target.value,
+                              })
+                            }
+                          />
+                        </label>
+                        <label>
+                          CTA
+                          <input
+                            value={draft.cta || ''}
+                            onChange={(e) => setDraft({ ...draft, cta: e.target.value })}
+                          />
+                        </label>
+                        <label>
+                          CTA href
+                          <input
+                            value={draft.ctaHref || ''}
+                            onChange={(e) => setDraft({ ...draft, ctaHref: e.target.value })}
+                          />
+                        </label>
+                        <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                          <input
+                            type="checkbox"
+                            checked={published}
+                            onChange={(e) => setPublished(e.target.checked)}
+                          />
+                          Publicado en sitio live
+                        </label>
+                        <button className="btn" type="button" disabled={saving} onClick={saveSection}>
+                          {saving ? 'Guardando…' : published ? 'Guardar y publicar' : 'Guardar borrador'}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="panel studio-preview">
+                    <div className="panel-head">
+                      <h2>Preview</h2>
+                      <span className="muted" style={{ fontSize: 12 }}>
+                        No published hasta guardar
+                      </span>
+                    </div>
+                    <div className="panel-body">
+                      <div className="studio-preview__stage">
+                        {draft.brand ? (
+                          <div className="studio-preview__brand">
+                            {draft.brand}
+                            {draft.brandSub ? <span>{draft.brandSub}</span> : null}
+                          </div>
+                        ) : null}
+                        <h3 className="studio-preview__headline">{previewHeadline}</h3>
+                        <p className="studio-preview__body">{previewBody}</p>
+                        {previewCta ? (
+                          <span className="studio-preview__cta">{previewCta}</span>
+                        ) : null}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </>
         )}
       </div>
     </AppShell>

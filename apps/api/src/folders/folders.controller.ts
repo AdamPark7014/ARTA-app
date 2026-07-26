@@ -23,8 +23,15 @@ import {
   type EntityKey as EK,
   type RoleKey,
 } from '../common/rbac/roles';
+import { assertSameTenant, orgWhere, tenantIdOf } from '../common/tenant';
 
-type AuthUser = { id: string; roleKey: string; entities: string[]; permissions: string[] };
+type AuthUser = {
+  id: string;
+  roleKey: string;
+  entities: string[];
+  permissions: string[];
+  organizationId?: string | null;
+};
 
 class FolderDto {
   @IsString() name!: string;
@@ -65,7 +72,7 @@ export class FoldersController {
     const ent = (entity && req.user.entities.includes(entity) ? entity : req.user.entities[0]) as EntityKey;
     this.assertEntity(req.user, ent);
     const folders = await this.prisma.sharedFolder.findMany({
-      where: { entity: ent },
+      where: { entity: ent, ...orgWhere(req.user) },
       include: { _count: { select: { files: true } } },
       orderBy: { name: 'asc' },
     });
@@ -79,6 +86,7 @@ export class FoldersController {
       include: { files: { orderBy: { createdAt: 'desc' } } },
     });
     if (!folder) throw new NotFoundException();
+    assertSameTenant(req.user, folder.organizationId);
     this.assertEntity(req.user, folder.entity);
     if (!this.canSeeFolder(req.user, folder.allowedRoles)) throw new ForbiddenException();
     return folder;
@@ -93,6 +101,7 @@ export class FoldersController {
     this.assertEntity(req.user, body.entity);
     return this.prisma.sharedFolder.create({
       data: {
+        organizationId: tenantIdOf(req.user),
         entity: body.entity,
         name: body.name,
         description: body.description,
@@ -107,6 +116,7 @@ export class FoldersController {
     if (!this.canEdit(req.user)) throw new ForbiddenException();
     const folder = await this.prisma.sharedFolder.findUnique({ where: { id } });
     if (!folder) throw new NotFoundException();
+    assertSameTenant(req.user, folder.organizationId);
     this.assertEntity(req.user, folder.entity);
     return this.prisma.sharedFolder.update({
       where: { id },
@@ -123,6 +133,7 @@ export class FoldersController {
     if (!this.canEdit(req.user)) throw new ForbiddenException();
     const folder = await this.prisma.sharedFolder.findUnique({ where: { id } });
     if (!folder) throw new NotFoundException();
+    assertSameTenant(req.user, folder.organizationId);
     this.assertEntity(req.user, folder.entity);
     await this.prisma.sharedFolder.delete({ where: { id } });
     return { ok: true };
@@ -133,6 +144,7 @@ export class FoldersController {
     if (!this.canEdit(req.user)) throw new ForbiddenException();
     const folder = await this.prisma.sharedFolder.findUnique({ where: { id } });
     if (!folder) throw new NotFoundException();
+    assertSameTenant(req.user, folder.organizationId);
     this.assertEntity(req.user, folder.entity);
     return this.prisma.sharedFile.create({
       data: {
@@ -158,6 +170,7 @@ export class FoldersController {
       include: { folder: true },
     });
     if (!file || file.folderId !== id) throw new NotFoundException();
+    assertSameTenant(req.user, file.folder.organizationId);
     this.assertEntity(req.user, file.folder.entity);
     await this.prisma.sharedFile.delete({ where: { id: fileId } });
     return { ok: true };

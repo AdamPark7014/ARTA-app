@@ -14,6 +14,7 @@ import {
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { assertSameTenant } from '../common/tenant';
 import {
   canAccessEventOps,
   hasPermission,
@@ -29,6 +30,7 @@ type AuthUser = {
   entities: string[];
   permissions?: string[];
   fullName: string;
+  organizationId?: string | null;
 };
 
 type SigBody = {
@@ -67,10 +69,11 @@ export class ChecklistsController {
     private pdfs: ChecklistPdfService,
   ) {}
 
-  private assertEventAccess(user: AuthUser, entity: string) {
-    if (!canAccessEventOps(user.entities as EntityKey[], user.roleKey as RoleKey, entity as EntityKey)) {
+  private assertEventAccess(user: AuthUser, event: { entity: string; organizationId?: string | null }) {
+    if (!canAccessEventOps(user.entities as EntityKey[], user.roleKey as RoleKey, event.entity as EntityKey)) {
       throw new ForbiddenException();
     }
+    assertSameTenant(user, event.organizationId);
   }
 
   private async regeneratePdf(id: string) {
@@ -274,7 +277,7 @@ export class ChecklistsController {
   async byEvent(@Req() req: { user: AuthUser }, @Param('eventId') eventId: string) {
     const event = await this.prisma.event.findUnique({ where: { id: eventId } });
     if (!event) throw new BadRequestException('Evento no encontrado');
-    this.assertEventAccess(req.user, event.entity);
+    this.assertEventAccess(req.user, event);
     return this.prisma.checklistInstance.findMany({
       where: { eventId },
       include: {
@@ -307,7 +310,7 @@ export class ChecklistsController {
       },
     });
     if (!item) throw new BadRequestException('Checklist no encontrado');
-    this.assertEventAccess(req.user, item.event.entity);
+    this.assertEventAccess(req.user, item.event);
     return item;
   }
 
@@ -322,7 +325,7 @@ export class ChecklistsController {
       include: { event: true },
     });
     if (!existing) throw new BadRequestException('Checklist no encontrado');
-    this.assertEventAccess(req.user, existing.event.entity);
+    this.assertEventAccess(req.user, existing.event);
 
     const progressPct = calcProgress(body.dataJson);
 
@@ -377,7 +380,7 @@ export class ChecklistsController {
       include: { event: true },
     });
     if (!existing) throw new BadRequestException('Checklist no encontrado');
-    this.assertEventAccess(req.user, existing.event.entity);
+    this.assertEventAccess(req.user, existing.event);
 
     // Autorizar: Melissa en Arta / Rodrigo en Auditorio / dirs
     if (body.kind === 'AUTORIZADO') {
@@ -459,7 +462,7 @@ export class ChecklistsController {
       include: { event: true },
     });
     if (!existing) throw new BadRequestException('Checklist no encontrado');
-    this.assertEventAccess(req.user, existing.event.entity);
+    this.assertEventAccess(req.user, existing.event);
     return this.regeneratePdf(id);
   }
 
@@ -474,7 +477,7 @@ export class ChecklistsController {
       include: { event: true },
     });
     if (!existing) throw new BadRequestException('Checklist no encontrado');
-    this.assertEventAccess(req.user, existing.event.entity);
+    this.assertEventAccess(req.user, existing.event);
 
     const version = await this.prisma.checklistVersion.findUnique({ where: { id: versionId } });
     if (!version || version.instanceId !== id) {
@@ -524,7 +527,7 @@ export class ChecklistsController {
   ) {
     const event = await this.prisma.event.findUnique({ where: { id: eventId } });
     if (!event) throw new BadRequestException('Evento no encontrado');
-    this.assertEventAccess(req.user, event.entity);
+    this.assertEventAccess(req.user, event);
     const template = await this.prisma.checklistTemplate.findUnique({
       where: { id: body.templateId },
     });

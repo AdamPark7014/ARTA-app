@@ -4,6 +4,7 @@
 
 | Host | Entidad | Uso |
 |------|---------|-----|
+| `artaproducciones.com` / `www` | — | Sitio público Arta (`/` → `/p/arta`) |
 | `arta.artaproducciones.com` | ARTA | Panel Arta + Studio |
 | `auditorio.artaproducciones.com` | EXPLANADA | Panel Auditorio Arema |
 | `localhost:3000` | (switch in-app) | Dev sin subdominio |

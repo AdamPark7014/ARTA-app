@@ -22,8 +22,16 @@ import {
   type EntityKey,
   type RoleKey,
 } from '../common/rbac/roles';
+import { assertSameTenant, tenantIdOf } from '../common/tenant';
+import { TicketingSyncService } from './ticketing-sync.service';
 
-type AuthUser = { id: string; roleKey: string; entities: string[]; permissions: string[] };
+type AuthUser = {
+  id: string;
+  roleKey: string;
+  entities: string[];
+  permissions: string[];
+  organizationId?: string | null;
+};
 
 class TicketingDto {
   @IsString() boletera!: string;
@@ -38,7 +46,10 @@ class TicketingDto {
 @Controller('ticketing')
 @UseGuards(JwtAuthGuard)
 export class TicketingController {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private sync: TicketingSyncService,
+  ) {}
 
   private assertEdit(user: AuthUser) {
     if (!hasPermission(user.roleKey as RoleKey, user.permissions, PERMISSIONS.TICKETING_EDIT)) {
@@ -51,16 +62,23 @@ export class TicketingController {
     const allowed = eventOpsEntities(req.user.entities as EntityKey[], req.user.roleKey as RoleKey);
     if (!allowed.length) return [];
     return this.prisma.ticketingSetup.findMany({
-      where: { event: { entity: { in: allowed } } },
+      where: { event: { entity: { in: allowed }, organizationId: tenantIdOf(req.user) } },
       include: { event: { select: { id: true, name: true, entity: true, artist: true } } },
       orderBy: { updatedAt: 'desc' },
     });
+  }
+
+  @Post('sync')
+  async syncSold(@Req() req: { user: AuthUser }) {
+    this.assertEdit(req.user);
+    return this.sync.syncAll(tenantIdOf(req.user));
   }
 
   @Get('event/:eventId')
   async byEvent(@Req() req: { user: AuthUser }, @Param('eventId') eventId: string) {
     const event = await this.prisma.event.findUnique({ where: { id: eventId } });
     if (!event) throw new NotFoundException();
+    assertSameTenant(req.user, event.organizationId);
     if (!canAccessEventOps(req.user.entities as EntityKey[], req.user.roleKey as RoleKey, event.entity as EntityKey)) {
       throw new ForbiddenException();
     }
@@ -79,6 +97,7 @@ export class TicketingController {
     this.assertEdit(req.user);
     const event = await this.prisma.event.findUnique({ where: { id: eventId } });
     if (!event) throw new NotFoundException();
+    assertSameTenant(req.user, event.organizationId);
     if (!canAccessEventOps(req.user.entities as EntityKey[], req.user.roleKey as RoleKey, event.entity as EntityKey)) {
       throw new ForbiddenException();
     }
@@ -86,10 +105,10 @@ export class TicketingController {
     const zones =
       dto.zonesJson ??
       [
-        { zona: 'Diamante', aforo: 0, precio: 0 },
-        { zona: 'Oro', aforo: 0, precio: 0 },
-        { zona: 'Plata', aforo: 0, precio: 0 },
-        { zona: 'Bronce', aforo: 0, precio: 0 },
+        { zona: 'Diamante', aforo: 0, precio: 0, sold: 0 },
+        { zona: 'Oro', aforo: 0, precio: 0, sold: 0 },
+        { zona: 'Plata', aforo: 0, precio: 0, sold: 0 },
+        { zona: 'Bronce', aforo: 0, precio: 0, sold: 0 },
       ];
 
     return this.prisma.ticketingSetup.create({
@@ -118,6 +137,7 @@ export class TicketingController {
       include: { event: true },
     });
     if (!existing) throw new NotFoundException();
+    assertSameTenant(req.user, existing.event.organizationId);
     if (
       !canAccessEventOps(
         req.user.entities as EntityKey[],
@@ -149,6 +169,7 @@ export class TicketingController {
       include: { event: true },
     });
     if (!existing) throw new NotFoundException();
+    assertSameTenant(req.user, existing.event.organizationId);
     if (
       !canAccessEventOps(
         req.user.entities as EntityKey[],

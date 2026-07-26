@@ -8,22 +8,21 @@ export type AuthUser = {
   roleKey: string;
   entities: EntityKey[];
   permissions: string[];
+  organizationId?: string;
+  totpEnabled?: boolean;
 };
 
-const TOKEN_KEY = 'arta_token';
+const LEGACY_TOKEN_KEY = 'arta_token';
 const ENTITY_KEY = 'arta_entity';
 
-export function getToken() {
-  if (typeof window === 'undefined') return null;
-  return localStorage.getItem(TOKEN_KEY);
-}
-
-export function setToken(token: string) {
-  localStorage.setItem(TOKEN_KEY, token);
-}
-
+/** Purge any leftover JWT from pre-cookie-only clients. */
 export function clearToken() {
-  localStorage.removeItem(TOKEN_KEY);
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.removeItem(LEGACY_TOKEN_KEY);
+  } catch {
+    /* private mode */
+  }
 }
 
 export function getActiveEntity(): EntityKey {
@@ -35,22 +34,48 @@ export function setActiveEntity(entity: EntityKey) {
   localStorage.setItem(ENTITY_KEY, entity);
 }
 
+function readCookie(name: string): string | null {
+  if (typeof document === 'undefined') return null;
+  const m = document.cookie.match(new RegExp(`(?:^|; )${name}=([^;]*)`));
+  return m ? decodeURIComponent(m[1]) : null;
+}
+
+export function getCsrfToken(): string | null {
+  return readCookie('arta_csrf');
+}
+
+export function hasSessionHint(): boolean {
+  if (typeof document === 'undefined') return false;
+  return document.cookie.includes('arta_session=1');
+}
+
 export async function api<T = unknown>(
   path: string,
   options: RequestInit = {},
 ): Promise<T> {
-  const token = getToken();
+  clearToken();
+
+  const method = (options.method || 'GET').toUpperCase();
   const headers: HeadersInit = {
     ...(options.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }),
     ...(options.headers || {}),
   };
-  if (token) (headers as Record<string, string>)['Authorization'] = `Bearer ${token}`;
 
-  const res = await fetch(`/api${path}`, { ...options, headers });
+  if (method !== 'GET' && method !== 'HEAD') {
+    const csrf = getCsrfToken();
+    if (csrf) (headers as Record<string, string>)['X-CSRF-Token'] = csrf;
+  }
+
+  const res = await fetch(`/api${path}`, {
+    ...options,
+    headers,
+    credentials: 'include',
+  });
   if (res.status === 401) {
     clearToken();
-    if (typeof window !== 'undefined') {
+    if (typeof document !== 'undefined') {
       document.cookie = 'arta_session=; Path=/; SameSite=Lax; Max-Age=0';
+      document.cookie = 'arta_csrf=; Path=/; SameSite=Lax; Max-Age=0';
       window.location.href = '/login';
     }
     throw new Error('No autorizado');

@@ -17,6 +17,7 @@ import { Type } from 'class-transformer';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { hasPermission, canAccessEventOps, PERMISSIONS, type EntityKey, type RoleKey } from '../common/rbac/roles';
+import { assertSameTenant } from '../common/tenant';
 
 class PoLineDto {
   @IsString() concept!: string;
@@ -42,9 +43,13 @@ class CreatePoDto {
 export class PurchaseOrdersController {
   constructor(private prisma: PrismaService) {}
 
-  private async assertEventOps(user: { entities: string[]; roleKey: string }, eventId: string) {
+  private async assertEventOps(
+    user: { entities: string[]; roleKey: string; organizationId?: string | null },
+    eventId: string,
+  ) {
     const event = await this.prisma.event.findUnique({ where: { id: eventId } });
     if (!event) throw new NotFoundException('Evento no encontrado');
+    assertSameTenant(user, event.organizationId);
     if (!canAccessEventOps(user.entities as EntityKey[], user.roleKey as RoleKey, event.entity as EntityKey)) {
       throw new ForbiddenException();
     }
@@ -169,7 +174,13 @@ export class PurchaseOrdersController {
   async addProof(
     @Req()
     req: {
-      user: { id: string; roleKey: string; permissions: string[]; entities: string[] };
+      user: {
+        id: string;
+        roleKey: string;
+        permissions: string[];
+        entities: string[];
+        organizationId?: string | null;
+      };
     },
     @Param('id') id: string,
     @Body() body: { fileUrl: string; label?: string; amount?: number },
@@ -188,6 +199,7 @@ export class PurchaseOrdersController {
     ) {
       throw new ForbiddenException();
     }
+    assertSameTenant(req.user, order.event.organizationId);
     return this.prisma.paymentProof.create({
       data: {
         purchaseOrderId: id,
@@ -204,7 +216,13 @@ export class PurchaseOrdersController {
   async setStatus(
     @Req()
     req: {
-      user: { id: string; roleKey: string; permissions: string[]; entities: string[] };
+      user: {
+        id: string;
+        roleKey: string;
+        permissions: string[];
+        entities: string[];
+        organizationId?: string | null;
+      };
     },
     @Param('id') id: string,
     @Body() body: { status: PoStatus },
@@ -215,6 +233,10 @@ export class PurchaseOrdersController {
       include: { event: true },
     });
     if (!order) throw new NotFoundException('OC no encontrada');
+    if (!canAccessEventOps(req.user.entities as EntityKey[], role, order.event.entity as EntityKey)) {
+      throw new ForbiddenException();
+    }
+    assertSameTenant(req.user, order.event.organizationId);
 
     if (body.status === 'AUTHORIZED') {
       if (!hasPermission(role, req.user.permissions, PERMISSIONS.PO_AUTHORIZE)) {
@@ -246,6 +268,11 @@ export class PurchaseOrdersController {
         include: { lines: true },
       });
     }
+    // Any other transition (REJECTED/CANCELLED/DRAFT/PENDING_AUTH) is still an
+    // authorization-flow action — gate it the same as approving, not left open.
+    if (!hasPermission(role, req.user.permissions, PERMISSIONS.PO_AUTHORIZE)) {
+      throw new ForbiddenException('No puedes cambiar el estatus de esta OC');
+    }
     return this.prisma.purchaseOrder.update({
       where: { id },
       data: { status: body.status },
@@ -255,11 +282,21 @@ export class PurchaseOrdersController {
 
   @Delete(':id')
   async remove(
-    @Req() req: { user: { id: string; roleKey: string; permissions: string[] } },
+    @Req()
+    req: {
+      user: {
+        id: string;
+        roleKey: string;
+        permissions: string[];
+        entities: string[];
+        organizationId?: string | null;
+      };
+    },
     @Param('id') id: string,
   ) {
     const order = await this.prisma.purchaseOrder.findUnique({ where: { id } });
     if (!order) throw new NotFoundException('OC no encontrada');
+    await this.assertEventOps(req.user, order.eventId);
     if (order.status === 'AUTHORIZED' || order.status === 'PAID') {
       throw new ForbiddenException('No se puede eliminar OC autorizada/pagada');
     }

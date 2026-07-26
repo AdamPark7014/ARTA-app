@@ -2,6 +2,7 @@ import { Controller, ForbiddenException, Get, Query, Req, UseGuards } from '@nes
 import { PrismaService } from '../common/prisma/prisma.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { hasPermission, PERMISSIONS, type RoleKey } from '../common/rbac/roles';
+import { tenantIdOf } from '../common/tenant';
 
 @Controller('audit')
 @UseGuards(JwtAuthGuard)
@@ -10,7 +11,7 @@ export class AuditController {
 
   @Get()
   async list(
-    @Req() req: { user: { roleKey: string; permissions: string[] } },
+    @Req() req: { user: { roleKey: string; permissions: string[]; organizationId?: string | null } },
     @Query('resource') resource?: string,
     @Query('take') take?: string,
   ) {
@@ -21,8 +22,14 @@ export class AuditController {
       throw new ForbiddenException('Solo dirección ve audit log');
     }
     const limit = Math.min(Number(take) || 100, 300);
+    // AuditLog no tiene organizationId propio; se acota por el org del autor.
+    // super_admin ve todo (incluye eventos de sistema con userId null).
+    const isSuper = req.user.roleKey === 'super_admin';
     return this.prisma.auditLog.findMany({
-      where: resource ? { resource } : undefined,
+      where: {
+        ...(resource ? { resource } : {}),
+        ...(isSuper ? {} : { user: { organizationId: tenantIdOf(req.user) } }),
+      },
       orderBy: { createdAt: 'desc' },
       take: limit,
       include: { user: { select: { id: true, fullName: true, email: true } } },

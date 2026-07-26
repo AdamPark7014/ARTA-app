@@ -13,6 +13,7 @@ import {
 import { CampaignType } from '@prisma/client';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { assertSameTenant, tenantIdOf } from '../common/tenant';
 import {
   canAccessEventOps,
   eventOpsEntities,
@@ -22,7 +23,13 @@ import {
   type RoleKey,
 } from '../common/rbac/roles';
 
-type AuthUser = { id: string; roleKey: string; entities: string[]; permissions: string[] };
+type AuthUser = {
+  id: string;
+  roleKey: string;
+  entities: string[];
+  permissions: string[];
+  organizationId?: string | null;
+};
 
 @Controller('campaigns')
 @UseGuards(JwtAuthGuard)
@@ -33,8 +40,12 @@ export class CampaignsController {
   async list(@Req() req: { user: AuthUser }) {
     const allowed = eventOpsEntities(req.user.entities as EntityKey[], req.user.roleKey as RoleKey);
     if (!allowed.length) return [];
+    const isSuper = req.user.roleKey === 'super_admin';
     const events = await this.prisma.event.findMany({
-      where: { entity: { in: allowed } },
+      where: {
+        entity: { in: allowed },
+        ...(isSuper ? {} : { organizationId: tenantIdOf(req.user) }),
+      },
       select: { id: true },
     });
     return this.prisma.campaign.findMany({
@@ -53,6 +64,7 @@ export class CampaignsController {
     if (!canAccessEventOps(req.user.entities as EntityKey[], req.user.roleKey as RoleKey, event.entity as EntityKey)) {
       throw new ForbiddenException();
     }
+    assertSameTenant(req.user, event.organizationId);
     return this.prisma.campaign.findUnique({ where: { eventId } });
   }
 
@@ -76,6 +88,7 @@ export class CampaignsController {
     if (!canAccessEventOps(req.user.entities as EntityKey[], req.user.roleKey as RoleKey, event.entity as EntityKey)) {
       throw new ForbiddenException();
     }
+    assertSameTenant(req.user, event.organizationId);
 
     const authorized = body.authorized;
     // Autorizar campaña: Melissa (tema campaña) + dirs

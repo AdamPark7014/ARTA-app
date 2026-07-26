@@ -1,0 +1,10 @@
+{
+  "name": "@arta/rbac",
+  "version": "0.1.0",
+  "private": true,
+  "main": "./src/roles.ts",
+  "types": "./src/roles.ts",
+  "exports": {
+    ".": "./src/roles.ts"
+  }
+}

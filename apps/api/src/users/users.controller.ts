@@ -3,6 +3,7 @@ import {
   Controller,
   ForbiddenException,
   Get,
+  NotFoundException,
   Param,
   Patch,
   Post,
@@ -14,14 +15,9 @@ import * as bcrypt from 'bcryptjs';
 import { EntityKey } from '@prisma/client';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import {
-  ASSIGNABLE_PERMISSIONS,
-  ALL_ROLES,
-  hasPermission,
-  PERMISSIONS,
-  ROLE_LABELS,
-  type RoleKey,
-} from '../common/rbac/roles';
+import { ASSIGNABLE_PERMISSIONS, ALL_ROLES, hasPermission, PERMISSIONS, ROLE_LABELS, type RoleKey } from '../common/rbac/roles';
+import { assertSameTenant, tenantIdOf } from '../common/tenant';
+import { assertUserSeatAvailable } from '../common/plan-limits';
 
 class CreateUserDto {
   @IsEmail() email!: string;
@@ -39,10 +35,13 @@ export class UsersController {
 
   /** Directorio ligero para asignar tareas (cualquier autenticado) */
   @Get('directory')
-  directory(@Req() req: { user: { entities: string[] } }) {
+  directory(
+    @Req() req: { user: { entities: string[]; roleKey: string; organizationId?: string | null } },
+  ) {
     return this.prisma.user.findMany({
       where: {
         active: true,
+        organizationId: tenantIdOf(req.user),
         entities: { hasSome: req.user.entities as EntityKey[] },
       },
       select: { id: true, fullName: true, email: true, title: true, roleKey: true, entities: true },
@@ -51,11 +50,14 @@ export class UsersController {
   }
 
   @Get()
-  async list(@Req() req: { user: { roleKey: string; permissions: string[] } }) {
+  async list(
+    @Req() req: { user: { id: string; roleKey: string; permissions: string[]; organizationId?: string | null } },
+  ) {
     if (!hasPermission(req.user.roleKey as RoleKey, req.user.permissions, PERMISSIONS.USERS_MANAGE)) {
       throw new ForbiddenException('Solo Arturo y Chacho gestionan usuarios');
     }
     const users = await this.prisma.user.findMany({
+      where: { organizationId: tenantIdOf(req.user) },
       select: {
         id: true,
         email: true,
@@ -66,6 +68,7 @@ export class UsersController {
         permissions: true,
         active: true,
         lastLoginAt: true,
+        organizationId: true,
       },
       orderBy: { fullName: 'asc' },
     });
@@ -77,7 +80,7 @@ export class UsersController {
 
   @Post()
   async create(
-    @Req() req: { user: { roleKey: string; permissions: string[] } },
+    @Req() req: { user: { id: string; roleKey: string; permissions: string[] } },
     @Body() dto: CreateUserDto,
   ) {
     if (!hasPermission(req.user.roleKey as RoleKey, req.user.permissions, PERMISSIONS.USERS_MANAGE)) {
@@ -86,7 +89,16 @@ export class UsersController {
     if (!ALL_ROLES.includes(dto.roleKey as RoleKey)) {
       throw new ForbiddenException('Rol inválido');
     }
+    if (dto.roleKey === 'super_admin' && req.user.roleKey !== 'super_admin') {
+      throw new ForbiddenException('Solo super_admin puede otorgar ese rol');
+    }
     const passwordHash = await bcrypt.hash(dto.password, 12);
+    const actor = await this.prisma.user.findUnique({
+      where: { id: req.user.id },
+      select: { organizationId: true },
+    });
+    const orgId = actor?.organizationId || 'org_arta_internal';
+    await assertUserSeatAvailable(this.prisma, orgId);
     return this.prisma.user.create({
       data: {
         email: dto.email.toLowerCase(),
@@ -96,6 +108,10 @@ export class UsersController {
         entities: dto.entities,
         passwordHash,
         active: true,
+        organizationId: orgId,
+        memberships: {
+          create: { organizationId: orgId, roleKey: dto.roleKey },
+        },
       },
       select: {
         id: true,
@@ -105,6 +121,7 @@ export class UsersController {
         roleKey: true,
         entities: true,
         active: true,
+        organizationId: true,
       },
     });
   }
@@ -127,7 +144,7 @@ export class UsersController {
 
   @Patch(':id')
   async update(
-    @Req() req: { user: { roleKey: string; permissions: string[] } },
+    @Req() req: { user: { roleKey: string; permissions: string[]; organizationId?: string | null } },
     @Param('id') id: string,
     @Body()
     body: {
@@ -142,6 +159,15 @@ export class UsersController {
   ) {
     if (!hasPermission(req.user.roleKey as RoleKey, req.user.permissions, PERMISSIONS.USERS_MANAGE)) {
       throw new ForbiddenException();
+    }
+    const target = await this.prisma.user.findUnique({
+      where: { id },
+      select: { organizationId: true },
+    });
+    if (!target) throw new NotFoundException('Usuario no encontrado');
+    assertSameTenant(req.user, target.organizationId);
+    if (body.roleKey === 'super_admin' && req.user.roleKey !== 'super_admin') {
+      throw new ForbiddenException('Solo super_admin puede otorgar ese rol');
     }
     const data: Record<string, unknown> = {
       fullName: body.fullName,

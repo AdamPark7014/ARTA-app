@@ -13,6 +13,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { hasPermission, canAccessEventOps, PERMISSIONS, type EntityKey, type RoleKey } from '../common/rbac/roles';
+import { assertSameTenant } from '../common/tenant';
 
 type FinancePayload = {
   rows?: Array<{ type?: string; amount?: number; concept?: string }>;
@@ -20,7 +21,13 @@ type FinancePayload = {
   totalExpense?: number;
 };
 
-type AuthUser = { id: string; roleKey: string; permissions: string[]; entities: string[] };
+type AuthUser = {
+  id: string;
+  roleKey: string;
+  permissions: string[];
+  entities: string[];
+  organizationId?: string | null;
+};
 
 function totals(dataJson: FinancePayload) {
   const rows = dataJson.rows || [];
@@ -42,6 +49,7 @@ export class FinanceController {
   private async assertEventOps(user: AuthUser, eventId: string) {
     const event = await this.prisma.event.findUnique({ where: { id: eventId } });
     if (!event) throw new ForbiddenException('Evento no encontrado');
+    assertSameTenant(user, event.organizationId);
     if (!canAccessEventOps(user.entities as EntityKey[], user.roleKey as RoleKey, event.entity as EntityKey)) {
       throw new ForbiddenException();
     }

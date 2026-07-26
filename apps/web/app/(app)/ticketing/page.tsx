@@ -3,10 +3,13 @@
 import Link from 'next/link';
 import { FormEvent, useEffect, useState } from 'react';
 import { AppShell } from '@/components/app-shell/AppShell';
+import { money } from '@/components/charts/SparkBars';
+import { EmptyState } from '@/components/ui/EmptyState';
+import { LoadingBlock, LoadingKpis } from '@/components/ui/LoadingBlock';
 import { api } from '@/lib/api';
 import { useUser } from '@/lib/user-context';
 
-type Zone = { zona: string; aforo: number; precio: number };
+type Zone = { zona: string; aforo: number; precio: number; sold?: number };
 type Setup = {
   id: string;
   boletera: string;
@@ -21,16 +24,26 @@ type Setup = {
 type EventOpt = { id: string; name: string; entity: string };
 
 const DEFAULT_ZONES: Zone[] = [
-  { zona: 'Diamante', aforo: 0, precio: 0 },
-  { zona: 'Oro', aforo: 0, precio: 0 },
-  { zona: 'Plata', aforo: 0, precio: 0 },
-  { zona: 'Bronce', aforo: 0, precio: 0 },
+  { zona: 'Diamante', aforo: 0, precio: 0, sold: 0 },
+  { zona: 'Oro', aforo: 0, precio: 0, sold: 0 },
+  { zona: 'Plata', aforo: 0, precio: 0, sold: 0 },
+  { zona: 'Bronce', aforo: 0, precio: 0, sold: 0 },
 ];
 
 export default function TicketingPage() {
   const { entity } = useUser();
   const [rows, setRows] = useState<Setup[]>([]);
   const [events, setEvents] = useState<EventOpt[]>([]);
+  const [kpis, setKpis] = useState<{
+    setups: number;
+    capacityTotal: number;
+    soldTotal?: number;
+    sellThroughPct?: number;
+    potentialRevenue: number;
+    realizedRevenue?: number;
+    avgTicket: number;
+    holdRisk: number;
+  } | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState({
     eventId: '',
@@ -42,15 +55,35 @@ export default function TicketingPage() {
   });
   const [zones, setZones] = useState<Zone[]>(DEFAULT_ZONES);
   const [msg, setMsg] = useState('');
+  const [syncing, setSyncing] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   async function load() {
-    const [t, e] = await Promise.all([
-      api<Setup[]>('/ticketing'),
-      api<EventOpt[]>(`/events?entity=${entity}`),
-    ]);
-    setRows(t.filter((r) => r.event.entity === entity));
-    setEvents(e);
-    if (!form.eventId && e[0]) setForm((f) => ({ ...f, eventId: e[0].id }));
+    setLoading(true);
+    try {
+      const [t, e, analytics] = await Promise.all([
+        api<Setup[]>('/ticketing'),
+        api<EventOpt[]>(`/events?entity=${entity}`),
+        api<{
+          kpis: {
+            setups: number;
+            capacityTotal: number;
+            soldTotal?: number;
+            sellThroughPct?: number;
+            potentialRevenue: number;
+            realizedRevenue?: number;
+            avgTicket: number;
+            holdRisk: number;
+          };
+        }>(`/analytics/ticketing?entity=${entity}`).catch(() => null),
+      ]);
+      setRows(t.filter((r) => r.event.entity === entity));
+      setEvents(e);
+      if (analytics) setKpis(analytics.kpis);
+      if (!form.eventId && e[0]) setForm((f) => ({ ...f, eventId: e[0].id }));
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => {
@@ -73,6 +106,7 @@ export default function TicketingPage() {
         zona: z.zona,
         aforo: Number(z.aforo || 0),
         precio: Number(z.precio || 0),
+        sold: Number(z.sold || 0),
       })),
     );
   }
@@ -126,11 +160,83 @@ export default function TicketingPage() {
   }
 
   return (
-    <AppShell title="Boletera">
-      <div className="stack">
-        <p className="muted">
-          Creación / edición · Arema / eTicket / otra · zona / aforo / precio · hold.
-        </p>
+    <AppShell title="Boletera · Capacidad">
+      <div className="stack page-workspace">
+        <div className="page-intro">
+          <p className="muted">
+            Performance de boletera: aforo, vendidos, sell-through % y revenue potencial vs realizado.
+            Sync stub/provider (Arema) rellena vendidos; modo live con TICKETING_SYNC_URL.
+          </p>
+          <button
+            className="btn ghost"
+            type="button"
+            disabled={syncing}
+            onClick={async () => {
+              setSyncing(true);
+              try {
+                const res = await api<{ updated: number; total: number }>('/ticketing/sync', {
+                  method: 'POST',
+                });
+                setMsg(`Sync boletera · actualizados ${res.updated}/${res.total}`);
+                await load();
+              } catch (e) {
+                setMsg(e instanceof Error ? e.message : 'Error sync');
+              } finally {
+                setSyncing(false);
+              }
+            }}
+          >
+            {syncing ? 'Sincronizando…' : 'Sync boletera ahora'}
+          </button>
+        </div>
+
+        {loading && !kpis ? (
+          <>
+            <LoadingKpis count={5} />
+            <LoadingBlock rows={4} label="Cargando boletera…" />
+          </>
+        ) : null}
+
+        {!loading && kpis ? (
+          <div className="grid-cards kpi-grid-dense">
+            <div className="kpi">
+              <div className="label">Setups</div>
+              <div className="value">{kpis.setups}</div>
+            </div>
+            <div className="kpi">
+              <div className="label">Aforo</div>
+              <div className="value" style={{ fontSize: '1.35rem' }}>
+                {kpis.capacityTotal.toLocaleString('es-MX')}
+              </div>
+            </div>
+            <div className="kpi">
+              <div className="label">Vendidos</div>
+              <div className="value" style={{ fontSize: '1.35rem' }}>
+                {(kpis.soldTotal ?? 0).toLocaleString('es-MX')}
+              </div>
+            </div>
+            <div className="kpi">
+              <div className="label">Sell-through</div>
+              <div className="value">{kpis.sellThroughPct ?? 0}%</div>
+            </div>
+            <div className="kpi">
+              <div className="label">Revenue potencial</div>
+              <div className="value" style={{ fontSize: '1.05rem' }}>
+                {money(kpis.potentialRevenue)}
+              </div>
+            </div>
+            <div className="kpi">
+              <div className="label">Revenue realizado</div>
+              <div className="value" style={{ fontSize: '1.05rem' }}>
+                {money(kpis.realizedRevenue ?? 0)}
+              </div>
+            </div>
+            <div className={`kpi ${kpis.holdRisk ? 'kpi--danger' : ''}`}>
+              <div className="label">Hold en riesgo</div>
+              <div className="value">{kpis.holdRisk}</div>
+            </div>
+          </div>
+        ) : null}
 
         <div className="panel">
           <div className="panel-head">
@@ -202,6 +308,7 @@ export default function TicketingPage() {
                   <tr>
                     <th>Zona</th>
                     <th>Aforo</th>
+                    <th>Vendidos</th>
                     <th>Precio</th>
                   </tr>
                 </thead>
@@ -216,6 +323,17 @@ export default function TicketingPage() {
                           onChange={(e) => {
                             const next = [...zones];
                             next[i] = { ...z, aforo: Number(e.target.value) };
+                            setZones(next);
+                          }}
+                        />
+                      </td>
+                      <td>
+                        <input
+                          type="number"
+                          value={z.sold ?? 0}
+                          onChange={(e) => {
+                            const next = [...zones];
+                            next[i] = { ...z, sold: Number(e.target.value) };
                             setZones(next);
                           }}
                         />
@@ -254,39 +372,50 @@ export default function TicketingPage() {
             <h2>Configuraciones · {entity}</h2>
           </div>
           <div className="panel-body">
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>Evento</th>
-                  <th>Boletera</th>
-                  <th>Hold</th>
-                  <th>Zonas</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((r) => (
-                  <tr key={r.id}>
-                    <td>
-                      <Link href={`/events/${r.event.id}`}>{r.event.name}</Link>
-                    </td>
-                    <td>{r.boletera}</td>
-                    <td>{r.holdUntil ? new Date(r.holdUntil).toLocaleDateString('es-MX') : '—'}</td>
-                    <td className="muted" style={{ fontSize: 12 }}>
-                      {(r.zonesJson || []).map((z) => `${z.zona}:${z.aforo}`).join(' · ')}
-                    </td>
-                    <td className="row">
-                      <button className="btn ghost" type="button" onClick={() => startEdit(r)}>
-                        Editar
-                      </button>
-                      <button className="btn ghost" type="button" onClick={() => remove(r.id)}>
-                        Eliminar
-                      </button>
-                    </td>
+            {loading ? (
+              <LoadingBlock rows={3} label="Cargando setups…" />
+            ) : !rows.length ? (
+              <EmptyState
+                title="Sin boleteras en esta entidad"
+                description="Crea un setup con zonas/aforo o sincroniza vendidos cuando exista la integración."
+                actionHref="/events"
+                actionLabel="Ir a eventos"
+              />
+            ) : (
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>Evento</th>
+                    <th>Boletera</th>
+                    <th>Hold</th>
+                    <th>Zonas</th>
+                    <th></th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {rows.map((r) => (
+                    <tr key={r.id}>
+                      <td>
+                        <Link href={`/events/${r.event.id}`}>{r.event.name}</Link>
+                      </td>
+                      <td>{r.boletera}</td>
+                      <td>{r.holdUntil ? new Date(r.holdUntil).toLocaleDateString('es-MX') : '—'}</td>
+                      <td className="muted" style={{ fontSize: 12 }}>
+                        {(r.zonesJson || []).map((z) => `${z.zona}:${z.aforo}`).join(' · ')}
+                      </td>
+                      <td className="row">
+                        <button className="btn ghost" type="button" onClick={() => startEdit(r)}>
+                          Editar
+                        </button>
+                        <button className="btn ghost" type="button" onClick={() => remove(r.id)}>
+                          Eliminar
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
           </div>
         </div>
       </div>

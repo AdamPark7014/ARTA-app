@@ -25,6 +25,16 @@ Tras login, el usuario elige / solo ve las entidades a las que tiene acceso.
 5. Corrida/cierre: solo Melissa, Chacho, Arturo
 6. Usuarios: solo Chacho y Arturo
 
+## Inteligencia operativa (Enterprise)
+- **Centro de comando** (`/dashboard`): KPIs, riesgo de shows, pipeline OC, margen, alertas.
+- **Analytics API** (`/analytics/*`): overview, finance, purchase-orders, ops, ticketing, users, audit.
+- **Workspaces por disciplina** (hospitality, transport, etc.): backlog + riesgo + firmas (sin N+1).
+- **Pipeline de eventos**: status + salud ops.
+- **Automations**: cron horario + boot scan + webhooks firmados (`/webhooks`).
+- **OpenAPI**: `http://api/docs`.
+- **RBAC compartido**: package `@arta/rbac`.
+- Ver `docs/ENTERPRISE_ITERATION_W1.md` y `docs/ENTERPRISE_ITERATION_W3.md`.
+
 ## Studio
 Panel tipo Nexara Studio: editar carrusel, noticias y secciones del **sitio público de Arta** (dominio principal).
 No hay sitio web del Auditorio: Explanada solo opera en el panel interno (switch de entidad).

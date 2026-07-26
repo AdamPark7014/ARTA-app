@@ -1,0 +1,132 @@
+'use client';
+
+import type { DirUser, Task } from '@/components/events/event-detail.types';
+
+type TaskForm = { title: string; module: string; assigneeId: string; dueAt: string };
+
+type EventTasksPanelProps = {
+  closed: boolean;
+  tasks: Task[];
+  directory: DirUser[];
+  taskForm: TaskForm;
+  setTaskForm: (form: TaskForm) => void;
+  onCreateTask: () => Promise<void>;
+  onSetTaskStatus: (taskId: string, status: string) => Promise<void>;
+};
+
+export function EventTasksPanel({
+  closed,
+  tasks,
+  directory,
+  taskForm,
+  setTaskForm,
+  onCreateTask,
+  onSetTaskStatus,
+}: EventTasksPanelProps) {
+  return (
+    <div className="stack">
+      {!closed ? (
+        <div className="panel">
+          <div className="panel-head">
+            <h2>Asignar tarea</h2>
+          </div>
+          <div className="panel-body">
+            <div className="form" style={{ maxWidth: 720 }}>
+              <label>
+                Título
+                <input
+                  value={taskForm.title}
+                  onChange={(e) => setTaskForm({ ...taskForm, title: e.target.value })}
+                  placeholder="Ej. Confirmar hospedaje artista"
+                />
+              </label>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+                <label>
+                  Módulo
+                  <input
+                    value={taskForm.module}
+                    onChange={(e) => setTaskForm({ ...taskForm, module: e.target.value })}
+                    placeholder="producción / hospitality…"
+                  />
+                </label>
+                <label>
+                  Asignado a
+                  <select
+                    value={taskForm.assigneeId}
+                    onChange={(e) => setTaskForm({ ...taskForm, assigneeId: e.target.value })}
+                  >
+                    <option value="">Sin asignar</option>
+                    {directory.map((u) => (
+                      <option key={u.id} value={u.id}>
+                        {u.fullName}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  Vence
+                  <input
+                    type="date"
+                    value={taskForm.dueAt}
+                    onChange={(e) => setTaskForm({ ...taskForm, dueAt: e.target.value })}
+                  />
+                </label>
+              </div>
+              <button className="btn" type="button" onClick={onCreateTask}>
+                Crear tarea
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+      <div className="panel">
+        <div className="panel-head">
+          <h2>Tareas del evento</h2>
+        </div>
+        <div className="panel-body">
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Tarea</th>
+                <th>Módulo</th>
+                <th>Asignado</th>
+                <th>Status</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {(tasks || []).map((t) => (
+                <tr key={t.id}>
+                  <td>{t.title}</td>
+                  <td className="muted">{t.module || '—'}</td>
+                  <td>{t.assignee?.fullName || '—'}</td>
+                  <td>
+                    <span className={`badge ${t.status === 'DONE' ? 'ok' : 'warn'}`}>{t.status}</span>
+                  </td>
+                  <td className="row">
+                    {t.status !== 'DONE' ? (
+                      <button className="btn ghost" type="button" onClick={() => onSetTaskStatus(t.id, 'DONE')}>
+                        Hecha
+                      </button>
+                    ) : (
+                      <button className="btn ghost" type="button" onClick={() => onSetTaskStatus(t.id, 'OPEN')}>
+                        Reabrir
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+              {!tasks?.length ? (
+                <tr>
+                  <td colSpan={5} className="muted">
+                    Sin tareas aún.
+                  </td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}

@@ -3,11 +3,11 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useUser } from '@/lib/user-context';
-import { EntityKey, getToken } from '@/lib/api';
+import { EntityKey } from '@/lib/api';
 import { canSeeNavItem, NAV_ITEMS, ROLE_SCOPE } from '@/lib/access-matrix';
-import { buildCrossEntityUrl } from '@/lib/cross-entity-handoff';
+import { createSecureHandoffUrl } from '@/lib/cross-entity-handoff';
 
 export function AppShell({
   children,
@@ -19,10 +19,15 @@ export function AppShell({
   const { user, loading, entity, setEntity, logout } = useUser();
   const pathname = usePathname();
   const router = useRouter();
+  const [navOpen, setNavOpen] = useState(false);
 
   useEffect(() => {
     if (!loading && !user) router.replace('/login');
   }, [loading, user, router]);
+
+  useEffect(() => {
+    setNavOpen(false);
+  }, [pathname, entity]);
 
   const nav = useMemo(() => {
     if (!user) return [];
@@ -39,31 +44,61 @@ export function AppShell({
     return Array.from(map.entries());
   }, [nav]);
 
-  function switchEntity(next: EntityKey) {
+  async function switchEntity(next: EntityKey) {
     if (!user || next === entity) return;
     if (!user.entities.includes(next)) return;
 
-    const token = getToken();
-    const url = token
-      ? buildCrossEntityUrl(next, '/dashboard', {
-          accessToken: token,
-          user,
-          entity: next,
-        })
-      : null;
-
-    if (url && url.startsWith('http')) {
-      window.location.href = url;
+    const secure = await createSecureHandoffUrl(next, '/dashboard');
+    if (secure && secure.startsWith('http')) {
+      window.location.href = secure;
       return;
     }
 
+    // Same-host / local: no cross-subdomain handoff needed
     setEntity(next);
   }
 
   if (loading || !user) {
     return (
-      <div className="login-wrap">
-        <p className="muted">Cargando ARTA…</p>
+      <div className="shell shell--loading" aria-busy="true" aria-label="Cargando ARTA">
+        <aside className="sidebar">
+          <div className="brand">
+            <div className="skeleton skeleton--value" style={{ width: 110, height: 36 }} />
+            <span>
+              <div className="skeleton skeleton--label" style={{ width: 90, marginTop: 8 }} />
+            </span>
+          </div>
+          <div className="entity-switch" aria-hidden>
+            <div className="skeleton skeleton--row" style={{ height: 28, borderRadius: 999 }} />
+            <div className="skeleton skeleton--row" style={{ height: 28, borderRadius: 999 }} />
+          </div>
+          <nav className="nav" aria-hidden>
+            {Array.from({ length: 7 }).map((_, i) => (
+              <div
+                key={i}
+                className="skeleton skeleton--row"
+                style={{ height: 36, width: `${78 - (i % 3) * 8}%`, marginBottom: 6 }}
+              />
+            ))}
+          </nav>
+        </aside>
+        <div className="main">
+          <header className="topbar">
+            <div className="topbar-left">
+              <div className="skeleton skeleton--value" style={{ width: 160, height: 22 }} />
+            </div>
+          </header>
+          <div className="content" style={{ padding: '1.25rem 1.5rem' }}>
+            <p className="muted" style={{ marginBottom: 16, fontSize: 13 }}>
+              Cargando ARTA…
+            </p>
+            <div className="skeleton-stack">
+              <div className="skeleton skeleton--row" style={{ width: '70%' }} />
+              <div className="skeleton skeleton--row" style={{ width: '92%' }} />
+              <div className="skeleton skeleton--row" style={{ width: '55%' }} />
+            </div>
+          </div>
+        </div>
       </div>
     );
   }
@@ -72,8 +107,17 @@ export function AppShell({
   const brandSub = entity === 'ARTA' ? 'PRODUCCIONES' : 'AUDITORIO AREMA';
 
   return (
-    <div className="shell" data-entity={entity}>
-      <aside className="sidebar">
+    <div className={`shell ${navOpen ? 'shell--nav-open' : ''}`} data-entity={entity}>
+      {navOpen ? (
+        <button
+          type="button"
+          className="shell-backdrop"
+          aria-label="Cerrar menú"
+          onClick={() => setNavOpen(false)}
+        />
+      ) : null}
+
+      <aside className="sidebar" id="app-sidebar">
         <div className="brand">
           {entity === 'ARTA' ? (
             <Image
@@ -149,10 +193,24 @@ export function AppShell({
 
       <div className="main">
         <header className="topbar">
-          <div>
-            <h1>{title || 'Panel'}</h1>
-            <div className="topbar-sub">
-              {entity === 'ARTA' ? 'Arta Producciones' : 'Auditorio Arema · Explanada'}
+          <div className="topbar-left">
+            <button
+              type="button"
+              className="nav-toggle"
+              aria-expanded={navOpen}
+              aria-controls="app-sidebar"
+              onClick={() => setNavOpen((v) => !v)}
+            >
+              <span />
+              <span />
+              <span />
+              <span className="sr-only">Menú</span>
+            </button>
+            <div>
+              <h1>{title || 'Panel'}</h1>
+              <div className="topbar-sub">
+                {entity === 'ARTA' ? 'Arta Producciones' : 'Auditorio Arema · Explanada'}
+              </div>
             </div>
           </div>
           <span className={`badge ${entity === 'ARTA' ? 'arta' : 'explanada'}`}>

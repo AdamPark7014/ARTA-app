@@ -14,9 +14,16 @@ import {
 import { IsOptional, IsString } from 'class-validator';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { assertSameTenant } from '../common/tenant';
 import { canAccessEventOps, type EntityKey, type RoleKey } from '../common/rbac/roles';
 
-type AuthUser = { id: string; roleKey: string; entities: string[]; permissions: string[] };
+type AuthUser = {
+  id: string;
+  roleKey: string;
+  entities: string[];
+  permissions: string[];
+  organizationId?: string | null;
+};
 
 class SponsorDto {
   @IsString() eventId!: string;
@@ -39,6 +46,7 @@ export class SponsorsController {
     if (!canAccessEventOps(req.user.entities as EntityKey[], req.user.roleKey as RoleKey, event.entity as EntityKey)) {
       throw new ForbiddenException();
     }
+    assertSameTenant(req.user, event.organizationId);
     return this.prisma.sponsor.findMany({
       where: { eventId },
       orderBy: { createdAt: 'desc' },
@@ -52,6 +60,7 @@ export class SponsorsController {
     if (!canAccessEventOps(req.user.entities as EntityKey[], req.user.roleKey as RoleKey, event.entity as EntityKey)) {
       throw new ForbiddenException();
     }
+    assertSameTenant(req.user, event.organizationId);
     return this.prisma.sponsor.create({
       data: {
         eventId: dto.eventId,
@@ -85,6 +94,7 @@ export class SponsorsController {
     ) {
       throw new ForbiddenException();
     }
+    assertSameTenant(req.user, existing.event.organizationId);
     return this.prisma.sponsor.update({
       where: { id },
       data: {
@@ -113,6 +123,7 @@ export class SponsorsController {
     ) {
       throw new ForbiddenException();
     }
+    assertSameTenant(req.user, existing.event.organizationId);
     await this.prisma.sponsor.delete({ where: { id } });
     return { ok: true };
   }

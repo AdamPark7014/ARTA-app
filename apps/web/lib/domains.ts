@@ -46,6 +46,7 @@ export function isEntitySubdomain(hostname: string): boolean {
 
 export function isPublicPath(pathname: string): boolean {
   if (pathname === '/login') return true;
+  if (pathname.startsWith('/invite')) return true;
   if (pathname.startsWith('/p/')) return true;
   if (pathname.startsWith('/v/')) return true;
   if (pathname.startsWith('/_next')) return true;
@@ -54,4 +55,14 @@ export function isPublicPath(pathname: string): boolean {
   if (pathname.startsWith('/api')) return true;
   if (pathname === '/favicon.ico') return true;
   return false;
+}
+
+/** Safe post-login destination (never bounce to public site). */
+export function safePanelPath(next: string | null | undefined): string {
+  const path = (next || '/dashboard').trim() || '/dashboard';
+  if (!path.startsWith('/')) return '/dashboard';
+  if (path === '/' || path.startsWith('/p/') || path.startsWith('/login') || path.startsWith('/v/')) {
+    return '/dashboard';
+  }
+  return path;
 }

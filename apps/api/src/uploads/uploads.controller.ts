@@ -19,10 +19,17 @@ import { existsSync, mkdirSync, unlinkSync } from 'fs';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { canAccessEventOps, type EntityKey, type RoleKey } from '../common/rbac/roles';
+import { assertSameTenant } from '../common/tenant';
 
 const uploadRoot = process.env.UPLOAD_DIR || join(process.cwd(), 'uploads');
 
-type AuthUser = { id: string; roleKey: string; entities: string[]; permissions: string[] };
+type AuthUser = {
+  id: string;
+  roleKey: string;
+  entities: string[];
+  permissions: string[];
+  organizationId?: string | null;
+};
 
 function ensureDir(path: string) {
   if (!existsSync(path)) mkdirSync(path, { recursive: true });
@@ -39,6 +46,7 @@ export class UploadsController {
     if (!canAccessEventOps(user.entities as EntityKey[], user.roleKey as RoleKey, event.entity as EntityKey)) {
       throw new ForbiddenException('Sin acceso a archivos de este evento');
     }
+    assertSameTenant(user, event.organizationId);
     return event;
   }
 
@@ -96,6 +104,7 @@ export class UploadsController {
       ) {
         throw new ForbiddenException('Sin acceso a archivos de este evento');
       }
+      assertSameTenant(req.user, cl.event.organizationId);
       eventId = cl.eventId;
     } else if (eventId) {
       await this.assertEventOps(req.user, eventId);
@@ -133,6 +142,7 @@ export class UploadsController {
       ) {
         throw new ForbiddenException();
       }
+      assertSameTenant(req.user, file.event.organizationId);
     }
 
     const name = basename(file.url);

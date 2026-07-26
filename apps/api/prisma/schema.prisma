@@ -62,6 +62,69 @@ enum ChecklistTemplateKey {
   CUSTOM
 }
 
+enum OrgPlan {
+  OPS
+  ENTERPRISE
+  TRIAL
+}
+
+// ─── Multi-org tenancy ───────────────────────────────────────────────────────
+model Organization {
+  id        String   @id @default(cuid())
+  slug      String   @unique
+  name      String
+  plan      OrgPlan  @default(OPS)
+  active    Boolean  @default(true)
+  /// Feature flags / branding
+  settingsJson Json?
+  /// Stripe Billing (self-serve)
+  stripeCustomerId     String?  @unique
+  stripeSubscriptionId String?  @unique
+  stripePriceId        String?
+  billingStatus        String?  // active | trialing | past_due | canceled | none
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users  User[]
+  events Event[]
+  memberships OrgMembership[]
+  invites OrgInvite[]
+  webhookEndpoints WebhookEndpoint[]
+  sharedFolders SharedFolder[]
+}
+
+model OrgInvite {
+  id             String    @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  email          String
+  roleKey        String
+  entities       EntityKey[]
+  permissions    String[]  @default([])
+  tokenHash      String    @unique
+  invitedById    String?
+  expiresAt      DateTime
+  acceptedAt     DateTime?
+  revokedAt      DateTime?
+  createdAt      DateTime  @default(now())
+
+  @@index([organizationId, email])
+  @@index([email])
+}
+
+model OrgMembership {
+  id             String   @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  roleKey        String   // rol dentro del org (puede espejar User.roleKey)
+  createdAt      DateTime @default(now())
+
+  @@unique([organizationId, userId])
+  @@index([userId])
+}
+
 // ─── Usuarios / RBAC ─────────────────────────────────────────────────────────
 model User {
   id           String   @id @default(cuid())
@@ -72,6 +135,9 @@ model User {
   phone        String?
   active       Boolean  @default(true)
   roleKey      String // ver roles.ts
+  /// Tenant primario (SaaS multi-org)
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id])
   /// Entidades a las que puede entrar: ["ARTA"], ["EXPLANADA"], ["ARTA","EXPLANADA"]
   entities     EntityKey[]
   /// Permisos finos opcionales (campaña, corrida, usuarios, studio…)
@@ -80,6 +146,10 @@ model User {
   failedLoginCount Int       @default(0)
   lockedUntil      DateTime?
   lastLoginAt  DateTime?
+  /// 2FA TOTP
+  totpSecret   String?
+  totpEnabled  Boolean  @default(false)
+  totpVerifiedAt DateTime?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -94,11 +164,17 @@ model User {
   purchaseOrders    PurchaseOrder[]      @relation("PoCreator")
   poAuthorizations  PurchaseOrder[]      @relation("PoAuthorizer")
   paymentsUploaded  PaymentProof[]
+  sessions          UserSession[]
+  handoffs          AuthHandoff[]
+  memberships       OrgMembership[]
+  totpChallenges    TotpChallenge[]
 }
 
 // ─── Eventos ─────────────────────────────────────────────────────────────────
 model Event {
   id           String       @id @default(cuid())
+  organizationId String?
+  organization Organization? @relation(fields: [organizationId], references: [id])
   entity       EntityKey
   name         String
   artist       String?
@@ -124,6 +200,8 @@ model Event {
   campaign        Campaign?
   sponsors        Sponsor[]
   vendorPins      VendorPin[]
+
+  @@index([organizationId, entity])
 }
 
 // ─── Patrocinadores ──────────────────────────────────────────────────────────
@@ -411,17 +489,20 @@ model NewsPost {
 
 // ─── Carpetas generales (ACL ligero) ─────────────────────────────────────────
 model SharedFolder {
-  id          String    @id @default(cuid())
-  entity      EntityKey
-  name        String
-  description String?
+  id             String       @id @default(cuid())
+  organizationId String       @default("org_arta_internal")
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  entity         EntityKey
+  name           String
+  description    String?
   /// Roles que pueden ver/editar (vacío = todos los de la entidad)
-  allowedRoles String[]
-  createdById String?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  files       SharedFile[]
+  allowedRoles   String[]
+  createdById    String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  files          SharedFile[]
 
+  @@index([organizationId, entity])
   @@index([entity])
 }
 
@@ -469,4 +550,124 @@ model AuditLog {
   createdAt  DateTime @default(now())
 
   @@index([resource, resourceId])
+}
+
+// ─── Identity: sesiones activas ──────────────────────────────────────────────
+model UserSession {
+  id           String    @id @default(cuid())
+  userId       String
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Hash del JWT jti o fingerprint de token (no guardar JWT en claro)
+  tokenHash    String
+  userAgent    String?
+  ip           String?
+  deviceLabel  String?
+  createdAt    DateTime  @default(now())
+  lastSeenAt   DateTime  @default(now())
+  revokedAt    DateTime?
+  expiresAt    DateTime
+
+  @@index([userId, revokedAt])
+  @@index([tokenHash])
+}
+
+/// One-time cross-host SSO (reemplaza JWT en query string)
+model AuthHandoff {
+  id        String   @id @default(cuid())
+  codeHash  String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  entity    EntityKey
+  path      String   @default("/dashboard")
+  /// JWT emitido al consumir (firmado al crear, short TTL)
+  token     String
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+// ─── Integraciones ───────────────────────────────────────────────────────────
+model WebhookEndpoint {
+  id             String   @id @default(cuid())
+  organizationId String   @default("org_arta_internal")
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  name           String
+  url            String
+  secret         String
+  events         String[] // event.created, po.status, checklist.signed, automation.alert…
+  active         Boolean  @default(true)
+  entity         EntityKey? // null = ambas
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  deliveries     WebhookDelivery[]
+
+  @@index([organizationId, active])
+}
+
+model WebhookDelivery {
+  id           String   @id @default(cuid())
+  endpointId   String
+  endpoint     WebhookEndpoint @relation(fields: [endpointId], references: [id], onDelete: Cascade)
+  event        String
+  payloadJson  Json
+  statusCode   Int?
+  success      Boolean  @default(false)
+  error        String?
+  attempts     Int      @default(1)
+  createdAt    DateTime @default(now())
+
+  @@index([endpointId, createdAt])
+}
+
+/// Challenge temporal post-password cuando 2FA está activo
+model TotpChallenge {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  codeHash  String   @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+/// Cola durable ligera (sin Redis): digests, retries, jobs
+model JobRun {
+  id             String   @id @default(cuid())
+  organizationId String?
+  kind           String   // digest.daily | automation.scan | webhook.retry
+  status         String   // pending | running | done | failed
+  payloadJson    Json?
+  resultJson     Json?
+  attempts       Int      @default(0)
+  runAt          DateTime @default(now())
+  startedAt      DateTime?
+  finishedAt     DateTime?
+  error          String?
+  createdAt      DateTime @default(now())
+
+  @@index([kind, status, runAt])
+  @@index([organizationId, createdAt])
+}
+
+model NotificationOutbox {
+  id             String   @id @default(cuid())
+  organizationId String?
+  channel        String   // email | webhook | inapp
+  toAddr         String
+  subject        String
+  bodyText       String   @db.Text
+  metaJson       Json?
+  status         String   @default("pending") // pending | sent | failed
+  attempts       Int      @default(0)
+  sentAt         DateTime?
+  error          String?
+  createdAt      DateTime @default(now())
+
+  @@index([status, createdAt])
+  @@index([organizationId, createdAt])
 }

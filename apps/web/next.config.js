@@ -2,6 +2,7 @@
 const nextConfig = {
   output: 'standalone',
   reactStrictMode: true,
+  transpilePackages: ['@arta/rbac'],
   images: {
     unoptimized: true,
   },

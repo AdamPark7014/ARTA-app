@@ -1,4 +1,5 @@
 import type { AuthUser } from '@/lib/api';
+import { api } from '@/lib/api';
 import type { EntityKey } from '@/lib/domains';
 import {
   AUDITORIO_HOST,
@@ -14,42 +15,12 @@ import {
 export { HANDOFF_PARAM };
 
 export type HandoffPayload = {
-  accessToken: string;
   user: AuthUser;
   entity: EntityKey;
 };
 
-export function encodeHandoff(payload: HandoffPayload): string {
-  try {
-    const json = JSON.stringify(payload);
-    return btoa(unescape(encodeURIComponent(json)));
-  } catch {
-    return '';
-  }
-}
-
-export function decodeHandoff(encoded: string): HandoffPayload | null {
-  try {
-    const json = decodeURIComponent(escape(atob(encoded)));
-    const data = JSON.parse(json) as HandoffPayload;
-    if (!data?.accessToken || !data?.user) return null;
-    return data;
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Build absolute URL to the other entity host with optional JWT handoff.
- * On plain localhost (no entity subdomain), returns null → caller uses setEntity.
- */
-export function buildCrossEntityUrl(
-  targetEntity: EntityKey,
-  path: string,
-  payload: HandoffPayload | null,
-): string | null {
+function targetBase(targetEntity: EntityKey, path: string): string | null {
   if (typeof window === 'undefined') return null;
-
   const { protocol, hostname, port } = window.location;
   const portSuffix = port ? `:${port}` : '';
   const safePath = path.startsWith('/') ? path : `/${path}`;
@@ -62,22 +33,41 @@ export function buildCrossEntityUrl(
   if (currentEntity === targetEntity) return safePath;
 
   let targetHost = hostForEntity(targetEntity);
-
-  // Local hosts-file: keep same TLD/port; arta.localhost / auditorio.localhost
   if (hostname.endsWith('.localhost')) {
     targetHost = targetEntity === 'ARTA' ? 'arta.localhost' : 'auditorio.localhost';
   } else if (isLocalHostname(hostname) === false && hostname.endsWith(`.${ROOT_DOMAIN}`)) {
     targetHost = targetEntity === 'ARTA' ? ARTA_HOST : AUDITORIO_HOST;
   }
 
-  const base = `${protocol}//${targetHost}${portSuffix}${safePath}`;
-  if (!payload) return base;
-  const encoded = encodeHandoff(payload);
-  return encoded ? `${base}?${HANDOFF_PARAM}=${encoded}` : base;
+  return `${protocol}//${targetHost}${portSuffix}${safePath}`;
 }
 
-/** Read and strip ?_nxt= from the current URL. */
-export function consumeHandoffParam(): HandoffPayload | null {
+/**
+ * Secure cross-entity URL using one-time server handoff code (no JWT in query).
+ */
+export async function createSecureHandoffUrl(
+  targetEntity: EntityKey,
+  path: string,
+): Promise<string | null> {
+  const base = targetBase(targetEntity, path);
+  if (!base) return null;
+  if (!base.startsWith('http')) return base;
+
+  try {
+    const res = await api<{ code: string }>('/auth/handoff', {
+      method: 'POST',
+      body: JSON.stringify({ entity: targetEntity, path }),
+    });
+    return `${base}${base.includes('?') ? '&' : '?'}${HANDOFF_PARAM}=${encodeURIComponent(res.code)}`;
+  } catch {
+    return base;
+  }
+}
+
+/**
+ * Consume ?_nxt= one-time handoff code. Legacy base64 JWT payloads are rejected.
+ */
+export async function consumeHandoffParam(): Promise<HandoffPayload | null> {
   if (typeof window === 'undefined') return null;
   const params = new URLSearchParams(window.location.search);
   const raw = params.get(HANDOFF_PARAM);
@@ -89,5 +79,28 @@ export function consumeHandoffParam(): HandoffPayload | null {
     window.location.pathname + (newSearch ? `?${newSearch}` : '') + window.location.hash;
   window.history.replaceState(null, '', newUrl);
 
-  return decodeHandoff(raw);
+  // One-time code only (hex). Reject legacy JWT-in-query payloads.
+  if (!/^[a-f0-9]{32,}$/i.test(raw)) {
+    return null;
+  }
+
+  try {
+    const res = await fetch('/api/auth/handoff/consume', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ code: raw }),
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as {
+      entity: EntityKey;
+      user: AuthUser;
+    };
+    return {
+      user: data.user,
+      entity: data.entity,
+    };
+  } catch {
+    return null;
+  }
 }

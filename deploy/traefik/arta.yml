@@ -1,21 +1,29 @@
 ## Traefik routing for ARTA Operaciones
 ##
 ## Hosts:
-##   arta.artaproducciones.com       → panel ARTA + sitio /p/arta
-##   auditorio.artaproducciones.com  → panel Auditorio (EXPLANADA)
+##   artaproducciones.com / www  → sitio público Arta
+##   arta.artaproducciones.com   → panel ARTA
+##   auditorio.artaproducciones.com → panel Auditorio
 ##
-## /api y /uploads van directo a arta-api (evita Invalid host header en rewrite).
+## /api y /uploads (paneles) van a arta-api con prioridad > Nexara.
 
 http:
   routers:
     arta-http:
-      rule: 'Host(`arta.artaproducciones.com`) || Host(`auditorio.artaproducciones.com`)'
+      rule: >-
+        Host(`artaproducciones.com`) ||
+        Host(`www.artaproducciones.com`) ||
+        Host(`arta.artaproducciones.com`) ||
+        Host(`auditorio.artaproducciones.com`)
       entryPoints: [web]
       middlewares: [redirect-https-arta]
       service: dummy-arta
 
     arta-api:
-      rule: 'Host(`arta.artaproducciones.com`,`auditorio.artaproducciones.com`) && PathPrefix(`/api`)'
+      rule: >-
+        Host(`artaproducciones.com`,`www.artaproducciones.com`,
+             `arta.artaproducciones.com`,`auditorio.artaproducciones.com`) &&
+        PathPrefix(`/api`)
       entryPoints: [websecure]
       service: arta-api
       priority: 200
@@ -24,12 +32,27 @@ http:
         certResolver: letsencrypt
 
     arta-uploads:
-      rule: 'Host(`arta.artaproducciones.com`,`auditorio.artaproducciones.com`) && PathPrefix(`/uploads`)'
+      rule: >-
+        Host(`artaproducciones.com`,`www.artaproducciones.com`,
+             `arta.artaproducciones.com`,`auditorio.artaproducciones.com`) &&
+        PathPrefix(`/uploads`)
       entryPoints: [websecure]
       service: arta-api
       priority: 200
       tls:
         certResolver: letsencrypt
+
+    arta-public-https:
+      rule: 'Host(`artaproducciones.com`,`www.artaproducciones.com`)'
+      service: arta-web
+      entryPoints: [websecure]
+      priority: 50
+      tls:
+        certResolver: letsencrypt
+        domains:
+          - main: artaproducciones.com
+            sans:
+              - www.artaproducciones.com
 
     arta-https:
       rule: 'Host(`arta.artaproducciones.com`,`auditorio.artaproducciones.com`)'
@@ -48,7 +71,6 @@ http:
       redirectScheme:
         scheme: https
         permanent: true
-    # Browser calls /api/... ; Nest listens on /...
     arta-strip-api:
       stripPrefix:
         prefixes:

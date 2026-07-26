@@ -15,9 +15,16 @@ import { TaskStatus } from '@prisma/client';
 import { IsEnum, IsOptional, IsString } from 'class-validator';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { assertSameTenant, tenantIdOf } from '../common/tenant';
 import { canAccessEventOps, eventOpsEntities, type EntityKey, type RoleKey } from '../common/rbac/roles';
 
-type AuthUser = { id: string; roleKey: string; entities: string[]; fullName: string };
+type AuthUser = {
+  id: string;
+  roleKey: string;
+  entities: string[];
+  fullName: string;
+  organizationId?: string | null;
+};
 
 class CreateTaskDto {
   @IsString() eventId!: string;
@@ -38,6 +45,7 @@ export class TasksController {
     if (!canAccessEventOps(user.entities as EntityKey[], user.roleKey as RoleKey, event.entity as EntityKey)) {
       throw new ForbiddenException();
     }
+    assertSameTenant(user, event.organizationId);
     return event;
   }
 
@@ -55,10 +63,14 @@ export class TasksController {
   mine(@Req() req: { user: AuthUser }) {
     const allowed = eventOpsEntities(req.user.entities as EntityKey[], req.user.roleKey as RoleKey);
     if (!allowed.length) return [];
+    const isSuper = req.user.roleKey === 'super_admin';
     return this.prisma.taskAssignment.findMany({
       where: {
         assigneeId: req.user.id,
-        event: { entity: { in: allowed } },
+        event: {
+          entity: { in: allowed },
+          ...(isSuper ? {} : { organizationId: tenantIdOf(req.user) }),
+        },
       },
       include: {
         event: { select: { id: true, name: true, entity: true, status: true } },

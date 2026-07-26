@@ -134,7 +134,7 @@ const USER_VIEWS: Record<
     notes: string;
   }
 > = {
-  'arturo@arta.mx': {
+  'arturo@artaproducciones.com': {
     entities: ['ARTA', 'EXPLANADA'],
     homeEntity: 'ARTA',
     modules: [
@@ -151,7 +151,7 @@ const USER_VIEWS: Record<
     ],
     notes: 'TODO en ambas entidades · usuarios · corrida · cierre',
   },
-  'chacho@arta.mx': {
+  'chacho@artaproducciones.com': {
     entities: ['ARTA', 'EXPLANADA'],
     homeEntity: 'ARTA',
     modules: [
@@ -168,7 +168,7 @@ const USER_VIEWS: Record<
     ],
     notes: 'TODO en ambas · usuarios · corrida · cierre',
   },
-  'melissa@arta.mx': {
+  'melissa@artaproducciones.com': {
     entities: ['ARTA'],
     homeEntity: 'ARTA',
     modules: [
@@ -201,19 +201,19 @@ const USER_VIEWS: Record<
     ],
     notes: 'Home Auditorio · TODO Explanada · generales Arta · autoriza OC Auditorio',
   },
-  'williams@arta.mx': {
+  'williams@artaproducciones.com': {
     entities: ['ARTA', 'EXPLANADA'],
     homeEntity: 'ARTA',
     modules: ['dashboard', 'events', 'checklists', 'campaigns', 'ticketing', 'site'],
     notes: 'Generales ambos · edita campaña con Melissa · boletera',
   },
-  'leida@arta.mx': {
+  'leida@artaproducciones.com': {
     entities: ['ARTA', 'EXPLANADA'],
     homeEntity: 'ARTA',
     modules: ['dashboard', 'events', 'checklists', 'site'],
     notes: 'Generales · convenios / patrocinios',
   },
-  'jp@arta.mx': {
+  'jp@artaproducciones.com': {
     entities: ['ARTA', 'EXPLANADA'],
     homeEntity: 'ARTA',
     modules: ['dashboard', 'events', 'checklists', 'purchase-orders', 'site'],
@@ -605,7 +605,7 @@ type SeedUser = {
 
 const USERS: SeedUser[] = [
   {
-    email: 'arturo@arta.mx',
+    email: 'arturo@artaproducciones.com',
     fullName: 'Arturo Taja',
     title: 'Director general de Arta',
     roleKey: ROLES.DIR_GENERAL,
@@ -614,7 +614,7 @@ const USERS: SeedUser[] = [
     passAlias: 'ARTURO',
   },
   {
-    email: 'chacho@arta.mx',
+    email: 'chacho@artaproducciones.com',
     fullName: 'José Luis Arista',
     title: 'Director general de Arta',
     roleKey: ROLES.DIR_GENERAL,
@@ -623,7 +623,7 @@ const USERS: SeedUser[] = [
     passAlias: 'CHACHO',
   },
   {
-    email: 'melissa@arta.mx',
+    email: 'melissa@artaproducciones.com',
     fullName: 'Melissa Astudillo',
     title: 'Gerente general de Arta',
     roleKey: ROLES.GERENTE_ARTA,
@@ -641,7 +641,7 @@ const USERS: SeedUser[] = [
     passAlias: 'RODRIGO',
   },
   {
-    email: 'williams@arta.mx',
+    email: 'williams@artaproducciones.com',
     fullName: 'Williams Taja',
     title: 'Logística y producción',
     roleKey: ROLES.LOGISTICA,
@@ -650,7 +650,7 @@ const USERS: SeedUser[] = [
     passAlias: 'WILLIAMS',
   },
   {
-    email: 'leida@arta.mx',
+    email: 'leida@artaproducciones.com',
     fullName: 'Leida Osorio',
     title: 'Convenios y patrocinios',
     roleKey: ROLES.CONVENIOS,
@@ -659,7 +659,7 @@ const USERS: SeedUser[] = [
     passAlias: 'LEIDA',
   },
   {
-    email: 'jp@arta.mx',
+    email: 'jp@artaproducciones.com',
     fullName: 'Juan Pablo Ramírez',
     title: 'Enlace gobierno y pagos',
     roleKey: ROLES.ENLACE_GOBIERNO,
@@ -840,9 +840,295 @@ async function main() {
   }
   console.log('  ✓ Studio pages + slides + news Arta (assets en uploads)');
 
+  await seedDemoPortfolio();
+
   console.log('\nSeed OK.');
   console.log('Passwords: SEED_PASSWORD o SEED_PASS_<ALIAS> (ARTURO, MELISSA, RODRIGO…).');
   console.log('Default dev (si no hay env): ArtaDevLocal-1');
+}
+
+/** Demo portfolio for walkthroughs / analytics — idempotent via notes marker. */
+async function seedDemoPortfolio() {
+  const existing = await prisma.event.count({ where: { notes: { contains: '[SEED_DEMO]' } } });
+  if (existing > 0) {
+    console.log('  · Demo portfolio ya existe — skip');
+    return;
+  }
+
+  const melissa = await prisma.user.findUnique({ where: { email: 'melissa@artaproducciones.com' } });
+  const rodrigo = await prisma.user.findUnique({ where: { email: 'rodrigo@arema.mx' } });
+  const williams = await prisma.user.findUnique({ where: { email: 'williams@artaproducciones.com' } });
+  const creatorId = melissa?.id || rodrigo?.id;
+  if (!creatorId) {
+    console.log('  · Sin usuarios seed — skip demo events');
+    return;
+  }
+
+  const templates = await prisma.checklistTemplate.findMany({ where: { active: true } });
+  const now = new Date();
+
+  type DemoSpec = {
+    entity: EntityKey;
+    name: string;
+    artist: string;
+    venue: string;
+    city: string;
+    status: 'ACTIVE' | 'DRAFT' | 'CLOSED';
+    daysFromNow: number;
+    progressBias: number;
+    income: number;
+    expense: number;
+    pos: Array<{ rubro: string; vendor: string; amount: number; status: 'DRAFT' | 'PENDING_AUTH' | 'AUTHORIZED' | 'PAID'; ageDays: number }>;
+  };
+
+  const demos: DemoSpec[] = [
+    {
+      entity: 'ARTA',
+      name: 'Noche Estelar · Puebla',
+      artist: 'Artista A',
+      venue: 'Auditorio Metropolitano',
+      city: 'Puebla',
+      status: 'ACTIVE',
+      daysFromNow: 9,
+      progressBias: 38,
+      income: 1_850_000,
+      expense: 1_420_000,
+      pos: [
+        { rubro: 'audio', vendor: 'Sonic MX', amount: 180000, status: 'PENDING_AUTH', ageDays: 9 },
+        { rubro: 'luces', vendor: 'Lumen Pro', amount: 95000, status: 'AUTHORIZED', ageDays: 5 },
+        { rubro: 'hospedaje', vendor: 'Hotel Reforma', amount: 62000, status: 'PAID', ageDays: 12 },
+      ],
+    },
+    {
+      entity: 'ARTA',
+      name: 'Tour Centro · León',
+      artist: 'Banda Norte',
+      venue: 'Domo de la Feria',
+      city: 'León',
+      status: 'ACTIVE',
+      daysFromNow: 22,
+      progressBias: 72,
+      income: 2_400_000,
+      expense: 1_650_000,
+      pos: [
+        { rubro: 'producción', vendor: 'StageCrew', amount: 210000, status: 'AUTHORIZED', ageDays: 3 },
+        { rubro: 'catering', vendor: 'Gourmet Live', amount: 48000, status: 'PENDING_AUTH', ageDays: 2 },
+      ],
+    },
+    {
+      entity: 'ARTA',
+      name: 'Cierre Temporada · CDMX',
+      artist: 'Headliner X',
+      venue: 'Foro Sol anexo',
+      city: 'CDMX',
+      status: 'CLOSED',
+      daysFromNow: -18,
+      progressBias: 96,
+      income: 3_100_000,
+      expense: 2_450_000,
+      pos: [{ rubro: 'marketing', vendor: 'MediaLab', amount: 120000, status: 'PAID', ageDays: 30 }],
+    },
+    {
+      entity: 'EXPLANADA',
+      name: 'Renta Boletera · Arena Night',
+      artist: 'Promotor Z',
+      venue: 'Auditorio Arema Explanada',
+      city: 'Puebla',
+      status: 'ACTIVE',
+      daysFromNow: 5,
+      progressBias: 45,
+      income: 980_000,
+      expense: 720_000,
+      pos: [
+        { rubro: 'mantenimiento', vendor: 'TechFix', amount: 35000, status: 'PENDING_AUTH', ageDays: 11 },
+        { rubro: 'seguridad', vendor: 'Guardia Elite', amount: 42000, status: 'AUTHORIZED', ageDays: 4 },
+      ],
+    },
+    {
+      entity: 'EXPLANADA',
+      name: 'Show Familiar · Domingo',
+      artist: 'Kids Live',
+      venue: 'Auditorio Arema Explanada',
+      city: 'Puebla',
+      status: 'DRAFT',
+      daysFromNow: 40,
+      progressBias: 18,
+      income: 420_000,
+      expense: 510_000,
+      pos: [{ rubro: 'artes', vendor: 'PrintLab', amount: 28000, status: 'DRAFT', ageDays: 1 }],
+    },
+  ];
+
+  function applyProgress(schema: Schema, pct: number): { data: Schema; progressPct: number } {
+    const clone: Schema = JSON.parse(JSON.stringify(schema));
+    const items = clone.sections.flatMap((s) => s.items);
+    const target = Math.round((pct / 100) * items.length);
+    items.forEach((it, i) => {
+      if (i < target) {
+        if (it.type === 'check' || !it.type) it.done = true;
+        else if (it.type === 'text') it.value = 'OK';
+        else if (it.type === 'number') it.value = 1;
+        else if (it.type === 'date') it.value = now.toISOString().slice(0, 10);
+      }
+    });
+    const scored = items.filter((i) => {
+      if (i.type === 'check' || !i.type) return !!i.done;
+      return i.value !== null && i.value !== undefined && String(i.value).trim() !== '';
+    }).length;
+    return {
+      data: clone,
+      progressPct: items.length ? Math.round((scored / items.length) * 100) : pct,
+    };
+  }
+
+  for (const d of demos) {
+    const startsAt = new Date(now.getTime() + d.daysFromNow * 86_400_000);
+    const event = await prisma.event.create({
+      data: {
+        entity: d.entity,
+        name: d.name,
+        artist: d.artist,
+        venue: d.venue,
+        city: d.city,
+        status: d.status,
+        startsAt,
+        endsAt: new Date(startsAt.getTime() + 4 * 3600_000),
+        campaignType: 'INTERNAL',
+        notes: `[SEED_DEMO] Portfolio demo para analytics / walkthrough`,
+        createdById: creatorId,
+      },
+    });
+
+    const applicable = templates.filter(
+      (t) => !t.entities.length || t.entities.includes(d.entity),
+    );
+
+    for (const t of applicable) {
+      const schema = (t.schemaJson || { sections: [] }) as Schema;
+      const { data, progressPct } = applyProgress(schema, d.progressBias + (Math.random() * 10 - 5));
+      await prisma.checklistInstance.create({
+        data: {
+          eventId: event.id,
+          templateId: t.id,
+          title: t.name,
+          dataJson: data as Prisma.InputJsonValue,
+          progressPct: Math.max(0, Math.min(100, Math.round(progressPct))),
+          lastEditedById: williams?.id || creatorId,
+          lastEditedAt: new Date(now.getTime() - Math.random() * 5 * 86_400_000),
+          deliveredAt: progressPct > 70 ? new Date(now.getTime() - 2 * 86_400_000) : undefined,
+          deliveredById: progressPct > 70 ? (williams?.id || creatorId) : undefined,
+          authorizedAt: progressPct > 90 ? new Date(now.getTime() - 1 * 86_400_000) : undefined,
+          authorizedById: progressPct > 90 ? creatorId : undefined,
+        },
+      });
+    }
+
+    await prisma.campaign.create({
+      data: {
+        eventId: event.id,
+        type: 'INTERNAL',
+        authorized: d.progressBias > 60,
+        authorizedAt: d.progressBias > 60 ? now : undefined,
+        notes: 'Campaña demo seed',
+      },
+    });
+
+    await prisma.financeRun.create({
+      data: {
+        eventId: event.id,
+        title: 'Corrida financiera',
+        locked: d.status === 'CLOSED',
+        dataJson: {
+          rows: [
+            { concept: 'Taquilla', type: 'income', amount: Math.round(d.income * 0.7) },
+            { concept: 'Patrocinios', type: 'income', amount: Math.round(d.income * 0.3) },
+            { concept: 'Producción', type: 'expense', amount: Math.round(d.expense * 0.55) },
+            { concept: 'Hospitality', type: 'expense', amount: Math.round(d.expense * 0.25) },
+            { concept: 'Marketing', type: 'expense', amount: Math.round(d.expense * 0.2) },
+          ],
+          totalIncome: d.income,
+          totalExpense: d.expense,
+        },
+      },
+    });
+
+    for (const po of d.pos) {
+      const createdAt = new Date(now.getTime() - po.ageDays * 86_400_000);
+      await prisma.purchaseOrder.create({
+        data: {
+          eventId: event.id,
+          rubro: po.rubro,
+          vendorName: po.vendor,
+          amount: po.amount,
+          status: po.status,
+          createdById: creatorId,
+          authorizedById:
+            po.status === 'AUTHORIZED' || po.status === 'PAID'
+              ? d.entity === 'EXPLANADA'
+                ? rodrigo?.id
+                : melissa?.id
+              : undefined,
+          authorizedAt: po.status === 'AUTHORIZED' || po.status === 'PAID' ? createdAt : undefined,
+          paidAt: po.status === 'PAID' ? now : undefined,
+          createdAt,
+          lines: {
+            create: [
+              {
+                concept: `${po.rubro} — servicio`,
+                qty: 1,
+                unitPrice: po.amount,
+                total: po.amount,
+              },
+            ],
+          },
+        },
+      });
+    }
+
+    if (williams) {
+      await prisma.taskAssignment.create({
+        data: {
+          eventId: event.id,
+          assigneeId: williams.id,
+          title: `Seguimiento ops · ${d.name}`,
+          module: 'producción',
+          status: d.progressBias > 70 ? 'DONE' : 'OPEN',
+          dueAt: startsAt,
+        },
+      });
+    }
+
+    await prisma.auditLog.create({
+      data: {
+        userId: creatorId,
+        action: 'event.create',
+        resource: 'Event',
+        resourceId: event.id,
+        metaJson: { seedDemo: true, name: d.name },
+      },
+    });
+
+    if (d.status !== 'DRAFT') {
+      const aforoBase = d.entity === 'EXPLANADA' ? 4500 : 3200;
+      await prisma.ticketingSetup.create({
+        data: {
+          eventId: event.id,
+          boletera: d.entity === 'EXPLANADA' ? 'Arema' : 'eTicket',
+          artist: d.artist,
+          holdUntil: new Date(startsAt.getTime() - 2 * 86_400_000),
+          zonesJson: [
+            { zona: 'Diamante', aforo: Math.round(aforoBase * 0.1), precio: 1800, sold: Math.round(aforoBase * 0.1 * 0.72) },
+            { zona: 'Oro', aforo: Math.round(aforoBase * 0.25), precio: 1200, sold: Math.round(aforoBase * 0.25 * 0.65) },
+            { zona: 'Plata', aforo: Math.round(aforoBase * 0.35), precio: 850, sold: Math.round(aforoBase * 0.35 * 0.58) },
+            { zona: 'Bronce', aforo: Math.round(aforoBase * 0.3), precio: 550, sold: Math.round(aforoBase * 0.3 * 0.81) },
+          ],
+          notes: 'Setup demo seed',
+        },
+      });
+    }
+  }
+
+  console.log(`  ✓ Demo portfolio: ${demos.length} eventos + corridas + OC + tasks`);
 }
 
 main()

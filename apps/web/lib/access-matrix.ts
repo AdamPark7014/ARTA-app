@@ -1,7 +1,16 @@
 /**
- * Matriz de acceso del panel (fuente única para sidebar y gates en UI).
- * Espejo de roles.ts del API.
+ * Matriz de acceso del panel (NAV + gates UI).
+ * Permisos/roles canónicos: @arta/rbac
  */
+
+import {
+  ROLE_PERMISSIONS,
+  hasPermission,
+  canAccessEventOps as rbacCanAccessEventOps,
+  type EntityKey as RbacEntity,
+  type Permission,
+  type RoleKey as RbacRole,
+} from '@arta/rbac';
 
 export type EntityKey = 'ARTA' | 'EXPLANADA';
 export type RoleKey =
@@ -133,6 +142,13 @@ export const NAV_ITEMS: NavItem[] = [
     requiresEventOps: true,
   },
   {
+    href: '/risk',
+    label: 'Risk workspace',
+    permissions: ['checklist.edit', 'event.create', 'everything'],
+    group: 'Operación',
+    requiresEventOps: true,
+  },
+  {
     href: '/maintenance',
     label: 'Mantenimiento',
     entities: ['EXPLANADA'],
@@ -161,19 +177,52 @@ export const NAV_ITEMS: NavItem[] = [
     group: 'Admin',
   },
   {
+    href: '/organizations',
+    label: 'Organizaciones',
+    permissions: ['users.manage', 'everything'],
+    roles: ['dir_general', 'super_admin'],
+    group: 'Admin',
+  },
+  {
+    href: '/security',
+    label: 'Seguridad',
+    group: 'Admin',
+  },
+  {
     href: '/audit',
     label: 'Audit log',
     permissions: ['users.manage', 'everything'],
     roles: ['dir_general', 'super_admin'],
     group: 'Admin',
   },
+  {
+    href: '/webhooks',
+    label: 'Webhooks',
+    permissions: ['users.manage', 'everything'],
+    roles: ['dir_general', 'super_admin'],
+    group: 'Admin',
+  },
+  {
+    href: '/digests',
+    label: 'Digests / Jobs',
+    permissions: ['users.manage', 'everything'],
+    roles: ['dir_general', 'super_admin'],
+    group: 'Admin',
+  },
+  {
+    href: '/vendor',
+    label: 'Vendor PIN',
+    permissions: ['vendor.pin', 'everything'],
+    group: 'Operación',
+    requiresEventOps: true,
+  },
 ];
 
 /** dir_auditorio: full EXPLANADA; ARTA = solo carpetas (no eventos) */
 export function canAccessEventOps(roleKey: string, entity: EntityKey): boolean {
+  // UI helper: entities list not always present — use role rules
   if (roleKey === 'super_admin' || roleKey === 'dir_general') return true;
-  if (roleKey === 'dir_auditorio' && entity === 'ARTA') return false;
-  return true;
+  return rbacCanAccessEventOps([entity] as RbacEntity[], roleKey as RbacRole, entity as RbacEntity);
 }
 
 export function userHasPermission(
@@ -184,49 +233,9 @@ export function userHasPermission(
   if (!needed?.length) return true;
   if (roleKey === 'super_admin' || roleKey === 'dir_general') return true;
   if (permissions.includes('everything')) return true;
-  const fromRole: Record<string, string[]> = {
-    gerente_arta: [
-      'finance.edit',
-      'finance.view',
-      'campaign.edit',
-      'campaign.view',
-      'po.authorize',
-      'po.mark_paid',
-      'event.create',
-      'event.close',
-      'checklist.edit',
-      'studio.edit',
-      'ticketing.edit',
-      'folders.edit',
-      'vendor.pin',
-    ],
-    dir_auditorio: [
-      'finance.view',
-      'campaign.view',
-      'po.authorize',
-      'po.mark_paid',
-      'event.create',
-      'event.close',
-      'checklist.edit',
-      'studio.edit',
-      'ticketing.edit',
-      'folders.edit',
-      'vendor.pin',
-    ],
-    logistica: [
-      'campaign.edit',
-      'campaign.view',
-      'checklist.edit',
-      'event.create',
-      'ticketing.edit',
-      'finance.view',
-      'folders.edit',
-    ],
-    convenios: ['checklist.edit', 'finance.view', 'campaign.view', 'folders.edit'],
-    enlace_gobierno: ['checklist.edit', 'finance.view', 'po.mark_paid', 'event.create', 'folders.edit'],
-  };
-  const bag = new Set([...(fromRole[roleKey] || []), ...permissions]);
-  return needed.some((p) => bag.has(p));
+  return needed.some((p) =>
+    hasPermission(roleKey as RbacRole, permissions, p as Permission),
+  );
 }
 
 export function canSeeNavItem(
@@ -252,3 +261,6 @@ export const ROLE_SCOPE: Record<string, string> = {
   convenios: 'Carpetas · patrocinios · checklists',
   enlace_gobierno: 'Carpetas · pagos · marcar OC pagado',
 };
+
+/** Expuesto para pantallas de gobierno */
+export { ROLE_PERMISSIONS };

@@ -1,7 +1,10 @@
 'use client';
 
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { AppShell } from '@/components/app-shell/AppShell';
+import { DistBar } from '@/components/charts/SparkBars';
+import { EmptyState } from '@/components/ui/EmptyState';
+import { LoadingBlock, LoadingKpis } from '@/components/ui/LoadingBlock';
 import { api } from '@/lib/api';
 
 type UserRow = {
@@ -17,6 +20,32 @@ type UserRow = {
   lastLoginAt?: string | null;
 };
 
+type GovUser = UserRow & {
+  activity30d: number;
+  checklistEdits30d: number;
+  activeSessions?: number;
+  inactive30: boolean;
+  locked: boolean;
+  risk: 'high' | 'medium' | 'low';
+  riskScore: number;
+  failedLoginCount: number;
+};
+
+type UsersGov = {
+  kpis: {
+    total: number;
+    active: number;
+    inactive: number;
+    neverLoggedIn: number;
+    inactive30d: number;
+    lockedNow: number;
+    highRisk: number;
+    loggedIn7d: number;
+  };
+  byRole: Record<string, number>;
+  users: GovUser[];
+};
+
 type RoleOpt = { key: string; label: string };
 type PermOpt = { key: string; label: string };
 
@@ -30,29 +59,57 @@ const EMPTY = {
 };
 
 export default function UsersPage() {
-  const [users, setUsers] = useState<UserRow[]>([]);
+  const [gov, setGov] = useState<UsersGov | null>(null);
   const [roles, setRoles] = useState<RoleOpt[]>([]);
   const [permCatalog, setPermCatalog] = useState<PermOpt[]>([]);
   const [error, setError] = useState('');
   const [msg, setMsg] = useState('');
   const [form, setForm] = useState(EMPTY);
+  const [inviteMode, setInviteMode] = useState(true);
+  const [inviteUrl, setInviteUrl] = useState('');
+  const [orgId, setOrgId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [permsUserId, setPermsUserId] = useState<string | null>(null);
+  const [riskFilter, setRiskFilter] = useState<'all' | 'high' | 'medium' | 'low'>('all');
+  const [q, setQ] = useState('');
+  const [loading, setLoading] = useState(true);
 
   async function load() {
-    const [u, r, p] = await Promise.all([
-      api<UserRow[]>('/users'),
+    const [g, r, p, meOrg] = await Promise.all([
+      api<UsersGov>('/analytics/users'),
       api<RoleOpt[]>('/users/roles'),
       api<PermOpt[]>('/users/permissions/catalog'),
+      api<{ id: string }>('/organizations/me').catch(() => null),
     ]);
-    setUsers(u);
+    setGov(g);
     setRoles(r);
     setPermCatalog(p);
+    if (meOrg?.id) setOrgId(meOrg.id);
   }
 
   useEffect(() => {
-    load().catch((e) => setError(e.message));
+    setLoading(true);
+    load()
+      .catch((e) => setError(e.message))
+      .finally(() => setLoading(false));
   }, []);
+
+  const users = gov?.users || [];
+
+  const filtered = useMemo(() => {
+    let list = users;
+    if (riskFilter !== 'all') list = list.filter((u) => u.risk === riskFilter);
+    if (q.trim()) {
+      const n = q.toLowerCase();
+      list = list.filter(
+        (u) =>
+          u.fullName.toLowerCase().includes(n) ||
+          u.email.toLowerCase().includes(n) ||
+          u.roleKey.toLowerCase().includes(n),
+      );
+    }
+    return list;
+  }, [users, riskFilter, q]);
 
   function toggleEntity(ent: string) {
     setForm((f) => ({
@@ -69,13 +126,30 @@ export default function UsersPage() {
     }
     setSaving(true);
     setMsg('');
+    setInviteUrl('');
     try {
-      await api('/users', {
-        method: 'POST',
-        body: JSON.stringify(form),
-      });
-      setForm(EMPTY);
-      setMsg('Usuario creado');
+      if (inviteMode) {
+        if (!orgId) throw new Error('Sin organización activa');
+        if (!form.email) throw new Error('Email requerido');
+        const created = await api<{ acceptUrl: string }>(`/organizations/${orgId}/invites`, {
+          method: 'POST',
+          body: JSON.stringify({
+            email: form.email,
+            roleKey: form.roleKey,
+            entities: form.entities,
+          }),
+        });
+        setInviteUrl(created.acceptUrl);
+        setForm({ ...EMPTY, roleKey: form.roleKey, entities: form.entities });
+        setMsg('Invitación creada — copia el link si SMTP está off');
+      } else {
+        await api('/users', {
+          method: 'POST',
+          body: JSON.stringify(form),
+        });
+        setForm(EMPTY);
+        setMsg('Usuario creado');
+      }
       await load();
     } catch (err) {
       setMsg(err instanceof Error ? err.message : 'Error');
@@ -98,7 +172,7 @@ export default function UsersPage() {
     await load();
   }
 
-  function togglePerm(u: UserRow, key: string) {
+  function togglePerm(u: GovUser, key: string) {
     const next = u.permissions.includes(key)
       ? u.permissions.filter((p) => p !== key)
       : [...u.permissions, key];
@@ -106,32 +180,99 @@ export default function UsersPage() {
   }
 
   const editingUser = users.find((u) => u.id === permsUserId) || null;
+  const k = gov?.kpis;
 
   return (
-    <AppShell title="Usuarios">
+    <AppShell title="Identity & Access">
       <div className="page-workspace stack">
         <div className="page-intro">
           <p className="muted">
-            Solo Arturo y Chacho gestionan cuentas. El rol define el acceso base; los permisos extra se
-            suman sin cambiar el rol.
+            Gobernanza de identidades: actividad, riesgo, lockouts y privilegios. Solo dirección gestiona
+            cuentas; el rol define el acceso base y los permisos extra se suman.
           </p>
         </div>
+
+        {loading ? (
+          <>
+            <LoadingKpis count={6} />
+            <LoadingBlock rows={5} label="Cargando gobernanza de usuarios…" />
+          </>
+        ) : null}
+
+        {!loading && k ? (
+          <div className="grid-cards kpi-grid-dense">
+            <div className="kpi">
+              <div className="label">Usuarios</div>
+              <div className="value">{k.total}</div>
+            </div>
+            <div className="kpi">
+              <div className="label">Activos</div>
+              <div className="value">{k.active}</div>
+            </div>
+            <div className="kpi">
+              <div className="label">Login 7d</div>
+              <div className="value">{k.loggedIn7d}</div>
+            </div>
+            <div className={`kpi ${k.inactive30d ? 'kpi--danger' : ''}`}>
+              <div className="label">Inactivos 30d</div>
+              <div className="value">{k.inactive30d}</div>
+            </div>
+            <div className={`kpi ${k.lockedNow ? 'kpi--danger' : ''}`}>
+              <div className="label">Locked ahora</div>
+              <div className="value">{k.lockedNow}</div>
+            </div>
+            <div className={`kpi ${k.highRisk ? 'kpi--danger' : ''}`}>
+              <div className="label">Alto riesgo</div>
+              <div className="value">{k.highRisk}</div>
+            </div>
+          </div>
+        ) : null}
+
+        {!loading && gov ? (
+          <div className="panel">
+            <div className="panel-body">
+              <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>
+                Distribución por rol
+              </div>
+              <DistBar
+                segments={Object.entries(gov.byRole).map(([label, value], i) => ({
+                  label,
+                  value,
+                  tone: (['ok', 'warn', 'muted', 'danger'] as const)[i % 4],
+                }))}
+              />
+            </div>
+          </div>
+        ) : null}
 
         <div className="users-layout">
           <div className="panel">
             <div className="panel-head">
-              <h2>Nuevo usuario</h2>
+              <h2>{inviteMode ? 'Invitar usuario' : 'Nuevo usuario'}</h2>
+              <button
+                className="btn ghost"
+                type="button"
+                onClick={() => {
+                  setInviteMode((v) => !v);
+                  setInviteUrl('');
+                  setMsg('');
+                }}
+              >
+                {inviteMode ? 'Crear con password' : 'Invitar por email'}
+              </button>
             </div>
             <div className="panel-body">
               <form className="form" onSubmit={onCreate}>
-                <label>
-                  Nombre
-                  <input
-                    required
-                    value={form.fullName}
-                    onChange={(e) => setForm({ ...form, fullName: e.target.value })}
-                  />
-                </label>
+                {!inviteMode ? (
+                  <label>
+                    Nombre
+                    <input
+                      required
+                      value={form.fullName}
+                      onChange={(e) => setForm({ ...form, fullName: e.target.value })}
+                    />
+                  </label>
+                ) : null}
                 <label>
                   Email
                   <input
@@ -141,10 +282,15 @@ export default function UsersPage() {
                     onChange={(e) => setForm({ ...form, email: e.target.value })}
                   />
                 </label>
-                <label>
-                  Cargo
-                  <input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
-                </label>
+                {!inviteMode ? (
+                  <label>
+                    Cargo
+                    <input
+                      value={form.title}
+                      onChange={(e) => setForm({ ...form, title: e.target.value })}
+                    />
+                  </label>
+                ) : null}
                 <label>
                   Rol
                   <select
@@ -159,16 +305,23 @@ export default function UsersPage() {
                     ))}
                   </select>
                 </label>
-                <label>
-                  Password temporal
-                  <input
-                    required
-                    type="password"
-                    minLength={6}
-                    value={form.password}
-                    onChange={(e) => setForm({ ...form, password: e.target.value })}
-                  />
-                </label>
+                {!inviteMode ? (
+                  <label>
+                    Password temporal
+                    <input
+                      required
+                      type="password"
+                      minLength={6}
+                      value={form.password}
+                      onChange={(e) => setForm({ ...form, password: e.target.value })}
+                    />
+                  </label>
+                ) : (
+                  <p className="muted" style={{ fontSize: 13, margin: 0 }}>
+                    Recibe un link de 7 días a <code>/invite/…</code> para elegir nombre y
+                    password. También aparece en Organizaciones.
+                  </p>
+                )}
                 <div className="row">
                   {(['ARTA', 'EXPLANADA'] as const).map((ent) => (
                     <label key={ent} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -182,8 +335,17 @@ export default function UsersPage() {
                   ))}
                 </div>
                 {msg ? <div className="muted">{msg}</div> : null}
+                {inviteUrl ? (
+                  <p className="muted" style={{ fontSize: 12, wordBreak: 'break-all' }}>
+                    <a href={inviteUrl}>{inviteUrl}</a>
+                  </p>
+                ) : null}
                 <button className="btn" type="submit" disabled={saving}>
-                  {saving ? 'Creando…' : 'Crear usuario'}
+                  {saving
+                    ? 'Guardando…'
+                    : inviteMode
+                      ? 'Enviar invitación'
+                      : 'Crear usuario'}
                 </button>
               </form>
             </div>
@@ -191,25 +353,48 @@ export default function UsersPage() {
 
           <div className="panel">
             <div className="panel-head">
-              <h2>Directorio · {users.length}</h2>
+              <h2>Directorio · {filtered.length}</h2>
             </div>
             <div className="panel-body">
               {error ? <p style={{ color: 'var(--danger)' }}>{error}</p> : null}
+              <div className="row" style={{ gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+                <input
+                  className="field"
+                  style={{ maxWidth: 240 }}
+                  placeholder="Buscar…"
+                  value={q}
+                  onChange={(e) => setQ(e.target.value)}
+                />
+                <select
+                  className="field"
+                  style={{ width: 'auto' }}
+                  value={riskFilter}
+                  onChange={(e) => setRiskFilter(e.target.value as typeof riskFilter)}
+                >
+                  <option value="all">Todo riesgo</option>
+                  <option value="high">Alto</option>
+                  <option value="medium">Medio</option>
+                  <option value="low">Bajo</option>
+                </select>
+              </div>
               <div className="table-wrap">
-                <table className="table">
+                <table className="table table-sticky">
                   <thead>
                     <tr>
                       <th>Nombre</th>
+                      <th>Riesgo</th>
+                      <th>Actividad 30d</th>
+                      <th>Sesiones</th>
+                      <th>Último acceso</th>
                       <th>Rol</th>
                       <th>Entidades</th>
                       <th>Extras</th>
                       <th>Estado</th>
-                      <th>Reset</th>
                       <th></th>
                     </tr>
                   </thead>
                   <tbody>
-                    {users.map((u) => (
+                    {filtered.map((u) => (
                       <tr key={u.id}>
                         <td>
                           <strong>{u.fullName}</strong>
@@ -217,6 +402,31 @@ export default function UsersPage() {
                             {u.email}
                             {u.title ? ` · ${u.title}` : ''}
                           </div>
+                        </td>
+                        <td>
+                          <span
+                            className={`badge ${
+                              u.risk === 'high' ? 'danger' : u.risk === 'medium' ? 'warn' : 'ok'
+                            }`}
+                          >
+                            {u.risk}
+                          </span>
+                          {u.locked ? <div className="muted" style={{ fontSize: 11 }}>locked</div> : null}
+                          {u.failedLoginCount > 0 ? (
+                            <div className="muted" style={{ fontSize: 11 }}>
+                              fails {u.failedLoginCount}
+                            </div>
+                          ) : null}
+                        </td>
+                        <td className="muted" style={{ fontSize: 12 }}>
+                          {u.activity30d} audit
+                          <div>{u.checklistEdits30d} edits chk</div>
+                        </td>
+                        <td className="muted">{u.activeSessions ?? 0}</td>
+                        <td className="muted" style={{ fontSize: 12 }}>
+                          {u.lastLoginAt
+                            ? new Date(u.lastLoginAt).toLocaleString('es-MX')
+                            : 'Nunca'}
                         </td>
                         <td>
                           <select
@@ -265,28 +475,38 @@ export default function UsersPage() {
                           </span>
                         </td>
                         <td>
-                          <button
-                            className="btn ghost"
-                            type="button"
-                            onClick={() => {
-                              const password = prompt('Nueva contraseña (mín. 6)');
-                              if (password && password.length >= 6) patchUser(u.id, { password });
-                            }}
-                          >
-                            Reset
-                          </button>
-                        </td>
-                        <td>
-                          <button
-                            className="btn ghost"
-                            type="button"
-                            onClick={() => setActive(u.id, !u.active)}
-                          >
-                            {u.active ? 'Desactivar' : 'Activar'}
-                          </button>
+                          <div className="row" style={{ gap: 4 }}>
+                            <button
+                              className="btn ghost"
+                              type="button"
+                              onClick={() => {
+                                const password = prompt('Nueva contraseña (mín. 6)');
+                                if (password && password.length >= 6) patchUser(u.id, { password });
+                              }}
+                            >
+                              Reset
+                            </button>
+                            <button
+                              className="btn ghost"
+                              type="button"
+                              onClick={() => setActive(u.id, !u.active)}
+                            >
+                              {u.active ? 'Off' : 'On'}
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}
+                    {!filtered.length ? (
+                      <tr>
+                        <td colSpan={10}>
+                          <EmptyState
+                            title="Sin usuarios para este filtro"
+                            description="Ajusta búsqueda o riesgo, o crea un usuario nuevo."
+                          />
+                        </td>
+                      </tr>
+                    ) : null}
                   </tbody>
                 </table>
               </div>

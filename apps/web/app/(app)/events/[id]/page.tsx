@@ -5,166 +5,31 @@ import { useParams, useSearchParams } from 'next/navigation';
 import { AppShell } from '@/components/app-shell/AppShell';
 import { api } from '@/lib/api';
 import { useUser } from '@/lib/user-context';
-import { SignaturePad } from '@/components/ui/SignaturePad';
-import { FileViewer } from '@/components/files/FileViewer';
 import { userHasPermission } from '@/lib/access-matrix';
 import { importFinanceFromFile } from '@/lib/finance-import';
-
-type SigPayload = {
-  signerName?: string;
-  imageDataUrl?: string;
-  signedAt?: string;
-};
-
-type ChecklistVersion = {
-  id: string;
-  createdAt: string;
-  note?: string | null;
-  editedBy?: { fullName: string } | null;
-};
-
-type Checklist = {
-  id: string;
-  title: string;
-  progressPct: number;
-  lastEditedAt?: string | null;
-  lastEditedBy?: { fullName: string } | null;
-  template?: { key: string };
-  pdfUrl?: string | null;
-  pdfGeneratedAt?: string | null;
-  deliveredAt?: string | null;
-  deliveredBy?: { fullName: string } | null;
-  deliveredSignature?: SigPayload | null;
-  authorizedAt?: string | null;
-  authorizedBy?: { fullName: string } | null;
-  authorizedSignature?: SigPayload | null;
-  versions?: ChecklistVersion[];
-  dataJson: {
-    sections: Array<{
-      id: string;
-      title: string;
-      items: Array<{
-        id: string;
-        label: string;
-        type?: string;
-        done?: boolean;
-        value?: string | number | null;
-        options?: string[];
-      }>;
-    }>;
-  };
-};
-
-type PoLine = { id?: string; concept: string; qty: number; unitPrice: number; total?: number };
-type Po = {
-  id: string;
-  rubro: string;
-  vendorName?: string | null;
-  description?: string | null;
-  amount: string | number;
-  status: string;
-  lines?: PoLine[];
-  proofs?: Array<{ id: string; fileUrl: string; label?: string | null }>;
-  createdBy?: { fullName: string } | null;
-  authorizedBy?: { fullName: string } | null;
-};
-
-type CampaignData = {
-  channels?: string;
-  budget?: number;
-  mediaPlan?: string;
-  creatives?: string;
-  timeline?: string;
-};
-
-type TicketingSetup = {
-  id: string;
-  boletera: string;
-  holdUntil?: string | null;
-  artist?: string | null;
-  promoter?: string | null;
-  venue?: string | null;
-  notes?: string | null;
-  zonesJson: Array<{ zona: string; aforo: number; precio: number }>;
-};
-
-type FinanceRow = { concept: string; type: 'income' | 'expense'; amount: number };
-type FinanceData = { rows: FinanceRow[]; totalIncome?: number; totalExpense?: number };
-
-type Task = {
-  id: string;
-  title: string;
-  module?: string | null;
-  status: string;
-  dueAt?: string | null;
-  assigneeId?: string | null;
-  assignee?: { id: string; fullName: string } | null;
-};
-
-type Sponsor = {
-  id: string;
-  name: string;
-  contact?: string | null;
-  contribution?: string | null;
-  amount?: string | number | null;
-  notes?: string | null;
-};
-
-type DirUser = { id: string; fullName: string; email: string };
-
-type EventDetail = {
-  id: string;
-  name: string;
-  artist?: string | null;
-  promoter?: string | null;
-  venue?: string | null;
-  city?: string | null;
-  status: string;
-  entity: string;
-  campaignType: string;
-  notes?: string | null;
-  checklists: Checklist[];
-  purchaseOrders: Po[];
-  financeRuns: Array<{ id: string; title: string; locked: boolean; dataJson: FinanceData | unknown }>;
-  campaign?: {
-    id?: string;
-    authorized: boolean;
-    type: string;
-    notes?: string | null;
-    dataJson?: CampaignData | null;
-  } | null;
-  ticketingSetups?: TicketingSetup[];
-  files: Array<{ id: string; fileName: string; url: string; kind?: string | null }>;
-  tasks?: Task[];
-  sponsors?: Sponsor[];
-};
-
-type Tab =
-  | 'overview'
-  | 'checklists'
-  | 'ocs'
-  | 'finance'
-  | 'campaign'
-  | 'ticketing'
-  | 'tasks'
-  | 'sponsors'
-  | 'files';
-
-const emptyFinance = (): FinanceData => ({
-  rows: [
-    { concept: 'Taquilla estimada', type: 'income', amount: 0 },
-    { concept: 'Patrocinios', type: 'income', amount: 0 },
-    { concept: 'Producción', type: 'expense', amount: 0 },
-  ],
-  totalIncome: 0,
-  totalExpense: 0,
-});
-
-function asFinance(data: unknown): FinanceData {
-  const d = data as FinanceData | null;
-  if (d?.rows?.length) return { rows: d.rows.map((r) => ({ ...r, amount: Number(r.amount || 0) })), totalIncome: d.totalIncome, totalExpense: d.totalExpense };
-  return emptyFinance();
-}
+import { EventOverviewPanel } from '@/components/events/EventOverviewPanel';
+import { EventChecklistsPanel } from '@/components/events/EventChecklistsPanel';
+import { EventPurchaseOrdersPanel } from '@/components/events/EventPurchaseOrdersPanel';
+import { EventFinancePanel } from '@/components/events/EventFinancePanel';
+import { EventCampaignPanel } from '@/components/events/EventCampaignPanel';
+import { EventTicketingPanel } from '@/components/events/EventTicketingPanel';
+import { EventTasksPanel } from '@/components/events/EventTasksPanel';
+import { EventSponsorsPanel } from '@/components/events/EventSponsorsPanel';
+import { EventFilesPanel } from '@/components/events/EventFilesPanel';
+import {
+  asFinance,
+  emptyFinance,
+  type Checklist,
+  type DirUser,
+  type EventDetail,
+  type FinanceRow,
+  type FinanceData,
+  type CampaignData,
+  type PoLine,
+  type Po,
+  type Tab,
+  type TicketingSetup,
+} from '@/components/events/event-detail.types';
 
 export default function EventDetailPage() {
   return (
@@ -220,10 +85,10 @@ function EventDetailInner() {
     notes: '',
   });
   const [ticketZones, setTicketZones] = useState([
-    { zona: 'Diamante', aforo: 0, precio: 0 },
-    { zona: 'Oro', aforo: 0, precio: 0 },
-    { zona: 'Plata', aforo: 0, precio: 0 },
-    { zona: 'Bronce', aforo: 0, precio: 0 },
+    { zona: 'Diamante', aforo: 0, precio: 0, sold: 0 },
+    { zona: 'Oro', aforo: 0, precio: 0, sold: 0 },
+    { zona: 'Plata', aforo: 0, precio: 0, sold: 0 },
+    { zona: 'Bronce', aforo: 0, precio: 0, sold: 0 },
   ]);
   const [editingTicketId, setEditingTicketId] = useState<string | null>(null);
 
@@ -242,7 +107,12 @@ function EventDetailInner() {
   const [vendorPins, setVendorPins] = useState<
     Array<{ id: string; label: string; scopes: string[]; active: boolean; expiresAt?: string | null }>
   >([]);
-  const [pinForm, setPinForm] = useState({ label: 'Vendor', pin: '', scopes: 'files,checklists' });
+  const [pinForm, setPinForm] = useState({
+    label: 'Vendor',
+    pin: '',
+    scopes: ['files', 'checklists'] as string[],
+    expiresAt: '',
+  });
   const [revealedPin, setRevealedPin] = useState<{ path: string; pin: string } | null>(null);
 
   const closed = event?.status === 'CLOSED' || event?.status === 'CANCELLED';
@@ -527,6 +397,7 @@ function EventDetailInner() {
         zona: z.zona,
         aforo: Number(z.aforo || 0),
         precio: Number(z.precio || 0),
+        sold: Number(z.sold || 0),
       })),
     );
     setTab('ticketing');
@@ -650,17 +521,22 @@ function EventDetailInner() {
       setMsg('PIN mínimo 4 caracteres');
       return;
     }
+    if (!pinForm.scopes.length) {
+      setMsg('Elige al menos un scope');
+      return;
+    }
     const res = await api<{ id: string; portalPath: string; pin: string }>('/vendor/pins', {
       method: 'POST',
       body: JSON.stringify({
         eventId: id,
         label: pinForm.label,
         pin: pinForm.pin,
-        scopes: pinForm.scopes.split(',').map((s) => s.trim()).filter(Boolean),
+        scopes: pinForm.scopes,
+        expiresAt: pinForm.expiresAt || undefined,
       }),
     });
     setRevealedPin({ path: res.portalPath, pin: res.pin });
-    setPinForm({ label: 'Vendor', pin: '', scopes: 'files,checklists' });
+    setPinForm({ label: 'Vendor', pin: '', scopes: ['files', 'checklists'], expiresAt: '' });
     const list = await api<typeof vendorPins>(`/vendor/event/${id}`);
     setVendorPins(list);
     setMsg('PIN vendor creado — cópialo ahora');
@@ -788,8 +664,6 @@ function EventDetailInner() {
     );
   }
 
-  const net = Number(financeDraft.totalIncome || 0) - Number(financeDraft.totalExpense || 0);
-
   return (
     <AppShell title={event.name}>
       <div className="stack">
@@ -841,1351 +715,172 @@ function EventDetailInner() {
           </div>
         </div>
 
-        <div className="row" style={{ flexWrap: 'wrap' }}>
-          <button className={`btn ${tab === 'overview' ? '' : 'ghost'}`} type="button" onClick={() => setTab('overview')}>
+        <nav className="tab-bar" aria-label="Módulos del evento">
+          <button
+            className={`tab-bar__btn ${tab === 'overview' ? 'is-active' : ''}`}
+            type="button"
+            onClick={() => setTab('overview')}
+          >
             Resumen
           </button>
           {modules.map((m) => (
             <button
               key={m.key}
-              className={`btn ${tab === m.key ? '' : 'ghost'}`}
+              className={`tab-bar__btn ${tab === m.key ? 'is-active' : ''}`}
               type="button"
               onClick={() => {
                 setTab(m.key as Tab);
                 setActiveChecklist(null);
               }}
             >
-              {m.label} ({m.count})
+              {m.label}
+              <span className="tab-bar__count">{m.count}</span>
             </button>
           ))}
-        </div>
+        </nav>
 
         {msg ? <div className="muted">{msg}</div> : null}
         {closed ? <div className="badge warn">Evento en solo lectura</div> : null}
 
         {tab === 'overview' && (
-          <div className="stack">
-            {editingMeta && !closed ? (
-              <div className="panel">
-                <div className="panel-head">
-                  <h2>Editar datos del evento</h2>
-                  <button className="btn" type="button" onClick={saveEventMeta}>
-                    Guardar
-                  </button>
-                </div>
-                <div className="panel-body">
-                  <div className="form" style={{ maxWidth: 720 }}>
-                    <label>
-                      Nombre
-                      <input
-                        value={metaForm.name}
-                        onChange={(e) => setMetaForm({ ...metaForm, name: e.target.value })}
-                      />
-                    </label>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                      <label>
-                        Artista
-                        <input
-                          value={metaForm.artist}
-                          onChange={(e) => setMetaForm({ ...metaForm, artist: e.target.value })}
-                        />
-                      </label>
-                      <label>
-                        Promotor
-                        <input
-                          value={metaForm.promoter}
-                          onChange={(e) => setMetaForm({ ...metaForm, promoter: e.target.value })}
-                        />
-                      </label>
-                    </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                      <label>
-                        Venue
-                        <input
-                          value={metaForm.venue}
-                          onChange={(e) => setMetaForm({ ...metaForm, venue: e.target.value })}
-                        />
-                      </label>
-                      <label>
-                        Ciudad
-                        <input
-                          value={metaForm.city}
-                          onChange={(e) => setMetaForm({ ...metaForm, city: e.target.value })}
-                        />
-                      </label>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ) : null}
-
-            <div className="panel">
-              <div className="panel-head">
-                <h2>Notas del evento</h2>
-                {!closed ? (
-                  <button className="btn ghost" type="button" onClick={saveEventNotes}>
-                    Guardar notas
-                  </button>
-                ) : null}
-              </div>
-              <div className="panel-body">
-                <textarea
-                  rows={3}
-                  disabled={closed}
-                  value={eventNotes}
-                  onChange={(e) => setEventNotes(e.target.value)}
-                  placeholder="Notas operativas, acuerdos, pendientes…"
-                  style={{ width: '100%' }}
-                />
-              </div>
-            </div>
-
-            {canVendorPin ? (
-              <div className="panel">
-                <div className="panel-head">
-                  <h2>PIN vendor / portal externo</h2>
-                </div>
-                <div className="panel-body stack">
-                  {!closed ? (
-                    <div className="form" style={{ maxWidth: 640 }}>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
-                        <label>
-                          Etiqueta
-                          <input
-                            value={pinForm.label}
-                            onChange={(e) => setPinForm({ ...pinForm, label: e.target.value })}
-                          />
-                        </label>
-                        <label>
-                          PIN
-                          <input
-                            value={pinForm.pin}
-                            onChange={(e) => setPinForm({ ...pinForm, pin: e.target.value })}
-                            placeholder="mín. 4"
-                          />
-                        </label>
-                        <label>
-                          Scopes
-                          <input
-                            value={pinForm.scopes}
-                            onChange={(e) => setPinForm({ ...pinForm, scopes: e.target.value })}
-                          />
-                        </label>
-                      </div>
-                      <button className="btn" type="button" onClick={createVendorPin}>
-                        Generar link + PIN
-                      </button>
-                    </div>
-                  ) : null}
-                  {revealedPin ? (
-                    <div className="badge ok">
-                      Portal: {revealedPin.path} · PIN: {revealedPin.pin} (cópialo ahora)
-                    </div>
-                  ) : null}
-                  <table className="table">
-                    <thead>
-                      <tr>
-                        <th>Label</th>
-                        <th>Link</th>
-                        <th>Scopes</th>
-                        <th>Estado</th>
-                        <th></th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {vendorPins.map((p) => (
-                        <tr key={p.id}>
-                          <td>{p.label}</td>
-                          <td>
-                            <a href={`/v/${p.id}`} target="_blank" rel="noreferrer">
-                              /v/{p.id}
-                            </a>
-                          </td>
-                          <td className="muted">{p.scopes.join(', ')}</td>
-                          <td>
-                            <span className={`badge ${p.active ? 'ok' : 'warn'}`}>
-                              {p.active ? 'Activo' : 'Off'}
-                            </span>
-                          </td>
-                          <td>
-                            {p.active ? (
-                              <button className="btn ghost" type="button" onClick={() => deactivatePin(p.id)}>
-                                Desactivar
-                              </button>
-                            ) : null}
-                          </td>
-                        </tr>
-                      ))}
-                      {!vendorPins.length ? (
-                        <tr>
-                          <td colSpan={5} className="muted">
-                            Sin PINs aún.
-                          </td>
-                        </tr>
-                      ) : null}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            ) : null}
-
-            <div className="grid-cards">
-              {event.checklists.map((c) => (
-                <button
-                  key={c.id}
-                  type="button"
-                  className="kpi"
-                  style={{ textAlign: 'left', cursor: 'pointer', width: '100%' }}
-                  onClick={() => openChecklist(c)}
-                >
-                  <div className="label">{c.template?.key || 'CHECK'}</div>
-                  <div style={{ fontWeight: 600, margin: '0.4rem 0' }}>{c.title}</div>
-                  <div className="progress">
-                    <span style={{ width: `${c.progressPct}%` }} />
-                  </div>
-                  <div className="muted" style={{ marginTop: 8, fontSize: 12 }}>
-                    {c.progressPct}%
-                    {c.pdfUrl ? ' · PDF listo' : ''}
-                    {c.authorizedAt ? ' · Autorizado' : ''}
-                  </div>
-                </button>
-              ))}
-            </div>
-          </div>
+          <EventOverviewPanel
+            event={event}
+            closed={closed}
+            editingMeta={editingMeta}
+            metaForm={metaForm}
+            setMetaForm={setMetaForm}
+            saveEventMeta={saveEventMeta}
+            eventNotes={eventNotes}
+            setEventNotes={setEventNotes}
+            saveEventNotes={saveEventNotes}
+            canVendorPin={canVendorPin}
+            vendorPins={vendorPins}
+            pinForm={pinForm}
+            setPinForm={setPinForm}
+            createVendorPin={createVendorPin}
+            revealedPin={revealedPin}
+            deactivatePin={deactivatePin}
+            onOpenChecklist={openChecklist}
+            onGoChecklists={() => setTab('checklists')}
+          />
         )}
 
         {tab === 'checklists' && (
-          <div style={{ display: 'grid', gridTemplateColumns: activeChecklist ? '280px 1fr' : '1fr', gap: 16 }}>
-            <div className="panel">
-              <div className="panel-head">
-                <h2>Formatos</h2>
-              </div>
-              <div className="panel-body stack">
-                {event.checklists.map((c) => (
-                  <button
-                    key={c.id}
-                    type="button"
-                    className={`btn ${activeChecklist?.id === c.id ? '' : 'ghost'}`}
-                    style={{ justifyContent: 'flex-start' }}
-                    onClick={() => openChecklist(c)}
-                  >
-                    {c.title} · {c.progressPct}%
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {activeChecklist ? (
-              <div className="panel">
-                <div className="panel-head">
-                  <div>
-                    <h2>{activeChecklist.title}</h2>
-                    <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
-                      {activeChecklist.lastEditedBy
-                        ? `Última: ${activeChecklist.lastEditedBy.fullName}`
-                        : 'Sin ediciones'}
-                    </div>
-                  </div>
-                  <div className="row">
-                    {activeChecklist.pdfUrl ? (
-                      <a className="btn" href={activeChecklist.pdfUrl} target="_blank" rel="noreferrer">
-                        Abrir PDF
-                      </a>
-                    ) : (
-                      <button className="btn" type="button" onClick={regeneratePdf}>
-                        Generar PDF
-                      </button>
-                    )}
-                    {activeChecklist.pdfUrl ? (
-                      <button className="btn ghost" type="button" onClick={regeneratePdf}>
-                        Regenerar PDF
-                      </button>
-                    ) : null}
-                    {!closed ? (
-                      <label className="btn ghost" style={{ cursor: 'pointer' }}>
-                        Subir Excel/PDF
-                        <input
-                          type="file"
-                          hidden
-                          accept=".pdf,.xlsx,.xls,.csv,image/*"
-                          onChange={(e) => {
-                            const f = e.target.files?.[0];
-                            if (f) onUpload(f);
-                          }}
-                        />
-                      </label>
-                    ) : null}
-                    <button className="btn" type="button" disabled={saving || closed} onClick={saveChecklist}>
-                      {saving ? 'Guardando…' : 'Guardar'}
-                    </button>
-                  </div>
-                </div>
-                <div className="panel-body">
-                  {(activeChecklist.dataJson?.sections || [])
-                    .filter((section) => section.id !== 'firmas')
-                    .map((section) => (
-                      <div className="check-section" key={section.id}>
-                        <h3>{section.title}</h3>
-                        {section.items.map((item) => (
-                          <div className="check-item" key={item.id}>
-                            {item.type === 'check' || !item.type ? (
-                              <input
-                                type="checkbox"
-                                disabled={closed}
-                                checked={!!item.done}
-                                onChange={(e) => updateItem(section.id, item.id, { done: e.target.checked })}
-                              />
-                            ) : (
-                              <span />
-                            )}
-                            <div>
-                              <div>{item.label}</div>
-                              {item.type === 'text' || item.type === 'number' || item.type === 'date' ? (
-                                <input
-                                  style={{ marginTop: 6, width: '100%' }}
-                                  type={item.type === 'text' ? 'text' : item.type}
-                                  disabled={closed}
-                                  value={item.value ?? ''}
-                                  onChange={(e) =>
-                                    updateItem(section.id, item.id, {
-                                      value: item.type === 'number' ? Number(e.target.value) : e.target.value,
-                                    })
-                                  }
-                                />
-                              ) : null}
-                              {item.type === 'select' ? (
-                                <select
-                                  style={{ marginTop: 6, width: '100%' }}
-                                  disabled={closed}
-                                  value={String(item.value ?? '')}
-                                  onChange={(e) => updateItem(section.id, item.id, { value: e.target.value })}
-                                >
-                                  {(item.options || []).map((o) => (
-                                    <option key={o} value={o}>
-                                      {o}
-                                    </option>
-                                  ))}
-                                </select>
-                              ) : null}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    ))}
-
-                  <div className="check-section">
-                    <h3>Firmas digitales</h3>
-                    <div className="sig-grid">
-                      <SignaturePad
-                        label="Entregado"
-                        signerName={user?.fullName || ''}
-                        existing={activeChecklist.deliveredSignature}
-                        onSign={(p) => signChecklist('ENTREGADO', p)}
-                      />
-                      <SignaturePad
-                        label="Autorizado"
-                        signerName={user?.fullName || ''}
-                        existing={activeChecklist.authorizedSignature}
-                        onSign={(p) => signChecklist('AUTORIZADO', p)}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="check-section">
-                    <h3>PDF embebido</h3>
-                    {activeChecklist.pdfUrl ? (
-                      <FileViewer
-                        url={activeChecklist.pdfUrl}
-                        fileName={`${activeChecklist.title}.pdf`}
-                        kind="pdf"
-                      />
-                    ) : (
-                      <p className="muted">
-                        Aún no hay PDF. Guarda el checklist o pulsa <strong>Generar PDF</strong> — se
-                        incrusta aquí automáticamente.
-                      </p>
-                    )}
-                  </div>
-
-                  <div className="check-section">
-                    <h3>Historial de versiones</h3>
-                    {(activeChecklist.versions || []).length ? (
-                      <table className="table">
-                        <thead>
-                          <tr>
-                            <th>Fecha</th>
-                            <th>Editor</th>
-                            <th>Nota</th>
-                            <th />
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {(activeChecklist.versions || []).map((v) => (
-                            <tr key={v.id}>
-                              <td className="muted" style={{ whiteSpace: 'nowrap' }}>
-                                {new Date(v.createdAt).toLocaleString('es-MX')}
-                              </td>
-                              <td>{v.editedBy?.fullName || '—'}</td>
-                              <td className="muted">{v.note || '—'}</td>
-                              <td>
-                                {!closed ? (
-                                  <button
-                                    className="btn ghost"
-                                    type="button"
-                                    disabled={saving}
-                                    onClick={() => restoreChecklistVersion(v.id)}
-                                  >
-                                    Restaurar
-                                  </button>
-                                ) : null}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    ) : (
-                      <p className="muted">Sin versiones guardadas aún (aparecen al editar).</p>
-                    )}
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <p className="muted">Elige un checklist / formato.</p>
-            )}
-          </div>
+          <EventChecklistsPanel
+            event={event}
+            activeChecklist={activeChecklist}
+            closed={closed}
+            saving={saving}
+            userFullName={user?.fullName || ''}
+            onOpenChecklist={openChecklist}
+            onSaveChecklist={saveChecklist}
+            onRegeneratePdf={regeneratePdf}
+            onUpload={onUpload}
+            onUpdateItem={updateItem}
+            onSignChecklist={signChecklist}
+            onRestoreVersion={restoreChecklistVersion}
+          />
         )}
 
         {tab === 'ocs' && (
-          <div className="stack">
-            {!closed ? (
-              <div className="panel">
-                <div className="panel-head">
-                  <h2>Nueva orden de compra</h2>
-                </div>
-                <div className="panel-body">
-                  <div className="form" style={{ maxWidth: 820 }}>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                      <label>
-                        Rubro
-                        <select value={poForm.rubro} onChange={(e) => setPoForm({ ...poForm, rubro: e.target.value })}>
-                          {['audio', 'luces', 'planta_luz', 'hospedaje', 'transporte', 'catering', 'artes', 'otro'].map(
-                            (r) => (
-                              <option key={r} value={r}>
-                                {r}
-                              </option>
-                            ),
-                          )}
-                        </select>
-                      </label>
-                      <label>
-                        Vendor
-                        <input
-                          value={poForm.vendorName}
-                          onChange={(e) => setPoForm({ ...poForm, vendorName: e.target.value })}
-                        />
-                      </label>
-                    </div>
-                    <label>
-                      Descripción
-                      <input
-                        value={poForm.description}
-                        onChange={(e) => setPoForm({ ...poForm, description: e.target.value })}
-                      />
-                    </label>
-                    <div>
-                      <div className="muted" style={{ marginBottom: 8, fontSize: 12 }}>
-                        Partidas · total ${poLinesTotal.toLocaleString('es-MX')}
-                      </div>
-                      <table className="table">
-                        <thead>
-                          <tr>
-                            <th>Concepto</th>
-                            <th>Cant.</th>
-                            <th>P. unit.</th>
-                            <th>Total</th>
-                            <th></th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {poForm.lines.map((line, idx) => (
-                            <tr key={idx}>
-                              <td>
-                                <input
-                                  value={line.concept}
-                                  onChange={(e) => {
-                                    const lines = [...poForm.lines];
-                                    lines[idx] = { ...line, concept: e.target.value };
-                                    setPoForm({ ...poForm, lines });
-                                  }}
-                                  placeholder="Concepto"
-                                />
-                              </td>
-                              <td>
-                                <input
-                                  type="number"
-                                  value={line.qty}
-                                  onChange={(e) => {
-                                    const lines = [...poForm.lines];
-                                    lines[idx] = { ...line, qty: Number(e.target.value) };
-                                    setPoForm({ ...poForm, lines });
-                                  }}
-                                />
-                              </td>
-                              <td>
-                                <input
-                                  type="number"
-                                  value={line.unitPrice}
-                                  onChange={(e) => {
-                                    const lines = [...poForm.lines];
-                                    lines[idx] = { ...line, unitPrice: Number(e.target.value) };
-                                    setPoForm({ ...poForm, lines });
-                                  }}
-                                />
-                              </td>
-                              <td className="muted">
-                                ${(Number(line.qty || 0) * Number(line.unitPrice || 0)).toLocaleString('es-MX')}
-                              </td>
-                              <td>
-                                <button
-                                  className="btn ghost"
-                                  type="button"
-                                  onClick={() =>
-                                    setPoForm({
-                                      ...poForm,
-                                      lines: poForm.lines.filter((_, i) => i !== idx),
-                                    })
-                                  }
-                                >
-                                  ×
-                                </button>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                      <button
-                        className="btn ghost"
-                        type="button"
-                        onClick={() =>
-                          setPoForm({
-                            ...poForm,
-                            lines: [...poForm.lines, { concept: '', qty: 1, unitPrice: 0 }],
-                          })
-                        }
-                      >
-                        + Partida
-                      </button>
-                    </div>
-                    <button className="btn" type="button" onClick={createPo}>
-                      Crear OC
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ) : null}
-
-            <div className="panel">
-              <div className="panel-head">
-                <h2>Flujo: pendiente → autorizado → pagado</h2>
-              </div>
-              <div className="panel-body stack">
-                {event.purchaseOrders.map((po) => (
-                  <div key={po.id} style={{ borderBottom: '1px solid var(--border)', paddingBottom: 12 }}>
-                    <div className="row" style={{ justifyContent: 'space-between' }}>
-                      <div>
-                        <strong>{po.rubro}</strong> · {po.vendorName || 'Sin vendor'} · $
-                        {Number(po.amount).toLocaleString('es-MX')}
-                        <div className="muted" style={{ fontSize: 12 }}>
-                          {po.description || ''}
-                        </div>
-                      </div>
-                      <div className="row">
-                        <span className={`badge ${po.status === 'PAID' ? 'ok' : 'warn'}`}>{po.status}</span>
-                        {!closed && po.status === 'PENDING_AUTH' ? (
-                          <>
-                            <button className="btn ghost" type="button" onClick={() => startEditPo(po)}>
-                              Editar
-                            </button>
-                            <button className="btn ghost" type="button" onClick={() => setPoStatus(po.id, 'AUTHORIZED')}>
-                              Autorizar
-                            </button>
-                            <button className="btn ghost" type="button" onClick={() => deletePo(po.id)}>
-                              Eliminar
-                            </button>
-                          </>
-                        ) : null}
-                        {!closed && po.status === 'AUTHORIZED' ? (
-                          <button className="btn ghost" type="button" onClick={() => setPoStatus(po.id, 'PAID')}>
-                            Marcar pagado
-                          </button>
-                        ) : null}
-                      </div>
-                    </div>
-                    {editingPoId === po.id ? (
-                      <div className="form" style={{ marginTop: 10 }}>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                          <label>
-                            Vendor
-                            <input
-                              value={editPoMeta.vendorName}
-                              onChange={(e) => setEditPoMeta({ ...editPoMeta, vendorName: e.target.value })}
-                            />
-                          </label>
-                          <label>
-                            Descripción
-                            <input
-                              value={editPoMeta.description}
-                              onChange={(e) => setEditPoMeta({ ...editPoMeta, description: e.target.value })}
-                            />
-                          </label>
-                        </div>
-                        <table className="table">
-                          <thead>
-                            <tr>
-                              <th>Concepto</th>
-                              <th>Cant.</th>
-                              <th>P. unit.</th>
-                              <th></th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {editPoLines.map((line, idx) => (
-                              <tr key={idx}>
-                                <td>
-                                  <input
-                                    value={line.concept}
-                                    onChange={(e) => {
-                                      const lines = [...editPoLines];
-                                      lines[idx] = { ...line, concept: e.target.value };
-                                      setEditPoLines(lines);
-                                    }}
-                                  />
-                                </td>
-                                <td>
-                                  <input
-                                    type="number"
-                                    value={line.qty}
-                                    onChange={(e) => {
-                                      const lines = [...editPoLines];
-                                      lines[idx] = { ...line, qty: Number(e.target.value) };
-                                      setEditPoLines(lines);
-                                    }}
-                                  />
-                                </td>
-                                <td>
-                                  <input
-                                    type="number"
-                                    value={line.unitPrice}
-                                    onChange={(e) => {
-                                      const lines = [...editPoLines];
-                                      lines[idx] = { ...line, unitPrice: Number(e.target.value) };
-                                      setEditPoLines(lines);
-                                    }}
-                                  />
-                                </td>
-                                <td>
-                                  <button
-                                    className="btn ghost"
-                                    type="button"
-                                    onClick={() => setEditPoLines(editPoLines.filter((_, i) => i !== idx))}
-                                  >
-                                    ×
-                                  </button>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                        <div className="row">
-                          <button
-                            className="btn ghost"
-                            type="button"
-                            onClick={() =>
-                              setEditPoLines([...editPoLines, { concept: '', qty: 1, unitPrice: 0 }])
-                            }
-                          >
-                            + Partida
-                          </button>
-                          <button className="btn" type="button" onClick={saveEditPo}>
-                            Guardar OC
-                          </button>
-                          <button className="btn ghost" type="button" onClick={() => setEditingPoId(null)}>
-                            Cancelar
-                          </button>
-                        </div>
-                      </div>
-                    ) : po.lines?.length ? (
-                      <table className="table" style={{ marginTop: 8 }}>
-                        <thead>
-                          <tr>
-                            <th>Concepto</th>
-                            <th>Cant.</th>
-                            <th>P. unit.</th>
-                            <th>Total</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {po.lines.map((l) => (
-                            <tr key={l.id || `${l.concept}-${l.qty}`}>
-                              <td>{l.concept}</td>
-                              <td>{Number(l.qty)}</td>
-                              <td>${Number(l.unitPrice).toLocaleString('es-MX')}</td>
-                              <td>${Number(l.total ?? Number(l.qty) * Number(l.unitPrice)).toLocaleString('es-MX')}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    ) : null}
-                  </div>
-                ))}
-                {!event.purchaseOrders.length ? <p className="muted">Sin OC aún.</p> : null}
-              </div>
-            </div>
-          </div>
+          <EventPurchaseOrdersPanel
+            closed={closed}
+            poForm={poForm}
+            setPoForm={setPoForm}
+            poLinesTotal={poLinesTotal}
+            onCreatePo={createPo}
+            purchaseOrders={event.purchaseOrders}
+            editingPoId={editingPoId}
+            setEditingPoId={setEditingPoId}
+            editPoMeta={editPoMeta}
+            setEditPoMeta={setEditPoMeta}
+            editPoLines={editPoLines}
+            setEditPoLines={setEditPoLines}
+            onStartEditPo={startEditPo}
+            onSaveEditPo={saveEditPo}
+            onSetPoStatus={setPoStatus}
+            onDeletePo={deletePo}
+          />
         )}
 
         {tab === 'finance' && (
-          <div className="panel">
-            <div className="panel-head">
-              <h2>Corrida financiera</h2>
-              <div className="row">
-                {financeLocked ? <span className="badge">LOCKED</span> : null}
-                <span className="badge warn">Melissa · Chacho · Arturo</span>
-                {canFinance && !financeLocked && !closed ? (
-                  <>
-                    <label className="btn ghost" style={{ cursor: 'pointer' }}>
-                      Importar Excel
-                      <input
-                        type="file"
-                        hidden
-                        accept=".xlsx,.xls,.csv"
-                        onChange={(e) => {
-                          const f = e.target.files?.[0];
-                          if (f) importFinanceExcel(f);
-                          e.target.value = '';
-                        }}
-                      />
-                    </label>
-                    <button className="btn" type="button" disabled={saving} onClick={saveFinance}>
-                      {saving ? 'Guardando…' : 'Guardar corrida'}
-                    </button>
-                  </>
-                ) : null}
-              </div>
-            </div>
-            <div className="panel-body stack">
-              <p className="muted" style={{ fontSize: 12, margin: 0 }}>
-                Excel: columnas Concepto / Tipo (ingreso|egreso) / Monto. Si no hay encabezado, usa las primeras 3
-                columnas.
-              </p>
-              <div className="row" style={{ gap: 24 }}>
-                <div>
-                  <div className="muted" style={{ fontSize: 12 }}>
-                    Ingresos
-                  </div>
-                  <strong>${Number(financeDraft.totalIncome || 0).toLocaleString('es-MX')}</strong>
-                </div>
-                <div>
-                  <div className="muted" style={{ fontSize: 12 }}>
-                    Egresos
-                  </div>
-                  <strong>${Number(financeDraft.totalExpense || 0).toLocaleString('es-MX')}</strong>
-                </div>
-                <div>
-                  <div className="muted" style={{ fontSize: 12 }}>
-                    Neto
-                  </div>
-                  <strong style={{ color: net >= 0 ? 'var(--ok, #2a7)' : 'var(--danger)' }}>
-                    ${net.toLocaleString('es-MX')}
-                  </strong>
-                </div>
-              </div>
-              <table className="table">
-                <thead>
-                  <tr>
-                    <th>Concepto</th>
-                    <th>Tipo</th>
-                    <th>Monto</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {financeDraft.rows.map((row, idx) => (
-                    <tr key={idx}>
-                      <td>
-                        <input
-                          disabled={!canFinance || financeLocked || closed}
-                          value={row.concept}
-                          onChange={(e) => patchFinanceRow(idx, { concept: e.target.value })}
-                          style={{ width: '100%' }}
-                        />
-                      </td>
-                      <td>
-                        <select
-                          disabled={!canFinance || financeLocked || closed}
-                          value={row.type}
-                          onChange={(e) => patchFinanceRow(idx, { type: e.target.value as 'income' | 'expense' })}
-                        >
-                          <option value="income">Ingreso</option>
-                          <option value="expense">Egreso</option>
-                        </select>
-                      </td>
-                      <td>
-                        <input
-                          type="number"
-                          disabled={!canFinance || financeLocked || closed}
-                          value={row.amount}
-                          onChange={(e) => patchFinanceRow(idx, { amount: Number(e.target.value) })}
-                        />
-                      </td>
-                      <td>
-                        {canFinance && !financeLocked && !closed ? (
-                          <button
-                            className="btn ghost"
-                            type="button"
-                            onClick={() =>
-                              setFinanceDraft((prev) => ({
-                                ...prev,
-                                rows: prev.rows.filter((_, i) => i !== idx),
-                              }))
-                            }
-                          >
-                            Quitar
-                          </button>
-                        ) : null}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              {canFinance && !financeLocked && !closed ? (
-                <button
-                  className="btn ghost"
-                  type="button"
-                  onClick={() =>
-                    setFinanceDraft((prev) => ({
-                      ...prev,
-                      rows: [...prev.rows, { concept: '', type: 'expense', amount: 0 }],
-                    }))
-                  }
-                >
-                  + Fila
-                </button>
-              ) : null}
-            </div>
-          </div>
+          <EventFinancePanel
+            financeLocked={financeLocked}
+            canFinance={canFinance}
+            closed={closed}
+            saving={saving}
+            financeDraft={financeDraft}
+            setFinanceDraft={setFinanceDraft}
+            onImportExcel={importFinanceExcel}
+            onSaveFinance={saveFinance}
+            onPatchRow={patchFinanceRow}
+          />
         )}
 
         {tab === 'campaign' && (
-          <div className="panel">
-            <div className="panel-head">
-              <h2>Campaña publicitaria</h2>
-              <div className="row">
-                {event.campaign?.authorized ? <span className="badge ok">Autorizada</span> : <span className="badge warn">Sin autorizar</span>}
-                {canCampaign && !closed ? (
-                  <>
-                    <button className="btn" type="button" disabled={saving} onClick={saveCampaign}>
-                      {saving ? 'Guardando…' : 'Guardar'}
-                    </button>
-                    {!event.campaign?.authorized ? (
-                      <button className="btn ghost" type="button" onClick={() => toggleCampaignAuth(true)}>
-                        Autorizar
-                      </button>
-                    ) : (
-                      <button className="btn ghost" type="button" onClick={() => toggleCampaignAuth(false)}>
-                        Quitar auth
-                      </button>
-                    )}
-                  </>
-                ) : null}
-              </div>
-            </div>
-            <div className="panel-body">
-              <div className="form" style={{ maxWidth: 720 }}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                  <label>
-                    Tipo
-                    <select
-                      disabled={!canCampaign || closed}
-                      value={campaignForm.type}
-                      onChange={(e) => setCampaignForm({ ...campaignForm, type: e.target.value })}
-                    >
-                      <option value="INTERNAL">Interna</option>
-                      <option value="EXTERNAL">Externa</option>
-                      <option value="NONE">Ninguna</option>
-                    </select>
-                  </label>
-                  <label>
-                    Presupuesto
-                    <input
-                      type="number"
-                      disabled={!canCampaign || closed}
-                      value={campaignForm.budget}
-                      onChange={(e) => setCampaignForm({ ...campaignForm, budget: e.target.value })}
-                    />
-                  </label>
-                </div>
-                <label>
-                  Canales
-                  <input
-                    disabled={!canCampaign || closed}
-                    value={campaignForm.channels}
-                    onChange={(e) => setCampaignForm({ ...campaignForm, channels: e.target.value })}
-                    placeholder="Meta, Google, radio, OOH…"
-                  />
-                </label>
-                <label>
-                  Plan de medios
-                  <textarea
-                    rows={3}
-                    disabled={!canCampaign || closed}
-                    value={campaignForm.mediaPlan}
-                    onChange={(e) => setCampaignForm({ ...campaignForm, mediaPlan: e.target.value })}
-                  />
-                </label>
-                <label>
-                  Creatividades / artes
-                  <textarea
-                    rows={2}
-                    disabled={!canCampaign || closed}
-                    value={campaignForm.creatives}
-                    onChange={(e) => setCampaignForm({ ...campaignForm, creatives: e.target.value })}
-                  />
-                </label>
-                <label>
-                  Timeline
-                  <input
-                    disabled={!canCampaign || closed}
-                    value={campaignForm.timeline}
-                    onChange={(e) => setCampaignForm({ ...campaignForm, timeline: e.target.value })}
-                    placeholder="Teaser → on sale → show week"
-                  />
-                </label>
-                <label>
-                  Notas
-                  <textarea
-                    rows={2}
-                    disabled={!canCampaign || closed}
-                    value={campaignForm.notes}
-                    onChange={(e) => setCampaignForm({ ...campaignForm, notes: e.target.value })}
-                  />
-                </label>
-                {!canCampaign ? <p className="muted">Solo Melissa y Williams editan campaña.</p> : null}
-              </div>
-            </div>
-          </div>
+          <EventCampaignPanel
+            event={event}
+            closed={closed}
+            saving={saving}
+            canCampaign={canCampaign}
+            campaignForm={campaignForm}
+            setCampaignForm={setCampaignForm}
+            onSaveCampaign={saveCampaign}
+            onToggleCampaignAuth={toggleCampaignAuth}
+          />
         )}
 
         {tab === 'ticketing' && (
-          <div className="stack">
-            {canTicketing && !closed ? (
-              <div className="panel">
-                <div className="panel-head">
-                  <h2>{editingTicketId ? 'Editar boletera' : 'Nueva boletera'}</h2>
-                  {editingTicketId ? (
-                    <button className="btn ghost" type="button" onClick={() => setEditingTicketId(null)}>
-                      Cancelar edición
-                    </button>
-                  ) : null}
-                </div>
-                <div className="panel-body">
-                  <div className="form">
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
-                      <label>
-                        Boletera
-                        <select
-                          value={ticketForm.boletera}
-                          onChange={(e) => setTicketForm({ ...ticketForm, boletera: e.target.value })}
-                        >
-                          <option>Arema</option>
-                          <option>eTicket</option>
-                          <option>Otra</option>
-                        </select>
-                      </label>
-                      <label>
-                        Hold hasta
-                        <input
-                          type="date"
-                          value={ticketForm.holdUntil}
-                          onChange={(e) => setTicketForm({ ...ticketForm, holdUntil: e.target.value })}
-                        />
-                      </label>
-                      <label>
-                        Artista
-                        <input
-                          value={ticketForm.artist}
-                          onChange={(e) => setTicketForm({ ...ticketForm, artist: e.target.value })}
-                        />
-                      </label>
-                    </div>
-                    <table className="table">
-                      <thead>
-                        <tr>
-                          <th>Zona</th>
-                          <th>Aforo</th>
-                          <th>Precio</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {ticketZones.map((z, i) => (
-                          <tr key={z.zona}>
-                            <td>{z.zona}</td>
-                            <td>
-                              <input
-                                type="number"
-                                value={z.aforo}
-                                onChange={(e) => {
-                                  const next = [...ticketZones];
-                                  next[i] = { ...z, aforo: Number(e.target.value) };
-                                  setTicketZones(next);
-                                }}
-                              />
-                            </td>
-                            <td>
-                              <input
-                                type="number"
-                                value={z.precio}
-                                onChange={(e) => {
-                                  const next = [...ticketZones];
-                                  next[i] = { ...z, precio: Number(e.target.value) };
-                                  setTicketZones(next);
-                                }}
-                              />
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                    <label>
-                      Notas
-                      <input
-                        value={ticketForm.notes}
-                        onChange={(e) => setTicketForm({ ...ticketForm, notes: e.target.value })}
-                      />
-                    </label>
-                    <button className="btn" type="button" disabled={saving} onClick={saveTicketing}>
-                      {saving ? 'Guardando…' : editingTicketId ? 'Actualizar' : 'Crear boletera'}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ) : null}
-            <div className="panel">
-              <div className="panel-head">
-                <h2>Configuraciones</h2>
-              </div>
-              <div className="panel-body">
-                {(event.ticketingSetups || []).map((t) => (
-                  <div key={t.id} className="row" style={{ justifyContent: 'space-between', marginBottom: 12 }}>
-                    <div>
-                      <strong>{t.boletera}</strong>
-                      <div className="muted" style={{ fontSize: 12 }}>
-                        Hold: {t.holdUntil ? new Date(t.holdUntil).toLocaleDateString('es-MX') : '—'} ·{' '}
-                        {(t.zonesJson || []).map((z) => `${z.zona}:${z.aforo}`).join(' · ')}
-                      </div>
-                    </div>
-                    <div className="row">
-                      {canTicketing && !closed ? (
-                        <>
-                          <button className="btn ghost" type="button" onClick={() => editTicketing(t)}>
-                            Editar
-                          </button>
-                          <button className="btn ghost" type="button" onClick={() => deleteTicketing(t.id)}>
-                            Eliminar
-                          </button>
-                        </>
-                      ) : null}
-                    </div>
-                  </div>
-                ))}
-                {!event.ticketingSetups?.length ? <p className="muted">Sin boletera aún.</p> : null}
-              </div>
-            </div>
-          </div>
+          <EventTicketingPanel
+            closed={closed}
+            saving={saving}
+            canTicketing={canTicketing}
+            ticketingSetups={event.ticketingSetups || []}
+            ticketForm={ticketForm}
+            setTicketForm={setTicketForm}
+            ticketZones={ticketZones}
+            setTicketZones={setTicketZones}
+            editingTicketId={editingTicketId}
+            setEditingTicketId={setEditingTicketId}
+            onSaveTicketing={saveTicketing}
+            onEditTicketing={editTicketing}
+            onDeleteTicketing={deleteTicketing}
+            onSynced={load}
+          />
         )}
 
         {tab === 'tasks' && (
-          <div className="stack">
-            {!closed ? (
-              <div className="panel">
-                <div className="panel-head">
-                  <h2>Asignar tarea</h2>
-                </div>
-                <div className="panel-body">
-                  <div className="form" style={{ maxWidth: 720 }}>
-                    <label>
-                      Título
-                      <input
-                        value={taskForm.title}
-                        onChange={(e) => setTaskForm({ ...taskForm, title: e.target.value })}
-                        placeholder="Ej. Confirmar hospedaje artista"
-                      />
-                    </label>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
-                      <label>
-                        Módulo
-                        <input
-                          value={taskForm.module}
-                          onChange={(e) => setTaskForm({ ...taskForm, module: e.target.value })}
-                          placeholder="producción / hospitality…"
-                        />
-                      </label>
-                      <label>
-                        Asignado a
-                        <select
-                          value={taskForm.assigneeId}
-                          onChange={(e) => setTaskForm({ ...taskForm, assigneeId: e.target.value })}
-                        >
-                          <option value="">Sin asignar</option>
-                          {directory.map((u) => (
-                            <option key={u.id} value={u.id}>
-                              {u.fullName}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      <label>
-                        Vence
-                        <input
-                          type="date"
-                          value={taskForm.dueAt}
-                          onChange={(e) => setTaskForm({ ...taskForm, dueAt: e.target.value })}
-                        />
-                      </label>
-                    </div>
-                    <button className="btn" type="button" onClick={createTask}>
-                      Crear tarea
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ) : null}
-            <div className="panel">
-              <div className="panel-head">
-                <h2>Tareas del evento</h2>
-              </div>
-              <div className="panel-body">
-                <table className="table">
-                  <thead>
-                    <tr>
-                      <th>Tarea</th>
-                      <th>Módulo</th>
-                      <th>Asignado</th>
-                      <th>Status</th>
-                      <th></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(event.tasks || []).map((t) => (
-                      <tr key={t.id}>
-                        <td>{t.title}</td>
-                        <td className="muted">{t.module || '—'}</td>
-                        <td>{t.assignee?.fullName || '—'}</td>
-                        <td>
-                          <span className={`badge ${t.status === 'DONE' ? 'ok' : 'warn'}`}>{t.status}</span>
-                        </td>
-                        <td className="row">
-                          {t.status !== 'DONE' ? (
-                            <button className="btn ghost" type="button" onClick={() => setTaskStatus(t.id, 'DONE')}>
-                              Hecha
-                            </button>
-                          ) : (
-                            <button className="btn ghost" type="button" onClick={() => setTaskStatus(t.id, 'OPEN')}>
-                              Reabrir
-                            </button>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                    {!event.tasks?.length ? (
-                      <tr>
-                        <td colSpan={5} className="muted">
-                          Sin tareas aún.
-                        </td>
-                      </tr>
-                    ) : null}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
+          <EventTasksPanel
+            closed={closed}
+            tasks={event.tasks || []}
+            directory={directory}
+            taskForm={taskForm}
+            setTaskForm={setTaskForm}
+            onCreateTask={createTask}
+            onSetTaskStatus={setTaskStatus}
+          />
         )}
 
         {tab === 'sponsors' && (
-          <div className="stack">
-            {!closed ? (
-              <div className="panel">
-                <div className="panel-head">
-                  <h2>Nuevo patrocinador</h2>
-                </div>
-                <div className="panel-body">
-                  <div className="form" style={{ maxWidth: 720 }}>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                      <label>
-                        Nombre
-                        <input
-                          value={sponsorForm.name}
-                          onChange={(e) => setSponsorForm({ ...sponsorForm, name: e.target.value })}
-                        />
-                      </label>
-                      <label>
-                        Contacto
-                        <input
-                          value={sponsorForm.contact}
-                          onChange={(e) => setSponsorForm({ ...sponsorForm, contact: e.target.value })}
-                        />
-                      </label>
-                    </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                      <label>
-                        Aportación
-                        <input
-                          value={sponsorForm.contribution}
-                          onChange={(e) => setSponsorForm({ ...sponsorForm, contribution: e.target.value })}
-                          placeholder="especie / cash / media"
-                        />
-                      </label>
-                      <label>
-                        Monto
-                        <input
-                          type="number"
-                          value={sponsorForm.amount}
-                          onChange={(e) => setSponsorForm({ ...sponsorForm, amount: e.target.value })}
-                        />
-                      </label>
-                    </div>
-                    <label>
-                      Notas
-                      <input
-                        value={sponsorForm.notes}
-                        onChange={(e) => setSponsorForm({ ...sponsorForm, notes: e.target.value })}
-                      />
-                    </label>
-                    <button className="btn" type="button" onClick={createSponsor}>
-                      Agregar
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ) : null}
-            <div className="panel">
-              <div className="panel-head">
-                <h2>Patrocinadores</h2>
-              </div>
-              <div className="panel-body">
-                <table className="table">
-                  <thead>
-                    <tr>
-                      <th>Nombre</th>
-                      <th>Contacto</th>
-                      <th>Aportación</th>
-                      <th>Monto</th>
-                      <th></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(event.sponsors || []).map((s) => (
-                      <tr key={s.id}>
-                        <td>{s.name}</td>
-                        <td>{s.contact || '—'}</td>
-                        <td>{s.contribution || '—'}</td>
-                        <td>{s.amount != null ? `$${Number(s.amount).toLocaleString('es-MX')}` : '—'}</td>
-                        <td>
-                          {!closed ? (
-                            <button className="btn ghost" type="button" onClick={() => removeSponsor(s.id)}>
-                              Quitar
-                            </button>
-                          ) : null}
-                        </td>
-                      </tr>
-                    ))}
-                    {!event.sponsors?.length ? (
-                      <tr>
-                        <td colSpan={5} className="muted">
-                          Sin patrocinadores.
-                        </td>
-                      </tr>
-                    ) : null}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
+          <EventSponsorsPanel
+            closed={closed}
+            sponsors={event.sponsors || []}
+            sponsorForm={sponsorForm}
+            setSponsorForm={setSponsorForm}
+            onCreateSponsor={createSponsor}
+            onRemoveSponsor={removeSponsor}
+          />
         )}
 
         {tab === 'files' && (
-          <div className="stack">
-            <div className="panel">
-              <div className="panel-head">
-                <h2>Exceles y PDFs embebidos</h2>
-                {!closed ? (
-                  <label className="btn" style={{ cursor: 'pointer' }}>
-                    Subir archivo
-                    <input
-                      type="file"
-                      hidden
-                      accept=".pdf,.xlsx,.xls,.csv,image/*"
-                      onChange={(e) => {
-                        const f = e.target.files?.[0];
-                        if (f) onUpload(f);
-                      }}
-                    />
-                  </label>
-                ) : null}
-              </div>
-              <div className="panel-body">
-                {!event.files.length ? (
-                  <p className="muted">Sube Excel o PDF del evento para verlo embebido aquí.</p>
-                ) : (
-                  <table className="table">
-                    <thead>
-                      <tr>
-                        <th>Archivo</th>
-                        <th>Tipo</th>
-                        <th></th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {event.files.map((f) => (
-                        <tr key={f.id}>
-                          <td>{f.fileName}</td>
-                          <td>
-                            <span className="badge">{f.kind || 'file'}</span>
-                          </td>
-                          <td className="row">
-                            <button className="btn ghost" type="button" onClick={() => setPreviewFile(f)}>
-                              Ver
-                            </button>
-                            <a href={f.url} target="_blank" rel="noreferrer">
-                              Descargar
-                            </a>
-                            {!closed ? (
-                              <button className="btn ghost" type="button" onClick={() => deleteFile(f.id)}>
-                                Eliminar
-                              </button>
-                            ) : null}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                )}
-              </div>
-            </div>
-            {previewFile ? (
-              <div className="panel">
-                <div className="panel-head">
-                  <h2>{previewFile.fileName}</h2>
-                  <button className="btn ghost" type="button" onClick={() => setPreviewFile(null)}>
-                    Cerrar
-                  </button>
-                </div>
-                <div className="panel-body">
-                  <FileViewer url={previewFile.url} fileName={previewFile.fileName} kind={previewFile.kind} />
-                </div>
-              </div>
-            ) : null}
-          </div>
+          <EventFilesPanel
+            closed={closed}
+            files={event.files}
+            previewFile={previewFile}
+            setPreviewFile={setPreviewFile}
+            onUpload={onUpload}
+            onDeleteFile={deleteFile}
+          />
         )}
       </div>
     </AppShell>

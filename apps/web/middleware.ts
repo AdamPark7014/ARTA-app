@@ -5,6 +5,7 @@ import {
   SESSION_COOKIE,
   entityFromHost,
   isPublicPath,
+  safePanelPath,
 } from '@/lib/domains';
 
 export function middleware(request: NextRequest) {
@@ -15,6 +16,13 @@ export function middleware(request: NextRequest) {
   const requestHeaders = new Headers(request.headers);
   if (hostEntity) {
     requestHeaders.set('x-arta-entity', hostEntity);
+  }
+
+  // Panel hosts: / → dashboard (no sitio público)
+  if (hostEntity && pathname === '/') {
+    const url = request.nextUrl.clone();
+    url.pathname = '/dashboard';
+    return NextResponse.redirect(url);
   }
 
   const response = NextResponse.next({
@@ -32,12 +40,14 @@ export function middleware(request: NextRequest) {
   // Auth gate only on entity subdomains for panel routes
   if (hostEntity && !isPublicPath(pathname)) {
     const session = request.cookies.get(SESSION_COOKIE);
+    const access = request.cookies.get('arta_access');
     const hasHandoff = searchParams.has(HANDOFF_PARAM);
-    if ((!session || session.value !== '1') && !hasHandoff) {
+    const authed = (session && session.value === '1') || !!access?.value;
+    if (!authed && !hasHandoff) {
       const loginUrl = request.nextUrl.clone();
       loginUrl.pathname = '/login';
       loginUrl.search = '';
-      loginUrl.searchParams.set('next', pathname + (request.nextUrl.search || ''));
+      loginUrl.searchParams.set('next', safePanelPath(pathname + (request.nextUrl.search || '')));
       return NextResponse.redirect(loginUrl);
     }
   }

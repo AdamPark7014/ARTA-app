@@ -20,4 +20,4 @@ npx prisma migrate deploy
 echo "Seed…"
 npx ts-node --transpile-only prisma/seed.ts || echo "Seed skipped/failed (may already be applied)"
 echo "Starting API…"
-exec node dist/main.js
+exec node dist/apps/api/src/main.js

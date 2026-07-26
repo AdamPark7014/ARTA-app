@@ -25,6 +25,8 @@ import {
   type RoleKey,
 } from '../common/rbac/roles';
 import { ChecklistPdfService } from '../checklists/checklist-pdf.service';
+import { assertSameTenant, tenantIdOf } from '../common/tenant';
+import { assertEventSlotAvailable } from '../common/plan-limits';
 
 class CreateEventDto {
   @IsEnum(EntityKey)
@@ -62,6 +64,7 @@ type AuthUser = {
   entities: string[];
   permissions: string[];
   fullName?: string;
+  organizationId?: string | null;
 };
 
 @Controller('events')
@@ -95,10 +98,11 @@ export class EventsController {
   ) {
     const allowed = eventOpsEntities(req.user.entities as EntityKey[], req.user.roleKey as RoleKey);
     if (!allowed.length) return [];
+    const orgId = tenantIdOf(req.user);
     const where =
       entity && allowed.includes(entity)
-        ? { entity }
-        : { entity: { in: allowed } };
+        ? { entity, organizationId: orgId }
+        : { entity: { in: allowed }, organizationId: orgId };
     return this.prisma.event.findMany({
       where,
       orderBy: { updatedAt: 'desc' },
@@ -137,6 +141,7 @@ export class EventsController {
       },
     });
     if (!event) throw new BadRequestException('Evento no encontrado');
+    assertSameTenant(req.user, event.organizationId);
     this.assertEntity(req.user, event.entity);
     return event;
   }
@@ -147,8 +152,11 @@ export class EventsController {
       throw new ForbiddenException('Sin permiso para crear eventos');
     }
     this.assertEntity(req.user, dto.entity);
+    const organizationId = tenantIdOf(req.user);
+    await assertEventSlotAvailable(this.prisma, organizationId);
     const event = await this.prisma.event.create({
       data: {
+        organizationId,
         entity: dto.entity,
         name: dto.name,
         artist: dto.artist,

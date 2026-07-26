@@ -3,6 +3,8 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { AppShell } from '@/components/app-shell/AppShell';
+import { EmptyState } from '@/components/ui/EmptyState';
+import { LoadingBlock, LoadingKpis } from '@/components/ui/LoadingBlock';
 import { api } from '@/lib/api';
 import { useUser } from '@/lib/user-context';
 import { userHasPermission } from '@/lib/access-matrix';
@@ -27,6 +29,7 @@ type CampaignRow = {
 export default function CampaignsPage() {
   const { user, entity } = useUser();
   const [rows, setRows] = useState<CampaignRow[]>([]);
+  const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<CampaignRow | null>(null);
   const [form, setForm] = useState({
     type: 'INTERNAL',
@@ -43,12 +46,17 @@ export default function CampaignsPage() {
     : false;
 
   async function load() {
-    const data = await api<CampaignRow[]>('/campaigns');
-    const filtered = data.filter((r) => r.event.entity === entity);
-    setRows(filtered);
-    if (selected) {
-      const refreshed = filtered.find((r) => r.id === selected.id);
-      if (refreshed) openEditor(refreshed);
+    setLoading(true);
+    try {
+      const data = await api<CampaignRow[]>('/campaigns');
+      const filtered = data.filter((r) => r.event.entity === entity);
+      setRows(filtered);
+      if (selected) {
+        const refreshed = filtered.find((r) => r.id === selected.id);
+        if (refreshed) openEditor(refreshed);
+      }
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -105,12 +113,46 @@ export default function CampaignsPage() {
   }
 
   return (
-    <AppShell title="Campañas publicitarias">
-      <div className="stack">
-        <p className="muted">
-          Edición: Melissa y Williams. Autorización: Melissa / dirección. Entidad: {entity}.
-        </p>
+    <AppShell title="Campañas · Media control">
+      <div className="stack page-workspace">
+        <div className="page-intro">
+          <p className="muted">
+            Control de campañas: autorización, presupuesto y backlog. Edición: Melissa y Williams.
+            Autorización: Melissa / dirección. Entidad: {entity}.
+          </p>
+        </div>
         {msg ? <div className="muted">{msg}</div> : null}
+
+        {loading ? (
+          <>
+            <LoadingKpis count={4} />
+            <LoadingBlock rows={5} label="Cargando campañas…" />
+          </>
+        ) : (
+          <>
+        <div className="grid-cards kpi-grid-dense">
+          <div className="kpi">
+            <div className="label">Campañas</div>
+            <div className="value">{rows.length}</div>
+          </div>
+          <div className="kpi">
+            <div className="label">Autorizadas</div>
+            <div className="value">{rows.filter((r) => r.authorized).length}</div>
+          </div>
+          <div className={`kpi ${rows.some((r) => !r.authorized) ? 'kpi--danger' : ''}`}>
+            <div className="label">Pend. auth</div>
+            <div className="value">{rows.filter((r) => !r.authorized).length}</div>
+          </div>
+          <div className="kpi">
+            <div className="label">Budget total</div>
+            <div className="value" style={{ fontSize: '1.15rem' }}>
+              $
+              {Math.round(
+                rows.reduce((s, r) => s + Number(r.dataJson?.budget || 0), 0),
+              ).toLocaleString('es-MX')}
+            </div>
+          </div>
+        </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: selected ? '1fr 1.1fr' : '1fr', gap: 16 }}>
           <div className="panel">
@@ -118,6 +160,19 @@ export default function CampaignsPage() {
               <h2>Campañas · {entity === 'ARTA' ? 'Arta' : 'Auditorio'}</h2>
             </div>
             <div className="panel-body">
+              {!rows.length ? (
+                <EmptyState
+                  title="Sin campañas en esta entidad"
+                  description="Las campañas nacen al crear un evento con tipo interna/externa. Abre un evento para editar media plan y presupuesto."
+                  steps={[
+                    'Crea o abre un evento',
+                    'Configura campaña en el panel del evento',
+                    'Autoriza desde aquí cuando el plan esté listo',
+                  ]}
+                  actionHref="/events"
+                  actionLabel="Ir a eventos"
+                />
+              ) : (
               <table className="table">
                 <thead>
                   <tr>
@@ -156,15 +211,9 @@ export default function CampaignsPage() {
                       </td>
                     </tr>
                   ))}
-                  {!rows.length ? (
-                    <tr>
-                      <td colSpan={4} className="muted">
-                        Sin campañas. Crea un evento con campaña interna/externa.
-                      </td>
-                    </tr>
-                  ) : null}
                 </tbody>
               </table>
+              )}
             </div>
           </div>
 
@@ -256,6 +305,8 @@ export default function CampaignsPage() {
             </div>
           ) : null}
         </div>
+          </>
+        )}
       </div>
     </AppShell>
   );

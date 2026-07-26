@@ -3,11 +3,13 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 COPY apps/api/package.json apps/api/
 COPY apps/web/package.json apps/web/
+COPY packages ./packages
 RUN npm ci --workspace=apps/web
 
 FROM node:20-bookworm-slim AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
+COPY --from=deps /app/packages ./packages
 COPY package.json package-lock.json ./
 COPY apps/web ./apps/web
 WORKDIR /app/apps/web
