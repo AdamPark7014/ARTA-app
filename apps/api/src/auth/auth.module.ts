@@ -14,7 +14,7 @@ import { TotpAccessGuard, TotpEnrollGuard } from './totp-access.guard';
       imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
-        secret: config.get('JWT_SECRET') || 'change-me-arta-prod-secret',
+        secret: config.getOrThrow<string>('JWT_SECRET'),
         signOptions: { expiresIn: config.get('JWT_EXPIRES_IN') || '7d' },
       }),
     }),

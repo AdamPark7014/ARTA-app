@@ -362,12 +362,14 @@ export default function UsersPage() {
                   className="field"
                   style={{ maxWidth: 240 }}
                   placeholder="Buscar…"
+                  aria-label="Buscar usuario"
                   value={q}
                   onChange={(e) => setQ(e.target.value)}
                 />
                 <select
                   className="field"
                   style={{ width: 'auto' }}
+                  aria-label="Filtrar por riesgo"
                   value={riskFilter}
                   onChange={(e) => setRiskFilter(e.target.value as typeof riskFilter)}
                 >

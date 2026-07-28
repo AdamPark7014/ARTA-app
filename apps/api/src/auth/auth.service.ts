@@ -6,12 +6,13 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
-import { createHash, randomBytes } from 'crypto';
+import { randomBytes } from 'crypto';
 import { generateSecret, generateURI, verifySync } from 'otplib';
 import * as QRCode from 'qrcode';
 import { EntityKey } from '@prisma/client';
 import { Response } from 'express';
 import { PrismaService } from '../common/prisma/prisma.service';
+import { sha256Hex as hash } from '../common/crypto';
 import { hasPermission, type Permission, type RoleKey } from '../common/rbac/roles';
 import { DEFAULT_ORG_ID } from '../common/tenant';
 
@@ -22,10 +23,6 @@ const HANDOFF_TTL_MS = 60 * 1000;
 const ACCESS_COOKIE = 'arta_access';
 const SESSION_COOKIE = 'arta_session';
 const CSRF_COOKIE = 'arta_csrf';
-
-function hash(value: string) {
-  return createHash('sha256').update(value).digest('hex');
-}
 
 function deviceLabel(ua?: string | null) {
   if (!ua) return 'Desconocido';

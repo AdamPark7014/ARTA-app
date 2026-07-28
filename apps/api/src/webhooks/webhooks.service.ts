@@ -3,6 +3,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { DEFAULT_ORG_ID } from '../common/tenant';
+import { assertPublicHttpUrl } from '../common/url-safety';
 
 export type WebhookEventName =
   | 'automation.alert'
@@ -141,6 +142,7 @@ export class WebhooksService {
     entity?: 'ARTA' | 'EXPLANADA' | null;
     organizationId?: string;
   }) {
+    assertPublicHttpUrl(data.url);
     const secret = randomBytes(24).toString('hex');
     return this.prisma.webhookEndpoint.create({
       data: {

@@ -162,12 +162,14 @@ export default function EventsPage() {
                 className="field"
                 style={{ maxWidth: 300 }}
                 placeholder="Buscar nombre, artista, venue…"
+                aria-label="Buscar nombre, artista o venue"
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
               />
               <select
                 className="field"
                 style={{ width: 'auto' }}
+                aria-label="Filtrar por estado"
                 value={status}
                 onChange={(e) => setStatus(e.target.value)}
               >

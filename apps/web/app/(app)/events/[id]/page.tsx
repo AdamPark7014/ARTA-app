@@ -79,6 +79,7 @@ function EventDetailInner() {
   });
   const [ticketForm, setTicketForm] = useState({
     boletera: 'Arema',
+    logoUrl: '',
     holdUntil: '',
     artist: '',
     promoter: '',
@@ -361,6 +362,7 @@ function EventDetailInner() {
     try {
       const payload = {
         boletera: ticketForm.boletera,
+        logoUrl: ticketForm.logoUrl || '',
         holdUntil: ticketForm.holdUntil || undefined,
         artist: ticketForm.artist || undefined,
         promoter: ticketForm.promoter || undefined,
@@ -375,6 +377,7 @@ function EventDetailInner() {
         setMsg('Boletera creada');
       }
       setEditingTicketId(null);
+      setTicketForm((f) => ({ ...f, boletera: 'Arema', logoUrl: '', holdUntil: '', notes: '' }));
       await load();
     } catch (e) {
       setMsg(e instanceof Error ? e.message : 'Error');
@@ -387,6 +390,7 @@ function EventDetailInner() {
     setEditingTicketId(t.id);
     setTicketForm({
       boletera: t.boletera,
+      logoUrl: t.logoUrl || '',
       holdUntil: t.holdUntil ? t.holdUntil.slice(0, 10) : '',
       artist: t.artist || '',
       promoter: t.promoter || '',
@@ -835,6 +839,7 @@ function EventDetailInner() {
             closed={closed}
             saving={saving}
             canTicketing={canTicketing}
+            eventId={id}
             ticketingSetups={event.ticketingSetups || []}
             ticketForm={ticketForm}
             setTicketForm={setTicketForm}

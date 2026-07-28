@@ -14,14 +14,18 @@ export class DigestsService {
     private webhooks: WebhooksService,
   ) {}
 
+  /** Bounded concurrency so this scales past a handful of orgs — see automations.service.ts for the same pattern. */
+  private static readonly DIGEST_CONCURRENCY = 10;
+
   @Cron(CronExpression.EVERY_DAY_AT_8AM)
   async dailyDigest() {
     const orgs = await this.prisma.organization.findMany({
       where: { active: true },
       select: { id: true, name: true, slug: true },
     });
-    for (const org of orgs) {
-      await this.runDigestForOrg(org.id, org.name);
+    for (let i = 0; i < orgs.length; i += DigestsService.DIGEST_CONCURRENCY) {
+      const batch = orgs.slice(i, i + DigestsService.DIGEST_CONCURRENCY);
+      await Promise.allSettled(batch.map((org) => this.runDigestForOrg(org.id, org.name)));
     }
   }
 

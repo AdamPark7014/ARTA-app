@@ -23,6 +23,41 @@ import { assertSameTenant } from '../common/tenant';
 
 const uploadRoot = process.env.UPLOAD_DIR || join(process.cwd(), 'uploads');
 
+/**
+ * Uploaded files are served statically at /uploads/* on the API's own origin
+ * (same-origin as the panel via the Traefik/Next proxy). An .html or .svg
+ * upload would be served with a Content-Type that the browser executes,
+ * giving stored XSS in an authenticated session. Allowlist by extension —
+ * fail closed on anything else (no PHP/CGI execution risk on this Node
+ * static server, so the concern is purely browser-rendered content).
+ */
+const ALLOWED_EXTENSIONS = new Set([
+  '.pdf',
+  '.jpg',
+  '.jpeg',
+  '.png',
+  '.gif',
+  '.webp',
+  '.xlsx',
+  '.xls',
+  '.csv',
+  '.doc',
+  '.docx',
+]);
+
+function fileFilter(
+  _req: unknown,
+  file: Express.Multer.File,
+  cb: (error: Error | null, acceptFile: boolean) => void,
+) {
+  const ext = extname(file.originalname).toLowerCase();
+  if (!ALLOWED_EXTENSIONS.has(ext)) {
+    cb(new BadRequestException(`Tipo de archivo no permitido: ${ext || '(sin extensión)'}`), false);
+    return;
+  }
+  cb(null, true);
+}
+
 type AuthUser = {
   id: string;
   roleKey: string;
@@ -60,10 +95,11 @@ export class UploadsController {
         },
         filename: (_req, file, cb) => {
           const unique = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
-          cb(null, `${unique}${extname(file.originalname)}`);
+          cb(null, `${unique}${extname(file.originalname).toLowerCase()}`);
         },
       }),
       limits: { fileSize: 40 * 1024 * 1024 },
+      fileFilter,
     }),
   )
   async upload(

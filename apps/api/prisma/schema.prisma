@@ -400,7 +400,8 @@ model TicketingSetup {
   id          String   @id @default(cuid())
   eventId     String
   event       Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  boletera    String // arema | eticket | custom
+  boletera    String // Arema | eTicket | custom display name
+  logoUrl     String? // /uploads/... used in checklist PDFs
   holdUntil   DateTime?
   artist      String?
   promoter    String?

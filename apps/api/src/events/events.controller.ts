@@ -106,6 +106,9 @@ export class EventsController {
     return this.prisma.event.findMany({
       where,
       orderBy: { updatedAt: 'desc' },
+      // Safety cap — an org running events for years has no other bound here.
+      // Real UI usage never approaches this; it just stops an unbounded scan.
+      take: 500,
       include: {
         createdBy: { select: { id: true, fullName: true } },
         _count: { select: { checklists: true, purchaseOrders: true, tasks: true } },
@@ -264,6 +267,7 @@ export class EventsController {
   async close(@Req() req: { user: AuthUser }, @Param('id') id: string) {
     const existing = await this.prisma.event.findUnique({ where: { id } });
     if (!existing) throw new BadRequestException('Evento no encontrado');
+    assertSameTenant(req.user, existing.organizationId);
     this.assertEntity(req.user, existing.entity);
     if (!hasPermission(req.user.roleKey as RoleKey, req.user.permissions, PERMISSIONS.EVENT_CLOSE)) {
       throw new ForbiddenException('Sin permiso para cerrar evento');
@@ -283,6 +287,7 @@ export class EventsController {
   async reopen(@Req() req: { user: AuthUser }, @Param('id') id: string) {
     const existing = await this.prisma.event.findUnique({ where: { id } });
     if (!existing) throw new BadRequestException('Evento no encontrado');
+    assertSameTenant(req.user, existing.organizationId);
     this.assertEntity(req.user, existing.entity);
     if (req.user.roleKey !== 'dir_general' && req.user.roleKey !== 'super_admin') {
       throw new ForbiddenException('Solo dirección puede reabrir');
@@ -299,6 +304,7 @@ export class EventsController {
   async cancel(@Req() req: { user: AuthUser }, @Param('id') id: string) {
     const existing = await this.prisma.event.findUnique({ where: { id } });
     if (!existing) throw new BadRequestException('Evento no encontrado');
+    assertSameTenant(req.user, existing.organizationId);
     this.assertEntity(req.user, existing.entity);
     if (!hasPermission(req.user.roleKey as RoleKey, req.user.permissions, PERMISSIONS.EVENT_CLOSE)) {
       throw new ForbiddenException();
@@ -318,6 +324,7 @@ export class EventsController {
   async remove(@Req() req: { user: AuthUser }, @Param('id') id: string) {
     const existing = await this.prisma.event.findUnique({ where: { id } });
     if (!existing) throw new BadRequestException('Evento no encontrado');
+    assertSameTenant(req.user, existing.organizationId);
     this.assertEntity(req.user, existing.entity);
     if (req.user.roleKey !== 'dir_general' && req.user.roleKey !== 'super_admin') {
       throw new ForbiddenException('Solo dirección puede eliminar eventos');
@@ -337,6 +344,7 @@ export class EventsController {
   ) {
     const existing = await this.prisma.event.findUnique({ where: { id } });
     if (!existing) throw new BadRequestException('Evento no encontrado');
+    assertSameTenant(req.user, existing.organizationId);
     this.assertEntity(req.user, existing.entity);
     this.assertNotClosed(existing.status);
 

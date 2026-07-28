@@ -8,11 +8,14 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { LoadingBlock, LoadingKpis } from '@/components/ui/LoadingBlock';
 import { api } from '@/lib/api';
 import { useUser } from '@/lib/user-context';
+import { BoleteraFields, resolveBoleteraName } from '@/components/ticketing/BoleteraFields';
+import { boleteraChoiceOf } from '@/lib/boletera';
 
 type Zone = { zona: string; aforo: number; precio: number; sold?: number };
 type Setup = {
   id: string;
   boletera: string;
+  logoUrl?: string | null;
   holdUntil?: string | null;
   artist?: string | null;
   promoter?: string | null;
@@ -48,6 +51,7 @@ export default function TicketingPage() {
   const [form, setForm] = useState({
     eventId: '',
     boletera: 'Arema',
+    logoUrl: '',
     holdUntil: '',
     artist: '',
     promoter: '',
@@ -96,6 +100,7 @@ export default function TicketingPage() {
     setForm({
       eventId: r.event.id,
       boletera: r.boletera,
+      logoUrl: r.logoUrl || '',
       holdUntil: r.holdUntil ? r.holdUntil.slice(0, 10) : '',
       artist: r.artist || '',
       promoter: r.promoter || '',
@@ -117,6 +122,7 @@ export default function TicketingPage() {
     setForm((f) => ({
       ...f,
       boletera: 'Arema',
+      logoUrl: '',
       holdUntil: '',
       artist: '',
       promoter: '',
@@ -127,8 +133,13 @@ export default function TicketingPage() {
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     setMsg('');
+    if (boleteraChoiceOf(form.boletera) === 'Otra' && !resolveBoleteraName('Otra', form.boletera)) {
+      setMsg('Escribe el nombre de la boletera (no dejes solo “Otra”).');
+      return;
+    }
     const payload = {
       boletera: form.boletera,
+      logoUrl: form.logoUrl || '',
       holdUntil: form.holdUntil || undefined,
       artist: form.artist || undefined,
       promoter: form.promoter || undefined,
@@ -249,34 +260,30 @@ export default function TicketingPage() {
           </div>
           <div className="panel-body">
             <form className="form" onSubmit={onSubmit}>
+              <label>
+                Evento
+                <select
+                  required
+                  disabled={!!editingId}
+                  value={form.eventId}
+                  onChange={(e) => setForm({ ...form, eventId: e.target.value })}
+                >
+                  <option value="">Selecciona…</option>
+                  {events.map((ev) => (
+                    <option key={ev.id} value={ev.id}>
+                      {ev.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                <label>
-                  Evento
-                  <select
-                    required
-                    disabled={!!editingId}
-                    value={form.eventId}
-                    onChange={(e) => setForm({ ...form, eventId: e.target.value })}
-                  >
-                    <option value="">Selecciona…</option>
-                    {events.map((ev) => (
-                      <option key={ev.id} value={ev.id}>
-                        {ev.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label>
-                  Boletera
-                  <select
-                    value={form.boletera}
-                    onChange={(e) => setForm({ ...form, boletera: e.target.value })}
-                  >
-                    <option>Arema</option>
-                    <option>eTicket</option>
-                    <option>Otra</option>
-                  </select>
-                </label>
+                <BoleteraFields
+                  eventId={form.eventId || undefined}
+                  boletera={form.boletera}
+                  logoUrl={form.logoUrl || null}
+                  onBoleteraChange={(boletera) => setForm({ ...form, boletera })}
+                  onLogoUrlChange={(logoUrl) => setForm({ ...form, logoUrl: logoUrl || '' })}
+                />
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
                 <label>
@@ -398,7 +405,19 @@ export default function TicketingPage() {
                       <td>
                         <Link href={`/events/${r.event.id}`}>{r.event.name}</Link>
                       </td>
-                      <td>{r.boletera}</td>
+                      <td>
+                        <div className="row" style={{ gap: 8, alignItems: 'center' }}>
+                          {r.logoUrl ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={r.logoUrl}
+                              alt=""
+                              style={{ height: 22, maxWidth: 56, objectFit: 'contain', background: '#fff', borderRadius: 3, padding: 1 }}
+                            />
+                          ) : null}
+                          <span>{r.boletera}</span>
+                        </div>
+                      </td>
                       <td>{r.holdUntil ? new Date(r.holdUntil).toLocaleDateString('es-MX') : '—'}</td>
                       <td className="muted" style={{ fontSize: 12 }}>
                         {(r.zonesJson || []).map((z) => `${z.zona}:${z.aforo}`).join(' · ')}

@@ -140,18 +140,58 @@ export function EventChecklistsPanel({
                           />
                         ) : null}
                         {item.type === 'select' ? (
-                          <select
-                            style={{ marginTop: 6, width: '100%' }}
-                            disabled={closed}
-                            value={String(item.value ?? '')}
-                            onChange={(e) => onUpdateItem(section.id, item.id, { value: e.target.value })}
-                          >
-                            {(item.options || []).map((o) => (
-                              <option key={o} value={o}>
-                                {o}
-                              </option>
-                            ))}
-                          </select>
+                          (() => {
+                            const opts = item.options || [];
+                            const otra = opts.find((o) => /^otra$/i.test(o));
+                            const raw = String(item.value ?? '');
+                            const known = opts.filter((o) => !/^otra$/i.test(o));
+                            const choice = known.includes(raw)
+                              ? raw
+                              : otra && (raw === otra || (raw && !known.includes(raw)))
+                                ? otra
+                                : raw || '';
+                            const custom =
+                              otra && choice === otra && raw !== otra ? raw : '';
+                            return (
+                              <div style={{ marginTop: 6 }}>
+                                <select
+                                  style={{ width: '100%' }}
+                                  disabled={closed}
+                                  value={choice}
+                                  onChange={(e) => {
+                                    const next = e.target.value;
+                                    if (otra && next === otra) {
+                                      onUpdateItem(section.id, item.id, {
+                                        value: custom || otra,
+                                      });
+                                    } else {
+                                      onUpdateItem(section.id, item.id, { value: next });
+                                    }
+                                  }}
+                                >
+                                  <option value="">Selecciona…</option>
+                                  {opts.map((o) => (
+                                    <option key={o} value={o}>
+                                      {o}
+                                    </option>
+                                  ))}
+                                </select>
+                                {otra && choice === otra ? (
+                                  <input
+                                    style={{ marginTop: 6, width: '100%' }}
+                                    disabled={closed}
+                                    placeholder="Nombre (ej. Ticketmaster)"
+                                    value={custom}
+                                    onChange={(e) =>
+                                      onUpdateItem(section.id, item.id, {
+                                        value: e.target.value.trim() || otra,
+                                      })
+                                    }
+                                  />
+                                ) : null}
+                              </div>
+                            );
+                          })()
                         ) : null}
                       </div>
                     </div>
@@ -184,6 +224,7 @@ export function EventChecklistsPanel({
                   url={activeChecklist.pdfUrl}
                   fileName={`${activeChecklist.title}.pdf`}
                   kind="pdf"
+                  cacheKey={activeChecklist.pdfGeneratedAt || undefined}
                 />
               ) : (
                 <p className="muted">

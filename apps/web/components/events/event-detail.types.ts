@@ -68,6 +68,7 @@ export type CampaignData = {
 export type TicketingSetup = {
   id: string;
   boletera: string;
+  logoUrl?: string | null;
   holdUntil?: string | null;
   artist?: string | null;
   promoter?: string | null;

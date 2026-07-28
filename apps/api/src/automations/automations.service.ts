@@ -46,7 +46,15 @@ export class AutomationsService implements OnModuleInit {
   /**
    * Scan one org or every active org. Webhook fan-out always carries organizationId
    * so deliveries never cross tenants.
+   *
+   * Runs orgs in bounded-concurrency batches rather than one at a time — at
+   * "thousands of orgs" scale, a fully sequential loop (each doing 3 queries +
+   * up to 4 webhook fetches with an 8s timeout) would make this hourly cron
+   * take unboundedly long. Each org is isolated in try/catch so one org's
+   * failure (bad webhook, transient DB error) can't abort the rest of the scan.
    */
+  private static readonly SCAN_CONCURRENCY = 10;
+
   async evaluateAndAudit(dispatchWebhooks = false, organizationId?: string) {
     const orgs = organizationId
       ? [{ id: organizationId }]
@@ -55,12 +63,22 @@ export class AutomationsService implements OnModuleInit {
           select: { id: true },
         });
 
-    const totals = { poAging: 0, eventRisk: 0, sigBacklog: 0, orgs: orgs.length };
-    for (const org of orgs) {
-      const summary = await this.evaluateForOrg(org.id, dispatchWebhooks);
-      totals.poAging += summary.poAging;
-      totals.eventRisk += summary.eventRisk;
-      totals.sigBacklog += summary.sigBacklog;
+    const totals = { poAging: 0, eventRisk: 0, sigBacklog: 0, orgs: orgs.length, failed: 0 };
+    for (let i = 0; i < orgs.length; i += AutomationsService.SCAN_CONCURRENCY) {
+      const batch = orgs.slice(i, i + AutomationsService.SCAN_CONCURRENCY);
+      const results = await Promise.allSettled(
+        batch.map((org) => this.evaluateForOrg(org.id, dispatchWebhooks)),
+      );
+      for (const r of results) {
+        if (r.status === 'fulfilled') {
+          totals.poAging += r.value.poAging;
+          totals.eventRisk += r.value.eventRisk;
+          totals.sigBacklog += r.value.sigBacklog;
+        } else {
+          totals.failed += 1;
+          this.log.warn(`Org scan failed: ${r.reason instanceof Error ? r.reason.message : r.reason}`);
+        }
+      }
     }
     return totals;
   }

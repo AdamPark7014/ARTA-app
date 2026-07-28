@@ -130,12 +130,14 @@ export default function TasksPage() {
                 className="field"
                 style={{ maxWidth: 280 }}
                 placeholder="Buscar tarea…"
+                aria-label="Buscar tarea"
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
               />
               <select
                 className="field"
                 style={{ width: 'auto' }}
+                aria-label="Filtrar por estado"
                 value={status}
                 onChange={(e) => setStatus(e.target.value)}
               >

@@ -29,7 +29,7 @@ const FIELD_TYPES: Array<{ value: string; label: string; hint: string }> = [
   { value: 'text', label: 'Texto', hint: 'En el PDF: etiqueta + línea' },
   { value: 'number', label: 'Número', hint: 'En el PDF: cantidad' },
   { value: 'date', label: 'Fecha', hint: 'En el PDF: fecha' },
-  { value: 'select', label: 'Opciones', hint: 'En el PDF: valor elegido' },
+  { value: 'select', label: 'Opciones', hint: 'Si incluye “Otra”, el checklist pide el nombre' },
 ];
 
 function uid(prefix: string) {
@@ -214,7 +214,7 @@ export function TemplateSchemaEditor({ templateId, initial, onSaved }: Props) {
                                       .filter(Boolean),
                                   })
                                 }
-                                placeholder="Arema, eTicket, Otra"
+                                placeholder="Arema, eTicket, Otra (con Otra pide nombre libre)"
                               />
                             </label>
                           ) : null}

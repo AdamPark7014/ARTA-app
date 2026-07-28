@@ -6,9 +6,26 @@ import { join } from 'path';
 import { existsSync, mkdirSync } from 'fs';
 import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
+import type { NextFunction, Request, Response } from 'express';
 import { AppModule } from './app.module';
 import { JsonLogger } from './common/logging/json-logger';
 import { initSentry, captureException } from './common/sentry';
+
+/**
+ * Browser traffic in prod/dev always reaches the API same-origin (Traefik/Next
+ * rewrite proxy /api → this service), so this allowlist is defense-in-depth
+ * for direct cross-origin callers (Swagger on another port, future clients),
+ * not the primary access path. Never reflect an arbitrary Origin with
+ * credentials:true (OWASP CORS misconfiguration).
+ */
+function corsOrigins(): (string | RegExp)[] {
+  const configured = (process.env.WEB_ORIGIN || '')
+    .split(',')
+    .map((o) => o.trim())
+    .filter(Boolean);
+  if (process.env.NODE_ENV === 'production') return configured;
+  return [...configured, /^https?:\/\/localhost:\d+$/, /^https?:\/\/127\.0\.0\.1:\d+$/];
+}
 
 async function bootstrap() {
   const sentryOn = initSentry();
@@ -18,21 +35,34 @@ async function bootstrap() {
     rawBody: true,
     logger,
   });
-  app.enableCors({ origin: true, credentials: true });
-  app.use(
-    helmet({
+  app.enableCors({ origin: corsOrigins(), credentials: true });
+  // PDFs/images under /uploads are embedded in the panel via iframe/object.
+  // Helmet's full CSP (object-src 'none', etc.) on those responses breaks
+  // Chrome's built-in PDF viewer; keep only frame-ancestors for embeds.
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    if (req.path.startsWith('/uploads/')) {
+      res.setHeader('Content-Security-Policy', "frame-ancestors 'self'");
+      res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+      res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+      res.setHeader('X-Content-Type-Options', 'nosniff');
+      return next();
+    }
+    return helmet({
       contentSecurityPolicy: {
         directives: {
           defaultSrc: ["'self'"],
           scriptSrc: ["'self'", "'unsafe-inline'"],
           styleSrc: ["'self'", "'unsafe-inline'"],
-          imgSrc: ["'self'", 'data:'],
-          frameAncestors: ["'none'"],
+          imgSrc: ["'self'", 'data:', 'blob:'],
+          frameAncestors: ["'self'"],
+          frameSrc: ["'self'", 'blob:'],
+          objectSrc: ["'self'"],
+          mediaSrc: ["'self'", 'blob:'],
         },
       },
       crossOriginResourcePolicy: { policy: 'cross-origin' },
-    }),
-  );
+    })(req, res, next);
+  });
   app.use(cookieParser());
   app.useGlobalPipes(
     new ValidationPipe({

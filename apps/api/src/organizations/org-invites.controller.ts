@@ -43,13 +43,14 @@ function hashToken(token: string) {
   return createHash('sha256').update(token).digest('hex');
 }
 
+/** WEB_ORIGIN may be a comma-separated CORS allowlist (see main.ts corsOrigins) — use the first entry as the canonical link target. */
 function webOrigin() {
-  return (
+  const raw =
     process.env.WEB_ORIGIN ||
     process.env.NEXT_PUBLIC_APP_URL ||
     process.env.PUBLIC_WEB_URL ||
-    'http://localhost:3000'
-  ).replace(/\/$/, '');
+    'http://localhost:3000';
+  return raw.split(',')[0].trim().replace(/\/$/, '');
 }
 
 @Controller()
@@ -228,7 +229,13 @@ export class OrgInvitesController {
       roleKey: invite.roleKey,
       entities: invite.entities,
       expiresAt: invite.expiresAt,
-      acceptUrl,
+      // The token proves the recipient controls that inbox — echoing it back to
+      // whoever *created* the invite (a different tenant's admin, in the SaaS
+      // multi-org case) would let them complete the accept flow themselves
+      // without ever touching the target inbox. Only expose it out-of-band
+      // (email) in production; keep it in the response for local/dev/test
+      // flows that have no mail transport configured.
+      acceptUrl: process.env.NODE_ENV === 'production' ? undefined : acceptUrl,
       outbox: true,
       emailFlushed,
     };

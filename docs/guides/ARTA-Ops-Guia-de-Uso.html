@@ -1,0 +1,1064 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ARTA Ops — Guía de uso</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,650;9..144,700&family=Sora:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --ink: #1a211d;
+      --ink-soft: #3a433e;
+      --muted: #6b736e;
+      --line: #e4e0d6;
+      --paper: #faf8f4;
+      --card: #ffffff;
+      --gold: #a8842e;
+      --gold-deep: #7a6120;
+      --gold-soft: #f3ead3;
+      --teal: #2f6f62;
+      --teal-soft: #e4f0ed;
+      --danger: #a84a3c;
+      --ok: #3d7a4c;
+      --display: "Fraunces", "Times New Roman", serif;
+      --body: "Sora", "Segoe UI", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: var(--paper);
+      color: var(--ink);
+      font-family: var(--body);
+      font-size: 10.5pt;
+      line-height: 1.55;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+
+    @page {
+      size: A4;
+      margin: 16mm 16mm 18mm 16mm;
+    }
+
+    .page {
+      width: 210mm;
+      min-height: 297mm;
+      margin: 0 auto;
+      padding: 0;
+      position: relative;
+    }
+
+    .sheet {
+      break-after: page;
+      page-break-after: always;
+      padding: 4mm 2mm 8mm;
+      min-height: 260mm;
+    }
+    .sheet:last-child {
+      break-after: auto;
+      page-break-after: auto;
+    }
+
+    /* ——— Cover ——— */
+    .cover {
+      min-height: 265mm;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      background:
+        radial-gradient(900px 420px at 0% 0%, rgba(168, 132, 46, 0.16), transparent 55%),
+        radial-gradient(700px 380px at 100% 10%, rgba(47, 111, 98, 0.12), transparent 50%),
+        linear-gradient(165deg, #121815 0%, #1a2420 48%, #0f1412 100%);
+      color: #f3eee4;
+      border-radius: 6px;
+      padding: 22mm 16mm 16mm;
+      overflow: hidden;
+      position: relative;
+    }
+    .cover::after {
+      content: "";
+      position: absolute;
+      inset: auto -10% -20% 40%;
+      height: 55%;
+      background: linear-gradient(135deg, rgba(196, 163, 90, 0.22), transparent 60%);
+      transform: rotate(-8deg);
+      pointer-events: none;
+    }
+    .cover-brand {
+      font-family: var(--display);
+      font-size: 42pt;
+      font-weight: 650;
+      letter-spacing: -0.02em;
+      line-height: 1;
+      margin: 0;
+      position: relative;
+      z-index: 1;
+    }
+    .cover-brand span {
+      display: block;
+      font-size: 12pt;
+      font-family: var(--body);
+      font-weight: 500;
+      letter-spacing: 0.28em;
+      text-transform: uppercase;
+      color: #c4a35a;
+      margin-bottom: 10mm;
+    }
+    .cover h1 {
+      font-family: var(--display);
+      font-weight: 500;
+      font-size: 26pt;
+      line-height: 1.15;
+      margin: 8mm 0 4mm;
+      max-width: 14cm;
+      position: relative;
+      z-index: 1;
+    }
+    .cover-lead {
+      font-size: 11pt;
+      color: #c8c2b6;
+      max-width: 13cm;
+      margin: 0;
+      position: relative;
+      z-index: 1;
+    }
+    .cover-meta {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8mm;
+      border-top: 1px solid rgba(232, 220, 196, 0.18);
+      padding-top: 8mm;
+      margin-top: 18mm;
+      position: relative;
+      z-index: 1;
+      font-size: 8.5pt;
+      color: #a8a196;
+    }
+    .cover-meta strong {
+      display: block;
+      color: #e8dcc4;
+      font-weight: 600;
+      margin-bottom: 1.5mm;
+      font-size: 8pt;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+
+    /* ——— Interior ——— */
+    .kicker {
+      font-size: 8pt;
+      font-weight: 600;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--gold);
+      margin: 0 0 2mm;
+    }
+    h2 {
+      font-family: var(--display);
+      font-size: 18pt;
+      font-weight: 650;
+      margin: 0 0 4mm;
+      color: var(--ink);
+      line-height: 1.2;
+    }
+    h3 {
+      font-family: var(--display);
+      font-size: 12.5pt;
+      font-weight: 650;
+      margin: 7mm 0 2.5mm;
+      color: var(--ink);
+    }
+    h4 {
+      font-size: 9.5pt;
+      font-weight: 700;
+      margin: 4mm 0 1.5mm;
+      color: var(--gold-deep);
+      letter-spacing: 0.02em;
+    }
+    p { margin: 0 0 3mm; color: var(--ink-soft); }
+    ul, ol { margin: 0 0 3.5mm; padding-left: 4.5mm; color: var(--ink-soft); }
+    li { margin-bottom: 1.2mm; }
+    li strong { color: var(--ink); }
+    a { color: var(--gold-deep); text-decoration: none; }
+
+    .header-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      border-bottom: 1.5px solid var(--ink);
+      padding-bottom: 2.5mm;
+      margin-bottom: 7mm;
+    }
+    .header-bar .logo {
+      font-family: var(--display);
+      font-weight: 650;
+      font-size: 11pt;
+    }
+    .header-bar .logo em {
+      font-style: normal;
+      color: var(--gold);
+      font-weight: 500;
+      margin-left: 2mm;
+      font-size: 8pt;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      font-family: var(--body);
+    }
+    .header-bar .sec {
+      font-size: 8pt;
+      color: var(--muted);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .toc-list {
+      list-style: none;
+      padding: 0;
+      margin: 6mm 0 0;
+    }
+    .toc-list li {
+      display: flex;
+      align-items: baseline;
+      gap: 3mm;
+      padding: 2.8mm 0;
+      border-bottom: 1px dotted var(--line);
+      margin: 0;
+    }
+    .toc-list .n {
+      font-family: var(--display);
+      font-weight: 650;
+      color: var(--gold);
+      width: 8mm;
+      flex-shrink: 0;
+    }
+    .toc-list .t { flex: 1; font-weight: 500; color: var(--ink); }
+    .toc-list .p { color: var(--muted); font-size: 8.5pt; }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 4mm;
+      margin: 3mm 0 4mm;
+    }
+    .grid-3 {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 3.5mm;
+      margin: 3mm 0 4mm;
+    }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      padding: 3.5mm 4mm;
+    }
+    .card.gold {
+      background: var(--gold-soft);
+      border-color: #e2d4a8;
+    }
+    .card.teal {
+      background: var(--teal-soft);
+      border-color: #c5ddd7;
+    }
+    .card h4 { margin-top: 0; }
+    .card p:last-child, .card ul:last-child { margin-bottom: 0; }
+
+    .step {
+      display: grid;
+      grid-template-columns: 9mm 1fr;
+      gap: 3mm;
+      margin: 0 0 3.5mm;
+      align-items: start;
+    }
+    .step .num {
+      width: 8mm;
+      height: 8mm;
+      border-radius: 50%;
+      background: var(--ink);
+      color: #f3eee4;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: var(--display);
+      font-weight: 650;
+      font-size: 10pt;
+    }
+    .step h4 { margin: 0.5mm 0 1mm; color: var(--ink); }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 2mm 0 4mm;
+      font-size: 8.5pt;
+    }
+    th, td {
+      border-bottom: 1px solid var(--line);
+      padding: 2.2mm 2mm;
+      text-align: left;
+      vertical-align: top;
+    }
+    th {
+      font-size: 7.5pt;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+      font-weight: 600;
+      border-bottom: 1.5px solid var(--ink);
+    }
+    td strong { color: var(--ink); }
+
+    .pill {
+      display: inline-block;
+      padding: 0.6mm 2mm;
+      border-radius: 999px;
+      font-size: 7.5pt;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+    }
+    .pill.arta { background: var(--gold-soft); color: var(--gold-deep); }
+    .pill.exp { background: var(--teal-soft); color: var(--teal); }
+    .pill.ok { background: #e6f2e9; color: var(--ok); }
+    .pill.warn { background: #f7eed4; color: #8a6a10; }
+
+    .callout {
+      border-left: 3px solid var(--gold);
+      background: var(--gold-soft);
+      padding: 3mm 4mm;
+      margin: 3mm 0 4mm;
+      border-radius: 0 3px 3px 0;
+    }
+    .callout.teal { border-left-color: var(--teal); background: var(--teal-soft); }
+    .callout strong { color: var(--ink); }
+
+    .flow {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 2mm;
+      margin: 3mm 0 4mm;
+    }
+    .flow .box {
+      background: var(--ink);
+      color: #f3eee4;
+      padding: 2mm 3mm;
+      border-radius: 3px;
+      font-size: 8pt;
+      font-weight: 600;
+    }
+    .flow .arrow {
+      color: var(--gold);
+      font-weight: 700;
+      font-size: 12pt;
+    }
+
+    .url {
+      font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+      font-size: 8pt;
+      background: #f0ede6;
+      padding: 0.8mm 1.8mm;
+      border-radius: 2px;
+      color: var(--ink);
+    }
+
+    .footer-note {
+      margin-top: 8mm;
+      padding-top: 3mm;
+      border-top: 1px solid var(--line);
+      font-size: 8pt;
+      color: var(--muted);
+    }
+
+    .two-col {
+      columns: 2;
+      column-gap: 6mm;
+    }
+    .two-col h3 { break-after: avoid; }
+    .two-col .card { break-inside: avoid; margin-bottom: 3mm; }
+
+    .checklist {
+      list-style: none;
+      padding: 0;
+    }
+    .checklist li {
+      padding-left: 6mm;
+      position: relative;
+      margin-bottom: 1.8mm;
+    }
+    .checklist li::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 1.2mm;
+      width: 3.2mm;
+      height: 3.2mm;
+      border: 1.4px solid var(--gold);
+      border-radius: 1px;
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+
+    <!-- ================= COVER ================= -->
+    <section class="sheet cover">
+      <div>
+        <p class="cover-brand"><span>ARTA PRODUCCIONES · AUDITORIO AREMA</span>ARTA Ops</p>
+        <h1>Guía de uso de la plataforma</h1>
+        <p class="cover-lead">
+          Manual operativo para dirigir shows de punta a punta: eventos, checklists,
+          órdenes de compra, finanzas, boletera, campañas y control de riesgo —
+          con dos entidades bajo un mismo login.
+        </p>
+      </div>
+      <div class="cover-meta">
+        <div>
+          <strong>Audiencia</strong>
+          Dirección, gerencia, logística, convenios, pagos y operación de escenario
+        </div>
+        <div>
+          <strong>Entornos</strong>
+          Arta · <span class="url">arta.artaproducciones.com</span><br />
+          Auditorio · <span class="url">auditorio.artaproducciones.com</span>
+        </div>
+        <div>
+          <strong>Versión</strong>
+          Guía v1.0 · Julio 2026 · Plataforma Enterprise Ops
+        </div>
+        <div>
+          <strong>Spine operativo</strong>
+          Evento → Checklist → OC → Finanzas → Boletera
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= TOC ================= -->
+    <section class="sheet">
+      <div class="header-bar">
+        <div class="logo">ARTA<em>Ops</em></div>
+        <div class="sec">Contenido</div>
+      </div>
+      <p class="kicker">Índice</p>
+      <h2>Cómo leer esta guía</h2>
+      <p>
+        Está pensada para usarse en el día a día. Empieza por el acceso y el cambio
+        de entidad; después sigue el flujo de un evento. Los capítulos finales cubren
+        seguridad, invites y buenas prácticas.
+      </p>
+      <ol class="toc-list">
+        <li><span class="n">01</span><span class="t">Acceso, entidades y navegación</span><span class="p">Entrar / SSO</span></li>
+        <li><span class="n">02</span><span class="t">Roles y qué puede hacer cada persona</span><span class="p">Permisos</span></li>
+        <li><span class="n">03</span><span class="t">Dashboard — centro de comando</span><span class="p">Riesgo / KPIs</span></li>
+        <li><span class="n">04</span><span class="t">Ciclo de vida de un evento</span><span class="p">Spine</span></li>
+        <li><span class="n">05</span><span class="t">Checklists y firmas digitales</span><span class="p">PDF</span></li>
+        <li><span class="n">06</span><span class="t">Órdenes de compra y finanzas</span><span class="p">Pipeline</span></li>
+        <li><span class="n">07</span><span class="t">Boletera, campañas y anticipos</span><span class="p">Sell-through</span></li>
+        <li><span class="n">08</span><span class="t">Workspaces, tareas y riesgo</span><span class="p">Ops</span></li>
+        <li><span class="n">09</span><span class="t">Studio web, carpetas y vendor PIN</span><span class="p">Extras</span></li>
+        <li><span class="n">10</span><span class="t">Organizaciones, seguridad y digests</span><span class="p">Admin</span></li>
+        <li><span class="n">11</span><span class="t">Checklist rápido por rol</span><span class="p">Atajos</span></li>
+      </ol>
+      <div class="callout" style="margin-top: 10mm;">
+        <strong>Regla de oro.</strong> Todo gira alrededor del <em>evento</em>.
+        Si no encuentras un dato en finanzas, boletera u OC, abre el show en
+        <strong>Eventos</strong> y trabaja desde su hub (pestañas).
+      </div>
+    </section>
+
+    <!-- ================= 01 ================= -->
+    <section class="sheet">
+      <div class="header-bar">
+        <div class="logo">ARTA<em>Ops</em></div>
+        <div class="sec">01 · Acceso</div>
+      </div>
+      <p class="kicker">Capítulo 01</p>
+      <h2>Acceso, entidades y navegación</h2>
+
+      <h3>Dónde entrar</h3>
+      <div class="grid-2">
+        <div class="card gold">
+          <h4>Arta Producciones</h4>
+          <p><span class="url">https://arta.artaproducciones.com</span></p>
+          <p>Panel de la productora + Studio del sitio público.</p>
+          <p><span class="pill arta">Entidad ARTA</span></p>
+        </div>
+        <div class="card teal">
+          <h4>Auditorio Arema · Explanada</h4>
+          <p><span class="url">https://auditorio.artaproducciones.com</span></p>
+          <p>Operación del auditorio (renta a boleteras, mantenimiento).</p>
+          <p><span class="pill exp">Entidad EXPLANADA</span></p>
+        </div>
+      </div>
+
+      <h3>Login</h3>
+      <div class="step">
+        <div class="num">1</div>
+        <div>
+          <h4>Correo y contraseña</h4>
+          <p>Usa tu correo corporativo. Tras 8 intentos fallidos la cuenta se bloquea 5 minutos.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="num">2</div>
+        <div>
+          <h4>2FA (si tu org lo exige)</h4>
+          <p>
+            Algunas organizaciones obligan autenticación de dos factores. Escanea el QR
+            con tu app (Google Authenticator, 1Password, etc.) y confirma el código.
+            Después puedes gestionar 2FA en <strong>Seguridad</strong>.
+          </p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="num">3</div>
+        <div>
+          <h4>Sesión segura</h4>
+          <p>
+            La sesión vive en cookie HttpOnly. No hace falta “pegar tokens”.
+            Cierra sesión desde el menú cuando termines en un equipo compartido.
+          </p>
+        </div>
+      </div>
+
+      <h3>Cambiar entre Arta y Auditorio</h3>
+      <p>
+        En la barra lateral verás el switch de entidad. Si tienes acceso a ambas,
+        al cambiar se abre el otro subdominio <strong>sin volver a pedir login</strong>
+        (handoff seguro de un solo uso).
+      </p>
+      <div class="callout teal">
+        <strong>Importante para Rodrigo (dir_auditorio).</strong>
+        En <em>Explanada</em> operas eventos completo. En <em>Arta</em> solo ves
+        carpetas generales / sitio — no el spine de eventos de la productora.
+      </div>
+
+      <h3>Mapa del menú</h3>
+      <table>
+        <thead>
+          <tr><th>Grupo</th><th>Módulos</th><th>Para qué</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><strong>Inicio</strong></td><td>Dashboard</td><td>Alertas, KPIs, shows en riesgo</td></tr>
+          <tr><td><strong>Operación</strong></td><td>Eventos, plantillas, carpetas, hospitality, transporte, catering, prensa, artes, pendones, tareas</td><td>Ejecución del show</td></tr>
+          <tr><td><strong>Control</strong></td><td>Finanzas, OC, campañas, boletera, anticipos, risk</td><td>Dinero y sell-through</td></tr>
+          <tr><td><strong>Sitio</strong></td><td>Studio web, ver sitio</td><td>Contenido público Arta</td></tr>
+          <tr><td><strong>Admin</strong></td><td>Usuarios, organizaciones, seguridad, audit, webhooks, digests, vendor PIN</td><td>Gobernanza</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- ================= 02 ================= -->
+    <section class="sheet">
+      <div class="header-bar">
+        <div class="logo">ARTA<em>Ops</em></div>
+        <div class="sec">02 · Roles</div>
+      </div>
+      <p class="kicker">Capítulo 02</p>
+      <h2>Roles y qué puede hacer cada persona</h2>
+      <p>
+        Un usuario tiene <strong>un rol</strong> y una o más <strong>entidades</strong>.
+        El menú se adapta solo: si no ves un módulo, es porque tu rol no lo incluye.
+      </p>
+
+      <table>
+        <thead>
+          <tr><th>Rol</th><th>Quién (ej.)</th><th>Alcance típico</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Director general</strong></td>
+            <td>Arturo, Chacho</td>
+            <td>Todo en ambas entidades · usuarios · cierre financiero · autorizaciones</td>
+          </tr>
+          <tr>
+            <td><strong>Gerente Arta</strong></td>
+            <td>Melissa</td>
+            <td>Operación Arta · corrida · campaña · autoriza OC Arta · firmas</td>
+          </tr>
+          <tr>
+            <td><strong>Director Auditorio</strong></td>
+            <td>Rodrigo</td>
+            <td>Operación Explanada completa · autoriza OC Auditorio · en Arta solo carpetas</td>
+          </tr>
+          <tr>
+            <td><strong>Logística</strong></td>
+            <td>Williams</td>
+            <td>Checklists / operación general · puede editar campaña</td>
+          </tr>
+          <tr>
+            <td><strong>Convenios</strong></td>
+            <td>Leida</td>
+            <td>Operación general · patrocinios / convenios en el flujo del evento</td>
+          </tr>
+          <tr>
+            <td><strong>Enlace gobierno / pagos</strong></td>
+            <td>Juan Pablo</td>
+            <td>Operación general · puede marcar OC como pagada</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="grid-2">
+        <div class="card">
+          <h4>Permisos que más importan</h4>
+          <ul>
+            <li><strong>event.create</strong> — crear shows</li>
+            <li><strong>po.authorize</strong> — autorizar OC</li>
+            <li><strong>po.mark_paid</strong> — marcar pagada</li>
+            <li><strong>finance.edit</strong> — corrida / cierre</li>
+            <li><strong>users.manage</strong> — usuarios e invites</li>
+            <li><strong>folders.edit</strong> — carpetas generales</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h4>Si “no me deja”</h4>
+          <ul>
+            <li>Confirma que estás en la entidad correcta (switch).</li>
+            <li>Pide a dirección que revise tu rol / entidades.</li>
+            <li>En orgs con plan Trial/Ops puede haber tope de usuarios o eventos.</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="callout">
+        <strong>Invitaciones.</strong> Dirección invita desde
+        <strong>Organizaciones → Invitar miembro</strong>. El invitado recibe un link
+        (o lo copias si no hay SMTP) válido 7 días, define nombre y contraseña, y entra al dashboard.
+      </div>
+    </section>
+
+    <!-- ================= 03 ================= -->
+    <section class="sheet">
+      <div class="header-bar">
+        <div class="logo">ARTA<em>Ops</em></div>
+        <div class="sec">03 · Dashboard</div>
+      </div>
+      <p class="kicker">Capítulo 03</p>
+      <h2>Dashboard — centro de comando</h2>
+      <p>
+        Abre el día aquí. El dashboard no es un mural de números: prioriza
+        <strong>qué está en riesgo</strong> y qué requiere decisión.
+      </p>
+
+      <div class="grid-3">
+        <div class="card">
+          <h4>Shows en riesgo</h4>
+          <p>Checklists atrasados o avance bajo cerca de la fecha del show.</p>
+        </div>
+        <div class="card">
+          <h4>Pipeline OC</h4>
+          <p>Pendientes de autorización, autorizadas, aging &gt; 7 días.</p>
+        </div>
+        <div class="card">
+          <h4>Margen / finanzas</h4>
+          <p>Señales de corrida y salud económica del portafolio activo.</p>
+        </div>
+      </div>
+
+      <h3>Cómo usarlo bien</h3>
+      <ol>
+        <li>Revisa alertas rojas / amber antes que KPIs verdes.</li>
+        <li>Haz clic en el show o la OC para ir al detalle (drill-down).</li>
+        <li>Complementa con <strong>Risk workspace</strong> cuando quieras la vista cruzada de firmas, aging y avance.</li>
+      </ol>
+
+      <div class="callout teal">
+        <strong>Automatizaciones.</strong> El sistema escanea riesgo cada hora y puede
+        disparar webhooks / digests diarios a dirección. Tú no “corres” el cron:
+        solo decides sobre lo que te marca.
+      </div>
+    </section>
+
+    <!-- ================= 04 ================= -->
+    <section class="sheet">
+      <div class="header-bar">
+        <div class="logo">ARTA<em>Ops</em></div>
+        <div class="sec">04 · Eventos</div>
+      </div>
+      <p class="kicker">Capítulo 04</p>
+      <h2>Ciclo de vida de un evento</h2>
+
+      <div class="flow">
+        <span class="box">Crear</span><span class="arrow">→</span>
+        <span class="box">Plantillas auto</span><span class="arrow">→</span>
+        <span class="box">Operar hub</span><span class="arrow">→</span>
+        <span class="box">OC / firmas</span><span class="arrow">→</span>
+        <span class="box">Cierre</span>
+      </div>
+
+      <h3>Crear un evento</h3>
+      <div class="step">
+        <div class="num">1</div>
+        <div>
+          <h4>Eventos → Nuevo evento</h4>
+          <p>
+            Elige entidad (Arta o Explanada), nombre, fechas y estado inicial
+            (borrador / activo). Necesitas permiso <em>event.create</em>.
+          </p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="num">2</div>
+        <div>
+          <h4>Se generan checklists automáticamente</h4>
+          <p>
+            General, producción, hospedaje, transporte, rueda de prensa, artes,
+            boletera, pendones, OC, catering, corrida, campaña, anticipos
+            (+ mantenimiento en Explanada).
+          </p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="num">3</div>
+        <div>
+          <h4>Trabaja en el hub del evento</h4>
+          <p>
+            Abre el show: verás pestañas / paneles de overview, tareas, checklists,
+            finanzas, OC, sponsors, campaña, boletera y archivos. Todo el spine vive ahí.
+          </p>
+        </div>
+      </div>
+
+      <h3>Estados del evento</h3>
+      <table>
+        <thead><tr><th>Estado</th><th>Significado</th><th>Qué hacer</th></tr></thead>
+        <tbody>
+          <tr><td><strong>DRAFT</strong></td><td>En armado</td><td>Completar checklists, aún no “vende” operación plena</td></tr>
+          <tr><td><strong>ACTIVE</strong></td><td>En vivo operativo</td><td>Monitorear riesgo, OC, boletera</td></tr>
+          <tr><td><strong>CLOSED</strong></td><td>Cerrado</td><td>Corrida/cierre financiero listo</td></tr>
+          <tr><td><strong>CANCELLED</strong></td><td>Cancelado</td><td>Documentar y cortar gastos pendientes</td></tr>
+        </tbody>
+      </table>
+
+      <div class="callout">
+        <strong>Lista de eventos.</strong> Usa filtros de estado y “solo riesgo” para
+        ver shows con badges de salud (critical / watch / healthy) sin perderte en el histórico.
+      </div>
+    </section>
+
+    <!-- ================= 05 ================= -->
+    <section class="sheet">
+      <div class="header-bar">
+        <div class="logo">ARTA<em>Ops</em></div>
+        <div class="sec">05 · Checklists</div>
+      </div>
+      <p class="kicker">Capítulo 05</p>
+      <h2>Checklists y firmas digitales</h2>
+      <p>
+        Cada checklist es un formato editable + PDF. El avance (% ) alimenta el
+        riesgo del show en dashboard y automations.
+      </p>
+
+      <h3>Flujo de firma</h3>
+      <div class="step">
+        <div class="num">1</div>
+        <div>
+          <h4>Completar checks</h4>
+          <p>Marca ítems, adjunta notas o archivos según el formato.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="num">2</div>
+        <div>
+          <h4>Firmar entregado</h4>
+          <p>Pad digital de quien entrega / ejecuta el formato.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="num">3</div>
+        <div>
+          <h4>Firmar autorizado</h4>
+          <p>
+            Autoriza quien corresponde:
+            <strong>Melissa → Arta</strong> ·
+            <strong>Rodrigo → Auditorio</strong> ·
+            <strong>Directores → ambos</strong>.
+          </p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="num">4</div>
+        <div>
+          <h4>PDF regenerado</h4>
+          <p>El sistema embebe firmas en el PDF del checklist. Descárgalo desde el evento.</p>
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <div class="card">
+          <h4>Plantillas</h4>
+          <p>
+            Dirección / roles con <em>checklist.edit</em> pueden revisar plantillas
+            globales en <strong>Plantillas</strong>. Las instancias viven en cada evento.
+          </p>
+        </div>
+        <div class="card">
+          <h4>Backlog de firmas</h4>
+          <p>
+            Si hay muchos formatos “entregados” sin autorizar, el digest y risk workspace
+            lo marcan. Prioriza firmas antes del show.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= 06 ================= -->
+    <section class="sheet">
+      <div class="header-bar">
+        <div class="logo">ARTA<em>Ops</em></div>
+        <div class="sec">06 · OC &amp; Finanzas</div>
+      </div>
+      <p class="kicker">Capítulo 06</p>
+      <h2>Órdenes de compra y finanzas</h2>
+
+      <h3>Pipeline de OC</h3>
+      <div class="flow">
+        <span class="box">DRAFT</span><span class="arrow">→</span>
+        <span class="box">PENDING_AUTH</span><span class="arrow">→</span>
+        <span class="box">AUTHORIZED</span><span class="arrow">→</span>
+        <span class="box">PAID</span>
+      </div>
+      <p style="font-size: 8.5pt; color: var(--muted);">También: REJECTED / CANCELLED</p>
+
+      <table>
+        <thead><tr><th>Acción</th><th>Quién</th><th>Dónde</th></tr></thead>
+        <tbody>
+          <tr><td>Crear / editar OC</td><td>Operación con acceso al evento</td><td>Hub del evento o módulo OC</td></tr>
+          <tr><td>Autorizar</td><td>Melissa (Arta) · Rodrigo (Auditorio) · dirs</td><td>Detalle OC</td></tr>
+          <tr><td>Marcar pagada</td><td>Enlace gobierno / dirs</td><td>Detalle OC</td></tr>
+        </tbody>
+      </table>
+
+      <div class="callout">
+        <strong>Aging.</strong> OC en PENDING_AUTH o AUTHORIZED con más de 7 días
+        aparecen en digests y risk. No dejes dinero “colgado” sin dueño.
+      </div>
+
+      <h3>Finanzas / corrida</h3>
+      <p>
+        La corrida financiera del evento concentra ingresos, costos y margen.
+        El <strong>cierre</strong> lo hacen roles con finanzas elevadas
+        (Melissa, Chacho, Arturo según política).
+      </p>
+      <ul>
+        <li>Revisa cifras en el panel Finanzas del evento y en el módulo global.</li>
+        <li>Cruza con boletera (sold / revenue realizado) y anticipos.</li>
+        <li>No cierres con checklists críticos abiertos o OC sin pagar relevantes.</li>
+      </ul>
+    </section>
+
+    <!-- ================= 07 ================= -->
+    <section class="sheet">
+      <div class="header-bar">
+        <div class="logo">ARTA<em>Ops</em></div>
+        <div class="sec">07 · Comercial</div>
+      </div>
+      <p class="kicker">Capítulo 07</p>
+      <h2>Boletera, campañas y anticipos</h2>
+
+      <div class="grid-2">
+        <div class="card gold">
+          <h4>Boletera</h4>
+          <ul>
+            <li>Define zonas (aforo, precio, sold).</li>
+            <li>Actualiza sold manualmente o vía sync (stub / live).</li>
+            <li>El analytics calcula sell-through y revenue realizado.</li>
+          </ul>
+          <p>Ruta: evento → panel Ticketing, o módulo <strong>Boletera</strong>.</p>
+        </div>
+        <div class="card teal">
+          <h4>Campañas</h4>
+          <ul>
+            <li>Interna / externa / ninguna.</li>
+            <li>Notas y seguimiento de promoción del show.</li>
+            <li>Roles con <em>campaign.edit</em> (p. ej. logística).</li>
+          </ul>
+          <p>Ruta: evento → Campaña, o módulo <strong>Campañas</strong>.</p>
+        </div>
+      </div>
+
+      <h3>Anticipos</h3>
+      <p>
+        Controla anticipos ligados al evento (checklist + vista finanzas).
+        Úsalos para no mezclar pagos parciales con la OC final.
+      </p>
+
+      <h3>Sponsors</h3>
+      <p>
+        Alta de patrocinadores por evento desde el hub. Mantén nombre y condiciones
+        visibles para convenios y dirección.
+      </p>
+    </section>
+
+    <!-- ================= 08 ================= -->
+    <section class="sheet">
+      <div class="header-bar">
+        <div class="logo">ARTA<em>Ops</em></div>
+        <div class="sec">08 · Ops diarias</div>
+      </div>
+      <p class="kicker">Capítulo 08</p>
+      <h2>Workspaces, tareas y riesgo</h2>
+
+      <h3>Workspaces por disciplina</h3>
+      <p>
+        Hospitality, transportación, catering, rueda de prensa, artes, pendones
+        (y mantenimiento en Explanada) concentran el backlog de esa disciplina
+        con señal de riesgo y firmas — sin saltar evento por evento a ciegas.
+      </p>
+
+      <h3>Mis tareas</h3>
+      <p>
+        Crea tareas ligadas a un evento (título, estado: open / in progress / done / blocked).
+        Úsalas para micro-pendientes que no merecen un checklist completo.
+      </p>
+
+      <h3>Risk workspace</h3>
+      <div class="grid-3">
+        <div class="card"><h4>Critical</h4><p>Acción hoy: show cerca + avance bajo o firmas trabadas.</p></div>
+        <div class="card"><h4>Watch</h4><p>Vigilar esta semana: aging OC o avance flojo.</p></div>
+        <div class="card"><h4>Healthy</h4><p>En curso normal; no requiere escalamiento.</p></div>
+      </div>
+    </section>
+
+    <!-- ================= 09 ================= -->
+    <section class="sheet">
+      <div class="header-bar">
+        <div class="logo">ARTA<em>Ops</em></div>
+        <div class="sec">09 · Sitio &amp; vendors</div>
+      </div>
+      <p class="kicker">Capítulo 09</p>
+      <h2>Studio web, carpetas y vendor PIN</h2>
+
+      <h3>Studio (solo Arta)</h3>
+      <p>
+        Edita carrusel, noticias y secciones del sitio público
+        (<span class="url">artaproducciones.com</span>).
+        El Auditorio no tiene sitio público en esta plataforma: opera solo en panel.
+      </p>
+
+      <h3>Carpetas generales</h3>
+      <p>
+        Documentos por entidad <strong>no ligados a un evento</strong>
+        (contratos marco, brand kits, etc.). Respeta <em>allowedRoles</em> si la carpeta está restringida.
+      </p>
+
+      <h3>Portal vendor (PIN)</h3>
+      <div class="step">
+        <div class="num">1</div>
+        <div><h4>Genera PIN</h4><p>Desde admin <strong>Vendor PIN</strong> o el evento, crea un PIN etiquetado.</p></div>
+      </div>
+      <div class="step">
+        <div class="num">2</div>
+        <div><h4>Comparte el link</h4><p><span class="url">/v/{pinId}</span> — el proveedor entra con el PIN.</p></div>
+      </div>
+      <div class="step">
+        <div class="num">3</div>
+        <div><h4>Desactiva al terminar</h4><p>Revoca el PIN cuando el show cierre para no dejar acceso abierto.</p></div>
+      </div>
+    </section>
+
+    <!-- ================= 10 ================= -->
+    <section class="sheet">
+      <div class="header-bar">
+        <div class="logo">ARTA<em>Ops</em></div>
+        <div class="sec">10 · Admin</div>
+      </div>
+      <p class="kicker">Capítulo 10</p>
+      <h2>Organizaciones, seguridad y digests</h2>
+
+      <div class="two-col">
+        <div class="card">
+          <h4>Organizaciones</h4>
+          <ul>
+            <li>Ver plan (Trial / Ops / Enterprise) y cupos.</li>
+            <li>Invitar miembros por email + rol + entidades.</li>
+            <li>Activar 2FA obligatorio del tenant.</li>
+            <li>Billing Stripe (si está configurado): suscribir / portal.</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h4>Usuarios</h4>
+          <ul>
+            <li>Alta / edición de rol, entidades y permisos finos.</li>
+            <li>Solo dirección (<em>users.manage</em>).</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h4>Seguridad</h4>
+          <ul>
+            <li>Enroll / disable TOTP.</li>
+            <li>Sesiones activas y revocación.</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h4>Audit / Webhooks / Digests</h4>
+          <ul>
+            <li>Audit log de acciones sensibles.</li>
+            <li>Webhooks firmados por org.</li>
+            <li>Digests diarios y cola de emails (jobs / outbox).</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="callout teal">
+        <strong>Multi-tenant.</strong> Cada organización está aislada. No verás
+        eventos, OC ni outbox de otro tenant. Solo platform admin (<em>super_admin</em>)
+        crea orgs o cambia planes manualmente.
+      </div>
+    </section>
+
+    <!-- ================= 11 ================= -->
+    <section class="sheet">
+      <div class="header-bar">
+        <div class="logo">ARTA<em>Ops</em></div>
+        <div class="sec">11 · Atajos</div>
+      </div>
+      <p class="kicker">Capítulo 11</p>
+      <h2>Checklist rápido por rol</h2>
+
+      <h3>Dirección (Arturo / Chacho)</h3>
+      <ul class="checklist">
+        <li>Dashboard → shows critical + OC aging</li>
+        <li>Autorizar firmas / OC pendientes de ambos lados</li>
+        <li>Revisar digests del día</li>
+        <li>Usuarios / invites / 2FA org si aplica</li>
+      </ul>
+
+      <h3>Gerencia Arta (Melissa)</h3>
+      <ul class="checklist">
+        <li>Eventos Arta activos: avance checklists</li>
+        <li>Autorizar OC Arta + firmas “autorizado”</li>
+        <li>Corrida financiera de shows cercanos</li>
+        <li>Campaña / boletera sell-through</li>
+      </ul>
+
+      <h3>Director Auditorio (Rodrigo)</h3>
+      <ul class="checklist">
+        <li>Entrar por auditorio.artaproducciones.com</li>
+        <li>Eventos Explanada + mantenimiento</li>
+        <li>Autorizar OC y firmas del auditorio</li>
+        <li>En Arta: solo carpetas si necesitas docs cruzados</li>
+      </ul>
+
+      <h3>Logística / Convenios / Pagos</h3>
+      <ul class="checklist">
+        <li>Workspaces de tu disciplina</li>
+        <li>Completar checklists y firmar entregado</li>
+        <li>Tareas del show</li>
+        <li>Pagos: marcar OC PAID cuando el dinero salió</li>
+      </ul>
+
+      <div class="footer-note">
+        <strong>ARTA Ops</strong> · Guía de uso v1.0 · Julio 2026<br />
+        Soporte interno: dirección · Plataforma: arta.artaproducciones.com · auditorio.artaproducciones.com<br />
+        Documento confidencial de uso operativo — no incluye contraseñas.
+      </div>
+    </section>
+
+  </div>
+</body>
+</html>

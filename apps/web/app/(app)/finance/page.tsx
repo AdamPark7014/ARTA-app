@@ -154,6 +154,7 @@ export default function FinancePage() {
             className="field"
             style={{ maxWidth: 320 }}
             placeholder="Buscar evento…"
+            aria-label="Buscar evento"
             value={q}
             onChange={(e) => setQ(e.target.value)}
           />

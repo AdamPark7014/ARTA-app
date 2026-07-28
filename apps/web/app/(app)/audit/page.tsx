@@ -166,12 +166,14 @@ export default function AuditPage() {
                 className="field"
                 style={{ maxWidth: 260 }}
                 placeholder="Buscar acción / usuario…"
+                aria-label="Buscar acción o usuario"
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
               />
               <select
                 className="field"
                 style={{ width: 'auto' }}
+                aria-label="Filtrar por recurso"
                 value={resource}
                 onChange={(e) => setResource(e.target.value)}
               >

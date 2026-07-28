@@ -68,6 +68,10 @@ export class OrganizationsController {
     if (isPlatformAdmin(req.user)) {
       return this.prisma.organization.findMany({
         orderBy: { createdAt: 'asc' },
+        // Safety cap for the "thousands of tenants" case — platform admin
+        // tooling should paginate past this, but nothing should ever return
+        // an unbounded scan of every org on the platform in one response.
+        take: 1000,
         include: { _count: { select: { users: true, events: true } } },
       });
     }

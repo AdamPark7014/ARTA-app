@@ -77,50 +77,7 @@ export class ChecklistsController {
   }
 
   private async regeneratePdf(id: string) {
-    const item = await this.prisma.checklistInstance.findUnique({
-      where: { id },
-      include: {
-        event: true,
-        template: true,
-        lastEditedBy: { select: { fullName: true } },
-      },
-    });
-    if (!item) return null;
-
-    const delivered = item.deliveredSignature as { signerName?: string; imageDataUrl?: string; signedAt?: string } | null;
-    const authorized = item.authorizedSignature as { signerName?: string; imageDataUrl?: string; signedAt?: string } | null;
-
-    const { url } = await this.pdfs.generate(id, {
-      title: item.title,
-      eventName: item.event.name,
-      entity: item.event.entity,
-      artist: item.event.artist,
-      venue: item.event.venue,
-      city: item.event.city,
-      templateKey: item.template?.key,
-      data: item.dataJson as never,
-      delivered: delivered
-        ? { ...delivered, signedAt: delivered.signedAt || item.deliveredAt?.toISOString() }
-        : null,
-      authorized: authorized
-        ? { ...authorized, signedAt: authorized.signedAt || item.authorizedAt?.toISOString() }
-        : null,
-      editedBy: item.lastEditedBy?.fullName,
-      editedAt: item.lastEditedAt,
-    });
-
-    return this.prisma.checklistInstance.update({
-      where: { id },
-      data: { pdfUrl: url, pdfGeneratedAt: new Date() },
-      include: {
-        template: true,
-        lastEditedBy: { select: { id: true, fullName: true, email: true } },
-        deliveredBy: { select: { id: true, fullName: true } },
-        authorizedBy: { select: { id: true, fullName: true } },
-        signatures: { orderBy: { signedAt: 'desc' }, take: 10 },
-        files: true,
-      },
-    });
+    return this.pdfs.regenerateInstance(id);
   }
 
   @Get('templates')

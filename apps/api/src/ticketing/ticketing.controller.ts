@@ -4,6 +4,7 @@ import {
   Delete,
   ForbiddenException,
   Get,
+  BadRequestException,
   NotFoundException,
   Param,
   Patch,
@@ -24,6 +25,7 @@ import {
 } from '../common/rbac/roles';
 import { assertSameTenant, tenantIdOf } from '../common/tenant';
 import { TicketingSyncService } from './ticketing-sync.service';
+import { ChecklistPdfService } from '../checklists/checklist-pdf.service';
 
 type AuthUser = {
   id: string;
@@ -35,6 +37,7 @@ type AuthUser = {
 
 class TicketingDto {
   @IsString() boletera!: string;
+  @IsOptional() @IsString() logoUrl?: string | null;
   @IsOptional() @IsString() holdUntil?: string;
   @IsOptional() @IsString() artist?: string;
   @IsOptional() @IsString() promoter?: string;
@@ -49,6 +52,7 @@ export class TicketingController {
   constructor(
     private prisma: PrismaService,
     private sync: TicketingSyncService,
+    private checklistPdfs: ChecklistPdfService,
   ) {}
 
   private assertEdit(user: AuthUser) {
@@ -111,10 +115,16 @@ export class TicketingController {
         { zona: 'Bronce', aforo: 0, precio: 0, sold: 0 },
       ];
 
-    return this.prisma.ticketingSetup.create({
+    const boletera = dto.boletera.trim();
+    if (!boletera || boletera.toLowerCase() === 'otra') {
+      throw new BadRequestException('Indica el nombre de la boletera');
+    }
+
+    const created = await this.prisma.ticketingSetup.create({
       data: {
         eventId,
-        boletera: dto.boletera,
+        boletera,
+        logoUrl: dto.logoUrl || undefined,
         holdUntil: dto.holdUntil ? new Date(dto.holdUntil) : undefined,
         artist: dto.artist ?? event.artist,
         promoter: dto.promoter ?? event.promoter,
@@ -123,6 +133,8 @@ export class TicketingController {
         notes: dto.notes,
       },
     });
+    await this.checklistPdfs.regenerateForEvent(eventId);
+    return created;
   }
 
   @Patch(':id')
@@ -147,10 +159,18 @@ export class TicketingController {
     ) {
       throw new ForbiddenException();
     }
-    return this.prisma.ticketingSetup.update({
+    if (dto.boletera !== undefined) {
+      const boletera = dto.boletera.trim();
+      if (!boletera || boletera.toLowerCase() === 'otra') {
+        throw new BadRequestException('Indica el nombre de la boletera');
+      }
+    }
+
+    const updated = await this.prisma.ticketingSetup.update({
       where: { id },
       data: {
-        boletera: dto.boletera,
+        boletera: dto.boletera?.trim(),
+        logoUrl: dto.logoUrl === '' || dto.logoUrl === null ? null : dto.logoUrl,
         holdUntil: dto.holdUntil === null || dto.holdUntil === '' ? null : dto.holdUntil ? new Date(dto.holdUntil) : undefined,
         artist: dto.artist,
         promoter: dto.promoter,
@@ -159,6 +179,8 @@ export class TicketingController {
         notes: dto.notes,
       },
     });
+    await this.checklistPdfs.regenerateForEvent(existing.eventId);
+    return updated;
   }
 
   @Delete(':id')

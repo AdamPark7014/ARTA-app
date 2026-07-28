@@ -48,30 +48,40 @@ export class TicketingSyncService {
       let failed = 0;
       const errors: Array<{ setupId: string; error: string }> = [];
 
-      for (const s of setups) {
-        const zones = (Array.isArray(s.zonesJson) ? s.zonesJson : []) as ZoneSold[];
-        if (!zones.length) continue;
-        const provider = resolveProvider(s.boletera);
-        try {
-          const next = await provider.fetchSold({
-            boletera: s.boletera,
-            eventName: s.event.name,
-            eventId: s.event.id,
-            zones,
-          });
-          const changed = JSON.stringify(zones) !== JSON.stringify(next);
-          if (!changed) continue;
-          await this.prisma.ticketingSetup.update({
-            where: { id: s.id },
-            data: { zonesJson: next as unknown as Prisma.InputJsonValue },
-          });
-          updated += 1;
-        } catch (e) {
-          failed += 1;
-          const msg = e instanceof Error ? e.message : String(e);
-          errors.push({ setupId: s.id, error: msg });
-          this.log.warn(`Ticketing sync setup=${s.id}: ${msg}`);
-        }
+      // Each setup does a real network call (live provider: up to 3 retries ×
+      // 12s timeout) — fully serial would make this cron's runtime scale
+      // linearly with total setups across every org. Bounded concurrency caps
+      // that without hammering the boletera provider(s).
+      const SYNC_CONCURRENCY = 8;
+      for (let i = 0; i < setups.length; i += SYNC_CONCURRENCY) {
+        const batch = setups.slice(i, i + SYNC_CONCURRENCY);
+        await Promise.allSettled(
+          batch.map(async (s) => {
+            const zones = (Array.isArray(s.zonesJson) ? s.zonesJson : []) as ZoneSold[];
+            if (!zones.length) return;
+            const provider = resolveProvider(s.boletera);
+            try {
+              const next = await provider.fetchSold({
+                boletera: s.boletera,
+                eventName: s.event.name,
+                eventId: s.event.id,
+                zones,
+              });
+              const changed = JSON.stringify(zones) !== JSON.stringify(next);
+              if (!changed) return;
+              await this.prisma.ticketingSetup.update({
+                where: { id: s.id },
+                data: { zonesJson: next as unknown as Prisma.InputJsonValue },
+              });
+              updated += 1;
+            } catch (e) {
+              failed += 1;
+              const msg = e instanceof Error ? e.message : String(e);
+              errors.push({ setupId: s.id, error: msg });
+              this.log.warn(`Ticketing sync setup=${s.id}: ${msg}`);
+            }
+          }),
+        );
       }
 
       await this.prisma.jobRun.update({

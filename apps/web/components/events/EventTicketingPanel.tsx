@@ -3,11 +3,14 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import type { TicketingSetup } from '@/components/events/event-detail.types';
+import { BoleteraFields, resolveBoleteraName } from '@/components/ticketing/BoleteraFields';
+import { boleteraChoiceOf } from '@/lib/boletera';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { api } from '@/lib/api';
 
 type TicketForm = {
   boletera: string;
+  logoUrl: string;
   holdUntil: string;
   artist: string;
   promoter: string;
@@ -20,6 +23,7 @@ type EventTicketingPanelProps = {
   closed: boolean;
   saving: boolean;
   canTicketing: boolean;
+  eventId: string;
   ticketingSetups: TicketingSetup[];
   ticketForm: TicketForm;
   setTicketForm: (form: TicketForm) => void;
@@ -44,6 +48,7 @@ export function EventTicketingPanel({
   closed,
   saving,
   canTicketing,
+  eventId,
   ticketingSetups,
   ticketForm,
   setTicketForm,
@@ -73,6 +78,14 @@ export function EventTicketingPanel({
     }
   }
 
+  async function handleSave() {
+    if (boleteraChoiceOf(ticketForm.boletera) === 'Otra' && !resolveBoleteraName('Otra', ticketForm.boletera)) {
+      setSyncMsg('Escribe el nombre de la boletera (no dejes solo “Otra”).');
+      return;
+    }
+    await onSaveTicketing();
+  }
+
   return (
     <div className="stack">
       <div className="page-intro">
@@ -100,18 +113,16 @@ export function EventTicketingPanel({
           </div>
           <div className="panel-body">
             <div className="form">
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <BoleteraFields
+                  eventId={eventId}
+                  boletera={ticketForm.boletera}
+                  logoUrl={ticketForm.logoUrl || null}
+                  onBoleteraChange={(boletera) => setTicketForm({ ...ticketForm, boletera })}
+                  onLogoUrlChange={(logoUrl) => setTicketForm({ ...ticketForm, logoUrl: logoUrl || '' })}
+                />
+              </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
-                <label>
-                  Boletera
-                  <select
-                    value={ticketForm.boletera}
-                    onChange={(e) => setTicketForm({ ...ticketForm, boletera: e.target.value })}
-                  >
-                    <option>Arema</option>
-                    <option>eTicket</option>
-                    <option>Otra</option>
-                  </select>
-                </label>
                 <label>
                   Hold hasta
                   <input
@@ -187,7 +198,7 @@ export function EventTicketingPanel({
                   onChange={(e) => setTicketForm({ ...ticketForm, notes: e.target.value })}
                 />
               </label>
-              <button className="btn" type="button" disabled={saving} onClick={onSaveTicketing}>
+              <button className="btn" type="button" disabled={saving} onClick={handleSave}>
                 {saving ? 'Guardando…' : editingTicketId ? 'Actualizar' : 'Crear boletera'}
               </button>
             </div>
@@ -208,14 +219,24 @@ export function EventTicketingPanel({
             const s = zoneSummary(zones);
             return (
               <div key={t.id} className="row" style={{ justifyContent: 'space-between', marginBottom: 12 }}>
-                <div>
-                  <strong>{t.boletera}</strong>
-                  <div className="muted" style={{ fontSize: 12 }}>
-                    Hold: {t.holdUntil ? new Date(t.holdUntil).toLocaleDateString('es-MX') : '—'} · Sell-through{' '}
-                    {s.pct}% ({s.sold.toLocaleString('es-MX')}/{s.aforo.toLocaleString('es-MX')})
-                  </div>
-                  <div className="muted" style={{ fontSize: 11 }}>
-                    {zones.map((z) => `${z.zona}:${z.sold ?? 0}/${z.aforo}`).join(' · ')}
+                <div className="row" style={{ gap: 12, alignItems: 'center' }}>
+                  {t.logoUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={t.logoUrl}
+                      alt=""
+                      style={{ height: 32, maxWidth: 80, objectFit: 'contain', background: '#fff', borderRadius: 4, padding: 2 }}
+                    />
+                  ) : null}
+                  <div>
+                    <strong>{t.boletera}</strong>
+                    <div className="muted" style={{ fontSize: 12 }}>
+                      Hold: {t.holdUntil ? new Date(t.holdUntil).toLocaleDateString('es-MX') : '—'} · Sell-through{' '}
+                      {s.pct}% ({s.sold.toLocaleString('es-MX')}/{s.aforo.toLocaleString('es-MX')})
+                    </div>
+                    <div className="muted" style={{ fontSize: 11 }}>
+                      {zones.map((z) => `${z.zona}:${z.sold ?? 0}/${z.aforo}`).join(' · ')}
+                    </div>
                   </div>
                 </div>
                 <div className="row">

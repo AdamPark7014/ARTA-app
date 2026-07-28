@@ -3,6 +3,7 @@ import PDFDocument = require('pdfkit');
 import { createWriteStream, existsSync, mkdirSync, readFileSync } from 'fs';
 import { join } from 'path';
 import { Prisma } from '@prisma/client';
+import { PrismaService } from '../common/prisma/prisma.service';
 
 type ChecklistData = {
   sections?: Array<{
@@ -37,6 +38,9 @@ type PdfInput = {
   authorized?: SignaturePayload | null;
   editedBy?: string | null;
   editedAt?: Date | null;
+  /** Optional ticketing brand for header (name + logo file path). */
+  boleteraName?: string | null;
+  boleteraLogoPath?: string | null;
 };
 
 function dataUrlToBuffer(dataUrl?: string): Buffer | null {
@@ -52,11 +56,23 @@ function dataUrlToBuffer(dataUrl?: string): Buffer | null {
 
 @Injectable()
 export class ChecklistPdfService {
+  constructor(private prisma: PrismaService) {}
+
   private uploadRoot() {
     const root = process.env.UPLOAD_DIR || join(process.cwd(), 'uploads');
     const dir = join(root, 'checklists');
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
     return dir;
+  }
+
+  /** Resolve /uploads/... URL to absolute disk path under UPLOAD_DIR. */
+  resolveUploadPath(url?: string | null): string | null {
+    if (!url) return null;
+    const cleaned = url.replace(/^\/uploads\/?/i, '').replace(/^uploads\//i, '');
+    if (!cleaned || cleaned.includes('..')) return null;
+    const root = process.env.UPLOAD_DIR || join(process.cwd(), 'uploads');
+    const full = join(root, cleaned);
+    return existsSync(full) ? full : null;
   }
 
   async generate(checklistId: string, input: PdfInput): Promise<{ url: string; filePath: string }> {
@@ -70,18 +86,35 @@ export class ChecklistPdfService {
       doc.pipe(stream);
 
       const accent = input.entity === 'EXPLANADA' ? '#1f5c50' : '#8b6914';
+      const left = 48;
+      const pageRight = 564;
+      let headerY = 48;
 
-      doc.fillColor(accent).fontSize(11).text(input.entity === 'EXPLANADA' ? 'AUDITORIO AREMA · EXPLANADA' : 'ARTA PRODUCCIONES', {
-        align: 'left',
-      });
-      doc.moveDown(0.3);
-      doc.fillColor('#111').fontSize(18).text(input.title, { align: 'left' });
+      if (input.boleteraLogoPath && existsSync(input.boleteraLogoPath)) {
+        try {
+          doc.image(input.boleteraLogoPath, pageRight - 110, headerY, { fit: [110, 42], align: 'right' });
+        } catch {
+          // ignore unsupported logo formats
+        }
+      }
+
+      doc.fillColor(accent).fontSize(11).text(
+        input.entity === 'EXPLANADA' ? 'AUDITORIO AREMA · EXPLANADA' : 'ARTA PRODUCCIONES',
+        left,
+        headerY,
+        { width: 380, align: 'left' },
+      );
+      headerY = doc.y + 4;
+      doc.fillColor('#111').fontSize(18).text(input.title, left, headerY, { width: 400, align: 'left' });
       doc.moveDown(0.35);
       doc.fontSize(10).fillColor('#444')
         .text(`Evento: ${input.eventName}`)
         .text([input.artist, input.venue, input.city].filter(Boolean).join(' · ') || '—')
         .text(`Plantilla: ${input.templateKey || 'CUSTOM'}`)
         .text(`Generado: ${new Date().toLocaleString('es-MX')}`);
+      if (input.boleteraName) {
+        doc.text(`Boletera: ${input.boleteraName}`);
+      }
       if (input.editedBy) {
         doc.text(`Última edición: ${input.editedBy}${input.editedAt ? ` · ${input.editedAt.toLocaleString('es-MX')}` : ''}`);
       }
@@ -157,6 +190,80 @@ export class ChecklistPdfService {
     if (sig?.signedAt) {
       doc.fillColor('#666').fontSize(8).text(new Date(sig.signedAt).toLocaleString('es-MX'), x, nameY + 12);
     }
+  }
+
+  /** Regenerate PDF for one checklist instance; returns updated row or null. */
+  async regenerateInstance(checklistId: string) {
+    const item = await this.prisma.checklistInstance.findUnique({
+      where: { id: checklistId },
+      include: {
+        event: true,
+        template: true,
+        lastEditedBy: { select: { fullName: true } },
+      },
+    });
+    if (!item) return null;
+
+    const delivered = item.deliveredSignature as SignaturePayload | null;
+    const authorized = item.authorizedSignature as SignaturePayload | null;
+
+    const ticketing = await this.prisma.ticketingSetup.findFirst({
+      where: { eventId: item.eventId },
+      orderBy: { updatedAt: 'desc' },
+      select: { boletera: true, logoUrl: true },
+    });
+
+    const { url } = await this.generate(checklistId, {
+      title: item.title,
+      eventName: item.event.name,
+      entity: item.event.entity,
+      artist: item.event.artist,
+      venue: item.event.venue,
+      city: item.event.city,
+      templateKey: item.template?.key,
+      data: item.dataJson as ChecklistData,
+      delivered: delivered
+        ? { ...delivered, signedAt: delivered.signedAt || item.deliveredAt?.toISOString() }
+        : null,
+      authorized: authorized
+        ? { ...authorized, signedAt: authorized.signedAt || item.authorizedAt?.toISOString() }
+        : null,
+      editedBy: item.lastEditedBy?.fullName,
+      editedAt: item.lastEditedAt,
+      boleteraName: ticketing?.boletera || null,
+      boleteraLogoPath: this.resolveUploadPath(ticketing?.logoUrl),
+    });
+
+    return this.prisma.checklistInstance.update({
+      where: { id: checklistId },
+      data: { pdfUrl: url, pdfGeneratedAt: new Date() },
+      include: {
+        template: true,
+        lastEditedBy: { select: { id: true, fullName: true, email: true } },
+        deliveredBy: { select: { id: true, fullName: true } },
+        authorizedBy: { select: { id: true, fullName: true } },
+        signatures: { orderBy: { signedAt: 'desc' }, take: 10 },
+        files: true,
+      },
+    });
+  }
+
+  /** After boletera/logo changes, refresh all checklist PDFs for the event. */
+  async regenerateForEvent(eventId: string): Promise<number> {
+    const ids = await this.prisma.checklistInstance.findMany({
+      where: { eventId },
+      select: { id: true },
+    });
+    let n = 0;
+    for (const row of ids) {
+      try {
+        await this.regenerateInstance(row.id);
+        n += 1;
+      } catch {
+        // keep going for other checklists
+      }
+    }
+    return n;
   }
 
   /** Helper if we ever need to read an existing PDF buffer */

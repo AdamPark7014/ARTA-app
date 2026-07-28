@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useRef } from 'react';
 import { FileViewer } from '@/components/files/FileViewer';
 import type { EventDetail } from '@/components/events/event-detail.types';
 
@@ -22,8 +23,37 @@ export function EventFilesPanel({
   onUpload,
   onDeleteFile,
 }: EventFilesPanelProps) {
+  const previewRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!previewFile) return;
+    previewRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [previewFile?.id]);
+
+  function onVer(file: EventFile) {
+    if (previewFile?.id === file.id) {
+      setPreviewFile(null);
+      return;
+    }
+    setPreviewFile(file);
+  }
+
   return (
     <div className="stack">
+      {previewFile ? (
+        <div className="panel" ref={previewRef} style={{ overflow: 'visible' }}>
+          <div className="panel-head">
+            <h2>Vista previa · {previewFile.fileName}</h2>
+            <button className="btn ghost" type="button" onClick={() => setPreviewFile(null)}>
+              Cerrar
+            </button>
+          </div>
+          <div className="panel-body">
+            <FileViewer url={previewFile.url} fileName={previewFile.fileName} kind={previewFile.kind} />
+          </div>
+        </div>
+      ) : null}
+
       <div className="panel">
         <div className="panel-head">
           <h2>Exceles y PDFs embebidos</h2>
@@ -55,45 +85,39 @@ export function EventFilesPanel({
                 </tr>
               </thead>
               <tbody>
-                {files.map((f) => (
-                  <tr key={f.id}>
-                    <td>{f.fileName}</td>
-                    <td>
-                      <span className="badge">{f.kind || 'file'}</span>
-                    </td>
-                    <td className="row">
-                      <button className="btn ghost" type="button" onClick={() => setPreviewFile(f)}>
-                        Ver
-                      </button>
-                      <a href={f.url} target="_blank" rel="noreferrer">
-                        Descargar
-                      </a>
-                      {!closed ? (
-                        <button className="btn ghost" type="button" onClick={() => onDeleteFile(f.id)}>
-                          Eliminar
+                {files.map((f) => {
+                  const active = previewFile?.id === f.id;
+                  return (
+                    <tr key={f.id} style={active ? { background: 'rgba(232, 196, 120, 0.08)' } : undefined}>
+                      <td>{f.fileName}</td>
+                      <td>
+                        <span className="badge">{f.kind || 'file'}</span>
+                      </td>
+                      <td className="row">
+                        <button
+                          className={active ? 'btn' : 'btn ghost'}
+                          type="button"
+                          onClick={() => onVer(f)}
+                        >
+                          {active ? 'Ocultar' : 'Ver'}
                         </button>
-                      ) : null}
-                    </td>
-                  </tr>
-                ))}
+                        <a className="btn ghost" href={f.url} target="_blank" rel="noreferrer">
+                          Descargar
+                        </a>
+                        {!closed ? (
+                          <button className="btn ghost" type="button" onClick={() => onDeleteFile(f.id)}>
+                            Eliminar
+                          </button>
+                        ) : null}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           )}
         </div>
       </div>
-      {previewFile ? (
-        <div className="panel">
-          <div className="panel-head">
-            <h2>{previewFile.fileName}</h2>
-            <button className="btn ghost" type="button" onClick={() => setPreviewFile(null)}>
-              Cerrar
-            </button>
-          </div>
-          <div className="panel-body">
-            <FileViewer url={previewFile.url} fileName={previewFile.fileName} kind={previewFile.kind} />
-          </div>
-        </div>
-      ) : null}
     </div>
   );
 }

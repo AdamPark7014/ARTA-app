@@ -224,12 +224,14 @@ export default function PurchaseOrdersPage() {
             className="field"
             style={{ maxWidth: 280 }}
             placeholder="Buscar evento / vendor / rubro…"
+            aria-label="Buscar evento, vendor o rubro"
             value={q}
             onChange={(e) => setQ(e.target.value)}
           />
           <select
             className="field"
             style={{ width: 'auto' }}
+            aria-label="Filtrar por estado"
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
           >

@@ -24,11 +24,12 @@ export function isStripeConfigured(): boolean {
   );
 }
 
+/** WEB_ORIGIN may be a comma-separated CORS allowlist (see main.ts corsOrigins) — use the first entry as the canonical link target. */
 export function webOrigin(): string {
-  return (
+  const raw =
     process.env.WEB_ORIGIN ||
     process.env.NEXT_PUBLIC_APP_URL ||
     process.env.PUBLIC_WEB_URL ||
-    'http://localhost:3000'
-  ).replace(/\/$/, '');
+    'http://localhost:3000';
+  return raw.split(',')[0].trim().replace(/\/$/, '');
 }
