@@ -4,6 +4,13 @@ import { FormEvent, useEffect, useState } from 'react';
 import { AppShell } from '@/components/app-shell/AppShell';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { LoadingBlock, LoadingKpis } from '@/components/ui/LoadingBlock';
+import {
+  FieldCheck,
+  FlashMessage,
+  FormGrid,
+  PageHeader,
+} from '@/components/ui/PageChrome';
+import { StatusBadge } from '@/components/ui/StatusBadge';
 import { api } from '@/lib/api';
 
 type Endpoint = {
@@ -92,26 +99,20 @@ export default function WebhooksPage() {
     await load();
   }
 
-  function toggleEvent(ev: string) {
-    setForm((f) => ({
-      ...f,
-      events: f.events.includes(ev) ? f.events.filter((x) => x !== ev) : [...f.events, ev],
-    }));
-  }
+  const msgVariant =
+    msg.startsWith('Webhook creado') || msg.startsWith('Test dispatch') ? 'success' : 'error';
 
   return (
     <AppShell title="Integraciones · Webhooks">
       <div className="stack page-workspace">
-        <div className="page-intro">
-          <p className="muted">
-            Endpoints firmados (HMAC SHA-256) para alertas de riesgo, aging de OC y backlog de firmas.
-            El cron horario dispara eventos cuando hay señales.
-          </p>
+        <PageHeader
+          description="Endpoints firmados (HMAC SHA-256) para alertas de riesgo, aging de OC y backlog de firmas. El cron horario dispara eventos cuando hay señales."
+        >
           <button className="btn ghost" type="button" onClick={() => testDispatch()}>
             Probar dispatch
           </button>
-        </div>
-        {msg ? <div className="muted">{msg}</div> : null}
+        </PageHeader>
+        {msg ? <FlashMessage variant={msgVariant}>{msg}</FlashMessage> : null}
 
         {loading && !endpoints.length && !deliveries.length ? (
           <>
@@ -127,38 +128,45 @@ export default function WebhooksPage() {
                 </div>
                 <div className="panel-body">
                   <form className="form" onSubmit={onCreate}>
-                    <label>
-                      Nombre
-                      <input
-                        required
-                        value={form.name}
-                        onChange={(e) => setForm({ ...form, name: e.target.value })}
-                      />
-                    </label>
-                    <label>
-                      URL
-                      <input
-                        required
-                        type="url"
-                        placeholder="https://…"
-                        value={form.url}
-                        onChange={(e) => setForm({ ...form, url: e.target.value })}
-                      />
-                    </label>
+                    <FormGrid cols={2}>
+                      <label>
+                        Nombre
+                        <input
+                          required
+                          value={form.name}
+                          onChange={(e) => setForm({ ...form, name: e.target.value })}
+                        />
+                      </label>
+                      <label>
+                        URL
+                        <input
+                          required
+                          type="url"
+                          placeholder="https://…"
+                          value={form.url}
+                          onChange={(e) => setForm({ ...form, url: e.target.value })}
+                        />
+                      </label>
+                    </FormGrid>
                     <div>
                       <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>
                         Eventos
                       </div>
                       <div className="row" style={{ flexWrap: 'wrap', gap: 8 }}>
                         {EVENT_OPTS.map((ev) => (
-                          <label key={ev} style={{ display: 'flex', gap: 6, fontSize: 12 }}>
-                            <input
-                              type="checkbox"
-                              checked={form.events.includes(ev)}
-                              onChange={() => toggleEvent(ev)}
-                            />
-                            {ev}
-                          </label>
+                          <FieldCheck
+                            key={ev}
+                            checked={form.events.includes(ev)}
+                            onChange={(checked) =>
+                              setForm((f) => ({
+                                ...f,
+                                events: checked
+                                  ? [...f.events, ev]
+                                  : f.events.filter((x) => x !== ev),
+                              }))
+                            }
+                            label={ev}
+                          />
                         ))}
                       </div>
                     </div>
@@ -194,9 +202,10 @@ export default function WebhooksPage() {
                           <tr key={ep.id}>
                             <td>
                               <strong>{ep.name}</strong>
-                              <div className="muted" style={{ fontSize: 11 }}>
-                                {ep.active ? 'activo' : 'off'}
-                              </div>
+                              <StatusBadge
+                                value={ep.active ? 'ACTIVE' : 'CANCELLED'}
+                                kind="event"
+                              />
                             </td>
                             <td className="muted" style={{ fontSize: 12 }}>
                               {ep.url}
@@ -245,9 +254,14 @@ export default function WebhooksPage() {
                             <code>{d.event}</code>
                           </td>
                           <td>
-                            <span className={`badge ${d.success ? 'ok' : 'danger'}`}>
-                              {d.success ? `OK ${d.statusCode || ''}` : d.error || 'fail'}
-                            </span>
+                            {d.success ? (
+                              <span className="badge ok">OK {d.statusCode || ''}</span>
+                            ) : (
+                              <StatusBadge value="REJECTED" kind="po" />
+                            )}
+                            {!d.success && d.error ? (
+                              <div className="muted" style={{ fontSize: 11 }}>{d.error}</div>
+                            ) : null}
                           </td>
                         </tr>
                       ))}

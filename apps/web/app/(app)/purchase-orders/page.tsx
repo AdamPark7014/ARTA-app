@@ -6,6 +6,14 @@ import { AppShell } from '@/components/app-shell/AppShell';
 import { DistBar, money } from '@/components/charts/SparkBars';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { LoadingBlock, LoadingKpis } from '@/components/ui/LoadingBlock';
+import {
+  ActionLink,
+  FieldSearch,
+  FieldSelect,
+  FilterBar,
+  PageHeader,
+} from '@/components/ui/PageChrome';
+import { StatusBadge } from '@/components/ui/StatusBadge';
 import { api } from '@/lib/api';
 import { useUser } from '@/lib/user-context';
 
@@ -45,6 +53,10 @@ type PoAnalytics = {
     createdBy?: string;
   }>;
 };
+
+function poStatusKind(status: string): 'po' | 'raw' {
+  return status === 'AUTHORIZED' || status === 'PAID' || status === 'REJECTED' ? 'po' : 'raw';
+}
 
 export default function PurchaseOrdersPage() {
   const { entity } = useUser();
@@ -110,14 +122,11 @@ export default function PurchaseOrdersPage() {
   return (
     <AppShell title="Procurement · OC">
       <div className="stack page-workspace">
-        <div className="page-intro">
-          <div>
-            <p className="muted">
-              Control tower de compras: pipeline de cash, aging, tasa de autorización y cola
-              prioritaria. Flujo: pendiente → autorizado → pagado.
-            </p>
-          </div>
-        </div>
+        <PageHeader
+          description="Control tower de compras: pipeline de cash, aging, tasa de autorización y cola prioritaria. Flujo: pendiente → autorizado → pagado."
+        >
+          <ActionLink href="/events" variant="ghost">Ir a eventos</ActionLink>
+        </PageHeader>
 
         {loading && !data ? (
           <>
@@ -194,24 +203,26 @@ export default function PurchaseOrdersPage() {
                 <h2>Por rubro</h2>
               </div>
               <div className="panel-body">
-                <table className="table">
-                  <thead>
-                    <tr>
-                      <th>Rubro</th>
-                      <th>#</th>
-                      <th>Monto</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {data.byRubro.slice(0, 8).map((r) => (
-                      <tr key={r.rubro}>
-                        <td>{r.rubro}</td>
-                        <td>{r.count}</td>
-                        <td>{money(r.amount)}</td>
+                <div className="table-wrap">
+                  <table className="table table-sticky">
+                    <thead>
+                      <tr>
+                        <th>Rubro</th>
+                        <th>#</th>
+                        <th className="num">Monto</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {data.byRubro.slice(0, 8).map((r) => (
+                        <tr key={r.rubro}>
+                          <td>{r.rubro}</td>
+                          <td>{r.count}</td>
+                          <td className="num">{money(r.amount)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
           </div>
@@ -219,138 +230,161 @@ export default function PurchaseOrdersPage() {
 
         {!loading && data ? (
           <>
-        <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
-          <input
-            className="field"
-            style={{ maxWidth: 280 }}
-            placeholder="Buscar evento / vendor / rubro…"
-            aria-label="Buscar evento, vendor o rubro"
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-          />
-          <select
-            className="field"
-            style={{ width: 'auto' }}
-            aria-label="Filtrar por estado"
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-          >
-            <option value="all">Todos status</option>
-            <option value="DRAFT">DRAFT</option>
-            <option value="PENDING_AUTH">PENDING_AUTH</option>
-            <option value="AUTHORIZED">AUTHORIZED</option>
-            <option value="PAID">PAID</option>
-            <option value="REJECTED">REJECTED</option>
-          </select>
-        </div>
-
-        <div className="panel">
-          <div className="panel-head">
-            <h2>OC · {entity}</h2>
-          </div>
-          <div className="panel-body">
-            {!rows.length ? (
-              <EmptyState
-                title={(data.orders?.length || 0) === 0 ? 'Sin órdenes de compra' : 'Sin OC en este filtro'}
-                description={
-                  (data.orders?.length || 0) === 0
-                    ? 'Crea OC desde el detalle de un evento (pestaña OC).'
-                    : 'Cambia status o limpia la búsqueda.'
-                }
-                actionHref="/events"
-                actionLabel="Ir a eventos"
+            <FilterBar meta={`${rows.length} órdenes`}>
+              <FieldSearch
+                value={q}
+                onChange={setQ}
+                placeholder="Buscar evento, vendor, rubro…"
+                label="Buscar OC"
+                maxWidth={280}
               />
-            ) : (
-            <div className="table-wrap">
-              <table className="table table-sticky">
-                <thead>
-                  <tr>
-                    <th>Evento</th>
-                    <th>Rubro</th>
-                    <th>Vendor</th>
-                    <th className="num">Monto</th>
-                    <th>Aging</th>
-                    <th>Status</th>
-                    <th>Acciones</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map((po) => (
-                    <Fragment key={po.id}>
+              <FieldSelect
+                value={statusFilter}
+                onChange={setStatusFilter}
+                label="Filtrar por estado"
+                options={[
+                  { value: 'all', label: 'Todos los estados' },
+                  { value: 'DRAFT', label: 'Borrador' },
+                  { value: 'PENDING_AUTH', label: 'Pend. autorización' },
+                  { value: 'AUTHORIZED', label: 'Autorizada' },
+                  { value: 'PAID', label: 'Pagada' },
+                  { value: 'REJECTED', label: 'Rechazada' },
+                ]}
+              />
+            </FilterBar>
+
+            <div className="panel">
+              <div className="panel-head">
+                <h2>OC · {entity}</h2>
+              </div>
+              <div className="panel-body">
+                <div className="table-wrap">
+                  <table className="table table-sticky">
+                    <thead>
                       <tr>
-                        <td>
-                          <Link href={`/events/${po.eventId}?tab=ocs`}>{po.eventName}</Link>
-                        </td>
-                        <td>{po.rubro}</td>
-                        <td>{po.vendorName || '—'}</td>
-                        <td className="num">{money(po.amount)}</td>
-                        <td>
-                          <span className={`badge ${po.ageDays > 7 ? 'danger' : po.ageDays > 3 ? 'warn' : 'ok'}`}>
-                            {po.ageDays}d
-                          </span>
-                        </td>
-                        <td>
-                          <span className="badge">{po.status}</span>
-                        </td>
-                        <td>
-                          <div className="row" style={{ gap: 4, flexWrap: 'wrap' }}>
-                            <button className="btn ghost" type="button" onClick={() => toggleExpand(po.id, po.eventId)}>
-                              Partidas
-                            </button>
-                            {po.status === 'PENDING_AUTH' || po.status === 'DRAFT' ? (
-                              <button className="btn ghost" type="button" onClick={() => setStatus(po.id, 'AUTHORIZED')}>
-                                Autorizar
-                              </button>
-                            ) : null}
-                            {po.status === 'AUTHORIZED' ? (
-                              <button className="btn ghost" type="button" onClick={() => setStatus(po.id, 'PAID')}>
-                                Pagado
-                              </button>
-                            ) : null}
-                          </div>
-                        </td>
+                        <th>Evento</th>
+                        <th>Rubro</th>
+                        <th>Vendor</th>
+                        <th className="num">Monto</th>
+                        <th>Aging</th>
+                        <th>Status</th>
+                        <th>Acciones</th>
                       </tr>
-                      {expanded === po.id ? (
+                    </thead>
+                    <tbody>
+                      {rows.map((po) => (
+                        <Fragment key={po.id}>
+                          <tr>
+                            <td>
+                              <Link href={`/events/${po.eventId}?tab=ocs`}>
+                                <strong>{po.eventName}</strong>
+                              </Link>
+                            </td>
+                            <td>{po.rubro}</td>
+                            <td>{po.vendorName || '—'}</td>
+                            <td className="num">{money(po.amount)}</td>
+                            <td>
+                              <span
+                                className={`badge ${
+                                  po.ageDays > 7 ? 'danger' : po.ageDays > 3 ? 'warn' : 'ok'
+                                }`}
+                              >
+                                {po.ageDays}d
+                              </span>
+                            </td>
+                            <td>
+                              <StatusBadge value={po.status} kind={poStatusKind(po.status)} />
+                            </td>
+                            <td>
+                              <div className="row" style={{ gap: 4, flexWrap: 'wrap' }}>
+                                <button
+                                  className="btn ghost"
+                                  type="button"
+                                  onClick={() => toggleExpand(po.id, po.eventId)}
+                                >
+                                  Partidas
+                                </button>
+                                {po.status === 'PENDING_AUTH' || po.status === 'DRAFT' ? (
+                                  <button
+                                    className="btn ghost"
+                                    type="button"
+                                    onClick={() => setStatus(po.id, 'AUTHORIZED')}
+                                  >
+                                    Autorizar
+                                  </button>
+                                ) : null}
+                                {po.status === 'AUTHORIZED' ? (
+                                  <button
+                                    className="btn ghost"
+                                    type="button"
+                                    onClick={() => setStatus(po.id, 'PAID')}
+                                  >
+                                    Pagado
+                                  </button>
+                                ) : null}
+                              </div>
+                            </td>
+                          </tr>
+                          {expanded === po.id ? (
+                            <tr>
+                              <td colSpan={7}>
+                                <table className="table">
+                                  <thead>
+                                    <tr>
+                                      <th>Concepto</th>
+                                      <th>Qty</th>
+                                      <th className="num">P.unit</th>
+                                      <th className="num">Total</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {(lines[po.id] || []).map((l, i) => (
+                                      <tr key={`${po.id}-${i}`}>
+                                        <td>{l.concept}</td>
+                                        <td>{l.qty}</td>
+                                        <td className="num">{money(Number(l.unitPrice))}</td>
+                                        <td className="num">{money(Number(l.total))}</td>
+                                      </tr>
+                                    ))}
+                                    {!lines[po.id]?.length ? (
+                                      <tr>
+                                        <td colSpan={4} className="muted">
+                                          Sin partidas
+                                        </td>
+                                      </tr>
+                                    ) : null}
+                                  </tbody>
+                                </table>
+                              </td>
+                            </tr>
+                          ) : null}
+                        </Fragment>
+                      ))}
+                      {!rows.length ? (
                         <tr>
                           <td colSpan={7}>
-                            <table className="table">
-                              <thead>
-                                <tr>
-                                  <th>Concepto</th>
-                                  <th>Qty</th>
-                                  <th>P.unit</th>
-                                  <th>Total</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {(lines[po.id] || []).map((l, i) => (
-                                  <tr key={`${po.id}-${i}`}>
-                                    <td>{l.concept}</td>
-                                    <td>{l.qty}</td>
-                                    <td>{money(Number(l.unitPrice))}</td>
-                                    <td>{money(Number(l.total))}</td>
-                                  </tr>
-                                ))}
-                                {!lines[po.id]?.length ? (
-                                  <tr>
-                                    <td colSpan={4} className="muted">
-                                      Sin partidas
-                                    </td>
-                                  </tr>
-                                ) : null}
-                              </tbody>
-                            </table>
+                            <EmptyState
+                              title={
+                                (data.orders?.length || 0) === 0
+                                  ? 'Sin órdenes de compra'
+                                  : 'Sin OC en este filtro'
+                              }
+                              description={
+                                (data.orders?.length || 0) === 0
+                                  ? 'Crea OC desde el detalle de un evento (pestaña OC).'
+                                  : 'Cambia status o limpia la búsqueda.'
+                              }
+                              actionHref="/events"
+                              actionLabel="Ir a eventos"
+                            />
                           </td>
                         </tr>
                       ) : null}
-                    </Fragment>
-                  ))}
-                </tbody>
-              </table>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
             </div>
-            )}
-          </div>
-        </div>
           </>
         ) : null}
       </div>

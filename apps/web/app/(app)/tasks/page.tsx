@@ -6,6 +6,14 @@ import { AppShell } from '@/components/app-shell/AppShell';
 import { DistBar } from '@/components/charts/SparkBars';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { LoadingBlock, LoadingKpis } from '@/components/ui/LoadingBlock';
+import {
+  ActionLink,
+  FieldSearch,
+  FieldSelect,
+  FilterBar,
+  PageHeader,
+} from '@/components/ui/PageChrome';
+import { StatusBadge } from '@/components/ui/StatusBadge';
 import { api } from '@/lib/api';
 import { useUser } from '@/lib/user-context';
 
@@ -17,6 +25,13 @@ type Task = {
   dueAt?: string | null;
   event?: { id: string; name: string; status: string };
 };
+
+function taskStatusTone(status: string): string {
+  if (status === 'DONE') return 'healthy';
+  if (status === 'BLOCKED') return 'critical';
+  if (status === 'IN_PROGRESS') return 'watch';
+  return 'medium';
+}
 
 export default function TasksPage() {
   const { entity } = useUser();
@@ -77,11 +92,11 @@ export default function TasksPage() {
   return (
     <AppShell title="Mis tareas · Workload">
       <div className="stack page-workspace">
-        <div className="page-intro">
-          <p className="muted">
-            Prioriza backlog personal: vencidas, bloqueadas y en curso. Entidad activa: {entity}.
-          </p>
-        </div>
+        <PageHeader
+          description={`Prioriza backlog personal: vencidas, bloqueadas y en curso. Entidad activa: ${entity}.`}
+        >
+          <ActionLink href="/events" variant="ghost">Ir a eventos</ActionLink>
+        </PageHeader>
 
         {loading ? (
           <>
@@ -115,6 +130,9 @@ export default function TasksPage() {
 
             <div className="panel">
               <div className="panel-body">
+                <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>
+                  Distribución de carga
+                </div>
                 <DistBar
                   segments={[
                     { label: 'open', value: kpis.open, tone: 'warn' },
@@ -125,133 +143,141 @@ export default function TasksPage() {
               </div>
             </div>
 
-            <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
-              <input
-                className="field"
-                style={{ maxWidth: 280 }}
-                placeholder="Buscar tarea…"
-                aria-label="Buscar tarea"
+            <FilterBar meta={`${filtered.length} en cola`}>
+              <FieldSearch
                 value={q}
-                onChange={(e) => setQ(e.target.value)}
+                onChange={setQ}
+                placeholder="Buscar tarea, módulo, evento…"
+                label="Buscar tarea"
+                maxWidth={280}
               />
-              <select
-                className="field"
-                style={{ width: 'auto' }}
-                aria-label="Filtrar por estado"
+              <FieldSelect
                 value={status}
-                onChange={(e) => setStatus(e.target.value)}
-              >
-                <option value="all">Todos</option>
-                <option value="OPEN">OPEN</option>
-                <option value="IN_PROGRESS">IN_PROGRESS</option>
-                <option value="BLOCKED">BLOCKED</option>
-                <option value="DONE">DONE</option>
-              </select>
-            </div>
+                onChange={setStatus}
+                label="Filtrar por estado"
+                options={[
+                  { value: 'all', label: 'Todos los estados' },
+                  { value: 'OPEN', label: 'Abierta' },
+                  { value: 'IN_PROGRESS', label: 'En curso' },
+                  { value: 'BLOCKED', label: 'Bloqueada' },
+                  { value: 'DONE', label: 'Hecha' },
+                ]}
+              />
+            </FilterBar>
 
             <div className="panel">
               <div className="panel-head">
                 <h2>Cola · {filtered.length}</h2>
               </div>
               <div className="panel-body">
-                {!filtered.length ? (
-                  <EmptyState
-                    title={rows.length === 0 ? 'Sin tareas asignadas' : 'Sin resultados en este filtro'}
-                    description={
-                      rows.length === 0
-                        ? 'Cuando te asignen tareas desde un evento aparecerán aquí para priorizar vencidas y bloqueadas.'
-                        : 'Prueba otro estado o limpia la búsqueda.'
-                    }
-                    actionHref={filterActive && rows.length ? undefined : '/events'}
-                    actionLabel={filterActive && rows.length ? undefined : 'Ir a eventos'}
-                  >
-                    {filterActive && rows.length ? (
-                      <button
-                        className="btn ghost"
-                        type="button"
-                        onClick={() => {
-                          setStatus('all');
-                          setQ('');
-                        }}
-                      >
-                        Limpiar filtros
-                      </button>
-                    ) : null}
-                  </EmptyState>
-                ) : (
-                  <div className="table-wrap">
-                    <table className="table">
-                      <thead>
-                        <tr>
-                          <th>Tarea</th>
-                          <th>Módulo</th>
-                          <th>Vence</th>
-                          <th>Status</th>
-                          <th></th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {filtered.map((t) => {
-                          const overdue =
-                            t.dueAt &&
-                            new Date(t.dueAt).getTime() < Date.now() &&
-                            t.status !== 'DONE';
-                          return (
-                            <tr key={t.id}>
-                              <td>
-                                <strong>{t.title}</strong>
-                                {t.event ? (
-                                  <div className="muted" style={{ fontSize: 12 }}>
-                                    <Link href={`/events/${t.event.id}`}>{t.event.name}</Link>
-                                  </div>
-                                ) : null}
-                              </td>
-                              <td className="muted">{t.module || '—'}</td>
-                              <td>
-                                <span className={`badge ${overdue ? 'danger' : 'ok'}`}>
-                                  {t.dueAt ? new Date(t.dueAt).toLocaleDateString('es-MX') : '—'}
-                                </span>
-                              </td>
-                              <td>
-                                <span className="badge">{t.status}</span>
-                              </td>
-                              <td>
-                                <div className="row" style={{ gap: 4 }}>
-                                  {t.status !== 'DONE' ? (
-                                    <button
-                                      className="btn ghost"
-                                      type="button"
-                                      onClick={() => setTaskStatus(t.id, 'DONE')}
-                                    >
-                                      Hecha
-                                    </button>
-                                  ) : (
-                                    <button
-                                      className="btn ghost"
-                                      type="button"
-                                      onClick={() => setTaskStatus(t.id, 'OPEN')}
-                                    >
-                                      Reabrir
-                                    </button>
-                                  )}
-                                  {t.status !== 'BLOCKED' && t.status !== 'DONE' ? (
-                                    <button
-                                      className="btn ghost"
-                                      type="button"
-                                      onClick={() => setTaskStatus(t.id, 'BLOCKED')}
-                                    >
-                                      Bloquear
-                                    </button>
-                                  ) : null}
+                <div className="table-wrap">
+                  <table className="table table-sticky">
+                    <thead>
+                      <tr>
+                        <th>Tarea</th>
+                        <th>Módulo</th>
+                        <th>Vence</th>
+                        <th>Status</th>
+                        <th></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filtered.map((t) => {
+                        const overdue =
+                          t.dueAt &&
+                          new Date(t.dueAt).getTime() < Date.now() &&
+                          t.status !== 'DONE';
+                        return (
+                          <tr key={t.id}>
+                            <td>
+                              <strong>{t.title}</strong>
+                              {t.event ? (
+                                <div className="muted" style={{ fontSize: 12 }}>
+                                  <Link href={`/events/${t.event.id}`}>{t.event.name}</Link>
                                 </div>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
+                              ) : null}
+                            </td>
+                            <td className="muted">{t.module || '—'}</td>
+                            <td>
+                              <span className={`badge ${overdue ? 'danger' : 'ok'}`}>
+                                {t.dueAt ? new Date(t.dueAt).toLocaleDateString('es-MX') : '—'}
+                              </span>
+                            </td>
+                            <td>
+                              <StatusBadge value={taskStatusTone(t.status)} kind="risk" />
+                              <span className="muted" style={{ fontSize: 11, marginLeft: 6 }}>
+                                {t.status}
+                              </span>
+                            </td>
+                            <td>
+                              <div className="row" style={{ gap: 4 }}>
+                                {t.status !== 'DONE' ? (
+                                  <button
+                                    className="btn ghost"
+                                    type="button"
+                                    onClick={() => setTaskStatus(t.id, 'DONE')}
+                                  >
+                                    Hecha
+                                  </button>
+                                ) : (
+                                  <button
+                                    className="btn ghost"
+                                    type="button"
+                                    onClick={() => setTaskStatus(t.id, 'OPEN')}
+                                  >
+                                    Reabrir
+                                  </button>
+                                )}
+                                {t.status !== 'BLOCKED' && t.status !== 'DONE' ? (
+                                  <button
+                                    className="btn ghost"
+                                    type="button"
+                                    onClick={() => setTaskStatus(t.id, 'BLOCKED')}
+                                  >
+                                    Bloquear
+                                  </button>
+                                ) : null}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                      {!filtered.length ? (
+                        <tr>
+                          <td colSpan={5}>
+                            <EmptyState
+                              title={
+                                rows.length === 0
+                                  ? 'Sin tareas asignadas'
+                                  : 'Sin resultados en este filtro'
+                              }
+                              description={
+                                rows.length === 0
+                                  ? 'Cuando te asignen tareas desde un evento aparecerán aquí para priorizar vencidas y bloqueadas.'
+                                  : 'Prueba otro estado o limpia la búsqueda.'
+                              }
+                              actionHref={filterActive && rows.length ? undefined : '/events'}
+                              actionLabel={filterActive && rows.length ? undefined : 'Ir a eventos'}
+                            >
+                              {filterActive && rows.length ? (
+                                <button
+                                  className="btn ghost"
+                                  type="button"
+                                  onClick={() => {
+                                    setStatus('all');
+                                    setQ('');
+                                  }}
+                                >
+                                  Limpiar filtros
+                                </button>
+                              ) : null}
+                            </EmptyState>
+                          </td>
+                        </tr>
+                      ) : null}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
           </>

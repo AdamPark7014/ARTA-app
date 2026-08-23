@@ -1,5 +1,7 @@
 'use client';
 
+import { FormGrid } from '@/components/ui/PageChrome';
+import { StatusBadge } from '@/components/ui/StatusBadge';
 import type { EventDetail } from '@/components/events/event-detail.types';
 
 type CampaignForm = {
@@ -38,7 +40,11 @@ export function EventCampaignPanel({
       <div className="panel-head">
         <h2>Campaña publicitaria</h2>
         <div className="row">
-          {event.campaign?.authorized ? <span className="badge ok">Autorizada</span> : <span className="badge warn">Sin autorizar</span>}
+          {event.campaign?.authorized ? (
+            <StatusBadge value="Autorizada" kind="raw" className="ok" />
+          ) : (
+            <StatusBadge value="Sin autorizar" kind="raw" className="warn" />
+          )}
           {canCampaign && !closed ? (
             <>
               <button className="btn" type="button" disabled={saving} onClick={onSaveCampaign}>
@@ -58,8 +64,8 @@ export function EventCampaignPanel({
         </div>
       </div>
       <div className="panel-body">
-        <div className="form" style={{ maxWidth: 720 }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+        <div className="form panel--narrow">
+          <FormGrid>
             <label>
               Tipo
               <select
@@ -81,7 +87,7 @@ export function EventCampaignPanel({
                 onChange={(e) => setCampaignForm({ ...campaignForm, budget: e.target.value })}
               />
             </label>
-          </div>
+          </FormGrid>
           <label>
             Canales
             <input

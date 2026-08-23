@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { AppShell } from '@/components/app-shell/AppShell';
+import { FlashMessage, PageHeader } from '@/components/ui/PageChrome';
 import { api } from '@/lib/api';
 import { useUser } from '@/lib/user-context';
 import { TemplateSchemaEditor } from '@/components/checklists/TemplateSchemaEditor';
@@ -47,6 +48,14 @@ function entityLabel(entities: string[]) {
   if (arta && aud) return 'Arta y Auditorio';
   if (aud) return 'Solo Auditorio';
   return 'Solo Arta';
+}
+
+function msgVariant(msg: string): 'success' | 'error' | 'warn' | 'info' {
+  const m = msg.toLowerCase();
+  if (m.includes('error')) return 'error';
+  if (m.includes('inactiva')) return 'warn';
+  if (m.includes('restaurad') || m.includes('activa')) return 'success';
+  return 'info';
 }
 
 export default function ChecklistsTemplatesPage() {
@@ -117,16 +126,19 @@ export default function ChecklistsTemplatesPage() {
 
   return (
     <AppShell title="Plantillas">
-      <div className="stack">
-        <p className="muted">
-          Cada plantilla es un <strong style={{ color: 'var(--text)' }}>formato PDF</strong> que se
-          copia al crear un evento. El equipo lo llena en pantalla y el PDF embebido se regenera solo
-          (guardar / firmar). Entidad activa:{' '}
-          {entity === 'ARTA' ? 'Arta' : 'Auditorio'}.
-        </p>
-        {msg ? <div className="muted">{msg}</div> : null}
+      <div className="stack page-workspace">
+        <PageHeader
+          description="Cada plantilla es un formato PDF que se copia al crear un evento. El equipo lo llena en pantalla y el PDF embebido se regenera solo (guardar / firmar)."
+          hint={`Entidad activa: ${entity === 'ARTA' ? 'Arta' : 'Auditorio'}`}
+        />
 
-        <div style={{ display: 'grid', gridTemplateColumns: preview ? '1fr 1.35fr' : '1fr', gap: 16 }}>
+        {msg ? (
+          <FlashMessage variant={msgVariant(msg)} onDismiss={() => setMsg('')}>
+            {msg}
+          </FlashMessage>
+        ) : null}
+
+        <div className={preview ? 'studio-split' : 'stack'}>
           <div className="grid-cards">
             {templates.map((t) => {
               const questions = (t.schemaJson?.sections || []).reduce(
@@ -135,23 +147,19 @@ export default function ChecklistsTemplatesPage() {
               );
               return (
                 <div className="kpi" key={t.id}>
-                  <div className="row" style={{ justifyContent: 'space-between' }}>
+                  <div className="row">
                     <span className={`badge ${t.active ? 'ok' : 'warn'}`}>
                       {t.active ? 'Activa' : 'Inactiva'}
                     </span>
-                    <span className="muted" style={{ fontSize: 11 }}>
-                      v{t.version}
-                    </span>
+                    <span className="kpi-sub muted">v{t.version}</span>
                   </div>
-                  <div style={{ fontWeight: 650, marginTop: 10, fontSize: '1.05rem' }}>{t.name}</div>
-                  <p className="muted" style={{ fontSize: 13, margin: '8px 0 0' }}>
-                    {t.description || 'Sin descripción'}
-                  </p>
-                  <div className="muted" style={{ fontSize: 12, marginTop: 10 }}>
+                  <strong>{t.name}</strong>
+                  <p className="kpi-sub muted">{t.description || 'Sin descripción'}</p>
+                  <div className="kpi-sub muted">
                     PDF · {entityLabel(t.entities)}
                     {questions ? ` · ${questions} campos` : ''}
                   </div>
-                  <div className="row" style={{ marginTop: 12, flexWrap: 'wrap' }}>
+                  <div className="row">
                     <button className="btn ghost" type="button" onClick={() => openPreview(t, false)}>
                       Ver
                     </button>
@@ -176,7 +184,7 @@ export default function ChecklistsTemplatesPage() {
               <div className="panel-head">
                 <div>
                   <h2>{preview.name}</h2>
-                  <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+                  <div className="kpi-sub muted">
                     {preview.description || 'Sin descripción'} · {entityLabel(preview.entities)} · v
                     {preview.version}
                   </div>
@@ -221,9 +229,9 @@ export default function ChecklistsTemplatesPage() {
                       <h3>{s.title}</h3>
                       <ul style={{ margin: 0, paddingLeft: 18 }}>
                         {(s.items || []).map((it) => (
-                          <li key={it.id} style={{ fontSize: 14, marginBottom: 6 }}>
+                          <li key={it.id}>
                             {it.label || 'Sin etiqueta'}
-                            <span className="muted" style={{ fontSize: 12 }}>
+                            <span className="muted kpi-sub">
                               {' '}
                               · {TYPE_LABEL[it.type || 'check'] || it.type}
                             </span>
@@ -238,39 +246,39 @@ export default function ChecklistsTemplatesPage() {
                   <div className="check-section">
                     <h3>Versiones anteriores</h3>
                     {(preview.versions || []).length ? (
-                      <table className="table">
-                        <thead>
-                          <tr>
-                            <th>Fecha</th>
-                            <th>v</th>
-                            <th>Quién</th>
-                            <th>Nota</th>
-                            <th />
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {(preview.versions || []).map((v) => (
-                            <tr key={v.id}>
-                              <td className="muted" style={{ whiteSpace: 'nowrap' }}>
-                                {new Date(v.createdAt).toLocaleString('es-MX')}
-                              </td>
-                              <td>v{v.version}</td>
-                              <td>{v.editedBy?.fullName || '—'}</td>
-                              <td className="muted">{v.note || '—'}</td>
-                              <td>
-                                <button
-                                  className="btn ghost"
-                                  type="button"
-                                  disabled={restoring}
-                                  onClick={() => restoreVersion(v.id)}
-                                >
-                                  Restaurar
-                                </button>
-                              </td>
+                      <div className="table-wrap">
+                        <table className="table">
+                          <thead>
+                            <tr>
+                              <th>Fecha</th>
+                              <th>v</th>
+                              <th>Quién</th>
+                              <th>Nota</th>
+                              <th />
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                          </thead>
+                          <tbody>
+                            {(preview.versions || []).map((v) => (
+                              <tr key={v.id}>
+                                <td className="muted">{new Date(v.createdAt).toLocaleString('es-MX')}</td>
+                                <td>v{v.version}</td>
+                                <td>{v.editedBy?.fullName || '—'}</td>
+                                <td className="muted">{v.note || '—'}</td>
+                                <td>
+                                  <button
+                                    className="btn ghost"
+                                    type="button"
+                                    disabled={restoring}
+                                    onClick={() => restoreVersion(v.id)}
+                                  >
+                                    Restaurar
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
                     ) : (
                       <p className="muted">Aún no hay historial (aparece al guardar cambios).</p>
                     )}

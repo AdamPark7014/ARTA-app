@@ -1,11 +1,12 @@
 'use client';
 
-import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { AppShell } from '@/components/app-shell/AppShell';
 import { DistBar } from '@/components/charts/SparkBars';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { LoadingBlock, LoadingKpis } from '@/components/ui/LoadingBlock';
+import { ActionLink, FlashMessage, PageHeader } from '@/components/ui/PageChrome';
+import { StatusBadge } from '@/components/ui/StatusBadge';
 import { api } from '@/lib/api';
 import { useUser } from '@/lib/user-context';
 
@@ -86,16 +87,12 @@ export default function RiskWorkspacePage() {
   return (
     <AppShell title="Risk workspace · Ops">
       <div className="stack page-workspace">
-        <div className="page-intro">
-          <p className="muted">
-            Vista cruzada de riesgo operativo por disciplina (checklists). Drill-down a cada índice ·{' '}
-            {entity}.
-          </p>
-          <Link className="btn ghost" href="/events">
-            Pipeline eventos
-          </Link>
-        </div>
-        {msg ? <div className="muted">{msg}</div> : null}
+        <PageHeader
+          description={`Vista cruzada de riesgo operativo por disciplina (checklists). Drill-down a cada índice · ${entity}.`}
+        >
+          <ActionLink href="/events" variant="ghost">Pipeline eventos</ActionLink>
+        </PageHeader>
+        {msg ? <FlashMessage variant="error">{msg}</FlashMessage> : null}
 
         {loading ? (
           <>
@@ -155,7 +152,7 @@ export default function RiskWorkspacePage() {
                               <strong>{r.label}</strong>
                               {r.kpis?.critical ? (
                                 <div>
-                                  <span className="badge badge--risk-critical">critical</span>
+                                  <StatusBadge value="critical" kind="risk" />
                                 </div>
                               ) : null}
                             </td>
@@ -176,9 +173,7 @@ export default function RiskWorkspacePage() {
                               )}
                             </td>
                             <td>
-                              <Link className="btn ghost" href={r.href}>
-                                Abrir
-                              </Link>
+                              <ActionLink href={r.href} variant="ghost">Abrir</ActionLink>
                             </td>
                           </tr>
                         ))}

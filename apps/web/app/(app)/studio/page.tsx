@@ -6,6 +6,14 @@ import { useRouter } from 'next/navigation';
 import { AppShell } from '@/components/app-shell/AppShell';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { LoadingBlock, LoadingKpis } from '@/components/ui/LoadingBlock';
+import {
+  ActionLink,
+  FieldCheck,
+  FilterBar,
+  FlashMessage,
+  FormGrid,
+  PageHeader,
+} from '@/components/ui/PageChrome';
 import { api } from '@/lib/api';
 import { useUser } from '@/lib/user-context';
 
@@ -47,6 +55,27 @@ const SECTION_META: Record<string, string> = {
   home_cta: 'CTA / contacto',
 };
 
+const STUDIO_TABS: Array<{ key: Tab; label: string }> = [
+  { key: 'carousel', label: 'Carrusel' },
+  { key: 'news', label: 'Noticias' },
+  { key: 'sections', label: 'Secciones' },
+];
+
+function msgVariant(msg: string): 'success' | 'error' | 'warn' | 'info' {
+  const m = msg.toLowerCase();
+  if (m.includes('error')) return 'error';
+  if (m.includes('borrador') || m.includes('agrega una imagen')) return 'warn';
+  if (
+    m.includes('guardad') ||
+    m.includes('publicad') ||
+    m.includes('agregad') ||
+    m.includes('subid')
+  ) {
+    return 'success';
+  }
+  return 'info';
+}
+
 export default function StudioPage() {
   const { entity, setEntity, user } = useUser();
   const router = useRouter();
@@ -83,6 +112,11 @@ export default function StudioPage() {
       news.filter((n) => !n.published).length +
       slides.filter((s) => !s.active).length,
     [pages, news, slides],
+  );
+
+  const tabCounts: Record<Tab, number> = useMemo(
+    () => ({ carousel: slides.length, news: news.length, sections: pages.length }),
+    [slides.length, news.length, pages.length],
   );
 
   async function uploadAsset(file: File): Promise<string> {
@@ -274,20 +308,16 @@ export default function StudioPage() {
   return (
     <AppShell title="Studio · Sitio Arta">
       <div className="stack page-workspace">
-        <div className="page-intro">
-          <p className="muted">
-            CMS del sitio público <strong>arta PRODUCCIONES</strong>. Preview en vivo, publicar /
-            borrador y enlace permanente al site.
-          </p>
-          <div className="row" style={{ gap: 8 }}>
-            <Link className="btn" href="/p/arta" target="_blank">
-              Ver sitio live
-            </Link>
-            <Link className="btn ghost" href="/site">
-              Guía sitio
-            </Link>
-          </div>
-        </div>
+        <PageHeader
+          description="CMS del sitio público arta PRODUCCIONES. Preview en vivo, publicar / borrador y enlace permanente al site."
+        >
+          <Link className="btn" href="/p/arta" target="_blank" rel="noopener noreferrer">
+            Ver sitio live
+          </Link>
+          <ActionLink href="/site" variant="ghost">
+            Guía sitio
+          </ActionLink>
+        </PageHeader>
 
         {loading ? (
           <>
@@ -319,27 +349,33 @@ export default function StudioPage() {
               </div>
             </div>
 
-            <nav className="tab-bar" aria-label="Studio">
-              {(
-                [
-                  ['carousel', 'Carrusel', slides.length],
-                  ['news', 'Noticias', news.length],
-                  ['sections', 'Secciones', pages.length],
-                ] as const
-              ).map(([k, label, count]) => (
-                <button
-                  key={k}
-                  type="button"
-                  className={`tab-bar__btn ${tab === k ? 'is-active' : ''}`}
-                  onClick={() => setTab(k)}
-                >
-                  {label}
-                  <span className="tab-bar__count">{count}</span>
-                </button>
-              ))}
-            </nav>
+            <FilterBar
+              meta={
+                draftsCount
+                  ? `${draftsCount} elemento${draftsCount === 1 ? '' : 's'} en borrador`
+                  : 'Todo publicado'
+              }
+            >
+              <nav className="tab-bar" aria-label="Studio">
+                {STUDIO_TABS.map(({ key, label }) => (
+                  <button
+                    key={key}
+                    type="button"
+                    className={`tab-bar__btn ${tab === key ? 'is-active' : ''}`}
+                    onClick={() => setTab(key)}
+                  >
+                    {label}
+                    <span className="tab-bar__count">{tabCounts[key]}</span>
+                  </button>
+                ))}
+              </nav>
+            </FilterBar>
 
-            {msg ? <div className="muted">{msg}</div> : null}
+            {msg ? (
+              <FlashMessage variant={msgVariant(msg)} onDismiss={() => setMsg('')}>
+                {msg}
+              </FlashMessage>
+            ) : null}
 
             {tab === 'carousel' && (
               <div className="dash-split">
@@ -364,7 +400,7 @@ export default function StudioPage() {
                           aria-hidden
                         />
                       ) : null}
-                      <label className="btn ghost" style={{ cursor: 'pointer', width: 'fit-content' }}>
+                      <label className="btn ghost">
                         {uploading ? 'Subiendo…' : 'Subir imagen'}
                         <input
                           type="file"
@@ -386,7 +422,7 @@ export default function StudioPage() {
                           }}
                         />
                       </label>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                      <FormGrid>
                         <label>
                           Título
                           <input
@@ -401,8 +437,8 @@ export default function StudioPage() {
                             onChange={(e) => setSlideForm({ ...slideForm, subtitle: e.target.value })}
                           />
                         </label>
-                      </div>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                      </FormGrid>
+                      <FormGrid>
                         <label>
                           CTA
                           <input
@@ -417,7 +453,7 @@ export default function StudioPage() {
                             onChange={(e) => setSlideForm({ ...slideForm, ctaHref: e.target.value })}
                           />
                         </label>
-                      </div>
+                      </FormGrid>
                       <button className="btn" type="button" disabled={saving} onClick={addSlide}>
                         {saving ? 'Guardando…' : 'Agregar al carrusel'}
                       </button>
@@ -445,16 +481,14 @@ export default function StudioPage() {
                               style={{ backgroundImage: `url(${s.imageUrl})` }}
                             />
                             <div className="studio-slide-card__body">
-                              <div className="row" style={{ justifyContent: 'space-between', gap: 8 }}>
+                              <div className="row">
                                 <strong>{s.title || 'Sin título'}</strong>
                                 <span className={`badge ${s.active ? 'ok' : 'warn'}`}>
                                   {s.active ? 'Activo' : 'Off'}
                                 </span>
                               </div>
-                              <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
-                                {s.subtitle || '—'}
-                              </div>
-                              <div className="row" style={{ marginTop: 10, gap: 6 }}>
+                              <div className="kpi-sub muted">{s.subtitle || '—'}</div>
+                              <div className="row">
                                 <button className="btn ghost" type="button" onClick={() => toggleSlide(s)}>
                                   {s.active ? 'Desactivar' : 'Activar'}
                                 </button>
@@ -480,7 +514,7 @@ export default function StudioPage() {
                   </div>
                   <div className="panel-body">
                     <div className="form">
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                      <FormGrid>
                         <label>
                           Título
                           <input
@@ -508,7 +542,7 @@ export default function StudioPage() {
                             onChange={(e) => setNewsForm({ ...newsForm, slug: e.target.value })}
                           />
                         </label>
-                      </div>
+                      </FormGrid>
                       <label>
                         Extracto
                         <textarea
@@ -532,7 +566,7 @@ export default function StudioPage() {
                           onChange={(e) => setNewsForm({ ...newsForm, coverUrl: e.target.value })}
                         />
                       </label>
-                      <label className="btn ghost" style={{ cursor: 'pointer', width: 'fit-content' }}>
+                      <label className="btn ghost">
                         {uploading ? 'Subiendo…' : 'Subir cover'}
                         <input
                           type="file"
@@ -554,14 +588,11 @@ export default function StudioPage() {
                           }}
                         />
                       </label>
-                      <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                        <input
-                          type="checkbox"
-                          checked={newsForm.published}
-                          onChange={(e) => setNewsForm({ ...newsForm, published: e.target.checked })}
-                        />
-                        Publicar al crear
-                      </label>
+                      <FieldCheck
+                        checked={newsForm.published}
+                        onChange={(checked) => setNewsForm({ ...newsForm, published: checked })}
+                        label="Publicar al crear"
+                      />
                       <button className="btn" type="button" disabled={saving} onClick={addNews}>
                         {saving ? 'Guardando…' : newsForm.published ? 'Publicar noticia' : 'Guardar borrador'}
                       </button>
@@ -596,7 +627,7 @@ export default function StudioPage() {
                                 <td>
                                   <strong>{n.title}</strong>
                                   {n.excerpt ? (
-                                    <div className="muted" style={{ fontSize: 12 }}>
+                                    <div className="kpi-sub muted">
                                       {n.excerpt.slice(0, 80)}
                                       {n.excerpt.length > 80 ? '…' : ''}
                                     </div>
@@ -609,7 +640,7 @@ export default function StudioPage() {
                                   </span>
                                 </td>
                                 <td>
-                                  <div className="row" style={{ gap: 6 }}>
+                                  <div className="row">
                                     <button className="btn ghost" type="button" onClick={() => toggleNews(n)}>
                                       {n.published ? 'Despublicar' : 'Publicar'}
                                     </button>
@@ -636,37 +667,42 @@ export default function StudioPage() {
 
             {tab === 'sections' && (
               <div className="stack">
-                <nav className="tab-bar" aria-label="Secciones del home">
-                  {Object.keys(SECTION_META).map((key) => {
-                    const page = pages.find((p) => p.sectionKey === key);
-                    return (
-                      <button
-                        key={key}
-                        type="button"
-                        className={`tab-bar__btn ${sectionKey === key ? 'is-active' : ''}`}
-                        onClick={() => setSectionKey(key)}
-                      >
-                        {SECTION_META[key]}
-                        {page ? (
-                          <span className="tab-bar__count">{page.published ? 'on' : 'off'}</span>
-                        ) : null}
-                      </button>
-                    );
-                  })}
-                </nav>
+                <FilterBar
+                  meta={
+                    <span className={`badge ${published ? 'ok' : 'warn'}`}>
+                      {published ? 'Publicado' : 'Borrador'}
+                    </span>
+                  }
+                >
+                  <nav className="tab-bar" aria-label="Secciones del home">
+                    {Object.keys(SECTION_META).map((key) => {
+                      const page = pages.find((p) => p.sectionKey === key);
+                      return (
+                        <button
+                          key={key}
+                          type="button"
+                          className={`tab-bar__btn ${sectionKey === key ? 'is-active' : ''}`}
+                          onClick={() => setSectionKey(key)}
+                        >
+                          {SECTION_META[key]}
+                          {page ? (
+                            <span className="tab-bar__count">{page.published ? 'on' : 'off'}</span>
+                          ) : null}
+                        </button>
+                      );
+                    })}
+                  </nav>
+                </FilterBar>
 
                 <div className="studio-split">
                   <div className="panel">
                     <div className="panel-head">
                       <h2>Editor · {SECTION_META[sectionKey]}</h2>
-                      <span className={`badge ${published ? 'ok' : 'warn'}`}>
-                        {published ? 'Publicado' : 'Borrador'}
-                      </span>
                     </div>
                     <div className="panel-body">
                       <div className="form">
                         {sectionKey === 'home_hero' ? (
-                          <>
+                          <FormGrid>
                             <label>
                               Brand
                               <input
@@ -681,7 +717,7 @@ export default function StudioPage() {
                                 onChange={(e) => setDraft({ ...draft, brandSub: e.target.value })}
                               />
                             </label>
-                          </>
+                          </FormGrid>
                         ) : null}
                         <label>
                           Headline
@@ -705,28 +741,27 @@ export default function StudioPage() {
                             }
                           />
                         </label>
-                        <label>
-                          CTA
-                          <input
-                            value={draft.cta || ''}
-                            onChange={(e) => setDraft({ ...draft, cta: e.target.value })}
-                          />
-                        </label>
-                        <label>
-                          CTA href
-                          <input
-                            value={draft.ctaHref || ''}
-                            onChange={(e) => setDraft({ ...draft, ctaHref: e.target.value })}
-                          />
-                        </label>
-                        <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                          <input
-                            type="checkbox"
-                            checked={published}
-                            onChange={(e) => setPublished(e.target.checked)}
-                          />
-                          Publicado en sitio live
-                        </label>
+                        <FormGrid>
+                          <label>
+                            CTA
+                            <input
+                              value={draft.cta || ''}
+                              onChange={(e) => setDraft({ ...draft, cta: e.target.value })}
+                            />
+                          </label>
+                          <label>
+                            CTA href
+                            <input
+                              value={draft.ctaHref || ''}
+                              onChange={(e) => setDraft({ ...draft, ctaHref: e.target.value })}
+                            />
+                          </label>
+                        </FormGrid>
+                        <FieldCheck
+                          checked={published}
+                          onChange={setPublished}
+                          label="Publicado en sitio live"
+                        />
                         <button className="btn" type="button" disabled={saving} onClick={saveSection}>
                           {saving ? 'Guardando…' : published ? 'Guardar y publicar' : 'Guardar borrador'}
                         </button>
@@ -737,9 +772,7 @@ export default function StudioPage() {
                   <div className="panel studio-preview">
                     <div className="panel-head">
                       <h2>Preview</h2>
-                      <span className="muted" style={{ fontSize: 12 }}>
-                        No published hasta guardar
-                      </span>
+                      <span className="kpi-sub muted">No publicado hasta guardar</span>
                     </div>
                     <div className="panel-body">
                       <div className="studio-preview__stage">

@@ -16,12 +16,57 @@ export default function GlobalError({
 
   return (
     <html lang="es">
-      <body style={{ fontFamily: 'system-ui, sans-serif', padding: '2rem', maxWidth: 480 }}>
-        <h1 style={{ fontSize: '1.25rem' }}>Algo falló</h1>
-        <p style={{ color: '#555' }}>Puedes reintentar. Si persiste, contacta a dirección.</p>
-        <button type="button" onClick={reset} style={{ marginTop: 12, padding: '8px 14px' }}>
-          Reintentar
-        </button>
+      <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link
+          href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,650&family=Inter:wght@400;500;600;700&display=swap"
+          rel="stylesheet"
+        />
+      </head>
+      <body
+        style={{
+          margin: 0,
+          minHeight: '100vh',
+          display: 'grid',
+          placeItems: 'center',
+          padding: '2rem',
+          background: '#09090b',
+          color: '#fafafa',
+          fontFamily: 'Inter, system-ui, sans-serif',
+        }}
+      >
+        <div
+          style={{
+            maxWidth: 420,
+            textAlign: 'center',
+            padding: '1.75rem',
+            border: '1px solid rgba(255,255,255,0.08)',
+            borderRadius: 14,
+            background: '#111113',
+          }}
+        >
+          <h1 style={{ margin: '0 0 0.5rem', fontFamily: 'Fraunces, Georgia, serif', fontSize: '1.5rem' }}>
+            Algo falló
+          </h1>
+          <p style={{ margin: '0 0 1.25rem', color: '#a1a1aa', lineHeight: 1.5 }}>
+            Puedes reintentar. Si persiste, contacta a dirección.
+          </p>
+          <button
+            type="button"
+            onClick={reset}
+            style={{
+              padding: '0.65rem 1rem',
+              border: 0,
+              borderRadius: 8,
+              background: '#c9a962',
+              color: '#0a0a0a',
+              fontWeight: 600,
+              cursor: 'pointer',
+            }}
+          >
+            Reintentar
+          </button>
+        </div>
       </body>
     </html>
   );

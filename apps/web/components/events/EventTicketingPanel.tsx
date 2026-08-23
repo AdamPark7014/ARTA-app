@@ -6,6 +6,7 @@ import type { TicketingSetup } from '@/components/events/event-detail.types';
 import { BoleteraFields, resolveBoleteraName } from '@/components/ticketing/BoleteraFields';
 import { boleteraChoiceOf } from '@/lib/boletera';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { FlashMessage, FormGrid, PageHeader } from '@/components/ui/PageChrome';
 import { api } from '@/lib/api';
 
 type TicketForm = {
@@ -42,6 +43,12 @@ function zoneSummary(zones: Array<{ aforo: number; sold?: number }>) {
   const sold = zones.reduce((s, z) => s + Number(z.sold || 0), 0);
   const pct = aforo > 0 ? Math.round((sold / aforo) * 100) : 0;
   return { aforo, sold, pct };
+}
+
+function syncFlashVariant(message: string): 'error' | 'success' | 'info' {
+  if (/error|escribe|dejes/i.test(message)) return 'error';
+  if (/sync ·/i.test(message)) return 'success';
+  return 'info';
 }
 
 export function EventTicketingPanel({
@@ -88,18 +95,14 @@ export function EventTicketingPanel({
 
   return (
     <div className="stack">
-      <div className="page-intro">
-        <p className="muted">
-          Aforo, vendidos y sell-through por zona. Sync rellena vendidos desde el provider (stub o{' '}
-          <code>TICKETING_SYNC_URL</code>).
-        </p>
+      <PageHeader description="Aforo, vendidos y sell-through por zona. Sync rellena vendidos desde el provider (stub o TICKETING_SYNC_URL).">
         {canTicketing && !closed ? (
           <button className="btn ghost" type="button" disabled={syncing} onClick={() => syncSold()}>
             {syncing ? 'Sincronizando…' : 'Sync boletera'}
           </button>
         ) : null}
-      </div>
-      {syncMsg ? <div className="muted">{syncMsg}</div> : null}
+      </PageHeader>
+      {syncMsg ? <FlashMessage variant={syncFlashVariant(syncMsg)}>{syncMsg}</FlashMessage> : null}
 
       {canTicketing && !closed ? (
         <div className="panel">
@@ -113,7 +116,7 @@ export function EventTicketingPanel({
           </div>
           <div className="panel-body">
             <div className="form">
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <FormGrid>
                 <BoleteraFields
                   eventId={eventId}
                   boletera={ticketForm.boletera}
@@ -121,8 +124,8 @@ export function EventTicketingPanel({
                   onBoleteraChange={(boletera) => setTicketForm({ ...ticketForm, boletera })}
                   onLogoUrlChange={(logoUrl) => setTicketForm({ ...ticketForm, logoUrl: logoUrl || '' })}
                 />
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+              </FormGrid>
+              <FormGrid cols={3}>
                 <label>
                   Hold hasta
                   <input
@@ -138,7 +141,7 @@ export function EventTicketingPanel({
                     onChange={(e) => setTicketForm({ ...ticketForm, artist: e.target.value })}
                   />
                 </label>
-              </div>
+              </FormGrid>
               <div className="table-wrap">
                 <table className="table">
                   <thead>
@@ -213,12 +216,12 @@ export function EventTicketingPanel({
             Vista portfolio
           </Link>
         </div>
-        <div className="panel-body">
+        <div className="panel-body stack">
           {(ticketingSetups || []).map((t) => {
             const zones = (t.zonesJson || []) as TicketZone[];
             const s = zoneSummary(zones);
             return (
-              <div key={t.id} className="row" style={{ justifyContent: 'space-between', marginBottom: 12 }}>
+              <div key={t.id} className="section-head-row" style={{ alignItems: 'center' }}>
                 <div className="row" style={{ gap: 12, alignItems: 'center' }}>
                   {t.logoUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
@@ -230,11 +233,11 @@ export function EventTicketingPanel({
                   ) : null}
                   <div>
                     <strong>{t.boletera}</strong>
-                    <div className="muted" style={{ fontSize: 12 }}>
+                    <div className="muted kpi-sub">
                       Hold: {t.holdUntil ? new Date(t.holdUntil).toLocaleDateString('es-MX') : '—'} · Sell-through{' '}
                       {s.pct}% ({s.sold.toLocaleString('es-MX')}/{s.aforo.toLocaleString('es-MX')})
                     </div>
-                    <div className="muted" style={{ fontSize: 11 }}>
+                    <div className="muted kpi-sub">
                       {zones.map((z) => `${z.zona}:${z.sold ?? 0}/${z.aforo}`).join(' · ')}
                     </div>
                   </div>

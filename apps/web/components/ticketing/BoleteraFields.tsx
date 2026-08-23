@@ -42,6 +42,7 @@ export function BoleteraFields({
       <label>
         Boletera
         <select
+          className="field field--select"
           disabled={disabled}
           value={choice}
           onChange={(e) => {
@@ -65,6 +66,7 @@ export function BoleteraFields({
         <label>
           Nombre de la boletera
           <input
+            className="field"
             disabled={disabled}
             required
             placeholder="Ej. Ticketmaster, Boletomóvil…"
@@ -75,8 +77,9 @@ export function BoleteraFields({
       ) : null}
       <label>
         Logo (checklists / PDF)
-        <div className="row" style={{ gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+        <div className="row">
           <input
+            className="field"
             type="file"
             accept="image/png,image/jpeg,image/webp"
             disabled={disabled}
@@ -92,16 +95,16 @@ export function BoleteraFields({
               <img
                 src={logoUrl}
                 alt="Logo boletera"
-                style={{ height: 36, maxWidth: 120, objectFit: 'contain', background: '#fff', borderRadius: 4, padding: 2 }}
+                height={36}
+                width={120}
+                style={{ objectFit: 'contain', background: '#fff', borderRadius: 4, padding: 2 }}
               />
-              <button className="btn ghost" type="button" disabled={disabled} onClick={() => onLogoUrlChange(null)}>
+              <button className="btn ghost btn-sm" type="button" disabled={disabled} onClick={() => onLogoUrlChange(null)}>
                 Quitar
               </button>
             </>
           ) : (
-            <span className="muted" style={{ fontSize: 12 }}>
-              Opcional · aparece en PDFs de checklist
-            </span>
+            <span className="muted">Opcional · aparece en PDFs de checklist</span>
           )}
         </div>
       </label>

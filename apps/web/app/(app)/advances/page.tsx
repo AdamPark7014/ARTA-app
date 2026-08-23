@@ -1,10 +1,15 @@
 'use client';
 
-import Link from 'next/link';
 import { FormEvent, useEffect, useState } from 'react';
 import { AppShell } from '@/components/app-shell/AppShell';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { LoadingBlock, LoadingKpis } from '@/components/ui/LoadingBlock';
+import {
+  ActionLink,
+  FlashMessage,
+  FormGrid,
+  PageHeader,
+} from '@/components/ui/PageChrome';
 import { api } from '@/lib/api';
 import { useUser } from '@/lib/user-context';
 
@@ -92,15 +97,23 @@ export default function AdvancesPage() {
   }
 
   const eventTotal = rows.reduce((s, r) => s + Number(r.amount || 0), 0);
+  const msgVariant =
+    msg.includes('registrado') ? 'success' : msg.toLowerCase().includes('error') ? 'error' : 'info';
 
   return (
     <AppShell title="Anticipos · Cash control">
       <div className="stack page-workspace">
-        <div className="page-intro">
-          <p className="muted">
-            Control de anticipos y comprobantes ligados a eventos. Portfolio vs evento seleccionado.
-          </p>
-        </div>
+        <PageHeader
+          description="Control de anticipos y comprobantes ligados a eventos. Portfolio vs evento seleccionado."
+        >
+          <ActionLink href="/events" variant="ghost">Ir a eventos</ActionLink>
+        </PageHeader>
+
+        {msg ? (
+          <FlashMessage variant={msgVariant} onDismiss={() => setMsg('')}>
+            {msg}
+          </FlashMessage>
+        ) : null}
 
         {loading && !events.length ? (
           <>
@@ -152,7 +165,7 @@ export default function AdvancesPage() {
                         ))}
                       </select>
                     </label>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                    <FormGrid cols={2}>
                       <label>
                         Concepto
                         <input value={label} onChange={(e) => setLabel(e.target.value)} />
@@ -166,7 +179,7 @@ export default function AdvancesPage() {
                           placeholder="0.00"
                         />
                       </label>
-                    </div>
+                    </FormGrid>
                     <label>
                       Comprobante (PDF / imagen)
                       <input
@@ -176,7 +189,6 @@ export default function AdvancesPage() {
                         onChange={(e) => setFile(e.target.files?.[0] || null)}
                       />
                     </label>
-                    {msg ? <div className="muted">{msg}</div> : null}
                     <button className="btn" type="submit" disabled={saving}>
                       {saving ? 'Subiendo…' : 'Subir anticipo'}
                     </button>
@@ -189,52 +201,59 @@ export default function AdvancesPage() {
               <div className="panel-head">
                 <h2>Comprobantes del evento</h2>
                 {eventId ? (
-                  <Link className="btn ghost" href={`/events/${eventId}`}>
+                  <ActionLink href={`/events/${eventId}`} variant="ghost">
                     Abrir evento
-                  </Link>
+                  </ActionLink>
                 ) : null}
               </div>
               <div className="panel-body">
                 {loading ? (
                   <LoadingBlock rows={3} label="Cargando comprobantes…" />
-                ) : !rows.length ? (
-                  <EmptyState
-                    title="Sin anticipos en este evento"
-                    description="Sube un comprobante PDF o imagen con monto y concepto."
-                  />
                 ) : (
-                  <table className="table">
-                    <thead>
-                      <tr>
-                        <th>Concepto</th>
-                        <th>Monto</th>
-                        <th>Quién</th>
-                        <th>Fecha</th>
-                        <th></th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {rows.map((r) => (
-                        <tr key={r.id}>
-                          <td>{r.label || 'Anticipo'}</td>
-                          <td>
-                            {r.amount != null
-                              ? `$${Number(r.amount).toLocaleString('es-MX')}`
-                              : '—'}
-                          </td>
-                          <td className="muted">{r.uploadedBy?.fullName || '—'}</td>
-                          <td className="muted">
-                            {new Date(r.createdAt).toLocaleString('es-MX')}
-                          </td>
-                          <td>
-                            <a href={r.fileUrl} target="_blank" rel="noreferrer">
-                              Ver
-                            </a>
-                          </td>
+                  <div className="table-wrap">
+                    <table className="table table-sticky">
+                      <thead>
+                        <tr>
+                          <th>Concepto</th>
+                          <th className="num">Monto</th>
+                          <th>Quién</th>
+                          <th>Fecha</th>
+                          <th></th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {rows.map((r) => (
+                          <tr key={r.id}>
+                            <td>{r.label || 'Anticipo'}</td>
+                            <td className="num">
+                              {r.amount != null
+                                ? `$${Number(r.amount).toLocaleString('es-MX')}`
+                                : '—'}
+                            </td>
+                            <td className="muted">{r.uploadedBy?.fullName || '—'}</td>
+                            <td className="muted">
+                              {new Date(r.createdAt).toLocaleString('es-MX')}
+                            </td>
+                            <td>
+                              <a className="btn ghost" href={r.fileUrl} target="_blank" rel="noreferrer">
+                                Ver
+                              </a>
+                            </td>
+                          </tr>
+                        ))}
+                        {!rows.length ? (
+                          <tr>
+                            <td colSpan={5}>
+                              <EmptyState
+                                title="Sin anticipos en este evento"
+                                description="Sube un comprobante PDF o imagen con monto y concepto."
+                              />
+                            </td>
+                          </tr>
+                        ) : null}
+                      </tbody>
+                    </table>
+                  </div>
                 )}
               </div>
             </div>

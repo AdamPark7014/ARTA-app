@@ -66,7 +66,7 @@ export function VenueMap({
             { elementType: 'labels.text.stroke', stylers: [{ color: '#1a1f1c' }] },
             { elementType: 'labels.text.fill', stylers: [{ color: '#a8a196' }] },
             { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#2a322e' }] },
-            { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#0f1412' }] },
+            { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#09090b' }] },
             { featureType: 'poi', stylers: [{ visibility: 'off' }] },
           ],
         });

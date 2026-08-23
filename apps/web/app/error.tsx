@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
+import Link from 'next/link';
 import { reportClientError } from '@/lib/report-error';
 
 export default function Error({
@@ -15,12 +16,21 @@ export default function Error({
   }, [error]);
 
   return (
-    <div className="panel" style={{ margin: '2rem auto', maxWidth: 480, padding: '1.25rem' }}>
-      <h2 style={{ marginTop: 0 }}>Error en esta vista</h2>
-      <p className="muted">El resto de la app sigue disponible.</p>
-      <button className="btn" type="button" onClick={reset}>
-        Reintentar
-      </button>
+    <div className="error-page">
+      <div className="panel error-page__card">
+        <div className="panel-body">
+          <h2>Algo salió mal</h2>
+          <p className="muted">No pudimos cargar esta vista. El resto de la app sigue disponible.</p>
+          <div className="row" style={{ justifyContent: 'center', marginTop: '1.25rem' }}>
+            <button className="btn" type="button" onClick={reset}>
+              Reintentar
+            </button>
+            <Link className="btn ghost" href="/dashboard">
+              Ir al inicio
+            </Link>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

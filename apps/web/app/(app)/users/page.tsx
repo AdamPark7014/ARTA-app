@@ -5,6 +5,16 @@ import { AppShell } from '@/components/app-shell/AppShell';
 import { DistBar } from '@/components/charts/SparkBars';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { LoadingBlock, LoadingKpis } from '@/components/ui/LoadingBlock';
+import {
+  FieldCheck,
+  FieldSearch,
+  FieldSelect,
+  FilterBar,
+  FlashMessage,
+  FormGrid,
+  PageHeader,
+} from '@/components/ui/PageChrome';
+import { StatusBadge } from '@/components/ui/StatusBadge';
 import { api } from '@/lib/api';
 
 type UserRow = {
@@ -182,15 +192,19 @@ export default function UsersPage() {
   const editingUser = users.find((u) => u.id === permsUserId) || null;
   const k = gov?.kpis;
 
+  const msgVariant =
+    msg === 'Elige al menos una entidad'
+      ? 'warn'
+      : msg === 'Usuario creado' ||
+          msg === 'Usuario actualizado' ||
+          msg.startsWith('Invitación creada')
+        ? 'success'
+        : 'error';
+
   return (
     <AppShell title="Identity & Access">
       <div className="page-workspace stack">
-        <div className="page-intro">
-          <p className="muted">
-            Gobernanza de identidades: actividad, riesgo, lockouts y privilegios. Solo dirección gestiona
-            cuentas; el rol define el acceso base y los permisos extra se suman.
-          </p>
-        </div>
+        <PageHeader description="Gobernanza de identidades: actividad, riesgo, lockouts y privilegios. Solo dirección gestiona cuentas; el rol define el acceso base y los permisos extra se suman." />
 
         {loading ? (
           <>
@@ -264,14 +278,23 @@ export default function UsersPage() {
             <div className="panel-body">
               <form className="form" onSubmit={onCreate}>
                 {!inviteMode ? (
-                  <label>
-                    Nombre
-                    <input
-                      required
-                      value={form.fullName}
-                      onChange={(e) => setForm({ ...form, fullName: e.target.value })}
-                    />
-                  </label>
+                  <FormGrid>
+                    <label>
+                      Nombre
+                      <input
+                        required
+                        value={form.fullName}
+                        onChange={(e) => setForm({ ...form, fullName: e.target.value })}
+                      />
+                    </label>
+                    <label>
+                      Cargo
+                      <input
+                        value={form.title}
+                        onChange={(e) => setForm({ ...form, title: e.target.value })}
+                      />
+                    </label>
+                  </FormGrid>
                 ) : null}
                 <label>
                   Email
@@ -282,15 +305,6 @@ export default function UsersPage() {
                     onChange={(e) => setForm({ ...form, email: e.target.value })}
                   />
                 </label>
-                {!inviteMode ? (
-                  <label>
-                    Cargo
-                    <input
-                      value={form.title}
-                      onChange={(e) => setForm({ ...form, title: e.target.value })}
-                    />
-                  </label>
-                ) : null}
                 <label>
                   Rol
                   <select
@@ -324,17 +338,15 @@ export default function UsersPage() {
                 )}
                 <div className="row">
                   {(['ARTA', 'EXPLANADA'] as const).map((ent) => (
-                    <label key={ent} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                      <input
-                        type="checkbox"
-                        checked={form.entities.includes(ent)}
-                        onChange={() => toggleEntity(ent)}
-                      />
-                      {ent === 'ARTA' ? 'Arta' : 'Auditorio'}
-                    </label>
+                    <FieldCheck
+                      key={ent}
+                      checked={form.entities.includes(ent)}
+                      onChange={() => toggleEntity(ent)}
+                      label={ent === 'ARTA' ? 'Arta' : 'Auditorio'}
+                    />
                   ))}
                 </div>
-                {msg ? <div className="muted">{msg}</div> : null}
+                {msg ? <FlashMessage variant={msgVariant}>{msg}</FlashMessage> : null}
                 {inviteUrl ? (
                   <p className="muted" style={{ fontSize: 12, wordBreak: 'break-all' }}>
                     <a href={inviteUrl}>{inviteUrl}</a>
@@ -356,29 +368,27 @@ export default function UsersPage() {
               <h2>Directorio · {filtered.length}</h2>
             </div>
             <div className="panel-body">
-              {error ? <p style={{ color: 'var(--danger)' }}>{error}</p> : null}
-              <div className="row" style={{ gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
-                <input
-                  className="field"
-                  style={{ maxWidth: 240 }}
-                  placeholder="Buscar…"
-                  aria-label="Buscar usuario"
+              {error ? <FlashMessage variant="error">{error}</FlashMessage> : null}
+              <FilterBar>
+                <FieldSearch
                   value={q}
-                  onChange={(e) => setQ(e.target.value)}
+                  onChange={setQ}
+                  placeholder="Buscar…"
+                  label="Buscar usuario"
+                  maxWidth={240}
                 />
-                <select
-                  className="field"
-                  style={{ width: 'auto' }}
-                  aria-label="Filtrar por riesgo"
+                <FieldSelect
                   value={riskFilter}
-                  onChange={(e) => setRiskFilter(e.target.value as typeof riskFilter)}
-                >
-                  <option value="all">Todo riesgo</option>
-                  <option value="high">Alto</option>
-                  <option value="medium">Medio</option>
-                  <option value="low">Bajo</option>
-                </select>
-              </div>
+                  onChange={(v) => setRiskFilter(v as typeof riskFilter)}
+                  label="Filtrar por riesgo"
+                  options={[
+                    { value: 'all', label: 'Todo riesgo' },
+                    { value: 'high', label: 'Alto' },
+                    { value: 'medium', label: 'Medio' },
+                    { value: 'low', label: 'Bajo' },
+                  ]}
+                />
+              </FilterBar>
               <div className="table-wrap">
                 <table className="table table-sticky">
                   <thead>
@@ -406,13 +416,7 @@ export default function UsersPage() {
                           </div>
                         </td>
                         <td>
-                          <span
-                            className={`badge ${
-                              u.risk === 'high' ? 'danger' : u.risk === 'medium' ? 'warn' : 'ok'
-                            }`}
-                          >
-                            {u.risk}
-                          </span>
+                          <StatusBadge value={u.risk} kind="risk" />
                           {u.locked ? <div className="muted" style={{ fontSize: 11 }}>locked</div> : null}
                           {u.failedLoginCount > 0 ? (
                             <div className="muted" style={{ fontSize: 11 }}>
@@ -472,9 +476,7 @@ export default function UsersPage() {
                           </button>
                         </td>
                         <td>
-                          <span className={`badge ${u.active ? 'ok' : 'warn'}`}>
-                            {u.active ? 'Activo' : 'Inactivo'}
-                          </span>
+                          <StatusBadge value={u.active ? 'Activo' : 'Inactivo'} kind="raw" />
                         </td>
                         <td>
                           <div className="row" style={{ gap: 4 }}>
@@ -529,24 +531,16 @@ export default function UsersPage() {
                 Se suman al rol base. Ejemplo: dar <code>campaign.edit</code> o <code>po.mark_paid</code>{' '}
                 sin cambiar el rol.
               </p>
-              <div
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
-                  gap: 8,
-                }}
-              >
+              <FormGrid cols={3}>
                 {permCatalog.map((p) => (
-                  <label key={p.key} style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13 }}>
-                    <input
-                      type="checkbox"
-                      checked={editingUser.permissions.includes(p.key)}
-                      onChange={() => togglePerm(editingUser, p.key)}
-                    />
-                    {p.key}
-                  </label>
+                  <FieldCheck
+                    key={p.key}
+                    checked={editingUser.permissions.includes(p.key)}
+                    onChange={() => togglePerm(editingUser, p.key)}
+                    label={p.key}
+                  />
                 ))}
-              </div>
+              </FormGrid>
             </div>
           </div>
         ) : null}

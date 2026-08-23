@@ -101,33 +101,31 @@ export function FileViewer({ url, fileName, kind, cacheKey }: Props) {
 
   if (isPdf) {
     return (
-      <div className="stack" style={{ gap: 8 }}>
+      <div className="stack">
         {loading ? <p className="muted">Cargando PDF…</p> : null}
-        {error ? <p style={{ color: 'var(--danger)' }}>{error}</p> : null}
+        {error ? (
+          <div className="form-error" role="alert">
+            {error}
+          </div>
+        ) : null}
         {!pdfFailed && pdfSrc ? (
-          <iframe
-            title={fileName}
-            src={`${pdfSrc}#toolbar=1&navpanes=0`}
-            style={{
-              width: '100%',
-              height: 560,
-              border: '1px solid var(--border, rgba(232,220,196,.12))',
-              borderRadius: 8,
-              background: 'rgba(0,0,0,.2)',
-            }}
-            onError={() => setPdfFailed(true)}
-          />
+          <div className="venue-map-wrap">
+            <iframe
+              title={fileName}
+              src={`${pdfSrc}#toolbar=1&navpanes=0`}
+              className="venue-map"
+              onError={() => setPdfFailed(true)}
+            />
+          </div>
         ) : null}
         {pdfFailed && !loading ? (
-          <p className="muted">
-            El navegador no pudo incrustar el PDF. Ábrelo en una pestaña nueva.
-          </p>
+          <p className="muted">El navegador no pudo incrustar el PDF. Ábrelo en una pestaña nueva.</p>
         ) : null}
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <a className="btn ghost" href={url} target="_blank" rel="noreferrer">
+        <div className="row">
+          <a className="btn ghost btn-sm" href={url} target="_blank" rel="noreferrer">
             Abrir PDF
           </a>
-          <a className="btn ghost" href={url} download={fileName}>
+          <a className="btn ghost btn-sm" href={url} download={fileName}>
             Descargar
           </a>
         </div>
@@ -137,12 +135,10 @@ export function FileViewer({ url, fileName, kind, cacheKey }: Props) {
 
   if (isImage) {
     return (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img
-        src={url}
-        alt={fileName}
-        style={{ maxWidth: '100%', maxHeight: 480, borderRadius: 8, border: '1px solid var(--border)' }}
-      />
+      <div className="venue-map-wrap panel-body">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={url} alt={fileName} className="sig-preview" />
+      </div>
     );
   }
 
@@ -150,15 +146,18 @@ export function FileViewer({ url, fileName, kind, cacheKey }: Props) {
     return (
       <div className="stack">
         {loading ? <p className="muted">Cargando hoja…</p> : null}
-        {error ? <p style={{ color: 'var(--danger)' }}>{error}</p> : null}
+        {error ? (
+          <div className="form-error" role="alert">
+            {error}
+          </div>
+        ) : null}
         {sheetHtml ? (
           <div
-            className="excel-embed"
-            style={{ overflow: 'auto', maxHeight: 480, border: '1px solid var(--border)', borderRadius: 8, padding: 8 }}
+            className="venue-map-wrap panel-body"
             dangerouslySetInnerHTML={{ __html: sheetHtml }}
           />
         ) : null}
-        <a className="btn ghost" href={url} target="_blank" rel="noreferrer">
+        <a className="btn ghost btn-sm" href={url} target="_blank" rel="noreferrer">
           Descargar {fileName}
         </a>
       </div>
@@ -166,7 +165,7 @@ export function FileViewer({ url, fileName, kind, cacheKey }: Props) {
   }
 
   return (
-    <a className="btn ghost" href={url} target="_blank" rel="noreferrer">
+    <a className="btn ghost btn-sm" href={url} target="_blank" rel="noreferrer">
       Abrir {fileName}
     </a>
   );

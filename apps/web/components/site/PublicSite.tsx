@@ -161,7 +161,9 @@ export function PublicSite() {
           <a href="#modulos">Operación</a>
           <a href="#noticias">Noticias</a>
           <a href="#ubicacion">Ubicación</a>
-          <a href="#contacto">Contacto</a>
+          <a href="#contacto" className="btn ghost btn-sm">
+            Contacto
+          </a>
         </nav>
       </header>
 
@@ -227,7 +229,7 @@ export function PublicSite() {
       <section className="site-section" id="nosotros">
         <div className="about-grid">
           <div>
-            <div className="site-hero-kicker">arta PRODUCCIONES</div>
+            <span className="badge arta">arta PRODUCCIONES</span>
             <h2>{about?.headline || 'Producimos el show completo'}</h2>
             <p className="lead">
               {about?.body ||
@@ -285,9 +287,7 @@ export function PublicSite() {
         <div className="section-head-row">
           <div>
             <h2>Noticias</h2>
-            <p className="lead" style={{ marginBottom: 0 }}>
-              Lo último de Arta Producciones
-            </p>
+            <p className="muted">Lo último de Arta Producciones</p>
           </div>
         </div>
         <div className="news-grid">

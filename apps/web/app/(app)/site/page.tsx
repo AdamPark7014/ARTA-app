@@ -3,7 +3,7 @@
 import { useEffect } from 'react';
 import { PublicSite } from '@/components/site/PublicSite';
 import { useUser } from '@/lib/user-context';
-import Link from 'next/link';
+import { ActionLink, PageHeader } from '@/components/ui/PageChrome';
 
 /** Preview autenticado del sitio Arta */
 export default function SitePreviewPage() {
@@ -16,18 +16,22 @@ export default function SitePreviewPage() {
   if (!user) {
     return (
       <div className="login-wrap">
-        <div className="stack" style={{ textAlign: 'center' }}>
-          <p className="muted">Sitio público Arta</p>
-          <Link className="btn" href="/p/arta">
-            Ver sitio
-          </Link>
+        <div className="stack page-workspace" style={{ textAlign: 'center' }}>
+          <PageHeader
+            title="Sitio público Arta"
+            description="Vista previa del sitio corporativo Arta."
+          >
+            <ActionLink href="/p/arta">Ver sitio</ActionLink>
+          </PageHeader>
         </div>
       </div>
     );
   }
+
   return (
     <div>
       <div
+        className="page-intro"
         style={{
           position: 'sticky',
           top: 0,
@@ -35,20 +39,17 @@ export default function SitePreviewPage() {
           padding: '0.65rem 1rem',
           background: 'rgba(0,0,0,0.75)',
           borderBottom: '1px solid rgba(255,255,255,0.08)',
-          display: 'flex',
-          gap: 12,
-          alignItems: 'center',
+          margin: 0,
         }}
       >
-        <Link className="btn ghost" href="/studio">
-          ← Studio
-        </Link>
-        <span className="muted" style={{ fontSize: 13 }}>
-          Preview · sitio Arta
-        </span>
-        <Link className="btn ghost" href="/dashboard" style={{ marginLeft: 'auto' }}>
-          Panel
-        </Link>
+        <PageHeader hint="Preview · sitio Arta">
+          <ActionLink href="/studio" variant="ghost">
+            ← Studio
+          </ActionLink>
+          <ActionLink href="/dashboard" variant="ghost">
+            Panel
+          </ActionLink>
+        </PageHeader>
       </div>
       <PublicSite />
     </div>

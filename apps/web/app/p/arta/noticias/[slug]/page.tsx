@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { type ReactNode, useEffect, useState } from 'react';
+import Image from 'next/image';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 
@@ -13,6 +14,29 @@ type NewsPost = {
   coverUrl?: string | null;
   publishedAt?: string | null;
 };
+
+function NewsShell({ children }: { children: ReactNode }) {
+  return (
+    <div className="site site-arta">
+      <header className="site-nav is-scrolled">
+        <Link href="/p/arta" className="site-brand">
+          <Image
+            src="/brand/arta-logo.png"
+            alt="arta"
+            width={140}
+            height={56}
+            className="site-logo-img"
+            priority
+          />
+        </Link>
+        <nav className="site-nav-links">
+          <Link href="/p/arta#noticias">← Noticias</Link>
+        </nav>
+      </header>
+      <article className="site-section panel--narrow">{children}</article>
+    </div>
+  );
+}
 
 export default function NewsDetailPage() {
   const params = useParams();
@@ -32,28 +56,32 @@ export default function NewsDetailPage() {
 
   if (error) {
     return (
-      <main style={{ maxWidth: 720, margin: '4rem auto', padding: '0 1.25rem' }}>
-        <p>{error}</p>
-        <Link href="/p/arta">← Volver</Link>
-      </main>
+      <NewsShell>
+        <div className="stack">
+          <p>{error}</p>
+          <Link href="/p/arta" className="btn ghost">
+            Volver al inicio
+          </Link>
+        </div>
+      </NewsShell>
     );
   }
 
   if (!post) {
     return (
-      <main style={{ maxWidth: 720, margin: '4rem auto', padding: '0 1.25rem' }}>
+      <NewsShell>
         <p className="muted">Cargando…</p>
-      </main>
+      </NewsShell>
     );
   }
 
   return (
-    <main className="news-detail">
-      <div className="news-detail-inner">
+    <NewsShell>
+      <div className="stack">
         <Link href="/p/arta#noticias" className="muted">
           ← Noticias
         </Link>
-        <time className="muted" style={{ display: 'block', marginTop: 16, fontSize: 13 }}>
+        <time className="muted">
           {post.publishedAt
             ? new Date(post.publishedAt).toLocaleDateString('es-MX', {
                 day: 'numeric',
@@ -62,41 +90,18 @@ export default function NewsDetailPage() {
               })
             : ''}
         </time>
-        <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 'clamp(1.8rem, 4vw, 2.8rem)', margin: '0.4rem 0 1rem' }}>
-          {post.title}
-        </h1>
-        {post.excerpt ? <p style={{ fontSize: '1.15rem', opacity: 0.85 }}>{post.excerpt}</p> : null}
+        <h1>{post.title}</h1>
+        {post.excerpt ? <p className="lead">{post.excerpt}</p> : null}
         {post.coverUrl ? (
           <div
-            style={{
-              margin: '1.5rem 0',
-              height: 'min(52vh, 420px)',
-              borderRadius: 12,
-              backgroundImage: `url(${post.coverUrl})`,
-              backgroundSize: 'cover',
-              backgroundPosition: 'center',
-            }}
+            className="about-visual"
+            style={{ backgroundImage: `url(${post.coverUrl})` }}
           />
         ) : null}
-        <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.7, fontSize: '1.05rem' }}>
-          {post.body || post.excerpt || ''}
-        </div>
+        {post.body ? (
+          <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.7 }}>{post.body}</div>
+        ) : null}
       </div>
-      <style jsx>{`
-        .news-detail {
-          min-height: 100vh;
-          background: linear-gradient(165deg, #0c0c0c 0%, #1a1512 45%, #121212 100%);
-          color: #f4efe8;
-          padding: 3rem 1.25rem 5rem;
-        }
-        .news-detail-inner {
-          max-width: 720px;
-          margin: 0 auto;
-        }
-        a {
-          color: inherit;
-        }
-      `}</style>
-    </main>
+    </NewsShell>
   );
 }

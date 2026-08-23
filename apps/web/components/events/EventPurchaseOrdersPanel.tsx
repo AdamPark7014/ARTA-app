@@ -1,5 +1,7 @@
 'use client';
 
+import { FormGrid } from '@/components/ui/PageChrome';
+import { StatusBadge } from '@/components/ui/StatusBadge';
 import type { Po, PoLine } from '@/components/events/event-detail.types';
 
 const RUBROS = ['audio', 'luces', 'planta_luz', 'hospedaje', 'transporte', 'catering', 'artes', 'otro'];
@@ -32,6 +34,10 @@ type EventPurchaseOrdersPanelProps = {
   onDeletePo: (poId: string) => Promise<void>;
 };
 
+function poStatusValue(status: string) {
+  return status === 'PENDING_AUTH' ? 'PENDING' : status;
+}
+
 export function EventPurchaseOrdersPanel({
   closed,
   poForm,
@@ -58,8 +64,8 @@ export function EventPurchaseOrdersPanel({
             <h2>Nueva orden de compra</h2>
           </div>
           <div className="panel-body">
-            <div className="form" style={{ maxWidth: 820 }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <div className="form panel--narrow">
+              <FormGrid>
                 <label>
                   Rubro
                   <select value={poForm.rubro} onChange={(e) => setPoForm({ ...poForm, rubro: e.target.value })}>
@@ -77,7 +83,7 @@ export function EventPurchaseOrdersPanel({
                     onChange={(e) => setPoForm({ ...poForm, vendorName: e.target.value })}
                   />
                 </label>
-              </div>
+              </FormGrid>
               <label>
                 Descripción
                 <input
@@ -86,7 +92,7 @@ export function EventPurchaseOrdersPanel({
                 />
               </label>
               <div>
-                <div className="muted" style={{ marginBottom: 8, fontSize: 12 }}>
+                <div className="muted kpi-sub" style={{ marginBottom: 8 }}>
                   Partidas · total ${poLinesTotal.toLocaleString('es-MX')}
                 </div>
                 <table className="table">
@@ -183,17 +189,15 @@ export function EventPurchaseOrdersPanel({
         </div>
         <div className="panel-body stack">
           {purchaseOrders.map((po) => (
-            <div key={po.id} style={{ borderBottom: '1px solid var(--border)', paddingBottom: 12 }}>
-              <div className="row" style={{ justifyContent: 'space-between' }}>
+            <div key={po.id}>
+              <div className="section-head-row" style={{ alignItems: 'flex-start' }}>
                 <div>
                   <strong>{po.rubro}</strong> · {po.vendorName || 'Sin vendor'} · $
                   {Number(po.amount).toLocaleString('es-MX')}
-                  <div className="muted" style={{ fontSize: 12 }}>
-                    {po.description || ''}
-                  </div>
+                  <div className="muted kpi-sub">{po.description || ''}</div>
                 </div>
                 <div className="row">
-                  <span className={`badge ${po.status === 'PAID' ? 'ok' : 'warn'}`}>{po.status}</span>
+                  <StatusBadge value={poStatusValue(po.status)} kind="po" />
                   {!closed && po.status === 'PENDING_AUTH' ? (
                     <>
                       <button className="btn ghost" type="button" onClick={() => onStartEditPo(po)}>
@@ -216,7 +220,7 @@ export function EventPurchaseOrdersPanel({
               </div>
               {editingPoId === po.id ? (
                 <div className="form" style={{ marginTop: 10 }}>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                  <FormGrid>
                     <label>
                       Vendor
                       <input
@@ -231,7 +235,7 @@ export function EventPurchaseOrdersPanel({
                         onChange={(e) => setEditPoMeta({ ...editPoMeta, description: e.target.value })}
                       />
                     </label>
-                  </div>
+                  </FormGrid>
                   <table className="table">
                     <thead>
                       <tr>

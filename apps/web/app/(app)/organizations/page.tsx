@@ -1,10 +1,17 @@
 'use client';
 
-import Link from 'next/link';
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { AppShell } from '@/components/app-shell/AppShell';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { LoadingBlock, LoadingKpis } from '@/components/ui/LoadingBlock';
+import {
+  ActionLink,
+  FieldCheck,
+  FlashMessage,
+  FormGrid,
+  PageHeader,
+} from '@/components/ui/PageChrome';
+import { StatusBadge } from '@/components/ui/StatusBadge';
 import { api } from '@/lib/api';
 import { useUser } from '@/lib/user-context';
 
@@ -233,16 +240,20 @@ export default function OrganizationsPage() {
     };
   }, [limits, usersNow, eventsNow]);
 
+  const msgVariant =
+    msg === 'Checkout cancelado' || msg === 'Elige al menos una entidad'
+      ? 'warn'
+      : msg === 'Organización creada (trial)' ||
+          msg === 'Suscripción actualizada · Stripe' ||
+          msg.startsWith('Invitación enviada')
+        ? 'success'
+        : 'error';
+
   return (
     <AppShell title="Organizaciones · Multi-tenant">
       <div className="stack page-workspace">
-        <div className="page-intro">
-          <p className="muted">
-            Tenants aislados (usuarios + eventos). Planes TRIAL / OPS / ENTERPRISE con límites soft
-            enforced en API (crear usuarios, invites y eventos).
-          </p>
-        </div>
-        {msg ? <div className="muted">{msg}</div> : null}
+        <PageHeader description="Tenants aislados (usuarios + eventos). Planes TRIAL / OPS / ENTERPRISE con límites soft enforced en API (crear usuarios, invites y eventos)." />
+        {msg ? <FlashMessage variant={msgVariant}>{msg}</FlashMessage> : null}
 
         {loading ? (
           <>
@@ -344,23 +355,25 @@ export default function OrganizationsPage() {
                       </div>
                       <div className="panel-body">
                         <form className="form" onSubmit={onCreate}>
-                          <label>
-                            Nombre
-                            <input
-                              required
-                              value={form.name}
-                              onChange={(e) => setForm({ ...form, name: e.target.value })}
-                            />
-                          </label>
-                          <label>
-                            Slug
-                            <input
-                              required
-                              value={form.slug}
-                              onChange={(e) => setForm({ ...form, slug: e.target.value })}
-                              placeholder="mi-org"
-                            />
-                          </label>
+                          <FormGrid>
+                            <label>
+                              Nombre
+                              <input
+                                required
+                                value={form.name}
+                                onChange={(e) => setForm({ ...form, name: e.target.value })}
+                              />
+                            </label>
+                            <label>
+                              Slug
+                              <input
+                                required
+                                value={form.slug}
+                                onChange={(e) => setForm({ ...form, slug: e.target.value })}
+                                placeholder="mi-org"
+                              />
+                            </label>
+                          </FormGrid>
                           <button className="btn" type="submit">
                             Crear trial
                           </button>
@@ -399,7 +412,7 @@ export default function OrganizationsPage() {
                             <tr key={o.id}>
                               <td>
                                 <strong>{o.name}</strong>
-                                {!o.active ? <span className="badge warn">off</span> : null}
+                                {!o.active ? <StatusBadge value="off" kind="raw" /> : null}
                               </td>
                               <td>
                                 <code>{o.slug}</code>
@@ -425,7 +438,7 @@ export default function OrganizationsPage() {
                                     <option value="ENTERPRISE">ENTERPRISE</option>
                                   </select>
                                 ) : (
-                                  <span className="badge">{o.plan}</span>
+                                  <StatusBadge value={o.plan} kind="raw" />
                                 )}
                               </td>
                               <td>
@@ -468,41 +481,41 @@ export default function OrganizationsPage() {
                   </div>
                   <div className="panel-body">
                     <form className="form" onSubmit={sendInvite}>
-                      <label>
-                        Email
-                        <input
-                          required
-                          type="email"
-                          value={inviteForm.email}
-                          onChange={(e) => setInviteForm({ ...inviteForm, email: e.target.value })}
-                        />
-                      </label>
-                      <label>
-                        Rol
-                        <select
-                          value={inviteForm.roleKey}
-                          onChange={(e) => setInviteForm({ ...inviteForm, roleKey: e.target.value })}
-                        >
-                          {(roles.length
-                            ? roles
-                            : [{ key: 'logistica', label: 'Logística' }]
-                          ).map((r) => (
-                            <option key={r.key} value={r.key}>
-                              {r.label}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
+                      <FormGrid>
+                        <label>
+                          Email
+                          <input
+                            required
+                            type="email"
+                            value={inviteForm.email}
+                            onChange={(e) => setInviteForm({ ...inviteForm, email: e.target.value })}
+                          />
+                        </label>
+                        <label>
+                          Rol
+                          <select
+                            value={inviteForm.roleKey}
+                            onChange={(e) => setInviteForm({ ...inviteForm, roleKey: e.target.value })}
+                          >
+                            {(roles.length
+                              ? roles
+                              : [{ key: 'logistica', label: 'Logística' }]
+                            ).map((r) => (
+                              <option key={r.key} value={r.key}>
+                                {r.label}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      </FormGrid>
                       <div className="row" style={{ gap: 12 }}>
                         {(['ARTA', 'EXPLANADA'] as const).map((ent) => (
-                          <label key={ent} style={{ display: 'flex', gap: 6, fontSize: 13 }}>
-                            <input
-                              type="checkbox"
-                              checked={inviteForm.entities.includes(ent)}
-                              onChange={() => toggleInviteEntity(ent)}
-                            />
-                            {ent === 'ARTA' ? 'Arta' : 'Auditorio'}
-                          </label>
+                          <FieldCheck
+                            key={ent}
+                            checked={inviteForm.entities.includes(ent)}
+                            onChange={() => toggleInviteEntity(ent)}
+                            label={ent === 'ARTA' ? 'Arta' : 'Auditorio'}
+                          />
                         ))}
                       </div>
                       <button className="btn" type="submit">
@@ -524,7 +537,7 @@ export default function OrganizationsPage() {
                       />
                     ) : (
                       <div className="table-wrap" style={{ marginTop: 8 }}>
-                        <table className="table">
+                        <table className="table table-sticky">
                           <thead>
                             <tr>
                               <th>Email</th>
@@ -547,17 +560,7 @@ export default function OrganizationsPage() {
                                   <td>{inv.email}</td>
                                   <td className="muted">{inv.roleKey}</td>
                                   <td>
-                                    <span
-                                      className={`badge ${
-                                        status === 'aceptada'
-                                          ? 'ok'
-                                          : status === 'pendiente'
-                                            ? 'warn'
-                                            : ''
-                                      }`}
-                                    >
-                                      {status}
-                                    </span>
+                                    <StatusBadge value={status} kind="raw" />
                                   </td>
                                   <td>
                                     {status === 'pendiente' ? (
@@ -583,9 +586,9 @@ export default function OrganizationsPage() {
                 <div className="panel">
                   <div className="panel-head">
                     <h2>Miembros · {members.length}</h2>
-                    <Link className="btn ghost" href="/users">
+                    <ActionLink href="/users" variant="ghost">
                       Gobernanza
-                    </Link>
+                    </ActionLink>
                   </div>
                   <div className="panel-body">
                     {!members.length ? (

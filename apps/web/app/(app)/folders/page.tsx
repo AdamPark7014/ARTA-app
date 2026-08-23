@@ -1,7 +1,15 @@
 'use client';
 
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { AppShell } from '@/components/app-shell/AppShell';
+import { EmptyState } from '@/components/ui/EmptyState';
+import {
+  FieldSearch,
+  FlashMessage,
+  FormGrid,
+  PageHeader,
+  FilterBar,
+} from '@/components/ui/PageChrome';
 import { api } from '@/lib/api';
 import { useUser } from '@/lib/user-context';
 import { userHasPermission } from '@/lib/access-matrix';
@@ -19,6 +27,12 @@ type FolderDetail = Folder & {
   files: Array<{ id: string; fileName: string; url: string; createdAt: string }>;
 };
 
+function flashVariant(msg: string): 'info' | 'success' | 'error' {
+  if (/error/i.test(msg)) return 'error';
+  if (/cread|agregad/i.test(msg)) return 'success';
+  return 'info';
+}
+
 export default function FoldersPage() {
   const { entity, user } = useUser();
   const [folders, setFolders] = useState<Folder[]>([]);
@@ -26,6 +40,7 @@ export default function FoldersPage() {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [msg, setMsg] = useState('');
+  const [q, setQ] = useState('');
   const canEdit = user
     ? userHasPermission(user.roleKey, user.permissions, ['folders.edit', 'everything'])
     : false;
@@ -39,6 +54,16 @@ export default function FoldersPage() {
     load().catch(console.error);
     setActive(null);
   }, [entity]);
+
+  const filtered = useMemo(() => {
+    if (!q.trim()) return folders;
+    const n = q.toLowerCase();
+    return folders.filter(
+      (f) =>
+        f.name.toLowerCase().includes(n) ||
+        (f.description || '').toLowerCase().includes(n),
+    );
+  }, [folders, q]);
 
   async function openFolder(id: string) {
     const detail = await api<FolderDetail>(`/folders/${id}`);
@@ -94,11 +119,16 @@ export default function FoldersPage() {
 
   return (
     <AppShell title="Carpetas generales">
-      <div className="stack">
-        <p className="muted">
-          Documentos compartidos por entidad (no ligados a un evento). Roles con acceso a {entity}.
-        </p>
-        {msg ? <div className="muted">{msg}</div> : null}
+      <div className="stack page-workspace">
+        <PageHeader
+          description={`Documentos compartidos por entidad (no ligados a un evento). Roles con acceso a ${entity}.`}
+        />
+
+        {msg ? (
+          <FlashMessage variant={flashVariant(msg)} onDismiss={() => setMsg('')}>
+            {msg}
+          </FlashMessage>
+        ) : null}
 
         <div style={{ display: 'grid', gridTemplateColumns: active ? '1fr 1.2fr' : '1fr', gap: 16 }}>
           <div className="stack">
@@ -109,14 +139,16 @@ export default function FoldersPage() {
                 </div>
                 <div className="panel-body">
                   <form className="form" onSubmit={createFolder}>
-                    <label>
-                      Nombre
-                      <input value={name} onChange={(e) => setName(e.target.value)} required />
-                    </label>
-                    <label>
-                      Descripción
-                      <input value={description} onChange={(e) => setDescription(e.target.value)} />
-                    </label>
+                    <FormGrid cols={2}>
+                      <label>
+                        Nombre
+                        <input value={name} onChange={(e) => setName(e.target.value)} required />
+                      </label>
+                      <label>
+                        Descripción
+                        <input value={description} onChange={(e) => setDescription(e.target.value)} />
+                      </label>
+                    </FormGrid>
                     <button className="btn" type="submit">
                       Crear
                     </button>
@@ -130,44 +162,55 @@ export default function FoldersPage() {
                 <h2>Carpetas</h2>
               </div>
               <div className="panel-body">
-                <table className="table">
-                  <thead>
-                    <tr>
-                      <th>Nombre</th>
-                      <th>Archivos</th>
-                      <th></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {folders.map((f) => (
-                      <tr key={f.id}>
-                        <td>
-                          <button className="btn ghost" type="button" onClick={() => openFolder(f.id)}>
-                            {f.name}
-                          </button>
-                          <div className="muted" style={{ fontSize: 12 }}>
-                            {f.description || '—'}
-                          </div>
-                        </td>
-                        <td>{f._count?.files ?? 0}</td>
-                        <td>
-                          {canEdit ? (
-                            <button className="btn ghost" type="button" onClick={() => removeFolder(f.id)}>
-                              Eliminar
-                            </button>
-                          ) : null}
-                        </td>
-                      </tr>
-                    ))}
-                    {!folders.length ? (
+                <FilterBar meta={`${filtered.length} de ${folders.length} carpetas`}>
+                  <FieldSearch
+                    value={q}
+                    onChange={setQ}
+                    placeholder="Buscar carpeta…"
+                    label="Buscar carpetas"
+                  />
+                </FilterBar>
+
+                {!folders.length ? (
+                  <EmptyState
+                    title={`Sin carpetas en ${entity}`}
+                    description="Crea una carpeta para compartir documentos de la entidad."
+                  />
+                ) : !filtered.length ? (
+                  <EmptyState title="Sin coincidencias" description="Prueba otro término de búsqueda." />
+                ) : (
+                  <table className="table">
+                    <thead>
                       <tr>
-                        <td colSpan={3} className="muted">
-                          Sin carpetas en {entity}.
-                        </td>
+                        <th>Nombre</th>
+                        <th>Archivos</th>
+                        <th></th>
                       </tr>
-                    ) : null}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {filtered.map((f) => (
+                        <tr key={f.id}>
+                          <td>
+                            <button className="btn ghost" type="button" onClick={() => openFolder(f.id)}>
+                              {f.name}
+                            </button>
+                            <div className="muted" style={{ fontSize: 12 }}>
+                              {f.description || '—'}
+                            </div>
+                          </td>
+                          <td>{f._count?.files ?? 0}</td>
+                          <td>
+                            {canEdit ? (
+                              <button className="btn ghost" type="button" onClick={() => removeFolder(f.id)}>
+                                Eliminar
+                              </button>
+                            ) : null}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
               </div>
             </div>
           </div>
@@ -195,40 +238,37 @@ export default function FoldersPage() {
                     />
                   </label>
                 ) : null}
-                <table className="table">
-                  <thead>
-                    <tr>
-                      <th>Archivo</th>
-                      <th>Fecha</th>
-                      <th></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {active.files.map((file) => (
-                      <tr key={file.id}>
-                        <td>{file.fileName}</td>
-                        <td className="muted">{new Date(file.createdAt).toLocaleString('es-MX')}</td>
-                        <td className="row">
-                          <a href={file.url} target="_blank" rel="noreferrer">
-                            Abrir
-                          </a>
-                          {canEdit ? (
-                            <button className="btn ghost" type="button" onClick={() => removeFile(file.id)}>
-                              Quitar
-                            </button>
-                          ) : null}
-                        </td>
-                      </tr>
-                    ))}
-                    {!active.files.length ? (
+                {!active.files.length ? (
+                  <EmptyState title="Carpeta vacía" description="Sube el primer archivo a esta carpeta." />
+                ) : (
+                  <table className="table">
+                    <thead>
                       <tr>
-                        <td colSpan={3} className="muted">
-                          Carpeta vacía.
-                        </td>
+                        <th>Archivo</th>
+                        <th>Fecha</th>
+                        <th></th>
                       </tr>
-                    ) : null}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {active.files.map((file) => (
+                        <tr key={file.id}>
+                          <td>{file.fileName}</td>
+                          <td className="muted">{new Date(file.createdAt).toLocaleString('es-MX')}</td>
+                          <td className="row">
+                            <a className="btn ghost" href={file.url} target="_blank" rel="noreferrer">
+                              Abrir
+                            </a>
+                            {canEdit ? (
+                              <button className="btn ghost" type="button" onClick={() => removeFile(file.id)}>
+                                Quitar
+                              </button>
+                            ) : null}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
               </div>
             </div>
           ) : null}

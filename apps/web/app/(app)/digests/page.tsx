@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react';
 import { AppShell } from '@/components/app-shell/AppShell';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { LoadingBlock, LoadingKpis } from '@/components/ui/LoadingBlock';
+import { FlashMessage, PageHeader } from '@/components/ui/PageChrome';
+import { StatusBadge } from '@/components/ui/StatusBadge';
 import { api } from '@/lib/api';
 
 type JobRun = {
@@ -44,6 +46,21 @@ const STATUS_LABEL: Record<string, string> = {
   pending: 'Pendiente',
   sent: 'Enviado',
 };
+
+function jobStatusBadge(status: string) {
+  if (status === 'done') return <StatusBadge value="ACTIVE" kind="event" />;
+  if (status === 'failed') return <StatusBadge value="REJECTED" kind="po" />;
+  if (status === 'pending') return <StatusBadge value="PENDING" kind="po" />;
+  if (status === 'running') return <span className="badge warn">{STATUS_LABEL.running}</span>;
+  return <span className="badge">{STATUS_LABEL[status] || status}</span>;
+}
+
+function outboxStatusBadge(status: string) {
+  if (status === 'sent') return <StatusBadge value="PAID" kind="po" />;
+  if (status === 'failed') return <StatusBadge value="REJECTED" kind="po" />;
+  if (status === 'pending') return <StatusBadge value="PENDING" kind="po" />;
+  return <span className="badge">{STATUS_LABEL[status] || status}</span>;
+}
 
 export default function DigestsPage() {
   const [jobs, setJobs] = useState<JobRun[]>([]);
@@ -101,14 +118,15 @@ export default function DigestsPage() {
   const failedJobs = jobs.filter((j) => j.status === 'failed').length;
   const pendingOut = outbox.filter((o) => o.status === 'pending' || o.status === 'failed').length;
 
+  const msgVariant =
+    msg === 'Digest diario ejecutado' || msg.startsWith('Outbox flush') ? 'success' : 'error';
+
   return (
     <AppShell title="Digests · Jobs & Outbox">
       <div className="stack page-workspace">
-        <div className="page-intro">
-          <p className="muted">
-            Digest operativo diario por organización (riesgo, aging OC, firmas). Outbox de email con
-            SMTP si hay <code>SMTP_HOST</code>; si no, modo log-only.
-          </p>
+        <PageHeader
+          description="Digest operativo diario por organización (riesgo, aging OC, firmas). Outbox de email con SMTP si hay SMTP_HOST; si no, modo log-only."
+        >
           <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
             <button className="btn" type="button" disabled={busy} onClick={() => runDaily()}>
               {busy ? 'Ejecutando…' : 'Ejecutar digest ahora'}
@@ -117,8 +135,8 @@ export default function DigestsPage() {
               Flush outbox
             </button>
           </div>
-        </div>
-        {msg ? <div className="muted">{msg}</div> : null}
+        </PageHeader>
+        {msg ? <FlashMessage variant={msgVariant}>{msg}</FlashMessage> : null}
 
         {loading ? (
           <>
@@ -169,15 +187,7 @@ export default function DigestsPage() {
                           {jobs.map((j) => (
                             <tr key={j.id}>
                               <td>{KIND_LABEL[j.kind] || j.kind}</td>
-                              <td>
-                                <span
-                                  className={`badge ${
-                                    j.status === 'done' ? 'ok' : j.status === 'failed' ? 'warn' : ''
-                                  }`}
-                                >
-                                  {STATUS_LABEL[j.status] || j.status}
-                                </span>
-                              </td>
+                              <td>{jobStatusBadge(j.status)}</td>
                               <td className="num">{j.attempts}</td>
                               <td className="muted">{new Date(j.createdAt).toLocaleString('es-MX')}</td>
                               <td className="muted">{j.error || '—'}</td>
@@ -216,15 +226,7 @@ export default function DigestsPage() {
                             <tr key={o.id}>
                               <td>{o.toAddr}</td>
                               <td>{o.subject}</td>
-                              <td>
-                                <span
-                                  className={`badge ${
-                                    o.status === 'sent' ? 'ok' : o.status === 'failed' ? 'warn' : ''
-                                  }`}
-                                >
-                                  {STATUS_LABEL[o.status] || o.status}
-                                </span>
-                              </td>
+                              <td>{outboxStatusBadge(o.status)}</td>
                               <td className="muted">
                                 {o.sentAt ? new Date(o.sentAt).toLocaleString('es-MX') : '—'}
                               </td>

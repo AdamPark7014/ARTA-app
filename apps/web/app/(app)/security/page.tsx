@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useState } from 'react';
 import { AppShell } from '@/components/app-shell/AppShell';
+import { FlashMessage, PageHeader } from '@/components/ui/PageChrome';
 import { api } from '@/lib/api';
 import { useUser } from '@/lib/user-context';
 
@@ -63,13 +64,15 @@ export default function SecurityPage() {
   return (
     <AppShell title="Seguridad · 2FA & sesiones">
       <div className="stack page-workspace">
-        <div className="page-intro">
-          <p className="muted">
-            Endurecimiento de identidad: TOTP, sesiones activas y cookie HttpOnly. Estado 2FA:{' '}
-            <strong>{user?.totpEnabled ? 'Activo' : 'Inactivo'}</strong>
-          </p>
-        </div>
-        {msg ? <div className="muted">{msg}</div> : null}
+        <PageHeader
+          description="Endurecimiento de identidad: TOTP, sesiones activas y cookie HttpOnly."
+          hint={`Estado 2FA: ${user?.totpEnabled ? 'Activo' : 'Inactivo'}`}
+        />
+        {msg ? (
+          <FlashMessage variant={msg.includes('activado') || msg.includes('desactivado') ? 'success' : 'error'}>
+            {msg}
+          </FlashMessage>
+        ) : null}
 
         <div className="dash-split">
           <div className="panel">
@@ -130,7 +133,8 @@ export default function SecurityPage() {
               <h2>Sesiones activas · {sessions.length}</h2>
             </div>
             <div className="panel-body">
-              <table className="table">
+              <div className="table-wrap">
+                <table className="table table-sticky">
                 <thead>
                   <tr>
                     <th>Dispositivo</th>
@@ -161,6 +165,7 @@ export default function SecurityPage() {
                   ) : null}
                 </tbody>
               </table>
+              </div>
             </div>
           </div>
         </div>

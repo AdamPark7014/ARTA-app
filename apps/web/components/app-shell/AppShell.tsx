@@ -8,6 +8,7 @@ import { useUser } from '@/lib/user-context';
 import { EntityKey } from '@/lib/api';
 import { canSeeNavItem, NAV_ITEMS, ROLE_SCOPE } from '@/lib/access-matrix';
 import { createSecureHandoffUrl } from '@/lib/cross-entity-handoff';
+import { NavIcon } from './NavIcon';
 
 export function AppShell({
   children,
@@ -129,7 +130,7 @@ export function AppShell({
               priority
             />
           ) : (
-            <>explanada</>
+            <div className="brand brand--text">explanada</div>
           )}
           <span>{brandSub}</span>
         </div>
@@ -173,7 +174,8 @@ export function AppShell({
                   (n.href !== '/dashboard' && pathname.startsWith(n.href));
                 return (
                   <Link key={n.href} href={n.href} className={active ? 'active' : ''}>
-                    {n.label}
+                    <NavIcon href={n.href} />
+                    <span>{n.label}</span>
                   </Link>
                 );
               })}
@@ -185,7 +187,7 @@ export function AppShell({
           <strong>{user.fullName}</strong>
           <div>{user.title || user.roleKey}</div>
           <div className="scope-hint">{ROLE_SCOPE[user.roleKey] || ''}</div>
-          <button type="button" className="btn ghost" style={{ marginTop: 12, width: '100%' }} onClick={logout}>
+          <button type="button" className="btn ghost btn-sm" style={{ marginTop: 12, width: '100%' }} onClick={logout}>
             Salir
           </button>
         </div>

@@ -1,9 +1,19 @@
 'use client';
 
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { AppShell } from '@/components/app-shell/AppShell';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { LoadingBlock } from '@/components/ui/LoadingBlock';
+import {
+  FieldCheck,
+  FieldSearch,
+  FieldSelect,
+  FlashMessage,
+  FormGrid,
+  PageHeader,
+  FilterBar,
+} from '@/components/ui/PageChrome';
+import { StatusBadge } from '@/components/ui/StatusBadge';
 import { api } from '@/lib/api';
 import { useUser } from '@/lib/user-context';
 
@@ -18,6 +28,15 @@ type Pin = {
   lastUsedAt?: string | null;
 };
 
+const SCOPE_OPTIONS = ['files', 'checklists', 'hospitality'] as const;
+
+function flashVariant(msg: string): 'info' | 'success' | 'error' | 'warn' {
+  if (/error|inválid/i.test(msg)) return 'error';
+  if (/cread|rotad|copiad/i.test(msg)) return 'success';
+  if (/única vez|guárdalo|cópialo/i.test(msg)) return 'warn';
+  return 'info';
+}
+
 export default function VendorPinsPage() {
   const { entity } = useUser();
   const [events, setEvents] = useState<EventOpt[]>([]);
@@ -25,6 +44,7 @@ export default function VendorPinsPage() {
   const [pins, setPins] = useState<Pin[]>([]);
   const [loading, setLoading] = useState(true);
   const [msg, setMsg] = useState('');
+  const [q, setQ] = useState('');
   const [form, setForm] = useState({
     label: '',
     pin: '',
@@ -61,6 +81,22 @@ export default function VendorPinsPage() {
   useEffect(() => {
     loadPins(eventId).catch((e) => setMsg(e.message));
   }, [eventId]);
+
+  const eventOptions = useMemo(
+    () => events.map((ev) => ({ value: ev.id, label: ev.name })),
+    [events],
+  );
+
+  const filteredPins = useMemo(() => {
+    if (!q.trim()) return pins;
+    const n = q.toLowerCase();
+    return pins.filter(
+      (p) =>
+        p.label.toLowerCase().includes(n) ||
+        p.scopes.some((s) => s.toLowerCase().includes(n)) ||
+        p.id.toLowerCase().includes(n),
+    );
+  }, [pins, q]);
 
   async function onCreate(e: FormEvent) {
     e.preventDefault();
@@ -113,16 +149,17 @@ export default function VendorPinsPage() {
   return (
     <AppShell title="Vendor PIN · Acceso externo">
       <div className="stack page-workspace">
-        <div className="page-intro">
-          <p className="muted">
-            PINs de acceso limitado para proveedores (archivos / checklists / hospitality). Portal
-            público en <code>/v/[pinId]</code>.
-          </p>
-        </div>
-        {msg ? <div className="muted">{msg}</div> : null}
+        <PageHeader description="PINs de acceso limitado para proveedores (archivos / checklists / hospitality). Portal público en /v/[pinId]." />
+
+        {msg ? (
+          <FlashMessage variant={flashVariant(msg)} onDismiss={() => setMsg('')}>
+            {msg}
+          </FlashMessage>
+        ) : null}
+
         {revealed ? (
-          <div className="panel">
-            <div className="panel-body row" style={{ gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+          <FlashMessage variant="warn">
+            <span className="row" style={{ gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
               <span>
                 <strong>PIN (única vez):</strong> <code>{revealed.pin}</code>
               </span>
@@ -145,8 +182,8 @@ export default function VendorPinsPage() {
               >
                 Copiar link + PIN
               </button>
-            </div>
-          </div>
+            </span>
+          </FlashMessage>
         ) : null}
 
         {loading && !events.length ? (
@@ -169,32 +206,33 @@ export default function VendorPinsPage() {
                   <form className="form" onSubmit={onCreate}>
                     <label>
                       Evento
-                      <select value={eventId} onChange={(e) => setEventId(e.target.value)} required>
-                        {events.map((ev) => (
-                          <option key={ev.id} value={ev.id}>
-                            {ev.name}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <label>
-                      Etiqueta
-                      <input
-                        required
-                        value={form.label}
-                        onChange={(e) => setForm({ ...form, label: e.target.value })}
-                        placeholder="Proveedor catering"
+                      <FieldSelect
+                        label="Evento"
+                        value={eventId}
+                        onChange={setEventId}
+                        options={eventOptions}
                       />
                     </label>
-                    <label>
-                      PIN (mín. 4)
-                      <input
-                        required
-                        minLength={4}
-                        value={form.pin}
-                        onChange={(e) => setForm({ ...form, pin: e.target.value })}
-                      />
-                    </label>
+                    <FormGrid cols={2}>
+                      <label>
+                        Etiqueta
+                        <input
+                          required
+                          value={form.label}
+                          onChange={(e) => setForm({ ...form, label: e.target.value })}
+                          placeholder="Proveedor catering"
+                        />
+                      </label>
+                      <label>
+                        PIN (mín. 4)
+                        <input
+                          required
+                          minLength={4}
+                          value={form.pin}
+                          onChange={(e) => setForm({ ...form, pin: e.target.value })}
+                        />
+                      </label>
+                    </FormGrid>
                     <label>
                       Expira
                       <input
@@ -208,20 +246,18 @@ export default function VendorPinsPage() {
                         Scopes
                       </div>
                       <div className="row" style={{ flexWrap: 'wrap', gap: 10 }}>
-                        {(['files', 'checklists', 'hospitality'] as const).map((s) => (
-                          <label key={s} style={{ display: 'flex', gap: 6, fontSize: 13 }}>
-                            <input
-                              type="checkbox"
-                              checked={form.scopes.includes(s)}
-                              onChange={() => {
-                                const next = form.scopes.includes(s)
-                                  ? form.scopes.filter((x) => x !== s)
-                                  : [...form.scopes, s];
-                                setForm({ ...form, scopes: next.length ? next : ['files'] });
-                              }}
-                            />
-                            {s}
-                          </label>
+                        {SCOPE_OPTIONS.map((s) => (
+                          <FieldCheck
+                            key={s}
+                            label={s}
+                            checked={form.scopes.includes(s)}
+                            onChange={(checked) => {
+                              const next = checked
+                                ? [...form.scopes, s]
+                                : form.scopes.filter((x) => x !== s);
+                              setForm({ ...form, scopes: next.length ? next : ['files'] });
+                            }}
+                          />
                         ))}
                       </div>
                     </div>
@@ -238,24 +274,35 @@ export default function VendorPinsPage() {
                 <h2>PINs del evento · {pins.length}</h2>
               </div>
               <div className="panel-body">
+                <FilterBar meta={`${filteredPins.length} de ${pins.length} PINs`}>
+                  <FieldSearch
+                    value={q}
+                    onChange={setQ}
+                    placeholder="Buscar por etiqueta o scope…"
+                    label="Buscar PINs"
+                  />
+                </FilterBar>
+
                 {!pins.length ? (
                   <EmptyState
                     title="Sin PINs para este evento"
                     description="Genera un PIN con scopes y, si aplica, fecha de expiración."
                   />
+                ) : !filteredPins.length ? (
+                  <EmptyState title="Sin coincidencias" description="Prueba otro término de búsqueda." />
                 ) : (
                   <table className="table">
                     <thead>
                       <tr>
                         <th>Label</th>
                         <th>Scopes</th>
-                        <th>Activo</th>
+                        <th>Estado</th>
                         <th>Último uso</th>
                         <th />
                       </tr>
                     </thead>
                     <tbody>
-                      {pins.map((p) => (
+                      {filteredPins.map((p) => (
                         <tr key={p.id}>
                           <td>
                             <strong>{p.label}</strong>
@@ -264,7 +311,12 @@ export default function VendorPinsPage() {
                             </div>
                           </td>
                           <td>{p.scopes.join(', ')}</td>
-                          <td>{p.active ? 'sí' : 'no'}</td>
+                          <td>
+                            <StatusBadge
+                              value={p.active ? 'healthy' : 'critical'}
+                              kind="risk"
+                            />
+                          </td>
                           <td className="muted">
                             {p.lastUsedAt ? new Date(p.lastUsedAt).toLocaleString() : '—'}
                           </td>

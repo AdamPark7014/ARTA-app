@@ -110,6 +110,7 @@ function LoginForm() {
                 <label>
                   Correo
                   <input
+                    className="field"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     type="email"
@@ -124,6 +125,7 @@ function LoginForm() {
                   Contraseña
                   <div className="pass-field">
                     <input
+                      className="field"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       type={showPass ? 'text' : 'password'}
@@ -160,6 +162,7 @@ function LoginForm() {
                 <label>
                   Código de la app autenticadora
                   <input
+                    className="field"
                     value={totpCode}
                     onChange={(e) => setTotpCode(e.target.value)}
                     inputMode="numeric"
@@ -175,6 +178,7 @@ function LoginForm() {
               <label>
                 Código TOTP
                 <input
+                  className="field"
                   value={totpCode}
                   onChange={(e) => setTotpCode(e.target.value)}
                   inputMode="numeric"

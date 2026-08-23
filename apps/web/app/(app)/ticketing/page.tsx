@@ -1,11 +1,21 @@
 'use client';
 
 import Link from 'next/link';
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { AppShell } from '@/components/app-shell/AppShell';
 import { money } from '@/components/charts/SparkBars';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { LoadingBlock, LoadingKpis } from '@/components/ui/LoadingBlock';
+import {
+  ActionLink,
+  FieldSearch,
+  FieldSelect,
+  FlashMessage,
+  FormGrid,
+  PageHeader,
+  FilterBar,
+} from '@/components/ui/PageChrome';
+import { StatusBadge } from '@/components/ui/StatusBadge';
 import { api } from '@/lib/api';
 import { useUser } from '@/lib/user-context';
 import { BoleteraFields, resolveBoleteraName } from '@/components/ticketing/BoleteraFields';
@@ -32,6 +42,12 @@ const DEFAULT_ZONES: Zone[] = [
   { zona: 'Plata', aforo: 0, precio: 0, sold: 0 },
   { zona: 'Bronce', aforo: 0, precio: 0, sold: 0 },
 ];
+
+function flashVariant(msg: string): 'info' | 'success' | 'error' | 'warn' {
+  if (/error|inválid/i.test(msg)) return 'error';
+  if (/cread|actualiz|copiad|sync/i.test(msg)) return 'success';
+  return 'info';
+}
 
 export default function TicketingPage() {
   const { entity } = useUser();
@@ -61,6 +77,7 @@ export default function TicketingPage() {
   const [msg, setMsg] = useState('');
   const [syncing, setSyncing] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [q, setQ] = useState('');
 
   async function load() {
     setLoading(true);
@@ -94,6 +111,25 @@ export default function TicketingPage() {
     load().catch(console.error);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [entity]);
+
+  const filtered = useMemo(() => {
+    if (!q.trim()) return rows;
+    const n = q.toLowerCase();
+    return rows.filter(
+      (r) =>
+        r.event.name.toLowerCase().includes(n) ||
+        r.boletera.toLowerCase().includes(n) ||
+        (r.artist || '').toLowerCase().includes(n),
+    );
+  }, [rows, q]);
+
+  const eventOptions = useMemo(
+    () => [
+      { value: '', label: 'Selecciona…' },
+      ...events.map((ev) => ({ value: ev.id, label: ev.name })),
+    ],
+    [events],
+  );
 
   function startEdit(r: Setup) {
     setEditingId(r.id);
@@ -173,11 +209,9 @@ export default function TicketingPage() {
   return (
     <AppShell title="Boletera · Capacidad">
       <div className="stack page-workspace">
-        <div className="page-intro">
-          <p className="muted">
-            Performance de boletera: aforo, vendidos, sell-through % y revenue potencial vs realizado.
-            Sync stub/provider (Arema) rellena vendidos; modo live con TICKETING_SYNC_URL.
-          </p>
+        <PageHeader
+          description="Performance de boletera: aforo, vendidos, sell-through % y revenue potencial vs realizado. Sync stub/provider (Arema) rellena vendidos; modo live con TICKETING_SYNC_URL."
+        >
           <button
             className="btn ghost"
             type="button"
@@ -199,7 +233,13 @@ export default function TicketingPage() {
           >
             {syncing ? 'Sincronizando…' : 'Sync boletera ahora'}
           </button>
-        </div>
+        </PageHeader>
+
+        {msg ? (
+          <FlashMessage variant={flashVariant(msg)} onDismiss={() => setMsg('')}>
+            {msg}
+          </FlashMessage>
+        ) : null}
 
         {loading && !kpis ? (
           <>
@@ -244,7 +284,9 @@ export default function TicketingPage() {
             </div>
             <div className={`kpi ${kpis.holdRisk ? 'kpi--danger' : ''}`}>
               <div className="label">Hold en riesgo</div>
-              <div className="value">{kpis.holdRisk}</div>
+              <div className="value">
+                {kpis.holdRisk ? <StatusBadge value="critical" kind="risk" /> : '0'}
+              </div>
             </div>
           </div>
         ) : null}
@@ -262,21 +304,24 @@ export default function TicketingPage() {
             <form className="form" onSubmit={onSubmit}>
               <label>
                 Evento
-                <select
-                  required
-                  disabled={!!editingId}
-                  value={form.eventId}
-                  onChange={(e) => setForm({ ...form, eventId: e.target.value })}
-                >
-                  <option value="">Selecciona…</option>
-                  {events.map((ev) => (
-                    <option key={ev.id} value={ev.id}>
-                      {ev.name}
-                    </option>
-                  ))}
-                </select>
+                {editingId ? (
+                  <select disabled value={form.eventId} aria-label="Evento">
+                    {events.map((ev) => (
+                      <option key={ev.id} value={ev.id}>
+                        {ev.name}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <FieldSelect
+                    label="Evento"
+                    value={form.eventId}
+                    onChange={(eventId) => setForm({ ...form, eventId })}
+                    options={eventOptions}
+                  />
+                )}
               </label>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <FormGrid cols={2}>
                 <BoleteraFields
                   eventId={form.eventId || undefined}
                   boletera={form.boletera}
@@ -284,8 +329,8 @@ export default function TicketingPage() {
                   onBoleteraChange={(boletera) => setForm({ ...form, boletera })}
                   onLogoUrlChange={(logoUrl) => setForm({ ...form, logoUrl: logoUrl || '' })}
                 />
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+              </FormGrid>
+              <FormGrid cols={3}>
                 <label>
                   Hold hasta
                   <input
@@ -308,7 +353,7 @@ export default function TicketingPage() {
                     onChange={(e) => setForm({ ...form, promoter: e.target.value })}
                   />
                 </label>
-              </div>
+              </FormGrid>
 
               <table className="table">
                 <thead>
@@ -366,8 +411,7 @@ export default function TicketingPage() {
                 <input value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
               </label>
 
-              {msg ? <div className="muted">{msg}</div> : null}
-              <button className="btn" type="submit">
+              <button className="btn" type="submit" disabled={!editingId && !form.eventId}>
                 {editingId ? 'Actualizar boletera' : 'Guardar boletera'}
               </button>
             </form>
@@ -379,6 +423,15 @@ export default function TicketingPage() {
             <h2>Configuraciones · {entity}</h2>
           </div>
           <div className="panel-body">
+            <FilterBar meta={`${filtered.length} de ${rows.length} setups`}>
+              <FieldSearch
+                value={q}
+                onChange={setQ}
+                placeholder="Buscar evento o boletera…"
+                label="Buscar configuraciones"
+              />
+            </FilterBar>
+
             {loading ? (
               <LoadingBlock rows={3} label="Cargando setups…" />
             ) : !rows.length ? (
@@ -387,6 +440,11 @@ export default function TicketingPage() {
                 description="Crea un setup con zonas/aforo o sincroniza vendidos cuando exista la integración."
                 actionHref="/events"
                 actionLabel="Ir a eventos"
+              />
+            ) : !filtered.length ? (
+              <EmptyState
+                title="Sin coincidencias"
+                description="Prueba otro término de búsqueda."
               />
             ) : (
               <table className="table">
@@ -400,38 +458,58 @@ export default function TicketingPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map((r) => (
-                    <tr key={r.id}>
-                      <td>
-                        <Link href={`/events/${r.event.id}`}>{r.event.name}</Link>
-                      </td>
-                      <td>
-                        <div className="row" style={{ gap: 8, alignItems: 'center' }}>
-                          {r.logoUrl ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img
-                              src={r.logoUrl}
-                              alt=""
-                              style={{ height: 22, maxWidth: 56, objectFit: 'contain', background: '#fff', borderRadius: 3, padding: 1 }}
-                            />
-                          ) : null}
-                          <span>{r.boletera}</span>
-                        </div>
-                      </td>
-                      <td>{r.holdUntil ? new Date(r.holdUntil).toLocaleDateString('es-MX') : '—'}</td>
-                      <td className="muted" style={{ fontSize: 12 }}>
-                        {(r.zonesJson || []).map((z) => `${z.zona}:${z.aforo}`).join(' · ')}
-                      </td>
-                      <td className="row">
-                        <button className="btn ghost" type="button" onClick={() => startEdit(r)}>
-                          Editar
-                        </button>
-                        <button className="btn ghost" type="button" onClick={() => remove(r.id)}>
-                          Eliminar
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
+                  {filtered.map((r) => {
+                    const holdExpired =
+                      r.holdUntil && new Date(r.holdUntil).getTime() < Date.now();
+                    return (
+                      <tr key={r.id}>
+                        <td>
+                          <Link href={`/events/${r.event.id}`}>{r.event.name}</Link>
+                        </td>
+                        <td>
+                          <div className="row" style={{ gap: 8, alignItems: 'center' }}>
+                            {r.logoUrl ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                src={r.logoUrl}
+                                alt=""
+                                style={{
+                                  height: 22,
+                                  maxWidth: 56,
+                                  objectFit: 'contain',
+                                  background: '#fff',
+                                  borderRadius: 3,
+                                  padding: 1,
+                                }}
+                              />
+                            ) : null}
+                            <span>{r.boletera}</span>
+                          </div>
+                        </td>
+                        <td>
+                          {r.holdUntil ? (
+                            <span className="row" style={{ gap: 6, alignItems: 'center' }}>
+                              {new Date(r.holdUntil).toLocaleDateString('es-MX')}
+                              {holdExpired ? <StatusBadge value="watch" kind="risk" /> : null}
+                            </span>
+                          ) : (
+                            '—'
+                          )}
+                        </td>
+                        <td className="muted" style={{ fontSize: 12 }}>
+                          {(r.zonesJson || []).map((z) => `${z.zona}:${z.aforo}`).join(' · ')}
+                        </td>
+                        <td className="row">
+                          <button className="btn ghost" type="button" onClick={() => startEdit(r)}>
+                            Editar
+                          </button>
+                          <button className="btn ghost" type="button" onClick={() => remove(r.id)}>
+                            Eliminar
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             )}

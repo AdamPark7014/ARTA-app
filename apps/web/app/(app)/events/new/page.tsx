@@ -3,6 +3,7 @@
 import { FormEvent, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { AppShell } from '@/components/app-shell/AppShell';
+import { FlashMessage, FormGrid } from '@/components/ui/PageChrome';
 import { api } from '@/lib/api';
 import { useUser } from '@/lib/user-context';
 
@@ -38,15 +39,19 @@ export default function NewEventPage() {
     }
   }
 
+  const entityLabel = entity === 'ARTA' ? 'Arta' : 'Auditorio';
+
   return (
     <AppShell title="Nuevo evento">
-      <div className="panel" style={{ maxWidth: 720 }}>
+      <div className="panel panel--narrow">
         <div className="panel-head">
-          <h2>
-            Crear en {entity === 'ARTA' ? 'Arta' : 'Auditorio'} · se instancian todos los formatos
-          </h2>
+          <h2>Crear en {entityLabel}</h2>
         </div>
         <div className="panel-body">
+          <p className="muted" style={{ margin: '0 0 1.25rem', fontSize: '0.9rem' }}>
+            Al crear el evento se instancian automáticamente todas las plantillas de checklist para
+            esta entidad.
+          </p>
           <form className="form" onSubmit={onSubmit}>
             <label>
               Nombre del evento / concierto
@@ -54,9 +59,10 @@ export default function NewEventPage() {
                 required
                 value={form.name}
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
+                placeholder="Ej. Concierto en Explanada"
               />
             </label>
-            <div className="row" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <FormGrid>
               <label>
                 Artista
                 <input
@@ -71,8 +77,8 @@ export default function NewEventPage() {
                   onChange={(e) => setForm({ ...form, promoter: e.target.value })}
                 />
               </label>
-            </div>
-            <div className="row" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            </FormGrid>
+            <FormGrid>
               <label>
                 Venue
                 <input
@@ -87,8 +93,8 @@ export default function NewEventPage() {
                   onChange={(e) => setForm({ ...form, city: e.target.value })}
                 />
               </label>
-            </div>
-            <div className="row" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            </FormGrid>
+            <FormGrid>
               <label>
                 Fecha inicio
                 <input
@@ -108,19 +114,22 @@ export default function NewEventPage() {
                   <option value="EXTERNAL">Externa</option>
                 </select>
               </label>
-            </div>
+            </FormGrid>
             <label>
               Notas
               <textarea
                 rows={3}
                 value={form.notes}
                 onChange={(e) => setForm({ ...form, notes: e.target.value })}
+                placeholder="Contexto, restricciones o acuerdos previos…"
               />
             </label>
-            {error ? <div style={{ color: 'var(--danger)' }}>{error}</div> : null}
-            <button className="btn" disabled={busy} type="submit">
-              {busy ? 'Creando…' : 'Crear evento + checklists'}
-            </button>
+            {error ? <FlashMessage variant="error">{error}</FlashMessage> : null}
+            <div className="row" style={{ marginTop: '0.25rem' }}>
+              <button className="btn" disabled={busy} type="submit">
+                {busy ? 'Creando…' : 'Crear evento + checklists'}
+              </button>
+            </div>
           </form>
         </div>
       </div>

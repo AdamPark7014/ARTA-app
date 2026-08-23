@@ -5,6 +5,13 @@ import { AppShell } from '@/components/app-shell/AppShell';
 import { DistBar } from '@/components/charts/SparkBars';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { LoadingBlock, LoadingKpis } from '@/components/ui/LoadingBlock';
+import {
+  FieldSearch,
+  FieldSelect,
+  FilterBar,
+  FlashMessage,
+  PageHeader,
+} from '@/components/ui/PageChrome';
 import { api } from '@/lib/api';
 
 type AuditIntel = {
@@ -73,11 +80,9 @@ export default function AuditPage() {
   return (
     <AppShell title="Compliance · Audit">
       <div className="stack page-workspace">
-        <div className="page-intro">
-          <p className="muted">
-            Inteligencia de auditoría: volumen, actores, acciones destructivas y anomalías (30 días).
-          </p>
-        </div>
+        <PageHeader
+          description="Inteligencia de auditoría: volumen, actores, acciones destructivas y anomalías (30 días)."
+        />
 
         {loading && !data ? (
           <>
@@ -161,33 +166,31 @@ export default function AuditPage() {
               </div>
             ) : null}
 
-            <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
-              <input
-                className="field"
-                style={{ maxWidth: 260 }}
-                placeholder="Buscar acción / usuario…"
-                aria-label="Buscar acción o usuario"
+            <FilterBar>
+              <FieldSearch
                 value={q}
-                onChange={(e) => setQ(e.target.value)}
+                onChange={setQ}
+                placeholder="Buscar acción / usuario…"
+                label="Buscar acción o usuario"
+                maxWidth={260}
               />
-              <select
-                className="field"
-                style={{ width: 'auto' }}
-                aria-label="Filtrar por recurso"
+              <FieldSelect
                 value={resource}
-                onChange={(e) => setResource(e.target.value)}
-              >
-                <option value="">Todos los recursos</option>
-                <option value="Event">Event</option>
-                <option value="ChecklistInstance">Checklist</option>
-                <option value="PageContent">Studio</option>
-                <option value="System">System</option>
-              </select>
+                onChange={setResource}
+                label="Filtrar por recurso"
+                options={[
+                  { value: '', label: 'Todos los recursos' },
+                  { value: 'Event', label: 'Event' },
+                  { value: 'ChecklistInstance', label: 'Checklist' },
+                  { value: 'PageContent', label: 'Studio' },
+                  { value: 'System', label: 'System' },
+                ]}
+              />
               <button className="btn ghost" type="button" disabled={loading} onClick={() => load()}>
                 {loading ? 'Refrescando…' : 'Refrescar'}
               </button>
-            </div>
-            {error ? <p style={{ color: 'var(--danger)' }}>{error}</p> : null}
+            </FilterBar>
+            {error ? <FlashMessage variant="error">{error}</FlashMessage> : null}
             <div className="panel">
               <div className="panel-head">
                 <h2>Timeline · {rows.length}</h2>

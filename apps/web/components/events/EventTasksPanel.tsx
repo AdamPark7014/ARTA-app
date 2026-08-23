@@ -1,5 +1,7 @@
 'use client';
 
+import { FormGrid } from '@/components/ui/PageChrome';
+import { StatusBadge } from '@/components/ui/StatusBadge';
 import type { DirUser, Task } from '@/components/events/event-detail.types';
 
 type TaskForm = { title: string; module: string; assigneeId: string; dueAt: string };
@@ -31,7 +33,7 @@ export function EventTasksPanel({
             <h2>Asignar tarea</h2>
           </div>
           <div className="panel-body">
-            <div className="form" style={{ maxWidth: 720 }}>
+            <div className="form panel--narrow">
               <label>
                 Título
                 <input
@@ -40,7 +42,7 @@ export function EventTasksPanel({
                   placeholder="Ej. Confirmar hospedaje artista"
                 />
               </label>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+              <FormGrid cols={3}>
                 <label>
                   Módulo
                   <input
@@ -71,7 +73,7 @@ export function EventTasksPanel({
                     onChange={(e) => setTaskForm({ ...taskForm, dueAt: e.target.value })}
                   />
                 </label>
-              </div>
+              </FormGrid>
               <button className="btn" type="button" onClick={onCreateTask}>
                 Crear tarea
               </button>
@@ -101,7 +103,11 @@ export function EventTasksPanel({
                   <td className="muted">{t.module || '—'}</td>
                   <td>{t.assignee?.fullName || '—'}</td>
                   <td>
-                    <span className={`badge ${t.status === 'DONE' ? 'ok' : 'warn'}`}>{t.status}</span>
+                    <StatusBadge
+                      value={t.status === 'DONE' ? 'Hecha' : 'Abierta'}
+                      kind="raw"
+                      className={t.status === 'DONE' ? 'ok' : 'warn'}
+                    />
                   </td>
                   <td className="row">
                     {t.status !== 'DONE' ? (

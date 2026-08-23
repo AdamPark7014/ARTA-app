@@ -5,6 +5,15 @@ import Link from 'next/link';
 import { AppShell } from '@/components/app-shell/AppShell';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { LoadingBlock } from '@/components/ui/LoadingBlock';
+import {
+  ActionLink,
+  FieldCheck,
+  FieldSearch,
+  FieldSelect,
+  FilterBar,
+  PageHeader,
+} from '@/components/ui/PageChrome';
+import { StatusBadge, pipelineStatusLabel } from '@/components/ui/StatusBadge';
 import { api } from '@/lib/api';
 import { useUser } from '@/lib/user-context';
 import { userHasPermission } from '@/lib/access-matrix';
@@ -36,10 +45,6 @@ type Overview = {
   eventHealth: HealthItem[];
   kpis: { eventsAtRisk: number; avgOpsProgress: number };
 };
-
-function riskBadge(risk: string) {
-  return `badge badge--risk-${risk}`;
-}
 
 export default function EventsPage() {
   const { entity, user } = useUser();
@@ -109,19 +114,11 @@ export default function EventsPage() {
   return (
     <AppShell title="Pipeline de eventos">
       <div className="stack page-workspace">
-        <div className="page-intro">
-          <div>
-            <p className="muted">
-              Portfolio operativo: pipeline, salud de checklists y hub del show. {atRiskCount} en
-              riesgo.
-            </p>
-          </div>
-          {canCreate ? (
-            <Link className="btn" href="/events/new">
-              Nuevo evento
-            </Link>
-          ) : null}
-        </div>
+        <PageHeader
+          description={`Portfolio operativo: pipeline, salud de checklists y hub del show. ${atRiskCount} en riesgo.`}
+        >
+          {canCreate ? <ActionLink href="/events/new">Nuevo evento</ActionLink> : null}
+        </PageHeader>
 
         {loading ? (
           <LoadingBlock rows={5} label="Cargando pipeline…" />
@@ -131,7 +128,7 @@ export default function EventsPage() {
               {(['DRAFT', 'ACTIVE', 'CLOSED', 'CANCELLED'] as const).map((st) => (
                 <div key={st} className="events-pipeline__col">
                   <h3>
-                    {st} · {pipeline[st].length}
+                    {pipelineStatusLabel(st)} · {pipeline[st].length}
                   </h3>
                   {pipeline[st].slice(0, 4).map((e) => {
                     const h = healthMap.get(e.id);
@@ -143,7 +140,7 @@ export default function EventsPage() {
                           {h ? ` · ${h.avgProgress}%` : ''}
                         </div>
                         {h && h.risk !== 'healthy' ? (
-                          <span className={riskBadge(h.risk)}>{h.risk}</span>
+                          <StatusBadge value={h.risk} kind="risk" />
                         ) : null}
                       </Link>
                     );
@@ -157,33 +154,28 @@ export default function EventsPage() {
               ))}
             </div>
 
-            <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
-              <input
-                className="field"
-                style={{ maxWidth: 300 }}
-                placeholder="Buscar nombre, artista, venue…"
-                aria-label="Buscar nombre, artista o venue"
+            <FilterBar>
+              <FieldSearch
                 value={q}
-                onChange={(e) => setQ(e.target.value)}
+                onChange={setQ}
+                placeholder="Buscar nombre, artista, venue…"
+                label="Buscar nombre, artista o venue"
+                maxWidth={300}
               />
-              <select
-                className="field"
-                style={{ width: 'auto' }}
-                aria-label="Filtrar por estado"
+              <FieldSelect
                 value={status}
-                onChange={(e) => setStatus(e.target.value)}
-              >
-                <option value="all">Todos</option>
-                <option value="DRAFT">DRAFT</option>
-                <option value="ACTIVE">ACTIVE</option>
-                <option value="CLOSED">CLOSED</option>
-                <option value="CANCELLED">CANCELLED</option>
-              </select>
-              <label className="row" style={{ gap: 6, fontSize: 13 }}>
-                <input type="checkbox" checked={riskOnly} onChange={(e) => setRiskOnly(e.target.checked)} />
-                Solo en riesgo
-              </label>
-            </div>
+                onChange={setStatus}
+                label="Filtrar por estado"
+                options={[
+                  { value: 'all', label: 'Todos los estados' },
+                  { value: 'DRAFT', label: 'Borrador' },
+                  { value: 'ACTIVE', label: 'Activo' },
+                  { value: 'CLOSED', label: 'Cerrado' },
+                  { value: 'CANCELLED', label: 'Cancelado' },
+                ]}
+              />
+              <FieldCheck checked={riskOnly} onChange={setRiskOnly} label="Solo en riesgo" />
+            </FilterBar>
 
             <div className="panel">
               <div className="panel-head">
@@ -239,11 +231,9 @@ export default function EventsPage() {
                                 '—'
                               )}
                             </td>
-                            <td>{h ? <span className={riskBadge(h.risk)}>{h.risk}</span> : '—'}</td>
+                            <td>{h ? <StatusBadge value={h.risk} kind="risk" /> : '—'}</td>
                             <td>
-                              <span className={`badge ${e.status === 'ACTIVE' ? 'ok' : 'warn'}`}>
-                                {e.status}
-                              </span>
+                              <StatusBadge value={e.status} kind="event" />
                             </td>
                             <td className="muted" style={{ fontSize: 12 }}>
                               {e._count

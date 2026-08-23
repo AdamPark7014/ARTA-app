@@ -3,6 +3,8 @@
 import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 import { AppShell } from '@/components/app-shell/AppShell';
+import { EventHero } from '@/components/ui/EventHero';
+import { FlashMessage } from '@/components/ui/PageChrome';
 import { api } from '@/lib/api';
 import { useUser } from '@/lib/user-context';
 import { userHasPermission } from '@/lib/access-matrix';
@@ -670,54 +672,45 @@ function EventDetailInner() {
 
   return (
     <AppShell title={event.name}>
-      <div className="stack">
-        <div className="panel">
-          <div className="panel-body">
-            <div className="row" style={{ justifyContent: 'space-between', alignItems: 'flex-start' }}>
-              <div>
-                <div className="muted" style={{ fontSize: 12, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
-                  {event.entity} · {event.status}
-                </div>
-                <h2 style={{ margin: '0.2rem 0 0.4rem', fontFamily: 'var(--font-display)', fontSize: '1.7rem' }}>
-                  {event.name}
-                </h2>
-                <div className="muted">
-                  {[event.artist, event.promoter, event.venue, event.city].filter(Boolean).join(' · ') || 'Sin meta'}
-                </div>
-              </div>
-              <div className="row" style={{ flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                <span className="badge">{event.campaignType}</span>
-                {event.campaign?.authorized ? <span className="badge ok">Campaña autorizada</span> : null}
-                {closed ? <span className="badge warn">Cerrado</span> : null}
-                {!closed ? (
-                  <button className="btn ghost" type="button" onClick={() => setEditingMeta((v) => !v)}>
-                    {editingMeta ? 'Cerrar edición' : 'Editar datos'}
-                  </button>
-                ) : null}
-                {!closed && canClose ? (
-                  <button className="btn ghost" type="button" onClick={closeEvent}>
-                    Cerrar evento
-                  </button>
-                ) : null}
-                {!closed && canClose ? (
-                  <button className="btn ghost" type="button" onClick={cancelEvent}>
-                    Cancelar
-                  </button>
-                ) : null}
-                {closed && canReopen ? (
-                  <button className="btn" type="button" onClick={reopenEvent}>
-                    Reabrir
-                  </button>
-                ) : null}
-                {canDeleteEvent ? (
-                  <button className="btn ghost" type="button" onClick={deleteEvent}>
-                    Eliminar
-                  </button>
-                ) : null}
-              </div>
-            </div>
-          </div>
-        </div>
+      <div className="stack page-workspace">
+        <EventHero
+          entity={event.entity}
+          status={event.status}
+          name={event.name}
+          meta={[event.artist, event.promoter, event.venue, event.city].filter(Boolean).join(' · ') || 'Sin meta'}
+          campaignType={event.campaignType}
+          campaignAuthorized={!!event.campaign?.authorized}
+          closed={closed}
+          actions={
+            <>
+              {!closed ? (
+                <button className="btn ghost" type="button" onClick={() => setEditingMeta((v) => !v)}>
+                  {editingMeta ? 'Cerrar edición' : 'Editar datos'}
+                </button>
+              ) : null}
+              {!closed && canClose ? (
+                <button className="btn ghost" type="button" onClick={closeEvent}>
+                  Cerrar evento
+                </button>
+              ) : null}
+              {!closed && canClose ? (
+                <button className="btn ghost" type="button" onClick={cancelEvent}>
+                  Cancelar
+                </button>
+              ) : null}
+              {closed && canReopen ? (
+                <button className="btn" type="button" onClick={reopenEvent}>
+                  Reabrir
+                </button>
+              ) : null}
+              {canDeleteEvent ? (
+                <button className="btn ghost" type="button" onClick={deleteEvent}>
+                  Eliminar
+                </button>
+              ) : null}
+            </>
+          }
+        />
 
         <nav className="tab-bar" aria-label="Módulos del evento">
           <button
@@ -743,8 +736,12 @@ function EventDetailInner() {
           ))}
         </nav>
 
-        {msg ? <div className="muted">{msg}</div> : null}
-        {closed ? <div className="badge warn">Evento en solo lectura</div> : null}
+        {msg ? (
+          <FlashMessage variant="success" onDismiss={() => setMsg('')}>
+            {msg}
+          </FlashMessage>
+        ) : null}
+        {closed ? <FlashMessage variant="warn">Evento en solo lectura — no se pueden editar datos.</FlashMessage> : null}
 
         {tab === 'overview' && (
           <EventOverviewPanel

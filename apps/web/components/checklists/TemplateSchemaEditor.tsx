@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { FlashMessage } from '@/components/ui/PageChrome';
 import { api } from '@/lib/api';
 
 export type SchemaItem = {
@@ -42,6 +43,13 @@ function moveItem<T>(arr: T[], from: number, to: number): T[] {
   const [row] = next.splice(from, 1);
   next.splice(to, 0, row);
   return next;
+}
+
+function msgVariant(msg: string): 'success' | 'error' | 'warn' | 'info' {
+  const m = msg.toLowerCase();
+  if (m.includes('error')) return 'error';
+  if (m.includes('guardad')) return 'success';
+  return 'info';
 }
 
 export function TemplateSchemaEditor({ templateId, initial, onSaved }: Props) {
@@ -88,10 +96,10 @@ export function TemplateSchemaEditor({ templateId, initial, onSaved }: Props) {
 
   return (
     <div className="tpl-editor">
-      <div className="tpl-editor-toolbar row" style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
-        <p className="muted" style={{ margin: 0, fontSize: 13, maxWidth: 480 }}>
-          Diseña el formato del <strong style={{ color: 'var(--text)' }}>PDF</strong>: bloques y
-          preguntas. Al crear un evento se instancia y el PDF se regenera solo al guardar o firmar.
+      <div className="tpl-editor-toolbar panel-head">
+        <p className="muted kpi-sub">
+          Diseña el formato del <strong>PDF</strong>: bloques y preguntas. Al crear un evento se
+          instancia y el PDF se regenera solo al guardar o firmar.
         </p>
         <div className="row">
           <button className="btn ghost" type="button" onClick={() => setShowPreview((v) => !v)}>
@@ -102,33 +110,27 @@ export function TemplateSchemaEditor({ templateId, initial, onSaved }: Props) {
           </button>
         </div>
       </div>
-      {msg ? <div className="muted">{msg}</div> : null}
 
-      <div
-        className="tpl-editor-grid"
-        style={{
-          display: 'grid',
-          gridTemplateColumns: showPreview ? '1.1fr 0.9fr' : '1fr',
-          gap: 16,
-          alignItems: 'start',
-        }}
-      >
+      {msg ? (
+        <FlashMessage variant={msgVariant(msg)} onDismiss={() => setMsg('')}>
+          {msg}
+        </FlashMessage>
+      ) : null}
+
+      <div className={showPreview ? 'tpl-editor-grid studio-split' : 'stack'}>
         <div className="stack">
           {sections.map((section, sIdx) => (
             <div className="tpl-block" key={section.id}>
-              <div className="tpl-block-head row" style={{ justifyContent: 'space-between', gap: 8 }}>
-                <label style={{ flex: 1, margin: 0 }}>
-                  <span className="muted" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                    Bloque {sIdx + 1}
-                  </span>
+              <div className="tpl-block-head panel-head">
+                <label>
+                  <span className="muted kpi-sub">Bloque {sIdx + 1}</span>
                   <input
                     value={section.title}
                     onChange={(e) => patchSection(sIdx, { title: e.target.value })}
                     placeholder="Nombre del bloque (ej. Hotel, Firmas…)"
-                    style={{ fontWeight: 650, width: '100%', marginTop: 4 }}
                   />
                 </label>
-                <div className="row" style={{ alignItems: 'flex-end' }}>
+                <div className="row">
                   <button
                     className="btn ghost"
                     type="button"
@@ -166,20 +168,20 @@ export function TemplateSchemaEditor({ templateId, initial, onSaved }: Props) {
                   const typeMeta = FIELD_TYPES.find((t) => t.value === (item.type || 'check'));
                   return (
                     <div className="tpl-question" key={item.id}>
-                      <div className="row" style={{ gap: 8, alignItems: 'flex-start' }}>
+                      <div className="row">
                         <span className="tpl-q-num muted">{iIdx + 1}</span>
-                        <div style={{ flex: 1 }} className="stack">
+                        <div className="stack">
                           <input
                             value={item.label}
                             onChange={(e) => patchItem(sIdx, iIdx, { label: e.target.value })}
                             placeholder="Pregunta o campo (ej. Nombre del hotel)"
                           />
-                          <div className="row" style={{ flexWrap: 'wrap', gap: 6 }}>
+                          <div className="row">
                             {FIELD_TYPES.map((t) => (
                               <button
                                 key={t.value}
                                 type="button"
-                                className={`tpl-type ${ (item.type || 'check') === t.value ? 'on' : ''}`}
+                                className={`tpl-type ${(item.type || 'check') === t.value ? 'on' : ''}`}
                                 onClick={() =>
                                   patchItem(sIdx, iIdx, {
                                     type: t.value,
@@ -196,14 +198,10 @@ export function TemplateSchemaEditor({ templateId, initial, onSaved }: Props) {
                               </button>
                             ))}
                           </div>
-                          <span className="muted" style={{ fontSize: 11 }}>
-                            {typeMeta?.hint}
-                          </span>
+                          <span className="muted kpi-sub">{typeMeta?.hint}</span>
                           {(item.type || 'check') === 'select' ? (
-                            <label style={{ margin: 0 }}>
-                              <span className="muted" style={{ fontSize: 12 }}>
-                                Opciones (separadas por coma)
-                              </span>
+                            <label>
+                              <span className="muted kpi-sub">Opciones (separadas por coma)</span>
                               <input
                                 value={(item.options || []).join(', ')}
                                 onChange={(e) =>
@@ -219,7 +217,7 @@ export function TemplateSchemaEditor({ templateId, initial, onSaved }: Props) {
                             </label>
                           ) : null}
                         </div>
-                        <div className="stack" style={{ gap: 4 }}>
+                        <div className="stack">
                           <button
                             className="btn ghost"
                             type="button"
@@ -299,9 +297,7 @@ export function TemplateSchemaEditor({ templateId, initial, onSaved }: Props) {
               <h2>Hoja PDF</h2>
             </div>
             <div className="panel-body">
-              <p className="muted" style={{ fontSize: 12, marginTop: 0 }}>
-                Así queda el documento embebido en el evento (carta / Letter).
-              </p>
+              <p className="muted kpi-sub">Así queda el documento embebido en el evento (carta / Letter).</p>
               <div className="pdf-sheet">
                 <div className="pdf-sheet-brand">ARTA PRODUCCIONES</div>
                 <h3>Vista de plantilla</h3>
@@ -327,10 +323,7 @@ export function TemplateSchemaEditor({ templateId, initial, onSaved }: Props) {
                           <div className="pdf-line" key={it.id}>
                             {it.label || 'Campo'}: <span className="pdf-blank" />
                             {t === 'select' && it.options?.length ? (
-                              <span style={{ color: '#666', fontSize: 11 }}>
-                                {' '}
-                                ({it.options.join(' / ')})
-                              </span>
+                              <span className="pdf-meta"> ({it.options.join(' / ')})</span>
                             ) : null}
                           </div>
                         );
@@ -338,11 +331,9 @@ export function TemplateSchemaEditor({ templateId, initial, onSaved }: Props) {
                     </div>
                   ))
                 ) : (
-                  <p style={{ color: '#666' }}>Agrega un bloque para ver el PDF.</p>
+                  <p className="muted">Agrega un bloque para ver el PDF.</p>
                 )}
-                <div className="pdf-sec" style={{ marginTop: '1.25rem' }}>
-                  Firmas digitales
-                </div>
+                <div className="pdf-sec">Firmas digitales</div>
                 <div className="pdf-line">ENTREGADO · ________________</div>
                 <div className="pdf-line">AUTORIZADO · ________________</div>
               </div>

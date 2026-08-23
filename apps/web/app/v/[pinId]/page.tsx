@@ -3,6 +3,7 @@
 import { FormEvent, useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
+import { FlashMessage } from '@/components/ui/PageChrome';
 
 type Session = {
   pinId: string;
@@ -115,7 +116,6 @@ export default function VendorPortalPage() {
     return (
       <main className="vendor-portal">
         <p className="muted">Cargando portal…</p>
-        <PortalStyles />
       </main>
     );
   }
@@ -141,19 +141,18 @@ export default function VendorPortalPage() {
               required
               minLength={4}
             />
-            {error ? <p className="err">{error}</p> : null}
-            <button type="submit" disabled={loading}>
+            {error ? <FlashMessage variant="error">{error}</FlashMessage> : null}
+            <button className="btn btn-login" type="submit" disabled={loading}>
               {loading ? 'Entrando…' : 'Entrar'}
             </button>
           </form>
           <div className="row-actions">
-            <button type="button" className="ghost" onClick={copyLink}>
+            <button type="button" className="btn ghost btn-sm" onClick={copyLink}>
               {copied ? 'Link copiado' : 'Copiar link del portal'}
             </button>
             <Link href="/p/arta">← Sitio Arta</Link>
           </div>
         </div>
-        <PortalStyles />
       </main>
     );
   }
@@ -181,16 +180,16 @@ export default function VendorPortalPage() {
             </p>
           </div>
           <div className="row-actions">
-            <button type="button" className="ghost" onClick={() => refresh()} disabled={loading}>
+            <button type="button" className="btn ghost btn-sm" onClick={() => refresh()} disabled={loading}>
               {loading ? 'Actualizando…' : 'Actualizar'}
             </button>
-            <button type="button" className="ghost" onClick={() => logout()}>
+            <button type="button" className="btn ghost btn-sm" onClick={() => logout()}>
               Salir
             </button>
           </div>
         </header>
 
-        {error ? <p className="err">{error}</p> : null}
+        {error ? <FlashMessage variant="error">{error}</FlashMessage> : null}
 
         {session.scopes.includes('files') ? (
           <section>
@@ -279,152 +278,6 @@ export default function VendorPortalPage() {
           </section>
         ) : null}
       </div>
-      <PortalStyles />
     </main>
-  );
-}
-
-function PortalStyles() {
-  return (
-    <style jsx global>{`
-      .vendor-portal {
-        min-height: 100vh;
-        display: grid;
-        place-items: center;
-        padding: 2rem 1.25rem 3rem;
-        background: linear-gradient(165deg, #0c0c0c 0%, #17140f 48%, #0f1010 100%);
-        color: #f3eee6;
-        font-family: Georgia, 'Times New Roman', serif;
-      }
-      .vendor-portal--session {
-        display: block;
-        place-items: initial;
-      }
-      .vendor-card {
-        width: min(420px, 100%);
-        display: grid;
-        gap: 0.85rem;
-      }
-      .vendor-session {
-        max-width: 760px;
-        margin: 0 auto;
-      }
-      .session-head {
-        display: flex;
-        justify-content: space-between;
-        gap: 1rem;
-        flex-wrap: wrap;
-        align-items: flex-start;
-        margin-bottom: 1.5rem;
-      }
-      .eyebrow {
-        letter-spacing: 0.14em;
-        text-transform: uppercase;
-        font-size: 0.72rem;
-        opacity: 0.65;
-        margin: 0;
-      }
-      h1 {
-        margin: 0.2rem 0 0.4rem;
-        font-size: clamp(1.8rem, 4vw, 2.6rem);
-        font-weight: 500;
-      }
-      .lead {
-        opacity: 0.75;
-        margin: 0;
-      }
-      .scopes {
-        margin: 0.55rem 0 0;
-        font-size: 0.85rem;
-        opacity: 0.55;
-        font-family: ui-sans-serif, system-ui, sans-serif;
-      }
-      form {
-        display: grid;
-        gap: 0.65rem;
-      }
-      input {
-        width: 100%;
-        padding: 0.85rem 1rem;
-        border-radius: 10px;
-        border: 1px solid rgba(255, 255, 255, 0.15);
-        background: rgba(255, 255, 255, 0.04);
-        color: inherit;
-        font-size: 1.1rem;
-        letter-spacing: 0.12em;
-      }
-      button[type='submit'] {
-        margin-top: 0.25rem;
-        padding: 0.85rem 1.2rem;
-        border: 0;
-        border-radius: 999px;
-        background: #c4a35a;
-        color: #111;
-        font-weight: 700;
-        cursor: pointer;
-        font-family: ui-sans-serif, system-ui, sans-serif;
-      }
-      button.ghost {
-        border: 1px solid rgba(255, 255, 255, 0.18);
-        background: transparent;
-        color: inherit;
-        border-radius: 999px;
-        padding: 0.45rem 0.9rem;
-        cursor: pointer;
-        font-family: ui-sans-serif, system-ui, sans-serif;
-        font-size: 0.85rem;
-      }
-      .row-actions {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 0.5rem;
-        align-items: center;
-        margin-top: 0.35rem;
-      }
-      .err {
-        color: #ff8f8f;
-        margin: 0;
-      }
-      .muted,
-      .empty {
-        opacity: 0.6;
-      }
-      a {
-        color: #e2c27a;
-      }
-      h2 {
-        margin: 1.75rem 0 0.65rem;
-        font-size: 1.15rem;
-      }
-      .file-list {
-        list-style: none;
-        padding: 0;
-        margin: 0;
-        display: grid;
-        gap: 0.45rem;
-      }
-      .file-list li {
-        display: flex;
-        justify-content: space-between;
-        gap: 0.75rem;
-        align-items: center;
-        padding: 0.65rem 0.75rem;
-        border: 1px solid rgba(255, 255, 255, 0.08);
-        border-radius: 8px;
-        background: rgba(255, 255, 255, 0.03);
-        font-family: ui-sans-serif, system-ui, sans-serif;
-        font-size: 0.92rem;
-      }
-      .tag {
-        opacity: 0.5;
-        font-size: 0.75rem;
-        text-transform: uppercase;
-        letter-spacing: 0.06em;
-      }
-      code {
-        font-size: 0.85em;
-        opacity: 0.8;
-      }
-    `}</style>
   );
 }

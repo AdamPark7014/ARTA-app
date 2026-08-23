@@ -6,6 +6,15 @@ import { AppShell } from '@/components/app-shell/AppShell';
 import { DistBar } from '@/components/charts/SparkBars';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { LoadingBlock, LoadingKpis } from '@/components/ui/LoadingBlock';
+import {
+  ActionLink,
+  FieldCheck,
+  FieldSearch,
+  FieldSelect,
+  FilterBar,
+  PageHeader,
+} from '@/components/ui/PageChrome';
+import { StatusBadge } from '@/components/ui/StatusBadge';
 import { api } from '@/lib/api';
 import { useUser } from '@/lib/user-context';
 
@@ -110,23 +119,15 @@ export function ModuleChecklistIndex({ title, description, templateKeys, fields 
   return (
     <AppShell title={title}>
       <div className="page-workspace stack">
-        <div className="page-intro">
-          <div>
-            <p className="muted">{description}</p>
-            <p className="muted" style={{ marginTop: 8, fontSize: 13 }}>
-              Workspace de disciplina: prioriza riesgo, firmas y avance. Los registros nacen al crear
-              el evento; aquí operas el backlog de {entityName}.
-            </p>
-          </div>
-          <div className="row">
-            <Link className="btn ghost" href="/events">
-              Eventos
-            </Link>
-            <Link className="btn" href="/events/new">
-              Nuevo evento
-            </Link>
-          </div>
-        </div>
+        <PageHeader
+          description={description}
+          hint={`Workspace de disciplina: prioriza riesgo, firmas y avance. Los registros nacen al crear el evento; aquí operas el backlog de ${entityName}.`}
+        >
+          <ActionLink href="/events" variant="ghost">
+            Eventos
+          </ActionLink>
+          <ActionLink href="/events/new">Nuevo evento</ActionLink>
+        </PageHeader>
 
         {loading ? (
           <>
@@ -181,39 +182,31 @@ export function ModuleChecklistIndex({ title, description, templateKeys, fields 
               </div>
             ) : null}
 
-            <div className="row" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
-              <div className="row" style={{ flexWrap: 'wrap', gap: 8 }}>
-                <input
-                  className="field"
-                  style={{ maxWidth: 280 }}
-                  placeholder={`Buscar en ${title.toLowerCase()}…`}
-                  value={q}
-                  onChange={(e) => setQ(e.target.value)}
-                />
-                <select
-                  className="field"
-                  style={{ width: 'auto' }}
-                  value={riskFilter}
-                  onChange={(e) => setRiskFilter(e.target.value as typeof riskFilter)}
-                >
-                  <option value="all">Todo riesgo</option>
-                  <option value="critical">Crítico</option>
-                  <option value="watch">Watch</option>
-                  <option value="healthy">Saludable</option>
-                </select>
-                <label className="row" style={{ gap: 6, fontSize: 13 }}>
-                  <input
-                    type="checkbox"
-                    checked={onlyIncomplete}
-                    onChange={(e) => setOnlyIncomplete(e.target.checked)}
-                  />
-                  Solo incompletos
-                </label>
-              </div>
-              <span className="muted" style={{ fontSize: 13 }}>
-                {rows.length} registro{rows.length === 1 ? '' : 's'} · {entityName}
-              </span>
-            </div>
+            <FilterBar
+              meta={`${rows.length} registro${rows.length === 1 ? '' : 's'} · ${entityName}`}
+            >
+              <FieldSearch
+                value={q}
+                onChange={setQ}
+                placeholder={`Buscar en ${title.toLowerCase()}…`}
+              />
+              <FieldSelect
+                value={riskFilter}
+                onChange={(v) => setRiskFilter(v as typeof riskFilter)}
+                label="Filtrar por riesgo"
+                options={[
+                  { value: 'all', label: 'Todo riesgo' },
+                  { value: 'critical', label: 'Crítico' },
+                  { value: 'watch', label: 'Atención' },
+                  { value: 'healthy', label: 'Saludable' },
+                ]}
+              />
+              <FieldCheck
+                checked={onlyIncomplete}
+                onChange={setOnlyIncomplete}
+                label="Solo incompletos"
+              />
+            </FilterBar>
 
             <div className="panel">
               <div className="panel-head">
@@ -253,7 +246,7 @@ export function ModuleChecklistIndex({ title, description, templateKeys, fields 
                   </EmptyState>
                 ) : (
                   <div className="table-wrap">
-                    <table className="table">
+                    <table className="table table-sticky">
                       <thead>
                         <tr>
                           <th>Evento</th>
@@ -280,17 +273,7 @@ export function ModuleChecklistIndex({ title, description, templateKeys, fields 
                               </div>
                             </td>
                             <td>
-                              <span
-                                className={`badge ${
-                                  r.risk === 'critical'
-                                    ? 'danger'
-                                    : r.risk === 'watch'
-                                      ? 'warn'
-                                      : 'ok'
-                                }`}
-                              >
-                                {r.risk}
-                              </span>
+                              <StatusBadge value={r.risk} kind="risk" />
                             </td>
                             {fields.map((f) => (
                               <td key={f.id}>{String(pickValue(r.dataJson, f))}</td>

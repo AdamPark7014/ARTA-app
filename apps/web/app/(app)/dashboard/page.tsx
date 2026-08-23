@@ -6,6 +6,8 @@ import { AppShell } from '@/components/app-shell/AppShell';
 import { DistBar, SparkBars, money } from '@/components/charts/SparkBars';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { LoadingBlock, LoadingKpis } from '@/components/ui/LoadingBlock';
+import { ActionLink, FlashMessage } from '@/components/ui/PageChrome';
+import { StatusBadge } from '@/components/ui/StatusBadge';
 import { api } from '@/lib/api';
 import { useUser } from '@/lib/user-context';
 import { ROLE_SCOPE, canAccessEventOps, userHasPermission } from '@/lib/access-matrix';
@@ -94,34 +96,24 @@ export default function DashboardPage() {
   return (
     <AppShell title="Centro de comando">
       <div className="stack page-workspace">
-        <div className="panel">
-          <div className="panel-body row" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
-            <div>
-              <div className="muted" style={{ fontSize: 12, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
-                Ops intelligence · {user?.roleKey}
-              </div>
-              <div style={{ fontFamily: 'var(--font-display)', fontSize: '1.45rem', marginTop: 4 }}>
-                Hola, {user?.fullName?.split(' ')[0]}
-              </div>
-              <p className="muted" style={{ margin: '6px 0 0', maxWidth: 560, fontSize: 13 }}>
+        <div className="panel panel--welcome">
+          <div className="panel-body welcome-banner">
+            <div className="welcome-banner__copy">
+              <p className="welcome-banner__eyebrow">
+                {entity === 'ARTA' ? 'Arta Producciones' : 'Auditorio Arema'} · {user?.roleKey}
+              </p>
+              <h2 className="welcome-banner__title">Hola, {user?.fullName?.split(' ')[0]}</h2>
+              <p className="muted welcome-banner__desc">
                 {ROLE_SCOPE[user?.roleKey || ''] ||
                   'Prioriza shows en riesgo, cash de OC y firmas pendientes.'}
               </p>
             </div>
-            <div className="row">
-              <Link className="btn ghost" href="/p/arta">
+            <div className="row welcome-banner__actions">
+              <ActionLink href="/p/arta" variant="ghost">
                 Sitio Arta
-              </Link>
-              {!eventOps ? (
-                <Link className="btn" href="/folders">
-                  Carpetas
-                </Link>
-              ) : null}
-              {canCreate ? (
-                <Link className="btn" href="/events/new">
-                  Nuevo evento
-                </Link>
-              ) : null}
+              </ActionLink>
+              {!eventOps ? <ActionLink href="/folders">Carpetas</ActionLink> : null}
+              {canCreate ? <ActionLink href="/events/new">Nuevo evento</ActionLink> : null}
             </div>
           </div>
         </div>
@@ -146,7 +138,7 @@ export default function DashboardPage() {
             <LoadingBlock rows={4} label="Calculando inteligencia operativa…" />
           </>
         ) : error ? (
-          <p style={{ color: 'var(--danger)' }}>{error}</p>
+          <FlashMessage variant="error">{error}</FlashMessage>
         ) : data ? (
           <>
             {data.alerts.length ? (
@@ -264,9 +256,7 @@ export default function DashboardPage() {
                               </div>
                             </td>
                             <td>
-                              <span className={`badge ${e.risk === 'critical' ? 'danger' : 'warn'}`}>
-                                {e.risk}
-                              </span>
+                              <StatusBadge value={e.risk} kind="risk" />
                             </td>
                             <td>
                               <div className="progress" style={{ minWidth: 72 }}>

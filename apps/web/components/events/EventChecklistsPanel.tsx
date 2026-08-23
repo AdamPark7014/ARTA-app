@@ -41,7 +41,7 @@ export function EventChecklistsPanel({
   onRestoreVersion,
 }: EventChecklistsPanelProps) {
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: activeChecklist ? '280px 1fr' : '1fr', gap: 16 }}>
+    <div className={activeChecklist ? 'users-layout' : 'stack'}>
       <div className="panel">
         <div className="panel-head">
           <h2>Formatos</h2>
@@ -66,7 +66,7 @@ export function EventChecklistsPanel({
           <div className="panel-head">
             <div>
               <h2>{activeChecklist.title}</h2>
-              <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+              <div className="muted kpi-sub">
                 {activeChecklist.lastEditedBy
                   ? `Última: ${activeChecklist.lastEditedBy.fullName}`
                   : 'Sin ediciones'}
@@ -128,7 +128,8 @@ export function EventChecklistsPanel({
                         <div>{item.label}</div>
                         {item.type === 'text' || item.type === 'number' || item.type === 'date' ? (
                           <input
-                            style={{ marginTop: 6, width: '100%' }}
+                            className="field"
+                            style={{ marginTop: 6 }}
                             type={item.type === 'text' ? 'text' : item.type}
                             disabled={closed}
                             value={item.value ?? ''}
@@ -155,7 +156,7 @@ export function EventChecklistsPanel({
                             return (
                               <div style={{ marginTop: 6 }}>
                                 <select
-                                  style={{ width: '100%' }}
+                                  className="field"
                                   disabled={closed}
                                   value={choice}
                                   onChange={(e) => {
@@ -178,7 +179,8 @@ export function EventChecklistsPanel({
                                 </select>
                                 {otra && choice === otra ? (
                                   <input
-                                    style={{ marginTop: 6, width: '100%' }}
+                                    className="field"
+                                    style={{ marginTop: 6 }}
                                     disabled={closed}
                                     placeholder="Nombre (ej. Ticketmaster)"
                                     value={custom}

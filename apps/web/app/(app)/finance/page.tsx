@@ -5,6 +5,14 @@ import { useEffect, useMemo, useState } from 'react';
 import { AppShell } from '@/components/app-shell/AppShell';
 import { DistBar, money } from '@/components/charts/SparkBars';
 import { EmptyState } from '@/components/ui/EmptyState';
+import {
+  ActionLink,
+  FieldCheck,
+  FieldSearch,
+  FilterBar,
+  PageHeader,
+} from '@/components/ui/PageChrome';
+import { StatusBadge } from '@/components/ui/StatusBadge';
 import { api } from '@/lib/api';
 import { useUser } from '@/lib/user-context';
 
@@ -72,17 +80,15 @@ export default function FinancePage() {
   return (
     <AppShell title="Finanzas · Portfolio">
       <div className="stack page-workspace">
-        <div className="page-intro">
-          <div>
-            <p className="muted">
-              Control tower de corridas: margen portfolio, pérdidas y estado de cierre.
-              {canEdit ? ' Tienes permiso de edición.' : ' Acceso de lectura / seguimiento.'}
-            </p>
-          </div>
-          <Link className="btn ghost" href="/dashboard">
+        <PageHeader
+          description={`Control tower de corridas: margen portfolio, pérdidas y estado de cierre.${
+            canEdit ? ' Tienes permiso de edición.' : ' Acceso de lectura / seguimiento.'
+          }`}
+        >
+          <ActionLink href="/dashboard" variant="ghost">
             Centro de comando
-          </Link>
-        </div>
+          </ActionLink>
+        </PageHeader>
 
         {data?.alerts?.length ? (
           <div className="alert-stack">
@@ -149,20 +155,10 @@ export default function FinancePage() {
           </div>
         ) : null}
 
-        <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
-          <input
-            className="field"
-            style={{ maxWidth: 320 }}
-            placeholder="Buscar evento…"
-            aria-label="Buscar evento"
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-          />
-          <label className="row" style={{ gap: 6, fontSize: 13 }}>
-            <input type="checkbox" checked={onlyLoss} onChange={(e) => setOnlyLoss(e.target.checked)} />
-            Solo pérdida
-          </label>
-        </div>
+        <FilterBar>
+          <FieldSearch value={q} onChange={setQ} placeholder="Buscar evento…" maxWidth={320} />
+          <FieldCheck checked={onlyLoss} onChange={setOnlyLoss} label="Solo pérdida" />
+        </FilterBar>
 
         <div className="panel">
           <div className="panel-head">
@@ -193,7 +189,7 @@ export default function FinancePage() {
                         </div>
                       </td>
                       <td>
-                        <span className={`badge ${e.status === 'ACTIVE' ? 'ok' : 'warn'}`}>{e.status}</span>
+                        <StatusBadge value={e.status} kind="event" />
                       </td>
                       <td className="num">{money(e.income)}</td>
                       <td className="num">{money(e.expense)}</td>

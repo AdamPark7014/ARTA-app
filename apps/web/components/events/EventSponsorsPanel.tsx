@@ -1,5 +1,6 @@
 'use client';
 
+import { FormGrid } from '@/components/ui/PageChrome';
 import type { Sponsor } from '@/components/events/event-detail.types';
 
 type SponsorForm = { name: string; contact: string; contribution: string; amount: string; notes: string };
@@ -29,8 +30,8 @@ export function EventSponsorsPanel({
             <h2>Nuevo patrocinador</h2>
           </div>
           <div className="panel-body">
-            <div className="form" style={{ maxWidth: 720 }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <div className="form panel--narrow">
+              <FormGrid>
                 <label>
                   Nombre
                   <input
@@ -45,8 +46,8 @@ export function EventSponsorsPanel({
                     onChange={(e) => setSponsorForm({ ...sponsorForm, contact: e.target.value })}
                   />
                 </label>
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              </FormGrid>
+              <FormGrid>
                 <label>
                   Aportación
                   <input
@@ -63,7 +64,7 @@ export function EventSponsorsPanel({
                     onChange={(e) => setSponsorForm({ ...sponsorForm, amount: e.target.value })}
                   />
                 </label>
-              </div>
+              </FormGrid>
               <label>
                 Notas
                 <input

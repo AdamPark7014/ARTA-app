@@ -1,6 +1,8 @@
 'use client';
 
 import type { Dispatch, SetStateAction } from 'react';
+import { FormGrid } from '@/components/ui/PageChrome';
+import { StatusBadge } from '@/components/ui/StatusBadge';
 import type { FinanceData, FinanceRow } from '@/components/events/event-detail.types';
 
 type EventFinancePanelProps = {
@@ -34,8 +36,8 @@ export function EventFinancePanel({
       <div className="panel-head">
         <h2>Corrida financiera</h2>
         <div className="row">
-          {financeLocked ? <span className="badge">LOCKED</span> : null}
-          <span className="badge warn">Melissa · Chacho · Arturo</span>
+          {financeLocked ? <StatusBadge value="LOCKED" kind="raw" className="warn" /> : null}
+          <StatusBadge value="Melissa · Chacho · Arturo" kind="raw" className="warn" />
           {canEditRows ? (
             <>
               <label className="btn ghost" style={{ cursor: 'pointer' }}>
@@ -59,32 +61,30 @@ export function EventFinancePanel({
         </div>
       </div>
       <div className="panel-body stack">
-        <p className="muted" style={{ fontSize: 12, margin: 0 }}>
+        <p className="muted kpi-sub" style={{ margin: 0 }}>
           Excel: columnas Concepto / Tipo (ingreso|egreso) / Monto. Si no hay encabezado, usa las primeras 3
           columnas.
         </p>
-        <div className="row" style={{ gap: 24 }}>
-          <div>
-            <div className="muted" style={{ fontSize: 12 }}>
-              Ingresos
+        <FormGrid cols={3}>
+          <div className="kpi">
+            <div className="label">Ingresos</div>
+            <div className="value" style={{ fontSize: '1.1rem' }}>
+              ${Number(financeDraft.totalIncome || 0).toLocaleString('es-MX')}
             </div>
-            <strong>${Number(financeDraft.totalIncome || 0).toLocaleString('es-MX')}</strong>
           </div>
-          <div>
-            <div className="muted" style={{ fontSize: 12 }}>
-              Egresos
+          <div className="kpi">
+            <div className="label">Egresos</div>
+            <div className="value" style={{ fontSize: '1.1rem' }}>
+              ${Number(financeDraft.totalExpense || 0).toLocaleString('es-MX')}
             </div>
-            <strong>${Number(financeDraft.totalExpense || 0).toLocaleString('es-MX')}</strong>
           </div>
-          <div>
-            <div className="muted" style={{ fontSize: 12 }}>
-              Neto
-            </div>
-            <strong style={{ color: net >= 0 ? 'var(--ok, #2a7)' : 'var(--danger)' }}>
+          <div className={`kpi ${net < 0 ? 'kpi--danger' : ''}`}>
+            <div className="label">Neto</div>
+            <div className="value" style={{ fontSize: '1.1rem' }}>
               ${net.toLocaleString('es-MX')}
-            </strong>
+            </div>
           </div>
-        </div>
+        </FormGrid>
         <table className="table">
           <thead>
             <tr>
@@ -102,7 +102,7 @@ export function EventFinancePanel({
                     disabled={!canEditRows}
                     value={row.concept}
                     onChange={(e) => onPatchRow(idx, { concept: e.target.value })}
-                    style={{ width: '100%' }}
+                    className="field"
                   />
                 </td>
                 <td>

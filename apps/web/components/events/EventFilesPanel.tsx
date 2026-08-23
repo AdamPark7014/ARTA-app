@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from 'react';
 import { FileViewer } from '@/components/files/FileViewer';
+import { StatusBadge } from '@/components/ui/StatusBadge';
 import type { EventDetail } from '@/components/events/event-detail.types';
 
 type EventFile = EventDetail['files'][0];
@@ -88,10 +89,10 @@ export function EventFilesPanel({
                 {files.map((f) => {
                   const active = previewFile?.id === f.id;
                   return (
-                    <tr key={f.id} style={active ? { background: 'rgba(232, 196, 120, 0.08)' } : undefined}>
+                    <tr key={f.id}>
                       <td>{f.fileName}</td>
                       <td>
-                        <span className="badge">{f.kind || 'file'}</span>
+                        <StatusBadge value={f.kind || 'file'} kind="raw" />
                       </td>
                       <td className="row">
                         <button
