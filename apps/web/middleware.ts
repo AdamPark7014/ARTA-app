@@ -25,6 +25,13 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
+  // Apex / www: la raíz siempre es el sitio público (no panel).
+  if (!hostEntity && pathname === '/') {
+    const url = request.nextUrl.clone();
+    url.pathname = '/p/arta';
+    return NextResponse.redirect(url);
+  }
+
   const response = NextResponse.next({
     request: { headers: requestHeaders },
   });

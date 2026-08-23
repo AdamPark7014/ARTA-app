@@ -45,7 +45,7 @@ export function isEntitySubdomain(hostname: string): boolean {
 }
 
 export function isPublicPath(pathname: string): boolean {
-  if (pathname === '/login') return true;
+  if (pathname === '/' || pathname === '/login') return true;
   if (pathname.startsWith('/invite')) return true;
   if (pathname.startsWith('/p/')) return true;
   if (pathname.startsWith('/v/')) return true;
@@ -55,6 +55,15 @@ export function isPublicPath(pathname: string): boolean {
   if (pathname.startsWith('/api')) return true;
   if (pathname === '/favicon.ico') return true;
   return false;
+}
+
+/** Only panel routes should hard-redirect to /login on 401. */
+export function shouldAuthRedirectOn401(pathname: string, hostname: string): boolean {
+  if (isPublicPath(pathname)) return false;
+  const hostEntity = entityFromHost(hostname);
+  // Apex/www: public marketing site — never yank visitors to login on auth errors.
+  if (!hostEntity) return false;
+  return true;
 }
 
 /** Safe post-login destination (never bounce to public site). */

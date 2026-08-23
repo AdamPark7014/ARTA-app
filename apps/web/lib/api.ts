@@ -49,6 +49,8 @@ export function hasSessionHint(): boolean {
   return document.cookie.includes('arta_session=1');
 }
 
+import { shouldAuthRedirectOn401 } from '@/lib/domains';
+
 export async function api<T = unknown>(
   path: string,
   options: RequestInit = {},
@@ -76,7 +78,9 @@ export async function api<T = unknown>(
     if (typeof document !== 'undefined') {
       document.cookie = 'arta_session=; Path=/; SameSite=Lax; Max-Age=0';
       document.cookie = 'arta_csrf=; Path=/; SameSite=Lax; Max-Age=0';
-      window.location.href = '/login';
+      if (shouldAuthRedirectOn401(window.location.pathname, window.location.hostname)) {
+        window.location.href = '/login';
+      }
     }
     throw new Error('No autorizado');
   }
