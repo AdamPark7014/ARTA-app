@@ -11,6 +11,11 @@
     "dev:web": "npm run dev --workspace=apps/web",
     "dev:api": "npm run dev --workspace=apps/api",
     "build": "turbo run build --filter=api --filter=web",
+    "typecheck": "npm run typecheck --workspace=apps/api && npm run typecheck --workspace=apps/web",
+    "test": "npm run test:api && npm run test:web",
+    "test:api": "npm run test --workspace=apps/api",
+    "test:api:e2e": "npm run test:e2e --workspace=apps/api",
+    "test:web": "npm run test --workspace=apps/web",
     "local:setup": "npm run prisma:generate --workspace=apps/api && npm run prisma:migrate --workspace=apps/api && npm run prisma:seed --workspace=apps/api",
     "prisma:generate": "npm run prisma:generate --workspace=apps/api",
     "prisma:seed": "npm run prisma:seed --workspace=apps/api"

@@ -11,3 +11,10 @@ apps/api/uploads/**
 !apps/api/uploads/.gitkeep
 .DS_Store
 *.tsbuildinfo
+
+# Playwright (apps/web)
+playwright-report
+test-results
+apps/web/e2e/.output
+blob-report
+.playwright
