@@ -1,8 +1,10 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { AppShell } from '@/components/app-shell/AppShell';
-import { FlashMessage, PageHeader } from '@/components/ui/PageChrome';
+import { EmptyState } from '@/components/ui/EmptyState';
+import { LoadingBlock } from '@/components/ui/LoadingBlock';
+import { FieldSearch, FilterBar, FlashMessage, PageHeader } from '@/components/ui/PageChrome';
 import { api } from '@/lib/api';
 import { useUser } from '@/lib/user-context';
 import { TemplateSchemaEditor } from '@/components/checklists/TemplateSchemaEditor';
@@ -65,6 +67,8 @@ export default function ChecklistsTemplatesPage() {
   const [editing, setEditing] = useState(false);
   const [msg, setMsg] = useState('');
   const [restoring, setRestoring] = useState(false);
+  const [q, setQ] = useState('');
+  const [loading, setLoading] = useState(true);
 
   const canManage =
     !!user &&
@@ -76,16 +80,32 @@ export default function ChecklistsTemplatesPage() {
       user.permissions.includes('users.manage'));
 
   async function load() {
-    const list = await api<Template[]>(`/checklists/templates${canManage ? '?all=1' : ''}`);
-    setTemplates(
-      list.filter((t) => !t.entities.length || t.entities.includes(entity) || canManage),
-    );
+    setLoading(true);
+    try {
+      const list = await api<Template[]>(`/checklists/templates${canManage ? '?all=1' : ''}`);
+      setTemplates(
+        list.filter((t) => !t.entities.length || t.entities.includes(entity) || canManage),
+      );
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => {
     load().catch(console.error);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [entity, canManage]);
+
+  const filtered = useMemo(() => {
+    if (!q.trim()) return templates;
+    const n = q.toLowerCase();
+    return templates.filter(
+      (t) =>
+        t.name.toLowerCase().includes(n) ||
+        t.key.toLowerCase().includes(n) ||
+        (t.description || '').toLowerCase().includes(n),
+    );
+  }, [templates, q]);
 
   async function toggleActive(t: Template) {
     if (!canManage) return;
@@ -128,8 +148,8 @@ export default function ChecklistsTemplatesPage() {
     <AppShell title="Plantillas">
       <div className="stack page-workspace">
         <PageHeader
-          description="Cada plantilla es un formato PDF que se copia al crear un evento. El equipo lo llena en pantalla y el PDF embebido se regenera solo (guardar / firmar)."
-          hint={`Entidad activa: ${entity === 'ARTA' ? 'Arta' : 'Auditorio'}`}
+          description="Cada plantilla es un formato PDF que se copia al crear un evento. El equipo lo llena en pantalla y el PDF embebido se regenera al guardar o firmar."
+          hint={`Entidad activa: ${entity === 'ARTA' ? 'Arta' : 'Auditorio'}. Las versiones nuevas aplican solo a eventos creados después del cambio.`}
         />
 
         {msg ? (
@@ -138,49 +158,79 @@ export default function ChecklistsTemplatesPage() {
           </FlashMessage>
         ) : null}
 
-        <div className={preview ? 'studio-split' : 'stack'}>
-          <div className="grid-cards">
-            {templates.map((t) => {
-              const questions = (t.schemaJson?.sections || []).reduce(
-                (n, s) => n + (s.items?.length || 0),
-                0,
-              );
-              return (
-                <div className="kpi" key={t.id}>
-                  <div className="row">
-                    <span className={`badge ${t.active ? 'ok' : 'warn'}`}>
-                      {t.active ? 'Activa' : 'Inactiva'}
-                    </span>
-                    <span className="kpi-sub muted">v{t.version}</span>
-                  </div>
-                  <strong>{t.name}</strong>
-                  <p className="kpi-sub muted">{t.description || 'Sin descripción'}</p>
-                  <div className="kpi-sub muted">
-                    PDF · {entityLabel(t.entities)}
-                    {questions ? ` · ${questions} campos` : ''}
-                  </div>
-                  <div className="row">
-                    <button className="btn ghost" type="button" onClick={() => openPreview(t, false)}>
-                      Ver
-                    </button>
-                    {canManage ? (
-                      <>
-                        <button className="btn" type="button" onClick={() => openPreview(t, true)}>
-                          Editar
-                        </button>
-                        <button className="btn ghost" type="button" onClick={() => toggleActive(t)}>
-                          {t.active ? 'Desactivar' : 'Activar'}
-                        </button>
-                      </>
-                    ) : null}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+        {loading ? (
+          <LoadingBlock rows={4} label="Cargando plantillas…" />
+        ) : (
+          <>
+            <FilterBar meta={`${filtered.length} de ${templates.length} plantillas · ${entity}`}>
+              <FieldSearch
+                value={q}
+                onChange={setQ}
+                placeholder="Buscar plantilla…"
+                label="Buscar plantillas"
+              />
+            </FilterBar>
 
-          {preview ? (
-            <div className="panel">
+            <div className={preview ? 'studio-split' : 'stack'}>
+            {!templates.length ? (
+              <EmptyState
+                title="Sin plantillas visibles"
+                description="No hay formatos de checklist para esta entidad. Si eres administrador, revisa permisos o crea plantillas en el catálogo."
+              />
+            ) : !filtered.length ? (
+              <EmptyState title="Sin coincidencias" description="Prueba otro término de búsqueda.">
+                <button className="btn ghost" type="button" onClick={() => setQ('')}>
+                  Limpiar búsqueda
+                </button>
+              </EmptyState>
+            ) : (
+              <div className="grid-cards">
+                {filtered.map((t) => {
+                  const questions = (t.schemaJson?.sections || []).reduce(
+                    (n, s) => n + (s.items?.length || 0),
+                    0,
+                  );
+                  return (
+                    <div className="kpi" key={t.id}>
+                      <div className="row">
+                        <span className={`badge ${t.active ? 'ok' : 'warn'}`}>
+                          {t.active ? 'Activa' : 'Inactiva'}
+                        </span>
+                        <span className="kpi-sub muted">v{t.version}</span>
+                      </div>
+                      <strong>{t.name}</strong>
+                      <p className="kpi-sub muted">{t.description || 'Sin descripción'}</p>
+                      <div className="kpi-sub muted">
+                        PDF · {entityLabel(t.entities)}
+                        {questions ? ` · ${questions} campos` : ''}
+                      </div>
+                      <div className="row">
+                        <button
+                          className="btn ghost"
+                          type="button"
+                          onClick={() => openPreview(t, false)}
+                        >
+                          Ver
+                        </button>
+                        {canManage ? (
+                          <>
+                            <button className="btn" type="button" onClick={() => openPreview(t, true)}>
+                              Editar
+                            </button>
+                            <button className="btn ghost" type="button" onClick={() => toggleActive(t)}>
+                              {t.active ? 'Desactivar' : 'Activar'}
+                            </button>
+                          </>
+                        ) : null}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {preview ? (
+              <div className="panel">
               <div className="panel-head">
                 <div>
                   <h2>{preview.name}</h2>
@@ -227,7 +277,7 @@ export default function ChecklistsTemplatesPage() {
                   (preview.schemaJson?.sections || []).map((s) => (
                     <div key={s.id} className="check-section">
                       <h3>{s.title}</h3>
-                      <ul style={{ margin: 0, paddingLeft: 18 }}>
+                      <ul className="check-section__list">
                         {(s.items || []).map((it) => (
                           <li key={it.id}>
                             {it.label || 'Sin etiqueta'}
@@ -285,9 +335,11 @@ export default function ChecklistsTemplatesPage() {
                   </div>
                 ) : null}
               </div>
+              </div>
+            ) : null}
             </div>
-          ) : null}
-        </div>
+          </>
+        )}
       </div>
     </AppShell>
   );

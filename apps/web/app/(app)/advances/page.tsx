@@ -1,11 +1,14 @@
 'use client';
 
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { AppShell } from '@/components/app-shell/AppShell';
+import { money } from '@/components/charts/SparkBars';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { LoadingBlock, LoadingKpis } from '@/components/ui/LoadingBlock';
 import {
   ActionLink,
+  FieldSelect,
+  FilterBar,
   FlashMessage,
   FormGrid,
   PageHeader,
@@ -65,6 +68,13 @@ export default function AdvancesPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [entity, eventId]);
 
+  const eventOptions = useMemo(
+    () => events.map((ev) => ({ value: ev.id, label: ev.name })),
+    [events],
+  );
+
+  const selectedEvent = events.find((ev) => ev.id === eventId);
+
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     if (!file || !eventId) return;
@@ -104,9 +114,12 @@ export default function AdvancesPage() {
     <AppShell title="Anticipos · Cash control">
       <div className="stack page-workspace">
         <PageHeader
-          description="Control de anticipos y comprobantes ligados a eventos. Portfolio vs evento seleccionado."
+          description="Control de anticipos y comprobantes ligados a eventos. Compara portfolio vs evento seleccionado."
+          hint="Sube PDF o imagen con monto y concepto. El comprobante queda ligado al evento para auditoría."
         >
-          <ActionLink href="/events" variant="ghost">Ir a eventos</ActionLink>
+          <ActionLink href="/events" variant="ghost">
+            Ir a eventos
+          </ActionLink>
         </PageHeader>
 
         {msg ? (
@@ -125,21 +138,31 @@ export default function AdvancesPage() {
             <div className="grid-cards kpi-grid-dense">
               <div className="kpi">
                 <div className="label">Portfolio anticipos</div>
-                <div className="value" style={{ fontSize: '1.25rem' }}>
-                  ${Math.round(portfolioAdvances).toLocaleString('es-MX')}
-                </div>
+                <div className="value value--money">{money(portfolioAdvances)}</div>
+                <div className="kpi-sub muted">Total en la entidad</div>
               </div>
               <div className="kpi">
                 <div className="label">Este evento</div>
-                <div className="value" style={{ fontSize: '1.25rem' }}>
-                  ${Math.round(eventTotal).toLocaleString('es-MX')}
-                </div>
+                <div className="value value--money">{money(eventTotal)}</div>
+                <div className="kpi-sub muted">{selectedEvent?.name || 'Sin evento'}</div>
               </div>
               <div className="kpi">
                 <div className="label">Comprobantes</div>
                 <div className="value">{rows.length}</div>
+                <div className="kpi-sub muted">Archivos registrados</div>
               </div>
             </div>
+
+            {events.length ? (
+              <FilterBar meta={`${rows.length} comprobantes · ${selectedEvent?.name || '—'}`}>
+                <FieldSelect
+                  value={eventId}
+                  onChange={setEventId}
+                  label="Evento"
+                  options={eventOptions}
+                />
+              </FilterBar>
+            ) : null}
 
             <div className="panel">
               <div className="panel-head">
@@ -154,17 +177,7 @@ export default function AdvancesPage() {
                     actionLabel="Crear evento"
                   />
                 ) : (
-                  <form className="form" onSubmit={onSubmit} style={{ maxWidth: 640 }}>
-                    <label>
-                      Evento
-                      <select required value={eventId} onChange={(e) => setEventId(e.target.value)}>
-                        {events.map((ev) => (
-                          <option key={ev.id} value={ev.id}>
-                            {ev.name}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
+                  <form className="form panel--narrow" onSubmit={onSubmit}>
                     <FormGrid cols={2}>
                       <label>
                         Concepto
@@ -189,7 +202,7 @@ export default function AdvancesPage() {
                         onChange={(e) => setFile(e.target.files?.[0] || null)}
                       />
                     </label>
-                    <button className="btn" type="submit" disabled={saving}>
+                    <button className="btn btn-sm" type="submit" disabled={saving}>
                       {saving ? 'Subiendo…' : 'Subir anticipo'}
                     </button>
                   </form>
@@ -226,16 +239,19 @@ export default function AdvancesPage() {
                           <tr key={r.id}>
                             <td>{r.label || 'Anticipo'}</td>
                             <td className="num">
-                              {r.amount != null
-                                ? `$${Number(r.amount).toLocaleString('es-MX')}`
-                                : '—'}
+                              {r.amount != null ? money(Number(r.amount)) : '—'}
                             </td>
-                            <td className="muted">{r.uploadedBy?.fullName || '—'}</td>
-                            <td className="muted">
+                            <td className="muted kpi-sub">{r.uploadedBy?.fullName || '—'}</td>
+                            <td className="muted kpi-sub">
                               {new Date(r.createdAt).toLocaleString('es-MX')}
                             </td>
                             <td>
-                              <a className="btn ghost" href={r.fileUrl} target="_blank" rel="noreferrer">
+                              <a
+                                className="btn ghost btn-sm"
+                                href={r.fileUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                              >
                                 Ver
                               </a>
                             </td>
@@ -246,7 +262,7 @@ export default function AdvancesPage() {
                             <td colSpan={5}>
                               <EmptyState
                                 title="Sin anticipos en este evento"
-                                description="Sube un comprobante PDF o imagen con monto y concepto."
+                                description="Sube un comprobante PDF o imagen con monto y concepto arriba."
                               />
                             </td>
                           </tr>

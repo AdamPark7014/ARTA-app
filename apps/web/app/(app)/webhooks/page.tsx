@@ -1,11 +1,14 @@
 'use client';
 
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { AppShell } from '@/components/app-shell/AppShell';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { LoadingBlock, LoadingKpis } from '@/components/ui/LoadingBlock';
 import {
   FieldCheck,
+  FieldSearch,
+  FieldSelect,
+  FilterBar,
   FlashMessage,
   FormGrid,
   PageHeader,
@@ -46,6 +49,9 @@ export default function WebhooksPage() {
   const [deliveries, setDeliveries] = useState<Delivery[]>([]);
   const [loading, setLoading] = useState(true);
   const [msg, setMsg] = useState('');
+  const [q, setQ] = useState('');
+  const [deliveryQ, setDeliveryQ] = useState('');
+  const [deliveryResult, setDeliveryResult] = useState<'all' | 'ok' | 'fail'>('all');
   const [form, setForm] = useState({
     name: '',
     url: '',
@@ -100,7 +106,38 @@ export default function WebhooksPage() {
   }
 
   const msgVariant =
-    msg.startsWith('Webhook creado') || msg.startsWith('Test dispatch') ? 'success' : 'error';
+    msg.startsWith('Webhook creado') || msg.startsWith('Test dispatch')
+      ? msg.includes('secret')
+        ? 'warn'
+        : 'success'
+      : 'error';
+
+  const filteredEndpoints = useMemo(() => {
+    if (!q.trim()) return endpoints;
+    const n = q.toLowerCase();
+    return endpoints.filter(
+      (ep) =>
+        ep.name.toLowerCase().includes(n) ||
+        ep.url.toLowerCase().includes(n) ||
+        ep.events.some((ev) => ev.toLowerCase().includes(n)),
+    );
+  }, [endpoints, q]);
+
+  const filteredDeliveries = useMemo(() => {
+    let list = deliveries;
+    if (deliveryResult === 'ok') list = list.filter((d) => d.success);
+    if (deliveryResult === 'fail') list = list.filter((d) => !d.success);
+    if (deliveryQ.trim()) {
+      const n = deliveryQ.toLowerCase();
+      list = list.filter(
+        (d) =>
+          d.event.toLowerCase().includes(n) ||
+          d.endpoint.name.toLowerCase().includes(n) ||
+          (d.error || '').toLowerCase().includes(n),
+      );
+    }
+    return list;
+  }, [deliveries, deliveryQ, deliveryResult]);
 
   return (
     <AppShell title="Integraciones · Webhooks">
@@ -112,7 +149,11 @@ export default function WebhooksPage() {
             Probar dispatch
           </button>
         </PageHeader>
-        {msg ? <FlashMessage variant={msgVariant}>{msg}</FlashMessage> : null}
+        {msg ? (
+          <FlashMessage variant={msgVariant} onDismiss={() => setMsg('')}>
+            {msg}
+          </FlashMessage>
+        ) : null}
 
         {loading && !endpoints.length && !deliveries.length ? (
           <>
@@ -188,36 +229,56 @@ export default function WebhooksPage() {
                       description="Crea un endpoint HMAC para recibir alertas de riesgo, aging OC y firmas."
                     />
                   ) : (
-                    <table className="table">
-                      <thead>
-                        <tr>
-                          <th>Nombre</th>
-                          <th>URL</th>
-                          <th>Eventos</th>
-                          <th>Entregas</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {endpoints.map((ep) => (
-                          <tr key={ep.id}>
-                            <td>
-                              <strong>{ep.name}</strong>
-                              <StatusBadge
-                                value={ep.active ? 'ACTIVE' : 'CANCELLED'}
-                                kind="event"
-                              />
-                            </td>
-                            <td className="muted" style={{ fontSize: 12 }}>
-                              {ep.url}
-                            </td>
-                            <td className="muted" style={{ fontSize: 11 }}>
-                              {ep.events.join(', ')}
-                            </td>
-                            <td>{ep._count?.deliveries ?? 0}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                    <>
+                      <FilterBar meta={`${filteredEndpoints.length} de ${endpoints.length} endpoints`}>
+                        <FieldSearch
+                          value={q}
+                          onChange={setQ}
+                          placeholder="Nombre, URL o evento…"
+                          label="Buscar endpoint"
+                          maxWidth={240}
+                        />
+                      </FilterBar>
+                      {!filteredEndpoints.length ? (
+                        <EmptyState
+                          title="Sin coincidencias"
+                          description="Prueba otro término de búsqueda."
+                        />
+                      ) : (
+                        <div className="table-wrap">
+                          <table className="table table-sticky">
+                            <thead>
+                              <tr>
+                                <th>Nombre</th>
+                                <th>URL</th>
+                                <th>Eventos</th>
+                                <th className="num">Entregas</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {filteredEndpoints.map((ep) => (
+                                <tr key={ep.id}>
+                                  <td>
+                                    <strong>{ep.name}</strong>
+                                    <StatusBadge
+                                      value={ep.active ? 'ACTIVE' : 'CANCELLED'}
+                                      kind="event"
+                                    />
+                                  </td>
+                                  <td className="muted" style={{ fontSize: 12 }}>
+                                    {ep.url}
+                                  </td>
+                                  <td className="muted" style={{ fontSize: 11 }}>
+                                    {ep.events.join(', ')}
+                                  </td>
+                                  <td className="num">{ep._count?.deliveries ?? 0}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </>
                   )}
                 </div>
               </div>
@@ -225,7 +286,7 @@ export default function WebhooksPage() {
 
             <div className="panel">
               <div className="panel-head">
-                <h2>Entregas recientes</h2>
+                <h2>Entregas recientes · {filteredDeliveries.length}</h2>
               </div>
               <div className="panel-body">
                 {!deliveries.length ? (
@@ -234,39 +295,72 @@ export default function WebhooksPage() {
                     description="Usa “Probar dispatch” o espera el cron horario cuando haya señales."
                   />
                 ) : (
-                  <table className="table">
-                    <thead>
-                      <tr>
-                        <th>Cuándo</th>
-                        <th>Endpoint</th>
-                        <th>Evento</th>
-                        <th>Resultado</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {deliveries.map((d) => (
-                        <tr key={d.id}>
-                          <td className="muted">
-                            {new Date(d.createdAt).toLocaleString('es-MX')}
-                          </td>
-                          <td>{d.endpoint.name}</td>
-                          <td>
-                            <code>{d.event}</code>
-                          </td>
-                          <td>
-                            {d.success ? (
-                              <span className="badge ok">OK {d.statusCode || ''}</span>
-                            ) : (
-                              <StatusBadge value="REJECTED" kind="po" />
-                            )}
-                            {!d.success && d.error ? (
-                              <div className="muted" style={{ fontSize: 11 }}>{d.error}</div>
-                            ) : null}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                  <>
+                    <FilterBar meta={`${filteredDeliveries.length} de ${deliveries.length} entregas`}>
+                      <FieldSearch
+                        value={deliveryQ}
+                        onChange={setDeliveryQ}
+                        placeholder="Evento, endpoint o error…"
+                        label="Buscar entrega"
+                        maxWidth={240}
+                      />
+                      <FieldSelect
+                        value={deliveryResult}
+                        onChange={(v) => setDeliveryResult(v as typeof deliveryResult)}
+                        label="Filtrar por resultado"
+                        options={[
+                          { value: 'all', label: 'Todos' },
+                          { value: 'ok', label: 'Exitosas' },
+                          { value: 'fail', label: 'Fallidas' },
+                        ]}
+                      />
+                      <button className="btn ghost" type="button" disabled={loading} onClick={() => load()}>
+                        {loading ? 'Refrescando…' : 'Refrescar'}
+                      </button>
+                    </FilterBar>
+                    {!filteredDeliveries.length ? (
+                      <EmptyState
+                        title="Sin coincidencias"
+                        description="Ajusta búsqueda o filtro de resultado."
+                      />
+                    ) : (
+                      <div className="table-wrap">
+                        <table className="table table-sticky">
+                          <thead>
+                            <tr>
+                              <th>Cuándo</th>
+                              <th>Endpoint</th>
+                              <th>Evento</th>
+                              <th>Resultado</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {filteredDeliveries.map((d) => (
+                              <tr key={d.id}>
+                                <td className="muted">
+                                  {new Date(d.createdAt).toLocaleString('es-MX')}
+                                </td>
+                                <td>{d.endpoint.name}</td>
+                                <td>
+                                  <code>{d.event}</code>
+                                </td>
+                                <td>
+                                  {d.success ? (
+                                    <span className="badge ok">OK {d.statusCode || ''}</span>
+                                  ) : (
+                                    <StatusBadge value="REJECTED" kind="po" />
+                                  )}
+                                  {!d.success && d.error ? (
+                                    <div className="muted" style={{ fontSize: 11 }}>{d.error}</div>
+                                  ) : null}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             </div>

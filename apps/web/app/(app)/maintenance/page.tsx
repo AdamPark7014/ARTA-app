@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { AppShell } from '@/components/app-shell/AppShell';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { LoadingBlock } from '@/components/ui/LoadingBlock';
 import { ActionLink, FieldSearch, PageHeader, FilterBar } from '@/components/ui/PageChrome';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { api } from '@/lib/api';
@@ -51,11 +52,14 @@ export default function MaintenancePage() {
   return (
     <AppShell title="Mantenimiento · Auditorio">
       <div className="stack page-workspace">
-        <PageHeader description="Solo Explanada / Auditorio Arema. Checklists de mantenimiento por evento de renta.">
+        <PageHeader
+          description="Checklists de mantenimiento para eventos de renta en Explanada / Auditorio Arema."
+          hint="Solo entidad Explanada. Abre el checklist desde la tarjeta o entra al evento para ver el detalle completo."
+        >
           <ActionLink href="/events/new">Nuevo evento Explanada</ActionLink>
         </PageHeader>
 
-        <FilterBar meta={`${filtered.length} de ${events.length} eventos`}>
+        <FilterBar meta={`${filtered.length} de ${events.length} eventos · Explanada`}>
           <FieldSearch
             value={q}
             onChange={setQ}
@@ -65,16 +69,23 @@ export default function MaintenancePage() {
         </FilterBar>
 
         {loading ? (
-          <p className="muted">Cargando eventos Explanada…</p>
+          <LoadingBlock rows={4} label="Cargando eventos Explanada…" />
         ) : !events.length ? (
           <EmptyState
             title="No hay eventos Explanada aún"
-            description="Crea un evento de renta para el auditorio y asigna checklists de mantenimiento."
+            description="Crea un evento de renta para el auditorio; se asignarán checklists de mantenimiento automáticamente."
             actionHref="/events/new"
             actionLabel="Nuevo evento"
           />
         ) : !filtered.length ? (
-          <EmptyState title="Sin coincidencias" description="Prueba otro término de búsqueda." />
+          <EmptyState
+            title="Sin coincidencias"
+            description="Prueba otro término de búsqueda o limpia el filtro."
+          >
+            <button className="btn ghost" type="button" onClick={() => setQ('')}>
+              Limpiar búsqueda
+            </button>
+          </EmptyState>
         ) : (
           <div className="grid-cards">
             {filtered.map((ev) => {
@@ -84,30 +95,33 @@ export default function MaintenancePage() {
               const list = maint.length ? maint : (ev.checklists || []).slice(0, 3);
               const primary = list[0];
               return (
-                <div className="kpi" key={ev.id}>
+                <div className="kpi stack" key={ev.id}>
                   <div className="label">
                     <StatusBadge value={ev.status} kind="event" />
                   </div>
-                  <div style={{ fontWeight: 600, margin: '0.35rem 0' }}>{ev.name}</div>
-                  <div className="muted" style={{ fontSize: 12 }}>
-                    {ev.venue || 'Auditorio Arema Explanada'}
-                  </div>
-                  <div className="stack" style={{ marginTop: 12, gap: 8 }}>
+                  <strong>{ev.name}</strong>
+                  <div className="kpi-sub muted">{ev.venue || 'Auditorio Arema Explanada'}</div>
+                  <div className="checklist-picker__list">
                     {list.map((c) => (
                       <Link
                         key={c.id}
+                        className="format-card"
                         href={`/events/${ev.id}?tab=checklists&checklist=${c.id}`}
-                        style={{ textDecoration: 'none', color: 'inherit' }}
                       >
-                        <div style={{ fontSize: 13 }}>{c.title}</div>
-                        <div className="progress">
-                          <span style={{ width: `${c.progressPct}%` }} />
+                        <div className="format-card__title">{c.title}</div>
+                        <div className="format-card__progress">
+                          <div className="progress">
+                            <span style={{ width: `${c.progressPct}%` }} />
+                          </div>
+                          <span className="kpi-sub muted">{c.progressPct}%</span>
                         </div>
                       </Link>
                     ))}
-                    {!list.length ? <div className="muted">Sin checklists</div> : null}
+                    {!list.length ? (
+                      <p className="checklist-picker__empty muted">Sin checklists asignados</p>
+                    ) : null}
                   </div>
-                  <div style={{ marginTop: 12 }}>
+                  <div className="row">
                     <ActionLink
                       href={
                         primary
@@ -116,7 +130,7 @@ export default function MaintenancePage() {
                       }
                       variant="ghost"
                     >
-                      Abrir
+                      Abrir evento
                     </ActionLink>
                   </div>
                 </div>

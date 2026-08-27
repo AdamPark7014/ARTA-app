@@ -166,11 +166,11 @@ export default function AuditPage() {
               </div>
             ) : null}
 
-            <FilterBar>
+            <FilterBar meta={`${rows.length} de ${data?.logs.length ?? 0} eventos`}>
               <FieldSearch
                 value={q}
                 onChange={setQ}
-                placeholder="Buscar acción / usuario…"
+                placeholder="Buscar acción o usuario…"
                 label="Buscar acción o usuario"
                 maxWidth={260}
               />
@@ -180,17 +180,21 @@ export default function AuditPage() {
                 label="Filtrar por recurso"
                 options={[
                   { value: '', label: 'Todos los recursos' },
-                  { value: 'Event', label: 'Event' },
+                  { value: 'Event', label: 'Evento' },
                   { value: 'ChecklistInstance', label: 'Checklist' },
                   { value: 'PageContent', label: 'Studio' },
-                  { value: 'System', label: 'System' },
+                  { value: 'System', label: 'Sistema' },
                 ]}
               />
               <button className="btn ghost" type="button" disabled={loading} onClick={() => load()}>
                 {loading ? 'Refrescando…' : 'Refrescar'}
               </button>
             </FilterBar>
-            {error ? <FlashMessage variant="error">{error}</FlashMessage> : null}
+            {error ? (
+              <FlashMessage variant="error" onDismiss={() => setError('')}>
+                {error}
+              </FlashMessage>
+            ) : null}
             <div className="panel">
               <div className="panel-head">
                 <h2>Timeline · {rows.length}</h2>
@@ -224,7 +228,7 @@ export default function AuditPage() {
                   </EmptyState>
                 ) : (
                   <div className="table-wrap">
-                    <table className="table">
+                    <table className="table table-sticky">
                       <thead>
                         <tr>
                           <th>Fecha</th>

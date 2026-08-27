@@ -6,7 +6,6 @@ import { AppShell } from '@/components/app-shell/AppShell';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { LoadingBlock } from '@/components/ui/LoadingBlock';
 import {
-  ActionLink,
   FieldCheck,
   FieldSearch,
   FieldSelect,
@@ -116,9 +115,7 @@ export default function EventsPage() {
       <div className="stack page-workspace">
         <PageHeader
           description={`Portfolio operativo: pipeline, salud de checklists y hub del show. ${atRiskCount} en riesgo.`}
-        >
-          {canCreate ? <ActionLink href="/events/new">Nuevo evento</ActionLink> : null}
-        </PageHeader>
+        />
 
         {loading ? (
           <LoadingBlock rows={5} label="Cargando pipeline…" />
@@ -135,7 +132,7 @@ export default function EventsPage() {
                     return (
                       <Link key={e.id} className="events-pipeline__item" href={`/events/${e.id}`}>
                         <strong>{e.name}</strong>
-                        <div className="muted" style={{ fontSize: 11 }}>
+                        <div className="muted kpi-sub">
                           {e.artist || '—'}
                           {h ? ` · ${h.avgProgress}%` : ''}
                         </div>
@@ -146,9 +143,16 @@ export default function EventsPage() {
                     );
                   })}
                   {!pipeline[st].length ? (
-                    <div className="muted" style={{ fontSize: 12 }}>
-                      Vacío
-                    </div>
+                    <p className="pipeline-empty muted">Sin eventos</p>
+                  ) : null}
+                  {pipeline[st].length > 4 ? (
+                    <button
+                      type="button"
+                      className="btn ghost btn-sm pipeline-more"
+                      onClick={() => setStatus(st)}
+                    >
+                      Ver todos ({pipeline[st].length})
+                    </button>
                   ) : null}
                 </div>
               ))}
@@ -185,7 +189,45 @@ export default function EventsPage() {
                 </h2>
               </div>
               <div className="panel-body">
-                <div className="table-wrap">
+                <div className="events-card-list">
+                  {filtered.map((e) => {
+                    const h = healthMap.get(e.id);
+                    return (
+                      <Link key={e.id} className="events-card" href={`/events/${e.id}`}>
+                        <div className="events-card__head">
+                          <strong>{e.name}</strong>
+                          <StatusBadge value={e.status} kind="event" />
+                        </div>
+                        <p className="muted kpi-sub">
+                          {e.artist || '—'}
+                          {e.venue ? ` · ${e.venue}` : ''}
+                        </p>
+                        <div className="events-card__meta">
+                          <span>
+                            {e.startsAt
+                              ? new Date(e.startsAt).toLocaleDateString('es-MX')
+                              : 'Sin fecha'}
+                          </span>
+                          {h ? (
+                            <>
+                              <span>{h.avgProgress}% ops</span>
+                              <StatusBadge value={h.risk} kind="risk" />
+                            </>
+                          ) : null}
+                        </div>
+                      </Link>
+                    );
+                  })}
+                  {!filtered.length ? (
+                    <EmptyState
+                      title="Sin eventos para este filtro"
+                      description="Ajusta búsqueda o crea un show nuevo."
+                      actionHref={canCreate ? '/events/new' : undefined}
+                      actionLabel={canCreate ? 'Nuevo evento' : undefined}
+                    />
+                  ) : null}
+                </div>
+                <div className="table-wrap events-table-desktop">
                   <table className="table table-sticky">
                     <thead>
                       <tr>
@@ -219,14 +261,12 @@ export default function EventsPage() {
                             </td>
                             <td>
                               {h ? (
-                                <>
-                                  <div className="progress" style={{ minWidth: 72 }}>
+                                <div className="progress-cell">
+                                  <div className="progress">
                                     <span style={{ width: `${h.avgProgress}%` }} />
                                   </div>
-                                  <span className="muted" style={{ fontSize: 11 }}>
-                                    {h.avgProgress}%
-                                  </span>
-                                </>
+                                  <span className="muted kpi-sub">{h.avgProgress}%</span>
+                                </div>
                               ) : (
                                 '—'
                               )}
@@ -235,7 +275,7 @@ export default function EventsPage() {
                             <td>
                               <StatusBadge value={e.status} kind="event" />
                             </td>
-                            <td className="muted" style={{ fontSize: 12 }}>
+                            <td className="muted kpi-sub">
                               {e._count
                                 ? `${e._count.checklists} chk · ${e._count.purchaseOrders} OC${
                                     e._count.tasks != null ? ` · ${e._count.tasks} tasks` : ''

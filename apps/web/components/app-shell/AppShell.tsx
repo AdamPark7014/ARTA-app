@@ -6,9 +6,11 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { useUser } from '@/lib/user-context';
 import { EntityKey } from '@/lib/api';
-import { canSeeNavItem, NAV_ITEMS, ROLE_SCOPE } from '@/lib/access-matrix';
+import { canAccessEventOps, canSeeNavItem, NAV_ITEMS, ROLE_SCOPE, userHasPermission } from '@/lib/access-matrix';
 import { createSecureHandoffUrl } from '@/lib/cross-entity-handoff';
 import { NavIcon } from './NavIcon';
+import { SidebarSearch } from './SidebarSearch';
+import { UserChip } from '@/components/ui/UserChip';
 
 export function AppShell({
   children,
@@ -21,6 +23,7 @@ export function AppShell({
   const pathname = usePathname();
   const router = useRouter();
   const [navOpen, setNavOpen] = useState(false);
+  const [navQuery, setNavQuery] = useState('');
 
   useEffect(() => {
     if (!loading && !user) router.replace('/login');
@@ -36,14 +39,27 @@ export function AppShell({
   }, [user, entity]);
 
   const groups = useMemo(() => {
+    const q = navQuery.trim().toLowerCase();
+    const filtered = q
+      ? nav.filter(
+          (item) =>
+            item.label.toLowerCase().includes(q) ||
+            (item.group || '').toLowerCase().includes(q),
+        )
+      : nav;
     const map = new Map<string, typeof nav>();
-    for (const item of nav) {
+    for (const item of filtered) {
       const g = item.group || 'General';
       if (!map.has(g)) map.set(g, []);
       map.get(g)!.push(item);
     }
     return Array.from(map.entries());
-  }, [nav]);
+  }, [nav, navQuery]);
+
+  const canCreateEvent =
+    !!user &&
+    canAccessEventOps(user.roleKey, entity) &&
+    userHasPermission(user.roleKey, user.permissions, ['event.create', 'everything']);
 
   async function switchEntity(next: EntityKey) {
     if (!user || next === entity) return;
@@ -164,28 +180,33 @@ export function AppShell({
             : `Tu acceso: ${user.entities.map((e) => (e === 'ARTA' ? 'Arta' : 'Auditorio')).join(' · ')}`}
         </p>
 
-        <nav className="nav">
-          {groups.map(([group, items]) => (
-            <div key={group} className="nav-group">
-              <div className="nav-group-label">{group}</div>
-              {items.map((n) => {
-                const active =
-                  pathname === n.href ||
-                  (n.href !== '/dashboard' && pathname.startsWith(n.href));
-                return (
-                  <Link key={n.href} href={n.href} className={active ? 'active' : ''}>
-                    <NavIcon href={n.href} />
-                    <span>{n.label}</span>
-                  </Link>
-                );
-              })}
-            </div>
-          ))}
+        <SidebarSearch value={navQuery} onChange={setNavQuery} />
+
+        <nav className="nav" aria-label="Módulos del panel">
+          {groups.length === 0 ? (
+            <p className="nav-empty muted">Sin resultados para “{navQuery}”</p>
+          ) : (
+            groups.map(([group, items]) => (
+              <div key={group} className="nav-group">
+                <div className="nav-group-label">{group}</div>
+                {items.map((n) => {
+                  const active =
+                    pathname === n.href ||
+                    (n.href !== '/dashboard' && pathname.startsWith(n.href));
+                  return (
+                    <Link key={n.href} href={n.href} className={active ? 'active' : ''}>
+                      <NavIcon href={n.href} />
+                      <span>{n.label}</span>
+                    </Link>
+                  );
+                })}
+              </div>
+            ))
+          )}
         </nav>
 
         <div className="sidebar-foot">
-          <strong>{user.fullName}</strong>
-          <div>{user.title || user.roleKey}</div>
+          <UserChip name={user.fullName} subtitle={user.title || user.roleKey} />
           <div className="scope-hint">{ROLE_SCOPE[user.roleKey] || ''}</div>
           <button type="button" className="btn ghost btn-sm" style={{ marginTop: 12, width: '100%' }} onClick={logout}>
             Salir
@@ -215,9 +236,16 @@ export function AppShell({
               </div>
             </div>
           </div>
-          <span className={`badge ${entity === 'ARTA' ? 'arta' : 'explanada'}`}>
-            {entity === 'ARTA' ? 'ARTA' : 'AUDITORIO'}
-          </span>
+          <div className="topbar-actions">
+            {canCreateEvent ? (
+              <Link href="/events/new" className="btn btn-sm">
+                Nuevo evento
+              </Link>
+            ) : null}
+            <span className={`badge ${entity === 'ARTA' ? 'arta' : 'explanada'}`}>
+              {entity === 'ARTA' ? 'ARTA' : 'AUDITORIO'}
+            </span>
+          </div>
         </header>
         <div className="content">{children}</div>
       </div>

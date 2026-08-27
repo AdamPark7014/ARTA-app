@@ -3,7 +3,10 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
+import { SiteHeader } from '@/components/site/SiteHeader';
 import { VenueMap } from '@/components/site/VenueMap';
+import { LoadingBlock } from '@/components/ui/LoadingBlock';
+import { panelLoginUrl } from '@/lib/domains';
 
 type Tile = { title: string; body: string };
 type Content = {
@@ -101,11 +104,12 @@ export function PublicSite() {
   const [pages, setPages] = useState<Array<{ sectionKey: string; contentJson: Content }>>([]);
   const [slides, setSlides] = useState<Slide[]>(FALLBACK_SLIDES);
   const [news, setNews] = useState<NewsItem[]>([]);
-  const [scrolled, setScrolled] = useState(false);
+  const [contentLoading, setContentLoading] = useState(true);
   const [slideIdx, setSlideIdx] = useState(0);
   const [paused, setPaused] = useState(false);
 
   useEffect(() => {
+    setContentLoading(true);
     fetch('/api/studio/public/ARTA')
       .then((r) => r.json())
       .then((d) => {
@@ -113,14 +117,8 @@ export function PublicSite() {
         if (d.slides?.length) setSlides(d.slides);
         if (d.news?.length) setNews(d.news);
       })
-      .catch(console.error);
-  }, []);
-
-  useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 24);
-    onScroll();
-    window.addEventListener('scroll', onScroll, { passive: true });
-    return () => window.removeEventListener('scroll', onScroll);
+      .catch(console.error)
+      .finally(() => setContentLoading(false));
   }, []);
 
   const next = useCallback(() => {
@@ -141,31 +139,14 @@ export function PublicSite() {
   const mods = pages.find((p) => p.sectionKey === 'home_modulos')?.contentJson;
   const about = pages.find((p) => p.sectionKey === 'home_about')?.contentJson;
   const cta = pages.find((p) => p.sectionKey === 'home_cta')?.contentJson;
+
+  const panelLogin = panelLoginUrl('ARTA');
+  const newsItems = news.length ? news : FALLBACK_NEWS;
   const current = slides[slideIdx] || FALLBACK_SLIDES[0];
 
   return (
     <div className="site site-arta">
-      <header className={`site-nav ${scrolled ? 'is-scrolled' : ''}`}>
-        <Link href="/p/arta" className="site-brand">
-          <Image
-            src="/brand/arta-logo.png"
-            alt="arta"
-            width={140}
-            height={56}
-            className="site-logo-img"
-            priority
-          />
-        </Link>
-        <nav className="site-nav-links">
-          <a href="#nosotros">Nosotros</a>
-          <a href="#modulos">Operación</a>
-          <a href="#noticias">Noticias</a>
-          <a href="#ubicacion">Ubicación</a>
-          <a href="#contacto" className="btn ghost btn-sm">
-            Contacto
-          </a>
-        </nav>
-      </header>
+      <SiteHeader />
 
       {/* Hero carousel — full bleed */}
       <section
@@ -289,9 +270,15 @@ export function PublicSite() {
             <h2>Noticias</h2>
             <p className="muted">Lo último de Arta Producciones</p>
           </div>
+          <a className="btn ghost btn-sm section-head-row__cta" href="#contacto">
+            ¿Tienes un show? Escríbenos
+          </a>
         </div>
+        {contentLoading && !news.length ? (
+          <LoadingBlock rows={3} label="Cargando noticias…" />
+        ) : (
         <div className="news-grid">
-          {(news.length ? news : FALLBACK_NEWS).map((n) => (
+          {newsItems.map((n) => (
             <Link href={`/p/arta/noticias/${n.slug}`} className="news-card" key={n.id}>
               <div
                 className="news-cover"
@@ -315,6 +302,7 @@ export function PublicSite() {
             </Link>
           ))}
         </div>
+        )}
       </section>
 
       <section className="site-section" id="ubicacion">
@@ -372,6 +360,11 @@ export function PublicSite() {
             <a href="#nosotros">Nosotros</a>
             <a href="#modulos">Operación</a>
             <a href="#ubicacion">Mapa</a>
+          </div>
+          <div>
+            <div className="label">Equipo</div>
+            <a href={panelLogin}>Acceso al panel</a>
+            <a href={panelLoginUrl('EXPLANADA')}>Panel Auditorio</a>
           </div>
           <div>
             <div className="label">Contacto</div>

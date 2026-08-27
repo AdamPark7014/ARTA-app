@@ -6,7 +6,8 @@ export default function TransportPage() {
   return (
     <ModuleChecklistIndex
       title="Transportación"
-      description="Vans / proveedor / traslados por evento."
+      description="Vans, proveedor y traslados por evento."
+      hint="Verifica proveedor, número de vans y contacto antes del día del evento. Los críticos suelen ser shows en ≤ 7 días."
       templateKeys={['TRANSPORTACION']}
       titleMatch={new RegExp('transport', 'i')}
       fields={[

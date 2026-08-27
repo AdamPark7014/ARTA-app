@@ -123,9 +123,12 @@ export default function PurchaseOrdersPage() {
     <AppShell title="Procurement · OC">
       <div className="stack page-workspace">
         <PageHeader
-          description="Control tower de compras: pipeline de cash, aging, tasa de autorización y cola prioritaria. Flujo: pendiente → autorizado → pagado."
+          description="Control tower de compras: pipeline de cash, aging, tasa de autorización y cola prioritaria."
+          hint="Flujo recomendado: borrador → pendiente de autorización → autorizada → pagada. Prioriza OC con más de 7 días abiertas."
         >
-          <ActionLink href="/events" variant="ghost">Ir a eventos</ActionLink>
+          <ActionLink href="/events" variant="ghost">
+            Ir a eventos
+          </ActionLink>
         </PageHeader>
 
         {loading && !data ? (
@@ -140,30 +143,32 @@ export default function PurchaseOrdersPage() {
             <div className="kpi">
               <div className="label">OC totales</div>
               <div className="value">{k.total}</div>
+              <div className="kpi-sub muted">En la entidad activa</div>
             </div>
             <div className="kpi">
               <div className="label">Pipeline</div>
-              <div className="value" style={{ fontSize: '1.25rem' }}>
-                {money(k.pipeline)}
-              </div>
+              <div className="value value--money">{money(k.pipeline)}</div>
+              <div className="kpi-sub muted">Pendiente de pago</div>
             </div>
             <div className="kpi">
               <div className="label">Pagado</div>
-              <div className="value" style={{ fontSize: '1.25rem' }}>
-                {money(k.paid)}
-              </div>
+              <div className="value value--money">{money(k.paid)}</div>
+              <div className="kpi-sub muted">Cash ejecutado</div>
             </div>
             <div className="kpi">
               <div className="label">Auth rate</div>
               <div className="value">{k.authRate}%</div>
+              <div className="kpi-sub muted">Tasa de autorización</div>
             </div>
             <div className="kpi">
               <div className="label">Aging medio</div>
               <div className="value">{k.avgAgingDays}d</div>
+              <div className="kpi-sub muted">Días abiertas en promedio</div>
             </div>
             <div className={`kpi ${k.agingOver7 ? 'kpi--danger' : ''}`}>
               <div className="label">&gt;7 días abiertas</div>
               <div className="value">{k.agingOver7}</div>
+              <div className="kpi-sub muted">Requieren seguimiento</div>
             </div>
           </div>
         ) : null}
@@ -172,9 +177,9 @@ export default function PurchaseOrdersPage() {
           <div className="dash-split">
             <div className="panel">
               <div className="panel-head">
-                <h2>Aging queue</h2>
+                <h2>Cola de aging</h2>
               </div>
-              <div className="panel-body">
+              <div className="panel-body stack">
                 <DistBar
                   segments={[
                     { label: '0-3d', value: data.agingBuckets.d0_3, tone: 'ok' },
@@ -183,18 +188,20 @@ export default function PurchaseOrdersPage() {
                     { label: '15d+', value: data.agingBuckets.d15plus, tone: 'danger' },
                   ]}
                 />
-                <ul className="compact-list" style={{ marginTop: 12 }}>
+                <ul className="compact-list">
                   {data.agingQueue.slice(0, 6).map((o) => (
                     <li key={o.id}>
                       <span>
                         <strong>{o.eventName}</strong> · {o.rubro}
                       </span>
-                      <span className="muted">
+                      <span className="muted kpi-sub">
                         {o.ageDays}d · {money(o.amount)}
                       </span>
                     </li>
                   ))}
-                  {!data.agingQueue.length ? <li className="muted">Cola limpia</li> : null}
+                  {!data.agingQueue.length ? (
+                    <li className="muted kpi-sub">Cola limpia — sin OC estancadas</li>
+                  ) : null}
                 </ul>
               </div>
             </div>
@@ -296,9 +303,9 @@ export default function PurchaseOrdersPage() {
                               <StatusBadge value={po.status} kind={poStatusKind(po.status)} />
                             </td>
                             <td>
-                              <div className="row" style={{ gap: 4, flexWrap: 'wrap' }}>
+                              <div className="row row--tight">
                                 <button
-                                  className="btn ghost"
+                                  className="btn ghost btn-sm"
                                   type="button"
                                   onClick={() => toggleExpand(po.id, po.eventId)}
                                 >
@@ -306,7 +313,7 @@ export default function PurchaseOrdersPage() {
                                 </button>
                                 {po.status === 'PENDING_AUTH' || po.status === 'DRAFT' ? (
                                   <button
-                                    className="btn ghost"
+                                    className="btn ghost btn-sm"
                                     type="button"
                                     onClick={() => setStatus(po.id, 'AUTHORIZED')}
                                   >
@@ -315,7 +322,7 @@ export default function PurchaseOrdersPage() {
                                 ) : null}
                                 {po.status === 'AUTHORIZED' ? (
                                   <button
-                                    className="btn ghost"
+                                    className="btn ghost btn-sm"
                                     type="button"
                                     onClick={() => setStatus(po.id, 'PAID')}
                                   >
@@ -328,33 +335,35 @@ export default function PurchaseOrdersPage() {
                           {expanded === po.id ? (
                             <tr>
                               <td colSpan={7}>
-                                <table className="table">
-                                  <thead>
-                                    <tr>
-                                      <th>Concepto</th>
-                                      <th>Qty</th>
-                                      <th className="num">P.unit</th>
-                                      <th className="num">Total</th>
-                                    </tr>
-                                  </thead>
-                                  <tbody>
-                                    {(lines[po.id] || []).map((l, i) => (
-                                      <tr key={`${po.id}-${i}`}>
-                                        <td>{l.concept}</td>
-                                        <td>{l.qty}</td>
-                                        <td className="num">{money(Number(l.unitPrice))}</td>
-                                        <td className="num">{money(Number(l.total))}</td>
-                                      </tr>
-                                    ))}
-                                    {!lines[po.id]?.length ? (
+                                <div className="table-wrap">
+                                  <table className="table">
+                                    <thead>
                                       <tr>
-                                        <td colSpan={4} className="muted">
-                                          Sin partidas
-                                        </td>
+                                        <th>Concepto</th>
+                                        <th>Qty</th>
+                                        <th className="num">P.unit</th>
+                                        <th className="num">Total</th>
                                       </tr>
-                                    ) : null}
-                                  </tbody>
-                                </table>
+                                    </thead>
+                                    <tbody>
+                                      {(lines[po.id] || []).map((l, i) => (
+                                        <tr key={`${po.id}-${i}`}>
+                                          <td>{l.concept}</td>
+                                          <td>{l.qty}</td>
+                                          <td className="num">{money(Number(l.unitPrice))}</td>
+                                          <td className="num">{money(Number(l.total))}</td>
+                                        </tr>
+                                      ))}
+                                      {!lines[po.id]?.length ? (
+                                        <tr>
+                                          <td colSpan={4} className="muted kpi-sub">
+                                            Sin partidas cargadas
+                                          </td>
+                                        </tr>
+                                      ) : null}
+                                    </tbody>
+                                  </table>
+                                </div>
                               </td>
                             </tr>
                           ) : null}
@@ -372,7 +381,7 @@ export default function PurchaseOrdersPage() {
                               description={
                                 (data.orders?.length || 0) === 0
                                   ? 'Crea OC desde el detalle de un evento (pestaña OC).'
-                                  : 'Cambia status o limpia la búsqueda.'
+                                  : 'Cambia el estado o limpia la búsqueda para ver más resultados.'
                               }
                               actionHref="/events"
                               actionLabel="Ir a eventos"

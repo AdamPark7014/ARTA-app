@@ -29,6 +29,29 @@ export function hostForEntity(entity: EntityKey): string {
   return entity === 'ARTA' ? ARTA_HOST : AUDITORIO_HOST;
 }
 
+/** URL absoluta al panel (login, dashboard, etc.) desde sitio público o correos. */
+export function panelUrl(entity: EntityKey, path = '/dashboard'): string {
+  const host = hostForEntity(entity);
+  const clean = path.startsWith('/') ? path : `/${path}`;
+  if (typeof window !== 'undefined') {
+    return `${window.location.protocol}//${host}${clean}`;
+  }
+  return `https://${host}${clean}`;
+}
+
+export function panelLoginUrl(entity: EntityKey = 'ARTA'): string {
+  return panelUrl(entity, '/login');
+}
+
+/** Sitio público en el dominio raíz (marketing). */
+export function publicSiteUrl(path = '/p/arta'): string {
+  const clean = path.startsWith('/') ? path : `/${path}`;
+  if (typeof window !== 'undefined') {
+    return `${window.location.protocol}//${ROOT_DOMAIN}${clean}`;
+  }
+  return `https://${ROOT_DOMAIN}${clean}`;
+}
+
 export function isLocalHostname(hostname: string): boolean {
   const host = hostname.toLowerCase().split(':')[0];
   return (

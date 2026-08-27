@@ -10,6 +10,12 @@ type Props = {
   campaignAuthorized?: boolean;
   closed?: boolean;
   actions?: ReactNode;
+  dangerActions?: ReactNode;
+  stats?: {
+    avgProgress?: number;
+    showLabel?: string;
+    daysLabel?: string;
+  };
 };
 
 /** Cabecera del detalle de evento. */
@@ -22,6 +28,8 @@ export function EventHero({
   campaignAuthorized,
   closed,
   actions,
+  dangerActions,
+  stats,
 }: Props) {
   return (
     <div className="panel event-hero">
@@ -35,6 +43,15 @@ export function EventHero({
             {meta ? <p className="muted event-hero__meta">{meta}</p> : null}
           </div>
           <div className="event-hero__badges row">
+            {stats?.showLabel ? <span className="badge">{stats.showLabel}</span> : null}
+            {stats?.daysLabel ? (
+              <span className={`badge ${stats.daysLabel.includes('hoy') ? 'arta' : ''}`}>
+                {stats.daysLabel}
+              </span>
+            ) : null}
+            {typeof stats?.avgProgress === 'number' ? (
+              <span className="badge ok">{stats.avgProgress}% ops</span>
+            ) : null}
             {campaignType && campaignType !== 'NONE' ? (
               <span className="badge arta">{campaignType}</span>
             ) : null}
@@ -43,6 +60,9 @@ export function EventHero({
           </div>
         </div>
         {actions ? <div className="event-hero__actions row">{actions}</div> : null}
+        {dangerActions ? (
+          <div className="event-hero__danger row">{dangerActions}</div>
+        ) : null}
       </div>
     </div>
   );

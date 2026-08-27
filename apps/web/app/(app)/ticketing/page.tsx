@@ -210,7 +210,8 @@ export default function TicketingPage() {
     <AppShell title="Boletera · Capacidad">
       <div className="stack page-workspace">
         <PageHeader
-          description="Performance de boletera: aforo, vendidos, sell-through % y revenue potencial vs realizado. Sync stub/provider (Arema) rellena vendidos; modo live con TICKETING_SYNC_URL."
+          description="Performance de boletera: aforo, vendidos, sell-through y revenue potencial vs realizado."
+          hint="Sync rellena vendidos vía integración (Arema). Revisa holds vencidos — aparecen marcados en la tabla."
         >
           <button
             className="btn ghost"
@@ -256,15 +257,11 @@ export default function TicketingPage() {
             </div>
             <div className="kpi">
               <div className="label">Aforo</div>
-              <div className="value" style={{ fontSize: '1.35rem' }}>
-                {kpis.capacityTotal.toLocaleString('es-MX')}
-              </div>
+              <div className="value">{kpis.capacityTotal.toLocaleString('es-MX')}</div>
             </div>
             <div className="kpi">
               <div className="label">Vendidos</div>
-              <div className="value" style={{ fontSize: '1.35rem' }}>
-                {(kpis.soldTotal ?? 0).toLocaleString('es-MX')}
-              </div>
+              <div className="value">{(kpis.soldTotal ?? 0).toLocaleString('es-MX')}</div>
             </div>
             <div className="kpi">
               <div className="label">Sell-through</div>
@@ -272,15 +269,11 @@ export default function TicketingPage() {
             </div>
             <div className="kpi">
               <div className="label">Revenue potencial</div>
-              <div className="value" style={{ fontSize: '1.05rem' }}>
-                {money(kpis.potentialRevenue)}
-              </div>
+              <div className="value value--money">{money(kpis.potentialRevenue)}</div>
             </div>
             <div className="kpi">
               <div className="label">Revenue realizado</div>
-              <div className="value" style={{ fontSize: '1.05rem' }}>
-                {money(kpis.realizedRevenue ?? 0)}
-              </div>
+              <div className="value value--money">{money(kpis.realizedRevenue ?? 0)}</div>
             </div>
             <div className={`kpi ${kpis.holdRisk ? 'kpi--danger' : ''}`}>
               <div className="label">Hold en riesgo</div>
@@ -355,6 +348,7 @@ export default function TicketingPage() {
                 </label>
               </FormGrid>
 
+              <div className="table-wrap">
               <table className="table">
                 <thead>
                   <tr>
@@ -405,6 +399,7 @@ export default function TicketingPage() {
                   ))}
                 </tbody>
               </table>
+              </div>
 
               <label>
                 Notas
@@ -447,7 +442,8 @@ export default function TicketingPage() {
                 description="Prueba otro término de búsqueda."
               />
             ) : (
-              <table className="table">
+              <div className="table-wrap">
+              <table className="table table-sticky">
                 <thead>
                   <tr>
                     <th>Evento</th>
@@ -467,28 +463,17 @@ export default function TicketingPage() {
                           <Link href={`/events/${r.event.id}`}>{r.event.name}</Link>
                         </td>
                         <td>
-                          <div className="row" style={{ gap: 8, alignItems: 'center' }}>
+                          <div className="row">
                             {r.logoUrl ? (
                               // eslint-disable-next-line @next/next/no-img-element
-                              <img
-                                src={r.logoUrl}
-                                alt=""
-                                style={{
-                                  height: 22,
-                                  maxWidth: 56,
-                                  objectFit: 'contain',
-                                  background: '#fff',
-                                  borderRadius: 3,
-                                  padding: 1,
-                                }}
-                              />
+                              <img src={r.logoUrl} alt="" className="ticket-card__logo" />
                             ) : null}
                             <span>{r.boletera}</span>
                           </div>
                         </td>
                         <td>
                           {r.holdUntil ? (
-                            <span className="row" style={{ gap: 6, alignItems: 'center' }}>
+                            <span className="row">
                               {new Date(r.holdUntil).toLocaleDateString('es-MX')}
                               {holdExpired ? <StatusBadge value="watch" kind="risk" /> : null}
                             </span>
@@ -496,7 +481,7 @@ export default function TicketingPage() {
                             '—'
                           )}
                         </td>
-                        <td className="muted" style={{ fontSize: 12 }}>
+                        <td className="kpi-sub muted">
                           {(r.zonesJson || []).map((z) => `${z.zona}:${z.aforo}`).join(' · ')}
                         </td>
                         <td className="row">
@@ -512,6 +497,7 @@ export default function TicketingPage() {
                   })}
                 </tbody>
               </table>
+              </div>
             )}
           </div>
         </div>

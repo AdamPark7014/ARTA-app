@@ -1,9 +1,14 @@
 'use client';
 
-import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 import { AppShell } from '@/components/app-shell/AppShell';
+import { EventDetailSkeleton } from '@/components/events/EventDetailSkeleton';
+import { EventContextHint } from '@/components/events/EventContextHint';
+import { EventTabBar } from '@/components/events/EventTabBar';
+import { useEventTab } from '@/components/events/useEventTab';
 import { EventHero } from '@/components/ui/EventHero';
+import { EmptyState } from '@/components/ui/EmptyState';
 import { FlashMessage } from '@/components/ui/PageChrome';
 import { api } from '@/lib/api';
 import { useUser } from '@/lib/user-context';
@@ -35,13 +40,7 @@ import {
 
 export default function EventDetailPage() {
   return (
-    <Suspense
-      fallback={
-        <AppShell title="Evento">
-          <p className="muted">Cargando…</p>
-        </AppShell>
-      }
-    >
+    <Suspense fallback={<EventDetailSkeleton />}>
       <EventDetailInner />
     </Suspense>
   );
@@ -52,8 +51,11 @@ function EventDetailInner() {
   const searchParams = useSearchParams();
   const id = params.id as string;
   const { user } = useUser();
+  const { tab, selectTab } = useEventTab();
+  const checklistBootRef = useRef(false);
   const [event, setEvent] = useState<EventDetail | null>(null);
-  const [tab, setTab] = useState<Tab>((searchParams.get('tab') as Tab) || 'overview');
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [activeChecklist, setActiveChecklist] = useState<Checklist | null>(null);
   const [saving, setSaving] = useState(false);
   const [poForm, setPoForm] = useState({
@@ -130,6 +132,7 @@ function EventDetailInner() {
   const load = useCallback(async () => {
     const data = await api<EventDetail>(`/events/${id}`);
     setEvent(data);
+    setLoadError('');
     if (activeChecklist) {
       try {
         const full = await api<Checklist>(`/checklists/${activeChecklist.id}`);
@@ -167,13 +170,16 @@ function EventDetailInner() {
   }, [id, activeChecklist?.id]);
 
   useEffect(() => {
-    load().catch(console.error);
+    setLoading(true);
+    load()
+      .catch((e) => setLoadError(e instanceof Error ? e.message : 'No se pudo cargar el evento'))
+      .finally(() => setLoading(false));
     api<DirUser[]>('/users/directory').then(setDirectory).catch(() => undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
   async function openChecklist(c: Checklist) {
-    setTab('checklists');
+    selectTab('checklists', { checklist: c.id });
     setActiveChecklist(c);
     try {
       const full = await api<Checklist>(`/checklists/${c.id}`);
@@ -183,19 +189,20 @@ function EventDetailInner() {
     }
   }
 
-  // Deep-link: ?tab=&checklist=
+  function selectModule(next: Tab) {
+    if (next !== 'checklists') setActiveChecklist(null);
+    selectTab(next);
+  }
+
+  // Deep-link: ?checklist=
   useEffect(() => {
-    if (!event) return;
-    const qTab = searchParams.get('tab') as Tab | null;
+    if (!event || checklistBootRef.current) return;
     const qChecklist = searchParams.get('checklist');
-    if (qTab) setTab(qTab);
-    if (qChecklist) {
-      const found = event.checklists.find((c) => c.id === qChecklist);
-      if (found) {
-        setTab('checklists');
-        openChecklist(found).catch(console.error);
-      }
-    }
+    if (!qChecklist) return;
+    const found = event.checklists.find((c) => c.id === qChecklist);
+    if (!found) return;
+    checklistBootRef.current = true;
+    openChecklist(found).catch(console.error);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [event?.id, searchParams]);
 
@@ -218,6 +225,32 @@ function EventDetailInner() {
       { key: 'sponsors', label: 'Patrocinios', count: event.sponsors?.length || 0 },
       { key: 'files', label: 'Excel / PDF', count: event.files.length },
     ] as const;
+  }, [event]);
+
+  const heroStats = useMemo(() => {
+    if (!event) return undefined;
+    const avgProgress = event.checklists.length
+      ? Math.round(
+          event.checklists.reduce((s, c) => s + (c.progressPct || 0), 0) / event.checklists.length,
+        )
+      : 0;
+    const showLabel = event.startsAt
+      ? new Date(event.startsAt).toLocaleDateString('es-MX', {
+          weekday: 'short',
+          day: 'numeric',
+          month: 'short',
+          year: 'numeric',
+        })
+      : undefined;
+    let daysLabel: string | undefined;
+    if (event.startsAt) {
+      const days = Math.ceil((new Date(event.startsAt).getTime() - Date.now()) / 86400000);
+      if (days < 0) daysLabel = 'Show pasado';
+      else if (days === 0) daysLabel = 'Show hoy';
+      else if (days === 1) daysLabel = 'Show mañana';
+      else daysLabel = `Faltan ${days} días`;
+    }
+    return { avgProgress, showLabel, daysLabel };
   }, [event]);
 
   async function saveChecklist() {
@@ -320,7 +353,7 @@ function EventDetailInner() {
       lines: [{ concept: '', qty: 1, unitPrice: 0 }],
     });
     await load();
-    setTab('ocs');
+    selectTab('ocs');
   }
 
   async function saveCampaign() {
@@ -406,7 +439,7 @@ function EventDetailInner() {
         sold: Number(z.sold || 0),
       })),
     );
-    setTab('ticketing');
+    selectTab('ticketing');
   }
 
   async function deleteTicketing(tid: string) {
@@ -662,12 +695,25 @@ function EventDetailInner() {
     await load();
   }
 
-  if (!event) {
+  if (loading && !event) {
+    return <EventDetailSkeleton />;
+  }
+
+  if (loadError && !event) {
     return (
       <AppShell title="Evento">
-        <p className="muted">Cargando evento…</p>
+        <EmptyState
+          title="No se pudo cargar el evento"
+          description={loadError}
+          actionHref="/events"
+          actionLabel="Volver al pipeline"
+        />
       </AppShell>
     );
+  }
+
+  if (!event) {
+    return <EventDetailSkeleton />;
   }
 
   return (
@@ -681,6 +727,7 @@ function EventDetailInner() {
           campaignType={event.campaignType}
           campaignAuthorized={!!event.campaign?.authorized}
           closed={closed}
+          stats={heroStats}
           actions={
             <>
               {!closed ? (
@@ -693,48 +740,32 @@ function EventDetailInner() {
                   Cerrar evento
                 </button>
               ) : null}
-              {!closed && canClose ? (
-                <button className="btn ghost" type="button" onClick={cancelEvent}>
-                  Cancelar
-                </button>
-              ) : null}
               {closed && canReopen ? (
                 <button className="btn" type="button" onClick={reopenEvent}>
                   Reabrir
                 </button>
               ) : null}
+            </>
+          }
+          dangerActions={
+            <>
+              {!closed && canClose ? (
+                <button className="btn ghost btn-danger" type="button" onClick={cancelEvent}>
+                  Cancelar evento
+                </button>
+              ) : null}
               {canDeleteEvent ? (
-                <button className="btn ghost" type="button" onClick={deleteEvent}>
-                  Eliminar
+                <button className="btn ghost btn-danger" type="button" onClick={deleteEvent}>
+                  Eliminar evento
                 </button>
               ) : null}
             </>
           }
         />
 
-        <nav className="tab-bar" aria-label="Módulos del evento">
-          <button
-            className={`tab-bar__btn ${tab === 'overview' ? 'is-active' : ''}`}
-            type="button"
-            onClick={() => setTab('overview')}
-          >
-            Resumen
-          </button>
-          {modules.map((m) => (
-            <button
-              key={m.key}
-              className={`tab-bar__btn ${tab === m.key ? 'is-active' : ''}`}
-              type="button"
-              onClick={() => {
-                setTab(m.key as Tab);
-                setActiveChecklist(null);
-              }}
-            >
-              {m.label}
-              <span className="tab-bar__count">{m.count}</span>
-            </button>
-          ))}
-        </nav>
+        <EventTabBar tab={tab} modules={modules} onSelect={selectModule} />
+
+        <EventContextHint tab={tab} />
 
         {msg ? (
           <FlashMessage variant="success" onDismiss={() => setMsg('')}>
@@ -762,7 +793,7 @@ function EventDetailInner() {
             revealedPin={revealedPin}
             deactivatePin={deactivatePin}
             onOpenChecklist={openChecklist}
-            onGoChecklists={() => setTab('checklists')}
+            onGoModule={selectModule}
           />
         )}
 
@@ -774,6 +805,7 @@ function EventDetailInner() {
             saving={saving}
             userFullName={user?.fullName || ''}
             onOpenChecklist={openChecklist}
+            onClearChecklist={() => setActiveChecklist(null)}
             onSaveChecklist={saveChecklist}
             onRegeneratePdf={regeneratePdf}
             onUpload={onUpload}

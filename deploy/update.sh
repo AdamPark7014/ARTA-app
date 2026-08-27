@@ -38,7 +38,7 @@ fi
 cd "$SCRIPT_DIR"
 
 echo "Installing Traefik route → $TRAEFIK_DST"
-cp -f "$TRAEFIK_SRC" "$TRAEFIK_DST"
+bash "$SCRIPT_DIR/ensure-traefik-route.sh"
 
 echo "Building images..."
 DOCKER_BUILDKIT=1 COMPOSE_DOCKER_CLI_BUILD=1 \

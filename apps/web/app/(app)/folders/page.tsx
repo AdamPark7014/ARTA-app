@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { AppShell } from '@/components/app-shell/AppShell';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { LoadingBlock } from '@/components/ui/LoadingBlock';
 import {
   FieldSearch,
   FlashMessage,
@@ -41,13 +42,19 @@ export default function FoldersPage() {
   const [description, setDescription] = useState('');
   const [msg, setMsg] = useState('');
   const [q, setQ] = useState('');
+  const [loading, setLoading] = useState(true);
   const canEdit = user
     ? userHasPermission(user.roleKey, user.permissions, ['folders.edit', 'everything'])
     : false;
 
   async function load() {
-    const list = await api<Folder[]>(`/folders?entity=${entity}`);
-    setFolders(list);
+    setLoading(true);
+    try {
+      const list = await api<Folder[]>(`/folders?entity=${entity}`);
+      setFolders(list);
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => {
@@ -121,7 +128,8 @@ export default function FoldersPage() {
     <AppShell title="Carpetas generales">
       <div className="stack page-workspace">
         <PageHeader
-          description={`Documentos compartidos por entidad (no ligados a un evento). Roles con acceso a ${entity}.`}
+          description={`Documentos compartidos por entidad (no ligados a un evento). Acceso según roles en ${entity}.`}
+          hint="Útil para políticas, formatos base y archivos de referencia. Los archivos de un evento viven en la ficha del evento."
         />
 
         {msg ? (
@@ -130,7 +138,7 @@ export default function FoldersPage() {
           </FlashMessage>
         ) : null}
 
-        <div style={{ display: 'grid', gridTemplateColumns: active ? '1fr 1.2fr' : '1fr', gap: 16 }}>
+        <div className={active ? 'studio-split' : 'stack'}>
           <div className="stack">
             {canEdit ? (
               <div className="panel">
@@ -162,7 +170,7 @@ export default function FoldersPage() {
                 <h2>Carpetas</h2>
               </div>
               <div className="panel-body">
-                <FilterBar meta={`${filtered.length} de ${folders.length} carpetas`}>
+                <FilterBar meta={`${filtered.length} de ${folders.length} carpetas · ${entity}`}>
                   <FieldSearch
                     value={q}
                     onChange={setQ}
@@ -171,45 +179,51 @@ export default function FoldersPage() {
                   />
                 </FilterBar>
 
-                {!folders.length ? (
+                {loading ? (
+                  <LoadingBlock rows={3} label="Cargando carpetas…" />
+                ) : !folders.length ? (
                   <EmptyState
                     title={`Sin carpetas en ${entity}`}
-                    description="Crea una carpeta para compartir documentos de la entidad."
+                    description="Crea una carpeta para compartir documentos de la entidad con el equipo."
                   />
                 ) : !filtered.length ? (
-                  <EmptyState title="Sin coincidencias" description="Prueba otro término de búsqueda." />
+                  <EmptyState title="Sin coincidencias" description="Prueba otro término de búsqueda.">
+                    <button className="btn ghost" type="button" onClick={() => setQ('')}>
+                      Limpiar búsqueda
+                    </button>
+                  </EmptyState>
                 ) : (
-                  <table className="table">
-                    <thead>
-                      <tr>
-                        <th>Nombre</th>
-                        <th>Archivos</th>
-                        <th></th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filtered.map((f) => (
-                        <tr key={f.id}>
-                          <td>
-                            <button className="btn ghost" type="button" onClick={() => openFolder(f.id)}>
-                              {f.name}
-                            </button>
-                            <div className="muted" style={{ fontSize: 12 }}>
-                              {f.description || '—'}
-                            </div>
-                          </td>
-                          <td>{f._count?.files ?? 0}</td>
-                          <td>
-                            {canEdit ? (
-                              <button className="btn ghost" type="button" onClick={() => removeFolder(f.id)}>
-                                Eliminar
-                              </button>
-                            ) : null}
-                          </td>
+                  <div className="table-wrap">
+                    <table className="table table-sticky">
+                      <thead>
+                        <tr>
+                          <th>Nombre</th>
+                          <th>Archivos</th>
+                          <th></th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {filtered.map((f) => (
+                          <tr key={f.id}>
+                            <td>
+                              <button className="btn ghost" type="button" onClick={() => openFolder(f.id)}>
+                                {f.name}
+                              </button>
+                              <div className="kpi-sub muted">{f.description || '—'}</div>
+                            </td>
+                            <td>{f._count?.files ?? 0}</td>
+                            <td>
+                              {canEdit ? (
+                                <button className="btn ghost" type="button" onClick={() => removeFolder(f.id)}>
+                                  Eliminar
+                                </button>
+                              ) : null}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 )}
               </div>
             </div>
@@ -225,7 +239,7 @@ export default function FoldersPage() {
               </div>
               <div className="panel-body stack">
                 {canEdit ? (
-                  <label className="btn" style={{ cursor: 'pointer', width: 'fit-content' }}>
+                  <label className="btn module-upload">
                     Subir archivo
                     <input
                       type="file"
@@ -241,33 +255,37 @@ export default function FoldersPage() {
                 {!active.files.length ? (
                   <EmptyState title="Carpeta vacía" description="Sube el primer archivo a esta carpeta." />
                 ) : (
-                  <table className="table">
-                    <thead>
-                      <tr>
-                        <th>Archivo</th>
-                        <th>Fecha</th>
-                        <th></th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {active.files.map((file) => (
-                        <tr key={file.id}>
-                          <td>{file.fileName}</td>
-                          <td className="muted">{new Date(file.createdAt).toLocaleString('es-MX')}</td>
-                          <td className="row">
-                            <a className="btn ghost" href={file.url} target="_blank" rel="noreferrer">
-                              Abrir
-                            </a>
-                            {canEdit ? (
-                              <button className="btn ghost" type="button" onClick={() => removeFile(file.id)}>
-                                Quitar
-                              </button>
-                            ) : null}
-                          </td>
+                  <div className="table-wrap">
+                    <table className="table table-sticky">
+                      <thead>
+                        <tr>
+                          <th>Archivo</th>
+                          <th>Fecha</th>
+                          <th></th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {active.files.map((file) => (
+                          <tr key={file.id}>
+                            <td>{file.fileName}</td>
+                            <td className="kpi-sub muted">
+                              {new Date(file.createdAt).toLocaleString('es-MX')}
+                            </td>
+                            <td className="row">
+                              <a className="btn ghost" href={file.url} target="_blank" rel="noreferrer">
+                                Abrir
+                              </a>
+                              {canEdit ? (
+                                <button className="btn ghost" type="button" onClick={() => removeFile(file.id)}>
+                                  Quitar
+                                </button>
+                              ) : null}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 )}
               </div>
             </div>

@@ -204,7 +204,18 @@ export default function UsersPage() {
   return (
     <AppShell title="Identity & Access">
       <div className="page-workspace stack">
-        <PageHeader description="Gobernanza de identidades: actividad, riesgo, lockouts y privilegios. Solo dirección gestiona cuentas; el rol define el acceso base y los permisos extra se suman." />
+        <PageHeader description="Gobernanza de identidades: actividad, riesgo, bloqueos y privilegios. Solo dirección gestiona cuentas; el rol define el acceso base y los permisos extra se suman." />
+
+        {error ? (
+          <FlashMessage variant="error" onDismiss={() => setError('')}>
+            {error}
+          </FlashMessage>
+        ) : null}
+        {msg ? (
+          <FlashMessage variant={msgVariant} onDismiss={() => setMsg('')}>
+            {msg}
+          </FlashMessage>
+        ) : null}
 
         {loading ? (
           <>
@@ -232,7 +243,7 @@ export default function UsersPage() {
               <div className="value">{k.inactive30d}</div>
             </div>
             <div className={`kpi ${k.lockedNow ? 'kpi--danger' : ''}`}>
-              <div className="label">Locked ahora</div>
+              <div className="label">Bloqueados ahora</div>
               <div className="value">{k.lockedNow}</div>
             </div>
             <div className={`kpi ${k.highRisk ? 'kpi--danger' : ''}`}>
@@ -307,17 +318,12 @@ export default function UsersPage() {
                 </label>
                 <label>
                   Rol
-                  <select
-                    className="field"
+                  <FieldSelect
                     value={form.roleKey}
-                    onChange={(e) => setForm({ ...form, roleKey: e.target.value })}
-                  >
-                    {roles.map((r) => (
-                      <option key={r.key} value={r.key}>
-                        {r.label}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={(v) => setForm({ ...form, roleKey: v })}
+                    label="Rol del usuario"
+                    options={roles.map((r) => ({ value: r.key, label: r.label }))}
+                  />
                 </label>
                 {!inviteMode ? (
                   <label>
@@ -346,7 +352,6 @@ export default function UsersPage() {
                     />
                   ))}
                 </div>
-                {msg ? <FlashMessage variant={msgVariant}>{msg}</FlashMessage> : null}
                 {inviteUrl ? (
                   <p className="muted" style={{ fontSize: 12, wordBreak: 'break-all' }}>
                     <a href={inviteUrl}>{inviteUrl}</a>
@@ -368,12 +373,11 @@ export default function UsersPage() {
               <h2>Directorio · {filtered.length}</h2>
             </div>
             <div className="panel-body">
-              {error ? <FlashMessage variant="error">{error}</FlashMessage> : null}
-              <FilterBar>
+              <FilterBar meta={`${filtered.length} de ${users.length} usuarios`}>
                 <FieldSearch
                   value={q}
                   onChange={setQ}
-                  placeholder="Buscar…"
+                  placeholder="Nombre, email o rol…"
                   label="Buscar usuario"
                   maxWidth={240}
                 />
@@ -389,6 +393,16 @@ export default function UsersPage() {
                   ]}
                 />
               </FilterBar>
+              {!filtered.length ? (
+                <EmptyState
+                  title={users.length ? 'Sin coincidencias' : 'Sin usuarios'}
+                  description={
+                    users.length
+                      ? 'Ajusta búsqueda o filtro de riesgo.'
+                      : 'Crea un usuario o envía una invitación.'
+                  }
+                />
+              ) : (
               <div className="table-wrap">
                 <table className="table table-sticky">
                   <thead>
@@ -417,16 +431,16 @@ export default function UsersPage() {
                         </td>
                         <td>
                           <StatusBadge value={u.risk} kind="risk" />
-                          {u.locked ? <div className="muted" style={{ fontSize: 11 }}>locked</div> : null}
+                          {u.locked ? <div className="muted" style={{ fontSize: 11 }}>bloqueado</div> : null}
                           {u.failedLoginCount > 0 ? (
                             <div className="muted" style={{ fontSize: 11 }}>
-                              fails {u.failedLoginCount}
+                              {u.failedLoginCount} fallos de login
                             </div>
                           ) : null}
                         </td>
                         <td className="muted" style={{ fontSize: 12 }}>
-                          {u.activity30d} audit
-                          <div>{u.checklistEdits30d} edits chk</div>
+                          {u.activity30d} auditoría
+                          <div>{u.checklistEdits30d} ediciones chk</div>
                         </td>
                         <td className="muted">{u.activeSessions ?? 0}</td>
                         <td className="muted" style={{ fontSize: 12 }}>
@@ -435,17 +449,12 @@ export default function UsersPage() {
                             : 'Nunca'}
                         </td>
                         <td>
-                          <select
-                            className="field"
+                          <FieldSelect
                             value={u.roleKey}
-                            onChange={(e) => patchUser(u.id, { roleKey: e.target.value })}
-                          >
-                            {roles.map((r) => (
-                              <option key={r.key} value={r.key}>
-                                {r.label}
-                              </option>
-                            ))}
-                          </select>
+                            onChange={(v) => patchUser(u.id, { roleKey: v })}
+                            label={`Rol de ${u.fullName}`}
+                            options={roles.map((r) => ({ value: r.key, label: r.label }))}
+                          />
                         </td>
                         <td>
                           <div className="row">
@@ -471,7 +480,7 @@ export default function UsersPage() {
                           </div>
                         </td>
                         <td>
-                          <button className="btn ghost" type="button" onClick={() => setPermsUserId(u.id)}>
+                          <button className="btn ghost btn-sm" type="button" onClick={() => setPermsUserId(u.id)}>
                             {u.permissions.length ? `${u.permissions.length} extra` : 'Permisos'}
                           </button>
                         </td>
@@ -479,41 +488,42 @@ export default function UsersPage() {
                           <StatusBadge value={u.active ? 'Activo' : 'Inactivo'} kind="raw" />
                         </td>
                         <td>
-                          <div className="row" style={{ gap: 4 }}>
+                          <div className="row row--tight">
                             <button
-                              className="btn ghost"
+                              className="btn ghost btn-sm"
                               type="button"
                               onClick={() => {
-                                const password = prompt('Nueva contraseña (mín. 6)');
+                                const password = prompt('Nueva contraseña (mín. 6 caracteres)');
                                 if (password && password.length >= 6) patchUser(u.id, { password });
                               }}
                             >
-                              Reset
+                              Restablecer
                             </button>
-                            <button
-                              className="btn ghost"
-                              type="button"
-                              onClick={() => setActive(u.id, !u.active)}
-                            >
-                              {u.active ? 'Off' : 'On'}
-                            </button>
+                            {u.active ? (
+                              <button
+                                className="btn ghost btn-sm btn-danger"
+                                type="button"
+                                onClick={() => setActive(u.id, false)}
+                              >
+                                Desactivar
+                              </button>
+                            ) : (
+                              <button
+                                className="btn ghost btn-sm"
+                                type="button"
+                                onClick={() => setActive(u.id, true)}
+                              >
+                                Activar
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>
                     ))}
-                    {!filtered.length ? (
-                      <tr>
-                        <td colSpan={10}>
-                          <EmptyState
-                            title="Sin usuarios para este filtro"
-                            description="Ajusta búsqueda o riesgo, o crea un usuario nuevo."
-                          />
-                        </td>
-                      </tr>
-                    ) : null}
                   </tbody>
                 </table>
               </div>
+              )}
             </div>
           </div>
         </div>

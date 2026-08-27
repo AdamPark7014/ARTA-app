@@ -52,6 +52,8 @@ export default function VendorPinsPage() {
     expiresAt: '',
   });
   const [revealed, setRevealed] = useState<{ pin: string; portalPath: string } | null>(null);
+  const [rotateId, setRotateId] = useState<string | null>(null);
+  const [rotatePin, setRotatePin] = useState('');
 
   async function loadEvents() {
     setLoading(true);
@@ -128,18 +130,19 @@ export default function VendorPinsPage() {
   }
 
   async function rotate(id: string) {
-    const next = window.prompt('Nuevo PIN (mín. 4 caracteres)');
-    if (!next || next.length < 4) {
-      setMsg('PIN de rotación inválido');
+    if (!rotatePin || rotatePin.length < 4) {
+      setMsg('PIN de rotación inválido (mín. 4 caracteres)');
       return;
     }
     try {
       const res = await api<{ pin: string; portalPath: string }>(`/vendor/pins/${id}/rotate`, {
         method: 'POST',
-        body: JSON.stringify({ pin: next }),
+        body: JSON.stringify({ pin: rotatePin }),
       });
       setRevealed({ pin: res.pin, portalPath: res.portalPath });
       setMsg('PIN rotado — cópialo ahora');
+      setRotateId(null);
+      setRotatePin('');
       await loadPins(eventId);
     } catch (err) {
       setMsg(err instanceof Error ? err.message : 'Error al rotar');
@@ -159,15 +162,15 @@ export default function VendorPinsPage() {
 
         {revealed ? (
           <FlashMessage variant="warn">
-            <span className="row" style={{ gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+            <div className="credential-strip">
               <span>
                 <strong>PIN (única vez):</strong> <code>{revealed.pin}</code>
               </span>
-              <a className="btn ghost" href={revealed.portalPath} target="_blank" rel="noreferrer">
+              <a className="btn ghost btn-sm" href={revealed.portalPath} target="_blank" rel="noreferrer">
                 Abrir portal
               </a>
               <button
-                className="btn ghost"
+                className="btn ghost btn-sm"
                 type="button"
                 onClick={() => {
                   const url =
@@ -182,7 +185,7 @@ export default function VendorPinsPage() {
               >
                 Copiar link + PIN
               </button>
-            </span>
+            </div>
           </FlashMessage>
         ) : null}
 
@@ -207,7 +210,6 @@ export default function VendorPinsPage() {
                     <label>
                       Evento
                       <FieldSelect
-                        label="Evento"
                         value={eventId}
                         onChange={setEventId}
                         options={eventOptions}
@@ -291,10 +293,47 @@ export default function VendorPinsPage() {
                 ) : !filteredPins.length ? (
                   <EmptyState title="Sin coincidencias" description="Prueba otro término de búsqueda." />
                 ) : (
-                  <table className="table">
+                  <>
+                    {rotateId ? (
+                      <form
+                        className="credential-rotate form"
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          rotate(rotateId);
+                        }}
+                      >
+                        <label>
+                          Nuevo PIN (mín. 4 caracteres)
+                          <input
+                            required
+                            minLength={4}
+                            value={rotatePin}
+                            onChange={(e) => setRotatePin(e.target.value)}
+                            autoFocus
+                          />
+                        </label>
+                        <div className="row">
+                          <button className="btn btn-sm" type="submit">
+                            Confirmar rotación
+                          </button>
+                          <button
+                            className="btn ghost btn-sm"
+                            type="button"
+                            onClick={() => {
+                              setRotateId(null);
+                              setRotatePin('');
+                            }}
+                          >
+                            Cancelar
+                          </button>
+                        </div>
+                      </form>
+                    ) : null}
+                    <div className="table-wrap">
+                      <table className="table">
                     <thead>
                       <tr>
-                        <th>Label</th>
+                        <th>Etiqueta</th>
                         <th>Scopes</th>
                         <th>Estado</th>
                         <th>Último uso</th>
@@ -321,13 +360,20 @@ export default function VendorPinsPage() {
                             {p.lastUsedAt ? new Date(p.lastUsedAt).toLocaleString() : '—'}
                           </td>
                           <td>
-                            <div className="row" style={{ gap: 4 }}>
-                              <button className="btn ghost" type="button" onClick={() => rotate(p.id)}>
+                            <div className="row row--tight">
+                              <button
+                                className="btn ghost btn-sm"
+                                type="button"
+                                onClick={() => {
+                                  setRotateId(p.id);
+                                  setRotatePin('');
+                                }}
+                              >
                                 Rotar PIN
                               </button>
                               {p.active ? (
                                 <button
-                                  className="btn ghost"
+                                  className="btn ghost btn-sm btn-danger"
                                   type="button"
                                   onClick={() => deactivate(p.id)}
                                 >
@@ -339,7 +385,9 @@ export default function VendorPinsPage() {
                         </tr>
                       ))}
                     </tbody>
-                  </table>
+                      </table>
+                    </div>
+                  </>
                 )}
               </div>
             </div>

@@ -7,6 +7,7 @@ import { LoadingBlock, LoadingKpis } from '@/components/ui/LoadingBlock';
 import {
   ActionLink,
   FieldCheck,
+  FieldSelect,
   FlashMessage,
   FormGrid,
   PageHeader,
@@ -253,7 +254,11 @@ export default function OrganizationsPage() {
     <AppShell title="Organizaciones · Multi-tenant">
       <div className="stack page-workspace">
         <PageHeader description="Tenants aislados (usuarios + eventos). Planes TRIAL / OPS / ENTERPRISE con límites soft enforced en API (crear usuarios, invites y eventos)." />
-        {msg ? <FlashMessage variant={msgVariant}>{msg}</FlashMessage> : null}
+        {msg ? (
+          <FlashMessage variant={msgVariant} onDismiss={() => setMsg('')}>
+            {msg}
+          </FlashMessage>
+        ) : null}
 
         {loading ? (
           <>
@@ -403,8 +408,8 @@ export default function OrganizationsPage() {
                             <th>Slug</th>
                             <th>Plan</th>
                             <th>2FA obligatorio</th>
-                            <th className="num">Users</th>
-                            <th className="num">Events</th>
+                            <th className="num">Usuarios</th>
+                            <th className="num">Eventos</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -419,24 +424,26 @@ export default function OrganizationsPage() {
                               </td>
                               <td>
                                 {isPlatform ? (
-                                  <select
+                                  <FieldSelect
                                     value={o.plan}
-                                    onChange={async (e) => {
+                                    onChange={async (v) => {
                                       try {
                                         await api(`/organizations/${o.id}`, {
                                           method: 'PATCH',
-                                          body: JSON.stringify({ plan: e.target.value }),
+                                          body: JSON.stringify({ plan: v }),
                                         });
                                         await load();
                                       } catch (err) {
                                         setMsg(err instanceof Error ? err.message : 'Error plan');
                                       }
                                     }}
-                                  >
-                                    <option value="TRIAL">TRIAL</option>
-                                    <option value="OPS">OPS</option>
-                                    <option value="ENTERPRISE">ENTERPRISE</option>
-                                  </select>
+                                    label={`Plan de ${o.name}`}
+                                    options={[
+                                      { value: 'TRIAL', label: 'TRIAL' },
+                                      { value: 'OPS', label: 'OPS' },
+                                      { value: 'ENTERPRISE', label: 'ENTERPRISE' },
+                                    ]}
+                                  />
                                 ) : (
                                   <StatusBadge value={o.plan} kind="raw" />
                                 )}
@@ -493,19 +500,15 @@ export default function OrganizationsPage() {
                         </label>
                         <label>
                           Rol
-                          <select
+                          <FieldSelect
                             value={inviteForm.roleKey}
-                            onChange={(e) => setInviteForm({ ...inviteForm, roleKey: e.target.value })}
-                          >
-                            {(roles.length
+                            onChange={(v) => setInviteForm({ ...inviteForm, roleKey: v })}
+                            label="Rol del invitado"
+                            options={(roles.length
                               ? roles
                               : [{ key: 'logistica', label: 'Logística' }]
-                            ).map((r) => (
-                              <option key={r.key} value={r.key}>
-                                {r.label}
-                              </option>
-                            ))}
-                          </select>
+                            ).map((r) => ({ value: r.key, label: r.label }))}
+                          />
                         </label>
                       </FormGrid>
                       <div className="row" style={{ gap: 12 }}>
@@ -565,7 +568,7 @@ export default function OrganizationsPage() {
                                   <td>
                                     {status === 'pendiente' ? (
                                       <button
-                                        className="btn ghost"
+                                        className="btn ghost btn-sm btn-danger"
                                         type="button"
                                         onClick={() => revokeInvite(inv.id)}
                                       >
@@ -614,7 +617,7 @@ export default function OrganizationsPage() {
                                   <strong>{u.fullName}</strong>
                                   <div className="muted" style={{ fontSize: 12 }}>
                                     {u.email}
-                                    {!u.active ? ' · off' : ''}
+                                    {!u.active ? ' · inactivo' : ''}
                                   </div>
                                 </td>
                                 <td className="muted">{u.roleKey}</td>

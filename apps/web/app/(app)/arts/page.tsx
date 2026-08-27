@@ -7,6 +7,7 @@ export default function ArtsPage() {
     <ModuleChecklistIndex
       title="Artes / Shows"
       description="Entregables de artes, deadlines y aprobaciones."
+      hint="Artes y piezas visuales suelen ser cuello de botella — prioriza deadlines y entregables sin autorizar."
       templateKeys={['ARTES_SHOWS']}
       titleMatch={new RegExp('artes|shows', 'i')}
       fields={[

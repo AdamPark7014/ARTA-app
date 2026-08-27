@@ -93,9 +93,12 @@ export default function TasksPage() {
     <AppShell title="Mis tareas · Workload">
       <div className="stack page-workspace">
         <PageHeader
-          description={`Prioriza backlog personal: vencidas, bloqueadas y en curso. Entidad activa: ${entity}.`}
+          description={`Tu cola personal: prioriza vencidas, bloqueadas y en curso. Entidad activa: ${entity === 'ARTA' ? 'Arta Producciones' : 'Auditorio Arema'}.`}
+          hint="Atiende primero vencidas y bloqueadas. Marca como hecha cuando cierres el entregable."
         >
-          <ActionLink href="/events" variant="ghost">Ir a eventos</ActionLink>
+          <ActionLink href="/events" variant="ghost">
+            Ir a eventos
+          </ActionLink>
         </PageHeader>
 
         {loading ? (
@@ -109,35 +112,38 @@ export default function TasksPage() {
               <div className="kpi">
                 <div className="label">Total</div>
                 <div className="value">{kpis.total}</div>
+                <div className="kpi-sub muted">Asignadas a ti</div>
               </div>
               <div className="kpi">
                 <div className="label">Abiertas</div>
                 <div className="value">{kpis.open}</div>
+                <div className="kpi-sub muted">Abiertas + en curso</div>
               </div>
               <div className={`kpi ${kpis.overdue ? 'kpi--danger' : ''}`}>
                 <div className="label">Vencidas</div>
                 <div className="value">{kpis.overdue}</div>
+                <div className="kpi-sub muted">Fuera de fecha</div>
               </div>
               <div className={`kpi ${kpis.blocked ? 'kpi--danger' : ''}`}>
                 <div className="label">Bloqueadas</div>
                 <div className="value">{kpis.blocked}</div>
+                <div className="kpi-sub muted">Esperan desbloqueo</div>
               </div>
               <div className="kpi">
                 <div className="label">Hechas</div>
                 <div className="value">{kpis.done}</div>
+                <div className="kpi-sub muted">Completadas</div>
               </div>
             </div>
 
             <div className="panel">
               <div className="panel-body">
-                <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>
-                  Distribución de carga
-                </div>
+                <div className="muted kpi-sub">Distribución de carga</div>
                 <DistBar
                   segments={[
-                    { label: 'open', value: kpis.open, tone: 'warn' },
-                    { label: 'blocked', value: kpis.blocked, tone: 'danger' },
-                    { label: 'done', value: kpis.done, tone: 'ok' },
+                    { label: 'Abiertas', value: kpis.open, tone: 'warn' },
+                    { label: 'Bloqueadas', value: kpis.blocked, tone: 'danger' },
+                    { label: 'Hechas', value: kpis.done, tone: 'ok' },
                   ]}
                 />
               </div>
@@ -192,12 +198,12 @@ export default function TasksPage() {
                             <td>
                               <strong>{t.title}</strong>
                               {t.event ? (
-                                <div className="muted" style={{ fontSize: 12 }}>
+                                <div className="muted kpi-sub">
                                   <Link href={`/events/${t.event.id}`}>{t.event.name}</Link>
                                 </div>
                               ) : null}
                             </td>
-                            <td className="muted">{t.module || '—'}</td>
+                            <td className="muted kpi-sub">{t.module || '—'}</td>
                             <td>
                               <span className={`badge ${overdue ? 'danger' : 'ok'}`}>
                                 {t.dueAt ? new Date(t.dueAt).toLocaleDateString('es-MX') : '—'}
@@ -205,15 +211,13 @@ export default function TasksPage() {
                             </td>
                             <td>
                               <StatusBadge value={taskStatusTone(t.status)} kind="risk" />
-                              <span className="muted" style={{ fontSize: 11, marginLeft: 6 }}>
-                                {t.status}
-                              </span>
+                              <span className="muted kpi-sub">{t.status}</span>
                             </td>
                             <td>
-                              <div className="row" style={{ gap: 4 }}>
+                              <div className="row row--tight">
                                 {t.status !== 'DONE' ? (
                                   <button
-                                    className="btn ghost"
+                                    className="btn btn-sm"
                                     type="button"
                                     onClick={() => setTaskStatus(t.id, 'DONE')}
                                   >
@@ -221,7 +225,7 @@ export default function TasksPage() {
                                   </button>
                                 ) : (
                                   <button
-                                    className="btn ghost"
+                                    className="btn ghost btn-sm"
                                     type="button"
                                     onClick={() => setTaskStatus(t.id, 'OPEN')}
                                   >
@@ -230,7 +234,7 @@ export default function TasksPage() {
                                 )}
                                 {t.status !== 'BLOCKED' && t.status !== 'DONE' ? (
                                   <button
-                                    className="btn ghost"
+                                    className="btn ghost btn-sm btn-danger"
                                     type="button"
                                     onClick={() => setTaskStatus(t.id, 'BLOCKED')}
                                   >
@@ -261,7 +265,7 @@ export default function TasksPage() {
                             >
                               {filterActive && rows.length ? (
                                 <button
-                                  className="btn ghost"
+                                  className="btn ghost btn-sm"
                                   type="button"
                                   onClick={() => {
                                     setStatus('all');

@@ -3,6 +3,8 @@
 import { FormEvent, useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
+import { EmptyState } from '@/components/ui/EmptyState';
+import { LoadingBlock } from '@/components/ui/LoadingBlock';
 import { FlashMessage } from '@/components/ui/PageChrome';
 
 type Session = {
@@ -33,10 +35,21 @@ type Session = {
   };
 };
 
+const SCOPE_LABELS: Record<string, string> = {
+  files: 'Archivos',
+  checklists: 'Checklists',
+  hospitality: 'Hospitality',
+};
+
+function scopeLabel(scope: string) {
+  return SCOPE_LABELS[scope] || scope;
+}
+
 export default function VendorPortalPage() {
   const params = useParams();
   const pinId = params.pinId as string;
   const [pin, setPin] = useState('');
+  const [showPin, setShowPin] = useState(false);
   const [session, setSession] = useState<Session | null>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -114,41 +127,58 @@ export default function VendorPortalPage() {
 
   if (booting) {
     return (
-      <main className="vendor-portal">
-        <p className="muted">Cargando portal…</p>
+      <main className="auth-page">
+        <div className="auth-card auth-card--vendor">
+          <LoadingBlock rows={3} label="Cargando portal…" />
+        </div>
       </main>
     );
   }
 
   if (!session) {
     return (
-      <main className="vendor-portal">
-        <div className="vendor-card">
+      <main className="auth-page">
+        <div className="auth-card auth-card--vendor">
           <p className="eyebrow">arta · acceso vendor</p>
           <h1>Ingresa tu PIN</h1>
           <p className="lead">
             Portal externo para archivos, checklists y hospitality del evento. Link ID:{' '}
             <code>{pinId.slice(0, 8)}…</code>
           </p>
-          <form onSubmit={onSubmit}>
-            <input
-              type="password"
-              inputMode="numeric"
-              autoComplete="one-time-code"
-              value={pin}
-              onChange={(e) => setPin(e.target.value)}
-              placeholder="PIN"
-              required
-              minLength={4}
-            />
+          <form className="form" onSubmit={onSubmit}>
+            <label>
+              PIN de acceso
+              <div className="pass-field">
+                <input
+                  className="field"
+                  type={showPin ? 'text' : 'password'}
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  value={pin}
+                  onChange={(e) => setPin(e.target.value)}
+                  placeholder="••••"
+                  required
+                  minLength={4}
+                  autoFocus
+                />
+                <button
+                  type="button"
+                  className="pass-toggle"
+                  onClick={() => setShowPin((v) => !v)}
+                  aria-label={showPin ? 'Ocultar PIN' : 'Mostrar PIN'}
+                >
+                  {showPin ? 'Ocultar' : 'Ver'}
+                </button>
+              </div>
+            </label>
             {error ? <FlashMessage variant="error">{error}</FlashMessage> : null}
-            <button className="btn btn-login" type="submit" disabled={loading}>
-              {loading ? 'Entrando…' : 'Entrar'}
+            <button className="btn btn-login" type="submit" disabled={loading || pin.length < 4}>
+              {loading ? 'Entrando…' : 'Entrar al portal'}
             </button>
           </form>
-          <div className="row-actions">
+          <div className="row-actions auth-foot">
             <button type="button" className="btn ghost btn-sm" onClick={copyLink}>
-              {copied ? 'Link copiado' : 'Copiar link del portal'}
+              {copied ? 'Link copiado ✓' : 'Copiar link del portal'}
             </button>
             <Link href="/p/arta">← Sitio Arta</Link>
           </div>
@@ -161,6 +191,7 @@ export default function VendorPortalPage() {
   const meta = [session.event.artist, session.event.venue, session.event.city]
     .filter(Boolean)
     .join(' · ');
+  const scopeText = session.scopes.map(scopeLabel).join(' · ') || '—';
 
   return (
     <main className="vendor-portal vendor-portal--session">
@@ -173,9 +204,13 @@ export default function VendorPortalPage() {
             <h1>{session.event.name}</h1>
             <p className="lead">{meta || 'Evento operativo'}</p>
             <p className="scopes">
-              Acceso: {session.scopes.join(' · ') || '—'}
+              Acceso: {scopeText}
               {session.event.startsAt
-                ? ` · ${new Date(session.event.startsAt).toLocaleDateString('es-MX')}`
+                ? ` · ${new Date(session.event.startsAt).toLocaleDateString('es-MX', {
+                    day: 'numeric',
+                    month: 'long',
+                    year: 'numeric',
+                  })}`
                 : ''}
             </p>
           </div>
@@ -192,89 +227,115 @@ export default function VendorPortalPage() {
         {error ? <FlashMessage variant="error">{error}</FlashMessage> : null}
 
         {session.scopes.includes('files') ? (
-          <section>
-            <h2>Archivos</h2>
-            {!session.files.length ? (
-              <p className="empty">Sin archivos compartidos aún.</p>
-            ) : (
-              <ul className="file-list">
-                {session.files.map((f) => (
-                  <li key={f.id}>
-                    <a href={f.url} target="_blank" rel="noreferrer">
-                      {f.fileName}
-                    </a>
-                    {f.kind ? <span className="tag">{f.kind}</span> : null}
-                  </li>
-                ))}
-              </ul>
-            )}
+          <section className="vendor-section panel">
+            <div className="panel-head">
+              <h2>Archivos</h2>
+              <span className="badge">{session.files.length}</span>
+            </div>
+            <div className="panel-body">
+              {!session.files.length ? (
+                <EmptyState
+                  title="Sin archivos compartidos"
+                  description="Cuando el equipo suba documentos para tu alcance, aparecerán aquí."
+                />
+              ) : (
+                <ul className="file-list">
+                  {session.files.map((f) => (
+                    <li key={f.id}>
+                      <a href={f.url} target="_blank" rel="noreferrer">
+                        {f.fileName}
+                      </a>
+                      {f.kind ? <span className="tag">{f.kind}</span> : null}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
           </section>
         ) : null}
 
         {session.scopes.includes('checklists') ? (
-          <section>
-            <h2>Checklists / PDFs</h2>
-            {!session.checklists.length ? (
-              <p className="empty">Sin checklists visibles.</p>
-            ) : (
-              <ul className="file-list">
-                {session.checklists.map((c) => (
-                  <li key={c.id}>
-                    <span>
-                      {c.title} · {c.progressPct}%
-                    </span>
-                    {c.pdfUrl ? (
-                      <a href={c.pdfUrl} target="_blank" rel="noreferrer">
-                        PDF
-                      </a>
-                    ) : (
-                      <span className="tag">sin PDF</span>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            )}
+          <section className="vendor-section panel">
+            <div className="panel-head">
+              <h2>Checklists / PDFs</h2>
+              <span className="badge">{session.checklists.length}</span>
+            </div>
+            <div className="panel-body">
+              {!session.checklists.length ? (
+                <EmptyState
+                  title="Sin checklists visibles"
+                  description="Los formatos compartidos con tu PIN se listarán aquí con enlace al PDF."
+                />
+              ) : (
+                <ul className="file-list">
+                  {session.checklists.map((c) => (
+                    <li key={c.id}>
+                      <span className="file-list__label">
+                        {c.title}
+                        <span className="muted"> · {c.progressPct}%</span>
+                      </span>
+                      {c.pdfUrl ? (
+                        <a href={c.pdfUrl} target="_blank" rel="noreferrer">
+                          Ver PDF
+                        </a>
+                      ) : (
+                        <span className="tag">sin PDF</span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
           </section>
         ) : null}
 
         {session.scopes.includes('hospitality') ? (
-          <section>
-            <h2>Hospitality / rider</h2>
-            {!hosp?.checklists.length && !hosp?.files.length ? (
-              <p className="empty">
-                Sin materiales de hospitality coincidentes (rider / catering / hospital*).
-              </p>
-            ) : (
-              <>
-                {hosp?.checklists.length ? (
-                  <ul className="file-list">
-                    {hosp.checklists.map((c) => (
-                      <li key={c.id}>
-                        <span>
-                          {c.title} · {c.progressPct}%
-                        </span>
-                        {c.pdfUrl ? (
-                          <a href={c.pdfUrl} target="_blank" rel="noreferrer">
-                            PDF
+          <section className="vendor-section panel">
+            <div className="panel-head">
+              <h2>Hospitality / rider</h2>
+              <span className="badge">
+                {(hosp?.checklists.length || 0) + (hosp?.files.length || 0)}
+              </span>
+            </div>
+            <div className="panel-body">
+              {!hosp?.checklists.length && !hosp?.files.length ? (
+                <EmptyState
+                  title="Sin materiales de hospitality"
+                  description="Rider, catering y hospitalidad aparecerán cuando el equipo los comparta."
+                />
+              ) : (
+                <>
+                  {hosp?.checklists.length ? (
+                    <ul className="file-list">
+                      {hosp.checklists.map((c) => (
+                        <li key={c.id}>
+                          <span className="file-list__label">
+                            {c.title}
+                            <span className="muted"> · {c.progressPct}%</span>
+                          </span>
+                          {c.pdfUrl ? (
+                            <a href={c.pdfUrl} target="_blank" rel="noreferrer">
+                              Ver PDF
+                            </a>
+                          ) : null}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                  {hosp?.files.length ? (
+                    <ul className="file-list">
+                      {hosp.files.map((f) => (
+                        <li key={f.id}>
+                          <a href={f.url} target="_blank" rel="noreferrer">
+                            {f.fileName}
                           </a>
-                        ) : null}
-                      </li>
-                    ))}
-                  </ul>
-                ) : null}
-                {hosp?.files.length ? (
-                  <ul className="file-list">
-                    {hosp.files.map((f) => (
-                      <li key={f.id}>
-                        <a href={f.url} target="_blank" rel="noreferrer">
-                          {f.fileName}
-                        </a>
-                      </li>
-                    ))}
-                  </ul>
-                ) : null}
-              </>
-            )}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                </>
+              )}
+            </div>
           </section>
         ) : null}
       </div>

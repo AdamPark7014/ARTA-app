@@ -1,107 +1,203 @@
 'use client';
 
+
+
 import { type ReactNode, useEffect, useState } from 'react';
-import Image from 'next/image';
+
 import Link from 'next/link';
+
 import { useParams } from 'next/navigation';
 
+import { SiteHeader } from '@/components/site/SiteHeader';
+
+import { EmptyState } from '@/components/ui/EmptyState';
+
+import { LoadingBlock } from '@/components/ui/LoadingBlock';
+
+
+
 type NewsPost = {
+
   id: string;
+
   slug: string;
+
   title: string;
+
   excerpt?: string | null;
+
   body?: string | null;
+
   coverUrl?: string | null;
+
   publishedAt?: string | null;
+
 };
 
+
+
 function NewsShell({ children }: { children: ReactNode }) {
+
   return (
+
     <div className="site site-arta">
-      <header className="site-nav is-scrolled">
-        <Link href="/p/arta" className="site-brand">
-          <Image
-            src="/brand/arta-logo.png"
-            alt="arta"
-            width={140}
-            height={56}
-            className="site-logo-img"
-            priority
-          />
+
+      <SiteHeader mode="article" />
+
+      <article className="site-section news-article">{children}</article>
+
+      <footer className="news-article__footer">
+
+        <Link className="btn ghost" href="/p/arta#noticias">
+
+          ← Todas las noticias
+
         </Link>
-        <nav className="site-nav-links">
-          <Link href="/p/arta#noticias">← Noticias</Link>
-        </nav>
-      </header>
-      <article className="site-section panel--narrow">{children}</article>
+
+        <Link className="btn" href="/p/arta#contacto">
+
+          Contactar a Arta
+
+        </Link>
+
+      </footer>
+
     </div>
+
   );
+
 }
+
+
 
 export default function NewsDetailPage() {
+
   const params = useParams();
+
   const slug = params.slug as string;
+
   const [post, setPost] = useState<NewsPost | null>(null);
+
   const [error, setError] = useState('');
 
+  const [loading, setLoading] = useState(true);
+
+
+
   useEffect(() => {
+
+    setLoading(true);
+
     fetch(`/api/studio/public/news/${slug}`)
+
       .then(async (r) => {
+
         if (!r.ok) throw new Error('Noticia no encontrada');
+
         return r.json();
+
       })
+
       .then(setPost)
-      .catch((e) => setError(e.message));
+
+      .catch((e) => setError(e.message))
+
+      .finally(() => setLoading(false));
+
   }, [slug]);
 
-  if (error) {
+
+
+  if (loading) {
+
     return (
+
       <NewsShell>
-        <div className="stack">
-          <p>{error}</p>
-          <Link href="/p/arta" className="btn ghost">
-            Volver al inicio
-          </Link>
-        </div>
+
+        <LoadingBlock rows={5} label="Cargando noticia…" />
+
       </NewsShell>
+
     );
+
   }
 
-  if (!post) {
+
+
+  if (error || !post) {
+
     return (
+
       <NewsShell>
-        <p className="muted">Cargando…</p>
+
+        <EmptyState
+
+          title="Noticia no encontrada"
+
+          description={error || 'El enlace puede estar desactualizado o la noticia fue retirada.'}
+
+          actionHref="/p/arta#noticias"
+
+          actionLabel="Ver todas las noticias"
+
+        />
+
       </NewsShell>
+
     );
+
   }
+
+
 
   return (
+
     <NewsShell>
-      <div className="stack">
-        <Link href="/p/arta#noticias" className="muted">
-          ← Noticias
-        </Link>
-        <time className="muted">
+
+      <div className="news-article__inner">
+
+        <time className="muted news-article__date">
+
           {post.publishedAt
+
             ? new Date(post.publishedAt).toLocaleDateString('es-MX', {
+
                 day: 'numeric',
+
                 month: 'long',
+
                 year: 'numeric',
+
               })
+
             : ''}
+
         </time>
-        <h1>{post.title}</h1>
-        {post.excerpt ? <p className="lead">{post.excerpt}</p> : null}
+
+        <h1 className="news-article__title">{post.title}</h1>
+
+        {post.excerpt ? <p className="lead news-article__excerpt">{post.excerpt}</p> : null}
+
         {post.coverUrl ? (
-          <div
-            className="about-visual"
-            style={{ backgroundImage: `url(${post.coverUrl})` }}
-          />
+
+          <div className="news-article__cover">
+
+            {/* eslint-disable-next-line @next/next/no-img-element -- URL dinámica de Studio */}
+
+            <img src={post.coverUrl} alt={post.title} />
+
+          </div>
+
         ) : null}
-        {post.body ? (
-          <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.7 }}>{post.body}</div>
-        ) : null}
+
+        {post.body ? <div className="article-prose">{post.body}</div> : null}
+
       </div>
+
     </NewsShell>
+
   );
+
 }
+
+

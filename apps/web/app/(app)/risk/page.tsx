@@ -1,11 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { AppShell } from '@/components/app-shell/AppShell';
 import { DistBar } from '@/components/charts/SparkBars';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { LoadingBlock, LoadingKpis } from '@/components/ui/LoadingBlock';
-import { ActionLink, FlashMessage, PageHeader } from '@/components/ui/PageChrome';
+import { ActionLink, FieldCheck, FilterBar, FlashMessage, PageHeader } from '@/components/ui/PageChrome';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { api } from '@/lib/api';
 import { useUser } from '@/lib/user-context';
@@ -40,6 +40,7 @@ export default function RiskWorkspacePage() {
   const [rows, setRows] = useState<ModuleRow[]>([]);
   const [msg, setMsg] = useState('');
   const [loading, setLoading] = useState(true);
+  const [criticalOnly, setCriticalOnly] = useState(false);
 
   useEffect(() => {
     setLoading(true);
@@ -84,6 +85,11 @@ export default function RiskWorkspacePage() {
 
   const ranked = [...rows].sort((a, b) => (b.kpis?.critical || 0) - (a.kpis?.critical || 0));
 
+  const visible = useMemo(
+    () => (criticalOnly ? ranked.filter((r) => (r.kpis?.critical || 0) > 0) : ranked),
+    [ranked, criticalOnly],
+  );
+
   return (
     <AppShell title="Risk workspace · Ops">
       <div className="stack page-workspace">
@@ -92,7 +98,11 @@ export default function RiskWorkspacePage() {
         >
           <ActionLink href="/events" variant="ghost">Pipeline eventos</ActionLink>
         </PageHeader>
-        {msg ? <FlashMessage variant="error">{msg}</FlashMessage> : null}
+        {msg ? (
+          <FlashMessage variant="error" onDismiss={() => setMsg('')}>
+            {msg}
+          </FlashMessage>
+        ) : null}
 
         {loading ? (
           <>
@@ -125,12 +135,24 @@ export default function RiskWorkspacePage() {
                 <h2>Por módulo · priorizado</h2>
               </div>
               <div className="panel-body">
+                <FilterBar meta={`${visible.length} de ${ranked.length} módulos`}>
+                  <FieldCheck
+                    checked={criticalOnly}
+                    onChange={setCriticalOnly}
+                    label="Solo con críticos"
+                  />
+                </FilterBar>
                 {!ranked.length || !totals.total ? (
                   <EmptyState
                     title="Sin checklists en esta entidad"
                     description="Cuando haya shows con plantillas, el riesgo aparecerá aquí."
                     actionHref="/events"
                     actionLabel="Ir a eventos"
+                  />
+                ) : !visible.length ? (
+                  <EmptyState
+                    title="Sin módulos con críticos"
+                    description="Ninguna disciplina tiene checklists críticos ahora."
                   />
                 ) : (
                   <div className="table-wrap">
@@ -146,7 +168,7 @@ export default function RiskWorkspacePage() {
                         </tr>
                       </thead>
                       <tbody>
-                        {ranked.map((r) => (
+                        {visible.map((r) => (
                           <tr key={r.key}>
                             <td>
                               <strong>{r.label}</strong>

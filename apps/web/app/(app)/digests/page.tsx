@@ -1,10 +1,16 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { AppShell } from '@/components/app-shell/AppShell';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { LoadingBlock, LoadingKpis } from '@/components/ui/LoadingBlock';
-import { FlashMessage, PageHeader } from '@/components/ui/PageChrome';
+import {
+  FieldSearch,
+  FieldSelect,
+  FilterBar,
+  FlashMessage,
+  PageHeader,
+} from '@/components/ui/PageChrome';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { api } from '@/lib/api';
 
@@ -68,6 +74,9 @@ export default function DigestsPage() {
   const [msg, setMsg] = useState('');
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [jobFilter, setJobFilter] = useState('all');
+  const [outboxFilter, setOutboxFilter] = useState('all');
+  const [outboxQ, setOutboxQ] = useState('');
 
   async function load() {
     const [j, o] = await Promise.all([
@@ -118,6 +127,23 @@ export default function DigestsPage() {
   const failedJobs = jobs.filter((j) => j.status === 'failed').length;
   const pendingOut = outbox.filter((o) => o.status === 'pending' || o.status === 'failed').length;
 
+  const filteredJobs = useMemo(() => {
+    if (jobFilter === 'all') return jobs;
+    return jobs.filter((j) => j.status === jobFilter);
+  }, [jobs, jobFilter]);
+
+  const filteredOutbox = useMemo(() => {
+    let list = outbox;
+    if (outboxFilter !== 'all') list = list.filter((o) => o.status === outboxFilter);
+    if (outboxQ.trim()) {
+      const n = outboxQ.toLowerCase();
+      list = list.filter(
+        (o) => o.toAddr.toLowerCase().includes(n) || o.subject.toLowerCase().includes(n),
+      );
+    }
+    return list;
+  }, [outbox, outboxFilter, outboxQ]);
+
   const msgVariant =
     msg === 'Digest diario ejecutado' || msg.startsWith('Outbox flush') ? 'success' : 'error';
 
@@ -136,7 +162,11 @@ export default function DigestsPage() {
             </button>
           </div>
         </PageHeader>
-        {msg ? <FlashMessage variant={msgVariant}>{msg}</FlashMessage> : null}
+        {msg ? (
+          <FlashMessage variant={msgVariant} onDismiss={() => setMsg('')}>
+            {msg}
+          </FlashMessage>
+        ) : null}
 
         {loading ? (
           <>
@@ -172,30 +202,53 @@ export default function DigestsPage() {
                       description="Ejecuta el digest diario o espera el cron de las 8:00."
                     />
                   ) : (
-                    <div className="table-wrap">
-                      <table className="table table-sticky">
-                        <thead>
-                          <tr>
-                            <th>Tipo</th>
-                            <th>Estado</th>
-                            <th className="num">Intentos</th>
-                            <th>Creado</th>
-                            <th>Error</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {jobs.map((j) => (
-                            <tr key={j.id}>
-                              <td>{KIND_LABEL[j.kind] || j.kind}</td>
-                              <td>{jobStatusBadge(j.status)}</td>
-                              <td className="num">{j.attempts}</td>
-                              <td className="muted">{new Date(j.createdAt).toLocaleString('es-MX')}</td>
-                              <td className="muted">{j.error || '—'}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
+                    <>
+                      <FilterBar meta={`${filteredJobs.length} de ${jobs.length} jobs`}>
+                        <FieldSelect
+                          value={jobFilter}
+                          onChange={setJobFilter}
+                          label="Filtrar jobs por estado"
+                          options={[
+                            { value: 'all', label: 'Todos' },
+                            { value: 'done', label: 'Listos' },
+                            { value: 'failed', label: 'Fallidos' },
+                            { value: 'running', label: 'Corriendo' },
+                            { value: 'pending', label: 'Pendientes' },
+                          ]}
+                        />
+                      </FilterBar>
+                      {!filteredJobs.length ? (
+                        <EmptyState
+                          title="Sin coincidencias"
+                          description="Cambia el filtro de estado."
+                        />
+                      ) : (
+                        <div className="table-wrap">
+                          <table className="table table-sticky">
+                            <thead>
+                              <tr>
+                                <th>Tipo</th>
+                                <th>Estado</th>
+                                <th className="num">Intentos</th>
+                                <th>Creado</th>
+                                <th>Error</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {filteredJobs.map((j) => (
+                                <tr key={j.id}>
+                                  <td>{KIND_LABEL[j.kind] || j.kind}</td>
+                                  <td>{jobStatusBadge(j.status)}</td>
+                                  <td className="num">{j.attempts}</td>
+                                  <td className="muted">{new Date(j.createdAt).toLocaleString('es-MX')}</td>
+                                  <td className="muted">{j.error || '—'}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </>
                   )}
                 </div>
               </div>
@@ -211,30 +264,59 @@ export default function DigestsPage() {
                       description="Los digests generan filas de email aquí."
                     />
                   ) : (
-                    <div className="table-wrap">
-                      <table className="table table-sticky">
-                        <thead>
-                          <tr>
-                            <th>Para</th>
-                            <th>Asunto</th>
-                            <th>Estado</th>
-                            <th>Enviado</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {outbox.map((o) => (
-                            <tr key={o.id}>
-                              <td>{o.toAddr}</td>
-                              <td>{o.subject}</td>
-                              <td>{outboxStatusBadge(o.status)}</td>
-                              <td className="muted">
-                                {o.sentAt ? new Date(o.sentAt).toLocaleString('es-MX') : '—'}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
+                    <>
+                      <FilterBar meta={`${filteredOutbox.length} de ${outbox.length} mensajes`}>
+                        <FieldSearch
+                          value={outboxQ}
+                          onChange={setOutboxQ}
+                          placeholder="Email o asunto…"
+                          label="Buscar en outbox"
+                          maxWidth={240}
+                        />
+                        <FieldSelect
+                          value={outboxFilter}
+                          onChange={setOutboxFilter}
+                          label="Filtrar outbox por estado"
+                          options={[
+                            { value: 'all', label: 'Todos' },
+                            { value: 'pending', label: 'Pendientes' },
+                            { value: 'sent', label: 'Enviados' },
+                            { value: 'failed', label: 'Fallidos' },
+                          ]}
+                        />
+                      </FilterBar>
+                      {!filteredOutbox.length ? (
+                        <EmptyState
+                          title="Sin coincidencias"
+                          description="Ajusta búsqueda o filtro de estado."
+                        />
+                      ) : (
+                        <div className="table-wrap">
+                          <table className="table table-sticky">
+                            <thead>
+                              <tr>
+                                <th>Para</th>
+                                <th>Asunto</th>
+                                <th>Estado</th>
+                                <th>Enviado</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {filteredOutbox.map((o) => (
+                                <tr key={o.id}>
+                                  <td>{o.toAddr}</td>
+                                  <td>{o.subject}</td>
+                                  <td>{outboxStatusBadge(o.status)}</td>
+                                  <td className="muted">
+                                    {o.sentAt ? new Date(o.sentAt).toLocaleString('es-MX') : '—'}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </>
                   )}
                 </div>
               </div>

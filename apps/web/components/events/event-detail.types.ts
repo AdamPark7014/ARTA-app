@@ -111,6 +111,7 @@ export type EventDetail = {
   status: string;
   entity: string;
   campaignType: string;
+  startsAt?: string | null;
   notes?: string | null;
   checklists: Checklist[];
   purchaseOrders: Po[];

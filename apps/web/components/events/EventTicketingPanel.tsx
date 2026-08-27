@@ -221,40 +221,57 @@ export function EventTicketingPanel({
             const zones = (t.zonesJson || []) as TicketZone[];
             const s = zoneSummary(zones);
             return (
-              <div key={t.id} className="section-head-row" style={{ alignItems: 'center' }}>
-                <div className="row" style={{ gap: 12, alignItems: 'center' }}>
-                  {t.logoUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={t.logoUrl}
-                      alt=""
-                      style={{ height: 32, maxWidth: 80, objectFit: 'contain', background: '#fff', borderRadius: 4, padding: 2 }}
-                    />
-                  ) : null}
-                  <div>
-                    <strong>{t.boletera}</strong>
-                    <div className="muted kpi-sub">
-                      Hold: {t.holdUntil ? new Date(t.holdUntil).toLocaleDateString('es-MX') : '—'} · Sell-through{' '}
-                      {s.pct}% ({s.sold.toLocaleString('es-MX')}/{s.aforo.toLocaleString('es-MX')})
-                    </div>
-                    <div className="muted kpi-sub">
-                      {zones.map((z) => `${z.zona}:${z.sold ?? 0}/${z.aforo}`).join(' · ')}
+              <article key={t.id} className="ticket-card">
+                <div className="ticket-card__head">
+                  <div className="row row--tight" style={{ alignItems: 'center' }}>
+                    {t.logoUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={t.logoUrl}
+                        alt=""
+                        className="ticket-card__logo"
+                      />
+                    ) : null}
+                    <div>
+                      <strong>{t.boletera}</strong>
+                      <div className="muted kpi-sub">
+                        Hold: {t.holdUntil ? new Date(t.holdUntil).toLocaleDateString('es-MX') : '—'}
+                      </div>
                     </div>
                   </div>
+                  <div className="panel-head-actions">
+                    {canTicketing && !closed ? (
+                      <>
+                        <button className="btn ghost btn-sm" type="button" onClick={() => onEditTicketing(t)}>
+                          Editar
+                        </button>
+                        <button
+                          className="btn ghost btn-sm btn-danger"
+                          type="button"
+                          onClick={() => onDeleteTicketing(t.id)}
+                        >
+                          Eliminar
+                        </button>
+                      </>
+                    ) : null}
+                  </div>
                 </div>
-                <div className="row">
-                  {canTicketing && !closed ? (
-                    <>
-                      <button className="btn ghost" type="button" onClick={() => onEditTicketing(t)}>
-                        Editar
-                      </button>
-                      <button className="btn ghost" type="button" onClick={() => onDeleteTicketing(t.id)}>
-                        Eliminar
-                      </button>
-                    </>
-                  ) : null}
+                <div className="ticket-card__stats">
+                  <div className="kpi kpi--inline">
+                    <span className="label">Sell-through</span>
+                    <strong>{s.pct}%</strong>
+                    <span className="muted kpi-sub">
+                      {s.sold.toLocaleString('es-MX')} / {s.aforo.toLocaleString('es-MX')} boletos
+                    </span>
+                  </div>
+                  <div className="progress">
+                    <span style={{ width: `${s.pct}%` }} />
+                  </div>
                 </div>
-              </div>
+                <p className="muted kpi-sub ticket-card__zones">
+                  {zones.map((z) => `${z.zona}: ${z.sold ?? 0}/${z.aforo}`).join(' · ')}
+                </p>
+              </article>
             );
           })}
           {!ticketingSetups?.length ? (

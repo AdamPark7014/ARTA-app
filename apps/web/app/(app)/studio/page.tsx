@@ -105,6 +105,14 @@ export default function StudioPage() {
     published: true,
   });
   const [uploading, setUploading] = useState(false);
+  const [editSlideId, setEditSlideId] = useState<string | null>(null);
+  const [editSlideDraft, setEditSlideDraft] = useState({
+    title: '',
+    subtitle: '',
+    imageUrl: '',
+    ctaLabel: '',
+    ctaHref: '',
+  });
 
   const draftsCount = useMemo(
     () =>
@@ -242,6 +250,58 @@ export default function StudioPage() {
     }
   }
 
+  async function saveSlide(s: Slide, patch: Partial<Slide>) {
+    setSaving(true);
+    try {
+      await api(`/studio/slides/${s.id}`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          title: patch.title ?? s.title,
+          subtitle: patch.subtitle ?? s.subtitle,
+          imageUrl: patch.imageUrl ?? s.imageUrl,
+          ctaLabel: patch.ctaLabel ?? s.ctaLabel,
+          ctaHref: patch.ctaHref ?? s.ctaHref,
+          sortOrder: s.sortOrder,
+          active: patch.active ?? s.active,
+        }),
+      });
+      setMsg('Slide actualizado');
+      setEditSlideId(null);
+      await load();
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : 'Error');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function replaceSlideImage(s: Slide, file: File) {
+    setUploading(true);
+    try {
+      const url = await uploadAsset(file);
+      await saveSlide(s, { imageUrl: url });
+      if (editSlideId === s.id) {
+        setEditSlideDraft((d) => ({ ...d, imageUrl: url }));
+      }
+      setMsg('Imagen reemplazada');
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : 'Error upload');
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  function startEditSlide(s: Slide) {
+    setEditSlideId(s.id);
+    setEditSlideDraft({
+      title: s.title || '',
+      subtitle: s.subtitle || '',
+      imageUrl: s.imageUrl,
+      ctaLabel: s.ctaLabel || '',
+      ctaHref: s.ctaHref || '',
+    });
+  }
+
   async function toggleSlide(s: Slide) {
     await api(`/studio/slides/${s.id}`, {
       method: 'PUT',
@@ -309,13 +369,14 @@ export default function StudioPage() {
     <AppShell title="Studio · Sitio Arta">
       <div className="stack page-workspace">
         <PageHeader
-          description="CMS del sitio público arta PRODUCCIONES. Preview en vivo, publicar / borrador y enlace permanente al site."
+          title="Studio · Sitio Arta"
+          description="CMS del sitio público arta PRODUCCIONES. Edita carrusel, noticias y secciones; publica o guarda borrador."
         >
           <Link className="btn" href="/p/arta" target="_blank" rel="noopener noreferrer">
             Ver sitio live
           </Link>
           <ActionLink href="/site" variant="ghost">
-            Guía sitio
+            Preview autenticado
           </ActionLink>
         </PageHeader>
 
@@ -394,10 +455,10 @@ export default function StudioPage() {
                         />
                       </label>
                       {slideForm.imageUrl ? (
-                        <div
+                        <img
                           className="studio-preview__thumb"
-                          style={{ backgroundImage: `url(${slideForm.imageUrl})` }}
-                          aria-hidden
+                          src={slideForm.imageUrl}
+                          alt="Vista previa del slide"
                         />
                       ) : null}
                       <label className="btn ghost">
@@ -474,31 +535,145 @@ export default function StudioPage() {
                       />
                     ) : (
                       <div className="studio-slide-grid">
-                        {slides.map((s) => (
+                        {slides.map((s) => {
+                          const editing = editSlideId === s.id;
+                          return (
                           <div className={`studio-slide-card ${s.active ? '' : 'is-off'}`} key={s.id}>
-                            <div
-                              className="studio-slide-card__media"
-                              style={{ backgroundImage: `url(${s.imageUrl})` }}
-                            />
-                            <div className="studio-slide-card__body">
-                              <div className="row">
-                                <strong>{s.title || 'Sin título'}</strong>
-                                <span className={`badge ${s.active ? 'ok' : 'warn'}`}>
-                                  {s.active ? 'Activo' : 'Off'}
-                                </span>
-                              </div>
-                              <div className="kpi-sub muted">{s.subtitle || '—'}</div>
-                              <div className="row">
-                                <button className="btn ghost" type="button" onClick={() => toggleSlide(s)}>
-                                  {s.active ? 'Desactivar' : 'Activar'}
-                                </button>
-                                <button className="btn ghost" type="button" onClick={() => removeSlide(s.id)}>
-                                  Eliminar
-                                </button>
+                            <div className="studio-slide-card__media">
+                              <img src={s.imageUrl} alt={s.title || 'Slide del carrusel'} />
+                              <div className="studio-slide-card__media-actions">
+                                <label className="btn ghost btn-sm">
+                                  {uploading ? 'Subiendo…' : 'Cambiar imagen'}
+                                  <input
+                                    type="file"
+                                    hidden
+                                    accept="image/*"
+                                    onChange={(e) => {
+                                      const f = e.target.files?.[0];
+                                      if (f) void replaceSlideImage(s, f);
+                                      e.target.value = '';
+                                    }}
+                                  />
+                                </label>
+                                {!editing ? (
+                                  <button
+                                    className="btn ghost btn-sm"
+                                    type="button"
+                                    onClick={() => startEditSlide(s)}
+                                  >
+                                    Editar
+                                  </button>
+                                ) : null}
                               </div>
                             </div>
+                            <div className="studio-slide-card__body">
+                              {editing ? (
+                                <div className="form studio-slide-card__edit">
+                                  <FormGrid>
+                                    <label>
+                                      Título
+                                      <input
+                                        value={editSlideDraft.title}
+                                        onChange={(e) =>
+                                          setEditSlideDraft({ ...editSlideDraft, title: e.target.value })
+                                        }
+                                      />
+                                    </label>
+                                    <label>
+                                      Subtítulo
+                                      <input
+                                        value={editSlideDraft.subtitle}
+                                        onChange={(e) =>
+                                          setEditSlideDraft({ ...editSlideDraft, subtitle: e.target.value })
+                                        }
+                                      />
+                                    </label>
+                                  </FormGrid>
+                                  <FormGrid>
+                                    <label>
+                                      CTA
+                                      <input
+                                        value={editSlideDraft.ctaLabel}
+                                        onChange={(e) =>
+                                          setEditSlideDraft({ ...editSlideDraft, ctaLabel: e.target.value })
+                                        }
+                                      />
+                                    </label>
+                                    <label>
+                                      CTA link
+                                      <input
+                                        value={editSlideDraft.ctaHref}
+                                        onChange={(e) =>
+                                          setEditSlideDraft({ ...editSlideDraft, ctaHref: e.target.value })
+                                        }
+                                      />
+                                    </label>
+                                  </FormGrid>
+                                  <label>
+                                    URL de imagen
+                                    <input
+                                      value={editSlideDraft.imageUrl}
+                                      onChange={(e) =>
+                                        setEditSlideDraft({ ...editSlideDraft, imageUrl: e.target.value })
+                                      }
+                                    />
+                                  </label>
+                                  <div className="form-actions">
+                                    <button
+                                      className="btn"
+                                      type="button"
+                                      disabled={saving || !editSlideDraft.imageUrl}
+                                      onClick={() =>
+                                        saveSlide(s, {
+                                          title: editSlideDraft.title,
+                                          subtitle: editSlideDraft.subtitle,
+                                          imageUrl: editSlideDraft.imageUrl,
+                                          ctaLabel: editSlideDraft.ctaLabel,
+                                          ctaHref: editSlideDraft.ctaHref,
+                                        })
+                                      }
+                                    >
+                                      {saving ? 'Guardando…' : 'Guardar cambios'}
+                                    </button>
+                                    <button
+                                      className="btn ghost"
+                                      type="button"
+                                      onClick={() => setEditSlideId(null)}
+                                    >
+                                      Cancelar
+                                    </button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <>
+                                  <div className="row">
+                                    <strong>{s.title || 'Sin título'}</strong>
+                                    <span className={`badge ${s.active ? 'ok' : 'warn'}`}>
+                                      {s.active ? 'Activo' : 'Off'}
+                                    </span>
+                                  </div>
+                                  <div className="kpi-sub muted">{s.subtitle || '—'}</div>
+                                  <div className="kpi-sub muted">
+                                    {s.ctaLabel || 'CTA'} → {s.ctaHref || '#'}
+                                  </div>
+                                  <div className="row row--tight">
+                                    <button className="btn ghost btn-sm" type="button" onClick={() => toggleSlide(s)}>
+                                      {s.active ? 'Desactivar' : 'Activar'}
+                                    </button>
+                                    <button
+                                      className="btn ghost btn-sm btn-danger"
+                                      type="button"
+                                      onClick={() => removeSlide(s.id)}
+                                    >
+                                      Eliminar
+                                    </button>
+                                  </div>
+                                </>
+                              )}
+                            </div>
                           </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     )}
                   </div>

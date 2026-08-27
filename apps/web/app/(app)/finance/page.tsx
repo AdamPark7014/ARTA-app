@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { AppShell } from '@/components/app-shell/AppShell';
 import { DistBar, money } from '@/components/charts/SparkBars';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { LoadingBlock, LoadingKpis } from '@/components/ui/LoadingBlock';
 import {
   ActionLink,
   FieldCheck,
@@ -47,13 +48,16 @@ type FinanceAnalytics = {
 export default function FinancePage() {
   const { entity, user } = useUser();
   const [data, setData] = useState<FinanceAnalytics | null>(null);
+  const [loading, setLoading] = useState(true);
   const [q, setQ] = useState('');
   const [onlyLoss, setOnlyLoss] = useState(false);
 
   useEffect(() => {
+    setLoading(true);
     api<FinanceAnalytics>(`/analytics/finance?entity=${entity}`)
       .then(setData)
-      .catch(console.error);
+      .catch(console.error)
+      .finally(() => setLoading(false));
   }, [entity]);
 
   const canEdit =
@@ -84,148 +88,167 @@ export default function FinancePage() {
           description={`Control tower de corridas: margen portfolio, pérdidas y estado de cierre.${
             canEdit ? ' Tienes permiso de edición.' : ' Acceso de lectura / seguimiento.'
           }`}
+          hint="Filtra neto negativo para priorizar shows en pérdida antes del cierre de corrida."
         >
           <ActionLink href="/dashboard" variant="ghost">
             Centro de comando
           </ActionLink>
         </PageHeader>
 
-        {data?.alerts?.length ? (
-          <div className="alert-stack">
-            {data.alerts.map((a) => (
-              <div key={a.message} className={`ops-alert ops-alert--${a.severity}`}>
-                <span className="ops-alert__msg">{a.message}</span>
+        {loading ? (
+          <>
+            <LoadingKpis count={6} />
+            <LoadingBlock rows={5} label="Cargando corridas…" />
+          </>
+        ) : (
+          <>
+            {data?.alerts?.length ? (
+              <div className="alert-stack">
+                {data.alerts.map((a) => (
+                  <div key={a.message} className={`ops-alert ops-alert--${a.severity}`}>
+                    <span className="ops-alert__msg">{a.message}</span>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-        ) : null}
+            ) : null}
 
-        {t ? (
-          <div className="grid-cards kpi-grid-dense">
-            <div className="kpi">
-              <div className="label">Ingresos</div>
-              <div className="value" style={{ fontSize: '1.35rem' }}>
-                {money(t.income)}
+            {t ? (
+              <div className="grid-cards kpi-grid-dense">
+                <div className="kpi">
+                  <div className="label">Ingresos</div>
+                  <div className="value value--money">{money(t.income)}</div>
+                  <div className="kpi-sub muted">Portfolio acumulado</div>
+                </div>
+                <div className="kpi">
+                  <div className="label">Egresos</div>
+                  <div className="value value--money">{money(t.expense)}</div>
+                  <div className="kpi-sub muted">Gastos registrados</div>
+                </div>
+                <div className={`kpi ${t.net < 0 ? 'kpi--danger' : ''}`}>
+                  <div className="label">Neto portfolio</div>
+                  <div className="value value--money">{money(t.net)}</div>
+                  <div className="kpi-sub muted">
+                    {t.net >= 0 ? 'Resultado positivo' : 'Resultado negativo'}
+                  </div>
+                </div>
+                <div className="kpi">
+                  <div className="label">Corridas locked</div>
+                  <div className="value">{t.locked}</div>
+                  <div className="kpi-sub muted">Selladas / solo lectura</div>
+                </div>
+                <div className="kpi">
+                  <div className="label">Abiertas c/movimiento</div>
+                  <div className="value">{t.open}</div>
+                  <div className="kpi-sub muted">Con ingresos o egresos</div>
+                </div>
+                <div className={`kpi ${t.lossMaking ? 'kpi--danger' : ''}`}>
+                  <div className="label">Neto negativo</div>
+                  <div className="value">{t.lossMaking}</div>
+                  <div className="kpi-sub muted">Shows en pérdida</div>
+                </div>
               </div>
-            </div>
-            <div className="kpi">
-              <div className="label">Egresos</div>
-              <div className="value" style={{ fontSize: '1.35rem' }}>
-                {money(t.expense)}
-              </div>
-            </div>
-            <div className={`kpi ${t.net < 0 ? 'kpi--danger' : ''}`}>
-              <div className="label">Neto portfolio</div>
-              <div
-                className="value"
-                style={{ fontSize: '1.35rem', color: t.net >= 0 ? 'var(--ok)' : 'var(--danger)' }}
-              >
-                {money(t.net)}
-              </div>
-            </div>
-            <div className="kpi">
-              <div className="label">Corridas locked</div>
-              <div className="value">{t.locked}</div>
-            </div>
-            <div className="kpi">
-              <div className="label">Abiertas c/movimiento</div>
-              <div className="value">{t.open}</div>
-            </div>
-            <div className={`kpi ${t.lossMaking ? 'kpi--danger' : ''}`}>
-              <div className="label">Neto negativo</div>
-              <div className="value">{t.lossMaking}</div>
-            </div>
-          </div>
-        ) : null}
+            ) : null}
 
-        {data ? (
-          <div className="panel">
-            <div className="panel-body">
-              <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>
-                Neto por status de evento
+            {data ? (
+              <div className="panel">
+                <div className="panel-body">
+                  <div className="muted kpi-sub">Neto por status de evento</div>
+                  <DistBar
+                    segments={Object.entries(data.byStatus).map(([status, v]) => ({
+                      label: status,
+                      value: Math.max(0, v.net) || v.count,
+                      tone: status === 'ACTIVE' ? 'ok' : status === 'CLOSED' ? 'warn' : 'muted',
+                    }))}
+                  />
+                </div>
               </div>
-              <DistBar
-                segments={Object.entries(data.byStatus).map(([status, v]) => ({
-                  label: status,
-                  value: Math.max(0, v.net) || v.count,
-                  tone: status === 'ACTIVE' ? 'ok' : status === 'CLOSED' ? 'warn' : 'muted',
-                }))}
+            ) : null}
+
+            <FilterBar meta={`${rows.length} corridas`}>
+              <FieldSearch
+                value={q}
+                onChange={setQ}
+                placeholder="Buscar evento o artista…"
+                label="Buscar corrida"
+                maxWidth={320}
               />
-            </div>
-          </div>
-        ) : null}
+              <FieldCheck checked={onlyLoss} onChange={setOnlyLoss} label="Solo pérdida" />
+            </FilterBar>
 
-        <FilterBar>
-          <FieldSearch value={q} onChange={setQ} placeholder="Buscar evento…" maxWidth={320} />
-          <FieldCheck checked={onlyLoss} onChange={setOnlyLoss} label="Solo pérdida" />
-        </FilterBar>
-
-        <div className="panel">
-          <div className="panel-head">
-            <h2>Corridas · {entity}</h2>
-          </div>
-          <div className="panel-body">
-            <div className="table-wrap">
-              <table className="table table-sticky">
-                <thead>
-                  <tr>
-                    <th>Evento</th>
-                    <th>Status</th>
-                    <th className="num">Ingresos</th>
-                    <th className="num">Egresos</th>
-                    <th className="num">Neto</th>
-                    <th className="num">Margen</th>
-                    <th>Corrida</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map((e) => (
-                    <tr key={e.eventId}>
-                      <td>
-                        <strong>{e.name}</strong>
-                        <div className="muted" style={{ fontSize: 12 }}>
-                          {e.artist || '—'}
-                        </div>
-                      </td>
-                      <td>
-                        <StatusBadge value={e.status} kind="event" />
-                      </td>
-                      <td className="num">{money(e.income)}</td>
-                      <td className="num">{money(e.expense)}</td>
-                      <td className="num" style={{ color: e.net >= 0 ? 'var(--ok)' : 'var(--danger)' }}>
-                        {money(e.net)}
-                      </td>
-                      <td className="num muted">
-                        {e.marginPct == null ? '—' : `${e.marginPct}%`}
-                      </td>
-                      <td>
-                        {e.title || '—'} {e.locked ? <span className="badge">LOCKED</span> : null}
-                      </td>
-                      <td>
-                        <Link className="btn ghost" href={`/events/${e.eventId}?tab=finance`}>
-                          Abrir
-                        </Link>
-                      </td>
-                    </tr>
-                  ))}
-                  {!rows.length ? (
-                    <tr>
-                      <td colSpan={8}>
-                        <EmptyState
-                          title="Sin corridas para este filtro"
-                          description="Abre un evento y captura ingresos/egresos en la pestaña Finanzas."
-                          actionHref="/events"
-                          actionLabel="Ir a eventos"
-                        />
-                      </td>
-                    </tr>
-                  ) : null}
-                </tbody>
-              </table>
+            <div className="panel">
+              <div className="panel-head">
+                <h2>Corridas · {entity}</h2>
+              </div>
+              <div className="panel-body">
+                <div className="table-wrap">
+                  <table className="table table-sticky">
+                    <thead>
+                      <tr>
+                        <th>Evento</th>
+                        <th>Status</th>
+                        <th className="num">Ingresos</th>
+                        <th className="num">Egresos</th>
+                        <th className="num">Neto</th>
+                        <th className="num">Margen</th>
+                        <th>Corrida</th>
+                        <th></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {rows.map((e) => (
+                        <tr key={e.eventId}>
+                          <td>
+                            <strong>{e.name}</strong>
+                            <div className="muted kpi-sub">{e.artist || '—'}</div>
+                          </td>
+                          <td>
+                            <StatusBadge value={e.status} kind="event" />
+                          </td>
+                          <td className="num">{money(e.income)}</td>
+                          <td className="num">{money(e.expense)}</td>
+                          <td className="num">
+                            <strong>{money(e.net)}</strong>
+                            {e.net < 0 ? (
+                              <div className="kpi-sub">
+                                <StatusBadge value="critical" kind="risk" />
+                              </div>
+                            ) : null}
+                          </td>
+                          <td className="num muted">
+                            {e.marginPct == null ? '—' : `${e.marginPct}%`}
+                          </td>
+                          <td>
+                            {e.title || '—'} {e.locked ? <span className="badge">LOCKED</span> : null}
+                          </td>
+                          <td>
+                            <Link
+                              className="btn ghost btn-sm"
+                              href={`/events/${e.eventId}?tab=finance`}
+                            >
+                              Abrir
+                            </Link>
+                          </td>
+                        </tr>
+                      ))}
+                      {!rows.length ? (
+                        <tr>
+                          <td colSpan={8}>
+                            <EmptyState
+                              title="Sin corridas para este filtro"
+                              description="Abre un evento y captura ingresos/egresos en la pestaña Finanzas."
+                              actionHref="/events"
+                              actionLabel="Ir a eventos"
+                            />
+                          </td>
+                        </tr>
+                      ) : null}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
+          </>
+        )}
       </div>
     </AppShell>
   );

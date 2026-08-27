@@ -3,7 +3,7 @@
 import { FormEvent, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { AppShell } from '@/components/app-shell/AppShell';
-import { FlashMessage, FormGrid } from '@/components/ui/PageChrome';
+import { FlashMessage, FormGrid, PageHeader } from '@/components/ui/PageChrome';
 import { api } from '@/lib/api';
 import { useUser } from '@/lib/user-context';
 
@@ -43,16 +43,17 @@ export default function NewEventPage() {
 
   return (
     <AppShell title="Nuevo evento">
-      <div className="panel panel--narrow">
-        <div className="panel-head">
-          <h2>Crear en {entityLabel}</h2>
-        </div>
-        <div className="panel-body">
-          <p className="muted" style={{ margin: '0 0 1.25rem', fontSize: '0.9rem' }}>
-            Al crear el evento se instancian automáticamente todas las plantillas de checklist para
-            esta entidad.
-          </p>
-          <form className="form" onSubmit={onSubmit}>
+      <div className="stack page-workspace">
+        <PageHeader
+          description={`Crear show en ${entityLabel}. Al guardar se instancian automáticamente todas las plantillas de checklist.`}
+          hint="Completa al menos el nombre y la fecha de inicio para empezar la operación."
+        />
+        <div className="panel panel--narrow">
+          <div className="panel-head">
+            <h2>Datos del evento</h2>
+          </div>
+          <div className="panel-body">
+            <form className="form" onSubmit={onSubmit}>
             <label>
               Nombre del evento / concierto
               <input
@@ -125,12 +126,13 @@ export default function NewEventPage() {
               />
             </label>
             {error ? <FlashMessage variant="error">{error}</FlashMessage> : null}
-            <div className="row" style={{ marginTop: '0.25rem' }}>
+            <div className="form-actions">
               <button className="btn" disabled={busy} type="submit">
                 {busy ? 'Creando…' : 'Crear evento + checklists'}
               </button>
             </div>
           </form>
+          </div>
         </div>
       </div>
     </AppShell>

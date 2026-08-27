@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { FlashMessage } from '@/components/ui/PageChrome';
+import { FlashMessage, FormGrid } from '@/components/ui/PageChrome';
 import { api } from '@/lib/api';
 
 export type SchemaItem = {
@@ -117,20 +117,22 @@ export function TemplateSchemaEditor({ templateId, initial, onSaved }: Props) {
         </FlashMessage>
       ) : null}
 
-      <div className={showPreview ? 'tpl-editor-grid studio-split' : 'stack'}>
+      <div className={showPreview ? 'tpl-editor-grid' : 'stack'}>
         <div className="stack">
           {sections.map((section, sIdx) => (
             <div className="tpl-block" key={section.id}>
-              <div className="tpl-block-head panel-head">
-                <label>
-                  <span className="muted kpi-sub">Bloque {sIdx + 1}</span>
-                  <input
-                    value={section.title}
-                    onChange={(e) => patchSection(sIdx, { title: e.target.value })}
-                    placeholder="Nombre del bloque (ej. Hotel, Firmas…)"
-                  />
-                </label>
-                <div className="row">
+              <div className="tpl-block-head">
+                <FormGrid cols={1}>
+                  <label>
+                    <span className="muted kpi-sub">Bloque {sIdx + 1}</span>
+                    <input
+                      value={section.title}
+                      onChange={(e) => patchSection(sIdx, { title: e.target.value })}
+                      placeholder="Nombre del bloque (ej. Hotel, Firmas…)"
+                    />
+                  </label>
+                </FormGrid>
+                <div className="row tpl-question__actions">
                   <button
                     className="btn ghost"
                     type="button"
@@ -170,13 +172,13 @@ export function TemplateSchemaEditor({ templateId, initial, onSaved }: Props) {
                     <div className="tpl-question" key={item.id}>
                       <div className="row">
                         <span className="tpl-q-num muted">{iIdx + 1}</span>
-                        <div className="stack">
+                        <div className="stack tpl-question__main">
                           <input
                             value={item.label}
                             onChange={(e) => patchItem(sIdx, iIdx, { label: e.target.value })}
                             placeholder="Pregunta o campo (ej. Nombre del hotel)"
                           />
-                          <div className="row">
+                          <div className="tpl-type-row">
                             {FIELD_TYPES.map((t) => (
                               <button
                                 key={t.value}
@@ -200,24 +202,26 @@ export function TemplateSchemaEditor({ templateId, initial, onSaved }: Props) {
                           </div>
                           <span className="muted kpi-sub">{typeMeta?.hint}</span>
                           {(item.type || 'check') === 'select' ? (
-                            <label>
-                              <span className="muted kpi-sub">Opciones (separadas por coma)</span>
-                              <input
-                                value={(item.options || []).join(', ')}
-                                onChange={(e) =>
-                                  patchItem(sIdx, iIdx, {
-                                    options: e.target.value
-                                      .split(',')
-                                      .map((x) => x.trim())
-                                      .filter(Boolean),
-                                  })
-                                }
-                                placeholder="Arema, eTicket, Otra (con Otra pide nombre libre)"
-                              />
-                            </label>
+                            <FormGrid cols={1}>
+                              <label>
+                                <span className="muted kpi-sub">Opciones (separadas por coma)</span>
+                                <input
+                                  value={(item.options || []).join(', ')}
+                                  onChange={(e) =>
+                                    patchItem(sIdx, iIdx, {
+                                      options: e.target.value
+                                        .split(',')
+                                        .map((x) => x.trim())
+                                        .filter(Boolean),
+                                    })
+                                  }
+                                  placeholder="Arema, eTicket, Otra (con Otra pide nombre libre)"
+                                />
+                              </label>
+                            </FormGrid>
                           ) : null}
                         </div>
-                        <div className="stack">
+                        <div className="stack tpl-question__actions">
                           <button
                             className="btn ghost"
                             type="button"

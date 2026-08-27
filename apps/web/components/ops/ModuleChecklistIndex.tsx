@@ -64,10 +64,17 @@ type FieldSpec = { id: string; label: string; sectionId?: string };
 type Props = {
   title: string;
   description: string;
+  hint?: string;
   templateKeys: string[];
   titleMatch?: RegExp;
   fields?: FieldSpec[];
 };
+
+function signatureLabel(row: OpsRow) {
+  if (row.authorizedAt) return { text: 'Autorizado', tone: 'ok' as const };
+  if (row.deliveredAt) return { text: 'Entregado', tone: 'warn' as const };
+  return { text: 'Sin firma', tone: 'muted' as const };
+}
 
 function pickValue(data: ChecklistData | undefined, field: FieldSpec) {
   for (const s of data?.sections || []) {
@@ -78,7 +85,13 @@ function pickValue(data: ChecklistData | undefined, field: FieldSpec) {
   return '—';
 }
 
-export function ModuleChecklistIndex({ title, description, templateKeys, fields = [] }: Props) {
+export function ModuleChecklistIndex({
+  title,
+  description,
+  hint,
+  templateKeys,
+  fields = [],
+}: Props) {
   const { entity } = useUser();
   const [data, setData] = useState<OpsResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -121,12 +134,14 @@ export function ModuleChecklistIndex({ title, description, templateKeys, fields 
       <div className="page-workspace stack">
         <PageHeader
           description={description}
-          hint={`Workspace de disciplina: prioriza riesgo, firmas y avance. Los registros nacen al crear el evento; aquí operas el backlog de ${entityName}.`}
+          hint={
+            hint ??
+            `Prioriza riesgo, firmas y avance. Cada registro se crea con el evento; aquí gestionas el backlog de ${entityName}.`
+          }
         >
           <ActionLink href="/events" variant="ghost">
             Eventos
           </ActionLink>
-          <ActionLink href="/events/new">Nuevo evento</ActionLink>
         </PageHeader>
 
         {loading ? (
@@ -168,9 +183,7 @@ export function ModuleChecklistIndex({ title, description, templateKeys, fields 
             {data ? (
               <div className="panel">
                 <div className="panel-body">
-                  <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>
-                    Distribución de riesgo
-                  </div>
+                  <div className="kpi-sub muted">Distribución de riesgo</div>
                   <DistBar
                     segments={[
                       { label: 'critical', value: data.byRisk.critical, tone: 'danger' },
@@ -224,8 +237,8 @@ export function ModuleChecklistIndex({ title, description, templateKeys, fields 
                     }
                     description={
                       (data?.rows.length || 0) === 0
-                        ? `Crea un evento para instanciar plantillas ${templateKeys.join(', ')}.`
-                        : 'Ajusta riesgo, búsqueda o “solo incompletos”.'
+                        ? `Al crear un evento se generan checklists ${templateKeys.join(', ')}. Empieza desde Eventos → Nuevo evento.`
+                        : 'Prueba otro término o quita filtros de riesgo e incompletos.'
                     }
                     actionHref="/events/new"
                     actionLabel="Crear evento"
@@ -265,8 +278,9 @@ export function ModuleChecklistIndex({ title, description, templateKeys, fields 
                           <tr key={r.checklistId}>
                             <td>
                               <strong>{r.event.name}</strong>
-                              <div className="muted" style={{ fontSize: 12 }}>
-                                {r.event.artist || '—'} · {r.event.status}
+                              <div className="kpi-sub muted">
+                                {r.event.artist || '—'} ·{' '}
+                                <StatusBadge value={r.event.status} kind="event" />
                                 {r.daysToShow != null
                                   ? ` · ${r.daysToShow < 0 ? 'pasado' : `${r.daysToShow}d`}`
                                   : ''}
@@ -279,21 +293,24 @@ export function ModuleChecklistIndex({ title, description, templateKeys, fields 
                               <td key={f.id}>{String(pickValue(r.dataJson, f))}</td>
                             ))}
                             <td>
-                              <div className="progress" style={{ minWidth: 80 }}>
-                                <span style={{ width: `${r.progressPct}%` }} />
+                              <div className="progress-cell">
+                                <div className="progress">
+                                  <span style={{ width: `${r.progressPct}%` }} />
+                                </div>
+                                <span className="kpi-sub muted">{r.progressPct}%</span>
                               </div>
-                              <span className="muted" style={{ fontSize: 11 }}>
-                                {r.progressPct}%
-                              </span>
                             </td>
-                            <td className="muted" style={{ fontSize: 12 }}>
-                              {r.authorizedAt
-                                ? 'Autorizado'
-                                : r.deliveredAt
-                                  ? 'Entregado'
-                                  : 'Sin firma'}
+                            <td>
+                              {(() => {
+                                const sig = signatureLabel(r);
+                                return sig.tone === 'muted' ? (
+                                  <span className="kpi-sub muted">{sig.text}</span>
+                                ) : (
+                                  <span className={`badge ${sig.tone}`}>{sig.text}</span>
+                                );
+                              })()}
                             </td>
-                            <td className="muted" style={{ fontSize: 12 }}>
+                            <td className="kpi-sub muted">
                               {r.lastEditedBy || '—'}
                               {r.lastEditedAt ? (
                                 <div>{new Date(r.lastEditedAt).toLocaleDateString('es-MX')}</div>

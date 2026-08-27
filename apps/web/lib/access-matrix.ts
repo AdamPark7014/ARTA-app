@@ -39,13 +39,6 @@ export const NAV_ITEMS: NavItem[] = [
   { href: '/dashboard', label: 'Dashboard', group: 'Inicio' },
   { href: '/events', label: 'Eventos', group: 'Operación', requiresEventOps: true },
   {
-    href: '/events/new',
-    label: 'Nuevo evento',
-    permissions: ['event.create', 'everything'],
-    group: 'Operación',
-    requiresEventOps: true,
-  },
-  {
     href: '/checklists',
     label: 'Plantillas',
     permissions: ['checklist.edit', 'everything'],

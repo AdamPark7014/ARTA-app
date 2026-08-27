@@ -6,11 +6,11 @@ import { AppShell } from '@/components/app-shell/AppShell';
 import { DistBar, SparkBars, money } from '@/components/charts/SparkBars';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { LoadingBlock, LoadingKpis } from '@/components/ui/LoadingBlock';
-import { ActionLink, FlashMessage } from '@/components/ui/PageChrome';
+import { ActionLink, FlashMessage, PageHeader } from '@/components/ui/PageChrome';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { api } from '@/lib/api';
 import { useUser } from '@/lib/user-context';
-import { ROLE_SCOPE, canAccessEventOps, userHasPermission } from '@/lib/access-matrix';
+import { ROLE_SCOPE, canAccessEventOps } from '@/lib/access-matrix';
 
 type Overview = {
   generatedAt: string;
@@ -67,10 +67,6 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
 
   const eventOps = canAccessEventOps(user?.roleKey || '', entity);
-  const canCreate =
-    eventOps && user
-      ? userHasPermission(user.roleKey, user.permissions, ['event.create', 'everything'])
-      : false;
 
   useEffect(() => {
     if (!eventOps) {
@@ -93,43 +89,34 @@ export default function DashboardPage() {
       .slice(0, 8);
   }, [data]);
 
+  const scopeHint =
+    ROLE_SCOPE[user?.roleKey || ''] ||
+    'Prioriza shows en riesgo, cash de OC y firmas pendientes.';
+
   return (
     <AppShell title="Centro de comando">
       <div className="stack page-workspace">
-        <div className="panel panel--welcome">
-          <div className="panel-body welcome-banner">
-            <div className="welcome-banner__copy">
-              <p className="welcome-banner__eyebrow">
-                {entity === 'ARTA' ? 'Arta Producciones' : 'Auditorio Arema'} · {user?.roleKey}
-              </p>
-              <h2 className="welcome-banner__title">Hola, {user?.fullName?.split(' ')[0]}</h2>
-              <p className="muted welcome-banner__desc">
-                {ROLE_SCOPE[user?.roleKey || ''] ||
-                  'Prioriza shows en riesgo, cash de OC y firmas pendientes.'}
-              </p>
-            </div>
-            <div className="row welcome-banner__actions">
-              <ActionLink href="/p/arta" variant="ghost">
-                Sitio Arta
-              </ActionLink>
-              {!eventOps ? <ActionLink href="/folders">Carpetas</ActionLink> : null}
-              {canCreate ? <ActionLink href="/events/new">Nuevo evento</ActionLink> : null}
-            </div>
-          </div>
-        </div>
+        <PageHeader
+          title={`Hola, ${user?.fullName?.split(' ')[0] || 'equipo'}`}
+          description={`${entity === 'ARTA' ? 'Arta Producciones' : 'Auditorio Arema'} · ${user?.roleKey || '—'}. ${scopeHint}`}
+          hint="Revisa alertas críticas, pipeline de riesgo y actividad reciente antes de cerrar el día."
+        >
+          <ActionLink href="/p/arta" variant="ghost">
+            Sitio Arta
+          </ActionLink>
+          {!eventOps ? <ActionLink href="/folders">Carpetas</ActionLink> : null}
+        </PageHeader>
 
         {!eventOps ? (
-          <div className="panel">
-            <div className="panel-body">
-              <p style={{ margin: 0 }}>
-                En Arta tu acceso es a carpetas generales. Cambia a Auditorio para conciertos, OC y
-                checklists.
-              </p>
-              <div className="row" style={{ marginTop: 12 }}>
-                <Link className="btn" href="/folders">
-                  Ir a carpetas
-                </Link>
-              </div>
+          <div className="module-banner">
+            <p className="kpi-sub muted">
+              En Arta tu acceso es a carpetas generales. Cambia a Auditorio para conciertos, OC y
+              checklists.
+            </p>
+            <div className="row row--tight">
+              <Link className="btn btn-sm" href="/folders">
+                Ir a carpetas
+              </Link>
             </div>
           </div>
         ) : loading ? (
@@ -148,7 +135,7 @@ export default function DashboardPage() {
                     <span className="ops-alert__code">{a.code}</span>
                     <span className="ops-alert__msg">{a.message}</span>
                     {a.href ? (
-                      <Link className="btn ghost" href={a.href} style={{ marginLeft: 'auto' }}>
+                      <Link className="btn ghost btn-sm" href={a.href}>
                         Ver
                       </Link>
                     ) : null}
@@ -173,30 +160,22 @@ export default function DashboardPage() {
               <div className="kpi">
                 <div className="label">Avance ops</div>
                 <div className="value">{data.kpis.avgOpsProgress}%</div>
-                <div className="progress" style={{ marginTop: 8 }}>
-                  <span style={{ width: `${data.kpis.avgOpsProgress}%` }} />
+                <div className="progress-cell">
+                  <div className="progress">
+                    <span style={{ width: `${data.kpis.avgOpsProgress}%` }} />
+                  </div>
                 </div>
               </div>
-              <div className="kpi">
+              <div className={`kpi ${data.kpis.portfolioNet < 0 ? 'kpi--danger' : ''}`}>
                 <div className="label">Portfolio neto</div>
-                <div
-                  className="value"
-                  style={{
-                    fontSize: '1.35rem',
-                    color: data.kpis.portfolioNet >= 0 ? 'var(--ok)' : 'var(--danger)',
-                  }}
-                >
-                  {money(data.kpis.portfolioNet)}
-                </div>
+                <div className="value value--money">{money(data.kpis.portfolioNet)}</div>
                 <div className="kpi-sub muted">
                   {money(data.kpis.portfolioIncome)} in · {money(data.kpis.portfolioExpense)} out
                 </div>
               </div>
               <div className="kpi">
                 <div className="label">Cash OC pipeline</div>
-                <div className="value" style={{ fontSize: '1.35rem' }}>
-                  {money(data.kpis.poPipelineAmount)}
-                </div>
+                <div className="value value--money">{money(data.kpis.poPipelineAmount)}</div>
                 <div className="kpi-sub muted">
                   Pagado {money(data.kpis.poPaidAmount)}
                   {data.kpis.poAgingOver7 ? ` · ${data.kpis.poAgingOver7} aging` : ''}
@@ -204,15 +183,10 @@ export default function DashboardPage() {
               </div>
               <div className="kpi">
                 <div className="label">Firmas / tareas</div>
-                <div className="value" style={{ fontSize: '1.2rem' }}>
-                  {data.kpis.pendingAuthorized}
-                  <span className="muted" style={{ fontSize: 14 }}>
-                    {' '}
-                    auth
-                  </span>
-                </div>
+                <div className="value">{data.kpis.pendingAuthorized}</div>
                 <div className="kpi-sub muted">
-                  {data.kpis.openTasks} tareas abiertas
+                  {data.kpis.pendingAuthorized} pend. autorización · {data.kpis.openTasks} tareas
+                  abiertas
                   {data.kpis.overdueTasks ? ` · ${data.kpis.overdueTasks} vencidas` : ''}
                 </div>
               </div>
@@ -222,7 +196,7 @@ export default function DashboardPage() {
               <div className="panel">
                 <div className="panel-head">
                   <h2>Pipeline de riesgo</h2>
-                  <Link className="btn ghost" href="/events">
+                  <Link className="btn ghost btn-sm" href="/events">
                     Todos
                   </Link>
                 </div>
@@ -230,49 +204,53 @@ export default function DashboardPage() {
                   {!data.atRisk.length ? (
                     <EmptyState
                       title="Portfolio saludable"
-                      description="Ningún show en riesgo crítico/watch."
+                      description="Ningún show en riesgo crítico o en observación."
                       actionHref="/events"
                       actionLabel="Ver eventos"
                     />
                   ) : (
-                    <table className="table">
-                      <thead>
-                        <tr>
-                          <th>Evento</th>
-                          <th>Riesgo</th>
-                          <th>Avance</th>
-                          <th>Show</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {data.atRisk.map((e) => (
-                          <tr key={e.id}>
-                            <td>
-                              <Link href={`/events/${e.id}`}>
-                                <strong>{e.name}</strong>
-                              </Link>
-                              <div className="muted" style={{ fontSize: 12 }}>
-                                {e.artist || '—'}
-                              </div>
-                            </td>
-                            <td>
-                              <StatusBadge value={e.risk} kind="risk" />
-                            </td>
-                            <td>
-                              <div className="progress" style={{ minWidth: 72 }}>
-                                <span style={{ width: `${e.avgProgress}%` }} />
-                              </div>
-                              <span className="muted" style={{ fontSize: 11 }}>
-                                {e.avgProgress}%
-                              </span>
-                            </td>
-                            <td className="muted">
-                              {e.daysToShow == null ? '—' : e.daysToShow < 0 ? 'pasado' : `${e.daysToShow}d`}
-                            </td>
+                    <div className="table-wrap">
+                      <table className="table table-sticky">
+                        <thead>
+                          <tr>
+                            <th>Evento</th>
+                            <th>Riesgo</th>
+                            <th>Avance</th>
+                            <th>Show</th>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                        </thead>
+                        <tbody>
+                          {data.atRisk.map((e) => (
+                            <tr key={e.id}>
+                              <td>
+                                <Link href={`/events/${e.id}`}>
+                                  <strong>{e.name}</strong>
+                                </Link>
+                                <div className="muted kpi-sub">{e.artist || '—'}</div>
+                              </td>
+                              <td>
+                                <StatusBadge value={e.risk} kind="risk" />
+                              </td>
+                              <td>
+                                <div className="progress-cell">
+                                  <div className="progress">
+                                    <span style={{ width: `${e.avgProgress}%` }} />
+                                  </div>
+                                  <span className="muted kpi-sub">{e.avgProgress}%</span>
+                                </div>
+                              </td>
+                              <td className="muted">
+                                {e.daysToShow == null
+                                  ? '—'
+                                  : e.daysToShow < 0
+                                    ? 'pasado'
+                                    : `${e.daysToShow}d`}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
                   )}
                 </div>
               </div>
@@ -288,15 +266,17 @@ export default function DashboardPage() {
                       labels={data.createdTrend.map((x) => x.month.slice(5))}
                       height={96}
                     />
-                    <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>
-                      Status mix
-                    </div>
+                    <div className="muted kpi-sub">Mix por status</div>
                     <DistBar
                       segments={[
                         { label: 'ACTIVE', value: data.eventsByStatus.ACTIVE || 0, tone: 'ok' },
                         { label: 'DRAFT', value: data.eventsByStatus.DRAFT || 0, tone: 'muted' },
                         { label: 'CLOSED', value: data.eventsByStatus.CLOSED || 0, tone: 'warn' },
-                        { label: 'CANCELLED', value: data.eventsByStatus.CANCELLED || 0, tone: 'danger' },
+                        {
+                          label: 'CANCELLED',
+                          value: data.eventsByStatus.CANCELLED || 0,
+                          tone: 'danger',
+                        },
                       ]}
                     />
                   </div>
@@ -308,9 +288,12 @@ export default function DashboardPage() {
                   </div>
                   <div className="panel-body">
                     {!data.upcoming.length ? (
-                      <p className="muted" style={{ margin: 0 }}>
-                        Sin shows en la ventana.
-                      </p>
+                      <EmptyState
+                        title="Sin shows próximos"
+                        description="No hay eventos en la ventana de 14 días."
+                        actionHref="/events"
+                        actionLabel="Ver calendario"
+                      />
                     ) : (
                       <ul className="compact-list">
                         {data.upcoming.map((e) => (
@@ -318,7 +301,7 @@ export default function DashboardPage() {
                             <Link href={`/events/${e.id}`}>
                               <strong>{e.name}</strong>
                             </Link>
-                            <span className="muted">
+                            <span className="muted kpi-sub">
                               {new Date(e.startsAt).toLocaleDateString('es-MX')} · {e.avgProgress}%
                             </span>
                           </li>
@@ -334,33 +317,27 @@ export default function DashboardPage() {
               <div className="panel">
                 <div className="panel-head">
                   <h2>Margen por evento</h2>
-                  <Link className="btn ghost" href="/finance">
+                  <Link className="btn ghost btn-sm" href="/finance">
                     Finanzas
                   </Link>
                 </div>
                 <div className="panel-body">
                   <div className="mini-rank">
                     <div>
-                      <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>
-                        Top neto
-                      </div>
+                      <div className="muted kpi-sub">Top neto</div>
                       {data.topMargin.slice(0, 4).map((r) => (
                         <div key={r.eventId} className="mini-rank__row">
                           <Link href={`/events/${r.eventId}?tab=finance`}>{r.name}</Link>
-                          <strong style={{ color: 'var(--ok)' }}>{money(r.net)}</strong>
+                          <strong>{money(r.net)}</strong>
                         </div>
                       ))}
                     </div>
                     <div>
-                      <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>
-                        Peor neto
-                      </div>
+                      <div className="muted kpi-sub">Peor neto</div>
                       {data.bottomMargin.slice(0, 4).map((r) => (
                         <div key={r.eventId} className="mini-rank__row">
                           <Link href={`/events/${r.eventId}?tab=finance`}>{r.name}</Link>
-                          <strong style={{ color: r.net < 0 ? 'var(--danger)' : undefined }}>
-                            {money(r.net)}
-                          </strong>
+                          <strong>{money(r.net)}</strong>
                         </div>
                       ))}
                     </div>
@@ -374,36 +351,43 @@ export default function DashboardPage() {
                 </div>
                 <div className="panel-body">
                   {!templateRank.length ? (
-                    <p className="muted">Sin checklists aún.</p>
+                    <EmptyState
+                      title="Sin checklists aún"
+                      description="Cuando haya instancias por plantilla verás avance y pendientes de autorización."
+                      actionHref="/checklists"
+                      actionLabel="Ver plantillas"
+                    />
                   ) : (
-                    <table className="table">
-                      <thead>
-                        <tr>
-                          <th>Plantilla</th>
-                          <th>Avg</th>
-                          <th>Pend. auth</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {templateRank.map((t) => (
-                          <tr key={t.key}>
-                            <td>
-                              <code style={{ fontSize: 12 }}>{t.key}</code>
-                              <div className="muted" style={{ fontSize: 11 }}>
-                                {t.count} instancias
-                              </div>
-                            </td>
-                            <td>
-                              <div className="progress" style={{ minWidth: 64 }}>
-                                <span style={{ width: `${t.avgProgress}%` }} />
-                              </div>
-                              {t.avgProgress}%
-                            </td>
-                            <td>{t.pendingAuth}</td>
+                    <div className="table-wrap">
+                      <table className="table table-sticky">
+                        <thead>
+                          <tr>
+                            <th>Plantilla</th>
+                            <th>Avg</th>
+                            <th>Pend. auth</th>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                        </thead>
+                        <tbody>
+                          {templateRank.map((t) => (
+                            <tr key={t.key}>
+                              <td>
+                                <code>{t.key}</code>
+                                <div className="muted kpi-sub">{t.count} instancias</div>
+                              </td>
+                              <td>
+                                <div className="progress-cell">
+                                  <div className="progress">
+                                    <span style={{ width: `${t.avgProgress}%` }} />
+                                  </div>
+                                  <span className="kpi-sub">{t.avgProgress}%</span>
+                                </div>
+                              </td>
+                              <td>{t.pendingAuth}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
                   )}
                 </div>
               </div>
@@ -412,36 +396,43 @@ export default function DashboardPage() {
             <div className="panel">
               <div className="panel-head">
                 <h2>Actividad reciente</h2>
-                <Link className="btn ghost" href="/audit">
-                  Audit
+                <Link className="btn ghost btn-sm" href="/audit">
+                  Auditoría
                 </Link>
               </div>
               <div className="panel-body">
                 {!data.recentActivity.length ? (
-                  <p className="muted">Sin movimientos en 30 días.</p>
+                  <EmptyState
+                    title="Sin movimientos recientes"
+                    description="No hubo actividad registrada en los últimos 30 días."
+                    actionHref="/audit"
+                    actionLabel="Ver auditoría"
+                  />
                 ) : (
-                  <table className="table">
-                    <thead>
-                      <tr>
-                        <th>Cuándo</th>
-                        <th>Quién</th>
-                        <th>Acción</th>
-                        <th>Recurso</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {data.recentActivity.map((a) => (
-                        <tr key={a.id}>
-                          <td className="muted">{new Date(a.at).toLocaleString('es-MX')}</td>
-                          <td>{a.user}</td>
-                          <td>
-                            <code>{a.action}</code>
-                          </td>
-                          <td>{a.resource}</td>
+                  <div className="table-wrap">
+                    <table className="table table-sticky">
+                      <thead>
+                        <tr>
+                          <th>Cuándo</th>
+                          <th>Quién</th>
+                          <th>Acción</th>
+                          <th>Recurso</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {data.recentActivity.map((a) => (
+                          <tr key={a.id}>
+                            <td className="muted">{new Date(a.at).toLocaleString('es-MX')}</td>
+                            <td>{a.user}</td>
+                            <td>
+                              <code>{a.action}</code>
+                            </td>
+                            <td className="kpi-sub">{a.resource}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 )}
               </div>
             </div>

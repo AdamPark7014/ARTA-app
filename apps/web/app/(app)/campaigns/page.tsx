@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { AppShell } from '@/components/app-shell/AppShell';
+import { money } from '@/components/charts/SparkBars';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { LoadingBlock, LoadingKpis } from '@/components/ui/LoadingBlock';
 import {
@@ -86,6 +87,11 @@ export default function CampaignsPage() {
     );
   }, [rows, q]);
 
+  const pendingAuth = rows.filter((r) => !r.authorized).length;
+  const budgetTotal = rows.reduce((s, r) => s + Number(r.dataJson?.budget || 0), 0);
+  const msgVariant =
+    msg === 'Campaña guardada' ? 'success' : msg.toLowerCase().includes('error') ? 'error' : 'info';
+
   function openEditor(r: CampaignRow) {
     setSelected(r);
     const dj = r.dataJson || {};
@@ -133,17 +139,16 @@ export default function CampaignsPage() {
     await load();
   }
 
-  const pendingAuth = rows.filter((r) => !r.authorized).length;
-  const msgVariant =
-    msg === 'Campaña guardada' ? 'success' : msg.toLowerCase().includes('error') ? 'error' : 'info';
-
   return (
     <AppShell title="Campañas · Media control">
       <div className="stack page-workspace">
         <PageHeader
-          description={`Control de campañas: autorización, presupuesto y backlog. ${pendingAuth} pendientes de auth. Entidad: ${entity}.`}
+          description={`Plan de medios y presupuesto por evento. ${pendingAuth} campaña${pendingAuth === 1 ? '' : 's'} pendiente${pendingAuth === 1 ? '' : 's'} de autorización en ${entity === 'ARTA' ? 'Arta' : 'Auditorio'}.`}
+          hint="Selecciona una fila para editar. Autoriza solo cuando el plan de medios y presupuesto estén completos."
         >
-          <ActionLink href="/events" variant="ghost">Ir a eventos</ActionLink>
+          <ActionLink href="/events" variant="ghost">
+            Ir a eventos
+          </ActionLink>
         </PageHeader>
 
         {msg ? (
@@ -163,23 +168,22 @@ export default function CampaignsPage() {
               <div className="kpi">
                 <div className="label">Campañas</div>
                 <div className="value">{rows.length}</div>
+                <div className="kpi-sub muted">En la entidad activa</div>
               </div>
               <div className="kpi">
                 <div className="label">Autorizadas</div>
                 <div className="value">{rows.filter((r) => r.authorized).length}</div>
+                <div className="kpi-sub muted">Listas para ejecutar</div>
               </div>
               <div className={`kpi ${pendingAuth ? 'kpi--danger' : ''}`}>
-                <div className="label">Pend. auth</div>
+                <div className="label">Pend. autorización</div>
                 <div className="value">{pendingAuth}</div>
+                <div className="kpi-sub muted">Requieren revisión</div>
               </div>
               <div className="kpi">
-                <div className="label">Budget total</div>
-                <div className="value" style={{ fontSize: '1.15rem' }}>
-                  $
-                  {Math.round(
-                    rows.reduce((s, r) => s + Number(r.dataJson?.budget || 0), 0),
-                  ).toLocaleString('es-MX')}
-                </div>
+                <div className="label">Presupuesto total</div>
+                <div className="value value--money">{money(budgetTotal)}</div>
+                <div className="kpi-sub muted">Suma de presupuestos</div>
               </div>
             </div>
 
@@ -193,9 +197,7 @@ export default function CampaignsPage() {
               />
             </FilterBar>
 
-            <div
-              style={{ display: 'grid', gridTemplateColumns: selected ? '1fr 1.1fr' : '1fr', gap: 16 }}
-            >
+            <div className={selected ? 'dash-split' : 'stack'}>
               <div className="panel">
                 <div className="panel-head">
                   <h2>Campañas · {entity === 'ARTA' ? 'Arta' : 'Auditorio'}</h2>
@@ -216,14 +218,12 @@ export default function CampaignsPage() {
                         {filtered.map((r) => (
                           <tr key={r.id}>
                             <td>
-                              <button className="btn ghost" type="button" onClick={() => openEditor(r)}>
+                              <button className="btn ghost btn-sm" type="button" onClick={() => openEditor(r)}>
                                 <strong>{r.event.name}</strong>
                               </button>
-                              <div className="muted" style={{ fontSize: 12 }}>
-                                {r.event.artist || '—'}
-                              </div>
+                              <div className="muted kpi-sub">{r.event.artist || '—'}</div>
                             </td>
-                            <td className="muted">{r.type}</td>
+                            <td className="muted kpi-sub">{r.type}</td>
                             <td>
                               <StatusBadge value={r.event.status} kind="event" />
                             </td>
@@ -234,13 +234,13 @@ export default function CampaignsPage() {
                               />
                             </td>
                             <td>
-                              <div className="row" style={{ gap: 4 }}>
-                                <Link className="btn ghost" href={`/events/${r.event.id}`}>
+                              <div className="row row--tight">
+                                <Link className="btn ghost btn-sm" href={`/events/${r.event.id}`}>
                                   Evento
                                 </Link>
                                 {canEdit && !r.authorized ? (
                                   <button
-                                    className="btn ghost"
+                                    className="btn btn-sm"
                                     type="button"
                                     onClick={() => toggleAuth(r.event.id, true)}
                                   >
@@ -278,7 +278,11 @@ export default function CampaignsPage() {
                                 actionLabel={rows.length === 0 ? 'Ir a eventos' : undefined}
                               >
                                 {rows.length && q.trim() ? (
-                                  <button className="btn ghost" type="button" onClick={() => setQ('')}>
+                                  <button
+                                    className="btn ghost btn-sm"
+                                    type="button"
+                                    onClick={() => setQ('')}
+                                  >
                                     Limpiar búsqueda
                                   </button>
                                 ) : null}
@@ -296,7 +300,7 @@ export default function CampaignsPage() {
                 <div className="panel">
                   <div className="panel-head">
                     <h2>{selected.event.name}</h2>
-                    <button className="btn ghost" type="button" onClick={() => setSelected(null)}>
+                    <button className="btn ghost btn-sm" type="button" onClick={() => setSelected(null)}>
                       Cerrar
                     </button>
                   </div>
@@ -369,11 +373,15 @@ export default function CampaignsPage() {
                         />
                       </label>
                       {canEdit ? (
-                        <button className="btn" type="button" onClick={save}>
-                          Guardar campaña
-                        </button>
+                        <div className="form-actions">
+                          <button className="btn" type="button" onClick={save}>
+                            Guardar campaña
+                          </button>
+                        </div>
                       ) : (
-                        <p className="muted">Solo lectura — Melissa y Williams editan campañas.</p>
+                        <p className="muted kpi-sub">
+                          Solo lectura — el equipo de marketing edita campañas.
+                        </p>
                       )}
                     </div>
                   </div>

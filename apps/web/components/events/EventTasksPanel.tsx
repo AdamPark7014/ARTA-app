@@ -1,5 +1,6 @@
 'use client';
 
+import { EmptyState } from '@/components/ui/EmptyState';
 import { FormGrid } from '@/components/ui/PageChrome';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import type { DirUser, Task } from '@/components/events/event-detail.types';
@@ -84,53 +85,64 @@ export function EventTasksPanel({
       <div className="panel">
         <div className="panel-head">
           <h2>Tareas del evento</h2>
+          <span className="badge">{tasks?.length || 0}</span>
         </div>
         <div className="panel-body">
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Tarea</th>
-                <th>Módulo</th>
-                <th>Asignado</th>
-                <th>Status</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {(tasks || []).map((t) => (
-                <tr key={t.id}>
-                  <td>{t.title}</td>
-                  <td className="muted">{t.module || '—'}</td>
-                  <td>{t.assignee?.fullName || '—'}</td>
-                  <td>
-                    <StatusBadge
-                      value={t.status === 'DONE' ? 'Hecha' : 'Abierta'}
-                      kind="raw"
-                      className={t.status === 'DONE' ? 'ok' : 'warn'}
-                    />
-                  </td>
-                  <td className="row">
-                    {t.status !== 'DONE' ? (
-                      <button className="btn ghost" type="button" onClick={() => onSetTaskStatus(t.id, 'DONE')}>
-                        Hecha
-                      </button>
-                    ) : (
-                      <button className="btn ghost" type="button" onClick={() => onSetTaskStatus(t.id, 'OPEN')}>
-                        Reabrir
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              ))}
-              {!tasks?.length ? (
-                <tr>
-                  <td colSpan={5} className="muted">
-                    Sin tareas aún.
-                  </td>
-                </tr>
-              ) : null}
-            </tbody>
-          </table>
+          {!tasks?.length ? (
+            <EmptyState
+              title="Sin tareas aún"
+              description="Asigna pendientes por módulo para dar seguimiento al equipo."
+            />
+          ) : (
+            <div className="table-wrap">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>Tarea</th>
+                    <th>Módulo</th>
+                    <th>Asignado</th>
+                    <th>Status</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {tasks.map((t) => (
+                    <tr key={t.id}>
+                      <td>{t.title}</td>
+                      <td className="muted">{t.module || '—'}</td>
+                      <td>{t.assignee?.fullName || '—'}</td>
+                      <td>
+                        <StatusBadge
+                          value={t.status === 'DONE' ? 'Hecha' : 'Abierta'}
+                          kind="raw"
+                          className={t.status === 'DONE' ? 'ok' : 'warn'}
+                        />
+                      </td>
+                      <td>
+                        {t.status !== 'DONE' ? (
+                          <button
+                            className="btn ghost btn-sm"
+                            type="button"
+                            onClick={() => onSetTaskStatus(t.id, 'DONE')}
+                          >
+                            Hecha
+                          </button>
+                        ) : (
+                          <button
+                            className="btn ghost btn-sm"
+                            type="button"
+                            onClick={() => onSetTaskStatus(t.id, 'OPEN')}
+                          >
+                            Reabrir
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       </div>
     </div>
