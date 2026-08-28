@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { Suspense, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { AppShell } from '@/components/app-shell/AppShell';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { LoadingBlock } from '@/components/ui/LoadingBlock';
@@ -45,8 +46,54 @@ type Overview = {
   kpis: { eventsAtRisk: number; avgOpsProgress: number };
 };
 
+type Scope = 'active' | 'past' | 'all';
+
+const SCOPE_TITLE: Record<Scope, string> = {
+  active: 'Eventos actuales',
+  past: 'Eventos pasados',
+  all: 'Pipeline de eventos',
+};
+
+function startOfToday() {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+}
+
+/**
+ * Junta 2026-08-28: el menú separa «Eventos actuales» de «Eventos Pasados».
+ * Pasado = cerrado/cancelado, o con fecha de show anterior a hoy.
+ */
+function isPastEvent(e: EventRow, today: number) {
+  if (e.status === 'CLOSED' || e.status === 'CANCELLED') return true;
+  if (!e.startsAt) return false;
+  return new Date(e.startsAt).getTime() < today;
+}
+
 export default function EventsPage() {
+  return (
+    <Suspense
+      fallback={
+        <AppShell title="Eventos">
+          <div className="stack page-workspace">
+            <LoadingBlock rows={5} label="Cargando pipeline…" />
+          </div>
+        </AppShell>
+      }
+    >
+      <EventsPageInner />
+    </Suspense>
+  );
+}
+
+function EventsPageInner() {
   const { entity, user } = useUser();
+  const searchParams = useSearchParams();
+  const scopeParam = searchParams.get('scope');
+  const scope: Scope =
+    scopeParam === 'past' || scopeParam === 'all' || scopeParam === 'active'
+      ? scopeParam
+      : 'active';
   const [events, setEvents] = useState<EventRow[]>([]);
   const [health, setHealth] = useState<HealthItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -74,8 +121,15 @@ export default function EventsPage() {
 
   const healthMap = useMemo(() => new Map(health.map((h) => [h.id, h])), [health]);
 
+  /** Universo de la vista: actuales, pasados o todo. */
+  const scoped = useMemo(() => {
+    if (scope === 'all') return events;
+    const today = startOfToday();
+    return events.filter((e) => isPastEvent(e, today) === (scope === 'past'));
+  }, [events, scope]);
+
   const filtered = useMemo(() => {
-    let list = events;
+    let list = scoped;
     if (status !== 'all') list = list.filter((e) => e.status === status);
     if (riskOnly) {
       list = list.filter((e) => {
@@ -93,7 +147,7 @@ export default function EventsPage() {
       );
     }
     return list;
-  }, [events, status, riskOnly, q, healthMap]);
+  }, [scoped, status, riskOnly, q, healthMap]);
 
   const pipeline = useMemo(() => {
     const groups: Record<string, EventRow[]> = {
@@ -102,20 +156,38 @@ export default function EventsPage() {
       CLOSED: [],
       CANCELLED: [],
     };
-    for (const e of events) {
+    for (const e of scoped) {
       if (groups[e.status]) groups[e.status].push(e);
     }
     return groups;
-  }, [events]);
+  }, [scoped]);
 
-  const atRiskCount = health.filter((h) => h.risk !== 'healthy').length;
+  const scopedIds = useMemo(() => new Set(scoped.map((e) => e.id)), [scoped]);
+  const atRiskCount = health.filter((h) => h.risk !== 'healthy' && scopedIds.has(h.id)).length;
+
+  const description =
+    scope === 'past'
+      ? `Histórico: shows cerrados, cancelados o con fecha ya pasada. ${scoped.length} en el archivo.`
+      : scope === 'all'
+        ? `Portafolio completo: pipeline, salud de checklists y hub del show. ${atRiskCount} en riesgo.`
+        : `Shows en curso y por venir. Pipeline, salud de checklists y hub del show. ${atRiskCount} en riesgo.`;
 
   return (
-    <AppShell title="Pipeline de eventos">
+    <AppShell title={SCOPE_TITLE[scope]}>
       <div className="stack page-workspace">
-        <PageHeader
-          description={`Portfolio operativo: pipeline, salud de checklists y hub del show. ${atRiskCount} en riesgo.`}
-        />
+        <PageHeader description={description}>
+          <div className="row row--tight">
+            {(['active', 'past', 'all'] as const).map((s) => (
+              <Link
+                key={s}
+                href={s === 'active' ? '/events' : `/events?scope=${s}`}
+                className={`btn btn-sm ${scope === s ? '' : 'ghost'}`}
+              >
+                {s === 'active' ? 'Actuales' : s === 'past' ? 'Pasados' : 'Todos'}
+              </Link>
+            ))}
+          </div>
+        </PageHeader>
 
         {loading ? (
           <LoadingBlock rows={5} label="Cargando pipeline…" />

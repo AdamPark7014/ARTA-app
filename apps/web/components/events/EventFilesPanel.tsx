@@ -24,6 +24,13 @@ function kindLabel(kind?: string | null) {
   return kind || 'Archivo';
 }
 
+/** De qué sección del evento viene el archivo (campaña, corrida…). */
+function moduleLabel(module?: string | null) {
+  if (module === 'campaign') return 'Campaña';
+  if (module === 'finance') return 'Corrida';
+  return null;
+}
+
 export function EventFilesPanel({
   closed,
   files,
@@ -108,6 +115,9 @@ export function EventFilesPanel({
                       <div className="file-card__meta">
                         <strong>{f.fileName}</strong>
                         <StatusBadge value={kindLabel(f.kind)} kind="raw" />
+                        {moduleLabel(f.module) ? (
+                          <StatusBadge value={moduleLabel(f.module)!} kind="raw" />
+                        ) : null}
                       </div>
                       <div className="panel-head-actions">
                         <button
@@ -148,7 +158,12 @@ export function EventFilesPanel({
                       const active = previewFile?.id === f.id;
                       return (
                         <tr key={f.id}>
-                          <td>{f.fileName}</td>
+                          <td>
+                            {f.fileName}
+                            {moduleLabel(f.module) ? (
+                              <div className="muted kpi-sub">{moduleLabel(f.module)}</div>
+                            ) : null}
+                          </td>
                           <td>
                             <StatusBadge value={kindLabel(f.kind)} kind="raw" />
                           </td>

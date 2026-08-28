@@ -33,7 +33,13 @@ class CreateUserDto {
 export class UsersController {
   constructor(private prisma: PrismaService) {}
 
-  /** Directorio ligero para asignar tareas (cualquier autenticado) */
+  /**
+   * Directorio para asignar tareas (cualquier autenticado).
+   *
+   * Junta 2026-08-28: se asignan tareas «entre todos los integrantes de la
+   * organización», así que aquí NO se filtra por entidad — un logístico de
+   * Arta puede pedirle apoyo a alguien que solo opera el Auditorio.
+   */
   @Get('directory')
   directory(
     @Req() req: { user: { entities: string[]; roleKey: string; organizationId?: string | null } },
@@ -42,7 +48,6 @@ export class UsersController {
       where: {
         active: true,
         organizationId: tenantIdOf(req.user),
-        entities: { hasSome: req.user.entities as EntityKey[] },
       },
       select: { id: true, fullName: true, email: true, title: true, roleKey: true, entities: true },
       orderBy: { fullName: 'asc' },

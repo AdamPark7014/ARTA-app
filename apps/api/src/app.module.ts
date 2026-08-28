@@ -17,6 +17,7 @@ import { UploadsModule } from './uploads/uploads.module';
 import { CampaignsModule } from './campaigns/campaigns.module';
 import { TicketingModule } from './ticketing/ticketing.module';
 import { TasksModule } from './tasks/tasks.module';
+import { NotificationsModule } from './notifications/notifications.module';
 import { SponsorsModule } from './sponsors/sponsors.module';
 import { FoldersModule } from './folders/folders.module';
 import { VendorModule } from './vendor/vendor.module';
@@ -48,6 +49,7 @@ import { HealthModule } from './health/health.module';
     CampaignsModule,
     TicketingModule,
     TasksModule,
+    NotificationsModule,
     SponsorsModule,
     FoldersModule,
     VendorModule,

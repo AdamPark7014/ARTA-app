@@ -34,6 +34,11 @@ export const TEST_USER: AuthUserFixture = {
   totpEnabled: true,
 };
 
+export const TEST_DIRECTORY = [
+  { id: 'usr-e2e-super', fullName: 'Ana Robles', title: 'Dirección de operaciones' },
+  { id: 'usr-e2e-logi', fullName: 'Beto Sandoval', title: 'Logística y producción' },
+];
+
 export const TEST_EVENTS = [
   {
     id: 'evt-e2e-1',
@@ -172,6 +177,27 @@ const DEFAULT_STUBS: ApiStubs = {
     }),
   '/analytics/overview': TEST_OVERVIEW,
   '/events': TEST_EVENTS,
+  // Campana de avisos: el AppShell la consulta en cada carga.
+  '/notifications/unread-count': { count: 0 },
+  '/notifications': [],
+  // Ventana de solicitud de OC (junta 2026-08-28).
+  '/purchase-orders/window': {
+    config: {
+      enabled: true,
+      days: [1, 4],
+      start: '10:00',
+      end: '14:00',
+      timeZone: 'America/Mexico_City',
+      note: '',
+    },
+    open: true,
+    scheduleLabel: 'lunes y jueves de 10:00 a 14:00',
+    nextOpenLabel: null,
+    nowMinutes: 660,
+    canRequestNow: true,
+    bypass: false,
+    canEdit: true,
+  },
 };
 
 function isHandler(value: JsonBody | RouteHandler): value is RouteHandler {

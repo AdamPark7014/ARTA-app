@@ -1,11 +1,13 @@
 'use client';
 
 import { useMemo } from 'react';
+import { PoWindowBanner } from '@/components/purchase-orders/PoWindowBanner';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { FlowSteps } from '@/components/ui/FlowSteps';
 import { FormGrid } from '@/components/ui/PageChrome';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import type { Po, PoLine } from '@/components/events/event-detail.types';
+import type { PoWindowState } from '@/lib/po-window';
 
 const RUBROS = ['audio', 'luces', 'planta_luz', 'hospedaje', 'transporte', 'catering', 'artes', 'otro'] as const;
 
@@ -48,6 +50,8 @@ type EventPurchaseOrdersPanelProps = {
   onSaveEditPo: () => Promise<void>;
   onSetPoStatus: (poId: string, status: string) => Promise<void>;
   onDeletePo: (poId: string) => Promise<void>;
+  /** Ventana configurable para solicitar OC (junta 2026-08-28) */
+  poWindow?: PoWindowState | null;
 };
 
 function poStatusValue(status: string) {
@@ -81,6 +85,7 @@ export function EventPurchaseOrdersPanel({
   onSaveEditPo,
   onSetPoStatus,
   onDeletePo,
+  poWindow,
 }: EventPurchaseOrdersPanelProps) {
   const stats = useMemo(() => {
     const pending = purchaseOrders.filter((p) => p.status === 'PENDING_AUTH').length;
@@ -112,6 +117,8 @@ export function EventPurchaseOrdersPanel({
       </div>
 
       <FlowSteps steps={PO_FLOW} activeIndex={stats.paid > 0 ? 2 : stats.authorized > 0 ? 1 : 0} />
+
+      {!closed ? <PoWindowBanner state={poWindow} /> : null}
 
       {!closed ? (
         <div className="panel">

@@ -1,9 +1,10 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { AppShell } from '@/components/app-shell/AppShell';
 import { money } from '@/components/charts/SparkBars';
+import { FileViewer } from '@/components/files/FileViewer';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { LoadingBlock, LoadingKpis } from '@/components/ui/LoadingBlock';
 import {
@@ -27,6 +28,14 @@ type CampaignData = {
   timeline?: string;
 };
 
+type CampaignFile = {
+  id: string;
+  fileName: string;
+  url: string;
+  kind?: string | null;
+  createdAt?: string;
+};
+
 type CampaignRow = {
   id: string;
   type: string;
@@ -34,7 +43,12 @@ type CampaignRow = {
   notes?: string | null;
   dataJson?: CampaignData | null;
   event: { id: string; name: string; entity: string; artist?: string | null; status: string };
+  /** Excel / PDF de la campaña (junta 2026-08-28) */
+  files?: CampaignFile[];
 };
+
+/** Etiqueta con la que viajan los adjuntos de campaña en EventFile.module */
+const CAMPAIGN_MODULE = 'campaign';
 
 export default function CampaignsPage() {
   const { user, entity } = useUser();
@@ -52,6 +66,9 @@ export default function CampaignsPage() {
     timeline: '',
   });
   const [msg, setMsg] = useState('');
+  // Junta 2026-08-28: la fila se expande para ver el Excel/PDF sin descargarlo.
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
   const canEdit = user
     ? userHasPermission(user.roleKey, user.permissions, ['campaign.edit', 'everything'])
     : false;
@@ -139,6 +156,33 @@ export default function CampaignsPage() {
     await load();
   }
 
+  /** Subir Excel / PDF de la campaña sin salir de esta pantalla. */
+  async function uploadCampaignFile(eventId: string, file: File) {
+    if (!canEdit) return;
+    setUploading(true);
+    setMsg('');
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      fd.append('eventId', eventId);
+      fd.append('module', CAMPAIGN_MODULE);
+      await api('/uploads', { method: 'POST', body: fd });
+      setMsg(`${file.name} agregado a la campaña`);
+      await load();
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : 'Error');
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  async function deleteCampaignFile(fileId: string) {
+    if (!canEdit) return;
+    if (!confirm('¿Eliminar este archivo de la campaña?')) return;
+    await api(`/uploads/${fileId}`, { method: 'DELETE' }).catch(() => undefined);
+    await load();
+  }
+
   return (
     <AppShell title="Campañas · Media control">
       <div className="stack page-workspace">
@@ -215,42 +259,125 @@ export default function CampaignsPage() {
                         </tr>
                       </thead>
                       <tbody>
-                        {filtered.map((r) => (
-                          <tr key={r.id}>
-                            <td>
-                              <button className="btn ghost btn-sm" type="button" onClick={() => openEditor(r)}>
-                                <strong>{r.event.name}</strong>
-                              </button>
-                              <div className="muted kpi-sub">{r.event.artist || '—'}</div>
-                            </td>
-                            <td className="muted kpi-sub">{r.type}</td>
-                            <td>
-                              <StatusBadge value={r.event.status} kind="event" />
-                            </td>
-                            <td>
-                              <StatusBadge
-                                value={r.authorized ? 'healthy' : 'watch'}
-                                kind="risk"
-                              />
-                            </td>
-                            <td>
-                              <div className="row row--tight">
-                                <Link className="btn ghost btn-sm" href={`/events/${r.event.id}`}>
-                                  Evento
-                                </Link>
-                                {canEdit && !r.authorized ? (
+                        {filtered.map((r) => {
+                          const files = r.files || [];
+                          const open = expandedId === r.id;
+                          return (
+                            <Fragment key={r.id}>
+                              <tr>
+                                <td>
                                   <button
-                                    className="btn btn-sm"
+                                    className="btn ghost btn-sm"
                                     type="button"
-                                    onClick={() => toggleAuth(r.event.id, true)}
+                                    onClick={() => openEditor(r)}
                                   >
-                                    Autorizar
+                                    <strong>{r.event.name}</strong>
                                   </button>
-                                ) : null}
-                              </div>
-                            </td>
-                          </tr>
-                        ))}
+                                  <div className="muted kpi-sub">{r.event.artist || '—'}</div>
+                                </td>
+                                <td className="muted kpi-sub">{r.type}</td>
+                                <td>
+                                  <StatusBadge value={r.event.status} kind="event" />
+                                </td>
+                                <td>
+                                  <StatusBadge
+                                    value={r.authorized ? 'healthy' : 'watch'}
+                                    kind="risk"
+                                  />
+                                </td>
+                                <td>
+                                  <div className="row row--tight">
+                                    <button
+                                      className={open ? 'btn btn-sm' : 'btn ghost btn-sm'}
+                                      type="button"
+                                      aria-expanded={open}
+                                      onClick={() => setExpandedId(open ? null : r.id)}
+                                    >
+                                      {open ? 'Contraer' : `Archivos (${files.length})`}
+                                    </button>
+                                    <Link
+                                      className="btn ghost btn-sm"
+                                      href={`/events/${r.event.id}?tab=campaign`}
+                                    >
+                                      Evento
+                                    </Link>
+                                    {canEdit && !r.authorized ? (
+                                      <button
+                                        className="btn btn-sm"
+                                        type="button"
+                                        onClick={() => toggleAuth(r.event.id, true)}
+                                      >
+                                        Autorizar
+                                      </button>
+                                    ) : null}
+                                  </div>
+                                </td>
+                              </tr>
+                              {open ? (
+                                <tr className="campaign-expand">
+                                  <td colSpan={5}>
+                                    <div className="stack">
+                                      <div className="row row--tight">
+                                        <span className="muted kpi-sub">
+                                          Excel y PDF de la campaña, embebidos aquí mismo.
+                                        </span>
+                                        {canEdit ? (
+                                          <label className="btn btn-sm module-upload">
+                                            {uploading ? 'Subiendo…' : 'Subir archivo'}
+                                            <input
+                                              type="file"
+                                              hidden
+                                              disabled={uploading}
+                                              accept=".pdf,.xlsx,.xls,.csv,image/*"
+                                              onChange={(e) => {
+                                                const f = e.target.files?.[0];
+                                                e.target.value = '';
+                                                if (f) uploadCampaignFile(r.event.id, f);
+                                              }}
+                                            />
+                                          </label>
+                                        ) : null}
+                                      </div>
+                                      {!files.length ? (
+                                        <p className="muted kpi-sub">
+                                          Esta campaña todavía no tiene plan de medios ni
+                                          presentación cargados.
+                                        </p>
+                                      ) : (
+                                        files.map((f) => (
+                                          <div key={f.id} className="campaign-file">
+                                            <div className="campaign-file__head">
+                                              <div className="campaign-file__meta">
+                                                <strong>{f.fileName}</strong>
+                                              </div>
+                                              {canEdit ? (
+                                                <button
+                                                  className="btn ghost btn-sm btn-danger"
+                                                  type="button"
+                                                  onClick={() => deleteCampaignFile(f.id)}
+                                                >
+                                                  Eliminar
+                                                </button>
+                                              ) : null}
+                                            </div>
+                                            <div className="campaign-file__body">
+                                              <FileViewer
+                                                url={f.url}
+                                                fileName={f.fileName}
+                                                kind={f.kind}
+                                                cacheKey={f.createdAt}
+                                              />
+                                            </div>
+                                          </div>
+                                        ))
+                                      )}
+                                    </div>
+                                  </td>
+                                </tr>
+                              ) : null}
+                            </Fragment>
+                          );
+                        })}
                         {!filtered.length ? (
                           <tr>
                             <td colSpan={5}>

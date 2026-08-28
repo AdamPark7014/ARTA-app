@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { AppShell } from '@/components/app-shell/AppShell';
 import { DistBar } from '@/components/charts/SparkBars';
@@ -11,6 +11,7 @@ import {
   FieldSearch,
   FieldSelect,
   FilterBar,
+  FormGrid,
   PageHeader,
 } from '@/components/ui/PageChrome';
 import { StatusBadge } from '@/components/ui/StatusBadge';
@@ -21,9 +22,31 @@ type Task = {
   id: string;
   title: string;
   module?: string | null;
+  detail?: string | null;
   status: string;
   dueAt?: string | null;
-  event?: { id: string; name: string; status: string };
+  assigneeId?: string | null;
+  assignee?: { id: string; fullName: string } | null;
+  createdById?: string | null;
+  createdBy?: { id: string; fullName: string } | null;
+  event?: { id: string; name: string; status: string } | null;
+};
+
+type DirUser = { id: string; fullName: string; title?: string | null; roleKey?: string };
+type EventRow = { id: string; name: string; status: string };
+
+type View = 'mine' | 'requested' | 'team';
+
+const VIEW_LABEL: Record<View, string> = {
+  mine: 'Asignadas a mí',
+  requested: 'Que pedí a otros',
+  team: 'Equipo',
+};
+
+const VIEW_ENDPOINT: Record<View, string> = {
+  mine: '/tasks/mine',
+  requested: '/tasks/requested',
+  team: '/tasks/workload',
 };
 
 function taskStatusTone(status: string): string {
@@ -33,25 +56,47 @@ function taskStatusTone(status: string): string {
   return 'medium';
 }
 
+const emptyForm = { title: '', detail: '', module: '', assigneeId: '', eventId: '', dueAt: '' };
+
 export default function TasksPage() {
-  const { entity } = useUser();
+  const { entity, user } = useUser();
+  const [view, setView] = useState<View>('mine');
   const [rows, setRows] = useState<Task[]>([]);
+  const [directory, setDirectory] = useState<DirUser[]>([]);
+  const [events, setEvents] = useState<EventRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState('all');
   const [q, setQ] = useState('');
+  const [form, setForm] = useState(emptyForm);
+  const [creating, setCreating] = useState(false);
+  const [msg, setMsg] = useState('');
+  const [error, setError] = useState('');
 
-  async function load() {
+  const load = useCallback(async () => {
     setLoading(true);
     try {
-      const mine = await api<Task[]>('/tasks/mine');
-      setRows(mine);
+      setRows(await api<Task[]>(VIEW_ENDPOINT[view]));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se pudieron cargar las tareas');
     } finally {
       setLoading(false);
     }
-  }
+  }, [view]);
 
   useEffect(() => {
     load().catch(console.error);
+  }, [load, entity]);
+
+  useEffect(() => {
+    api<DirUser[]>('/users/directory')
+      .then(setDirectory)
+      .catch(() => setDirectory([]));
+  }, []);
+
+  useEffect(() => {
+    api<EventRow[]>(`/events?entity=${entity}`)
+      .then((list) => setEvents(list.filter((e) => e.status !== 'CANCELLED')))
+      .catch(() => setEvents([]));
   }, [entity]);
 
   const filtered = useMemo(() => {
@@ -63,6 +108,7 @@ export default function TasksPage() {
         (t) =>
           t.title.toLowerCase().includes(n) ||
           (t.module || '').toLowerCase().includes(n) ||
+          (t.assignee?.fullName || '').toLowerCase().includes(n) ||
           (t.event?.name || '').toLowerCase().includes(n),
       );
     }
@@ -83,23 +129,191 @@ export default function TasksPage() {
   }, [rows]);
 
   async function setTaskStatus(id: string, next: string) {
-    await api(`/tasks/${id}`, { method: 'PATCH', body: JSON.stringify({ status: next }) });
-    await load();
+    setError('');
+    try {
+      await api(`/tasks/${id}`, { method: 'PATCH', body: JSON.stringify({ status: next }) });
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se pudo actualizar la tarea');
+    }
+  }
+
+  async function reassign(id: string, assigneeId: string) {
+    setError('');
+    try {
+      await api(`/tasks/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ assigneeId: assigneeId || null }),
+      });
+      setMsg('Tarea reasignada — la persona recibe el aviso en su panel');
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se pudo reasignar');
+    }
+  }
+
+  async function createTask() {
+    if (!form.title.trim()) {
+      setError('La tarea necesita un título');
+      return;
+    }
+    setCreating(true);
+    setError('');
+    try {
+      await api('/tasks', {
+        method: 'POST',
+        body: JSON.stringify({
+          title: form.title.trim(),
+          detail: form.detail || undefined,
+          module: form.module || undefined,
+          assigneeId: form.assigneeId || undefined,
+          eventId: form.eventId || undefined,
+          dueAt: form.dueAt || undefined,
+        }),
+      });
+      const who = directory.find((d) => d.id === form.assigneeId)?.fullName;
+      setForm(emptyForm);
+      setMsg(who ? `Tarea asignada a ${who} — le llega el aviso en su panel` : 'Tarea creada');
+      if (view === 'mine' && form.assigneeId && form.assigneeId !== user?.id) setView('requested');
+      else await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se pudo crear la tarea');
+    } finally {
+      setCreating(false);
+    }
   }
 
   const filterActive = status !== 'all' || !!q.trim();
 
   return (
-    <AppShell title="Mis tareas · Workload">
+    <AppShell title="Tareas">
       <div className="stack page-workspace">
         <PageHeader
-          description={`Tu cola personal: prioriza vencidas, bloqueadas y en curso. Entidad activa: ${entity === 'ARTA' ? 'Arta Producciones' : 'Auditorio Arema'}.`}
-          hint="Atiende primero vencidas y bloqueadas. Marca como hecha cuando cierres el entregable."
+          description={`Pide apoyo a cualquier integrante de la organización y da seguimiento. Entidad activa: ${
+            entity === 'ARTA' ? 'Arta Producciones' : 'Auditorio Arema'
+          }.`}
+          hint="Quien recibe una tarea ve el aviso en la campana del panel. Atiende primero vencidas y bloqueadas."
         >
           <ActionLink href="/events" variant="ghost">
             Ir a eventos
           </ActionLink>
         </PageHeader>
+
+        {msg ? (
+          <div className="module-banner" role="status">
+            {msg}
+          </div>
+        ) : null}
+        {error ? (
+          <div className="form-error" role="alert">
+            {error}
+          </div>
+        ) : null}
+
+        <div className="panel">
+          <div className="panel-head">
+            <div>
+              <h2>Asignar una tarea</h2>
+              <p className="muted kpi-sub" style={{ margin: '0.25rem 0 0' }}>
+                A cualquier persona del equipo, con o sin evento detrás.
+              </p>
+            </div>
+          </div>
+          <div className="panel-body">
+            <div className="form">
+              <FormGrid cols={2}>
+                <label>
+                  Tarea
+                  <input
+                    className="field"
+                    value={form.title}
+                    onChange={(e) => setForm({ ...form, title: e.target.value })}
+                    placeholder="Ej. Cotizar transporte del staff"
+                  />
+                </label>
+                <label>
+                  Asignar a
+                  <select
+                    className="field"
+                    value={form.assigneeId}
+                    onChange={(e) => setForm({ ...form, assigneeId: e.target.value })}
+                  >
+                    <option value="">Sin asignar</option>
+                    {directory.map((u) => (
+                      <option key={u.id} value={u.id}>
+                        {u.fullName}
+                        {u.title ? ` · ${u.title}` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </FormGrid>
+              <FormGrid cols={3}>
+                <label>
+                  Evento (opcional)
+                  <select
+                    className="field"
+                    value={form.eventId}
+                    onChange={(e) => setForm({ ...form, eventId: e.target.value })}
+                  >
+                    <option value="">Sin evento</option>
+                    {events.map((ev) => (
+                      <option key={ev.id} value={ev.id}>
+                        {ev.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  Módulo
+                  <input
+                    className="field"
+                    value={form.module}
+                    onChange={(e) => setForm({ ...form, module: e.target.value })}
+                    placeholder="producción / campaña…"
+                  />
+                </label>
+                <label>
+                  Vence
+                  <input
+                    className="field"
+                    type="date"
+                    value={form.dueAt}
+                    onChange={(e) => setForm({ ...form, dueAt: e.target.value })}
+                  />
+                </label>
+              </FormGrid>
+              <label>
+                Detalle
+                <textarea
+                  className="field"
+                  rows={2}
+                  value={form.detail}
+                  onChange={(e) => setForm({ ...form, detail: e.target.value })}
+                  placeholder="Qué se necesita exactamente, con qué contacto o referencia…"
+                />
+              </label>
+              <button className="btn" type="button" disabled={creating} onClick={createTask}>
+                {creating ? 'Asignando…' : 'Asignar tarea'}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className="tab-bar" role="tablist" aria-label="Vista de tareas">
+          {(['mine', 'requested', 'team'] as const).map((v) => (
+            <button
+              key={v}
+              type="button"
+              role="tab"
+              aria-selected={view === v}
+              className={`tab-bar__btn ${view === v ? 'is-active' : ''}`}
+              onClick={() => setView(v)}
+            >
+              {VIEW_LABEL[v]}
+            </button>
+          ))}
+        </div>
 
         {loading ? (
           <>
@@ -112,7 +326,7 @@ export default function TasksPage() {
               <div className="kpi">
                 <div className="label">Total</div>
                 <div className="value">{kpis.total}</div>
-                <div className="kpi-sub muted">Asignadas a ti</div>
+                <div className="kpi-sub muted">{VIEW_LABEL[view]}</div>
               </div>
               <div className="kpi">
                 <div className="label">Abiertas</div>
@@ -153,7 +367,7 @@ export default function TasksPage() {
               <FieldSearch
                 value={q}
                 onChange={setQ}
-                placeholder="Buscar tarea, módulo, evento…"
+                placeholder="Buscar tarea, persona, evento…"
                 label="Buscar tarea"
                 maxWidth={280}
               />
@@ -173,7 +387,9 @@ export default function TasksPage() {
 
             <div className="panel">
               <div className="panel-head">
-                <h2>Cola · {filtered.length}</h2>
+                <h2>
+                  {VIEW_LABEL[view]} · {filtered.length}
+                </h2>
               </div>
               <div className="panel-body">
                 <div className="table-wrap">
@@ -181,7 +397,8 @@ export default function TasksPage() {
                     <thead>
                       <tr>
                         <th>Tarea</th>
-                        <th>Módulo</th>
+                        <th>Asignada a</th>
+                        <th>Pedida por</th>
                         <th>Vence</th>
                         <th>Status</th>
                         <th></th>
@@ -197,13 +414,34 @@ export default function TasksPage() {
                           <tr key={t.id}>
                             <td>
                               <strong>{t.title}</strong>
-                              {t.event ? (
-                                <div className="muted kpi-sub">
-                                  <Link href={`/events/${t.event.id}`}>{t.event.name}</Link>
-                                </div>
-                              ) : null}
+                              <div className="muted kpi-sub">
+                                {t.event ? (
+                                  <Link href={`/events/${t.event.id}?tab=tasks`}>
+                                    {t.event.name}
+                                  </Link>
+                                ) : (
+                                  'Sin evento'
+                                )}
+                                {t.module ? ` · ${t.module}` : ''}
+                              </div>
+                              {t.detail ? <div className="muted kpi-sub">{t.detail}</div> : null}
                             </td>
-                            <td className="muted kpi-sub">{t.module || '—'}</td>
+                            <td>
+                              <select
+                                className="field field--select"
+                                aria-label={`Reasignar ${t.title}`}
+                                value={t.assigneeId || ''}
+                                onChange={(e) => reassign(t.id, e.target.value)}
+                              >
+                                <option value="">Sin asignar</option>
+                                {directory.map((u) => (
+                                  <option key={u.id} value={u.id}>
+                                    {u.fullName}
+                                  </option>
+                                ))}
+                              </select>
+                            </td>
+                            <td className="muted kpi-sub">{t.createdBy?.fullName || '—'}</td>
                             <td>
                               <span className={`badge ${overdue ? 'danger' : 'ok'}`}>
                                 {t.dueAt ? new Date(t.dueAt).toLocaleDateString('es-MX') : '—'}
@@ -248,20 +486,22 @@ export default function TasksPage() {
                       })}
                       {!filtered.length ? (
                         <tr>
-                          <td colSpan={5}>
+                          <td colSpan={6}>
                             <EmptyState
                               title={
                                 rows.length === 0
-                                  ? 'Sin tareas asignadas'
+                                  ? view === 'mine'
+                                    ? 'Sin tareas asignadas'
+                                    : view === 'requested'
+                                      ? 'No has pedido apoyo todavía'
+                                      : 'El equipo no tiene tareas abiertas'
                                   : 'Sin resultados en este filtro'
                               }
                               description={
                                 rows.length === 0
-                                  ? 'Cuando te asignen tareas desde un evento aparecerán aquí para priorizar vencidas y bloqueadas.'
+                                  ? 'Usa el formulario de arriba para pedirle una actividad a cualquier integrante del equipo.'
                                   : 'Prueba otro estado o limpia la búsqueda.'
                               }
-                              actionHref={filterActive && rows.length ? undefined : '/events'}
-                              actionLabel={filterActive && rows.length ? undefined : 'Ir a eventos'}
                             >
                               {filterActive && rows.length ? (
                                 <button

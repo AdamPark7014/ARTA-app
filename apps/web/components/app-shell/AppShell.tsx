@@ -3,12 +3,13 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useEffect, useMemo, useState } from 'react';
+import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useUser } from '@/lib/user-context';
 import { EntityKey } from '@/lib/api';
-import { canAccessEventOps, canSeeNavItem, NAV_ITEMS, ROLE_SCOPE, userHasPermission } from '@/lib/access-matrix';
+import { canAccessEventOps, ROLE_SCOPE, userHasPermission, visibleNavItems } from '@/lib/access-matrix';
 import { createSecureHandoffUrl } from '@/lib/cross-entity-handoff';
-import { NavIcon } from './NavIcon';
+import { NotificationBell } from './NotificationBell';
+import { SidebarNav } from './SidebarNav';
 import { SidebarSearch } from './SidebarSearch';
 import { UserChip } from '@/components/ui/UserChip';
 
@@ -33,28 +34,7 @@ export function AppShell({
     setNavOpen(false);
   }, [pathname, entity]);
 
-  const nav = useMemo(() => {
-    if (!user) return [];
-    return NAV_ITEMS.filter((item) => canSeeNavItem(user, item, entity));
-  }, [user, entity]);
-
-  const groups = useMemo(() => {
-    const q = navQuery.trim().toLowerCase();
-    const filtered = q
-      ? nav.filter(
-          (item) =>
-            item.label.toLowerCase().includes(q) ||
-            (item.group || '').toLowerCase().includes(q),
-        )
-      : nav;
-    const map = new Map<string, typeof nav>();
-    for (const item of filtered) {
-      const g = item.group || 'General';
-      if (!map.has(g)) map.set(g, []);
-      map.get(g)!.push(item);
-    }
-    return Array.from(map.entries());
-  }, [nav, navQuery]);
+  const nav = useMemo(() => (user ? visibleNavItems(user, entity) : []), [user, entity]);
 
   const canCreateEvent =
     !!user &&
@@ -182,28 +162,9 @@ export function AppShell({
 
         <SidebarSearch value={navQuery} onChange={setNavQuery} />
 
-        <nav className="nav" aria-label="Módulos del panel">
-          {groups.length === 0 ? (
-            <p className="nav-empty muted">Sin resultados para “{navQuery}”</p>
-          ) : (
-            groups.map(([group, items]) => (
-              <div key={group} className="nav-group">
-                <div className="nav-group-label">{group}</div>
-                {items.map((n) => {
-                  const active =
-                    pathname === n.href ||
-                    (n.href !== '/dashboard' && pathname.startsWith(n.href));
-                  return (
-                    <Link key={n.href} href={n.href} className={active ? 'active' : ''}>
-                      <NavIcon href={n.href} />
-                      <span>{n.label}</span>
-                    </Link>
-                  );
-                })}
-              </div>
-            ))
-          )}
-        </nav>
+        <Suspense fallback={<nav className="nav" aria-hidden />}>
+          <SidebarNav items={nav} query={navQuery} />
+        </Suspense>
 
         <div className="sidebar-foot">
           <UserChip name={user.fullName} subtitle={user.title || user.roleKey} />
@@ -237,6 +198,7 @@ export function AppShell({
             </div>
           </div>
           <div className="topbar-actions">
+            <NotificationBell />
             {canCreateEvent ? (
               <Link href="/events/new" className="btn btn-sm">
                 Nuevo evento

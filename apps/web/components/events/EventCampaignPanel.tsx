@@ -1,9 +1,12 @@
 'use client';
 
+import { useState } from 'react';
+import { FileViewer } from '@/components/files/FileViewer';
+import { EmptyState } from '@/components/ui/EmptyState';
 import { FlowSteps } from '@/components/ui/FlowSteps';
 import { FormGrid } from '@/components/ui/PageChrome';
 import { StatusBadge } from '@/components/ui/StatusBadge';
-import type { EventDetail } from '@/components/events/event-detail.types';
+import type { EventDetail, EventFile } from '@/components/events/event-detail.types';
 
 type CampaignForm = {
   type: string;
@@ -24,9 +27,21 @@ type EventCampaignPanelProps = {
   setCampaignForm: (form: CampaignForm) => void;
   onSaveCampaign: () => Promise<void>;
   onToggleCampaignAuth: (authorized: boolean) => Promise<void>;
+  /** Excel / PDF de la campaña, embebidos aquí mismo */
+  files: EventFile[];
+  onUploadFile: (file: File) => Promise<void>;
+  onReplaceFile: (fileId: string, file: File) => Promise<void>;
+  onDeleteFile: (fileId: string) => Promise<void>;
 };
 
 const CAMPAIGN_FLOW = ['Borrador', 'Guardada', 'Autorizada'];
+
+function kindLabel(kind?: string | null) {
+  if (kind === 'excel') return 'Excel';
+  if (kind === 'pdf') return 'PDF';
+  if (kind === 'image') return 'Imagen';
+  return kind || 'Archivo';
+}
 
 export function EventCampaignPanel({
   event,
@@ -37,9 +52,27 @@ export function EventCampaignPanel({
   setCampaignForm,
   onSaveCampaign,
   onToggleCampaignAuth,
+  files,
+  onUploadFile,
+  onReplaceFile,
+  onDeleteFile,
 }: EventCampaignPanelProps) {
   const hasSaved = !!event.campaign;
   const flowIndex = event.campaign?.authorized ? 2 : hasSaved ? 1 : 0;
+  // Junta 2026-08-28: la campaña se expande para ver el Excel/PDF sin descargar.
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function withBusy(fn: () => Promise<void>) {
+    setBusy(true);
+    try {
+      await fn();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const canEditFiles = canCampaign && !closed;
 
   return (
     <div className="stack">
@@ -165,6 +198,115 @@ export function EventCampaignPanel({
               />
             </label>
           </div>
+        </div>
+      </div>
+
+      <div className="panel">
+        <div className="panel-head">
+          <div>
+            <h2>Archivos de la campaña · {files.length}</h2>
+            <p className="muted kpi-sub" style={{ margin: '0.25rem 0 0' }}>
+              Plan de medios en Excel y presentación en PDF. Se abren aquí mismo, sin descargar.
+            </p>
+          </div>
+          {canEditFiles ? (
+            <label className="btn btn-sm module-upload">
+              {busy ? 'Subiendo…' : 'Subir archivo'}
+              <input
+                type="file"
+                hidden
+                disabled={busy}
+                accept=".pdf,.xlsx,.xls,.csv,image/*"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  e.target.value = '';
+                  if (f) withBusy(() => onUploadFile(f));
+                }}
+              />
+            </label>
+          ) : null}
+        </div>
+        <div className="panel-body">
+          {!files.length ? (
+            <EmptyState
+              title="Sin Excel ni PDF de campaña"
+              description={
+                canEditFiles
+                  ? 'Sube el plan de medios (Excel) y la presentación (PDF). Quedan embebidos en esta sección y se consultan sin salir del evento.'
+                  : 'Cuando el equipo de campaña suba el plan de medios o la presentación, se verán aquí sin necesidad de descargarlos.'
+              }
+            />
+          ) : (
+            <div className="campaign-files">
+              {files.map((f) => {
+                const open = expandedId === f.id;
+                return (
+                  <div key={f.id} className={`campaign-file ${open ? 'campaign-file--open' : ''}`}>
+                    <div className="campaign-file__head">
+                      <div className="campaign-file__meta">
+                        <strong>{f.fileName}</strong>
+                        <StatusBadge value={kindLabel(f.kind)} kind="raw" />
+                        {f.createdAt ? (
+                          <span className="muted kpi-sub">
+                            {new Date(f.createdAt).toLocaleDateString('es-MX')}
+                          </span>
+                        ) : null}
+                      </div>
+                      <div className="panel-head-actions">
+                        <button
+                          className={open ? 'btn btn-sm' : 'btn ghost btn-sm'}
+                          type="button"
+                          aria-expanded={open}
+                          onClick={() => setExpandedId(open ? null : f.id)}
+                        >
+                          {open ? 'Contraer' : 'Expandir'}
+                        </button>
+                        {canEditFiles ? (
+                          <label className="btn ghost btn-sm module-upload">
+                            Actualizar
+                            <input
+                              type="file"
+                              hidden
+                              disabled={busy}
+                              accept=".pdf,.xlsx,.xls,.csv,image/*"
+                              onChange={(e) => {
+                                const next = e.target.files?.[0];
+                                e.target.value = '';
+                                if (next) withBusy(() => onReplaceFile(f.id, next));
+                              }}
+                            />
+                          </label>
+                        ) : null}
+                        <a className="btn ghost btn-sm" href={f.url} target="_blank" rel="noreferrer">
+                          Descargar
+                        </a>
+                        {canEditFiles ? (
+                          <button
+                            className="btn ghost btn-sm btn-danger"
+                            type="button"
+                            disabled={busy}
+                            onClick={() => withBusy(() => onDeleteFile(f.id))}
+                          >
+                            Eliminar
+                          </button>
+                        ) : null}
+                      </div>
+                    </div>
+                    {open ? (
+                      <div className="campaign-file__body">
+                        <FileViewer
+                          url={f.url}
+                          fileName={f.fileName}
+                          kind={f.kind}
+                          cacheKey={f.createdAt}
+                        />
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
     </div>

@@ -70,56 +70,58 @@ enum OrgPlan {
 
 // ─── Multi-org tenancy ───────────────────────────────────────────────────────
 model Organization {
-  id        String   @id @default(cuid())
-  slug      String   @unique
-  name      String
-  plan      OrgPlan  @default(OPS)
-  active    Boolean  @default(true)
+  id                   String   @id @default(cuid())
+  slug                 String   @unique
+  name                 String
+  plan                 OrgPlan  @default(OPS)
+  active               Boolean  @default(true)
   /// Feature flags / branding
-  settingsJson Json?
+  settingsJson         Json?
   /// Stripe Billing (self-serve)
   stripeCustomerId     String?  @unique
   stripeSubscriptionId String?  @unique
   stripePriceId        String?
-  billingStatus        String?  // active | trialing | past_due | canceled | none
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  billingStatus        String? // active | trialing | past_due | canceled | none
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
 
-  users  User[]
-  events Event[]
-  memberships OrgMembership[]
-  invites OrgInvite[]
+  users            User[]
+  events           Event[]
+  memberships      OrgMembership[]
+  invites          OrgInvite[]
   webhookEndpoints WebhookEndpoint[]
-  sharedFolders SharedFolder[]
+  sharedFolders    SharedFolder[]
+  tasks            TaskAssignment[]
+  notifications    Notification[]
 }
 
 model OrgInvite {
-  id             String    @id @default(cuid())
+  id             String       @id @default(cuid())
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   email          String
   roleKey        String
   entities       EntityKey[]
-  permissions    String[]  @default([])
-  tokenHash      String    @unique
+  permissions    String[]     @default([])
+  tokenHash      String       @unique
   invitedById    String?
   expiresAt      DateTime
   acceptedAt     DateTime?
   revokedAt      DateTime?
-  createdAt      DateTime  @default(now())
+  createdAt      DateTime     @default(now())
 
   @@index([organizationId, email])
   @@index([email])
 }
 
 model OrgMembership {
-  id             String   @id @default(cuid())
+  id             String       @id @default(cuid())
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   userId         String
-  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  roleKey        String   // rol dentro del org (puede espejar User.roleKey)
-  createdAt      DateTime @default(now())
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  roleKey        String // rol dentro del org (puede espejar User.roleKey)
+  createdAt      DateTime     @default(now())
 
   @@unique([organizationId, userId])
   @@index([userId])
@@ -127,69 +129,72 @@ model OrgMembership {
 
 // ─── Usuarios / RBAC ─────────────────────────────────────────────────────────
 model User {
-  id           String   @id @default(cuid())
-  email        String   @unique
-  passwordHash String
-  fullName     String
-  title        String?
-  phone        String?
-  active       Boolean  @default(true)
-  roleKey      String // ver roles.ts
+  id               String        @id @default(cuid())
+  email            String        @unique
+  passwordHash     String
+  fullName         String
+  title            String?
+  phone            String?
+  active           Boolean       @default(true)
+  roleKey          String // ver roles.ts
   /// Tenant primario (SaaS multi-org)
-  organizationId String?
-  organization   Organization? @relation(fields: [organizationId], references: [id])
+  organizationId   String?
+  organization     Organization? @relation(fields: [organizationId], references: [id])
   /// Entidades a las que puede entrar: ["ARTA"], ["EXPLANADA"], ["ARTA","EXPLANADA"]
-  entities     EntityKey[]
+  entities         EntityKey[]
   /// Permisos finos opcionales (campaña, corrida, usuarios, studio…)
-  permissions  String[] @default([])
+  permissions      String[]      @default([])
   /// Anti-brute force persistente
-  failedLoginCount Int       @default(0)
+  failedLoginCount Int           @default(0)
   lockedUntil      DateTime?
-  lastLoginAt  DateTime?
+  lastLoginAt      DateTime?
   /// 2FA TOTP
-  totpSecret   String?
-  totpEnabled  Boolean  @default(false)
-  totpVerifiedAt DateTime?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  totpSecret       String?
+  totpEnabled      Boolean       @default(false)
+  totpVerifiedAt   DateTime?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
 
-  eventsCreated     Event[]              @relation("EventCreator")
-  checklistEdits    ChecklistInstance[]  @relation("ChecklistLastEditor")
-  checklistDelivered ChecklistInstance[] @relation("ChecklistDelivered")
-  checklistAuthorized ChecklistInstance[] @relation("ChecklistAuthorized")
-  checklistVersions ChecklistVersion[]
-  templateVersions  ChecklistTemplateVersion[]
-  assignedTasks     TaskAssignment[]
-  auditLogs         AuditLog[]
-  purchaseOrders    PurchaseOrder[]      @relation("PoCreator")
-  poAuthorizations  PurchaseOrder[]      @relation("PoAuthorizer")
-  paymentsUploaded  PaymentProof[]
-  sessions          UserSession[]
-  handoffs          AuthHandoff[]
-  memberships       OrgMembership[]
-  totpChallenges    TotpChallenge[]
+  eventsCreated       Event[]                    @relation("EventCreator")
+  checklistEdits      ChecklistInstance[]        @relation("ChecklistLastEditor")
+  checklistDelivered  ChecklistInstance[]        @relation("ChecklistDelivered")
+  checklistAuthorized ChecklistInstance[]        @relation("ChecklistAuthorized")
+  checklistVersions   ChecklistVersion[]
+  templateVersions    ChecklistTemplateVersion[]
+  assignedTasks       TaskAssignment[]           @relation("TaskAssignee")
+  createdTasks        TaskAssignment[]           @relation("TaskCreator")
+  notifications       Notification[]             @relation("NotificationRecipient")
+  notificationsSent   Notification[]             @relation("NotificationActor")
+  auditLogs           AuditLog[]
+  purchaseOrders      PurchaseOrder[]            @relation("PoCreator")
+  poAuthorizations    PurchaseOrder[]            @relation("PoAuthorizer")
+  paymentsUploaded    PaymentProof[]
+  sessions            UserSession[]
+  handoffs            AuthHandoff[]
+  memberships         OrgMembership[]
+  totpChallenges      TotpChallenge[]
 }
 
 // ─── Eventos ─────────────────────────────────────────────────────────────────
 model Event {
-  id           String       @id @default(cuid())
+  id             String        @id @default(cuid())
   organizationId String?
-  organization Organization? @relation(fields: [organizationId], references: [id])
-  entity       EntityKey
-  name         String
-  artist       String?
-  promoter     String?
-  venue        String?
-  city         String?
-  startsAt     DateTime?
-  endsAt       DateTime?
-  status       EventStatus  @default(DRAFT)
-  campaignType CampaignType @default(NONE)
-  notes        String?
-  createdById  String?
-  createdBy    User?        @relation("EventCreator", fields: [createdById], references: [id])
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime     @updatedAt
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+  entity         EntityKey
+  name           String
+  artist         String?
+  promoter       String?
+  venue          String?
+  city           String?
+  startsAt       DateTime?
+  endsAt         DateTime?
+  status         EventStatus   @default(DRAFT)
+  campaignType   CampaignType  @default(NONE)
+  notes          String?
+  createdById    String?
+  createdBy      User?         @relation("EventCreator", fields: [createdById], references: [id])
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
 
   checklists      ChecklistInstance[]
   purchaseOrders  PurchaseOrder[]
@@ -241,47 +246,47 @@ model ChecklistTemplate {
 }
 
 model ChecklistTemplateVersion {
-  id          String            @id @default(cuid())
-  templateId  String
-  template    ChecklistTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
-  schemaJson  Json
-  version     Int
-  note        String?
-  editedById  String?
-  editedBy    User?             @relation(fields: [editedById], references: [id])
-  createdAt   DateTime          @default(now())
+  id         String            @id @default(cuid())
+  templateId String
+  template   ChecklistTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  schemaJson Json
+  version    Int
+  note       String?
+  editedById String?
+  editedBy   User?             @relation(fields: [editedById], references: [id])
+  createdAt  DateTime          @default(now())
 
   @@index([templateId])
 }
 
 model ChecklistInstance {
-  id              String             @id @default(cuid())
-  eventId         String
-  event           Event              @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  templateId      String
-  template        ChecklistTemplate  @relation(fields: [templateId], references: [id])
-  title           String
+  id                  String            @id @default(cuid())
+  eventId             String
+  event               Event             @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  templateId          String
+  template            ChecklistTemplate @relation(fields: [templateId], references: [id])
+  title               String
   /// Datos llenados (mismo shape que schemaJson) — plantilla editable en web
-  dataJson        Json
-  progressPct     Int                @default(0)
-  lastEditedById  String?
-  lastEditedBy    User?              @relation("ChecklistLastEditor", fields: [lastEditedById], references: [id])
-  lastEditedAt    DateTime?
+  dataJson            Json
+  progressPct         Int               @default(0)
+  lastEditedById      String?
+  lastEditedBy        User?             @relation("ChecklistLastEditor", fields: [lastEditedById], references: [id])
+  lastEditedAt        DateTime?
   /// PDF generado desde la plantilla (se regenera al guardar)
-  pdfUrl          String?
-  pdfGeneratedAt  DateTime?
+  pdfUrl              String?
+  pdfGeneratedAt      DateTime?
   /// Firma digital "Entregado"
   deliveredAt         DateTime?
   deliveredById       String?
-  deliveredBy         User?     @relation("ChecklistDelivered", fields: [deliveredById], references: [id])
+  deliveredBy         User?             @relation("ChecklistDelivered", fields: [deliveredById], references: [id])
   deliveredSignature  Json?
   /// Firma digital "Autorizado"
   authorizedAt        DateTime?
   authorizedById      String?
-  authorizedBy        User?     @relation("ChecklistAuthorized", fields: [authorizedById], references: [id])
+  authorizedBy        User?             @relation("ChecklistAuthorized", fields: [authorizedById], references: [id])
   authorizedSignature Json?
-  createdAt       DateTime           @default(now())
-  updatedAt       DateTime           @updatedAt
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
 
   versions   ChecklistVersion[]
   files      EventFile[]
@@ -291,141 +296,176 @@ model ChecklistInstance {
 }
 
 model DigitalSignature {
-  id          String             @id @default(cuid())
-  checklistId String
-  checklist   ChecklistInstance  @relation(fields: [checklistId], references: [id], onDelete: Cascade)
-  kind        String // ENTREGADO | AUTORIZADO
-  signerName  String
+  id           String            @id @default(cuid())
+  checklistId  String
+  checklist    ChecklistInstance @relation(fields: [checklistId], references: [id], onDelete: Cascade)
+  kind         String // ENTREGADO | AUTORIZADO
+  signerName   String
   signerUserId String?
   imageDataUrl String            @db.Text
-  signedAt    DateTime           @default(now())
-  ip          String?
-  userAgent   String?
-  metaJson    Json?
+  signedAt     DateTime          @default(now())
+  ip           String?
+  userAgent    String?
+  metaJson     Json?
 
   @@index([checklistId, kind])
 }
 
 model ChecklistVersion {
-  id          String             @id @default(cuid())
-  instanceId  String
-  instance    ChecklistInstance  @relation(fields: [instanceId], references: [id], onDelete: Cascade)
-  dataJson    Json
-  editedById  String?
-  editedBy    User?              @relation(fields: [editedById], references: [id])
-  note        String?
-  createdAt   DateTime           @default(now())
+  id         String            @id @default(cuid())
+  instanceId String
+  instance   ChecklistInstance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+  dataJson   Json
+  editedById String?
+  editedBy   User?             @relation(fields: [editedById], references: [id])
+  note       String?
+  createdAt  DateTime          @default(now())
 
   @@index([instanceId])
 }
 
 // ─── Órdenes de compra ───────────────────────────────────────────────────────
 model PurchaseOrder {
-  id             String   @id @default(cuid())
+  id             String    @id @default(cuid())
   eventId        String
-  event          Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  event          Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
   rubro          String // audio, luces, hospedaje, catering…
   vendorName     String?
   description    String?
-  amount         Decimal  @db.Decimal(14, 2)
-  currency       String   @default("MXN")
-  status         PoStatus @default(DRAFT)
+  amount         Decimal   @db.Decimal(14, 2)
+  currency       String    @default("MXN")
+  status         PoStatus  @default(DRAFT)
   createdById    String?
-  createdBy      User?    @relation("PoCreator", fields: [createdById], references: [id])
+  createdBy      User?     @relation("PoCreator", fields: [createdById], references: [id])
   authorizedById String?
-  authorizedBy   User?    @relation("PoAuthorizer", fields: [authorizedById], references: [id])
+  authorizedBy   User?     @relation("PoAuthorizer", fields: [authorizedById], references: [id])
   authorizedAt   DateTime?
   paidAt         DateTime?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   lines  PurchaseOrderLine[]
   proofs PaymentProof[]
 }
 
 model PurchaseOrderLine {
-  id          String        @id @default(cuid())
-  orderId     String
-  order       PurchaseOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  concept     String
-  qty         Decimal       @default(1) @db.Decimal(12, 2)
-  unitPrice   Decimal       @db.Decimal(14, 2)
-  total       Decimal       @db.Decimal(14, 2)
+  id        String        @id @default(cuid())
+  orderId   String
+  order     PurchaseOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  concept   String
+  qty       Decimal       @default(1) @db.Decimal(12, 2)
+  unitPrice Decimal       @db.Decimal(14, 2)
+  total     Decimal       @db.Decimal(14, 2)
 }
 
 model PaymentProof {
-  id             String         @id @default(cuid())
+  id              String         @id @default(cuid())
   purchaseOrderId String?
-  purchaseOrder  PurchaseOrder? @relation(fields: [purchaseOrderId], references: [id])
-  eventId        String?
-  label          String?
-  fileUrl        String
-  amount         Decimal?       @db.Decimal(14, 2)
-  uploadedById   String?
-  uploadedBy     User?          @relation(fields: [uploadedById], references: [id])
-  createdAt      DateTime       @default(now())
+  purchaseOrder   PurchaseOrder? @relation(fields: [purchaseOrderId], references: [id])
+  eventId         String?
+  label           String?
+  fileUrl         String
+  amount          Decimal?       @db.Decimal(14, 2)
+  uploadedById    String?
+  uploadedBy      User?          @relation(fields: [uploadedById], references: [id])
+  createdAt       DateTime       @default(now())
 }
 
 // ─── Corrida financiera ──────────────────────────────────────────────────────
 model FinanceRun {
-  id          String   @id @default(cuid())
-  eventId     String
-  event       Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  title       String   @default("Corrida financiera")
+  id        String   @id @default(cuid())
+  eventId   String
+  event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  title     String   @default("Corrida financiera")
   /// Filas/budget embebido (compatible con Excel import)
-  dataJson    Json
-  locked      Boolean  @default(false)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  dataJson  Json
+  locked    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([eventId])
 }
 
 // ─── Campaña publicitaria ────────────────────────────────────────────────────
 model Campaign {
-  id           String   @id @default(cuid())
-  eventId      String   @unique
-  event        Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  id           String       @id @default(cuid())
+  eventId      String       @unique
+  event        Event        @relation(fields: [eventId], references: [id], onDelete: Cascade)
   type         CampaignType @default(INTERNAL)
-  authorized   Boolean  @default(false)
+  authorized   Boolean      @default(false)
   authorizedAt DateTime?
   notes        String?
   dataJson     Json?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
 }
 
 // ─── Boletera ────────────────────────────────────────────────────────────────
 model TicketingSetup {
-  id          String   @id @default(cuid())
-  eventId     String
-  event       Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  boletera    String // Arema | eTicket | custom display name
-  logoUrl     String? // /uploads/... used in checklist PDFs
-  holdUntil   DateTime?
-  artist      String?
-  promoter    String?
-  venue       String?
+  id        String    @id @default(cuid())
+  eventId   String
+  event     Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  boletera  String // Arema | eTicket | custom display name
+  logoUrl   String? // /uploads/... used in checklist PDFs
+  holdUntil DateTime?
+  artist    String?
+  promoter  String?
+  venue     String?
   /// Zonas: [{zona, aforo, precio}]
-  zonesJson   Json
-  notes       String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  zonesJson Json
+  notes     String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 }
 
 // ─── Tareas ──────────────────────────────────────────────────────────────────
 model TaskAssignment {
-  id          String     @id @default(cuid())
-  eventId     String
-  event       Event      @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  assigneeId  String?
-  assignee    User?      @relation(fields: [assigneeId], references: [id])
-  title       String
-  module      String?
-  status      TaskStatus @default(OPEN)
-  dueAt       DateTime?
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
+  id             String        @id @default(cuid())
+  /// Opcional: una tarea puede ser de apoyo entre personas, sin evento detrás
+  eventId        String?
+  event          Event?        @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  /// Tenant de la tarea (se copia del evento cuando lo hay)
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+  assigneeId     String?
+  assignee       User?         @relation("TaskAssignee", fields: [assigneeId], references: [id])
+  /// Quién pidió el apoyo — recibe el aviso cuando se cierra
+  createdById    String?
+  createdBy      User?         @relation("TaskCreator", fields: [createdById], references: [id])
+  title          String
+  module         String?
+  detail         String?
+  status         TaskStatus    @default(OPEN)
+  dueAt          DateTime?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@index([assigneeId, status])
+  @@index([organizationId, status])
+  @@index([eventId])
+}
+
+// ─── Notificaciones dentro de la plataforma ──────────────────────────────────
+model Notification {
+  id             String        @id @default(cuid())
+  userId         String
+  user           User          @relation("NotificationRecipient", fields: [userId], references: [id], onDelete: Cascade)
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+  /// task.assigned | task.reassigned | task.done | task.due …
+  type           String
+  title          String
+  body           String?
+  /// Ruta interna del panel a la que lleva el aviso
+  linkUrl        String?
+  actorId        String?
+  actor          User?         @relation("NotificationActor", fields: [actorId], references: [id])
+  entity         EntityKey?
+  readAt         DateTime?
+  createdAt      DateTime      @default(now())
+
+  @@index([userId, readAt, createdAt])
+  @@index([organizationId, createdAt])
 }
 
 // ─── Archivos / Excel-PDF embebidos ──────────────────────────────────────────
@@ -440,7 +480,11 @@ model EventFile {
   url         String
   sizeBytes   Int?
   kind        String? // pdf | excel | image | other
+  /// Sección del evento a la que pertenece: campaign | finance | general …
+  module      String?
   createdAt   DateTime           @default(now())
+
+  @@index([eventId, module])
 }
 
 // ─── Studio (CMS pages) ──────────────────────────────────────────────────────
@@ -508,15 +552,15 @@ model SharedFolder {
 }
 
 model SharedFile {
-  id          String       @id @default(cuid())
-  folderId    String
-  folder      SharedFolder @relation(fields: [folderId], references: [id], onDelete: Cascade)
-  fileName    String
-  mimeType    String?
-  url         String
-  sizeBytes   Int?
+  id           String       @id @default(cuid())
+  folderId     String
+  folder       SharedFolder @relation(fields: [folderId], references: [id], onDelete: Cascade)
+  fileName     String
+  mimeType     String?
+  url          String
+  sizeBytes    Int?
   uploadedById String?
-  createdAt   DateTime     @default(now())
+  createdAt    DateTime     @default(now())
 
   @@index([folderId])
 }
@@ -555,18 +599,18 @@ model AuditLog {
 
 // ─── Identity: sesiones activas ──────────────────────────────────────────────
 model UserSession {
-  id           String    @id @default(cuid())
-  userId       String
-  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   /// Hash del JWT jti o fingerprint de token (no guardar JWT en claro)
-  tokenHash    String
-  userAgent    String?
-  ip           String?
-  deviceLabel  String?
-  createdAt    DateTime  @default(now())
-  lastSeenAt   DateTime  @default(now())
-  revokedAt    DateTime?
-  expiresAt    DateTime
+  tokenHash   String
+  userAgent   String?
+  ip          String?
+  deviceLabel String?
+  createdAt   DateTime  @default(now())
+  lastSeenAt  DateTime  @default(now())
+  revokedAt   DateTime?
+  expiresAt   DateTime
 
   @@index([userId, revokedAt])
   @@index([tokenHash])
@@ -574,17 +618,17 @@ model UserSession {
 
 /// One-time cross-host SSO (reemplaza JWT en query string)
 model AuthHandoff {
-  id        String   @id @default(cuid())
-  codeHash  String   @unique
+  id        String    @id @default(cuid())
+  codeHash  String    @unique
   userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   entity    EntityKey
-  path      String   @default("/dashboard")
+  path      String    @default("/dashboard")
   /// JWT emitido al consumir (firmado al crear, short TTL)
   token     String
   expiresAt DateTime
   usedAt    DateTime?
-  createdAt DateTime @default(now())
+  createdAt DateTime  @default(now())
 
   @@index([userId])
   @@index([expiresAt])
@@ -592,82 +636,82 @@ model AuthHandoff {
 
 // ─── Integraciones ───────────────────────────────────────────────────────────
 model WebhookEndpoint {
-  id             String   @id @default(cuid())
-  organizationId String   @default("org_arta_internal")
-  organization   Organization @relation(fields: [organizationId], references: [id])
+  id             String            @id @default(cuid())
+  organizationId String            @default("org_arta_internal")
+  organization   Organization      @relation(fields: [organizationId], references: [id])
   name           String
   url            String
   secret         String
   events         String[] // event.created, po.status, checklist.signed, automation.alert…
-  active         Boolean  @default(true)
+  active         Boolean           @default(true)
   entity         EntityKey? // null = ambas
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
   deliveries     WebhookDelivery[]
 
   @@index([organizationId, active])
 }
 
 model WebhookDelivery {
-  id           String   @id @default(cuid())
-  endpointId   String
-  endpoint     WebhookEndpoint @relation(fields: [endpointId], references: [id], onDelete: Cascade)
-  event        String
-  payloadJson  Json
-  statusCode   Int?
-  success      Boolean  @default(false)
-  error        String?
-  attempts     Int      @default(1)
-  createdAt    DateTime @default(now())
+  id          String          @id @default(cuid())
+  endpointId  String
+  endpoint    WebhookEndpoint @relation(fields: [endpointId], references: [id], onDelete: Cascade)
+  event       String
+  payloadJson Json
+  statusCode  Int?
+  success     Boolean         @default(false)
+  error       String?
+  attempts    Int             @default(1)
+  createdAt   DateTime        @default(now())
 
   @@index([endpointId, createdAt])
 }
 
 /// Challenge temporal post-password cuando 2FA está activo
 model TotpChallenge {
-  id        String   @id @default(cuid())
+  id        String    @id @default(cuid())
   userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  codeHash  String   @unique
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  codeHash  String    @unique
   expiresAt DateTime
   usedAt    DateTime?
-  createdAt DateTime @default(now())
+  createdAt DateTime  @default(now())
 
   @@index([userId])
 }
 
 /// Cola durable ligera (sin Redis): digests, retries, jobs
 model JobRun {
-  id             String   @id @default(cuid())
+  id             String    @id @default(cuid())
   organizationId String?
-  kind           String   // digest.daily | automation.scan | webhook.retry
-  status         String   // pending | running | done | failed
+  kind           String // digest.daily | automation.scan | webhook.retry
+  status         String // pending | running | done | failed
   payloadJson    Json?
   resultJson     Json?
-  attempts       Int      @default(0)
-  runAt          DateTime @default(now())
+  attempts       Int       @default(0)
+  runAt          DateTime  @default(now())
   startedAt      DateTime?
   finishedAt     DateTime?
   error          String?
-  createdAt      DateTime @default(now())
+  createdAt      DateTime  @default(now())
 
   @@index([kind, status, runAt])
   @@index([organizationId, createdAt])
 }
 
 model NotificationOutbox {
-  id             String   @id @default(cuid())
+  id             String    @id @default(cuid())
   organizationId String?
-  channel        String   // email | webhook | inapp
+  channel        String // email | webhook | inapp
   toAddr         String
   subject        String
-  bodyText       String   @db.Text
+  bodyText       String    @db.Text
   metaJson       Json?
-  status         String   @default("pending") // pending | sent | failed
-  attempts       Int      @default(0)
+  status         String    @default("pending") // pending | sent | failed
+  attempts       Int       @default(0)
   sentAt         DateTime?
   error          String?
-  createdAt      DateTime @default(now())
+  createdAt      DateTime  @default(now())
 
   @@index([status, createdAt])
   @@index([organizationId, createdAt])

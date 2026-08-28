@@ -14,6 +14,7 @@ import { api } from '@/lib/api';
 import { useUser } from '@/lib/user-context';
 import { userHasPermission } from '@/lib/access-matrix';
 import { importFinanceFromFile } from '@/lib/finance-import';
+import { fetchPoWindow, type PoWindowState } from '@/lib/po-window';
 import { EventOverviewPanel } from '@/components/events/EventOverviewPanel';
 import { EventChecklistsPanel } from '@/components/events/EventChecklistsPanel';
 import { EventPurchaseOrdersPanel } from '@/components/events/EventPurchaseOrdersPanel';
@@ -25,6 +26,7 @@ import { EventSponsorsPanel } from '@/components/events/EventSponsorsPanel';
 import { EventFilesPanel } from '@/components/events/EventFilesPanel';
 import {
   asFinance,
+  CAMPAIGN_FILE_MODULE,
   emptyFinance,
   type Checklist,
   type DirUser,
@@ -69,9 +71,10 @@ function EventDetailInner() {
   const [financeId, setFinanceId] = useState<string | null>(null);
   const [financeLocked, setFinanceLocked] = useState(false);
   const [directory, setDirectory] = useState<DirUser[]>([]);
-  const [taskForm, setTaskForm] = useState({ title: '', module: '', assigneeId: '', dueAt: '' });
+  const [taskForm, setTaskForm] = useState({ title: '', module: '', assigneeId: '', dueAt: '', detail: '' });
   const [sponsorForm, setSponsorForm] = useState({ name: '', contact: '', contribution: '', amount: '', notes: '' });
   const [previewFile, setPreviewFile] = useState<EventDetail['files'][0] | null>(null);
+  const [poWindow, setPoWindow] = useState<PoWindowState | null>(null);
   const [campaignForm, setCampaignForm] = useState({
     type: 'INTERNAL',
     notes: '',
@@ -206,6 +209,13 @@ function EventDetailInner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [event?.id, searchParams]);
 
+  // Ventana de solicitud de OC: se consulta una vez por visita al hub.
+  useEffect(() => {
+    fetchPoWindow()
+      .then(setPoWindow)
+      .catch(() => setPoWindow(null));
+  }, []);
+
   useEffect(() => {
     if (!canVendorPin) return;
     api<typeof vendorPins>(`/vendor/event/${id}`)
@@ -213,19 +223,29 @@ function EventDetailInner() {
       .catch(() => undefined);
   }, [id, canVendorPin]);
 
+  /** Excel / PDF que cuelgan de la campaña (module=campaign). */
+  const campaignFiles = useMemo(
+    () => (event?.files || []).filter((f) => f.module === CAMPAIGN_FILE_MODULE),
+    [event],
+  );
+
   const modules = useMemo(() => {
     if (!event) return [];
     return [
       { key: 'checklists', label: 'Checklists', count: event.checklists.length },
       { key: 'ocs', label: 'Órdenes de compra', count: event.purchaseOrders.length },
       { key: 'finance', label: 'Corrida', count: event.financeRuns.length },
-      { key: 'campaign', label: 'Campaña', count: event.campaign ? 1 : 0 },
+      {
+        key: 'campaign',
+        label: 'Campaña',
+        count: (event.campaign ? 1 : 0) + campaignFiles.length,
+      },
       { key: 'ticketing', label: 'Boletera', count: event.ticketingSetups?.length || 0 },
       { key: 'tasks', label: 'Tareas', count: event.tasks?.length || 0 },
-      { key: 'sponsors', label: 'Patrocinios', count: event.sponsors?.length || 0 },
+      { key: 'sponsors', label: 'Convenios y patrocinios', count: event.sponsors?.length || 0 },
       { key: 'files', label: 'Excel / PDF', count: event.files.length },
     ] as const;
-  }, [event]);
+  }, [event, campaignFiles]);
 
   const heroStats = useMemo(() => {
     if (!event) return undefined;
@@ -328,24 +348,34 @@ function EventDetailInner() {
   async function createPo() {
     if (closed) return;
     const lines = poForm.lines.filter((l) => l.concept.trim());
-    await api('/purchase-orders', {
-      method: 'POST',
-      body: JSON.stringify({
-        eventId: id,
-        rubro: poForm.rubro,
-        vendorName: poForm.vendorName || undefined,
-        description: poForm.description || undefined,
-        ...(lines.length
-          ? {
-              lines: lines.map((l) => ({
-                concept: l.concept,
-                qty: Number(l.qty),
-                unitPrice: Number(l.unitPrice),
-              })),
-            }
-          : { amount: poLinesTotal }),
-      }),
-    });
+    setMsg('');
+    try {
+      await api('/purchase-orders', {
+        method: 'POST',
+        body: JSON.stringify({
+          eventId: id,
+          rubro: poForm.rubro,
+          vendorName: poForm.vendorName || undefined,
+          description: poForm.description || undefined,
+          ...(lines.length
+            ? {
+                lines: lines.map((l) => ({
+                  concept: l.concept,
+                  qty: Number(l.qty),
+                  unitPrice: Number(l.unitPrice),
+                })),
+              }
+            : { amount: poLinesTotal }),
+        }),
+      });
+    } catch (e) {
+      // Fuera de la ventana de OC el servidor responde 403 con el horario.
+      setMsg(e instanceof Error ? e.message : 'No se pudo crear la OC');
+      fetchPoWindow()
+        .then(setPoWindow)
+        .catch(() => undefined);
+      return;
+    }
     setPoForm({
       rubro: 'audio',
       vendorName: '',
@@ -499,6 +529,43 @@ function EventDetailInner() {
     await api('/uploads', { method: 'POST', body: fd });
     await load();
     setMsg(`Archivo ${file.name} embebido`);
+  }
+
+  /**
+   * Junta 2026-08-28: el Excel y/o PDF de la campaña se suben, se actualizan y
+   * se consultan desde el propio evento. Se etiquetan con `module=campaign`
+   * para que la sección de Campaña los liste aparte.
+   */
+  async function uploadCampaignFile(file: File) {
+    if (closed || !canCampaign) return;
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('eventId', id);
+    fd.append('module', CAMPAIGN_FILE_MODULE);
+    await api('/uploads', { method: 'POST', body: fd });
+    await load();
+    setMsg(`${file.name} agregado a la campaña`);
+  }
+
+  /** Actualizar = subir la versión nueva y retirar la anterior. */
+  async function replaceCampaignFile(fileId: string, file: File) {
+    if (closed || !canCampaign) return;
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('eventId', id);
+    fd.append('module', CAMPAIGN_FILE_MODULE);
+    await api('/uploads', { method: 'POST', body: fd });
+    await api(`/uploads/${fileId}`, { method: 'DELETE' }).catch(() => undefined);
+    await load();
+    setMsg(`Campaña actualizada con ${file.name}`);
+  }
+
+  async function deleteCampaignFile(fileId: string) {
+    if (closed || !canCampaign) return;
+    if (!confirm('¿Eliminar este archivo de la campaña?')) return;
+    await api(`/uploads/${fileId}`, { method: 'DELETE' });
+    await load();
+    setMsg('Archivo de campaña eliminado');
   }
 
   async function closeEvent() {
@@ -658,17 +725,29 @@ function EventDetailInner() {
         eventId: id,
         title: taskForm.title,
         module: taskForm.module || undefined,
+        detail: taskForm.detail || undefined,
         assigneeId: taskForm.assigneeId || undefined,
         dueAt: taskForm.dueAt || undefined,
       }),
     });
-    setTaskForm({ title: '', module: '', assigneeId: '', dueAt: '' });
-    setMsg('Tarea creada');
+    const who = directory.find((d) => d.id === taskForm.assigneeId)?.fullName;
+    setTaskForm({ title: '', module: '', assigneeId: '', dueAt: '', detail: '' });
+    setMsg(who ? `Tarea asignada a ${who} — le llega el aviso en su panel` : 'Tarea creada');
     await load();
   }
 
   async function setTaskStatus(taskId: string, status: string) {
     await api(`/tasks/${taskId}`, { method: 'PATCH', body: JSON.stringify({ status }) });
+    await load();
+  }
+
+  /** Pasar la tarea a otra persona sin salir del evento. */
+  async function reassignTask(taskId: string, assigneeId: string) {
+    await api(`/tasks/${taskId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ assigneeId: assigneeId || null }),
+    });
+    setMsg(assigneeId ? 'Tarea reasignada — se envió el aviso' : 'Tarea sin asignar');
     await load();
   }
 
@@ -833,6 +912,7 @@ function EventDetailInner() {
             onSaveEditPo={saveEditPo}
             onSetPoStatus={setPoStatus}
             onDeletePo={deletePo}
+            poWindow={poWindow}
           />
         )}
 
@@ -860,6 +940,10 @@ function EventDetailInner() {
             setCampaignForm={setCampaignForm}
             onSaveCampaign={saveCampaign}
             onToggleCampaignAuth={toggleCampaignAuth}
+            files={campaignFiles}
+            onUploadFile={uploadCampaignFile}
+            onReplaceFile={replaceCampaignFile}
+            onDeleteFile={deleteCampaignFile}
           />
         )}
 
@@ -892,6 +976,7 @@ function EventDetailInner() {
             setTaskForm={setTaskForm}
             onCreateTask={createTask}
             onSetTaskStatus={setTaskStatus}
+            onReassignTask={reassignTask}
           />
         )}
 

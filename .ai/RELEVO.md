@@ -1,7 +1,7 @@
 # RELEVO
 
 - **Último turno:** claude-code
-- **Fecha:** 2026-08-27
+- **Fecha:** 2026-08-28
 - **Rama:** main
 
 ## Contexto del proyecto
@@ -13,126 +13,130 @@ App Router (`apps/web`), monorepo npm workspaces + turbo.
 
 ## Hecho en este turno
 
-1. **Rescate del turno anterior.** Había 67 archivos sin commitear
-   (56 modificados, 11 nuevos). Van al commit WIP **`2c165a1`**
-   — 67 files changed, +6.061 / −2.486. Nada se perdió y nada se reescribió.
+Se aplicaron **las correcciones de la junta del 28-08-2026**
+(`Correciones Dashboard ARTA.pdf`). El detalle razonado, con las decisiones y
+las excepciones, está en **`docs/CORRECCIONES_JUNTA_2026-08-28.md`** — léelo
+antes de tocar cualquiera de estas áreas. Resumen:
 
-2. **Identificado qué era ese trabajo:** la **Fase A (Craft UI)** de
-   `docs/PROFESSIONALIZATION_PLAN.md`. **Ojo: la Fase A del plan tiene 7
-   items, no 4.** Estado real leído del disco:
-   - (1) Skeleton / empty-state compartidos — hecho
-     (`components/ui/EmptyState.tsx`, `LoadingBlock.tsx`,
-     `components/events/EventDetailSkeleton.tsx`).
-   - (2) Event hub tab bar — hecho (`components/events/EventTabBar.tsx` +
-     `useEventTab.ts`).
-   - (3) Ticketing unificado — hecho (`EventTicketingPanel.tsx`).
-   - (4) Events list risk badges + jerarquía — hecho
-     (`app/(app)/events/page.tsx`, filtro `riskOnly` + `StatusBadge kind="risk"`).
-   - (5) Dashboard alert-first — hecho (`alert-stack` / `ops-alert` en
-     `app/(app)/dashboard/page.tsx`).
-   - (6) Finance + OC tables y (7) Users / Security consistency — las páginas
-     están tocadas y compilan, pero **no se auditó visualmente si el criterio
-     de "consistency" quedó cumplido**. Es lo único de la Fase A sin verificar.
+1. **Sidebar sin desglose de checks.** `apps/web/lib/access-matrix.ts` se
+   reescribió: el menú queda en Inicio (Dashboard), Eventos (Crear evento ·
+   Eventos actuales · Eventos pasados · Tareas), Marca y Admin. Las 16 vistas
+   de portafolio (Plantillas, Carpetas, Finanzas, OC, Campañas, Boletera,
+   Anticipos, Hospitality, Transportación, Catering, Prensa, Artes, Pendones,
+   Risk, Mantenimiento, Vendor PIN) **no se borraron**: quedan `hidden: true`
+   y salen al escribir en el buscador del sidebar. El menú se movió a
+   `components/app-shell/SidebarNav.tsx` porque necesita `useSearchParams`
+   (va envuelto en `<Suspense>` dentro de `AppShell`).
 
-   Los 11 archivos nuevos **están todos referenciados** desde al menos un
-   consumidor — no quedó ningún componente huérfano.
+2. **Eventos actuales / pasados.** `/events` acepta `?scope=active|past|all`.
+   Pasado = cerrado/cancelado **o** con `startsAt` anterior a hoy. La página se
+   partió en `EventsPage` (Suspense) + `EventsPageInner`.
 
-3. **A3-1 — compila.** `npx tsc --noEmit` verde en `apps/web` **y** en
-   `apps/api`. `next build` verde: 34 rutas generadas, 0 errores. **El
-   rediseño no dejó nada roto**: no hubo imports rotos ni componentes
-   fantasma que arreglar.
+3. **Campaña con Excel/PDF embebidos.** `EventFile` gana la columna `module`;
+   los adjuntos de campaña van con `module='campaign'`. `POST /uploads` acepta
+   `module`. La pestaña Campaña del evento y la fila de `/campaigns` se
+   expanden y pintan el archivo con el `FileViewer` que ya existía. «Actualizar»
+   sube la versión nueva y borra la anterior.
 
-4. **A3-3 — scripts raíz.** `package.json` raíz ahora tiene `typecheck`,
-   `test`, `test:api`, `test:api:e2e`, `test:web`. Añadido `typecheck` a
-   `apps/api` y `typecheck` + `test` + `test:e2e` + `start:e2e` a `apps/web`.
-   `npm run typecheck` y `npm test` desde la raíz cubren api **y** web.
+4. **Ventana de OC configurable.** Lógica pura en
+   `apps/api/src/purchase-orders/po-window.ts` (14 tests verdes en
+   `po-window.spec.ts`), config en `Organization.settingsJson.poWindow`,
+   default lunes y jueves 10:00–14:00 CDMX. `GET/PATCH /purchase-orders/window`,
+   bloqueo real en `POST /purchase-orders`, pantalla nueva `/settings` y
+   banner `PoWindowBanner` en el hub del evento y en `/purchase-orders`.
+   **`dir_general` y `super_admin` saltan la ventana a propósito.**
 
-5. **A3-2 — Playwright arrancado.** `apps/web` pasa de 0 a **6 specs verdes**:
-   - `apps/web/e2e/login.spec.ts` (2): reto 2FA completo
-     (login → `requires2fa` → `verify-login` → `/dashboard`) y credenciales
-     inválidas sin salir de `/login`.
-   - `apps/web/e2e/app-shell.spec.ts` (4): gate del middleware sin sesión,
-     shell con navegación + identidad, buscador del sidebar filtrando módulos,
-     y navegación sidebar → portafolio de eventos.
-   - `apps/web/e2e/support/mock-api.ts`: doble de la capa `/api/*`.
-   - `apps/web/playwright.config.ts`.
+5. **Tareas org-wide + avisos en plataforma.** `TaskAssignment.eventId` pasa a
+   opcional y se agregan `organizationId`, `createdById`, `detail`. Modelo
+   `Notification` nuevo con su módulo Nest. `/users/directory` deja de filtrar
+   por entidad. `/tasks` se rehízo: alta de tareas + tres vistas (Asignadas a
+   mí / Que pedí / Equipo). Campana `NotificationBell` en la topbar, sondeo
+   cada 45 s.
 
-6. **A3-4 — CI.** El job `web` de `.github/workflows/ci.yml` pasa de
-   `npm ci → tsc → build` a `npm ci → typecheck → build → playwright install
-   chromium → e2e → upload del report`. Los dos jobs usan ahora los scripts
-   npm en vez de `npx tsc` suelto, para que CI y local no se separen.
+6. **Altas Monse, Sol y Kika** definidas en `apps/api/prisma/new-team-members.ts`
+   con rol `logistica`, y script `npm run users:provision` que **solo inserta
+   lo que falta**.
+
+### Verificación
+
+- `npm run typecheck` (api + web) — verde.
+- `npx jest` en `apps/api` — **9 suites, 61 tests**, incluidas las 14 nuevas de
+  la ventana de OC.
+- `next build` — verde, **35 rutas** (antes 34; entra `/settings`).
+- `npm run test:e2e` en `apps/web` — **9 specs verdes** (antes 6). Se
+  actualizaron los tres de `app-shell` que asumían el menú viejo y se agregó
+  `e2e/tasks.spec.ts` (asignar tarea a otra persona + campana de avisos).
 
 ## Decisiones de diseño que hay que respetar
 
-- **Los e2e del web NO necesitan Postgres ni el workspace `api` levantado.**
-  El navegador siempre pega a `/api<path>` (rewrite de `next.config.js`) y
-  Playwright intercepta con `page.route('**/api/**')` antes del rewrite. Lo
-  que se prueba es el contrato de `lib/api.ts` + `lib/user-context.tsx`; el
-  backend ya está cubierto por los e2e de `apps/api` contra BD real.
-- **El host de los e2e es `arta.localhost:3100`**, porque `lib/domains.ts`
-  mapea ese hostname a la entidad `ARTA` y así el middleware aplica el mismo
-  gate de panel que en producción. La config fuerza
-  `--host-resolver-rules=MAP *.localhost 127.0.0.1` para no depender del
-  resolver de Windows.
-- `webServer` corre `npm run build && npm run start:e2e`. En local reutiliza
-  un server ya levantado (`reuseExistingServer: !CI`); en CI reconstruye
-  aprovechando la caché de `.next` del paso `Build`.
+- **Las herramientas ocultas no se borran.** Están fuera del menú, no del
+  router. Si borras esas rutas rompes enlaces que ya circulan y dejas huérfanos
+  los deep links de los checklists por disciplina.
+- **`visibleNavItems()` devuelve Carpetas generales al menú** cuando el usuario
+  no tiene operación de eventos en la entidad activa (`dir_auditorio` dentro de
+  Arta). Sin esa excepción ese rol se queda con el menú vacío.
+- **La ventana de OC no encierra a dirección.** Es deliberado: quien configura
+  la regla necesita la válvula para urgencias.
+- **Los avisos nunca lanzan.** `NotificationsService.notify()` traga el error y
+  lo loguea: un aviso que falla no puede tumbar la creación de la tarea.
+- **No se pasa el seed en producción.** `prisma/seed.ts` reescribe el
+  `passwordHash` de TODOS los usuarios en cada corrida. Para altas se usa
+  `npm run users:provision`, que solo inserta lo que falta.
+- Sigue vigente todo lo del turno anterior: los e2e del web no necesitan
+  Postgres (Playwright intercepta `**/api/**`), el host es
+  `arta.localhost:3100`, y `output: 'standalone'` no se toca.
 
 ## A medias — CUIDADO
 
-- **`apps/web/app/(app)/finance/page.tsx`, `purchase-orders/page.tsx`,
-  `users/page.tsx`, `security/page.tsx`** — items 6 y 7 de la Fase A.
-  Compilan y renderizan, pero nadie ha verificado que la "consistency" de UI
-  que pedía el plan esté realmente cerrada. No los reescribas: ábrelos,
-  compáralos con `dashboard` y `events` (que sí quedaron al nivel objetivo)
-  y cierra la diferencia.
-- **`next start` avisa** `"next start" does not work with "output: standalone"`
-  en cada arranque del webServer de Playwright. **Hoy funciona igual** (los 6
-  specs pasan), pero es una advertencia real de Next: si una versión futura la
-  convierte en error, hay que servir los e2e con
-  `node .next/standalone/server.js` (y copiar `public/` y `.next/static` al
-  lado). No cambies `output: 'standalone'` en `next.config.js` — lo necesita
-  el Docker de producción.
-- **`deploy/ensure-traefik-route.sh`** (nuevo, del turno anterior) ya está
-  cableado en `deploy/update.sh`, que dejó de hacer `cp -f` directo. **El cron
-  de cada 5 min que lo reejecuta no está en el repo**, vive en el droplet.
+- **La migración `20260828120000_tasks_org_notifications_file_module` NO se ha
+  aplicado en producción.** Toca `EventFile`, `TaskAssignment` y crea
+  `Notification`. Hay que correr `npm run prisma:deploy` en `apps/api` contra
+  el droplet **antes** de desplegar el API nuevo, o el backend arranca contra
+  un esquema viejo. La migración trae el `UPDATE` que hereda
+  `TaskAssignment.organizationId` desde el evento; las tareas que ya existen
+  quedan sin `createdById` (nadie las pidió) y eso es correcto.
+- **Rol y correo de Monse, Sol y Kika están asumidos**, no confirmados. La
+  junta solo dio nombres de pila. Confirmar con Arturo antes de correr
+  `users:provision`.
+- **Items 6 y 7 de la Fase A** siguen sin auditar visualmente
+  (`finance/page.tsx`, `purchase-orders/page.tsx`, `users/page.tsx`,
+  `security/page.tsx`). `purchase-orders` se tocó solo para meter el banner.
+- **`deploy/ensure-traefik-route.sh`** y su cron de 5 min siguen igual que el
+  turno pasado: el cron vive en el droplet, no en el repo.
 
 ## Siguiente paso
 
 Por orden de valor:
 
-1. **A3-2 (continuación)** — ampliar Playwright al hub de evento: `EventTabBar`
-   + `useEventTab` + `EventTicketingPanel` son lo más nuevo y lo menos
-   cubierto. La ruta `/events/[id]` es la más pesada del build (130 kB) y no
-   tiene ni un spec.
-2. **Cerrar los items 6 y 7 de la Fase A** (ver «A medias»).
-3. **A3-5 — módulos operativos**: inventario técnico, calendario de producción
-   y reportes ejecutivos. No existen. Ojo con la regla del plan: *un módulo a
-   la vez, sin CRUD nuevo fuera del spine* (Event → checklist → OC → finance →
-   boletera).
-4. **A3-6 — manual de usuario del Auditorio**: extender
-   `docs/guides/ARTA-Ops-Guia-de-Uso.html` con la operación del venue
-   (entidad `EXPLANADA`, rol `dir_auditorio`).
-5. **A3-7 — causa raíz de la ruta de Traefik**: el deploy de NEXARA borra
-   `arta.yml` del directorio compartido del file provider
-   (`/var/www/nexara-app/deploy/traefik/`) y tumba artaproducciones.com a 404.
-   Hoy se parchea con `ensure-traefik-route.sh` + un cron cada 5 min en el
-   droplet. **La causa raíz sigue sin resolver**: lo correcto es que NEXARA no
-   sea dueño de ese directorio, o que ARTA publique su ruta por otro
-   mecanismo (label de Docker o un file provider propio).
-6. **A3-8 — falta `docs/ENTERPRISE_ITERATION_W2.md`**. La bitácora va W1, W3,
-   W4W5, W6…W11. El W2 nunca se escribió; hay que reconstruirlo del `git log`
-   de ese tramo o dejar constancia de que no existió.
+1. **Aplicar la migración y desplegar.** Es lo único que separa este trabajo de
+   estar vivo en artaproducciones.com.
+2. **Confirmar con Arturo** rol/correo de las tres altas y correr
+   `users:provision`. Después, entregar credenciales a Chacho, Arturo, Leida y
+   Sol (`ENVIAR USUARIOS` del PDF) — acción manual, fuera del repo.
+3. **Playwright del hub de evento**: la pestaña Campaña con archivos y la
+   ventana de OC son lo más nuevo y no tienen spec. `/events/[id]` sigue siendo
+   la ruta más pesada (244 kB) y la menos cubierta.
+4. **Cerrar los items 6 y 7 de la Fase A** (ver «A medias»).
+5. **A3-5 — módulos operativos**: inventario técnico, calendario de producción
+   y reportes ejecutivos. No existen. Regla del plan: *un módulo a la vez, sin
+   CRUD nuevo fuera del spine*.
+6. **A3-6 — manual del Auditorio**: extender
+   `docs/guides/ARTA-Ops-Guia-de-Uso.html` y, ya de paso, documentar el menú
+   nuevo — la guía todavía describe el sidebar viejo.
+7. **A3-7 — causa raíz de la ruta de Traefik**: el deploy de NEXARA borra
+   `arta.yml` del file provider compartido y tumba el dominio a 404. Hoy se
+   parchea con cron.
+8. **A3-8 — falta `docs/ENTERPRISE_ITERATION_W2.md`**.
 
 ## No tocar
 
 - **`docs/ACCESS.md`** — 7 usuarios reales con nombre y correo. No se mueve, no
-  se publica, no se cambia. Fuera de alcance también cualquier rotación o
-  lectura de secretos.
+  se publica, no se cambia. Fuera de alcance cualquier rotación o lectura de
+  secretos.
 - **`next.config.js` → `output: 'standalone'`** — lo exige el Dockerfile de
   producción, aunque haga ruido con `next start` en los e2e.
-- **El commit `2c165a1`** — es el rescate del turno anterior. No se reescribe
-  ni se hace squash hasta que Adam confirme que ese rediseño es el bueno.
+- **El commit `2c165a1`** — rescate del turno anterior. No se reescribe ni se
+  hace squash hasta que Adam confirme que ese rediseño es el bueno.
 - **`apps/api/test/*.e2e-spec.ts`** — corren contra BD real y el CI hace
   `prisma migrate deploy` antes. Están bien como están.
-- **No se ha hecho push.** Todos los commits de este turno son locales.
+- **No se ha hecho push.** Todos los commits siguen siendo locales.

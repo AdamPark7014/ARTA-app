@@ -105,7 +105,7 @@ export class UploadsController {
   async upload(
     @Req() req: { user: AuthUser },
     @UploadedFile() file: Express.Multer.File,
-    @Body() body: { eventId?: string; checklistId?: string; kind?: string },
+    @Body() body: { eventId?: string; checklistId?: string; kind?: string; module?: string },
   ) {
     if (!file) throw new BadRequestException('Archivo requerido');
     const mime = file.mimetype || 'application/octet-stream';
@@ -155,6 +155,8 @@ export class UploadsController {
         url,
         sizeBytes: file.size,
         kind,
+        // Sección del evento (campaign, finance…) para poder listar por módulo
+        module: body.module ? String(body.module).slice(0, 40) : undefined,
       },
     });
     return record;

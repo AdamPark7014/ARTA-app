@@ -13,6 +13,7 @@ import {
   FilterBar,
   PageHeader,
 } from '@/components/ui/PageChrome';
+import { PoWindowBanner } from '@/components/purchase-orders/PoWindowBanner';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { api } from '@/lib/api';
 import { useUser } from '@/lib/user-context';
@@ -129,7 +130,12 @@ export default function PurchaseOrdersPage() {
           <ActionLink href="/events" variant="ghost">
             Ir a eventos
           </ActionLink>
+          <ActionLink href="/settings" variant="ghost">
+            Configurar ventana
+          </ActionLink>
         </PageHeader>
+
+        <PoWindowBanner />
 
         {loading && !data ? (
           <>

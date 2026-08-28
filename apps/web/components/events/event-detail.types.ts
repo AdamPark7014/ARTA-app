@@ -84,11 +84,19 @@ export type Task = {
   id: string;
   title: string;
   module?: string | null;
+  detail?: string | null;
   status: string;
   dueAt?: string | null;
   assigneeId?: string | null;
   assignee?: { id: string; fullName: string } | null;
+  createdById?: string | null;
+  createdBy?: { id: string; fullName: string } | null;
 };
+
+/** Etiqueta de `EventFile.module` que usa la sección de campaña. */
+export const CAMPAIGN_FILE_MODULE = 'campaign';
+
+export type EventFile = EventDetail['files'][number];
 
 export type Sponsor = {
   id: string;
@@ -124,7 +132,15 @@ export type EventDetail = {
     dataJson?: CampaignData | null;
   } | null;
   ticketingSetups?: TicketingSetup[];
-  files: Array<{ id: string; fileName: string; url: string; kind?: string | null }>;
+  files: Array<{
+    id: string;
+    fileName: string;
+    url: string;
+    kind?: string | null;
+    /** Sección del evento: campaign | finance | general… */
+    module?: string | null;
+    createdAt?: string;
+  }>;
   tasks?: Task[];
   sponsors?: Sponsor[];
 };

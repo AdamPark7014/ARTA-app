@@ -17,7 +17,15 @@ import { Type } from 'class-transformer';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { hasPermission, canAccessEventOps, PERMISSIONS, type EntityKey, type RoleKey } from '../common/rbac/roles';
-import { assertSameTenant } from '../common/tenant';
+import { assertSameTenant, tenantIdOf } from '../common/tenant';
+import {
+  DEFAULT_PO_WINDOW,
+  describeSchedule,
+  evaluatePoWindow,
+  readPoWindow,
+  sanitizePoWindow,
+  type PoWindowConfig,
+} from './po-window';
 
 class PoLineDto {
   @IsString() concept!: string;
@@ -38,10 +46,97 @@ class CreatePoDto {
   lines?: PoLineDto[];
 }
 
+type WindowUser = {
+  id: string;
+  roleKey: string;
+  permissions?: string[];
+  organizationId?: string | null;
+};
+
 @Controller('purchase-orders')
 @UseGuards(JwtAuthGuard)
 export class PurchaseOrdersController {
   constructor(private prisma: PrismaService) {}
+
+  /** Config de la ventana de OC del tenant (con defaults de Arta). */
+  private async loadWindow(user: WindowUser): Promise<PoWindowConfig> {
+    const org = await this.prisma.organization.findUnique({
+      where: { id: tenantIdOf(user) },
+      select: { settingsJson: true },
+    });
+    if (!org) return { ...DEFAULT_PO_WINDOW };
+    return readPoWindow(org.settingsJson);
+  }
+
+  /** Dirección configura la ventana, así que no puede quedar encerrada por ella. */
+  private bypassesWindow(user: WindowUser) {
+    return user.roleKey === 'super_admin' || user.roleKey === 'dir_general';
+  }
+
+  /**
+   * Estado de la ventana: si se puede solicitar OC ahora mismo y cuándo vuelve
+   * a abrir. El panel lo consulta para avisar antes de que el usuario capture.
+   */
+  @Get('window')
+  async window(@Req() req: { user: WindowUser }) {
+    const config = await this.loadWindow(req.user);
+    const state = evaluatePoWindow(config);
+    const canEdit = hasPermission(
+      req.user.roleKey as RoleKey,
+      req.user.permissions || [],
+      PERMISSIONS.USERS_MANAGE,
+    );
+    return {
+      ...state,
+      canRequestNow: state.open || this.bypassesWindow(req.user),
+      bypass: this.bypassesWindow(req.user),
+      canEdit,
+    };
+  }
+
+  @Patch('window')
+  async setWindow(@Req() req: { user: WindowUser }, @Body() body: Partial<PoWindowConfig>) {
+    if (
+      !hasPermission(
+        req.user.roleKey as RoleKey,
+        req.user.permissions || [],
+        PERMISSIONS.USERS_MANAGE,
+      )
+    ) {
+      throw new ForbiddenException('Solo dirección configura la ventana de órdenes de compra');
+    }
+    const orgId = tenantIdOf(req.user);
+    const org = await this.prisma.organization.findUnique({
+      where: { id: orgId },
+      select: { settingsJson: true },
+    });
+    if (!org) throw new NotFoundException('Organización no encontrada');
+
+    const poWindow = sanitizePoWindow(body || {});
+    await this.prisma.organization.update({
+      where: { id: orgId },
+      data: {
+        settingsJson: {
+          ...((org.settingsJson as Record<string, unknown>) || {}),
+          poWindow,
+        },
+      },
+    });
+    return { ...evaluatePoWindow(poWindow), canRequestNow: true, canEdit: true };
+  }
+
+  /** Bloquea la captura de OC fuera de los días/horas configurados. */
+  private async assertWindowOpen(user: WindowUser) {
+    if (this.bypassesWindow(user)) return;
+    const config = await this.loadWindow(user);
+    const state = evaluatePoWindow(config);
+    if (state.open) return;
+    const next = state.nextOpenLabel ? ` Vuelve a abrir ${state.nextOpenLabel}.` : '';
+    const note = config.note ? ` ${config.note}` : '';
+    throw new ForbiddenException(
+      `Fuera de la ventana para solicitar órdenes de compra (${describeSchedule(config)}).${next}${note}`,
+    );
+  }
 
   private async assertEventOps(
     user: { entities: string[]; roleKey: string; organizationId?: string | null },
@@ -110,10 +205,20 @@ export class PurchaseOrdersController {
 
   @Post()
   async create(
-    @Req() req: { user: { id: string; entities: string[]; roleKey: string } },
+    @Req()
+    req: {
+      user: {
+        id: string;
+        entities: string[];
+        roleKey: string;
+        permissions?: string[];
+        organizationId?: string | null;
+      };
+    },
     @Body() dto: CreatePoDto,
   ) {
     await this.assertEventOps(req.user, dto.eventId);
+    await this.assertWindowOpen(req.user);
     const lines = dto.lines?.length ? dto.lines : undefined;
     const amount = lines ? this.sumLines(lines) : Number(dto.amount || 0);
     return this.prisma.purchaseOrder.create({

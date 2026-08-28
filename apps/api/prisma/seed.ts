@@ -3,6 +3,7 @@ import * as bcrypt from 'bcryptjs';
 import * as fs from 'fs';
 import * as path from 'path';
 import { ROLES, ROLE_PERMISSIONS, type RoleKey } from '../src/common/rbac/roles';
+import { NEW_TEAM_MEMBERS } from './new-team-members';
 
 const prisma = new PrismaClient();
 
@@ -667,6 +668,8 @@ const USERS: SeedUser[] = [
     permissions: [...ROLE_PERMISSIONS[ROLES.ENLACE_GOBIERNO]],
     passAlias: 'JP',
   },
+  // Altas de la junta 2026-08-28 (Monse, Sol, Kika) — ver new-team-members.ts
+  ...NEW_TEAM_MEMBERS,
 ];
 
 function passwordFor(alias: string) {

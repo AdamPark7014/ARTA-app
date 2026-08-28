@@ -23,6 +23,9 @@ import {
   type RoleKey,
 } from '../common/rbac/roles';
 
+/** Etiqueta de `EventFile.module` para los adjuntos de campaña. */
+export const CAMPAIGN_MODULE = 'campaign';
+
 type AuthUser = {
   id: string;
   roleKey: string;
@@ -36,6 +39,17 @@ type AuthUser = {
 export class CampaignsController {
   constructor(private prisma: PrismaService) {}
 
+  /**
+   * Junta 2026-08-28: la campaña debe poder expandirse para ver el Excel y/o
+   * PDF sin salir de la sección, así que la lista viaja con sus archivos.
+   */
+  private campaignFiles(eventIds: string[]) {
+    return this.prisma.eventFile.findMany({
+      where: { eventId: { in: eventIds }, module: CAMPAIGN_MODULE },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
   @Get()
   async list(@Req() req: { user: AuthUser }) {
     const allowed = eventOpsEntities(req.user.entities as EntityKey[], req.user.roleKey as RoleKey);
@@ -48,13 +62,25 @@ export class CampaignsController {
       },
       select: { id: true },
     });
-    return this.prisma.campaign.findMany({
-      where: { eventId: { in: events.map((e) => e.id) } },
-      include: {
-        event: { select: { id: true, name: true, entity: true, artist: true, status: true } },
-      },
-      orderBy: { updatedAt: 'desc' },
-    });
+    const eventIds = events.map((e) => e.id);
+    const [campaigns, files] = await Promise.all([
+      this.prisma.campaign.findMany({
+        where: { eventId: { in: eventIds } },
+        include: {
+          event: { select: { id: true, name: true, entity: true, artist: true, status: true } },
+        },
+        orderBy: { updatedAt: 'desc' },
+      }),
+      this.campaignFiles(eventIds),
+    ]);
+    const byEvent = new Map<string, typeof files>();
+    for (const f of files) {
+      if (!f.eventId) continue;
+      const list = byEvent.get(f.eventId) || [];
+      list.push(f);
+      byEvent.set(f.eventId, list);
+    }
+    return campaigns.map((c) => ({ ...c, files: byEvent.get(c.eventId) || [] }));
   }
 
   @Get('event/:eventId')
@@ -65,7 +91,23 @@ export class CampaignsController {
       throw new ForbiddenException();
     }
     assertSameTenant(req.user, event.organizationId);
-    return this.prisma.campaign.findUnique({ where: { eventId } });
+    const [campaign, files] = await Promise.all([
+      this.prisma.campaign.findUnique({ where: { eventId } }),
+      this.campaignFiles([eventId]),
+    ]);
+    return { ...(campaign || null), files, eventId };
+  }
+
+  /** Solo los archivos — para refrescar tras subir o reemplazar. */
+  @Get('event/:eventId/files')
+  async files(@Req() req: { user: AuthUser }, @Param('eventId') eventId: string) {
+    const event = await this.prisma.event.findUnique({ where: { id: eventId } });
+    if (!event) throw new NotFoundException();
+    if (!canAccessEventOps(req.user.entities as EntityKey[], req.user.roleKey as RoleKey, event.entity as EntityKey)) {
+      throw new ForbiddenException();
+    }
+    assertSameTenant(req.user, event.organizationId);
+    return this.campaignFiles([eventId]);
   }
 
   @Post('event/:eventId')
