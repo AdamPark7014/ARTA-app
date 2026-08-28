@@ -42,7 +42,7 @@ export function EventFinancePanel({
 
       {!canFinance ? (
         <div className="module-banner">
-          Vista de corrida. Solo finanzas (Melissa, Chacho, Arturo) pueden editar e importar.
+          Vista de corrida. Solo finanzas (gerencia y dirección) pueden editar e importar.
         </div>
       ) : null}
 

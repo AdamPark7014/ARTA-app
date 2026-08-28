@@ -339,7 +339,7 @@ export class ChecklistsController {
     if (!existing) throw new BadRequestException('Checklist no encontrado');
     this.assertEventAccess(req.user, existing.event);
 
-    // Autorizar: Melissa en Arta / Rodrigo en Auditorio / dirs
+    // Autorizar: gerencia en Arta / dirección del Auditorio / dirección general
     if (body.kind === 'AUTORIZADO') {
       const role = req.user.roleKey;
       const entity = existing.event.entity;

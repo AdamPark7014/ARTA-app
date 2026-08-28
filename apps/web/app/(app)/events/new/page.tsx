@@ -111,7 +111,7 @@ export default function NewEventPage() {
                   onChange={(e) => setForm({ ...form, campaignType: e.target.value })}
                 >
                   <option value="NONE">Sin campaña</option>
-                  <option value="INTERNAL">Interna (Melissa / Will)</option>
+                  <option value="INTERNAL">Interna (equipo Arta)</option>
                   <option value="EXTERNAL">Externa</option>
                 </select>
               </label>

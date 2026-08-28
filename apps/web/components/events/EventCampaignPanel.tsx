@@ -80,7 +80,7 @@ export function EventCampaignPanel({
 
       {!canCampaign ? (
         <div className="module-banner">
-          Solo el equipo de campaña (Melissa / Williams) puede editar y autorizar.
+          Solo el equipo de campaña (gerencia de Arta y logística) puede editar y autorizar.
         </div>
       ) : null}
 
@@ -127,7 +127,7 @@ export function EventCampaignPanel({
                   value={campaignForm.type}
                   onChange={(e) => setCampaignForm({ ...campaignForm, type: e.target.value })}
                 >
-                  <option value="INTERNAL">Interna (Melissa / Will)</option>
+                  <option value="INTERNAL">Interna (equipo Arta)</option>
                   <option value="EXTERNAL">Externa</option>
                   <option value="NONE">Sin campaña</option>
                 </select>

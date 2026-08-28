@@ -169,22 +169,6 @@ const USER_VIEWS: Record<
     ],
     notes: 'TODO en ambas · usuarios · corrida · cierre',
   },
-  'melissa@artaproducciones.com': {
-    entities: ['ARTA'],
-    homeEntity: 'ARTA',
-    modules: [
-      'dashboard',
-      'events',
-      'checklists',
-      'finance',
-      'purchase-orders',
-      'campaigns',
-      'ticketing',
-      'studio',
-      'site',
-    ],
-    notes: 'Solo Arta · campaña · corrida · autoriza OC Arta · Studio Arta',
-  },
   'rodrigo@arema.mx': {
     entities: ['EXPLANADA', 'ARTA'],
     homeEntity: 'EXPLANADA',
@@ -206,7 +190,7 @@ const USER_VIEWS: Record<
     entities: ['ARTA', 'EXPLANADA'],
     homeEntity: 'ARTA',
     modules: ['dashboard', 'events', 'checklists', 'campaigns', 'ticketing', 'site'],
-    notes: 'Generales ambos · edita campaña con Melissa · boletera',
+    notes: 'Generales ambos · edita campaña con gerencia · boletera',
   },
   'leida@artaproducciones.com': {
     entities: ['ARTA', 'EXPLANADA'],
@@ -523,7 +507,7 @@ const TEMPLATES: Array<{
   {
     key: 'CORRIDA_FINANCIERA',
     name: 'Corrida financiera',
-    description: 'Solo editable por Melissa, Chacho y Arturo',
+    description: 'Solo editable por gerencia de Arta y dirección general',
     entities: [],
     schema: {
       sections: [
@@ -539,7 +523,7 @@ const TEMPLATES: Array<{
   {
     key: 'CAMPANA',
     name: 'Campaña publicitaria',
-    description: 'Edición: Melissa y Williams',
+    description: 'Edición: equipo de campaña',
     entities: [],
     schema: {
       sections: [
@@ -622,15 +606,6 @@ const USERS: SeedUser[] = [
     entities: ['ARTA', 'EXPLANADA'],
     permissions: [...ROLE_PERMISSIONS[ROLES.DIR_GENERAL]],
     passAlias: 'CHACHO',
-  },
-  {
-    email: 'melissa@artaproducciones.com',
-    fullName: 'Melissa Astudillo',
-    title: 'Gerente general de Arta',
-    roleKey: ROLES.GERENTE_ARTA,
-    entities: ['ARTA'],
-    permissions: [...ROLE_PERMISSIONS[ROLES.GERENTE_ARTA]],
-    passAlias: 'MELISSA',
   },
   {
     email: 'rodrigo@arema.mx',
@@ -846,7 +821,7 @@ async function main() {
   await seedDemoPortfolio();
 
   console.log('\nSeed OK.');
-  console.log('Passwords: SEED_PASSWORD o SEED_PASS_<ALIAS> (ARTURO, MELISSA, RODRIGO…).');
+  console.log('Passwords: SEED_PASSWORD o SEED_PASS_<ALIAS> (ARTURO, CHACHO, RODRIGO…).');
   console.log('Default dev (si no hay env): ArtaDevLocal-1');
 }
 
@@ -858,10 +833,10 @@ async function seedDemoPortfolio() {
     return;
   }
 
-  const melissa = await prisma.user.findUnique({ where: { email: 'melissa@artaproducciones.com' } });
+  const arturo = await prisma.user.findUnique({ where: { email: 'arturo@artaproducciones.com' } });
   const rodrigo = await prisma.user.findUnique({ where: { email: 'rodrigo@arema.mx' } });
   const williams = await prisma.user.findUnique({ where: { email: 'williams@artaproducciones.com' } });
-  const creatorId = melissa?.id || rodrigo?.id;
+  const creatorId = arturo?.id || rodrigo?.id;
   if (!creatorId) {
     console.log('  · Sin usuarios seed — skip demo events');
     return;
@@ -1069,7 +1044,7 @@ async function seedDemoPortfolio() {
             po.status === 'AUTHORIZED' || po.status === 'PAID'
               ? d.entity === 'EXPLANADA'
                 ? rodrigo?.id
-                : melissa?.id
+                : arturo?.id
               : undefined,
           authorizedAt: po.status === 'AUTHORIZED' || po.status === 'PAID' ? createdAt : undefined,
           paidAt: po.status === 'PAID' ? now : undefined,

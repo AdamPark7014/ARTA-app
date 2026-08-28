@@ -123,7 +123,7 @@ export class CampaignsController {
     },
   ) {
     if (!hasPermission(req.user.roleKey as RoleKey, req.user.permissions, PERMISSIONS.CAMPAIGN_EDIT)) {
-      throw new ForbiddenException('Solo Melissa y Williams editan campaña');
+      throw new ForbiddenException('Solo el equipo de campaña edita la campaña');
     }
     const event = await this.prisma.event.findUnique({ where: { id: eventId } });
     if (!event) throw new NotFoundException();
@@ -133,13 +133,13 @@ export class CampaignsController {
     assertSameTenant(req.user, event.organizationId);
 
     const authorized = body.authorized;
-    // Autorizar campaña: Melissa (tema campaña) + dirs
+    // Autorizar campaña: gerencia de Arta + dirección
     if (authorized === true) {
       const canAuth =
         req.user.roleKey === 'gerente_arta' ||
         req.user.roleKey === 'dir_general' ||
         req.user.roleKey === 'super_admin';
-      if (!canAuth) throw new ForbiddenException('Solo Melissa (o dirección) autoriza campaña');
+      if (!canAuth) throw new ForbiddenException('Solo gerencia de Arta o dirección autoriza campaña');
     }
 
     return this.prisma.campaign.upsert({

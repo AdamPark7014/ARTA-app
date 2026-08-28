@@ -348,7 +348,7 @@ export class PurchaseOrdersController {
         throw new ForbiddenException('No puedes autorizar OC');
       }
       if (role === 'gerente_arta' && order.event.entity !== 'ARTA') {
-        throw new ForbiddenException('Melissa solo autoriza OC de Arta');
+        throw new ForbiddenException('La gerencia de Arta solo autoriza OC de Arta');
       }
       if (role === 'dir_auditorio' && order.event.entity !== 'EXPLANADA') {
         throw new ForbiddenException('Rodrigo solo autoriza OC del Auditorio');

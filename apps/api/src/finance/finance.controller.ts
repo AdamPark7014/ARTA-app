@@ -165,7 +165,7 @@ export class FinanceController {
     const role = req.user.roleKey as RoleKey;
     if (!hasPermission(role, req.user.permissions, PERMISSIONS.FINANCE_EDIT)) {
       throw new ForbiddenException(
-        'Solo Melissa, Chacho y Arturo pueden editar corrida financiera',
+        'Solo gerencia de Arta y dirección general pueden editar corrida financiera',
       );
     }
     const existing = await this.prisma.financeRun.findUnique({ where: { id } });

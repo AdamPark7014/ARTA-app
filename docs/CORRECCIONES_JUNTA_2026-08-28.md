@@ -107,35 +107,59 @@ herramienta ahí.
   **Asignadas a mí**, **Que pedí a otros** y **Equipo**. Se reasigna desde la
   tabla, tanto aquí como dentro del evento.
 
-## 5. Altas de usuario
+## 5. Altas y baja de usuarios
 
 > «AGREGAR USUARIO: MONSE, SOL Y KIKA.»
 
-La junta dio nombre de pila, no correo ni rol. Quedan definidas en
-`apps/api/prisma/new-team-members.ts` como `monse@`, `sol@` y
-`kika@artaproducciones.com`, con rol **`logistica`** en ambas entidades — el
-mínimo con el que pueden trabajar (eventos, checklists, campaña, boletera,
-carpetas; sin usuarios, sin cierre y sin autorizar OC).
+Definidas en `apps/api/prisma/new-team-members.ts` y enganchadas al roster de
+`prisma/seed.ts`:
 
-**Para darlas de alta en producción, NO se pasa el seed**: `prisma/seed.ts`
-reescribe el `passwordHash` de todos los usuarios en cada corrida y le
-cambiaría la contraseña a las siete personas reales. Se usa el script que solo
-inserta lo que falta:
+| Persona                    | Correo                       | Rol         | Alcance |
+| -------------------------- | ---------------------------- | ----------- | ------- |
+| Monse                      | `monse@artaproducciones.com` | `logistica` | Eventos, checklists, campaña, boletera y carpetas en ambas entidades |
+| **Marisol Pérez Vásquez**  | `marisol@artaproducciones.com` | `convenios` | Carpetas, patrocinios y checklists — **mismo perfil que Leida Osorio** |
+| Kika                       | `kika@artaproducciones.com`  | `logistica` | Igual que Monse |
 
-```bash
-cd apps/api
-SEED_PASS_MONSE=... SEED_PASS_SOL=... SEED_PASS_KIKA=... npm run users:provision
+**«SOL» es Marisol Pérez Vásquez** (confirmado por Adam el 28-08-2026), con el
+mismo perfil que Leida. De Monse y Kika la junta solo dio el nombre de pila:
+quedan en `logistica`, que es el mínimo con el que pueden trabajar. Apellidos,
+correo definitivo y rol se ajustan desde **Panel → Usuarios**.
+
+### Baja: Melissa Astudillo
+
+Sale del roster del seeder (`prisma/seed.ts`) y su cuenta se borra de la base
+de datos de producción. El copy que la nombraba por su nombre —mensajes de la
+API, banners del panel, `docs/PRODUCT.md` y la guía de uso— pasa a nombrar el
+**rol** («gerencia de Arta»), que es como debió estar desde el principio.
+
+Su historial **no se pierde**: todas las llaves foráneas hacia `User` son
+opcionales (`ON DELETE SET NULL`) o en cascada sobre datos de sesión. Los
+checklists que firmó, las OC que autorizó y el audit log conservan la fila con
+el `userId` en nulo, y la firma digital guarda el nombre dentro del JSON.
+
+### Cómo llegan las altas a producción
+
+`docker/api-entrypoint.sh` corre `prisma migrate deploy` **y el seed** en cada
+arranque del contenedor del API. Es decir: **el seed sí corre en producción en
+cada despliegue**, y reescribe el `passwordHash` de todo el roster con los
+valores de `deploy/.env.arta`. Por eso las tres altas nuevas necesitan su
+propia variable en `deploy/docker-compose.arta.yml` y en `.env.arta`:
+
+```
+SEED_PASS_MONSE=…
+SEED_PASS_MARISOL=…
+SEED_PASS_KIKA=…
 ```
 
-Sin variables de entorno genera una contraseña aleatoria por persona y la
-imprime una sola vez. Confirmar con Arturo el apellido, el correo definitivo y
-el rol real, y ajustarlos desde **Panel → Usuarios**.
+Sin ellas caerían en `SEED_PASSWORD`, que es compartida. Existe además
+`npm run users:provision` (`apps/api/scripts/provision-new-users.ts`) para dar
+de alta sin redesplegar: **solo inserta lo que falta** y no toca a nadie que ya
+exista.
 
 ## Pendiente (fuera del código)
 
-- **Confirmar rol y correo de Monse, Sol y Kika** antes de correr el script.
+- **Confirmar apellidos y correo de Monse y Kika** con Arturo, y ajustar rol si
+  hace falta desde Panel → Usuarios.
 - **`ENVIAR USUARIOS: CHACHO, ARTURO, LEIDA Y SOL`** — entrega de credenciales
   por canal seguro. Es una acción operativa de Adam, no del repositorio: aquí
   no se guardan contraseñas.
-- **Migración de base de datos**: `20260828120000_tasks_org_notifications_file_module`
-  aún no se ha aplicado en producción (`npm run prisma:deploy` en `apps/api`).

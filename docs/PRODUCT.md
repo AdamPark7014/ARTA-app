@@ -11,7 +11,6 @@ Tras login, el usuario elige / solo ve las entidades a las que tiene acceso.
 |---------|-----|-----------|
 | Arturo Taja | dir_general | ambas · TODO · usuarios |
 | José Luis Arista (Chacho) | dir_general | ambas · TODO · usuarios |
-| Melissa Astudillo | gerente_arta | ARTA todo · corrida · campaña · autoriza OC Arta |
 | Rodrigo López | dir_auditorio | EXPLANADA todo · en ARTA solo carpetas (sin event ops) · autoriza OC Auditorio |
 | Williams Taja | logistica | generales ambos · edita campaña |
 | Leida Osorio | convenios | generales ambos |
@@ -22,7 +21,7 @@ Tras login, el usuario elige / solo ve las entidades a las que tiene acceso.
 2. Se auto-instancian plantillas: general, producción, hospedaje, transporte, RP, artes, boletera, pendones, OC, catering, corrida, campaña, anticipos (+ mantenimiento en Explanada)
 3. Dentro del concierto: campaña, corrida financiera, OC por rubro, checklists, archivos Excel/PDF
 4. OC: pendiente → autorizada → pagada
-5. Corrida/cierre: solo Melissa, Chacho, Arturo
+5. Corrida/cierre: solo gerencia de Arta y dirección general
 6. Usuarios: solo Chacho y Arturo
 
 ## Inteligencia operativa (Enterprise)

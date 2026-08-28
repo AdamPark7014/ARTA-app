@@ -15,11 +15,15 @@ export type TeamMember = {
 /**
  * Altas pedidas en la junta del 2026-08-28: «AGREGAR USUARIO: MONSE, SOL Y KIKA».
  *
- * La junta dio nombre de pila, no correo ni rol. Se les da de alta con el rol
- * operativo `logistica` (eventos de ambas entidades, checklists, campaña,
- * boletera y carpetas — sin usuarios, sin cierre y sin autorizar OC), que es el
- * mínimo con el que pueden trabajar. Ajustar rol, correo y apellidos desde
- * Panel → Usuarios en cuanto Arturo confirme; esta lista solo define el alta.
+ * «SOL» es **Marisol Pérez Vásquez**, confirmado por Adam el 28-08-2026, y va
+ * con el mismo perfil que Leida Osorio: rol `convenios` en ambas entidades
+ * (carpetas, patrocinios y checklists; sin usuarios, sin corrida y sin
+ * autorizar OC).
+ *
+ * De Monse y Kika la junta solo dio el nombre de pila: quedan con rol
+ * operativo `logistica` — el mínimo con el que pueden trabajar (eventos,
+ * checklists, campaña, boletera y carpetas). Ajustar apellidos, correo y rol
+ * desde Panel → Usuarios en cuanto Arturo los confirme.
  */
 export const NEW_TEAM_MEMBERS: TeamMember[] = [
   {
@@ -32,13 +36,13 @@ export const NEW_TEAM_MEMBERS: TeamMember[] = [
     passAlias: 'MONSE',
   },
   {
-    email: 'sol@artaproducciones.com',
-    fullName: 'Sol',
-    title: 'Operación Arta',
-    roleKey: ROLES.LOGISTICA,
+    email: 'marisol@artaproducciones.com',
+    fullName: 'Marisol Pérez Vásquez',
+    title: 'Convenios y patrocinios',
+    roleKey: ROLES.CONVENIOS,
     entities: ['ARTA', 'EXPLANADA'],
-    permissions: [...ROLE_PERMISSIONS[ROLES.LOGISTICA]],
-    passAlias: 'SOL',
+    permissions: [...ROLE_PERMISSIONS[ROLES.CONVENIOS]],
+    passAlias: 'MARISOL',
   },
   {
     email: 'kika@artaproducciones.com',
