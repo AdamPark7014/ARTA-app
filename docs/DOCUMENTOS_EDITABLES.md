@@ -56,6 +56,40 @@ avisa.
 
 Modelo nuevo `EventDocument` (`blocksJson`, `version`, `pdfUrl`, `pdfVersion`).
 
+## 3-bis. El checklist se captura SOBRE su PDF
+
+`components/files/ChecklistPdfEditor.tsx` + `checklist-pdf.service.ts`
+
+Antes el formulario mandaba y el PDF era su salida en solo lectura. Ahora es al
+revés: **se escribe sobre la hoja**.
+
+Funciona porque el PDF lo genera este mismo sistema, así que el generador sabe
+dónde escribió cada dato. Ahora lo registra —página y coordenadas por ítem— en
+`ChecklistInstance.pdfFieldsJson`, y el panel dibuja el PDF real con pdf.js y
+coloca un campo de captura justo encima de cada valor: texto, select o casilla.
+Al guardar, el PDF se regenera con lo capturado y sigue el flujo de firmas de
+siempre.
+
+Los campos van con fondo opaco porque el PDF de abajo sigue mostrando el valor
+anterior hasta la regeneración.
+
+El **formulario clásico sigue disponible** con el botón *Formulario*, y es el
+modo por defecto mientras un formato no tenga mapa (se llena en su siguiente
+regeneración). Para los que ya existían:
+
+```bash
+docker exec -w /app/apps/api arta-api npx ts-node --transpile-only scripts/backfill-checklist-pdf-fields.ts
+```
+
+Ese script **deja fuera los formatos ya autorizados** a propósito: reescribir en
+bloque un documento firmado no debe pasar sin que alguien lo pida. Para
+incluirlos, `--include-signed`.
+
+> Detalle que cuesta caro: en columnas `Json?` de Prisma, `{ equals: null }`
+> significa «JSON null», no NULL de la base. Hay que usar `Prisma.DbNull` o la
+> consulta no devuelve nada — la primera corrida del backfill no encontró
+> ninguna de las 59 filas por eso.
+
 ## 4. PDF → documento editable
 
 `lib/pdf-to-blocks.ts`
@@ -96,3 +130,9 @@ respaldo. Un evento cerrado deja todo en solo lectura.
 comprueba que el contenido real llegó a la cuadrícula, escribe dos celdas,
 guarda y verifica que se subió un `.xlsx` reconstruido de más de 1 KB al
 endpoint de guardado. Un segundo spec crea un documento, lo escribe y lo guarda.
+
+`e2e/checklist-pdf.spec.ts` usa fixtures producidos por el **generador real**
+(`e2e/fixtures/`, ver `README-regenerar.ts.txt`), así que comprueba que los
+campos caen sobre lo que pdfkit imprimió de verdad y no sobre coordenadas
+inventadas: valores correctos, escritura sobre la hoja, campos dentro de los
+límites de la página y vuelta al formulario clásico.

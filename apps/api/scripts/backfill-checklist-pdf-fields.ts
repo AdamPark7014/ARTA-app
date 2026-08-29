@@ -11,23 +11,42 @@
  *
  * Es idempotente y seguro de repetir: regenerar un PDF no cambia los datos del
  * checklist ni sus firmas, solo vuelve a imprimir el archivo.
+ *
+ * **Los formatos ya autorizados quedan fuera por defecto.** Reescribir en bloque
+ * un documento firmado no es algo que deba pasar sin que alguien lo pida: las
+ * firmas se re-incrustan igual desde la base, pero el archivo cambia. Para
+ * incluirlos: `--include-signed`. Para regenerar todo: `--all`.
  */
-import { PrismaClient } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
 import { ChecklistPdfService } from '../src/checklists/checklist-pdf.service';
 
 const prisma = new PrismaClient();
 
 async function main() {
-  const onlyMissing = process.argv.includes('--all') ? {} : { pdfFieldsJson: { equals: null } };
+  const all = process.argv.includes('--all');
+  const includeSigned = all || process.argv.includes('--include-signed');
+
+  const where = {
+    ...(all ? {} : { pdfFieldsJson: { equals: Prisma.DbNull } }),
+    ...(includeSigned ? {} : { authorizedAt: null }),
+  };
+
+  // Cuántos formatos firmados se están dejando fuera a propósito.
+  const skipped = includeSigned
+    ? 0
+    : await prisma.checklistInstance.count({
+        where: { pdfFieldsJson: { equals: Prisma.DbNull }, NOT: { authorizedAt: null } },
+      });
 
   const pending = await prisma.checklistInstance.findMany({
-    where: onlyMissing,
+    where,
     select: { id: true, title: true, eventId: true },
     orderBy: { createdAt: 'asc' },
   });
 
   if (!pending.length) {
     console.log('Nada que rellenar: todos los checklists ya tienen su mapa de campos.');
+    if (skipped) console.log(`(${skipped} autorizados quedaron fuera; usa --include-signed)`);
     return;
   }
 
@@ -49,6 +68,11 @@ async function main() {
   }
 
   console.log(`\nListo: ${ok} regenerados${failed ? `, ${failed} con error` : ''}.`);
+  if (skipped) {
+    console.log(
+      `${skipped} formato(s) ya autorizados quedaron intactos. Para incluirlos: --include-signed`,
+    );
+  }
 }
 
 main()

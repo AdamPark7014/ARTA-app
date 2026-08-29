@@ -88,6 +88,12 @@ antes de tocar estas áreas.
    - **Carpetas generales**: los archivos ya no solo se abren en otra pestaña;
      se ven embebidos y el Excel y el PDF se editan ahí mismo
      (`PUT /folders/files/:id/content`).
+   - **El checklist se captura SOBRE su PDF.** El generador registra página y
+     coordenadas de cada ítem en `ChecklistInstance.pdfFieldsJson`, y el panel
+     pone un campo de captura encima de cada valor. El formulario clásico sigue
+     con el botón «Formulario». Backfill ya corrido en producción: **59 de 80**
+     formatos; los **21 ya autorizados quedaron intactos a propósito**
+     (`--include-signed` para incluirlos).
 
 ### Verificación
 
