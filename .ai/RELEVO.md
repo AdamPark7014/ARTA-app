@@ -95,11 +95,24 @@ antes de tocar estas áreas.
      formatos; los **21 ya autorizados quedaron intactos a propósito**
      (`--include-signed` para incluirlos).
 
+10. **Ver y editar en grande, y menú que se esconde** (29-08-2026).
+    - `ExpandBox`: cualquier visor o editor va a **pantalla completa** y se sale
+      con el botón o con Escape. El contenido no se desmonta, así que no se
+      pierde lo escrito.
+    - Los editores de PDF **miden su contenedor** y rasterizan a ese ancho en
+      vez de a uno fijo (736 px en columna → 1416 px a pantalla completa). Al
+      cambiar el ancho se vuelve a rasterizar, no se reutiliza el canvas.
+    - El visor de archivos usaba la clase del **mapa del recinto**, topada a
+      420 px de alto. Ahora tiene la suya, con alto de trabajo.
+    - **Menú automático**: botón en el pie del menú (recordado por navegador).
+      Se repliega y vuelve al pasar el cursor por la franja del borde izquierdo
+      o por el propio menú; también con el teclado (`:focus-within`).
+
 ### Verificación
 
 - `npm run typecheck` (api + web) verde · `npx jest` en `apps/api`
   **9 suites / 61 tests** · `next build` verde con **35 rutas** ·
-  `npm run test:e2e` **13 specs verdes**. `e2e/editors.spec.ts` genera un
+  `npm run test:e2e` **18 specs verdes**. `e2e/editors.spec.ts` genera un
   `.xlsx` de verdad, lo sirve, comprueba que su contenido llega a la cuadrícula,
   escribe dos celdas y verifica que se sube un `.xlsx` reconstruido de más de
   1 KB al endpoint de guardado.
@@ -127,6 +140,13 @@ antes de tocar estas áreas.
   debe pasar por el gate de sesión.
 - **`pdfjs-dist` y `pdf-lib` entran por import dinámico.** Son pesados; así solo
   se descargan cuando alguien abre un editor.
+- **Con el menú automático, el shell pasa a UNA columna.** El sidebar queda
+  `position: fixed`, o sea fuera del flujo: si se dejaran dos columnas, `.main`
+  caería en la primera y se quedaría sin ancho.
+- **El botón del menú automático hace `blur()`.** Vive dentro del propio menú y
+  `:focus-within` lo mantendría abierto: parecería que el botón no hace nada.
+- **Las cajas de campo del checklist se miden en puntos PDF, no en píxeles.** Si
+  los márgenes fueran en píxeles, al ampliar dejarían de cuadrar con lo impreso.
 - **La ventana de OC no encierra a dirección.**
 - **Los avisos nunca lanzan**: `NotificationsService.notify()` traga el error.
 - **El seed ya no toca `passwordHash` en el update.** La contraseña de
