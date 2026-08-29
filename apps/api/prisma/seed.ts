@@ -3,6 +3,7 @@ import * as bcrypt from 'bcryptjs';
 import * as fs from 'fs';
 import * as path from 'path';
 import { ROLES, ROLE_PERMISSIONS, type RoleKey } from '../src/common/rbac/roles';
+import { DEFAULT_ORG_ID } from '../src/common/tenant';
 import { NEW_TEAM_MEMBERS } from './new-team-members';
 
 const prisma = new PrismaClient();
@@ -698,11 +699,32 @@ const STUDIO_CONTENT: Array<{ sectionKey: string; title: string; contentJson: Re
 async function main() {
   console.log('Seeding ARTA users, templates, studio…');
 
+  /**
+   * Tenant por defecto.
+   *
+   * Un usuario sin `organizationId` es invisible para `/users` y
+   * `/users/directory`, que filtran por tenant: no aparece en Panel → Usuarios
+   * ni se le pueden asignar tareas, aunque pueda iniciar sesión. El seed lo
+   * garantiza en vez de dejarlo al backfill de una migración.
+   */
+  const org = await prisma.organization.upsert({
+    where: { id: DEFAULT_ORG_ID },
+    create: {
+      id: DEFAULT_ORG_ID,
+      slug: 'arta',
+      name: 'Arta Producciones · Ops',
+      plan: 'OPS',
+      settingsJson: { entities: ['ARTA', 'EXPLANADA'] },
+    },
+    update: {},
+  });
+  console.log(`  ✓ Organización ${org.slug} (${org.id})`);
+
   for (const u of USERS) {
     const plain = passwordFor(u.passAlias);
     const passwordHash = await bcrypt.hash(plain, 12);
     const views = USER_VIEWS[u.email];
-    await prisma.user.upsert({
+    const user = await prisma.user.upsert({
       where: { email: u.email },
       create: {
         email: u.email,
@@ -713,17 +735,37 @@ async function main() {
         permissions: u.permissions,
         passwordHash,
         active: true,
+        organizationId: org.id,
       },
+      // Sin `passwordHash`: el seed corre en CADA arranque del contenedor y
+      // reescribirlo revertía la contraseña que la persona hubiera cambiado
+      // desde Panel → Seguridad. La contraseña de `.env.arta` es solo la
+      // inicial; para reponerla se usa Panel → Usuarios.
       update: {
         fullName: u.fullName,
         title: u.title,
         roleKey: u.roleKey,
         entities: u.entities,
         permissions: u.permissions,
-        passwordHash,
         active: true,
       },
     });
+
+    // Solo se adopta al que no tiene tenant: no se mueve a nadie que ya
+    // pertenezca a otra organización.
+    if (!user.organizationId) {
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { organizationId: org.id },
+      });
+    }
+
+    await prisma.orgMembership.upsert({
+      where: { organizationId_userId: { organizationId: org.id, userId: user.id } },
+      create: { organizationId: org.id, userId: user.id, roleKey: u.roleKey },
+      update: { roleKey: u.roleKey },
+    });
+
     console.log(
       `  ✓ ${u.fullName} · ${u.entities.join('+')} · módulos: ${(views?.modules || []).join(', ')}`,
     );
