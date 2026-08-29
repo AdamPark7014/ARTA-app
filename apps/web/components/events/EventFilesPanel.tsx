@@ -6,6 +6,7 @@ import { SheetEditor } from '@/components/files/SheetEditor';
 import { PdfEditor } from '@/components/files/PdfEditor';
 import { DocEditor, type EventDocumentRow } from '@/components/files/DocEditor';
 import { pdfToBlocks } from '@/lib/pdf-to-blocks';
+import { replaceEventFile } from '@/lib/file-save';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { api } from '@/lib/api';
@@ -189,19 +190,19 @@ export function EventFilesPanel({
             {isSheet(editing) ? (
               <SheetEditor
                 key={editing.id}
-                fileId={editing.id}
                 url={editing.url}
                 fileName={editing.fileName}
                 canEdit={canEdit}
+                onSave={replaceEventFile(editing.id)}
                 onSaved={onFilesChanged}
               />
             ) : (
               <PdfEditor
                 key={editing.id}
-                fileId={editing.id}
                 url={editing.url}
                 fileName={editing.fileName}
                 canEdit={canEdit}
+                onSave={replaceEventFile(editing.id)}
                 onSaved={onFilesChanged}
               />
             )}

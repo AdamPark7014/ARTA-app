@@ -5,6 +5,9 @@ import { Fragment, useEffect, useMemo, useState } from 'react';
 import { AppShell } from '@/components/app-shell/AppShell';
 import { money } from '@/components/charts/SparkBars';
 import { FileViewer } from '@/components/files/FileViewer';
+import { SheetEditor } from '@/components/files/SheetEditor';
+import { PdfEditor } from '@/components/files/PdfEditor';
+import { replaceEventFile } from '@/lib/file-save';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { LoadingBlock, LoadingKpis } from '@/components/ui/LoadingBlock';
 import {
@@ -50,6 +53,10 @@ type CampaignRow = {
 /** Etiqueta con la que viajan los adjuntos de campaña en EventFile.module */
 const CAMPAIGN_MODULE = 'campaign';
 
+function isSheetFile(name: string, kind?: string | null) {
+  return kind === 'excel' || /\.(xlsx?|csv)$/i.test(name);
+}
+
 export default function CampaignsPage() {
   const { user, entity } = useUser();
   const [rows, setRows] = useState<CampaignRow[]>([]);
@@ -68,6 +75,7 @@ export default function CampaignsPage() {
   const [msg, setMsg] = useState('');
   // Junta 2026-08-28: la fila se expande para ver el Excel/PDF sin descargarlo.
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [editingFileId, setEditingFileId] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const canEdit = user
     ? userHasPermission(user.roleKey, user.permissions, ['campaign.edit', 'everything'])
@@ -344,32 +352,74 @@ export default function CampaignsPage() {
                                           presentación cargados.
                                         </p>
                                       ) : (
-                                        files.map((f) => (
-                                          <div key={f.id} className="campaign-file">
-                                            <div className="campaign-file__head">
-                                              <div className="campaign-file__meta">
-                                                <strong>{f.fileName}</strong>
+                                        files.map((f) => {
+                                          const editing = editingFileId === f.id;
+                                          return (
+                                            <div key={f.id} className="campaign-file">
+                                              <div className="campaign-file__head">
+                                                <div className="campaign-file__meta">
+                                                  <strong>{f.fileName}</strong>
+                                                </div>
+                                                <div className="panel-head-actions">
+                                                  {canEdit ? (
+                                                    <button
+                                                      className={editing ? 'btn btn-sm' : 'btn ghost btn-sm'}
+                                                      type="button"
+                                                      onClick={() =>
+                                                        setEditingFileId(editing ? null : f.id)
+                                                      }
+                                                    >
+                                                      {editing
+                                                        ? 'Cerrar editor'
+                                                        : isSheetFile(f.fileName, f.kind)
+                                                          ? 'Editar hoja'
+                                                          : 'Escribir encima'}
+                                                    </button>
+                                                  ) : null}
+                                                  {canEdit ? (
+                                                    <button
+                                                      className="btn ghost btn-sm btn-danger"
+                                                      type="button"
+                                                      onClick={() => deleteCampaignFile(f.id)}
+                                                    >
+                                                      Eliminar
+                                                    </button>
+                                                  ) : null}
+                                                </div>
                                               </div>
-                                              {canEdit ? (
-                                                <button
-                                                  className="btn ghost btn-sm btn-danger"
-                                                  type="button"
-                                                  onClick={() => deleteCampaignFile(f.id)}
-                                                >
-                                                  Eliminar
-                                                </button>
-                                              ) : null}
+                                              <div className="campaign-file__body">
+                                                {editing ? (
+                                                  isSheetFile(f.fileName, f.kind) ? (
+                                                    <SheetEditor
+                                                      key={f.id}
+                                                      url={f.url}
+                                                      fileName={f.fileName}
+                                                      canEdit={canEdit}
+                                                      onSave={replaceEventFile(f.id)}
+                                                      onSaved={load}
+                                                    />
+                                                  ) : (
+                                                    <PdfEditor
+                                                      key={f.id}
+                                                      url={f.url}
+                                                      fileName={f.fileName}
+                                                      canEdit={canEdit}
+                                                      onSave={replaceEventFile(f.id)}
+                                                      onSaved={load}
+                                                    />
+                                                  )
+                                                ) : (
+                                                  <FileViewer
+                                                    url={f.url}
+                                                    fileName={f.fileName}
+                                                    kind={f.kind}
+                                                    cacheKey={f.createdAt}
+                                                  />
+                                                )}
+                                              </div>
                                             </div>
-                                            <div className="campaign-file__body">
-                                              <FileViewer
-                                                url={f.url}
-                                                fileName={f.fileName}
-                                                kind={f.kind}
-                                                cacheKey={f.createdAt}
-                                              />
-                                            </div>
-                                          </div>
-                                        ))
+                                          );
+                                        })
                                       )}
                                     </div>
                                   </td>

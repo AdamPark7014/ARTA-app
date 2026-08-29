@@ -1,7 +1,11 @@
 'use client';
 
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { Fragment, FormEvent, useEffect, useMemo, useState } from 'react';
 import { AppShell } from '@/components/app-shell/AppShell';
+import { FileViewer } from '@/components/files/FileViewer';
+import { SheetEditor } from '@/components/files/SheetEditor';
+import { PdfEditor } from '@/components/files/PdfEditor';
+import { replaceFolderFile } from '@/lib/file-save';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { LoadingBlock } from '@/components/ui/LoadingBlock';
 import {
@@ -14,6 +18,18 @@ import {
 import { api } from '@/lib/api';
 import { useUser } from '@/lib/user-context';
 import { userHasPermission } from '@/lib/access-matrix';
+
+function isSheet(name: string) {
+  return /\.(xlsx?|csv)$/i.test(name);
+}
+
+function isPdf(name: string) {
+  return /\.pdf$/i.test(name);
+}
+
+function isImage(name: string) {
+  return /\.(png|jpe?g|gif|webp)$/i.test(name);
+}
 
 type Folder = {
   id: string;
@@ -43,6 +59,9 @@ export default function FoldersPage() {
   const [msg, setMsg] = useState('');
   const [q, setQ] = useState('');
   const [loading, setLoading] = useState(true);
+  const [openFileId, setOpenFileId] = useState<string | null>(null);
+  const [editFileId, setEditFileId] = useState<string | null>(null);
+
   const canEdit = user
     ? userHasPermission(user.roleKey, user.permissions, ['folders.edit', 'everything'])
     : false;
@@ -265,24 +284,104 @@ export default function FoldersPage() {
                         </tr>
                       </thead>
                       <tbody>
-                        {active.files.map((file) => (
-                          <tr key={file.id}>
-                            <td>{file.fileName}</td>
-                            <td className="kpi-sub muted">
-                              {new Date(file.createdAt).toLocaleString('es-MX')}
-                            </td>
-                            <td className="row">
-                              <a className="btn ghost" href={file.url} target="_blank" rel="noreferrer">
-                                Abrir
-                              </a>
-                              {canEdit ? (
-                                <button className="btn ghost" type="button" onClick={() => removeFile(file.id)}>
-                                  Quitar
-                                </button>
+                        {active.files.map((file) => {
+                          const viewing = openFileId === file.id;
+                          const editing = editFileId === file.id;
+                          const embeddable =
+                            isSheet(file.fileName) || isPdf(file.fileName) || isImage(file.fileName);
+                          const editable = isSheet(file.fileName) || isPdf(file.fileName);
+                          return (
+                            <Fragment key={file.id}>
+                              <tr>
+                                <td>{file.fileName}</td>
+                                <td className="kpi-sub muted">
+                                  {new Date(file.createdAt).toLocaleString('es-MX')}
+                                </td>
+                                <td className="row">
+                                  {embeddable ? (
+                                    <button
+                                      className={viewing ? 'btn btn-sm' : 'btn ghost btn-sm'}
+                                      type="button"
+                                      onClick={() => {
+                                        setEditFileId(null);
+                                        setOpenFileId(viewing ? null : file.id);
+                                      }}
+                                    >
+                                      {viewing ? 'Ocultar' : 'Ver aquí'}
+                                    </button>
+                                  ) : null}
+                                  {editable && canEdit ? (
+                                    <button
+                                      className={editing ? 'btn btn-sm' : 'btn ghost btn-sm'}
+                                      type="button"
+                                      onClick={() => {
+                                        setOpenFileId(null);
+                                        setEditFileId(editing ? null : file.id);
+                                      }}
+                                    >
+                                      {editing
+                                        ? 'Cerrar editor'
+                                        : isSheet(file.fileName)
+                                          ? 'Editar hoja'
+                                          : 'Escribir encima'}
+                                    </button>
+                                  ) : null}
+                                  <a
+                                    className="btn ghost btn-sm"
+                                    href={file.url}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                  >
+                                    Abrir
+                                  </a>
+                                  {canEdit ? (
+                                    <button
+                                      className="btn ghost btn-sm"
+                                      type="button"
+                                      onClick={() => removeFile(file.id)}
+                                    >
+                                      Quitar
+                                    </button>
+                                  ) : null}
+                                </td>
+                              </tr>
+
+                              {viewing ? (
+                                <tr className="campaign-expand">
+                                  <td colSpan={3}>
+                                    <FileViewer url={file.url} fileName={file.fileName} />
+                                  </td>
+                                </tr>
                               ) : null}
-                            </td>
-                          </tr>
-                        ))}
+
+                              {editing ? (
+                                <tr className="campaign-expand">
+                                  <td colSpan={3}>
+                                    {isSheet(file.fileName) ? (
+                                      <SheetEditor
+                                        key={file.id}
+                                        url={file.url}
+                                        fileName={file.fileName}
+                                        canEdit={canEdit}
+                                        onSave={replaceFolderFile(file.id)}
+                                        onSaved={load}
+                                      />
+                                    ) : (
+                                      <PdfEditor
+                                        key={file.id}
+                                        url={file.url}
+                                        fileName={file.fileName}
+                                        canEdit={canEdit}
+                                        onSave={replaceFolderFile(file.id)}
+                                        onSaved={load}
+                                      />
+                                    )}
+                                  </td>
+                                </tr>
+                              ) : null}
+                            </Fragment>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>

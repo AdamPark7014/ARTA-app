@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { FileViewer } from '@/components/files/FileViewer';
 import { SheetEditor } from '@/components/files/SheetEditor';
 import { PdfEditor } from '@/components/files/PdfEditor';
+import { replaceEventFile } from '@/lib/file-save';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { FlowSteps } from '@/components/ui/FlowSteps';
 import { FormGrid } from '@/components/ui/PageChrome';
@@ -346,19 +347,19 @@ export function EventCampaignPanel({
                         {isSheet(f.fileName, f.kind) ? (
                           <SheetEditor
                             key={f.id}
-                            fileId={f.id}
                             url={f.url}
                             fileName={f.fileName}
                             canEdit={canEditFiles}
+                            onSave={replaceEventFile(f.id)}
                             onSaved={onFilesChanged}
                           />
                         ) : (
                           <PdfEditor
                             key={f.id}
-                            fileId={f.id}
                             url={f.url}
                             fileName={f.fileName}
                             canEdit={canEditFiles}
+                            onSave={replaceEventFile(f.id)}
                             onSaved={onFilesChanged}
                           />
                         )}

@@ -4264,3 +4264,24 @@ body.site-nav-open {
 .file-card-list--always {
   display: grid !important;
 }
+
+
+/* Cabecera de sección del checklist, con su acción a la derecha */
+.check-section__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.65rem;
+  padding: 0.8rem 1rem;
+  background: hsla(0, 0%, 100%, 0.03);
+  border-bottom: 1px solid var(--line);
+}
+
+.check-section__head h3 {
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  font-size: 0.92rem;
+}

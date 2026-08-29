@@ -891,6 +891,7 @@ function EventDetailInner() {
             onUpdateItem={updateItem}
             onSignChecklist={signChecklist}
             onRestoreVersion={restoreChecklistVersion}
+            onFilesChanged={load}
           />
         )}
 

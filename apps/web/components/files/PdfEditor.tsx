@@ -1,14 +1,22 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { api } from '@/lib/api';
+import type { SaveFile } from '@/lib/file-save';
 
 type Props = {
-  fileId: string;
   url: string;
   fileName: string;
   canEdit: boolean;
+  /** Dónde se guarda el PDF con el texto ya impreso */
+  onSave: SaveFile;
   onSaved?: () => void | Promise<void>;
+  /**
+   * Aviso propio del contexto. El PDF de un checklist, por ejemplo, lo
+   * regenera el sistema: ahí lo escrito se guarda como copia aparte.
+   */
+  note?: string;
+  /** Texto del botón de guardar, cuando no se guarda encima del original */
+  saveLabel?: string;
 };
 
 type Note = {
@@ -50,7 +58,7 @@ function toWinAnsi(text: string): string {
  * Lo que esto NO hace: reescribir el texto original del PDF. Para eso está
  * «Pasar a documento editable», que extrae el texto a un documento tipo Word.
  */
-export function PdfEditor({ fileId, url, fileName, canEdit, onSaved }: Props) {
+export function PdfEditor({ url, fileName, canEdit, onSave, onSaved, note, saveLabel }: Props) {
   const bytesRef = useRef<Uint8Array | null>(null);
   /** Contenedor de cada página, para colgarle el canvas ya renderizado */
   const pageHostsRef = useRef(new Map<number, HTMLDivElement>());
@@ -206,19 +214,13 @@ export function PdfEditor({ fileId, url, fileName, canEdit, onSaved }: Props) {
 
       const out = await pdf.save();
       const blob = new Blob([out as BlobPart], { type: 'application/pdf' });
-      const fd = new FormData();
-      fd.append('file', blob, /\.pdf$/i.test(fileName) ? fileName : `${fileName}.pdf`);
-      const saved = await api<{ url: string }>(`/uploads/${fileId}/content`, {
-        method: 'PUT',
-        body: fd,
-      });
+      await onSave(blob, /\.pdf$/i.test(fileName) ? fileName : `${fileName}.pdf`);
 
       // El PDF guardado pasa a ser el original: lo que se escriba después va
       // encima de esta versión, no de la anterior.
       bytesRef.current = new Uint8Array(await new Response(blob).arrayBuffer());
       setNotes([]);
       setMsg('Guardado: el texto quedó impreso dentro del PDF');
-      void saved;
       await onSaved?.();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'No se pudo guardar el PDF');
@@ -253,7 +255,7 @@ export function PdfEditor({ fileId, url, fileName, canEdit, onSaved }: Props) {
                 disabled={saving || !pending}
                 onClick={save}
               >
-                {saving ? 'Guardando…' : 'Guardar en el PDF'}
+                {saving ? 'Guardando…' : saveLabel || 'Guardar en el PDF'}
               </button>
             </>
           ) : (
@@ -275,6 +277,7 @@ export function PdfEditor({ fileId, url, fileName, canEdit, onSaved }: Props) {
           {error}
         </div>
       ) : null}
+      {note ? <div className="module-banner">{note}</div> : null}
       {placing ? (
         <div className="module-banner">Haz clic en el punto de la hoja donde quieres escribir.</div>
       ) : null}
@@ -346,7 +349,7 @@ export function PdfEditor({ fileId, url, fileName, canEdit, onSaved }: Props) {
 
       <p className="muted kpi-sub">
         El texto se imprime dentro del PDF al guardar. Para reescribir el contenido original del
-        documento, usa «Pasar a documento editable».
+        documento, usa «Pasar a documento».
       </p>
     </div>
   );

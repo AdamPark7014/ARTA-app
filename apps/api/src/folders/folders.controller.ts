@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -8,10 +9,15 @@ import {
   Param,
   Patch,
   Post,
+  Put,
   Query,
   Req,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { extname } from 'path';
 import { EntityKey } from '@prisma/client';
 import { IsArray, IsOptional, IsString } from 'class-validator';
 import { PrismaService } from '../common/prisma/prisma.service';
@@ -24,6 +30,7 @@ import {
   type RoleKey,
 } from '../common/rbac/roles';
 import { assertSameTenant, orgWhere, tenantIdOf } from '../common/tenant';
+import { MULTER_OPTIONS } from '../uploads/upload-storage';
 
 type AuthUser = {
   id: string;
@@ -153,6 +160,52 @@ export class FoldersController {
         url: body.url,
         mimeType: body.mimeType,
         sizeBytes: body.sizeBytes,
+        uploadedById: req.user.id,
+      },
+    });
+  }
+
+  /**
+   * Guardar en el sitio un archivo de carpetas generales.
+   *
+   * El panel deja abrir el Excel en una hoja de cálculo y escribir encima del
+   * PDF; al guardar manda el archivo ya reconstruido y aquí se reemplaza el
+   * contenido **sin cambiar el id**, para que los enlaces que ya circulan
+   * sigan sirviendo. El archivo anterior se queda en disco como respaldo.
+   */
+  @Put('files/:fileId/content')
+  @UseInterceptors(FileInterceptor('file', MULTER_OPTIONS))
+  async saveFileInPlace(
+    @Req() req: { user: AuthUser },
+    @Param('fileId') fileId: string,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    if (!file) throw new BadRequestException('Archivo requerido');
+    if (!this.canEdit(req.user)) throw new ForbiddenException();
+
+    const current = await this.prisma.sharedFile.findUnique({
+      where: { id: fileId },
+      include: { folder: true },
+    });
+    if (!current) throw new NotFoundException('Archivo no encontrado');
+    assertSameTenant(req.user, current.folder.organizationId);
+    this.assertEntity(req.user, current.folder.entity);
+
+    // El tipo no puede cambiar a media edición: un .xlsx se guarda como .xlsx.
+    const wasExt = extname(current.fileName || current.url).toLowerCase();
+    const nowExt = extname(file.originalname).toLowerCase();
+    if (wasExt && nowExt && wasExt !== nowExt) {
+      throw new BadRequestException(
+        `El archivo guardado debe seguir siendo ${wasExt} (llegó ${nowExt})`,
+      );
+    }
+
+    return this.prisma.sharedFile.update({
+      where: { id: fileId },
+      data: {
+        url: `/uploads/${file.filename}`,
+        sizeBytes: file.size,
+        mimeType: file.mimetype || current.mimeType,
         uploadedById: req.user.id,
       },
     });

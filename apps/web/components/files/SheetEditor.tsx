@@ -2,14 +2,15 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as XLSX from 'xlsx';
-import { api } from '@/lib/api';
+import type { SaveFile } from '@/lib/file-save';
 
 type Props = {
-  fileId: string;
   url: string;
   fileName: string;
   canEdit: boolean;
-  /** Se llama tras guardar, para refrescar la lista del evento */
+  /** Dónde se guarda el .xlsx reconstruido */
+  onSave: SaveFile;
+  /** Se llama tras guardar, para refrescar la lista de quien lo muestra */
   onSaved?: () => void | Promise<void>;
 };
 
@@ -68,7 +69,7 @@ function toCellValue(text: string): { v: string | number; t: 's' | 'n' } {
  * las celdas que nadie toca sobreviven al guardado**. Una celda con fórmula que
  * se sobrescribe pasa a ser valor fijo — igual que en Excel.
  */
-export function SheetEditor({ fileId, url, fileName, canEdit, onSaved }: Props) {
+export function SheetEditor({ url, fileName, canEdit, onSave, onSaved }: Props) {
   const workbookRef = useRef<XLSX.WorkBook | null>(null);
   const [sheetNames, setSheetNames] = useState<string[]>([]);
   const [activeSheet, setActiveSheet] = useState('');
@@ -208,10 +209,10 @@ export function SheetEditor({ fileId, url, fileName, canEdit, onSaved }: Props) 
     try {
       const blob = buildFile();
       if (!blob) throw new Error('No hay hoja abierta');
-      const fd = new FormData();
-      const name = /\.xlsx?$/i.test(fileName) ? fileName.replace(/\.xls$/i, '.xlsx') : `${fileName}.xlsx`;
-      fd.append('file', blob, name);
-      await api(`/uploads/${fileId}/content`, { method: 'PUT', body: fd });
+      const name = /\.xlsx?$/i.test(fileName)
+        ? fileName.replace(/\.xls$/i, '.xlsx')
+        : `${fileName}.xlsx`;
+      await onSave(blob, name);
       setDirty(false);
       setMsg('Guardado');
       await onSaved?.();

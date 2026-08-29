@@ -1,7 +1,10 @@
 'use client';
 
+import { useState } from 'react';
 import { SignaturePad } from '@/components/ui/SignaturePad';
 import { FileViewer } from '@/components/files/FileViewer';
+import { PdfEditor } from '@/components/files/PdfEditor';
+import { createEventFile } from '@/lib/file-save';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { ChecklistPicker } from '@/components/events/ChecklistPicker';
 import type { Checklist, EventDetail } from '@/components/events/event-detail.types';
@@ -27,6 +30,8 @@ type EventChecklistsPanelProps = {
     payload: { imageDataUrl: string; signerName: string },
   ) => Promise<void>;
   onRestoreVersion: (versionId: string) => Promise<void>;
+  /** Recarga el evento cuando se guarda una copia anotada del PDF */
+  onFilesChanged: () => void | Promise<void>;
 };
 
 export function EventChecklistsPanel({
@@ -43,7 +48,9 @@ export function EventChecklistsPanel({
   onUpdateItem,
   onSignChecklist,
   onRestoreVersion,
+  onFilesChanged,
 }: EventChecklistsPanelProps) {
+  const [annotating, setAnnotating] = useState(false);
   const sections = (activeChecklist?.dataJson?.sections || []).filter((s) => s.id !== 'firmas');
   const doneItems = sections.reduce(
     (acc, s) => acc + s.items.filter((i) => i.type === 'check' || !i.type ? i.done : !!i.value).length,
@@ -253,18 +260,51 @@ export function EventChecklistsPanel({
               </div>
 
               <div className="check-section">
-                <h3>Vista previa PDF</h3>
-                {activeChecklist.pdfUrl ? (
+                <div className="check-section__head">
+                  <h3>{annotating ? 'Escribiendo sobre el PDF' : 'Vista previa PDF'}</h3>
+                  {activeChecklist.pdfUrl && !closed ? (
+                    <button
+                      className={annotating ? 'btn btn-sm' : 'btn ghost btn-sm'}
+                      type="button"
+                      onClick={() => setAnnotating((v) => !v)}
+                    >
+                      {annotating ? 'Volver a la vista' : 'Escribir encima'}
+                    </button>
+                  ) : null}
+                </div>
+
+                {!activeChecklist.pdfUrl ? (
+                  <EmptyState
+                    title="Aún no hay PDF"
+                    description="Completa el formato y pulsa Guardar o Generar PDF — aparecerá aquí automáticamente."
+                  />
+                ) : annotating ? (
+                  <PdfEditor
+                    key={activeChecklist.id}
+                    url={activeChecklist.pdfUrl}
+                    fileName={`${activeChecklist.title} — anotado.pdf`}
+                    canEdit={!closed}
+                    saveLabel="Guardar copia anotada"
+                    note={
+                      'Este PDF lo regenera el sistema cada vez que guardas el formato, así que lo ' +
+                      'que escribas se guarda como una copia aparte en la pestaña Documentos del ' +
+                      'evento. Así no se borra al siguiente guardado.'
+                    }
+                    onSave={createEventFile({
+                      eventId: event.id,
+                      checklistId: activeChecklist.id,
+                    })}
+                    onSaved={async () => {
+                      await onFilesChanged();
+                      setAnnotating(false);
+                    }}
+                  />
+                ) : (
                   <FileViewer
                     url={activeChecklist.pdfUrl}
                     fileName={`${activeChecklist.title}.pdf`}
                     kind="pdf"
                     cacheKey={activeChecklist.pdfGeneratedAt || undefined}
-                  />
-                ) : (
-                  <EmptyState
-                    title="Aún no hay PDF"
-                    description="Completa el formato y pulsa Guardar o Generar PDF — aparecerá aquí automáticamente."
                   />
                 )}
               </div>
