@@ -61,13 +61,32 @@ antes de tocar estas áreas.
    despliegue**. Ambos corregidos en `prisma/seed.ts`, con backfill ya aplicado
    en producción (9/9 usuarios con `organizationId` + `OrgMembership`).
 
+9. **Documentos editables dentro del evento** (pedido del 29-08-2026, detalle en
+   `docs/DOCUMENTOS_EDITABLES.md`). La pestaña «Excel / PDF» pasa a llamarse
+   **Documentos** y ahora:
+   - **Hoja de cálculo editable**: se abre el `.xlsx` real en una cuadrícula, se
+     escribe en las celdas y al guardar se reconstruye el archivo. Solo se
+     tocan las celdas editadas, así que **las fórmulas y el formato de las que
+     nadie tocó sobreviven**.
+   - **Escribir encima del PDF**: pdf.js dibuja las páginas, se colocan cajas de
+     texto arrastrables y pdf-lib las **imprime dentro del PDF** al guardar.
+   - **Documento tipo Word → PDF**: se escribe por bloques y «Descargar PDF» lo
+     imprime con pdfkit y lo registra como archivo del evento. Modelo nuevo
+     `EventDocument` con versionado.
+   - **PDF → documento editable**: extrae el texto y lo reagrupa en párrafos.
+     **No reconstruye el diseño** y un PDF escaneado no devuelve nada — el panel
+     lo dice en vez de crear un documento vacío.
+   - `PUT /uploads/:id/content` reemplaza el archivo **sin cambiar el id**, sube
+     `version`, guarda quién editó y conserva el anterior en disco.
+
 ### Verificación
 
 - `npm run typecheck` (api + web) verde · `npx jest` en `apps/api`
   **9 suites / 61 tests** · `next build` verde con **35 rutas** ·
-  `npm run test:e2e` **11 specs verdes** (se actualizaron los de `app-shell`
-  que asumían el menú viejo y se agregaron `e2e/tasks.spec.ts`, el spec del rol
-  de convenios y el de «Más herramientas»).
+  `npm run test:e2e` **13 specs verdes**. `e2e/editors.spec.ts` genera un
+  `.xlsx` de verdad, lo sirve, comprueba que su contenido llega a la cuadrícula,
+  escribe dos celdas y verifica que se sube un `.xlsx` reconstruido de más de
+  1 KB al endpoint de guardado.
 - La UI se auditó con capturas del panel real (Playwright contra la API
   simulada): sidebar, hub de evento, pestaña Campaña con los archivos,
   `/tasks` y `/settings`.
@@ -85,6 +104,13 @@ antes de tocar estas áreas.
   herramienta: las carpetas no cuelgan de ningún evento.
 - **Órdenes de compra se queda en el menú.** El PDF le dedica su propia sección
   (la ventana de solicitud) y nunca pidió moverla dentro del evento.
+- **El worker de pdf.js se copia a `public/` en cada build**, no se versiona:
+  si worker y librería se desfasan, pdf.js revienta en runtime. Está en
+  `.gitignore` y lo genera `npm run copy-pdf-worker` (enganchado a `prebuild`).
+  Además está excluido del matcher del middleware: es un asset estático y no
+  debe pasar por el gate de sesión.
+- **`pdfjs-dist` y `pdf-lib` entran por import dinámico.** Son pesados; así solo
+  se descargan cuando alguien abre un editor.
 - **La ventana de OC no encierra a dirección.**
 - **Los avisos nunca lanzan**: `NotificationsService.notify()` traga el error.
 - **El seed ya no toca `passwordHash` en el update.** La contraseña de
@@ -113,6 +139,18 @@ antes de tocar estas áreas.
   `purchase-orders/page.tsx` solo se tocó para meter el banner.
 - **`deploy/ensure-traefik-route.sh`** y su cron de 5 min siguen igual: el cron
   vive en el droplet, no en el repo.
+
+## Límites conocidos de los editores
+
+Están explicados en `docs/DOCUMENTOS_EDITABLES.md`, pero conviene tenerlos a
+mano antes de prometer nada:
+
+- La hoja **no calcula fórmulas nuevas**: si escribes `=A1+B1` se guarda ese
+  texto, no el resultado. Tampoco edita estilos (colores, bordes, anchos).
+- Escribir sobre el PDF **añade** texto; no reescribe el original.
+- El paso de PDF a documento **pierde el diseño** (tablas, columnas, imágenes) y
+  no funciona con PDF escaneados. Hacerlo bien exigiría OCR y reconstrucción de
+  layout, que no es cosa del navegador.
 
 ## Siguiente paso
 
