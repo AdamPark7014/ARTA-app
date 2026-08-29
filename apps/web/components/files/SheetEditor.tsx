@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as XLSX from 'xlsx';
 import type { SaveFile } from '@/lib/file-save';
+import { ExpandBox } from '@/components/ui/ExpandBox';
 
 type Props = {
   url: string;
@@ -235,6 +236,7 @@ export function SheetEditor({ url, fileName, canEdit, onSave, onSaved }: Props) 
   }
 
   return (
+    <ExpandBox title={fileName}>
     <div className="stack">
       <div className="sheet-toolbar">
         {sheetNames.length > 1 ? (
@@ -335,5 +337,6 @@ export function SheetEditor({ url, fileName, canEdit, onSave, onSaved }: Props) 
         fórmula, esa celda pasa a ser un valor fijo — igual que en Excel.
       </p>
     </div>
+    </ExpandBox>
   );
 }

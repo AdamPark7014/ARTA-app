@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { ExpandBox } from '@/components/ui/ExpandBox';
+import { useElementWidth } from '@/lib/use-element-width';
 
 export type PdfField = {
   sectionId: string;
@@ -40,7 +42,9 @@ type Props = {
   onUpdateItem: (sectionId: string, itemId: string, patch: Partial<Item>) => void;
 };
 
-const RENDER_WIDTH = 860;
+/** Límites del ancho de dibujado: legible en columna, grande a pantalla completa */
+const MIN_RENDER_WIDTH = 560;
+const MAX_RENDER_WIDTH = 1700;
 /** Tamaño de la letra con la que el generador escribe los ítems (puntos PDF) */
 const PDF_FONT_SIZE = 10;
 
@@ -67,6 +71,14 @@ export function ChecklistPdfEditor({
   const [pages, setPages] = useState<Array<{ index: number; width: number; height: number }>>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const { ref: boxRef, width: boxWidth } = useElementWidth();
+
+  // El formato se dibuja al ancho disponible: al ampliar se lee y se captura
+  // como en papel, no en una columna estrecha.
+  const renderWidth = Math.min(
+    MAX_RENDER_WIDTH,
+    Math.max(MIN_RENDER_WIDTH, (boxWidth || MIN_RENDER_WIDTH) - 24),
+  );
 
   const src = cacheKey ? `${url}${url.includes('?') ? '&' : '?'}v=${encodeURIComponent(cacheKey)}` : url;
 
@@ -93,7 +105,7 @@ export function ChecklistPdfEditor({
       for (let p = 1; p <= doc.numPages; p += 1) {
         const page = await doc.getPage(p);
         const base = page.getViewport({ scale: 1 });
-        const vp = page.getViewport({ scale: RENDER_WIDTH / base.width });
+        const vp = page.getViewport({ scale: renderWidth / base.width });
         info.push({ index: p - 1, width: Math.floor(vp.width), height: Math.floor(vp.height) });
       }
       if (!cancelled) setPages(info);
@@ -108,7 +120,7 @@ export function ChecklistPdfEditor({
     return () => {
       cancelled = true;
     };
-  }, [src]);
+  }, [src, renderWidth]);
 
   // 2) Pintar cada página dentro de su contenedor.
   useEffect(() => {
@@ -124,11 +136,15 @@ export function ChecklistPdfEditor({
       for (const info of pages) {
         if (cancelled) return;
         const host = pageHostsRef.current.get(info.index);
-        if (!host || host.querySelector('canvas')) continue;
+        if (!host) continue;
+        // Al cambiar el ancho hay que volver a rasterizar, no reutilizar.
+        const drawn = host.querySelector('canvas');
+        if (drawn && host.dataset.width === String(info.width)) continue;
+        drawn?.remove();
 
         const page = await doc.getPage(info.index + 1);
         const base = page.getViewport({ scale: 1 });
-        const vp = page.getViewport({ scale: RENDER_WIDTH / base.width });
+        const vp = page.getViewport({ scale: renderWidth / base.width });
 
         const canvas = document.createElement('canvas');
         canvas.width = info.width;
@@ -137,6 +153,7 @@ export function ChecklistPdfEditor({
         const ctx = canvas.getContext('2d');
         if (!ctx) continue;
         host.prepend(canvas);
+        host.dataset.width = String(info.width);
         await page.render({ canvasContext: ctx, viewport: vp }).promise;
       }
     })().catch(() => {
@@ -146,14 +163,14 @@ export function ChecklistPdfEditor({
     return () => {
       cancelled = true;
     };
-  }, [pages, src]);
+  }, [pages, src, renderWidth]);
 
   /** Ítem vivo del checklist, que es de donde sale el valor que se muestra. */
   function findItem(sectionId: string, itemId: string): Item | undefined {
     return sections.find((s) => s.id === sectionId)?.items.find((i) => i.id === itemId);
   }
 
-  const scale = RENDER_WIDTH / fieldMap.pageWidth;
+  const scale = renderWidth / fieldMap.pageWidth;
 
   if (error) {
     return (
@@ -164,7 +181,8 @@ export function ChecklistPdfEditor({
   }
 
   return (
-    <div className="stack">
+    <ExpandBox title="Formato del checklist">
+    <div className="stack" ref={boxRef}>
       {loading ? <p className="muted kpi-sub">Abriendo el formato…</p> : null}
 
       <div className="pdfedit pdfedit--fields">
@@ -184,11 +202,22 @@ export function ChecklistPdfEditor({
                 .map((f) => {
                   const item = findItem(f.sectionId, f.itemId);
                   if (!item) return null;
+                  /*
+                   * La caja se mide en puntos PDF y se escala entera; si los
+                   * márgenes fueran en píxeles, al ampliar dejarían de cuadrar.
+                   *
+                   * Arranca 2pt a la izquierda del valor porque el ancho que
+                   * reporta `widthOfString` para la etiqueta queda un pelo
+                   * corto respecto a lo que dibuja pdfkit, y por esa rendija
+                   * asomaban los guiones bajos del marcador de posición.
+                   * De alto, 14pt: la línea mide ~13.9pt, así que tapa el valor
+                   * sin comerse la línea de arriba.
+                   */
                   const style = {
-                    left: f.x * scale,
-                    top: f.y * scale - 2,
-                    width: f.w * scale,
-                    height: (f.h + 3) * scale,
+                    left: (f.x - 2) * scale,
+                    top: (f.y - 0.5) * scale,
+                    width: (f.w + 2) * scale,
+                    height: (f.h + 2) * scale,
                   };
 
                   if (f.type === 'check') {
@@ -245,7 +274,6 @@ export function ChecklistPdfEditor({
                       value={value}
                       readOnly={!canEdit}
                       aria-label={item.label}
-                      placeholder="—"
                       onChange={(e) => onUpdateItem(f.sectionId, f.itemId, { value: e.target.value })}
                     />
                   );
@@ -260,5 +288,6 @@ export function ChecklistPdfEditor({
         capturaste y queda listo para firmar y descargar.
       </p>
     </div>
+    </ExpandBox>
   );
 }

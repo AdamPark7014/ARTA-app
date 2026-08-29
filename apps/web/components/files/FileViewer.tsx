@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import * as XLSX from 'xlsx';
+import { ExpandBox } from '@/components/ui/ExpandBox';
 
 type Props = {
   url: string;
@@ -101,6 +102,7 @@ export function FileViewer({ url, fileName, kind, cacheKey }: Props) {
 
   if (isPdf) {
     return (
+      <ExpandBox title={fileName}>
       <div className="stack">
         {loading ? <p className="muted">Cargando PDF…</p> : null}
         {error ? (
@@ -109,11 +111,11 @@ export function FileViewer({ url, fileName, kind, cacheKey }: Props) {
           </div>
         ) : null}
         {!pdfFailed && pdfSrc ? (
-          <div className="venue-map-wrap">
+          <div className="docview">
             <iframe
               title={fileName}
               src={`${pdfSrc}#toolbar=1&navpanes=0`}
-              className="venue-map"
+              className="docview__frame"
               onError={() => setPdfFailed(true)}
             />
           </div>
@@ -130,20 +132,24 @@ export function FileViewer({ url, fileName, kind, cacheKey }: Props) {
           </a>
         </div>
       </div>
+      </ExpandBox>
     );
   }
 
   if (isImage) {
     return (
-      <div className="venue-map-wrap panel-body">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={url} alt={fileName} className="sig-preview" />
-      </div>
+      <ExpandBox title={fileName}>
+        <div className="docview docview--image panel-body">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={url} alt={fileName} />
+        </div>
+      </ExpandBox>
     );
   }
 
   if (isExcel) {
     return (
+      <ExpandBox title={fileName}>
       <div className="stack">
         {loading ? <p className="muted">Cargando hoja…</p> : null}
         {error ? (
@@ -153,7 +159,7 @@ export function FileViewer({ url, fileName, kind, cacheKey }: Props) {
         ) : null}
         {sheetHtml ? (
           <div
-            className="venue-map-wrap panel-body"
+            className="docview docview--sheet panel-body"
             dangerouslySetInnerHTML={{ __html: sheetHtml }}
           />
         ) : null}
@@ -161,6 +167,7 @@ export function FileViewer({ url, fileName, kind, cacheKey }: Props) {
           Descargar {fileName}
         </a>
       </div>
+      </ExpandBox>
     );
   }
 

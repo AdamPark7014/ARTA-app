@@ -25,6 +25,34 @@ export function AppShell({
   const router = useRouter();
   const [navOpen, setNavOpen] = useState(false);
   const [navQuery, setNavQuery] = useState('');
+  /**
+   * Menú que se esconde solo y vuelve al acercar el cursor al borde izquierdo,
+   * como el Dock de macOS. Se recuerda por navegador.
+   */
+  const [autoHide, setAutoHide] = useState(false);
+
+  useEffect(() => {
+    try {
+      setAutoHide(localStorage.getItem('arta_nav_autohide') === '1');
+    } catch {
+      /* modo privado: se queda fijo, que es el comportamiento de siempre */
+    }
+  }, []);
+
+  function toggleAutoHide(e: React.MouseEvent<HTMLButtonElement>) {
+    // El botón vive dentro del menú: si conserva el foco, `:focus-within` deja
+    // el menú abierto y parece que el botón no hizo nada.
+    e.currentTarget.blur();
+    setAutoHide((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem('arta_nav_autohide', next ? '1' : '0');
+      } catch {
+        /* sin persistencia, pero funciona en esta sesión */
+      }
+      return next;
+    });
+  }
 
   useEffect(() => {
     if (!loading && !user) router.replace('/login');
@@ -104,7 +132,16 @@ export function AppShell({
   const brandSub = entity === 'ARTA' ? 'PRODUCCIONES' : 'AUDITORIO AREMA';
 
   return (
-    <div className={`shell ${navOpen ? 'shell--nav-open' : ''}`} data-entity={entity}>
+    <div
+      className={`shell ${navOpen ? 'shell--nav-open' : ''} ${
+        autoHide ? 'shell--nav-auto' : ''
+      }`}
+      data-entity={entity}
+    >
+      {/* Franja invisible pegada al borde: al pasar el cursor, el menú entra.
+          Vive junto al sidebar dentro del mismo contenedor de hover para que
+          no se cierre al mover el cursor del borde al propio menú. */}
+      {autoHide ? <div className="shell-hot-edge" aria-hidden /> : null}
       {navOpen ? (
         <button
           type="button"
@@ -167,6 +204,19 @@ export function AppShell({
         </Suspense>
 
         <div className="sidebar-foot">
+          <button
+            type="button"
+            className="nav-autohide"
+            aria-pressed={autoHide}
+            onClick={toggleAutoHide}
+            title={
+              autoHide
+                ? 'El menú se esconde solo; vuelve al acercar el cursor al borde izquierdo'
+                : 'Esconder el menú y mostrarlo al acercar el cursor al borde izquierdo'
+            }
+          >
+            {autoHide ? '⇤ Menú automático' : '⇥ Esconder menú'}
+          </button>
           <UserChip name={user.fullName} subtitle={user.title || user.roleKey} />
           <div className="scope-hint">{ROLE_SCOPE[user.roleKey] || ''}</div>
           <button type="button" className="btn ghost btn-sm" style={{ marginTop: 12, width: '100%' }} onClick={logout}>

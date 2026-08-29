@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { SaveFile } from '@/lib/file-save';
+import { ExpandBox } from '@/components/ui/ExpandBox';
+import { useElementWidth } from '@/lib/use-element-width';
 
 type Props = {
   url: string;
@@ -31,7 +33,9 @@ type Note = {
 
 type PageInfo = { pageNumber: number; width: number; height: number };
 
-const RENDER_WIDTH = 880;
+/** Límites del ancho de dibujado: legible en columna, grande a pantalla completa */
+const MIN_RENDER_WIDTH = 520;
+const MAX_RENDER_WIDTH = 1700;
 const DEFAULT_SIZE = 12;
 
 let noteSeq = 0;
@@ -70,6 +74,14 @@ export function PdfEditor({ url, fileName, canEdit, onSave, onSaved, note, saveL
   const [error, setError] = useState('');
   const [msg, setMsg] = useState('');
   const dragRef = useRef<string | null>(null);
+  const { ref: boxRef, width: boxWidth } = useElementWidth();
+
+  // El PDF se dibuja al ancho disponible: en columna se ve completo y al
+  // ampliar ocupa la ventana, sin quedarse en un tamaño fijo pequeño.
+  const renderWidth = Math.min(
+    MAX_RENDER_WIDTH,
+    Math.max(MIN_RENDER_WIDTH, (boxWidth || MIN_RENDER_WIDTH) - 24),
+  );
 
   // 1) Abrir el PDF y medir las páginas (todavía sin pintar).
   useEffect(() => {
@@ -95,7 +107,7 @@ export function PdfEditor({ url, fileName, canEdit, onSave, onSaved, note, saveL
       for (let p = 1; p <= doc.numPages; p += 1) {
         const page = await doc.getPage(p);
         const base = page.getViewport({ scale: 1 });
-        const scale = RENDER_WIDTH / base.width;
+        const scale = renderWidth / base.width;
         const vp = page.getViewport({ scale });
         info.push({ pageNumber: p, width: Math.floor(vp.width), height: Math.floor(vp.height) });
       }
@@ -111,7 +123,7 @@ export function PdfEditor({ url, fileName, canEdit, onSave, onSaved, note, saveL
     return () => {
       cancelled = true;
     };
-  }, [url]);
+  }, [url, renderWidth]);
 
   // 2) Ya con los contenedores en el DOM, pintar cada página dentro del suyo.
   useEffect(() => {
@@ -125,11 +137,15 @@ export function PdfEditor({ url, fileName, canEdit, onSave, onSaved, note, saveL
       for (const info of pages) {
         if (cancelled) return;
         const host = pageHostsRef.current.get(info.pageNumber);
-        if (!host || host.querySelector('canvas')) continue;
+        if (!host) continue;
+        // Al cambiar el ancho hay que volver a rasterizar, no reutilizar.
+        const drawn = host.querySelector('canvas');
+        if (drawn && host.dataset.width === String(info.width)) continue;
+        drawn?.remove();
 
         const page = await doc.getPage(info.pageNumber);
         const base = page.getViewport({ scale: 1 });
-        const vp = page.getViewport({ scale: RENDER_WIDTH / base.width });
+        const vp = page.getViewport({ scale: renderWidth / base.width });
 
         const canvas = document.createElement('canvas');
         canvas.width = info.width;
@@ -138,6 +154,7 @@ export function PdfEditor({ url, fileName, canEdit, onSave, onSaved, note, saveL
         const ctx = canvas.getContext('2d');
         if (!ctx) continue;
         host.prepend(canvas);
+        host.dataset.width = String(info.width);
         await page.render({ canvasContext: ctx, viewport: vp }).promise;
       }
     })().catch(() => {
@@ -147,7 +164,7 @@ export function PdfEditor({ url, fileName, canEdit, onSave, onSaved, note, saveL
     return () => {
       cancelled = true;
     };
-  }, [pages]);
+  }, [pages, renderWidth]);
 
   const addNoteAt = useCallback((page: number, xRatio: number, yRatio: number) => {
     setNotes((prev) => [
@@ -232,7 +249,8 @@ export function PdfEditor({ url, fileName, canEdit, onSave, onSaved, note, saveL
   const pending = notes.filter((n) => n.text.trim()).length;
 
   return (
-    <div className="stack">
+    <ExpandBox title={fileName}>
+    <div className="stack" ref={boxRef}>
       <div className="sheet-toolbar">
         <span className="muted kpi-sub">
           {loading ? 'Abriendo PDF…' : `${pages.length} página${pages.length === 1 ? '' : 's'}`}
@@ -352,5 +370,6 @@ export function PdfEditor({ url, fileName, canEdit, onSave, onSaved, note, saveL
         documento, usa «Pasar a documento».
       </p>
     </div>
+    </ExpandBox>
   );
 }
