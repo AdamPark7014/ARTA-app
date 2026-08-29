@@ -236,7 +236,7 @@ export function SheetEditor({ url, fileName, canEdit, onSave, onSaved }: Props) 
   }
 
   return (
-    <ExpandBox title={fileName}>
+    <ExpandBox title={fileName} defaultExpanded>
     <div className="stack">
       <div className="sheet-toolbar">
         {sheetNames.length > 1 ? (

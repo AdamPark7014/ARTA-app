@@ -102,7 +102,7 @@ export function FileViewer({ url, fileName, kind, cacheKey }: Props) {
 
   if (isPdf) {
     return (
-      <ExpandBox title={fileName}>
+      <ExpandBox title={fileName} defaultExpanded>
       <div className="stack">
         {loading ? <p className="muted">Cargando PDF…</p> : null}
         {error ? (
@@ -138,7 +138,7 @@ export function FileViewer({ url, fileName, kind, cacheKey }: Props) {
 
   if (isImage) {
     return (
-      <ExpandBox title={fileName}>
+      <ExpandBox title={fileName} defaultExpanded>
         <div className="docview docview--image panel-body">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={url} alt={fileName} />
@@ -149,7 +149,7 @@ export function FileViewer({ url, fileName, kind, cacheKey }: Props) {
 
   if (isExcel) {
     return (
-      <ExpandBox title={fileName}>
+      <ExpandBox title={fileName} defaultExpanded>
       <div className="stack">
         {loading ? <p className="muted">Cargando hoja…</p> : null}
         {error ? (

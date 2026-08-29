@@ -8,6 +8,11 @@ type Props = {
   children: ReactNode;
   /** Acciones propias del contenido, a la izquierda del botón de ampliar */
   actions?: ReactNode;
+  /**
+   * Abrir ya a pantalla completa. Útil en PDF / hoja / checklist: trabajar en
+   * una columna estrecha no sirve; el documento debe mandar desde el primer clic.
+   */
+  defaultExpanded?: boolean;
 };
 
 /**
@@ -18,8 +23,8 @@ type Props = {
  * mismo botón o con Escape. El contenido se mantiene montado —no se
  * desmonta y vuelve a montar— para no perder lo que se lleva escrito.
  */
-export function ExpandBox({ title, children, actions }: Props) {
-  const [expanded, setExpanded] = useState(false);
+export function ExpandBox({ title, children, actions, defaultExpanded = false }: Props) {
+  const [expanded, setExpanded] = useState(defaultExpanded);
 
   useEffect(() => {
     if (!expanded) return;
@@ -27,7 +32,6 @@ export function ExpandBox({ title, children, actions }: Props) {
       if (e.key === 'Escape') setExpanded(false);
     }
     document.addEventListener('keydown', onKey);
-    // Sin scroll de fondo mientras se trabaja a pantalla completa
     const previous = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     return () => {
@@ -37,9 +41,9 @@ export function ExpandBox({ title, children, actions }: Props) {
   }, [expanded]);
 
   return (
-    <div className={`expandbox ${expanded ? 'expandbox--full' : ''}`}>
+    <div className={`expandbox ${expanded ? 'expandbox--full' : 'expandbox--inline'}`}>
       <div className="expandbox__bar">
-        {expanded ? <strong className="expandbox__title">{title}</strong> : <span />}
+        <strong className="expandbox__title">{title}</strong>
         <div className="row row--tight">
           {actions}
           <button
@@ -48,7 +52,7 @@ export function ExpandBox({ title, children, actions }: Props) {
             aria-pressed={expanded}
             onClick={() => setExpanded((v) => !v)}
           >
-            {expanded ? 'Salir de pantalla completa (Esc)' : 'Ampliar'}
+            {expanded ? 'Salir de pantalla completa (Esc)' : 'Ampliar a pantalla completa'}
           </button>
         </div>
       </div>

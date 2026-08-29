@@ -249,7 +249,7 @@ export function PdfEditor({ url, fileName, canEdit, onSave, onSaved, note, saveL
   const pending = notes.filter((n) => n.text.trim()).length;
 
   return (
-    <ExpandBox title={fileName}>
+    <ExpandBox title={fileName} defaultExpanded>
     <div className="stack" ref={boxRef}>
       <div className="sheet-toolbar">
         <span className="muted kpi-sub">

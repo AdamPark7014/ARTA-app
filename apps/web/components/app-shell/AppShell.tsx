@@ -27,16 +27,24 @@ export function AppShell({
   const [navQuery, setNavQuery] = useState('');
   /**
    * Menú que se esconde solo y vuelve al acercar el cursor al borde izquierdo,
-   * como el Dock de macOS. Se recuerda por navegador.
+   * como el Dock de macOS. Por defecto activo en escritorio; se recuerda.
    */
   const [autoHide, setAutoHide] = useState(false);
+  const [autoHideReady, setAutoHideReady] = useState(false);
 
   useEffect(() => {
     try {
-      setAutoHide(localStorage.getItem('arta_nav_autohide') === '1');
+      const stored = localStorage.getItem('arta_nav_autohide');
+      if (stored === '1' || stored === '0') {
+        setAutoHide(stored === '1');
+      } else {
+        // Primera visita en desktop: menú automático (más superficie para documentos)
+        setAutoHide(window.matchMedia('(min-width: 901px)').matches);
+      }
     } catch {
-      /* modo privado: se queda fijo, que es el comportamiento de siempre */
+      /* modo privado: se queda fijo */
     }
+    setAutoHideReady(true);
   }, []);
 
   function toggleAutoHide(e: React.MouseEvent<HTMLButtonElement>) {
@@ -134,14 +142,14 @@ export function AppShell({
   return (
     <div
       className={`shell ${navOpen ? 'shell--nav-open' : ''} ${
-        autoHide ? 'shell--nav-auto' : ''
+        autoHideReady && autoHide ? 'shell--nav-auto' : ''
       }`}
       data-entity={entity}
     >
-      {/* Franja invisible pegada al borde: al pasar el cursor, el menú entra.
-          Vive junto al sidebar dentro del mismo contenedor de hover para que
-          no se cierre al mover el cursor del borde al propio menú. */}
-      {autoHide ? <div className="shell-hot-edge" aria-hidden /> : null}
+      {/* Franja sensible: al pasar el cursor, el menú entra (estilo Dock macOS). */}
+      {autoHideReady && autoHide ? (
+        <div className="shell-hot-edge" aria-hidden title="Menú" />
+      ) : null}
       {navOpen ? (
         <button
           type="button"
@@ -215,7 +223,7 @@ export function AppShell({
                 : 'Esconder el menú y mostrarlo al acercar el cursor al borde izquierdo'
             }
           >
-            {autoHide ? '⇤ Menú automático' : '⇥ Esconder menú'}
+            {autoHide ? '⇤ Menú automático activo' : '⇥ Esconder menú (automático)'}
           </button>
           <UserChip name={user.fullName} subtitle={user.title || user.roleKey} />
           <div className="scope-hint">{ROLE_SCOPE[user.roleKey] || ''}</div>
@@ -240,10 +248,23 @@ export function AppShell({
               <span />
               <span className="sr-only">Menú</span>
             </button>
+            {autoHideReady && autoHide ? (
+              <button
+                type="button"
+                className="btn ghost btn-sm topbar-pin-nav"
+                onClick={toggleAutoHide}
+                title="Fijar el menú lateral"
+              >
+                Fijar menú
+              </button>
+            ) : null}
             <div>
               <h1>{title || 'Panel'}</h1>
               <div className="topbar-sub">
                 {entity === 'ARTA' ? 'Arta Producciones' : 'Auditorio Arema · Explanada'}
+                {autoHideReady && autoHide ? (
+                  <span className="topbar-autohide-hint"> · Acerca el cursor al borde izquierdo para el menú</span>
+                ) : null}
               </div>
             </div>
           </div>

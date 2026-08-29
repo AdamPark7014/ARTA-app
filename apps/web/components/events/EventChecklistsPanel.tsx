@@ -158,7 +158,8 @@ export function EventChecklistsPanel({
 
             {!closed ? (
               <div className="checklist-save-hint muted kpi-sub">
-                Guarda después de editar para regenerar el PDF y registrar versión.
+                El formato se abre a pantalla completa. Esc o «Salir» para volver. Guarda después de
+                editar para regenerar el PDF y registrar versión.
               </div>
             ) : null}
 

@@ -4393,11 +4393,26 @@ body.site-nav-open {
   align-items: center;
   justify-content: space-between;
   gap: 0.6rem;
+  flex-wrap: wrap;
 }
 
 .expandbox__title {
   font-size: 0.95rem;
   color: var(--text);
+}
+
+/* Inline: ya no es miniatura — altura de trabajo aunque no esté a pantalla completa */
+.expandbox--inline .expandbox__body {
+  min-height: min(70vh, 900px);
+}
+
+.expandbox--inline .docview__frame {
+  height: min(72vh, 960px);
+}
+
+.expandbox--inline .pdfedit,
+.expandbox--inline .sheet-wrap {
+  max-height: none;
 }
 
 /* A pantalla completa: el documento manda y todo lo demás se quita de en medio */
@@ -4420,6 +4435,7 @@ body.site-nav-open {
 .expandbox--full .expandbox__body {
   overflow: auto;
   padding-top: 0.75rem;
+  min-height: 0;
 }
 
 /* Dentro del modo grande los topes de altura estorban */
@@ -4431,7 +4447,7 @@ body.site-nav-open {
 }
 
 .expandbox--full .docview__frame {
-  height: calc(100vh - 170px);
+  height: calc(100vh - 140px);
 }
 
 /* Visor de documentos: tamaño de trabajo, no de miniatura */
@@ -4468,14 +4484,26 @@ body.site-nav-open {
 
 /* ── Menú que se esconde y vuelve al acercar el cursor ───────────────────── */
 
-/* Franja sensible pegada al borde izquierdo */
+/* Franja sensible pegada al borde izquierdo (más ancha = más fácil de “pescar”) */
 .shell-hot-edge {
   position: fixed;
   left: 0;
   top: 0;
   bottom: 0;
-  width: 14px;
+  width: 18px;
   z-index: 41;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--accent) 28%, transparent),
+    transparent 70%
+  );
+  opacity: 0.55;
+  transition: opacity 0.15s ease, width 0.15s ease;
+}
+
+.shell-hot-edge:hover {
+  opacity: 0.9;
+  width: 22px;
 }
 
 /* Con el menú fuera del flujo, `.main` es el único hijo en el grid: si se
@@ -4522,6 +4550,15 @@ body.site-nav-open {
   opacity: 0;
 }
 
+.topbar-autohide-hint {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.topbar-pin-nav {
+  flex-shrink: 0;
+}
+
 .nav-autohide {
   width: 100%;
   margin-bottom: 0.75rem;
@@ -4550,6 +4587,11 @@ body.site-nav-open {
 /* En móvil manda el botón de hamburguesa, no el cursor */
 @media (max-width: 900px) {
   .shell-hot-edge {
+    display: none;
+  }
+
+  .topbar-autohide-hint,
+  .topbar-pin-nav {
     display: none;
   }
 

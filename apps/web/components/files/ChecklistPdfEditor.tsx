@@ -181,7 +181,7 @@ export function ChecklistPdfEditor({
   }
 
   return (
-    <ExpandBox title="Formato del checklist">
+    <ExpandBox title="Formato del checklist" defaultExpanded>
     <div className="stack" ref={boxRef}>
       {loading ? <p className="muted kpi-sub">Abriendo el formato…</p> : null}
 

@@ -78,7 +78,11 @@ export default function SecurityPage() {
       <div className="stack page-workspace">
         <PageHeader
           description="Endurecimiento de identidad: TOTP, sesiones activas y cookie HttpOnly."
-          hint={`Estado 2FA: ${user?.totpEnabled ? 'Activo' : 'Inactivo'}`}
+          hint={
+            user?.totpEnabled
+              ? '2FA activo. Revisa sesiones y revoca las que no reconozcas.'
+              : '2FA inactivo — actívalo con tu app autenticadora. El panel lo pide en el primer acceso.'
+          }
         />
         {msg ? (
           <FlashMessage variant={msgVariant} onDismiss={() => setMsg('')}>
@@ -102,7 +106,7 @@ export default function SecurityPage() {
                     <form className="form" onSubmit={enable}>
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img src={setup.qrDataUrl} alt="Código QR para 2FA" width={180} height={180} />
-                      <p className="muted" style={{ fontSize: 12 }}>
+                      <p className="muted kpi-sub">
                         Clave secreta: <code>{setup.secret}</code>
                       </p>
                       <label>
