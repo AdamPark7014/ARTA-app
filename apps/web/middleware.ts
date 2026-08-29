@@ -63,5 +63,7 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
+  // `pdf.worker.min.mjs` es el worker de pdf.js que sirve el editor de PDF:
+  // es un asset estático de public/ y no debe pasar por el gate de sesión.
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|pdf.worker.min.mjs).*)'],
 };
