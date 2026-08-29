@@ -1,7 +1,7 @@
 # RELEVO
 
 - **Último turno:** claude-code
-- **Fecha:** 2026-08-28
+- **Fecha:** 2026-08-29
 - **Rama:** main
 
 ## Contexto del proyecto
@@ -78,6 +78,16 @@ antes de tocar estas áreas.
      lo dice en vez de crear un documento vacío.
    - `PUT /uploads/:id/content` reemplaza el archivo **sin cambiar el id**, sube
      `version`, guarda quién editó y conserva el anterior en disco.
+   - **Los editores no saben dónde se guarda lo que producen**: reciben un
+     `onSave` (`lib/file-save.ts`). Por eso el mismo componente sirve en
+     Documentos, Campaña, Checklists y Carpetas generales.
+   - **Checklists**: la vista previa del PDF trae «Escribir encima». Ese PDF lo
+     **regenera el sistema** en cada guardado del formato, así que lo escrito se
+     guarda como **copia aparte** en Documentos — guardarlo encima habría
+     borrado las anotaciones al siguiente guardado, sin avisar.
+   - **Carpetas generales**: los archivos ya no solo se abren en otra pestaña;
+     se ven embebidos y el Excel y el PDF se editan ahí mismo
+     (`PUT /folders/files/:id/content`).
 
 ### Verificación
 
