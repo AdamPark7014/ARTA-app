@@ -101,6 +101,19 @@ export const NAV_ITEMS: NavItem[] = [
     keywords: 'pendientes apoyo asignar workload',
   },
 
+  // ── Control ───────────────────────────────────────────────────────────────
+  // La junta le dedicó una sección propia a las OC (la ventana de solicitud);
+  // nunca pidió moverlas dentro del evento, así que la torre de control se
+  // queda en el menú.
+  {
+    href: '/purchase-orders',
+    label: 'Órdenes de compra',
+    permissions: ['checklist.edit', 'po.authorize', 'po.mark_paid', 'everything'],
+    group: 'Control',
+    requiresEventOps: true,
+    keywords: 'oc procurement compras ventana',
+  },
+
   // ── Marca ─────────────────────────────────────────────────────────────────
   {
     href: '/studio',
@@ -193,15 +206,6 @@ export const NAV_ITEMS: NavItem[] = [
     requiresEventOps: true,
     hidden: true,
     keywords: 'corrida financiera cierre',
-  },
-  {
-    href: '/purchase-orders',
-    label: 'Órdenes de compra',
-    permissions: ['checklist.edit', 'po.authorize', 'po.mark_paid', 'everything'],
-    group: HIDDEN_NAV_GROUP,
-    requiresEventOps: true,
-    hidden: true,
-    keywords: 'oc procurement compras',
   },
   {
     href: '/campaigns',
@@ -354,21 +358,33 @@ export function activeNavKey(
 }
 
 /**
+ * Roles cuya herramienta principal son las carpetas generales, no los eventos.
+ * Su `ROLE_SCOPE` empieza justamente por «Carpetas».
+ */
+const FOLDER_CENTRIC_ROLES: RoleKey[] = ['convenios', 'enlace_gobierno'];
+
+/**
  * Items que le tocan a este usuario en esta entidad.
  *
- * Excepción deliberada: un rol sin operación de eventos en la entidad activa
- * (dir_auditorio dentro de Arta, por ejemplo) se quedaría con un menú vacío,
- * porque las cuatro entradas de eventos no le aplican. Para ese caso las
- * carpetas generales — su única herramienta ahí — vuelven al menú.
+ * Excepción deliberada: **las carpetas generales vuelven al menú** para quien
+ * no tiene operación de eventos en la entidad activa (dir_auditorio dentro de
+ * Arta) y para los roles que trabajan sobre carpetas (convenios, enlace de
+ * gobierno). Sin esto, Leida, Marisol y Juan Pablo se quedaban con un menú de
+ * cuatro entradas de eventos y sin su herramienta de todos los días: las
+ * carpetas no son un check del evento, son el repositorio que no cuelga de
+ * ningún show.
  */
 export function visibleNavItems(
   user: { roleKey: string; permissions: string[]; entities: EntityKey[] },
   entity: EntityKey,
 ): NavItem[] {
   const items = NAV_ITEMS.filter((item) => canSeeNavItem(user, item, entity));
-  if (canAccessEventOps(user.roleKey, entity)) return items;
+  const needsFolders =
+    !canAccessEventOps(user.roleKey, entity) ||
+    FOLDER_CENTRIC_ROLES.includes(user.roleKey as RoleKey);
+  if (!needsFolders) return items;
   return items.map((item) =>
-    item.href === '/folders' ? { ...item, hidden: false, group: 'Operación' } : item,
+    item.href === '/folders' ? { ...item, hidden: false, group: 'Documentos' } : item,
   );
 }
 

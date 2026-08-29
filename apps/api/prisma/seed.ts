@@ -193,10 +193,28 @@ const USER_VIEWS: Record<
     modules: ['dashboard', 'events', 'checklists', 'campaigns', 'ticketing', 'site'],
     notes: 'Generales ambos · edita campaña con gerencia · boletera',
   },
+  'monse@artaproducciones.com': {
+    entities: ['ARTA', 'EXPLANADA'],
+    homeEntity: 'ARTA',
+    modules: ['dashboard', 'events', 'checklists', 'campaigns', 'ticketing', 'folders', 'site'],
+    notes: 'Alta junta 2026-08-28 · operación Arta',
+  },
+  'kika@artaproducciones.com': {
+    entities: ['ARTA', 'EXPLANADA'],
+    homeEntity: 'ARTA',
+    modules: ['dashboard', 'events', 'checklists', 'campaigns', 'ticketing', 'folders', 'site'],
+    notes: 'Alta junta 2026-08-28 · operación Arta',
+  },
+  'marisol@artaproducciones.com': {
+    entities: ['ARTA', 'EXPLANADA'],
+    homeEntity: 'ARTA',
+    modules: ['dashboard', 'events', 'checklists', 'folders', 'site'],
+    notes: 'Alta junta 2026-08-28 · convenios / patrocinios (perfil de Leida)',
+  },
   'leida@artaproducciones.com': {
     entities: ['ARTA', 'EXPLANADA'],
     homeEntity: 'ARTA',
-    modules: ['dashboard', 'events', 'checklists', 'site'],
+    modules: ['dashboard', 'events', 'checklists', 'folders', 'site'],
     notes: 'Generales · convenios / patrocinios',
   },
   'jp@artaproducciones.com': {

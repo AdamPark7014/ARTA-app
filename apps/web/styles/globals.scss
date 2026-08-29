@@ -3683,6 +3683,37 @@ body.site-nav-open {
   color: var(--text);
 }
 
+/* Abre las vistas de portafolio sin tener que adivinar un término de búsqueda */
+.nav-more {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  width: 100%;
+  margin-top: 0.35rem;
+  padding: 0.55rem 0.75rem;
+  border: 1px dashed var(--line-strong);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color 0.12s ease, background 0.12s ease, border-color 0.12s ease;
+}
+
+.nav-more:hover {
+  color: var(--text);
+  background: hsla(0, 0%, 100%, 0.04);
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line-strong));
+}
+
+.nav-more span {
+  font-size: 0.95rem;
+  line-height: 1;
+  width: 12px;
+  text-align: center;
+}
+
 /* Pie del menú: recuerda que las herramientas viven dentro del evento */
 .nav-hint {
   margin: 0.85rem 0.35rem 0;
@@ -3896,14 +3927,24 @@ body.site-nav-open {
   color: var(--text);
 }
 
+.form label.checkbox-row,
 .checkbox-row {
   display: flex;
+  flex-direction: row;
   align-items: flex-start;
+  justify-content: flex-start;
   gap: 0.6rem;
   font-size: 0.88rem;
 }
 
+.form .checkbox-row input,
 .checkbox-row input {
   width: auto !important;
+  flex: 0 0 auto;
   margin-top: 0.2rem;
+}
+
+.form .day-chip input,
+.day-chip input {
+  flex: 0 0 auto;
 }
