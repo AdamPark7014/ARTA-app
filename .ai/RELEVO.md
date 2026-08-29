@@ -12,56 +12,48 @@ y Next 14 App Router (`apps/web`), monorepo npm workspaces + turbo.
 
 ## Hecho en este turno
 
-**Fix: no se podía escribir sobre el PDF del checklist** (reportado en
-Catering y Camerinos / ANDRES PARRA).
+**Campaña / gastos de publicidad: Excel super-editable** (pedido al ver el PDF
+«GASTOS DE PUBLICIDAD Y CONVENIOS» de ANDRES PARRA).
 
-### Causa
+### Qué se hizo
 
-1. El canvas de pdf.js quedaba por encima / capturando clics: los campos
-   existían en el DOM pero no se veían ni respondían.
-2. Las reglas globales `.shell input` / `.panel input` (fondo `#141416`,
-   `color-scheme: dark`, `width: 100%`) ganaban o camuflaban los `.pdffield`
-   sobre la hoja blanca.
+1. **`SheetEditor` potenciado** — selección de celda; +/− fila/columna;
+   duplicar/vaciar fila; llenar abajo; sumar columna; fórmulas `=` se guardan
+   como fórmula del libro.
+2. **Modo `variant="campaign"`** — «+ Concepto (con totales)» (fórmulas B×C /
+   E×F), calcular fila, Σ Total / Σ Total ARTA.
+3. **`lib/campaign-sheet-template.ts`** — plantilla GASTOS DE PUBLICIDAD Y
+   CONVENIOS con columnas del formato real + totales/cortesías.
+4. **Campaña del evento** — botón **Nueva hoja de gastos**; SheetEditor en modo
+   campaña; en PDF aviso claro: la tabla se edita en Excel, el PDF solo anota.
 
-Los datos en BD estaban bien: Catering tiene `pdfFieldsJson` con 6 campos,
-`pageWidth=612`, sectionId `cat` alineado con `dataJson`.
+### Límite explícito (no mentir)
 
-### Cambio
-
-- Canvas: `z-index: 0` + `pointer-events: none`.
-- Overlay: `z-index: 2`; campos `z-index: 3` + `pointer-events: auto`.
-- `.pdffield` con borde dorado siempre visible, fondo blanco forzado,
-  especificidad `.shell` / `.panel`, casillas mín. 22px.
-- Hint «N campos editables…» y alerta si el mapa no coincide con ítems.
-- Hit targets de check un poco más grandes al escalar.
-
-Plan P0 sigue en `docs/PLAN_PROFESIONALIZACION_UI.md`.
+Un PDF escaneado/exportado de esa tabla **no** se puede reescribir celda a
+celda como Excel en el navegador. La fuente editable es el `.xlsx`.
 
 ### Verificación
 
 - `npx tsc --noEmit` en `apps/web` verde.
-- Confirmado en prod DB: checklist Catering con fields no nulos.
 
 ## Decisiones de diseño que hay que respetar
 
-- Todo lo del relevo anterior sigue vigente.
-- No regenerar en bloque los 21 checklists ya autorizados.
-- Los `.pdffield` deben ganar siempre a `.shell input` (fondo claro sobre PDF).
+- Todo lo anterior (checklists sobre PDF, ExpandBox, menú auto, pdffield CSS).
+- Campaña: editar tabla en Excel; PDF = vista/anotación.
+- No regenerar checklists autorizados en bloque.
 
 ## A medias — CUIDADO
 
-- Deploy de este fix (bundle / `--no-pull`).
-- Deploy key GitHub en el servidor.
-- Monse/Kika: confirmar apellidos.
-- P1 Playwright hub; guía HTML menú nuevo.
-- Traefik/Nexara causa raíz.
+- Deploy de este turno.
+- Deploy key GitHub; Monse/Kika; P1 Playwright; Traefik causa raíz.
 
 ## Siguiente paso
 
-1. Deploy inmediato de este fix.
-2. Verificar en UI: casillas blancas con borde dorado sobre el PDF.
-3. P1 specs / guía.
+1. Deploy.
+2. Probar: Campaña → Nueva hoja de gastos → Editar hoja → + Concepto → Guardar.
+3. Si Adam insiste en PDF “como Word completo”, valorar OCR/servicio aparte
+   (fuera del spine actual).
 
 ## No tocar
 
-- `docs/ACCESS.md`, `output: 'standalone'`, e2e API contra BD, `.env.arta`.
+- `docs/ACCESS.md`, `output: 'standalone'`, e2e API BD, `.env.arta`.

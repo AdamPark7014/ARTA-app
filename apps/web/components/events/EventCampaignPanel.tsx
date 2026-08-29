@@ -4,6 +4,11 @@ import { useState } from 'react';
 import { FileViewer } from '@/components/files/FileViewer';
 import { SheetEditor } from '@/components/files/SheetEditor';
 import { PdfEditor } from '@/components/files/PdfEditor';
+import {
+  buildCampaignExpensesWorkbook,
+  campaignExpensesFileName,
+  workbookToXlsxBlob,
+} from '@/lib/campaign-sheet-template';
 import { replaceEventFile } from '@/lib/file-save';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { FlowSteps } from '@/components/ui/FlowSteps';
@@ -222,24 +227,51 @@ export function EventCampaignPanel({
           <div>
             <h2>Archivos de la campaña · {files.length}</h2>
             <p className="muted kpi-sub" style={{ margin: '0.25rem 0 0' }}>
-              Plan de medios en Excel y presentación en PDF. Se abren aquí mismo, sin descargar.
+              Edita el Excel de gastos (agregar/quitar conceptos, totales). El PDF es para anotar o
+              presentar; la tabla viva es la hoja.
             </p>
           </div>
           {canEditFiles ? (
-            <label className="btn btn-sm module-upload">
-              {busy ? 'Subiendo…' : 'Subir archivo'}
-              <input
-                type="file"
-                hidden
+            <div className="panel-head-actions">
+              <button
+                className="btn btn-sm"
+                type="button"
                 disabled={busy}
-                accept=".pdf,.xlsx,.xls,.csv,image/*"
-                onChange={(e) => {
-                  const f = e.target.files?.[0];
-                  e.target.value = '';
-                  if (f) withBusy(() => onUploadFile(f));
-                }}
-              />
-            </label>
+                onClick={() =>
+                  withBusy(async () => {
+                    const wb = buildCampaignExpensesWorkbook({
+                      eventName: event.name,
+                      venue: event.venue,
+                      city: event.city,
+                      startsAt: event.startsAt,
+                      promoter: event.promoter || 'ARTA PRODUCCIONES',
+                    });
+                    const blob = workbookToXlsxBlob(wb);
+                    const name = campaignExpensesFileName(event.name);
+                    const file = new File([blob], name, {
+                      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                    });
+                    await onUploadFile(file);
+                  })
+                }
+              >
+                Nueva hoja de gastos
+              </button>
+              <label className="btn ghost btn-sm module-upload">
+                {busy ? 'Subiendo…' : 'Subir archivo'}
+                <input
+                  type="file"
+                  hidden
+                  disabled={busy}
+                  accept=".pdf,.xlsx,.xls,.csv,image/*"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    e.target.value = '';
+                    if (f) withBusy(() => onUploadFile(f));
+                  }}
+                />
+              </label>
+            </div>
           ) : null}
         </div>
         <div className="panel-body">
@@ -248,7 +280,7 @@ export function EventCampaignPanel({
               title="Sin Excel ni PDF de campaña"
               description={
                 canEditFiles
-                  ? 'Sube el plan de medios (Excel) y la presentación (PDF). Quedan embebidos en esta sección y se consultan sin salir del evento.'
+                  ? 'Crea una «Nueva hoja de gastos» (formato publicidad/convenios) o sube tu Excel/PDF. La hoja se edita aquí: filas, columnas y totales.'
                   : 'Cuando el equipo de campaña suba el plan de medios o la presentación, se verán aquí sin necesidad de descargarlos.'
               }
             />
@@ -297,7 +329,7 @@ export function EventCampaignPanel({
                               ? 'Cerrar editor'
                               : isSheet(f.fileName, f.kind)
                                 ? 'Editar hoja'
-                                : 'Escribir encima'}
+                                : 'Anotar PDF'}
                           </button>
                         ) : null}
                         {canEditFiles ? (
@@ -350,18 +382,27 @@ export function EventCampaignPanel({
                             url={f.url}
                             fileName={f.fileName}
                             canEdit={canEditFiles}
+                            variant="campaign"
                             onSave={replaceEventFile(f.id)}
                             onSaved={onFilesChanged}
                           />
                         ) : (
-                          <PdfEditor
-                            key={f.id}
-                            url={f.url}
-                            fileName={f.fileName}
-                            canEdit={canEditFiles}
-                            onSave={replaceEventFile(f.id)}
-                            onSaved={onFilesChanged}
-                          />
+                          <div className="stack">
+                            <div className="module-banner">
+                              Un PDF de campaña (como el de gastos) no se reescribe celda a celda.
+                              Usa <strong>Nueva hoja de gastos</strong> o <strong>Editar hoja</strong>{' '}
+                              en el Excel para agregar/quitar conceptos y totales. Aquí solo puedes
+                              anotar texto encima del PDF.
+                            </div>
+                            <PdfEditor
+                              key={f.id}
+                              url={f.url}
+                              fileName={f.fileName}
+                              canEdit={canEditFiles}
+                              onSave={replaceEventFile(f.id)}
+                              onSaved={onFilesChanged}
+                            />
+                          </div>
                         )}
                       </div>
                     ) : null}

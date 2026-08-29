@@ -3964,6 +3964,49 @@ body.site-nav-open {
   background: var(--bg-soft);
 }
 
+.sheet-toolbar__actions {
+  flex-wrap: wrap;
+}
+
+.sheet-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1rem;
+  padding: 0.55rem 0.75rem;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius);
+  background: rgba(0, 0, 0, 0.15);
+}
+
+.sheet-tools__group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.sheet-tools__group--campaign {
+  padding-left: 0.5rem;
+  border-left: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+}
+
+.sheet-tools__label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  margin-right: 0.25rem;
+}
+
+.sheet__row--sel .sheet__rownum {
+  color: var(--accent);
+}
+
+.sheet__td--sel {
+  outline: 1px solid color-mix(in srgb, var(--accent) 70%, transparent);
+  outline-offset: -1px;
+}
+
 .sheet-toolbar__sheets {
   display: flex;
   align-items: center;
@@ -4493,6 +4536,10 @@ body.site-nav-open {
 .expandbox--full .docview__frame {
   max-height: none;
   height: auto;
+}
+
+.expandbox--full .sheet-wrap {
+  max-height: calc(100vh - 220px);
 }
 
 .expandbox--full .docview__frame {

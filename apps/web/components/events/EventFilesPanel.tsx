@@ -193,6 +193,7 @@ export function EventFilesPanel({
                 url={editing.url}
                 fileName={editing.fileName}
                 canEdit={canEdit}
+                variant={editing.module === 'campaign' ? 'campaign' : 'default'}
                 onSave={replaceEventFile(editing.id)}
                 onSaved={onFilesChanged}
               />

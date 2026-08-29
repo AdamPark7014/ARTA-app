@@ -18,15 +18,24 @@ Se abre el `.xlsx` real en una cuadrícula con letras de columna y números de
 fila, se escribe en las celdas y **Guardar cambios** reconstruye el archivo y lo
 reemplaza en el evento.
 
+**Herramientas.** Con una celda seleccionada: insertar/duplicar/vaciar/borrar
+fila, insertar/borrar columna, llenar abajo, sumar columna. Las fórmulas que
+empiezan con `=` se guardan como fórmula del libro.
+
+**Modo campaña** (`variant="campaign"`): barra extra para gastos de publicidad —
+«+ Concepto (con totales)» escribe fórmulas `B×C` y `E×F`, y botones para
+calcular la fila o sumar totales. En Campaña del evento, **Nueva hoja de gastos**
+crea un Excel con el formato CONCEPTO / CANTIDAD / COSTO / TOTAL / ARTA /
+PAGADO / POR PAGAR (`lib/campaign-sheet-template.ts`).
+
 **Qué se conserva.** El libro original se mantiene en memoria y al guardar solo
 se tocan las celdas que la persona editó, así que **las fórmulas y el formato de
 las celdas que nadie tocó sobreviven**. Si escribes encima de una fórmula, esa
 celda pasa a ser un valor fijo — exactamente lo que hace Excel.
 
-**Qué no hace.** No calcula fórmulas nuevas: si escribes `=A1+B1`, se guarda ese
-texto, no el resultado. Tampoco edita estilos (colores, bordes, anchos).
-
-Hojas múltiples: se listan todas y se edita la activa.
+**Qué no hace.** No es un motor completo de Excel (sin pivotes ni gráficos). El
+**PDF de campaña** no se reescribe celda a celda: la tabla viva es el Excel; el
+PDF sirve para anotar o presentar.
 
 ## 2. Escribir encima del PDF
 
