@@ -47,7 +47,15 @@ antes de tocar estas áreas.
    **Kika**. El copy que la nombraba por su nombre pasa a nombrar el rol
    («gerencia de Arta») en API, panel, `docs/PRODUCT.md` y la guía de uso.
 
-7. **Dos defectos encontrados al desplegar** (ver doc, sección 6):
+7. **Auditoría de la UI ya desplegada** (ver doc, sección 7). El menú se había
+   podado de más: **Órdenes de compra** vuelve al menú (el PDF nunca pidió
+   moverla dentro del evento, le dedica sección propia) y **Carpetas generales**
+   vuelve para `convenios` y `enlace_gobierno`, cuyo `ROLE_SCOPE` empieza por
+   «Carpetas» y se habían quedado sin herramienta. Botón **«Más herramientas»**
+   para abrir en un clic las 14 vistas que siguen fuera del menú. Arreglado el
+   checkbox de `/settings`, que salía centrado sobre su etiqueta.
+
+8. **Dos defectos encontrados al desplegar** (ver doc, sección 6):
    el seed creaba usuarios **sin tenant** —quedaban invisibles para el panel de
    Usuarios y para asignar tareas— y **pisaba las contraseñas en cada
    despliegue**. Ambos corregidos en `prisma/seed.ts`, con backfill ya aplicado
@@ -57,8 +65,12 @@ antes de tocar estas áreas.
 
 - `npm run typecheck` (api + web) verde · `npx jest` en `apps/api`
   **9 suites / 61 tests** · `next build` verde con **35 rutas** ·
-  `npm run test:e2e` **9 specs verdes** (se actualizaron los 3 de `app-shell`
-  que asumían el menú viejo y se agregó `e2e/tasks.spec.ts`).
+  `npm run test:e2e` **11 specs verdes** (se actualizaron los de `app-shell`
+  que asumían el menú viejo y se agregaron `e2e/tasks.spec.ts`, el spec del rol
+  de convenios y el de «Más herramientas»).
+- La UI se auditó con capturas del panel real (Playwright contra la API
+  simulada): sidebar, hub de evento, pestaña Campaña con los archivos,
+  `/tasks` y `/settings`.
 - En producción: migración `20260828120000_…` aplicada, tabla `Notification`
   creada, columnas nuevas presentes, `TaskAssignment.eventId` nullable,
   9 usuarios activos, y salud pública 307/200/200/200.
@@ -67,9 +79,12 @@ antes de tocar estas áreas.
 
 - **Las herramientas ocultas no se borran.** Están fuera del menú, no del
   router: borrar esas rutas rompería enlaces que ya circulan.
-- **`visibleNavItems()` devuelve Carpetas generales al menú** cuando el usuario
-  no tiene operación de eventos en la entidad activa (`dir_auditorio` en Arta).
-  Sin esa excepción ese rol se queda con el menú vacío.
+- **`visibleNavItems()` devuelve Carpetas generales al menú** a `convenios`,
+  `enlace_gobierno` y a quien no tenga operación de eventos en la entidad
+  activa (`dir_auditorio` en Arta). Sin esa excepción esos roles se quedan sin
+  herramienta: las carpetas no cuelgan de ningún evento.
+- **Órdenes de compra se queda en el menú.** El PDF le dedica su propia sección
+  (la ventana de solicitud) y nunca pidió moverla dentro del evento.
 - **La ventana de OC no encierra a dirección.**
 - **Los avisos nunca lanzan**: `NotificationsService.notify()` traga el error.
 - **El seed ya no toca `passwordHash` en el update.** La contraseña de

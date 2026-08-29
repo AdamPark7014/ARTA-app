@@ -175,6 +175,45 @@ siguiente despliegue se la revertía. Ese campo salió del `update`. La contrase
 de `.env.arta` es ahora solo la **inicial**; para reponer una se usa
 *Panel → Usuarios*.
 
+## 7. Auditoría de la UI: lo que había escondido de más
+
+Con el panel ya desplegado se revisó pantalla por pantalla contra el PDF. El
+menú se había podado demasiado y tres roles se quedaron sin herramienta:
+
+**Órdenes de compra vuelve al menú.** El PDF no la puso en la lista de lo que
+se muda dentro del evento —«checklists, campañas, boletera, corrida financiera,
+hospitality, rueda de prensa, convenios»—; al contrario, le dedica una sección
+propia y enseña su pantalla. Estaba oculta por error.
+
+**Carpetas generales vuelve al menú para quien vive de ellas.** `ROLE_SCOPE` lo
+dice literalmente: `convenios` es «Carpetas · patrocinios · checklists» y
+`enlace_gobierno` es «Carpetas · pagos · marcar OC pagado». Con el menú podado,
+Leida, Marisol y Juan Pablo veían cuatro entradas de eventos y nada más. Las
+carpetas generales **no son un check del evento**: son el repositorio que no
+cuelga de ningún show, así que no tienen dónde vivir «dentro del evento».
+`visibleNavItems()` las devuelve al grupo *Documentos* para esos roles y para
+`dir_auditorio` dentro de Arta.
+
+**Botón «Más herramientas».** Las 14 vistas que siguen fuera del menú se abren
+en un clic desde el sidebar, en vez de exigir adivinar un término en el
+buscador. El menú sigue sin desglosar cada check, que es lo que pedía la junta.
+
+**Arreglo visual.** En *Configuración*, el checkbox de la ventana de OC salía
+centrado sobre su etiqueta: `.form label` (grid) le ganaba en especificidad a
+`.checkbox-row` (flex).
+
+Dos specs nuevos fijan el comportamiento: un rol de convenios conserva Carpetas
+en el menú, y «Más herramientas» abre las vistas ocultas.
+
+### Observación que no se tocó
+
+El item de menú de *Órdenes de compra* se muestra a cualquiera con
+`checklist.edit`, que es casi todo el mundo —incluido `convenios`—. Es
+comportamiento anterior a este trabajo (la lista de permisos del item ya era
+`['checklist.edit', 'po.authorize', 'po.mark_paid', 'everything']`). Afinar qué
+rol ve la torre de control de compras es una decisión de Adam, no un arreglo
+que corresponda meter aquí.
+
 ## Despliegue del 28-08-2026
 
 Servidor Hetzner `5.78.215.109`, stack `arta` (`arta-db`, `arta-api`,
