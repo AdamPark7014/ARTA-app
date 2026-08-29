@@ -156,10 +156,82 @@ Sin ellas caerían en `SEED_PASSWORD`, que es compartida. Existe además
 de alta sin redesplegar: **solo inserta lo que falta** y no toca a nadie que ya
 exista.
 
+## 6. Dos defectos que salieron al desplegar
+
+Ninguno venía en el PDF; aparecieron al poner las altas en producción.
+
+**El seed creaba usuarios sin `organizationId`.** Los endpoints de usuarios y de
+directorio filtran por tenant, así que Monse, Marisol y Kika quedaban
+invisibles: no salían en *Panel → Usuarios* ni se les podía asignar una tarea,
+aunque sí podían iniciar sesión. El seed ahora hace `upsert` de la organización
+por defecto, adopta al usuario que no tenga tenant —sin mover a nadie que ya
+pertenezca a otra— y le crea su `OrgMembership`. En producción se hizo además el
+backfill: los 9 usuarios quedaron en `org_arta_internal` con membresía.
+
+**El seed pisaba las contraseñas en cada despliegue.** `api-entrypoint.sh` lo
+ejecuta en cada arranque del contenedor y el `update` del upsert reescribía
+`passwordHash`: si alguien cambiaba su contraseña desde *Panel → Seguridad*, el
+siguiente despliegue se la revertía. Ese campo salió del `update`. La contraseña
+de `.env.arta` es ahora solo la **inicial**; para reponer una se usa
+*Panel → Usuarios*.
+
+## Despliegue del 28-08-2026
+
+Servidor Hetzner `5.78.215.109`, stack `arta` (`arta-db`, `arta-api`,
+`arta-web`) detrás del Traefik compartido.
+
+- **Respaldo previo**: volcado completo de la base y copia de `.env.arta` en
+  `/root/arta-backups/`.
+- **Migración** `20260828120000_tasks_org_notifications_file_module` aplicada
+  por el entrypoint. Verificado en la base: tabla `Notification` creada,
+  `EventFile.module`, `TaskAssignment.organizationId/createdById/detail` y
+  `TaskAssignment.eventId` ya nullable.
+- **Roster final**: 9 usuarios activos. Melissa borrada; Monse, Marisol y Kika
+  creadas con su propia contraseña (`SEED_PASS_*` en `.env.arta`, que se
+  agregaron al compose para que no cayeran en la `SEED_PASSWORD` compartida).
+- Se agregó `WEB_ORIGIN` a `.env.arta`, que faltaba en producción.
+- **Salud**: `artaproducciones.com` 307 → panel, `arta…/login` 200,
+  `arta…/api/health` 200, `auditorio…/login` 200.
+
+### Cómo se subió el código
+
+**El servidor no tiene credenciales de GitHub** (repo privado) y su `.git`
+estaba vacío: los archivos se habían subido a mano en algún momento, así que
+`deploy/update.sh` nunca pudo hacer su `git pull`. Se reconstruyó la historia
+desde un `git bundle` del repo local y se desplegó con `--no-pull`.
+
+**Queda pendiente** dar acceso de lectura al servidor —deploy key SSH o token—
+para que `update.sh` funcione como fue diseñado. Mientras tanto, el
+procedimiento es:
+
+```bash
+# en local
+git bundle create arta.bundle main
+scp -P 2222 arta.bundle root@5.78.215.109:/root/arta.bundle
+# en el servidor
+cd /var/www/arta-app
+git fetch /root/arta.bundle 'main:refs/remotes/origin/main'
+git reset origin/main && git checkout -- .
+bash deploy/update.sh --no-pull
+```
+
+### Observación: los 5 eventos demo son invisibles
+
+`Event.organizationId` está en `NULL` en los 5 eventos `[SEED_DEMO]` (el evento
+real sí tiene tenant). Como el listado filtra por organización, esos 5 no se ven
+en el panel — comportamiento que ya existía antes de este trabajo. Por eso el
+`UPDATE` de la migración que hereda `TaskAssignment.organizationId` desde el
+evento dejó las 5 tareas demo en `NULL`: no es un fallo de la migración, es que
+sus eventos tampoco tienen tenant. Si algún día se quieren ver, hay que asignar
+`organizationId` a esos eventos.
+
 ## Pendiente (fuera del código)
 
 - **Confirmar apellidos y correo de Monse y Kika** con Arturo, y ajustar rol si
   hace falta desde Panel → Usuarios.
+- **Dar acceso de lectura del repo al servidor** (deploy key) para que
+  `deploy/update.sh` vuelva a hacer `git pull` por sí solo.
+- **Nadie tiene 2FA dado de alta**: el panel lo pide en el primer acceso.
 - **`ENVIAR USUARIOS: CHACHO, ARTURO, LEIDA Y SOL`** — entrega de credenciales
   por canal seguro. Es una acción operativa de Adam, no del repositorio: aquí
   no se guardan contraseñas.
