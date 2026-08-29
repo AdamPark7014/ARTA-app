@@ -171,6 +171,7 @@ export function ChecklistPdfEditor({
   }
 
   const scale = renderWidth / fieldMap.pageWidth;
+  const matchedFields = fieldMap.fields.filter((f) => !!findItem(f.sectionId, f.itemId)).length;
 
   if (error) {
     return (
@@ -184,6 +185,20 @@ export function ChecklistPdfEditor({
     <ExpandBox title="Formato del checklist" defaultExpanded>
     <div className="stack" ref={boxRef}>
       {loading ? <p className="muted kpi-sub">Abriendo el formato…</p> : null}
+
+      {!loading && matchedFields > 0 ? (
+        <p className="pdffield-hint">
+          {matchedFields} campo{matchedFields === 1 ? '' : 's'} editables sobre la hoja — marca las
+          casillas o escribe en las cajas blancas con borde dorado. Luego pulsa Guardar.
+        </p>
+      ) : null}
+
+      {!loading && fieldMap.fields.length > 0 && matchedFields === 0 ? (
+        <div className="form-error" role="alert">
+          El mapa del PDF no coincide con los ítems de este formato. Pulsa «Regenerar» y vuelve a
+          intentar.
+        </div>
+      ) : null}
 
       <div className="pdfedit pdfedit--fields">
         {pages.map((p) => (
@@ -216,8 +231,8 @@ export function ChecklistPdfEditor({
                   const style = {
                     left: (f.x - 2) * scale,
                     top: (f.y - 0.5) * scale,
-                    width: (f.w + 2) * scale,
-                    height: (f.h + 2) * scale,
+                    width: Math.max(f.type === 'check' ? 22 : 48, (f.w + 2) * scale),
+                    height: Math.max(f.type === 'check' ? 22 : 16, (f.h + 2) * scale),
                   };
 
                   if (f.type === 'check') {

@@ -12,72 +12,56 @@ y Next 14 App Router (`apps/web`), monorepo npm workspaces + turbo.
 
 ## Hecho en este turno
 
-Plan + implementación **P0** de profesionalización e intuitividad. Documento
-maestro: **`docs/PLAN_PROFESIONALIZACION_UI.md`** (gap junta 28-08, documentos
-editables 29-08, y fases P0–P3).
+**Fix: no se podía escribir sobre el PDF del checklist** (reportado en
+Catering y Camerinos / ANDRES PARRA).
 
-1. **Documentos en grande por defecto.** `ExpandBox` gana `defaultExpanded`.
-   ChecklistPdfEditor, PdfEditor, SheetEditor y FileViewer (PDF/xlsx/imagen)
-   abren a **pantalla completa**; Esc o «Salir» vuelve. Inline ya no es
-   miniatura: `.expandbox--inline` con ~70vh de trabajo.
+### Causa
 
-2. **Menú automático tipo Mac por defecto en desktop.** Primera visita
-   (≥901px) activa auto-hide; se recuerda en `localStorage`. Franja sensible
-   más visible, hint en topbar («Acerca el cursor al borde izquierdo»), botón
-   **Fijar menú**. Móvil sigue con hamburguesa.
+1. El canvas de pdf.js quedaba por encima / capturando clics: los campos
+   existían en el DOM pero no se veían ni respondían.
+2. Las reglas globales `.shell input` / `.panel input` (fondo `#141416`,
+   `color-scheme: dark`, `width: 100%`) ganaban o camuflaban los `.pdffield`
+   sobre la hoja blanca.
 
-3. **Checklist hub.** Hint de pantalla completa + guardar/regenerar PDF.
+Los datos en BD estaban bien: Catering tiene `pdfFieldsJson` con 6 campos,
+`pageWidth=612`, sectionId `cat` alineado con `dataJson`.
 
-4. **Security.** Copy 2FA más claro; sin inline style en clave secreta.
+### Cambio
 
-5. **Auditoría Fase A 6–7.** Finance / users / security ya usan PageHeader,
-   LoadingBlock, EmptyState — sin reescritura; se marcan como revisadas en el
-   plan (P1-1 queda para polish fino si Adam pide).
+- Canvas: `z-index: 0` + `pointer-events: none`.
+- Overlay: `z-index: 2`; campos `z-index: 3` + `pointer-events: auto`.
+- `.pdffield` con borde dorado siempre visible, fondo blanco forzado,
+  especificidad `.shell` / `.panel`, casillas mín. 22px.
+- Hint «N campos editables…» y alerta si el mapa no coincide con ítems.
+- Hit targets de check un poco más grandes al escalar.
+
+Plan P0 sigue en `docs/PLAN_PROFESIONALIZACION_UI.md`.
 
 ### Verificación
 
 - `npx tsc --noEmit` en `apps/web` verde.
+- Confirmado en prod DB: checklist Catering con fields no nulos.
 
 ## Decisiones de diseño que hay que respetar
 
-- Todo lo del relevo anterior de claude-code sigue vigente (herramientas
-  ocultas no se borran, OC en menú, Carpetas para convenios, pdf worker,
-  menú auto = una columna, blur del botón autohide, cajas PDF en puntos,
-  seed sin tocar passwordHash, etc.).
-- **`defaultExpanded` en editores de documento** — si alguien quiere empezar
-  en columna, sale con Esc; no quitar el default sin pedirlo.
-- **Primera visita desktop = menú automático.** Quien prefiera fijo usa
-  «Fijar menú» o el toggle del pie (`arta_nav_autohide=0`).
-- Los **21 checklists autorizados** siguen fuera del backfill salvo
-  `--include-signed`.
+- Todo lo del relevo anterior sigue vigente.
+- No regenerar en bloque los 21 checklists ya autorizados.
+- Los `.pdffield` deben ganar siempre a `.shell input` (fondo claro sobre PDF).
 
 ## A medias — CUIDADO
 
-- **Deploy key de GitHub en el servidor** — sigue pendiente (bundle + `--no-pull`).
-- **Monse y Kika:** confirmar apellidos/correo/rol con Arturo.
-- **Eventos `[SEED_DEMO]` sin `organizationId`** — invisibles en panel.
-- **P1:** Playwright hub (Campaña + OC + ExpandBox Esc), guía HTML del menú nuevo.
-- **P2:** causa raíz Traefik/Nexara; A3-5 un módulo operativo.
-- **P3:** `ENTERPRISE_ITERATION_W2.md`.
-- **`deploy/ensure-traefik-route.sh`** + cron 5 min en el droplet.
-
-## Límites conocidos de los editores
-
-Sin cambio: hoja no calcula fórmulas nuevas; PDF overlay añade texto; PDF→doc
-pierde layout / no OCR. Ver `docs/DOCUMENTOS_EDITABLES.md`.
+- Deploy de este fix (bundle / `--no-pull`).
+- Deploy key GitHub en el servidor.
+- Monse/Kika: confirmar apellidos.
+- P1 Playwright hub; guía HTML menú nuevo.
+- Traefik/Nexara causa raíz.
 
 ## Siguiente paso
 
-1. Deploy a producción (bundle/`--no-pull` o deploy key).
-2. P1-3 Playwright ExpandBox + Campaña + ventana OC.
-3. P1-4 actualizar guía de uso al menú nuevo.
-4. Confirmar roster Monse/Kika y entregar credenciales (fuera de repo).
-5. P2-2 hook Nexara para no borrar `arta.yml`.
+1. Deploy inmediato de este fix.
+2. Verificar en UI: casillas blancas con borde dorado sobre el PDF.
+3. P1 specs / guía.
 
 ## No tocar
 
-- **`docs/ACCESS.md`**
-- **`next.config.js` → `output: 'standalone'`**
-- **`apps/api/test/*.e2e-spec.ts`**
-- **`deploy/.env.arta` del servidor**
-- No regenerar en bloque PDFs ya autorizados.
+- `docs/ACCESS.md`, `output: 'standalone'`, e2e API contra BD, `.env.arta`.
