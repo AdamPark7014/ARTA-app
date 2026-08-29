@@ -2,6 +2,8 @@
 
 import { useState } from 'react';
 import { FileViewer } from '@/components/files/FileViewer';
+import { SheetEditor } from '@/components/files/SheetEditor';
+import { PdfEditor } from '@/components/files/PdfEditor';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { FlowSteps } from '@/components/ui/FlowSteps';
 import { FormGrid } from '@/components/ui/PageChrome';
@@ -32,6 +34,8 @@ type EventCampaignPanelProps = {
   onUploadFile: (file: File) => Promise<void>;
   onReplaceFile: (fileId: string, file: File) => Promise<void>;
   onDeleteFile: (fileId: string) => Promise<void>;
+  /** Recarga el evento cuando se guarda un archivo editado en el sitio */
+  onFilesChanged: () => void | Promise<void>;
 };
 
 const CAMPAIGN_FLOW = ['Borrador', 'Guardada', 'Autorizada'];
@@ -41,6 +45,14 @@ function kindLabel(kind?: string | null) {
   if (kind === 'pdf') return 'PDF';
   if (kind === 'image') return 'Imagen';
   return kind || 'Archivo';
+}
+
+function isSheet(name: string, kind?: string | null) {
+  return kind === 'excel' || /\.(xlsx?|csv)$/i.test(name);
+}
+
+function isPdf(name: string, kind?: string | null) {
+  return kind === 'pdf' || /\.pdf$/i.test(name);
 }
 
 export function EventCampaignPanel({
@@ -56,11 +68,14 @@ export function EventCampaignPanel({
   onUploadFile,
   onReplaceFile,
   onDeleteFile,
+  onFilesChanged,
 }: EventCampaignPanelProps) {
   const hasSaved = !!event.campaign;
   const flowIndex = event.campaign?.authorized ? 2 : hasSaved ? 1 : 0;
-  // Junta 2026-08-28: la campaña se expande para ver el Excel/PDF sin descargar.
+  // Junta 2026-08-28: la campaña se expande para ver el Excel/PDF sin descargar,
+  // y desde ahí mismo se puede editar el archivo.
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   async function withBusy(fn: () => Promise<void>) {
@@ -240,8 +255,12 @@ export function EventCampaignPanel({
             <div className="campaign-files">
               {files.map((f) => {
                 const open = expandedId === f.id;
+                const editing = editingId === f.id;
                 return (
-                  <div key={f.id} className={`campaign-file ${open ? 'campaign-file--open' : ''}`}>
+                  <div
+                    key={f.id}
+                    className={`campaign-file ${open || editing ? 'campaign-file--open' : ''}`}
+                  >
                     <div className="campaign-file__head">
                       <div className="campaign-file__meta">
                         <strong>{f.fileName}</strong>
@@ -257,10 +276,29 @@ export function EventCampaignPanel({
                           className={open ? 'btn btn-sm' : 'btn ghost btn-sm'}
                           type="button"
                           aria-expanded={open}
-                          onClick={() => setExpandedId(open ? null : f.id)}
+                          onClick={() => {
+                            setEditingId(null);
+                            setExpandedId(open ? null : f.id);
+                          }}
                         >
                           {open ? 'Contraer' : 'Expandir'}
                         </button>
+                        {isSheet(f.fileName, f.kind) || isPdf(f.fileName, f.kind) ? (
+                          <button
+                            className={editing ? 'btn btn-sm' : 'btn ghost btn-sm'}
+                            type="button"
+                            onClick={() => {
+                              setExpandedId(null);
+                              setEditingId(editing ? null : f.id);
+                            }}
+                          >
+                            {editing
+                              ? 'Cerrar editor'
+                              : isSheet(f.fileName, f.kind)
+                                ? 'Editar hoja'
+                                : 'Escribir encima'}
+                          </button>
+                        ) : null}
                         {canEditFiles ? (
                           <label className="btn ghost btn-sm module-upload">
                             Actualizar
@@ -300,6 +338,30 @@ export function EventCampaignPanel({
                           kind={f.kind}
                           cacheKey={f.createdAt}
                         />
+                      </div>
+                    ) : null}
+
+                    {editing ? (
+                      <div className="campaign-file__body">
+                        {isSheet(f.fileName, f.kind) ? (
+                          <SheetEditor
+                            key={f.id}
+                            fileId={f.id}
+                            url={f.url}
+                            fileName={f.fileName}
+                            canEdit={canEditFiles}
+                            onSaved={onFilesChanged}
+                          />
+                        ) : (
+                          <PdfEditor
+                            key={f.id}
+                            fileId={f.id}
+                            url={f.url}
+                            fileName={f.fileName}
+                            canEdit={canEditFiles}
+                            onSaved={onFilesChanged}
+                          />
+                        )}
                       </div>
                     ) : null}
                   </div>

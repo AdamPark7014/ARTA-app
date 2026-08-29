@@ -1,0 +1,158 @@
+import { expect, test } from '@playwright/test';
+import type { Route } from '@playwright/test';
+import * as XLSX from 'xlsx';
+
+import { mockAuthenticatedApi, seedSession } from './support/mock-api';
+
+/**
+ * Editores embebidos: el Excel se abre, se escribe encima y al guardar se
+ * reemplaza el archivo del evento en el sitio.
+ */
+
+function demoWorkbook(): Buffer {
+  const ws = XLSX.utils.aoa_to_sheet([
+    ['Concepto', 'Monto'],
+    ['Audio', 12000],
+    ['Luces', 8000],
+  ]);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Presupuesto');
+  return XLSX.write(wb, { bookType: 'xlsx', type: 'buffer' }) as Buffer;
+}
+
+const EVENT = {
+  id: 'evt-e2e-1',
+  name: 'Noche de Bandas',
+  artist: 'Los Ecos',
+  venue: 'Auditorio Arema',
+  city: 'Puebla',
+  status: 'ACTIVE',
+  entity: 'ARTA',
+  campaignType: 'INTERNAL',
+  startsAt: '2026-09-20T02:00:00.000Z',
+  checklists: [],
+  purchaseOrders: [],
+  financeRuns: [],
+  campaign: null,
+  ticketingSetups: [],
+  files: [
+    {
+      id: 'file-xlsx',
+      fileName: 'Presupuesto.xlsx',
+      url: '/uploads/demo.xlsx',
+      kind: 'excel',
+      module: null,
+      createdAt: '2026-08-28T10:00:00.000Z',
+    },
+  ],
+  tasks: [],
+  sponsors: [],
+};
+
+test.describe('Editores embebidos', () => {
+  test('la hoja de cálculo se abre, se edita y se guarda en el sitio', async ({
+    page,
+    baseURL,
+  }) => {
+    const saved: Array<{ id: string; bytes: number }> = [];
+
+    await seedSession(page, baseURL!);
+    await mockAuthenticatedApi(page, {
+      '/events/evt-e2e-1': EVENT,
+      '/documents/event/evt-e2e-1': [],
+      '/vendor/event/evt-e2e-1': [],
+      '/uploads/file-xlsx/content': (route: Route) => {
+        const post = route.request().postDataBuffer();
+        saved.push({ id: 'file-xlsx', bytes: post?.length || 0 });
+        return route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ id: 'file-xlsx', version: 2, url: '/uploads/demo.xlsx' }),
+        });
+      },
+    });
+
+    // El archivo vive fuera de /api: se sirve un .xlsx real generado aquí.
+    await page.route('**/uploads/demo.xlsx', (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        body: demoWorkbook(),
+      }),
+    );
+
+    await page.goto('/events/evt-e2e-1?tab=files');
+
+    await page.getByRole('button', { name: 'Editar hoja' }).click();
+
+    // El contenido real del archivo llega a la cuadrícula
+    const a1 = page.getByLabel('Celda A1', { exact: true });
+    await expect(a1).toHaveValue('Concepto');
+    await expect(page.getByLabel('Celda B2', { exact: true })).toHaveValue('12000');
+
+    // Se escribe encima como en Excel
+    await page.getByLabel('Celda A4', { exact: true }).fill('Transporte');
+    await page.getByLabel('Celda B4', { exact: true }).fill('4500');
+
+    const guardar = page.getByRole('button', { name: 'Guardar cambios' });
+    await expect(guardar).toBeEnabled();
+    await guardar.click();
+
+    await expect(page.getByText(/el archivo quedó actualizado/i)).toBeVisible();
+    expect(saved).toHaveLength(1);
+    // Se subió un .xlsx reconstruido de verdad, no un cuerpo vacío
+    expect(saved[0].bytes).toBeGreaterThan(1000);
+  });
+
+  test('un documento nuevo se escribe y se exporta a PDF', async ({ page, baseURL }) => {
+    const created = { title: '' };
+
+    await seedSession(page, baseURL!);
+    await mockAuthenticatedApi(page, {
+      '/events/evt-e2e-1': { ...EVENT, files: [] },
+      '/documents/event/evt-e2e-1': [],
+      '/vendor/event/evt-e2e-1': [],
+      '/documents': (route: Route) => {
+        const body = JSON.parse(route.request().postData() || '{}');
+        created.title = body.title;
+        return route.fulfill({
+          status: 201,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            id: 'doc-1',
+            title: body.title,
+            blocksJson: [{ type: 'p', text: '' }],
+            version: 1,
+            updatedAt: '2026-08-29T00:00:00.000Z',
+          }),
+        });
+      },
+      '/documents/doc-1': (route: Route) =>
+        route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            id: 'doc-1',
+            title: 'Acta de junta',
+            blocksJson: JSON.parse(route.request().postData() || '{}').blocks,
+            version: 2,
+            updatedAt: '2026-08-29T00:00:00.000Z',
+          }),
+        }),
+    });
+
+    await page.goto('/events/evt-e2e-1?tab=files');
+
+    await page.getByRole('button', { name: 'Nuevo documento' }).click();
+    expect(created.title).toBe('Documento sin título');
+
+    await page.locator('.docedit__title').fill('Acta de junta');
+    await page.locator('.docedit__text').first().fill('Acuerdos de la reunión del 28 de agosto.');
+
+    const guardar = page.getByRole('button', { name: 'Guardar', exact: true });
+    await expect(guardar).toBeEnabled();
+    await guardar.click();
+
+    await expect(page.getByText('Documento guardado')).toBeVisible();
+  });
+});

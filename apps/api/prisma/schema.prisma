@@ -163,6 +163,9 @@ model User {
   templateVersions    ChecklistTemplateVersion[]
   assignedTasks       TaskAssignment[]           @relation("TaskAssignee")
   createdTasks        TaskAssignment[]           @relation("TaskCreator")
+  filesEdited         EventFile[]                @relation("FileEditor")
+  documentsCreated    EventDocument[]            @relation("DocumentCreator")
+  documentsEdited     EventDocument[]            @relation("DocumentEditor")
   notifications       Notification[]             @relation("NotificationRecipient")
   notificationsSent   Notification[]             @relation("NotificationActor")
   auditLogs           AuditLog[]
@@ -205,6 +208,7 @@ model Event {
   campaign        Campaign?
   sponsors        Sponsor[]
   vendorPins      VendorPin[]
+  documents       EventDocument[]
 
   @@index([organizationId, entity])
 }
@@ -482,7 +486,38 @@ model EventFile {
   kind        String? // pdf | excel | image | other
   /// Sección del evento a la que pertenece: campaign | finance | general …
   module      String?
+  /// Sube cada vez que alguien guarda el archivo editado desde el panel
+  version     Int                @default(1)
+  updatedById String?
+  updatedBy   User?              @relation("FileEditor", fields: [updatedById], references: [id])
   createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @default(now()) @updatedAt
+
+  @@index([eventId, module])
+}
+
+/// Documento editable tipo Word: se escribe en el panel y se descarga en PDF.
+model EventDocument {
+  id           String   @id @default(cuid())
+  eventId      String
+  event        Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  /// Sección del evento: campaign | general …
+  module       String?
+  title        String
+  /// Bloques: [{ type: 'h1'|'h2'|'p'|'bullet'|'divider', text: string }]
+  blocksJson   Json
+  version      Int      @default(1)
+  /// Último PDF exportado, para no regenerarlo si nada cambió
+  pdfUrl       String?
+  pdfVersion   Int?
+  /// Cuando el documento nació de un PDF importado
+  sourceFileId String?
+  createdById  String?
+  createdBy    User?    @relation("DocumentCreator", fields: [createdById], references: [id])
+  updatedById  String?
+  updatedBy    User?    @relation("DocumentEditor", fields: [updatedById], references: [id])
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   @@index([eventId, module])
 }

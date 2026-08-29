@@ -13,7 +13,7 @@ export const TAB_LABELS: Record<Tab, string> = {
   ticketing: 'Boletera',
   tasks: 'Tareas',
   sponsors: 'Convenios y patrocinios',
-  files: 'Excel / PDF',
+  files: 'Documentos',
 };
 
 const VALID_TABS = new Set<string>(Object.keys(TAB_LABELS));

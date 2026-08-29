@@ -3948,3 +3948,319 @@ body.site-nav-open {
 .day-chip input {
   flex: 0 0 auto;
 }
+
+
+/* ── Editores embebidos: hoja de cálculo, PDF y documento ────────────────── */
+
+.sheet-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.65rem;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg-soft);
+}
+
+.sheet-toolbar__sheets {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0;
+}
+
+.sheet-toolbar__sheets select {
+  width: auto !important;
+  min-width: 140px;
+}
+
+/* Hoja de cálculo */
+.sheet-wrap {
+  overflow: auto;
+  max-height: 62vh;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg-elev);
+}
+
+.sheet {
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 0.82rem;
+  table-layout: fixed;
+}
+
+.sheet th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--bg-soft);
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+  text-align: center;
+  padding: 0.3rem 0.4rem;
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  min-width: 120px;
+}
+
+.sheet__corner,
+.sheet__rownum {
+  position: sticky;
+  left: 0;
+  z-index: 3;
+  min-width: 46px !important;
+  width: 46px;
+  background: var(--bg-soft);
+}
+
+.sheet__rownum {
+  top: auto;
+  z-index: 1;
+}
+
+.sheet td {
+  padding: 0;
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
+.sheet__cell {
+  width: 100% !important;
+  min-width: 120px;
+  padding: 0.35rem 0.45rem !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  font-size: 0.82rem;
+  outline-offset: -2px;
+}
+
+.sheet__cell:focus {
+  outline: 2px solid var(--accent);
+  background: hsla(0, 0%, 100%, 0.04) !important;
+}
+
+.sheet__cell[readonly] {
+  color: var(--muted);
+}
+
+/* PDF con escritura encima */
+.pdfedit {
+  display: grid;
+  gap: 1rem;
+  justify-items: center;
+  max-height: 70vh;
+  overflow: auto;
+  padding: 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #202024;
+}
+
+.pdfedit__page {
+  position: relative;
+  flex: 0 0 auto;
+  box-shadow: var(--shadow-md);
+  background: #fff;
+}
+
+.pdfedit__canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.pdfedit__overlay {
+  position: absolute;
+  inset: 0;
+}
+
+.pdfedit--placing .pdfedit__overlay {
+  cursor: crosshair;
+  background: rgba(201, 169, 98, 0.06);
+}
+
+.pdfedit__note {
+  position: absolute;
+  display: flex;
+  align-items: flex-start;
+  gap: 2px;
+  transform: translate(-2px, -2px);
+}
+
+.pdfedit__input {
+  width: auto !important;
+  min-width: 150px;
+  padding: 2px 4px !important;
+  border: 1px dashed var(--accent) !important;
+  border-radius: 3px !important;
+  background: rgba(255, 255, 255, 0.94) !important;
+  color: #111 !important;
+  line-height: 1.25;
+  resize: both;
+  font-family: Helvetica, Arial, sans-serif;
+}
+
+.pdfedit__grip,
+.pdfedit__del {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border: 0;
+  border-radius: 3px;
+  background: var(--accent);
+  color: #0a0a0a;
+  font-size: 0.7rem;
+  line-height: 1;
+  cursor: grab;
+  flex: 0 0 auto;
+}
+
+.pdfedit__del {
+  cursor: pointer;
+  background: var(--danger);
+  color: #fff;
+}
+
+/* Documento tipo Word */
+.docedit {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg-elev);
+  padding: 1.25rem clamp(1rem, 4vw, 2.5rem) 2rem;
+  max-width: 900px;
+}
+
+.docedit__title {
+  width: 100% !important;
+  padding: 0.25rem 0 !important;
+  border: 0 !important;
+  border-bottom: 1px solid var(--line) !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  font-family: var(--font-display);
+  font-size: 1.6rem !important;
+  font-weight: 600;
+  margin-bottom: 1rem;
+}
+
+.docedit__block {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr;
+  padding-left: 0;
+}
+
+.docedit__gutter {
+  position: absolute;
+  left: -2px;
+  top: -26px;
+  display: none;
+  align-items: center;
+  gap: 2px;
+  z-index: 2;
+  padding: 2px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: var(--bg-soft);
+  box-shadow: var(--shadow-sm);
+}
+
+.docedit__block:focus-within .docedit__gutter,
+.docedit__block:hover .docedit__gutter {
+  display: flex;
+}
+
+.docedit__gutter button {
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  line-height: 1;
+}
+
+.docedit__gutter button:hover {
+  background: hsla(0, 0%, 100%, 0.08);
+  color: var(--text);
+}
+
+.docedit__type {
+  width: auto !important;
+  padding: 0.15rem 0.3rem !important;
+  border: 0 !important;
+  background: transparent !important;
+  font-size: 0.72rem !important;
+  color: var(--muted) !important;
+}
+
+.docedit__text {
+  width: 100% !important;
+  padding: 0.2rem 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  resize: none;
+  overflow: hidden;
+  line-height: 1.55;
+  min-height: 1.6em;
+}
+
+.docedit__text:focus {
+  outline: 0;
+  background: hsla(0, 0%, 100%, 0.03) !important;
+}
+
+.docedit__block--h1 .docedit__text {
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin-top: 0.75rem;
+}
+
+.docedit__block--h2 .docedit__text {
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-top: 0.6rem;
+}
+
+.docedit__block--bullet .docedit__text {
+  padding-left: 1.35rem !important;
+}
+
+.docedit__block--bullet::before {
+  content: '•';
+  position: absolute;
+  left: 0.35rem;
+  top: 0.2rem;
+  color: var(--accent);
+}
+
+.docedit__divider {
+  border: 0;
+  border-top: 1px solid var(--line);
+  margin: 0.9rem 0;
+}
+
+.docedit__add {
+  margin-top: 1.25rem;
+  padding-top: 0.85rem;
+  border-top: 1px dashed var(--line);
+  flex-wrap: wrap;
+}
+
+/* Las tarjetas de archivo dejan de ser solo móvil: llevan más acciones */
+.file-card-list--always {
+  display: grid !important;
+}

@@ -4,6 +4,9 @@
   "private": true,
   "scripts": {
     "dev": "next dev -p 3000",
+    "copy-pdf-worker": "node scripts/copy-pdf-worker.mjs",
+    "predev": "npm run copy-pdf-worker",
+    "prebuild": "npm run copy-pdf-worker",
     "build": "next build",
     "start": "next start -p 3000",
     "start:e2e": "next start -p 3100 -H 127.0.0.1",
@@ -15,6 +18,8 @@
   "dependencies": {
     "@arta/rbac": "*",
     "next": "^14.2.35",
+    "pdf-lib": "^1.17.1",
+    "pdfjs-dist": "^4.10.38",
     "react": "18.2.0",
     "react-dom": "18.2.0",
     "xlsx": "^0.18.5"

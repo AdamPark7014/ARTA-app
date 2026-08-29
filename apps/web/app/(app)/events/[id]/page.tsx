@@ -243,7 +243,7 @@ function EventDetailInner() {
       { key: 'ticketing', label: 'Boletera', count: event.ticketingSetups?.length || 0 },
       { key: 'tasks', label: 'Tareas', count: event.tasks?.length || 0 },
       { key: 'sponsors', label: 'Convenios y patrocinios', count: event.sponsors?.length || 0 },
-      { key: 'files', label: 'Excel / PDF', count: event.files.length },
+      { key: 'files', label: 'Documentos', count: event.files.length },
     ] as const;
   }, [event, campaignFiles]);
 
@@ -944,6 +944,7 @@ function EventDetailInner() {
             onUploadFile={uploadCampaignFile}
             onReplaceFile={replaceCampaignFile}
             onDeleteFile={deleteCampaignFile}
+            onFilesChanged={load}
           />
         )}
 
@@ -993,12 +994,14 @@ function EventDetailInner() {
 
         {tab === 'files' && (
           <EventFilesPanel
+            eventId={id}
             closed={closed}
             files={event.files}
             previewFile={previewFile}
             setPreviewFile={setPreviewFile}
             onUpload={onUpload}
             onDeleteFile={deleteFile}
+            onFilesChanged={load}
           />
         )}
       </div>

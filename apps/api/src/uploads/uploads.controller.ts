@@ -1,6 +1,7 @@
 import {
   Controller,
   Post,
+  Put,
   Delete,
   Param,
   UploadedFile,
@@ -70,6 +71,25 @@ function ensureDir(path: string) {
   if (!existsSync(path)) mkdirSync(path, { recursive: true });
 }
 
+const MULTER_OPTIONS = {
+  storage: diskStorage({
+    destination: (_req: unknown, _file: unknown, cb: (e: Error | null, dest: string) => void) => {
+      ensureDir(uploadRoot);
+      cb(null, uploadRoot);
+    },
+    filename: (
+      _req: unknown,
+      file: Express.Multer.File,
+      cb: (e: Error | null, name: string) => void,
+    ) => {
+      const unique = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+      cb(null, `${unique}${extname(file.originalname).toLowerCase()}`);
+    },
+  }),
+  limits: { fileSize: 40 * 1024 * 1024 },
+  fileFilter,
+};
+
 @Controller('uploads')
 @UseGuards(JwtAuthGuard)
 export class UploadsController {
@@ -86,22 +106,7 @@ export class UploadsController {
   }
 
   @Post()
-  @UseInterceptors(
-    FileInterceptor('file', {
-      storage: diskStorage({
-        destination: (_req, _file, cb) => {
-          ensureDir(uploadRoot);
-          cb(null, uploadRoot);
-        },
-        filename: (_req, file, cb) => {
-          const unique = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
-          cb(null, `${unique}${extname(file.originalname).toLowerCase()}`);
-        },
-      }),
-      limits: { fileSize: 40 * 1024 * 1024 },
-      fileFilter,
-    }),
-  )
+  @UseInterceptors(FileInterceptor('file', MULTER_OPTIONS))
   async upload(
     @Req() req: { user: AuthUser },
     @UploadedFile() file: Express.Multer.File,
@@ -160,6 +165,68 @@ export class UploadsController {
       },
     });
     return record;
+  }
+
+  /**
+   * Guardar en el sitio.
+   *
+   * El panel deja editar el Excel en una hoja de cálculo y escribir encima del
+   * PDF; al guardar manda el archivo completo ya reconstruido y aquí se
+   * reemplaza el contenido **sin cambiar el id**, para que los enlaces que ya
+   * circulan sigan apuntando al mismo documento.
+   *
+   * El archivo anterior NO se borra del disco: queda como respaldo de la
+   * versión previa. La fila apunta al nuevo y sube `version`.
+   */
+  @Put(':id/content')
+  @UseInterceptors(FileInterceptor('file', MULTER_OPTIONS))
+  async saveInPlace(
+    @Req() req: { user: AuthUser },
+    @Param('id') id: string,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    if (!file) throw new BadRequestException('Archivo requerido');
+
+    const current = await this.prisma.eventFile.findUnique({
+      where: { id },
+      include: { event: true },
+    });
+    if (!current) throw new NotFoundException('Archivo no encontrado');
+    if (current.event) {
+      if (
+        !canAccessEventOps(
+          req.user.entities as EntityKey[],
+          req.user.roleKey as RoleKey,
+          current.event.entity as EntityKey,
+        )
+      ) {
+        throw new ForbiddenException('Sin acceso a archivos de este evento');
+      }
+      assertSameTenant(req.user, current.event.organizationId);
+      if (current.event.status === 'CLOSED' || current.event.status === 'CANCELLED') {
+        throw new ForbiddenException('Evento cerrado — los archivos quedan en solo lectura');
+      }
+    }
+
+    // El tipo no puede cambiar a media edición: un .xlsx se guarda como .xlsx.
+    const wasExt = extname(current.fileName || current.url).toLowerCase();
+    const nowExt = extname(file.originalname).toLowerCase();
+    if (wasExt && nowExt && wasExt !== nowExt) {
+      throw new BadRequestException(
+        `El archivo guardado debe seguir siendo ${wasExt} (llegó ${nowExt})`,
+      );
+    }
+
+    return this.prisma.eventFile.update({
+      where: { id },
+      data: {
+        url: `/uploads/${file.filename}`,
+        sizeBytes: file.size,
+        mimeType: file.mimetype || current.mimeType,
+        version: { increment: 1 },
+        updatedById: req.user.id,
+      },
+    });
   }
 
   @Delete(':id')

@@ -10,7 +10,7 @@ const TAB_HINTS: Record<Tab, string> = {
   ticketing: 'Configura boletera, zonas, aforo y ventas por zona.',
   tasks: 'Asigna pendientes al equipo con módulo, responsable y fecha.',
   sponsors: 'Patrocinios, aportes y contactos del evento.',
-  files: 'Archivos Excel y PDF ligados al show.',
+  files: 'Documentos del show: escribe actas y cartas aquí, edita el Excel en la hoja y escribe encima del PDF. Todo se guarda en el evento.',
 };
 
 type Props = {
