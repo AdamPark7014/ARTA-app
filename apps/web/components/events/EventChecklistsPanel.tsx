@@ -1,9 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { SignaturePad } from '@/components/ui/SignaturePad';
 import { FileViewer } from '@/components/files/FileViewer';
 import { PdfEditor } from '@/components/files/PdfEditor';
+import { ChecklistPdfEditor } from '@/components/files/ChecklistPdfEditor';
 import { createEventFile } from '@/lib/file-save';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { ChecklistPicker } from '@/components/events/ChecklistPicker';
@@ -51,6 +52,19 @@ export function EventChecklistsPanel({
   onFilesChanged,
 }: EventChecklistsPanelProps) {
   const [annotating, setAnnotating] = useState(false);
+  /**
+   * Cómo se captura el formato: escribiendo sobre el PDF (por defecto, si el
+   * generador ya dejó el mapa de campos) o en el formulario clásico.
+   */
+  const [mode, setMode] = useState<'pdf' | 'form'>('pdf');
+  const fieldMap = activeChecklist?.pdfFieldsJson;
+  const canWriteOnPdf = !!activeChecklist?.pdfUrl && !!fieldMap?.fields?.length;
+
+  // Al cambiar de formato se vuelve al modo que corresponda.
+  useEffect(() => {
+    setAnnotating(false);
+    setMode(canWriteOnPdf ? 'pdf' : 'form');
+  }, [activeChecklist?.id, canWriteOnPdf]);
   const sections = (activeChecklist?.dataJson?.sections || []).filter((s) => s.id !== 'firmas');
   const doneItems = sections.reduce(
     (acc, s) => acc + s.items.filter((i) => i.type === 'check' || !i.type ? i.done : !!i.value).length,
@@ -149,7 +163,50 @@ export function EventChecklistsPanel({
             ) : null}
 
             <div className="panel-body">
-              {sections.map((section) => (
+              <div className="checklist-mode">
+                <button
+                  className={mode === 'pdf' ? 'btn btn-sm' : 'btn ghost btn-sm'}
+                  type="button"
+                  disabled={!canWriteOnPdf}
+                  title={
+                    canWriteOnPdf
+                      ? 'Captura directamente sobre la hoja'
+                      : 'Pulsa «Generar PDF» para poder escribir sobre el formato'
+                  }
+                  onClick={() => setMode('pdf')}
+                >
+                  Escribir en el formato
+                </button>
+                <button
+                  className={mode === 'form' ? 'btn btn-sm' : 'btn ghost btn-sm'}
+                  type="button"
+                  onClick={() => setMode('form')}
+                >
+                  Formulario
+                </button>
+                {!canWriteOnPdf ? (
+                  <span className="muted kpi-sub">
+                    Este formato todavía no tiene el mapa del PDF. Pulsa «
+                    {activeChecklist.pdfUrl ? 'Regenerar' : 'Generar PDF'}» una vez y podrás escribir
+                    sobre la hoja.
+                  </span>
+                ) : null}
+              </div>
+
+              {mode === 'pdf' && canWriteOnPdf ? (
+                <ChecklistPdfEditor
+                  key={activeChecklist.id}
+                  url={activeChecklist.pdfUrl!}
+                  cacheKey={activeChecklist.pdfGeneratedAt || undefined}
+                  fieldMap={fieldMap!}
+                  sections={sections}
+                  canEdit={!closed}
+                  onUpdateItem={onUpdateItem}
+                />
+              ) : null}
+
+              {mode === 'form'
+                ? sections.map((section) => (
                 <div className="check-section" key={section.id}>
                   <h3>{section.title}</h3>
                   {section.items.map((item) => (
@@ -236,7 +293,8 @@ export function EventChecklistsPanel({
                     </div>
                   ))}
                 </div>
-              ))}
+                  ))
+                : null}
 
               <div className="check-section check-section--highlight">
                 <h3>Firmas digitales</h3>
@@ -259,7 +317,7 @@ export function EventChecklistsPanel({
                 </div>
               </div>
 
-              <div className="check-section">
+              <div className={`check-section ${mode === 'pdf' ? 'is-hidden' : ''}`}>
                 <div className="check-section__head">
                   <h3>{annotating ? 'Escribiendo sobre el PDF' : 'Vista previa PDF'}</h3>
                   {activeChecklist.pdfUrl && !closed ? (

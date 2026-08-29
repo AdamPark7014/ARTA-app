@@ -20,6 +20,21 @@ export type Checklist = {
   template?: { key: string };
   pdfUrl?: string | null;
   pdfGeneratedAt?: string | null;
+  /** Dónde quedó cada dato dentro del PDF, para escribir encima del documento */
+  pdfFieldsJson?: {
+    pageWidth: number;
+    pageHeight: number;
+    fields: Array<{
+      sectionId: string;
+      itemId: string;
+      type: 'check' | 'value';
+      page: number;
+      x: number;
+      y: number;
+      w: number;
+      h: number;
+    }>;
+  } | null;
   deliveredAt?: string | null;
   deliveredBy?: { fullName: string } | null;
   deliveredSignature?: SigPayload | null;

@@ -1,0 +1,96 @@
+{
+  "pageWidth": 612,
+  "pageHeight": 792,
+  "fields": [
+    {
+      "sectionId": "general",
+      "itemId": "venue",
+      "type": "value",
+      "page": 0,
+      "x": 86.96000000000001,
+      "y": 187.82999999999996,
+      "w": 477.04,
+      "h": 12
+    },
+    {
+      "sectionId": "general",
+      "itemId": "fecha",
+      "type": "value",
+      "page": 0,
+      "x": 132.8,
+      "y": 201.70199999999997,
+      "w": 431.2,
+      "h": 12
+    },
+    {
+      "sectionId": "general",
+      "itemId": "contacto",
+      "type": "value",
+      "page": 0,
+      "x": 127.54,
+      "y": 215.57399999999998,
+      "w": 436.46,
+      "h": 12
+    },
+    {
+      "sectionId": "general",
+      "itemId": "aforo",
+      "type": "value",
+      "page": 0,
+      "x": 126.28,
+      "y": 229.446,
+      "w": 437.72,
+      "h": 12
+    },
+    {
+      "sectionId": "produccion",
+      "itemId": "audio",
+      "type": "check",
+      "page": 0,
+      "x": 48,
+      "y": 268.4032,
+      "w": 12.23,
+      "h": 12
+    },
+    {
+      "sectionId": "produccion",
+      "itemId": "luces",
+      "type": "check",
+      "page": 0,
+      "x": 48,
+      "y": 282.27520000000004,
+      "w": 12.23,
+      "h": 12
+    },
+    {
+      "sectionId": "produccion",
+      "itemId": "planta",
+      "type": "check",
+      "page": 0,
+      "x": 48,
+      "y": 296.14720000000005,
+      "w": 12.23,
+      "h": 12
+    },
+    {
+      "sectionId": "produccion",
+      "itemId": "rider",
+      "type": "check",
+      "page": 0,
+      "x": 48,
+      "y": 310.01920000000007,
+      "w": 12.23,
+      "h": 12
+    },
+    {
+      "sectionId": "produccion",
+      "itemId": "notas",
+      "type": "value",
+      "page": 0,
+      "x": 172.05,
+      "y": 323.8912000000001,
+      "w": 391.95,
+      "h": 12
+    }
+  ]
+}

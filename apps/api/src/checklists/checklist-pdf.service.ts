@@ -25,6 +25,33 @@ type SignaturePayload = {
   signedAt?: string;
 };
 
+/**
+ * Dónde quedó cada dato dentro del PDF.
+ *
+ * El PDF lo genera este servicio, así que puede decir en qué página y en qué
+ * coordenadas escribió cada ítem. El panel usa ese mapa para poner un campo de
+ * captura justo encima, y así se escribe **sobre el documento** en vez de en un
+ * formulario aparte que lo controle.
+ *
+ * Coordenadas en puntos PDF desde la esquina superior izquierda de la página.
+ */
+export type PdfField = {
+  sectionId: string;
+  itemId: string;
+  type: 'check' | 'value';
+  page: number;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+};
+
+export type PdfFieldMap = {
+  pageWidth: number;
+  pageHeight: number;
+  fields: PdfField[];
+};
+
 type PdfInput = {
   title: string;
   eventName: string;
@@ -75,15 +102,28 @@ export class ChecklistPdfService {
     return existsSync(full) ? full : null;
   }
 
-  async generate(checklistId: string, input: PdfInput): Promise<{ url: string; filePath: string }> {
+  async generate(
+    checklistId: string,
+    input: PdfInput,
+  ): Promise<{ url: string; filePath: string; fieldMap: PdfFieldMap }> {
     const dir = this.uploadRoot();
     const fileName = `${checklistId}.pdf`;
     const filePath = join(dir, fileName);
+
+    const PAGE_WIDTH = 612;
+    const PAGE_HEIGHT = 792;
+    const fields: PdfField[] = [];
 
     await new Promise<void>((resolve, reject) => {
       const doc = new PDFDocument({ size: 'LETTER', margin: 48 });
       const stream = createWriteStream(filePath);
       doc.pipe(stream);
+
+      // La primera página existe al crear el documento y no dispara el evento.
+      let pageIndex = 0;
+      doc.on('pageAdded', () => {
+        pageIndex += 1;
+      });
 
       const accent = input.entity === 'EXPLANADA' ? '#1f5c50' : '#8b6914';
       const left = 48;
@@ -131,12 +171,40 @@ export class ChecklistPdfService {
 
         for (const item of section.items || []) {
           if (doc.y > 720) doc.addPage();
+          const top = doc.y;
+          const page = pageIndex;
+
           if (item.type === 'check' || !item.type) {
             const mark = item.done ? '[X]' : '[ ]';
+            const markWidth = doc.widthOfString('[X]');
             doc.text(`${mark}  ${item.label}`);
+            fields.push({
+              sectionId: section.id,
+              itemId: item.id,
+              type: 'check',
+              page,
+              x: left,
+              y: top,
+              w: markWidth,
+              h: 12,
+            });
           } else {
-            const val = item.value === null || item.value === undefined || item.value === '' ? '______________' : String(item.value);
+            const val =
+              item.value === null || item.value === undefined || item.value === ''
+                ? '______________'
+                : String(item.value);
+            const labelWidth = doc.widthOfString(`${item.label}: `);
             doc.text(`${item.label}: ${val}`);
+            fields.push({
+              sectionId: section.id,
+              itemId: item.id,
+              type: 'value',
+              page,
+              x: left + labelWidth,
+              y: top,
+              w: Math.max(60, pageRight - left - labelWidth),
+              h: 12,
+            });
           }
           doc.moveDown(0.2);
         }
@@ -161,7 +229,11 @@ export class ChecklistPdfService {
       stream.on('error', reject);
     });
 
-    return { url: `/uploads/checklists/${fileName}`, filePath };
+    return {
+      url: `/uploads/checklists/${fileName}`,
+      filePath,
+      fieldMap: { pageWidth: PAGE_WIDTH, pageHeight: PAGE_HEIGHT, fields },
+    };
   }
 
   private drawSignatureBlock(
@@ -213,7 +285,7 @@ export class ChecklistPdfService {
       select: { boletera: true, logoUrl: true },
     });
 
-    const { url } = await this.generate(checklistId, {
+    const { url, fieldMap } = await this.generate(checklistId, {
       title: item.title,
       eventName: item.event.name,
       entity: item.event.entity,
@@ -236,7 +308,11 @@ export class ChecklistPdfService {
 
     return this.prisma.checklistInstance.update({
       where: { id: checklistId },
-      data: { pdfUrl: url, pdfGeneratedAt: new Date() },
+      data: {
+        pdfUrl: url,
+        pdfGeneratedAt: new Date(),
+        pdfFieldsJson: fieldMap as unknown as Prisma.InputJsonValue,
+      },
       include: {
         template: true,
         lastEditedBy: { select: { id: true, fullName: true, email: true } },

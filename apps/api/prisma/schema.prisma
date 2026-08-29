@@ -279,6 +279,8 @@ model ChecklistInstance {
   /// PDF generado desde la plantilla (se regenera al guardar)
   pdfUrl              String?
   pdfGeneratedAt      DateTime?
+  /// Dónde quedó cada dato dentro del PDF, para escribir encima del documento
+  pdfFieldsJson       Json?
   /// Firma digital "Entregado"
   deliveredAt         DateTime?
   deliveredById       String?

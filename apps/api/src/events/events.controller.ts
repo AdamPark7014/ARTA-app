@@ -196,7 +196,7 @@ export class EventsController {
       });
 
       // PDF base editable/descargable desde el momento de crear el check
-      const { url } = await this.pdfs.generate(instance.id, {
+      const { url, fieldMap } = await this.pdfs.generate(instance.id, {
         title: t.name,
         eventName: event.name,
         entity: event.entity,
@@ -212,7 +212,11 @@ export class EventsController {
       });
       await this.prisma.checklistInstance.update({
         where: { id: instance.id },
-        data: { pdfUrl: url, pdfGeneratedAt: new Date() },
+        data: {
+          pdfUrl: url,
+          pdfGeneratedAt: new Date(),
+          pdfFieldsJson: fieldMap as unknown as Prisma.InputJsonValue,
+        },
       });
       await this.prisma.eventFile.create({
         data: {

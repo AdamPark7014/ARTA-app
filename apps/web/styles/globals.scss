@@ -4285,3 +4285,97 @@ body.site-nav-open {
   border: 0;
   font-size: 0.92rem;
 }
+
+
+/* ── Escribir directamente sobre el PDF del checklist ────────────────────── */
+
+.checklist-mode {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.9rem;
+}
+
+.is-hidden {
+  display: none !important;
+}
+
+/* En modo campos el PDF manda: se ve completo, sin recorte de altura */
+.pdfedit--fields {
+  max-height: none;
+  background: #23232a;
+}
+
+.pdfedit__overlay--fields {
+  cursor: default;
+}
+
+/* Cada dato del formato, encima de donde el generador lo imprimió.
+   Fondo opaco: tapa el valor viejo mientras el PDF no se regenera. */
+.shell .pdffield,
+.pdffield {
+  color-scheme: light;
+  position: absolute;
+  display: block;
+  margin: 0;
+  padding: 0 2px !important;
+  border: 1px solid transparent !important;
+  border-radius: 2px !important;
+  background: #fff !important;
+  color: #111 !important;
+  font-family: Helvetica, Arial, sans-serif;
+  line-height: 1.1;
+  box-sizing: border-box;
+}
+
+.shell .pdffield:hover,
+.pdffield:hover {
+  border-color: color-mix(in srgb, var(--accent) 70%, #fff) !important;
+  background: #fffdf5 !important;
+}
+
+.shell .pdffield:focus,
+.shell .pdffield:focus-within,
+.pdffield:focus,
+.pdffield:focus-within {
+  outline: 2px solid var(--accent);
+  outline-offset: 0;
+  background: #fffdf5 !important;
+}
+
+.pdffield__input {
+  width: auto;
+  min-width: 0;
+}
+
+.pdffield__input::placeholder {
+  color: #b9b2a4;
+}
+
+.pdffield--check {
+  display: grid;
+  place-items: center;
+  padding: 0 !important;
+  cursor: pointer;
+}
+
+.shell .pdffield--check input,
+.pdffield--check input {
+  width: auto !important;
+  color-scheme: light;
+  background: #fff !important;
+  appearance: auto;
+  margin: 0;
+  accent-color: #8b6914;
+  cursor: pointer;
+}
+
+.shell .pdffield[readonly],
+.shell .pdffield:disabled,
+.pdffield[readonly],
+.pdffield:disabled {
+  background: #f4f2ee !important;
+  color: #555 !important;
+  cursor: default;
+}
