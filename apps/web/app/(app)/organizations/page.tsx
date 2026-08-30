@@ -251,7 +251,7 @@ export default function OrganizationsPage() {
         : 'error';
 
   return (
-    <AppShell title="Organizaciones · Multi-tenant">
+    <AppShell title="Organizaciones">
       <div className="stack page-workspace">
         <PageHeader description="Tenants aislados (usuarios + eventos). Planes TRIAL / OPS / ENTERPRISE con límites soft enforced en API (crear usuarios, invites y eventos)." />
         {msg ? (

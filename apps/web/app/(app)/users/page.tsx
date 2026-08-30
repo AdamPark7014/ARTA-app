@@ -204,7 +204,7 @@ export default function UsersPage() {
         : 'error';
 
   return (
-    <AppShell title="Usuarios · acceso">
+    <AppShell title="Usuarios">
       <div className="page-workspace stack">
         <PageHeader
           description="Cuentas del equipo: actividad, riesgo, bloqueos y privilegios. Solo dirección gestiona usuarios; el rol define el acceso base y los permisos extra se suman."

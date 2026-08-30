@@ -80,6 +80,10 @@ DocEditor ExpandBox; password inline; revocar sesiones.
 seed no pisa ACL; flash error/success en hub; try/catch mutaciones; healthchecks
 compose + backup/rollback; OC nav sin `checklist.edit`; docs Traefik/Nexara.
 
+**Hosts polish (2026-08-30):** nav/títulos 100 % ES; wordmark EXPLANADA a la par;
+sitio público sin teléfono falso + stats de marca; Studio/preview ES; portal PIN
+y login/invite en español formal (Proveedor). Desplegado a los 3 hosts.
+
 ### Fase P2 — Operación y escala
 
 | ID | Trabajo | Estado |

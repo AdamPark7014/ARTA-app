@@ -111,7 +111,7 @@ export default function AdvancesPage() {
     msg.includes('registrado') ? 'success' : msg.toLowerCase().includes('error') ? 'error' : 'info';
 
   return (
-    <AppShell title="Anticipos · Cash control">
+    <AppShell title="Anticipos">
       <div className="stack page-workspace">
         <PageHeader
           description="Control de anticipos y comprobantes ligados a eventos. Compara portfolio vs evento seleccionado."

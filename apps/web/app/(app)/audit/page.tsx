@@ -78,7 +78,7 @@ export default function AuditPage() {
   const filterActive = !!resource || !!q.trim();
 
   return (
-    <AppShell title="Compliance · Audit">
+    <AppShell title="Auditoría">
       <div className="stack page-workspace">
         <PageHeader
           description="Inteligencia de auditoría: volumen, actores, acciones destructivas y anomalías (30 días)."

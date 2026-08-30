@@ -117,7 +117,7 @@ function EventDetailInner() {
     Array<{ id: string; label: string; scopes: string[]; active: boolean; expiresAt?: string | null }>
   >([]);
   const [pinForm, setPinForm] = useState({
-    label: 'Vendor',
+    label: 'Proveedor',
     pin: '',
     scopes: ['files', 'checklists'] as string[],
     expiresAt: '',
@@ -721,10 +721,10 @@ function EventDetailInner() {
         }),
       });
       setRevealedPin({ path: res.portalPath, pin: res.pin });
-      setPinForm({ label: 'Vendor', pin: '', scopes: ['files', 'checklists'], expiresAt: '' });
+      setPinForm({ label: 'Proveedor', pin: '', scopes: ['files', 'checklists'], expiresAt: '' });
       const list = await api<typeof vendorPins>(`/vendor/event/${id}`);
       setVendorPins(list);
-      flash('PIN vendor creado — cópialo ahora');
+      flash('PIN de proveedor creado — cópialo ahora');
     } catch (e) {
       flash(e instanceof Error ? e.message : 'Error al crear PIN', 'error');
     }

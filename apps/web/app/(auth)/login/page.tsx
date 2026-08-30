@@ -170,7 +170,7 @@ function LoginForm() {
 
         title: 'Panel Auditorio Arema',
 
-        hint: 'Explanada · operación y cierre del venue',
+        hint: 'Explanada · operación y cierre del auditorio',
 
       };
 
@@ -182,7 +182,7 @@ function LoginForm() {
 
         title: 'Panel Arta Producciones',
 
-        hint: 'Eventos, checklists, finanzas y Studio',
+        hint: 'Eventos, formatos, finanzas y Studio',
 
       };
 
@@ -230,7 +230,7 @@ function LoginForm() {
 
             Operación de eventos Arta Producciones y Auditorio Arema Explanada.
 
-            Checklists, finanzas, boletera y Studio en un solo panel.
+            Formatos, finanzas, boletera y Studio en un solo panel.
 
           </p>
 

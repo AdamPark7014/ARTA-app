@@ -171,7 +171,9 @@ export function AppShell({
               priority
             />
           ) : (
-            <div className="brand brand--text">explanada</div>
+            <div className="brand-wordmark" aria-label="EXPLANADA · Auditorio Arema">
+              <span className="brand-wordmark__mark">EXPLANADA</span>
+            </div>
           )}
           <span>{brandSub}</span>
         </div>

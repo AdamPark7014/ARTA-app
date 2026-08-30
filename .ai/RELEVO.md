@@ -12,37 +12,33 @@ y Next 14 App Router (`apps/web`), monorepo npm workspaces + turbo.
 
 ## Hecho en este turno
 
-**Sistema super robusto** (plan P0 → P1 → P2 + deploy).
+**Hosts polish** — profesionalización visual/copy en los 4 hosts (sitio, arta,
+auditorio, PIN/auth). Sin módulos CRUD nuevos.
 
-### P0 — Integridad
+### A — Panel unificado
 
-1. `regenerateForEvent` salta instancias con `authorizedAt` /
-   `authorizedSignature` (boletera no reescribe PDFs firmados).
-2. Seed `update`: solo `fullName` / `title`; no pisa `roleKey`, `entities`,
-   `permissions`, `active`; membership `update: {}`.
-3. Hub evento: `flash()` + `msgVariant` (success vs error).
+1. Nav 100 % ES en `access-matrix.ts` (Inicio, Auditoría, Resúmenes, Hospedaje,
+   Riesgo, PIN proveedores) + tab evento Checklists→Formatos.
+2. Títulos `AppShell` sin jerga EN (Finanzas, OC, Campañas, Auditoría, etc.).
+3. Wordmark tipográfico EXPLANADA + `globals.scss` `data-entity` polish.
+4. Empty states más claros en `ModuleChecklistIndex`.
 
-### P1 — Fiabilidad
+### B — Sitio público + Studio
 
-4. try/catch en mutaciones del hub (firma, OC, uploads, close/reopen/cancel,
-   tasks, sponsors, PIN, etc.).
-5. Compose: API health `/ready`; web `/login` + `depends_on` api healthy.
-6. `update.sh`: pg_dump → `/root/arta-backups/`; tags `arta-web:prev` /
-   `arta-api:prev`. Nuevo `deploy/rollback.sh`.
-7. Nav OC sin `checklist.edit` (solo `po.authorize` | `po.mark_paid` |
-   `everything`).
+5. Sin teléfono placeholder; stats de marca (Shows / Puebla / Experiencia);
+   aria-labels ES en carrusel.
+6. Studio y vista previa del sitio: labels ES (Titular, Botón, Borrador).
 
-### P2 — Pruebas y docs
+### C — PIN + auth
 
-8. Playwright `apps/web/e2e/hub-critical.spec.ts` (campaña, Esc dirty, OC
-   window, corrida).
-9. Guía HTML: menú nuevo, Más herramientas, ExpandBox, Ctrl+S, campaña Excel.
-10. `DOMAINS.md`: hook post-deploy Nexara + backup/rollback.
-11. `PLAN_PROFESIONALIZACION_UI.md`: P1-3/P1-4 y gap table actualizados.
+7. Portal `/v/[pinId]` Acceso proveedor; label default Proveedor en hub.
+8. Login/invite copy alineado a entidad (Auditorio Arema · Explanada).
 
-### Verificación
+### D — Cierre
 
-- `npx tsc --noEmit` en `apps/web` y `apps/api` verde.
+9. `npx tsc --noEmit` en `apps/web`.
+10. Nota hosts polish en `PLAN_PROFESIONALIZACION_UI.md`.
+11. Deploy bundle + smoke 3 hosts.
 
 ## Decisiones de diseño que hay que respetar
 
@@ -50,6 +46,7 @@ y Next 14 App Router (`apps/web`), monorepo npm workspaces + turbo.
 - Campaña: editar tabla en Excel; PDF = vista/anotación.
 - No regenerar checklists autorizados en bloque.
 - Seed no pisa `passwordHash` ni ACL en update.
+- Marca Explanada = wordmark tipográfico (no hay PNG Arema en `public/brand/`).
 
 ## A medias — CUIDADO
 
@@ -59,9 +56,8 @@ y Next 14 App Router (`apps/web`), monorepo npm workspaces + turbo.
 
 ## Siguiente paso
 
-1. Smoke prod: boletera no toca PDF firmado; Usuarios cambiar rol → restart
-   API → rol intacto; hub flash rojo si falla guardar; Esc dirty.
-2. Adam: deploy key + hook Nexara post-deploy.
+1. Adam: deploy key + hook Nexara post-deploy.
+2. Smoke manual opcional: panel auditorio wordmark; sitio sin tel falso.
 3. Opcional: backfill `--include-signed` solo si Adam lo pide.
 
 ## No tocar

@@ -6,7 +6,7 @@ import type { Tab } from './event-detail.types';
 
 export const TAB_LABELS: Record<Tab, string> = {
   overview: 'Resumen',
-  checklists: 'Checklists',
+  checklists: 'Formatos',
   ocs: 'Órdenes de compra',
   finance: 'Corrida',
   campaign: 'Campaña',

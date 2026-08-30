@@ -150,7 +150,7 @@ export default function VendorPinsPage() {
   }
 
   return (
-    <AppShell title="Vendor PIN · Acceso externo">
+    <AppShell title="PIN proveedores">
       <div className="stack page-workspace">
         <PageHeader description="PINs de acceso limitado para proveedores (archivos / checklists / hospitality). Portal público en /v/[pinId]." />
 

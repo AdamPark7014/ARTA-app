@@ -91,7 +91,7 @@ export default function RiskWorkspacePage() {
   );
 
   return (
-    <AppShell title="Risk workspace · Ops">
+    <AppShell title="Riesgo">
       <div className="stack page-workspace">
         <PageHeader
           description={`Vista cruzada de riesgo operativo por disciplina (checklists). Drill-down a cada índice · ${entity}.`}

@@ -5,7 +5,7 @@ import { ModuleChecklistIndex } from '@/components/ops/ModuleChecklistIndex';
 export default function ArtsPage() {
   return (
     <ModuleChecklistIndex
-      title="Artes / Shows"
+      title="Artes"
       description="Entregables de artes, deadlines y aprobaciones."
       hint="Artes y piezas visuales suelen ser cuello de botella — prioriza deadlines y entregables sin autorizar."
       templateKeys={['ARTES_SHOWS']}

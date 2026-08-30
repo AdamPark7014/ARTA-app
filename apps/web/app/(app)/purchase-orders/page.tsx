@@ -121,7 +121,7 @@ export default function PurchaseOrdersPage() {
   const k = data?.kpis;
 
   return (
-    <AppShell title="Procurement · OC">
+    <AppShell title="Órdenes de compra">
       <div className="stack page-workspace">
         <PageHeader
           description="Control tower de compras: pipeline de cash, aging, tasa de autorización y cola prioritaria."

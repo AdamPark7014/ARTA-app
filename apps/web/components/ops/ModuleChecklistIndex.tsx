@@ -232,12 +232,12 @@ export function ModuleChecklistIndex({
                   <EmptyState
                     title={
                       (data?.rows.length || 0) === 0
-                        ? 'Sin instancias de esta disciplina'
+                        ? `Aún no hay formatos de ${title.toLowerCase()} en esta entidad`
                         : 'Sin registros en este filtro'
                     }
                     description={
                       (data?.rows.length || 0) === 0
-                        ? `Al crear un evento se generan checklists ${templateKeys.join(', ')}. Empieza desde Eventos → Nuevo evento.`
+                        ? `Cuando crees un evento se generan los formatos ${templateKeys.join(', ')}. Empieza en Eventos → Nuevo evento y ábrelos desde el hub del show.`
                         : 'Prueba otro término o quita filtros de riesgo e incompletos.'
                     }
                     actionHref="/events/new"

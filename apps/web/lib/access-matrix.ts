@@ -65,7 +65,7 @@ export const HIDDEN_NAV_GROUP = 'Vistas de portafolio';
  * del hub de cada evento.
  */
 export const NAV_ITEMS: NavItem[] = [
-  { href: '/dashboard', label: 'Dashboard', group: 'Inicio', exact: true },
+  { href: '/dashboard', label: 'Inicio', group: 'Inicio', exact: true },
 
   // ── Eventos: las cuatro entradas que pidió la junta ────────────────────────
   {
@@ -159,10 +159,11 @@ export const NAV_ITEMS: NavItem[] = [
   },
   {
     href: '/audit',
-    label: 'Audit log',
+    label: 'Auditoría',
     permissions: ['users.manage', 'everything'],
     roles: ['dir_general', 'super_admin'],
     group: 'Admin',
+    keywords: 'audit log cumplimiento',
   },
   {
     href: '/webhooks',
@@ -173,10 +174,11 @@ export const NAV_ITEMS: NavItem[] = [
   },
   {
     href: '/digests',
-    label: 'Digests / Jobs',
+    label: 'Resúmenes',
     permissions: ['users.manage', 'everything'],
     roles: ['dir_general', 'super_admin'],
     group: 'Admin',
+    keywords: 'digests jobs outbox',
   },
 
   // ── Fuera del menú: vistas de portafolio (buscador del sidebar) ───────────
@@ -235,12 +237,12 @@ export const NAV_ITEMS: NavItem[] = [
   },
   {
     href: '/hospitality',
-    label: 'Hospitality',
+    label: 'Hospedaje',
     permissions: ['checklist.edit', 'event.create', 'everything'],
     group: HIDDEN_NAV_GROUP,
     requiresEventOps: true,
     hidden: true,
-    keywords: 'hospedaje hotel',
+    keywords: 'hospitality hotel rider',
   },
   {
     href: '/transport',
@@ -284,12 +286,12 @@ export const NAV_ITEMS: NavItem[] = [
   },
   {
     href: '/risk',
-    label: 'Risk workspace',
+    label: 'Riesgo',
     permissions: ['checklist.edit', 'event.create', 'everything'],
     group: HIDDEN_NAV_GROUP,
     requiresEventOps: true,
     hidden: true,
-    keywords: 'riesgo alertas',
+    keywords: 'risk workspace alertas criticos',
   },
   {
     href: '/maintenance',
@@ -302,12 +304,12 @@ export const NAV_ITEMS: NavItem[] = [
   },
   {
     href: '/vendor',
-    label: 'Vendor PIN',
+    label: 'PIN proveedores',
     permissions: ['vendor.pin', 'everything'],
     group: HIDDEN_NAV_GROUP,
     requiresEventOps: true,
     hidden: true,
-    keywords: 'proveedor acceso',
+    keywords: 'vendor pin acceso externo',
   },
 ];
 

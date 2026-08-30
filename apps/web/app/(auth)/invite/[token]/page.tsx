@@ -42,7 +42,7 @@ const ENTITY_LABELS: Record<string, string> = {
 
   ARTA: 'Arta Producciones',
 
-  EXPLANADA: 'Auditorio Arema',
+  EXPLANADA: 'Auditorio Arema · Explanada',
 
 };
 
@@ -212,7 +212,7 @@ export default function AcceptInvitePage() {
 
         </div>
 
-        <p className="eyebrow">arta ops · invitación</p>
+        <p className="eyebrow">Invitación al panel</p>
 
         {loading ? <LoadingBlock rows={4} label="Validando invitación…" /> : null}
 

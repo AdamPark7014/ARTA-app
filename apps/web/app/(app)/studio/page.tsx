@@ -52,7 +52,7 @@ const SECTION_META: Record<string, string> = {
   home_hero: 'Hero (textos)',
   home_about: 'Nosotros',
   home_modulos: 'Módulos',
-  home_cta: 'CTA / contacto',
+  home_cta: 'Contacto',
 };
 
 const STUDIO_TABS: Array<{ key: Tab; label: string }> = [
@@ -361,9 +361,9 @@ export default function StudioPage() {
     await load();
   }
 
-  const previewHeadline = draft.headline || 'Headline del sitio';
+  const previewHeadline = draft.headline || 'Titular del sitio';
   const previewBody = draft.body || draft.sub || 'Texto de apoyo editable en Studio.';
-  const previewCta = draft.cta || 'CTA';
+  const previewCta = draft.cta || 'Botón';
 
   return (
     <AppShell title="Studio · Sitio Arta">
@@ -376,7 +376,7 @@ export default function StudioPage() {
             Ver sitio live
           </Link>
           <ActionLink href="/site" variant="ghost">
-            Preview autenticado
+            Vista previa
           </ActionLink>
         </PageHeader>
 
@@ -404,7 +404,7 @@ export default function StudioPage() {
                 <div className="kpi-sub muted">{news.filter((n) => n.published).length} publicadas</div>
               </div>
               <div className={`kpi ${draftsCount ? 'kpi--danger' : ''}`}>
-                <div className="label">Off / borradores</div>
+                <div className="label">Borradores</div>
                 <div className="value">{draftsCount}</div>
                 <div className="kpi-sub muted">Incluye slides inactivos</div>
               </div>
@@ -447,7 +447,7 @@ export default function StudioPage() {
                   <div className="panel-body">
                     <div className="form">
                       <label>
-                        URL de imagen (full-bleed)
+                        URL de imagen (pantalla completa)
                         <input
                           value={slideForm.imageUrl}
                           onChange={(e) => setSlideForm({ ...slideForm, imageUrl: e.target.value })}
@@ -501,14 +501,14 @@ export default function StudioPage() {
                       </FormGrid>
                       <FormGrid>
                         <label>
-                          CTA
+                          Botón
                           <input
                             value={slideForm.ctaLabel}
                             onChange={(e) => setSlideForm({ ...slideForm, ctaLabel: e.target.value })}
                           />
                         </label>
                         <label>
-                          CTA link
+                          Enlace del botón
                           <input
                             value={slideForm.ctaHref}
                             onChange={(e) => setSlideForm({ ...slideForm, ctaHref: e.target.value })}
@@ -530,7 +530,7 @@ export default function StudioPage() {
                     {!slides.length ? (
                       <EmptyState
                         title="Carrusel vacío"
-                        description="Sube una imagen full-bleed y define título + CTA."
+                        description="Sube una imagen a pantalla completa y define título + botón."
                         steps={['Sube o pega URL', 'Título / subtítulo', 'Agregar al carrusel']}
                       />
                     ) : (
@@ -591,7 +591,7 @@ export default function StudioPage() {
                                   </FormGrid>
                                   <FormGrid>
                                     <label>
-                                      CTA
+                                      Botón
                                       <input
                                         value={editSlideDraft.ctaLabel}
                                         onChange={(e) =>
@@ -600,7 +600,7 @@ export default function StudioPage() {
                                       />
                                     </label>
                                     <label>
-                                      CTA link
+                                      Enlace del botón
                                       <input
                                         value={editSlideDraft.ctaHref}
                                         onChange={(e) =>
@@ -649,12 +649,12 @@ export default function StudioPage() {
                                   <div className="row">
                                     <strong>{s.title || 'Sin título'}</strong>
                                     <span className={`badge ${s.active ? 'ok' : 'warn'}`}>
-                                      {s.active ? 'Activo' : 'Off'}
+                                      {s.active ? 'Activo' : 'Borrador'}
                                     </span>
                                   </div>
                                   <div className="kpi-sub muted">{s.subtitle || '—'}</div>
                                   <div className="kpi-sub muted">
-                                    {s.ctaLabel || 'CTA'} → {s.ctaHref || '#'}
+                                    {s.ctaLabel || 'Botón'} → {s.ctaHref || '#'}
                                   </div>
                                   <div className="row row--tight">
                                     <button className="btn ghost btn-sm" type="button" onClick={() => toggleSlide(s)}>
@@ -879,14 +879,14 @@ export default function StudioPage() {
                         {sectionKey === 'home_hero' ? (
                           <FormGrid>
                             <label>
-                              Brand
+                              Marca
                               <input
                                 value={draft.brand || ''}
                                 onChange={(e) => setDraft({ ...draft, brand: e.target.value })}
                               />
                             </label>
                             <label>
-                              Brand sub
+                              Submarca
                               <input
                                 value={draft.brandSub || ''}
                                 onChange={(e) => setDraft({ ...draft, brandSub: e.target.value })}
@@ -895,7 +895,7 @@ export default function StudioPage() {
                           </FormGrid>
                         ) : null}
                         <label>
-                          Headline
+                          Titular
                           <input
                             value={draft.headline || ''}
                             onChange={(e) => setDraft({ ...draft, headline: e.target.value })}
@@ -918,14 +918,14 @@ export default function StudioPage() {
                         </label>
                         <FormGrid>
                           <label>
-                            CTA
+                            Botón
                             <input
                               value={draft.cta || ''}
                               onChange={(e) => setDraft({ ...draft, cta: e.target.value })}
                             />
                           </label>
                           <label>
-                            CTA href
+                            Enlace del botón
                             <input
                               value={draft.ctaHref || ''}
                               onChange={(e) => setDraft({ ...draft, ctaHref: e.target.value })}
@@ -946,7 +946,7 @@ export default function StudioPage() {
 
                   <div className="panel studio-preview">
                     <div className="panel-head">
-                      <h2>Preview</h2>
+                      <h2>Vista previa</h2>
                       <span className="kpi-sub muted">No publicado hasta guardar</span>
                     </div>
                     <div className="panel-body">

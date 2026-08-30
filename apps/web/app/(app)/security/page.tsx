@@ -87,7 +87,7 @@ export default function SecurityPage() {
       : 'error';
 
   return (
-    <AppShell title="Seguridad · 2FA & sesiones">
+    <AppShell title="Seguridad">
       <div className="stack page-workspace">
         <PageHeader
           description="Protege tu cuenta: autenticación en dos pasos, sesiones activas y cookie segura."

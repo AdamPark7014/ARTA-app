@@ -29,6 +29,19 @@
   --accent-deep: var(--explanada-deep);
 }
 
+[data-entity='EXPLANADA'] .sidebar {
+  border-right-color: color-mix(in srgb, var(--explanada) 18%, var(--line));
+}
+
+[data-entity='EXPLANADA'] .brand {
+  padding-bottom: 0.15rem;
+}
+
+[data-entity='EXPLANADA'] .brand > span {
+  letter-spacing: 0.14em;
+  color: color-mix(in srgb, var(--explanada) 55%, var(--muted));
+}
+
 * {
   box-sizing: border-box;
 }
@@ -150,6 +163,23 @@ textarea {
   font-size: 1.45rem;
   letter-spacing: -0.02em;
   text-transform: lowercase;
+  color: var(--explanada);
+}
+
+.brand-wordmark {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 48px;
+  line-height: 1;
+}
+
+.brand-wordmark__mark {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.35rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
   color: var(--explanada);
 }
 

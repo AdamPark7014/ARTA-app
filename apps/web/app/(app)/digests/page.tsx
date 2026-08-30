@@ -148,7 +148,7 @@ export default function DigestsPage() {
     msg === 'Digest diario ejecutado' || msg.startsWith('Outbox flush') ? 'success' : 'error';
 
   return (
-    <AppShell title="Digests · Jobs & Outbox">
+    <AppShell title="Resúmenes">
       <div className="stack page-workspace">
         <PageHeader
           description="Digest operativo diario por organización (riesgo, aging OC, firmas). Outbox de email con SMTP si hay SMTP_HOST; si no, modo log-only."

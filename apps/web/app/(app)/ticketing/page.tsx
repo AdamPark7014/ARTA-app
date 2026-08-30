@@ -207,7 +207,7 @@ export default function TicketingPage() {
   }
 
   return (
-    <AppShell title="Boletera · Capacidad">
+    <AppShell title="Boletera">
       <div className="stack page-workspace">
         <PageHeader
           description="Performance de boletera: aforo, vendidos, sell-through y revenue potencial vs realizado."

@@ -50,7 +50,7 @@ export default function MaintenancePage() {
   }, [events, q]);
 
   return (
-    <AppShell title="Mantenimiento · Auditorio">
+    <AppShell title="Mantenimiento">
       <div className="stack page-workspace">
         <PageHeader
           description="Checklists de mantenimiento para eventos de renta en Explanada / Auditorio Arema."

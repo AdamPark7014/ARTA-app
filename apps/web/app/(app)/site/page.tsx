@@ -38,7 +38,7 @@ export default function SitePreviewPage() {
           </p>
           <EmptyState
             title="Sesión requerida"
-            description="El preview con barra de Studio requiere acceso al panel Arta."
+            description="La vista previa con barra de Studio requiere acceso al panel Arta."
             actionHref="/login?next=/site"
             actionLabel="Iniciar sesión"
           >
@@ -54,12 +54,12 @@ export default function SitePreviewPage() {
   return (
     <div>
       <div className="site-preview-bar">
-        <PageHeader hint="Preview · sitio Arta — no es la URL pública">
+        <PageHeader hint="Vista previa del sitio público — no es la URL pública">
           <ActionLink href="/studio" variant="ghost">
             Studio
           </ActionLink>
           <Link className="btn" href="/p/arta" target="_blank" rel="noopener noreferrer">
-            Abrir sitio live
+            Abrir sitio en vivo
           </Link>
           <ActionLink href="/dashboard" variant="ghost">
             Panel

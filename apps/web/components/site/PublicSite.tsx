@@ -41,7 +41,7 @@ type NewsItem = {
 
 const CONTACT = {
   email: process.env.NEXT_PUBLIC_CONTACT_EMAIL || 'contacto@artaproducciones.com',
-  phone: process.env.NEXT_PUBLIC_CONTACT_PHONE || '+52 222 000 0000',
+  phone: process.env.NEXT_PUBLIC_CONTACT_PHONE?.trim() || '',
   city: process.env.NEXT_PUBLIC_CITY || 'Puebla',
   state: process.env.NEXT_PUBLIC_STATE || 'Puebla',
 };
@@ -159,6 +159,8 @@ export function PublicSite() {
             key={s.id}
             className={`hero-slide ${i === slideIdx ? 'is-active' : ''}`}
             style={{ backgroundImage: `url(${s.imageUrl})` }}
+            role="img"
+            aria-label={s.title || `Imagen del carrusel ${i + 1}`}
             aria-hidden={i !== slideIdx}
           />
         ))}
@@ -198,7 +200,7 @@ export function PublicSite() {
                   key={s.id}
                   type="button"
                   className={i === slideIdx ? 'active' : ''}
-                  aria-label={`Slide ${i + 1}`}
+                  aria-label={`Ir a imagen ${i + 1}${s.title ? `: ${s.title}` : ''}`}
                   onClick={() => setSlideIdx(i)}
                 />
               ))}
@@ -219,16 +221,16 @@ export function PublicSite() {
             </p>
             <div className="stat-row">
               <div>
-                <strong>14+</strong>
-                <span>Formatos operativos</span>
+                <strong>Shows</strong>
+                <span>Producción integral de conciertos</span>
               </div>
               <div>
-                <strong>1</strong>
-                <span>Sitio público Arta</span>
+                <strong>Puebla</strong>
+                <span>Base operativa y venues aliados</span>
               </div>
               <div>
-                <strong>1</strong>
-                <span>Panel de control</span>
+                <strong>Experiencia</strong>
+                <span>Del rider al cierre del evento</span>
               </div>
             </div>
           </div>
@@ -328,15 +330,21 @@ export function PublicSite() {
             <a className="btn" href={`mailto:${CONTACT.email}`}>
               Escribir a Arta
             </a>
-            <a className="btn ghost" href={`tel:${CONTACT.phone.replace(/\s/g, '')}`}>
-              {CONTACT.phone}
-            </a>
+            {CONTACT.phone ? (
+              <a className="btn ghost" href={`tel:${CONTACT.phone.replace(/\s/g, '')}`}>
+                {CONTACT.phone}
+              </a>
+            ) : (
+              <a className="btn ghost" href={`mailto:${CONTACT.email}`}>
+                {CONTACT.email}
+              </a>
+            )}
           </div>
         </div>
         <div className="site-contact-card">
           <div className="label">Contacto</div>
-          <strong>{CONTACT.phone}</strong>
-          <span>{CONTACT.email}</span>
+          {CONTACT.phone ? <strong>{CONTACT.phone}</strong> : <strong>{CONTACT.email}</strong>}
+          {CONTACT.phone ? <span>{CONTACT.email}</span> : null}
           <span>
             {CONTACT.city}, {CONTACT.state}
           </span>
@@ -369,7 +377,7 @@ export function PublicSite() {
           <div>
             <div className="label">Contacto</div>
             <span>{CONTACT.email}</span>
-            <span>{CONTACT.phone}</span>
+            {CONTACT.phone ? <span>{CONTACT.phone}</span> : null}
             <span>
               {CONTACT.city}, {CONTACT.state}
             </span>

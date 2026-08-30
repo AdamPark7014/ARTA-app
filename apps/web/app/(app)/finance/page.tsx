@@ -82,7 +82,7 @@ export default function FinancePage() {
   const t = data?.totals;
 
   return (
-    <AppShell title="Finanzas · Portfolio">
+    <AppShell title="Finanzas">
       <div className="stack page-workspace">
         <PageHeader
           description={`Vista de corridas del portfolio: margen, pérdidas y estado de cierre.${

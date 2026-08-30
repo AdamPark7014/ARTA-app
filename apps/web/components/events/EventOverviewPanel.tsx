@@ -251,12 +251,12 @@ export function EventOverviewPanel({
       {canVendorPin ? (
         <div className="panel">
           <div className="panel-head">
-            <h2>Acceso externo (vendor)</h2>
+            <h2>Acceso proveedor (PIN)</h2>
           </div>
           <div className="panel-body stack">
             <p className="muted kpi-sub" style={{ margin: 0 }}>
-              Genera un link + PIN para que proveedores vean solo lo que autorices (archivos, checklists,
-              hospitality).
+              Genera un enlace + PIN para que proveedores vean solo lo que autorices (archivos, formatos,
+              hospedaje).
             </p>
             {!closed ? (
               <div className="form panel--narrow">
@@ -308,7 +308,7 @@ export function EventOverviewPanel({
                   </div>
                 </div>
                 <button className="btn btn-sm" type="button" onClick={createVendorPin}>
-                  Generar link + PIN
+                  Generar enlace + PIN
                 </button>
               </div>
             ) : null}
@@ -332,7 +332,7 @@ export function EventOverviewPanel({
                     navigator.clipboard?.writeText(`${url}\nPIN: ${revealedPin.pin}`).catch(() => undefined);
                   }}
                 >
-                  Copiar link + PIN
+                  Copiar enlace + PIN
                 </button>
               </div>
             ) : null}

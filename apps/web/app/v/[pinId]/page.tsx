@@ -37,8 +37,8 @@ type Session = {
 
 const SCOPE_LABELS: Record<string, string> = {
   files: 'Archivos',
-  checklists: 'Checklists',
-  hospitality: 'Hospitality',
+  checklists: 'Formatos',
+  hospitality: 'Hospedaje',
 };
 
 function scopeLabel(scope: string) {
@@ -139,11 +139,10 @@ export default function VendorPortalPage() {
     return (
       <main className="auth-page">
         <div className="auth-card auth-card--vendor">
-          <p className="eyebrow">arta · acceso vendor</p>
+          <p className="eyebrow">arta · acceso proveedor</p>
           <h1>Ingresa tu PIN</h1>
           <p className="lead">
-            Portal externo para archivos, checklists y hospitality del evento. Link ID:{' '}
-            <code>{pinId.slice(0, 8)}…</code>
+            Acceso proveedor al evento: archivos, formatos y hospedaje compartidos contigo.
           </p>
           <form className="form" onSubmit={onSubmit}>
             <label>
@@ -178,7 +177,7 @@ export default function VendorPortalPage() {
           </form>
           <div className="row-actions auth-foot">
             <button type="button" className="btn ghost btn-sm" onClick={copyLink}>
-              {copied ? 'Link copiado ✓' : 'Copiar link del portal'}
+              {copied ? 'Enlace copiado ✓' : 'Copiar enlace del portal'}
             </button>
             <Link href="/p/arta">← Sitio Arta</Link>
           </div>
@@ -257,13 +256,13 @@ export default function VendorPortalPage() {
         {session.scopes.includes('checklists') ? (
           <section className="vendor-section panel">
             <div className="panel-head">
-              <h2>Checklists / PDFs</h2>
+              <h2>Formatos / PDFs</h2>
               <span className="badge">{session.checklists.length}</span>
             </div>
             <div className="panel-body">
               {!session.checklists.length ? (
                 <EmptyState
-                  title="Sin checklists visibles"
+                  title="Sin formatos visibles"
                   description="Los formatos compartidos con tu PIN se listarán aquí con enlace al PDF."
                 />
               ) : (
@@ -292,7 +291,7 @@ export default function VendorPortalPage() {
         {session.scopes.includes('hospitality') ? (
           <section className="vendor-section panel">
             <div className="panel-head">
-              <h2>Hospitality / rider</h2>
+              <h2>Hospedaje / rider</h2>
               <span className="badge">
                 {(hosp?.checklists.length || 0) + (hosp?.files.length || 0)}
               </span>
@@ -300,7 +299,7 @@ export default function VendorPortalPage() {
             <div className="panel-body">
               {!hosp?.checklists.length && !hosp?.files.length ? (
                 <EmptyState
-                  title="Sin materiales de hospitality"
+                  title="Sin materiales de hospedaje"
                   description="Rider, catering y hospitalidad aparecerán cuando el equipo los comparta."
                 />
               ) : (

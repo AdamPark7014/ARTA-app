@@ -140,7 +140,7 @@ export default function WebhooksPage() {
   }, [deliveries, deliveryQ, deliveryResult]);
 
   return (
-    <AppShell title="Integraciones · Webhooks">
+    <AppShell title="Webhooks">
       <div className="stack page-workspace">
         <PageHeader
           description="Endpoints firmados (HMAC SHA-256) para alertas de riesgo, aging de OC y backlog de firmas. El cron horario dispara eventos cuando hay señales."

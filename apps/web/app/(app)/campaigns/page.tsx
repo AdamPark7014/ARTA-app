@@ -192,7 +192,7 @@ export default function CampaignsPage() {
   }
 
   return (
-    <AppShell title="Campañas · Media control">
+    <AppShell title="Campañas">
       <div className="stack page-workspace">
         <PageHeader
           description={`Plan de medios y presupuesto por evento. ${pendingAuth} campaña${pendingAuth === 1 ? '' : 's'} pendiente${pendingAuth === 1 ? '' : 's'} de autorización en ${entity === 'ARTA' ? 'Arta' : 'Auditorio'}.`}
