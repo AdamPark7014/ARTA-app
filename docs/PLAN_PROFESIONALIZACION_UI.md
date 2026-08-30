@@ -66,12 +66,16 @@ buscar el botón «Ampliar»; que el menú se esconda como en Mac sin tutorial.
 
 ### Fase P1 — Profesionalismo del panel (siguiente turno corto)
 
-| ID | Trabajo |
-| -- | ------- |
-| P1-1 | Auditoría visual finance / users / security (Fase A 6–7) |
-| P1-2 | Empty states + copy unificados en hub de evento |
-| P1-3 | Specs Playwright: Campaña expandida + ventana OC + ExpandBox Esc |
-| P1-4 | Actualizar `docs/guides/ARTA-Ops-Guia-de-Uso.html` al menú nuevo |
+| ID | Trabajo | Estado |
+| -- | ------- | ------ |
+| P1-1 | Auditoría visual finance / users / security (Fase A 6–7) | ✅ Copy ES + CTAs (2026-08-29) |
+| P1-2 | Empty states + copy unificados en hub de evento | ✅ Campaña / archivos / corrida |
+| P1-3 | Specs Playwright: Campaña expandida + ventana OC + ExpandBox Esc | ❌ |
+| P1-4 | Actualizar `docs/guides/ARTA-Ops-Guia-de-Uso.html` al menú nuevo | ❌ |
+
+**Extra P1 (eficiencia diaria, mismo turno):** Ctrl/⌘+S en editores; Esc con
+confirmación si dirty; un clic a editar en campaña/archivos; DocEditor en
+ExpandBox; restablecer password inline; revocar todas las sesiones.
 
 ### Fase P2 — Operación y escala
 

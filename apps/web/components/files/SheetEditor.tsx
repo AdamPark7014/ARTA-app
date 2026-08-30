@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as XLSX from 'xlsx';
 import type { SaveFile } from '@/lib/file-save';
 import { ExpandBox } from '@/components/ui/ExpandBox';
+import { useSaveHotkey } from '@/lib/use-save-hotkey';
 
 type Props = {
   url: string;
@@ -379,6 +380,8 @@ export function SheetEditor({
     }
   }
 
+  useSaveHotkey(canEdit && dirty && !saving, save);
+
   const shownRows = useMemo(() => grid.slice(0, visibleRows), [grid, visibleRows]);
   const selLabel = sel ? `${colLabel(sel.c)}${sel.r + 1}` : 'ninguna';
 
@@ -392,7 +395,7 @@ export function SheetEditor({
   }
 
   return (
-    <ExpandBox title={fileName} defaultExpanded>
+    <ExpandBox title={fileName} defaultExpanded dirty={dirty}>
       <div className="stack">
         <div className="sheet-toolbar">
           {sheetNames.length > 1 ? (
@@ -425,6 +428,7 @@ export function SheetEditor({
                   type="button"
                   disabled={!dirty || saving}
                   onClick={save}
+                  title="Ctrl+S / ⌘S"
                 >
                   {saving ? 'Guardando…' : dirty ? 'Guardar cambios' : 'Sin cambios'}
                 </button>

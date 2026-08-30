@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { SaveFile } from '@/lib/file-save';
 import { ExpandBox } from '@/components/ui/ExpandBox';
 import { useElementWidth } from '@/lib/use-element-width';
+import { useSaveHotkey } from '@/lib/use-save-hotkey';
 
 type Props = {
   url: string;
@@ -247,9 +248,12 @@ export function PdfEditor({ url, fileName, canEdit, onSave, onSaved, note, saveL
   }
 
   const pending = notes.filter((n) => n.text.trim()).length;
+  const dirty = pending > 0;
+
+  useSaveHotkey(canEdit && dirty && !saving, save);
 
   return (
-    <ExpandBox title={fileName} defaultExpanded>
+    <ExpandBox title={fileName} defaultExpanded dirty={dirty}>
     <div className="stack" ref={boxRef}>
       <div className="sheet-toolbar">
         <span className="muted kpi-sub">
@@ -272,6 +276,7 @@ export function PdfEditor({ url, fileName, canEdit, onSave, onSaved, note, saveL
                 type="button"
                 disabled={saving || !pending}
                 onClick={save}
+                title="Ctrl+S / ⌘S"
               >
                 {saving ? 'Guardando…' : saveLabel || 'Guardar en el PDF'}
               </button>

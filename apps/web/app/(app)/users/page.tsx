@@ -83,6 +83,8 @@ export default function UsersPage() {
   const [riskFilter, setRiskFilter] = useState<'all' | 'high' | 'medium' | 'low'>('all');
   const [q, setQ] = useState('');
   const [loading, setLoading] = useState(true);
+  const [resetPwUserId, setResetPwUserId] = useState<string | null>(null);
+  const [resetPwValue, setResetPwValue] = useState('');
 
   async function load() {
     const [g, r, p, meOrg] = await Promise.all([
@@ -202,9 +204,12 @@ export default function UsersPage() {
         : 'error';
 
   return (
-    <AppShell title="Identity & Access">
+    <AppShell title="Usuarios · acceso">
       <div className="page-workspace stack">
-        <PageHeader description="Gobernanza de identidades: actividad, riesgo, bloqueos y privilegios. Solo dirección gestiona cuentas; el rol define el acceso base y los permisos extra se suman." />
+        <PageHeader
+          description="Cuentas del equipo: actividad, riesgo, bloqueos y privilegios. Solo dirección gestiona usuarios; el rol define el acceso base y los permisos extra se suman."
+          hint="Invitar por email deja que la persona elija su contraseña. «Crear con password» asigna una clave inicial."
+        />
 
         {error ? (
           <FlashMessage variant="error" onDismiss={() => setError('')}>
@@ -246,7 +251,17 @@ export default function UsersPage() {
               <div className="label">Bloqueados ahora</div>
               <div className="value">{k.lockedNow}</div>
             </div>
-            <div className={`kpi ${k.highRisk ? 'kpi--danger' : ''}`}>
+            <div
+              className={`kpi ${k.highRisk ? 'kpi--danger' : ''}`}
+              role="button"
+              tabIndex={0}
+              style={{ cursor: 'pointer' }}
+              onClick={() => setRiskFilter('high')}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') setRiskFilter('high');
+              }}
+              title="Filtrar alto riesgo"
+            >
               <div className="label">Alto riesgo</div>
               <div className="value">{k.highRisk}</div>
             </div>
@@ -399,7 +414,7 @@ export default function UsersPage() {
                   description={
                     users.length
                       ? 'Ajusta búsqueda o filtro de riesgo.'
-                      : 'Crea un usuario o envía una invitación.'
+                      : 'Crea un usuario o envía una invitación desde el formulario de la izquierda.'
                   }
                 />
               ) : (
@@ -488,17 +503,58 @@ export default function UsersPage() {
                           <StatusBadge value={u.active ? 'Activo' : 'Inactivo'} kind="raw" />
                         </td>
                         <td>
-                          <div className="row row--tight">
-                            <button
-                              className="btn ghost btn-sm"
-                              type="button"
-                              onClick={() => {
-                                const password = prompt('Nueva contraseña (mín. 6 caracteres)');
-                                if (password && password.length >= 6) patchUser(u.id, { password });
-                              }}
-                            >
-                              Restablecer
-                            </button>
+                          <div className="row row--tight" style={{ flexWrap: 'wrap' }}>
+                            {resetPwUserId === u.id ? (
+                              <>
+                                <input
+                                  className="field"
+                                  type="password"
+                                  autoComplete="new-password"
+                                  placeholder="Nueva contraseña (mín. 6)"
+                                  value={resetPwValue}
+                                  onChange={(e) => setResetPwValue(e.target.value)}
+                                  style={{ minWidth: 160 }}
+                                />
+                                <button
+                                  className="btn btn-sm"
+                                  type="button"
+                                  onClick={() => {
+                                    if (resetPwValue.length < 6) {
+                                      setError('La contraseña debe tener al menos 6 caracteres');
+                                      return;
+                                    }
+                                    void patchUser(u.id, { password: resetPwValue }).then(() => {
+                                      setResetPwUserId(null);
+                                      setResetPwValue('');
+                                      setMsg('Contraseña actualizada');
+                                    });
+                                  }}
+                                >
+                                  Guardar
+                                </button>
+                                <button
+                                  className="btn ghost btn-sm"
+                                  type="button"
+                                  onClick={() => {
+                                    setResetPwUserId(null);
+                                    setResetPwValue('');
+                                  }}
+                                >
+                                  Cancelar
+                                </button>
+                              </>
+                            ) : (
+                              <button
+                                className="btn ghost btn-sm"
+                                type="button"
+                                onClick={() => {
+                                  setResetPwUserId(u.id);
+                                  setResetPwValue('');
+                                }}
+                              >
+                                Restablecer
+                              </button>
+                            )}
                             {u.active ? (
                               <button
                                 className="btn ghost btn-sm btn-danger"

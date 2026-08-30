@@ -8,6 +8,7 @@ import { ChecklistPdfEditor } from '@/components/files/ChecklistPdfEditor';
 import { createEventFile } from '@/lib/file-save';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { ChecklistPicker } from '@/components/events/ChecklistPicker';
+import { useSaveHotkey } from '@/lib/use-save-hotkey';
 import type { Checklist, EventDetail } from '@/components/events/event-detail.types';
 
 type EventChecklistsPanelProps = {
@@ -71,6 +72,8 @@ export function EventChecklistsPanel({
     0,
   );
   const totalItems = sections.reduce((acc, s) => acc + s.items.length, 0);
+
+  useSaveHotkey(!!activeChecklist && !closed && !saving, onSaveChecklist);
 
   return (
     <div className={`checklist-workspace ${activeChecklist ? 'checklist-workspace--open' : ''}`}>
@@ -150,6 +153,7 @@ export function EventChecklistsPanel({
                   type="button"
                   disabled={saving || closed}
                   onClick={onSaveChecklist}
+                  title="Ctrl+S / ⌘S"
                 >
                   {saving ? 'Guardando…' : 'Guardar'}
                 </button>
@@ -158,8 +162,8 @@ export function EventChecklistsPanel({
 
             {!closed ? (
               <div className="checklist-save-hint muted kpi-sub">
-                El formato se abre a pantalla completa. Esc o «Salir» para volver. Guarda después de
-                editar para regenerar el PDF y registrar versión.
+                El formato se abre a pantalla completa. Esc o «Salir» para volver. Ctrl+S / ⌘S o
+                Guardar regenera el PDF y registra versión.
               </div>
             ) : null}
 

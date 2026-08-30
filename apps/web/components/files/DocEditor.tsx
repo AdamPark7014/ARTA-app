@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { api } from '@/lib/api';
+import { ExpandBox } from '@/components/ui/ExpandBox';
+import { useSaveHotkey } from '@/lib/use-save-hotkey';
 
 export type DocBlockType = 'h1' | 'h2' | 'p' | 'bullet' | 'divider';
 export type DocBlock = { type: DocBlockType; text: string };
@@ -186,16 +188,26 @@ export function DocEditor({ doc, canEdit, onSaved, onDeleted, onClose }: Props) 
     }
   }
 
+  useSaveHotkey(canEdit && dirty && !saving, save);
+
   return (
+    <ExpandBox title={title || doc.title || 'Documento'} defaultExpanded dirty={dirty}>
     <div className="stack">
       <div className="sheet-toolbar">
         <span className="muted kpi-sub">
           Versión {doc.version}
           {doc.updatedBy ? ` · ${doc.updatedBy.fullName}` : ''}
+          {canEdit ? ' · Ctrl+S guardar' : ''}
         </span>
         <div className="row row--tight">
           {canEdit ? (
-            <button className="btn btn-sm" type="button" disabled={!dirty || saving} onClick={save}>
+            <button
+              className="btn btn-sm"
+              type="button"
+              disabled={!dirty || saving}
+              onClick={save}
+              title="Ctrl+S / ⌘S"
+            >
               {saving ? 'Guardando…' : dirty ? 'Guardar' : 'Sin cambios'}
             </button>
           ) : null}
@@ -323,5 +335,6 @@ export function DocEditor({ doc, canEdit, onSaved, onDeleted, onClose }: Props) 
         ) : null}
       </div>
     </div>
+    </ExpandBox>
   );
 }

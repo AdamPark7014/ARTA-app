@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 
 type Props = {
   /** Se muestra en la barra del modo grande */
@@ -13,6 +13,8 @@ type Props = {
    * una columna estrecha no sirve; el documento debe mandar desde el primer clic.
    */
   defaultExpanded?: boolean;
+  /** Si hay borrador sin guardar, Esc / salir pide confirmación */
+  dirty?: boolean;
 };
 
 /**
@@ -23,13 +25,36 @@ type Props = {
  * mismo botón o con Escape. El contenido se mantiene montado —no se
  * desmonta y vuelve a montar— para no perder lo que se lleva escrito.
  */
-export function ExpandBox({ title, children, actions, defaultExpanded = false }: Props) {
+export function ExpandBox({
+  title,
+  children,
+  actions,
+  defaultExpanded = false,
+  dirty = false,
+}: Props) {
   const [expanded, setExpanded] = useState(defaultExpanded);
+  const dirtyRef = useRef(dirty);
+  dirtyRef.current = dirty;
+
+  function tryCollapse() {
+    if (
+      dirtyRef.current &&
+      !confirm('Hay cambios sin guardar. ¿Salir de pantalla completa de todos modos?')
+    ) {
+      return;
+    }
+    setExpanded(false);
+  }
+
+  function toggle() {
+    if (expanded) tryCollapse();
+    else setExpanded(true);
+  }
 
   useEffect(() => {
     if (!expanded) return;
     function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') setExpanded(false);
+      if (e.key === 'Escape') tryCollapse();
     }
     document.addEventListener('keydown', onKey);
     const previous = document.body.style.overflow;
@@ -50,7 +75,7 @@ export function ExpandBox({ title, children, actions, defaultExpanded = false }:
             className="btn ghost btn-sm"
             type="button"
             aria-pressed={expanded}
-            onClick={() => setExpanded((v) => !v)}
+            onClick={toggle}
           >
             {expanded ? 'Salir de pantalla completa (Esc)' : 'Ampliar a pantalla completa'}
           </button>

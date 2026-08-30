@@ -4,6 +4,7 @@ import type { Dispatch, SetStateAction } from 'react';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { FormGrid } from '@/components/ui/PageChrome';
 import { StatusBadge } from '@/components/ui/StatusBadge';
+import { useSaveHotkey } from '@/lib/use-save-hotkey';
 import type { FinanceData, FinanceRow } from '@/components/events/event-detail.types';
 
 type EventFinancePanelProps = {
@@ -31,6 +32,15 @@ export function EventFinancePanel({
 }: EventFinancePanelProps) {
   const net = Number(financeDraft.totalIncome || 0) - Number(financeDraft.totalExpense || 0);
   const canEditRows = canFinance && !financeLocked && !closed;
+
+  useSaveHotkey(canEditRows && !saving, onSaveFinance);
+
+  function addRow() {
+    setFinanceDraft((d) => ({
+      ...d,
+      rows: [...d.rows, { concept: '', type: 'expense', amount: 0 }],
+    }));
+  }
 
   return (
     <div className="stack">
@@ -71,7 +81,13 @@ export function EventFinancePanel({
                     }}
                   />
                 </label>
-                <button className="btn btn-sm" type="button" disabled={saving} onClick={onSaveFinance}>
+                <button
+                  className="btn btn-sm"
+                  type="button"
+                  disabled={saving}
+                  onClick={onSaveFinance}
+                  title="Ctrl+S / ⌘S"
+                >
                   {saving ? 'Guardando…' : 'Guardar corrida'}
                 </button>
               </>
@@ -103,7 +119,15 @@ export function EventFinancePanel({
             <EmptyState
               title="Sin filas en la corrida"
               description="Agrega conceptos manualmente o importa un Excel con ingresos y egresos."
-            />
+            >
+              {canEditRows ? (
+                <div className="row row--tight" style={{ marginTop: '0.75rem' }}>
+                  <button className="btn btn-sm" type="button" onClick={addRow}>
+                    + Agregar concepto
+                  </button>
+                </div>
+              ) : null}
+            </EmptyState>
           ) : (
             <div className="table-wrap">
               <table className="table">
@@ -171,16 +195,7 @@ export function EventFinancePanel({
           )}
 
           {canEditRows ? (
-            <button
-              className="btn ghost btn-sm"
-              type="button"
-              onClick={() =>
-                setFinanceDraft((prev) => ({
-                  ...prev,
-                  rows: [...prev.rows, { concept: '', type: 'expense', amount: 0 }],
-                }))
-              }
-            >
+            <button className="btn ghost btn-sm" type="button" onClick={addRow}>
               + Agregar concepto
             </button>
           ) : null}

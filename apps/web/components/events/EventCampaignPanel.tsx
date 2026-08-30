@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { FileViewer } from '@/components/files/FileViewer';
 import { SheetEditor } from '@/components/files/SheetEditor';
 import { PdfEditor } from '@/components/files/PdfEditor';
@@ -83,6 +83,26 @@ export function EventCampaignPanel({
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  /** Tras «Nueva hoja de gastos», abrir el Excel recién creado */
+  const [openNewestSheet, setOpenNewestSheet] = useState(false);
+
+  useEffect(() => {
+    if (!openNewestSheet || !files.length) return;
+    const sheets = files
+      .filter((f) => isSheet(f.fileName, f.kind))
+      .slice()
+      .sort((a, b) => {
+        const ta = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const tb = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return tb - ta;
+      });
+    const newest = sheets[0];
+    if (newest) {
+      setExpandedId(null);
+      setEditingId(newest.id);
+    }
+    setOpenNewestSheet(false);
+  }, [files, openNewestSheet]);
 
   async function withBusy(fn: () => Promise<void>) {
     setBusy(true);
@@ -91,6 +111,25 @@ export function EventCampaignPanel({
     } finally {
       setBusy(false);
     }
+  }
+
+  async function createExpensesSheet() {
+    await withBusy(async () => {
+      const wb = buildCampaignExpensesWorkbook({
+        eventName: event.name,
+        venue: event.venue,
+        city: event.city,
+        startsAt: event.startsAt,
+        promoter: event.promoter || 'ARTA PRODUCCIONES',
+      });
+      const blob = workbookToXlsxBlob(wb);
+      const name = campaignExpensesFileName(event.name);
+      const file = new File([blob], name, {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      });
+      await onUploadFile(file);
+      setOpenNewestSheet(true);
+    });
   }
 
   const canEditFiles = canCampaign && !closed;
@@ -237,23 +276,7 @@ export function EventCampaignPanel({
                 className="btn btn-sm"
                 type="button"
                 disabled={busy}
-                onClick={() =>
-                  withBusy(async () => {
-                    const wb = buildCampaignExpensesWorkbook({
-                      eventName: event.name,
-                      venue: event.venue,
-                      city: event.city,
-                      startsAt: event.startsAt,
-                      promoter: event.promoter || 'ARTA PRODUCCIONES',
-                    });
-                    const blob = workbookToXlsxBlob(wb);
-                    const name = campaignExpensesFileName(event.name);
-                    const file = new File([blob], name, {
-                      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-                    });
-                    await onUploadFile(file);
-                  })
-                }
+                onClick={() => void createExpensesSheet()}
               >
                 Nueva hoja de gastos
               </button>
@@ -280,15 +303,29 @@ export function EventCampaignPanel({
               title="Sin Excel ni PDF de campaña"
               description={
                 canEditFiles
-                  ? 'Crea una «Nueva hoja de gastos» (formato publicidad/convenios) o sube tu Excel/PDF. La hoja se edita aquí: filas, columnas y totales.'
+                  ? 'Crea una hoja de gastos (formato publicidad/convenios) o sube tu Excel/PDF. La hoja se edita aquí: filas, columnas y totales.'
                   : 'Cuando el equipo de campaña suba el plan de medios o la presentación, se verán aquí sin necesidad de descargarlos.'
               }
-            />
+            >
+              {canEditFiles ? (
+                <div className="row row--tight" style={{ marginTop: '0.75rem' }}>
+                  <button
+                    className="btn btn-sm"
+                    type="button"
+                    disabled={busy}
+                    onClick={() => void createExpensesSheet()}
+                  >
+                    Nueva hoja de gastos
+                  </button>
+                </div>
+              ) : null}
+            </EmptyState>
           ) : (
             <div className="campaign-files">
               {files.map((f) => {
                 const open = expandedId === f.id;
                 const editing = editingId === f.id;
+                const editable = isSheet(f.fileName, f.kind) || isPdf(f.fileName, f.kind);
                 return (
                   <div
                     key={f.id}
@@ -305,20 +342,9 @@ export function EventCampaignPanel({
                         ) : null}
                       </div>
                       <div className="panel-head-actions">
-                        <button
-                          className={open ? 'btn btn-sm' : 'btn ghost btn-sm'}
-                          type="button"
-                          aria-expanded={open}
-                          onClick={() => {
-                            setEditingId(null);
-                            setExpandedId(open ? null : f.id);
-                          }}
-                        >
-                          {open ? 'Contraer' : 'Expandir'}
-                        </button>
-                        {isSheet(f.fileName, f.kind) || isPdf(f.fileName, f.kind) ? (
+                        {editable ? (
                           <button
-                            className={editing ? 'btn btn-sm' : 'btn ghost btn-sm'}
+                            className="btn btn-sm"
                             type="button"
                             onClick={() => {
                               setExpandedId(null);
@@ -332,6 +358,17 @@ export function EventCampaignPanel({
                                 : 'Anotar PDF'}
                           </button>
                         ) : null}
+                        <button
+                          className={open ? 'btn btn-sm' : 'btn ghost btn-sm'}
+                          type="button"
+                          aria-expanded={open}
+                          onClick={() => {
+                            setEditingId(null);
+                            setExpandedId(open ? null : f.id);
+                          }}
+                        >
+                          {open ? 'Contraer' : 'Vista previa'}
+                        </button>
                         {canEditFiles ? (
                           <label className="btn ghost btn-sm module-upload">
                             Actualizar

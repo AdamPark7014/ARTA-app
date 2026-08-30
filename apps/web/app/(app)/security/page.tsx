@@ -4,7 +4,7 @@ import { FormEvent, useEffect, useState } from 'react';
 import { AppShell } from '@/components/app-shell/AppShell';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { LoadingBlock } from '@/components/ui/LoadingBlock';
-import { FlashMessage, PageHeader } from '@/components/ui/PageChrome';
+import { FlashMessage, PageHeader, ActionLink } from '@/components/ui/PageChrome';
 import { api } from '@/lib/api';
 import { useUser } from '@/lib/user-context';
 
@@ -68,6 +68,19 @@ export default function SecurityPage() {
     await load();
   }
 
+  async function revokeAll() {
+    if (
+      !confirm(
+        '¿Revocar todas las sesiones? También cerrarás esta sesión y tendrás que volver a iniciar.',
+      )
+    ) {
+      return;
+    }
+    await api('/auth/sessions/revoke-all', { method: 'POST' });
+    setMsg('Todas las sesiones fueron revocadas. Vuelve a iniciar sesión.');
+    window.location.href = '/login';
+  }
+
   const msgVariant =
     msg.includes('activado') || msg.includes('desactivado') || msg.includes('revocada')
       ? 'success'
@@ -77,13 +90,17 @@ export default function SecurityPage() {
     <AppShell title="Seguridad · 2FA & sesiones">
       <div className="stack page-workspace">
         <PageHeader
-          description="Endurecimiento de identidad: TOTP, sesiones activas y cookie HttpOnly."
+          description="Protege tu cuenta: autenticación en dos pasos, sesiones activas y cookie segura."
           hint={
             user?.totpEnabled
               ? '2FA activo. Revisa sesiones y revoca las que no reconozcas.'
               : '2FA inactivo — actívalo con tu app autenticadora. El panel lo pide en el primer acceso.'
           }
-        />
+        >
+          <ActionLink href="/users" variant="ghost">
+            Ir a Usuarios
+          </ActionLink>
+        </PageHeader>
         {msg ? (
           <FlashMessage variant={msgVariant} onDismiss={() => setMsg('')}>
             {msg}
@@ -151,6 +168,11 @@ export default function SecurityPage() {
           <div className="panel">
             <div className="panel-head">
               <h2>Sesiones activas · {sessions.length}</h2>
+              {sessions.length > 1 ? (
+                <button className="btn ghost btn-sm btn-danger" type="button" onClick={() => void revokeAll()}>
+                  Revocar todas
+                </button>
+              ) : null}
             </div>
             <div className="panel-body">
               {loading ? (

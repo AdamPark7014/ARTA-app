@@ -261,7 +261,20 @@ export function EventFilesPanel({
             <EmptyState
               title="Sin documentos todavía"
               description="Crea un acta, un minuto a minuto o una carta: se escribe aquí y al descargarlo sale en PDF con el formato de Arta."
-            />
+            >
+              {canEdit ? (
+                <div className="row row--tight" style={{ marginTop: '0.75rem' }}>
+                  <button
+                    className="btn btn-sm"
+                    type="button"
+                    disabled={busy === 'doc'}
+                    onClick={() => void createDoc()}
+                  >
+                    {busy === 'doc' ? 'Creando…' : 'Nuevo documento'}
+                  </button>
+                </div>
+              ) : null}
+            </EmptyState>
           ) : (
             <div className="file-card-list file-card-list--always">
               {docs.map((d) => (
@@ -328,7 +341,23 @@ export function EventFilesPanel({
             <EmptyState
               title="Sin archivos aún"
               description="Sube corrida en Excel, riders en PDF o referencias visuales. Se abren embebidos y se editan sin salir del evento."
-            />
+            >
+              {canEdit ? (
+                <label className="btn btn-sm module-upload" style={{ marginTop: '0.75rem' }}>
+                  Subir archivo
+                  <input
+                    type="file"
+                    hidden
+                    accept=".pdf,.xlsx,.xls,.csv,image/*"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) onUpload(f);
+                      e.target.value = '';
+                    }}
+                  />
+                </label>
+              ) : null}
+            </EmptyState>
           ) : (
             <div className="file-card-list file-card-list--always">
               {files.map((f) => {
@@ -348,20 +377,34 @@ export function EventFilesPanel({
                       ) : null}
                     </div>
                     <div className="panel-head-actions">
-                      <button
-                        className={active ? 'btn btn-sm' : 'btn ghost btn-sm'}
-                        type="button"
-                        onClick={() => onVer(f)}
-                      >
-                        {active ? 'Ocultar' : 'Ver'}
-                      </button>
                       {editable ? (
                         <button
-                          className={isEditing ? 'btn btn-sm' : 'btn ghost btn-sm'}
+                          className="btn btn-sm"
                           type="button"
                           onClick={() => onEditar(f)}
                         >
-                          {isEditing ? 'Cerrar editor' : isSheet(f) ? 'Editar hoja' : 'Escribir encima'}
+                          {isEditing
+                            ? 'Cerrar'
+                            : isSheet(f)
+                              ? 'Editar hoja'
+                              : 'Escribir encima'}
+                        </button>
+                      ) : (
+                        <button
+                          className={active ? 'btn btn-sm' : 'btn ghost btn-sm'}
+                          type="button"
+                          onClick={() => onVer(f)}
+                        >
+                          {active ? 'Ocultar' : 'Ver'}
+                        </button>
+                      )}
+                      {editable && !isEditing ? (
+                        <button
+                          className="btn ghost btn-sm"
+                          type="button"
+                          onClick={() => onVer(f)}
+                        >
+                          {active ? 'Ocultar vista' : 'Vista previa'}
                         </button>
                       ) : null}
                       {isPdf(f) && canEdit ? (

@@ -85,13 +85,13 @@ export default function FinancePage() {
     <AppShell title="Finanzas · Portfolio">
       <div className="stack page-workspace">
         <PageHeader
-          description={`Control tower de corridas: margen portfolio, pérdidas y estado de cierre.${
+          description={`Vista de corridas del portfolio: margen, pérdidas y estado de cierre.${
             canEdit ? ' Tienes permiso de edición.' : ' Acceso de lectura / seguimiento.'
           }`}
-          hint="Filtra neto negativo para priorizar shows en pérdida antes del cierre de corrida."
+          hint="Filtra neto negativo para priorizar shows en pérdida. Abrir lleva directo a la corrida del evento."
         >
-          <ActionLink href="/dashboard" variant="ghost">
-            Centro de comando
+          <ActionLink href="/events?scope=active" variant="ghost">
+            Eventos activos
           </ActionLink>
         </PageHeader>
 
@@ -235,9 +235,9 @@ export default function FinancePage() {
                           <td colSpan={8}>
                             <EmptyState
                               title="Sin corridas para este filtro"
-                              description="Abre un evento y captura ingresos/egresos en la pestaña Finanzas."
-                              actionHref="/events"
-                              actionLabel="Ir a eventos"
+                              description="Abre un evento activo y captura ingresos/egresos en la pestaña Finanzas."
+                              actionHref="/events?scope=active"
+                              actionLabel="Ir a eventos activos"
                             />
                           </td>
                         </tr>
