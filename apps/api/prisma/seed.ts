@@ -755,17 +755,12 @@ async function main() {
         active: true,
         organizationId: org.id,
       },
-      // Sin `passwordHash`: el seed corre en CADA arranque del contenedor y
-      // reescribirlo revertía la contraseña que la persona hubiera cambiado
-      // desde Panel → Seguridad. La contraseña de `.env.arta` es solo la
-      // inicial; para reponerla se usa Panel → Usuarios.
+      // Sin passwordHash ni ACL: el seed corre en cada arranque.
+      // No pisar roleKey / entities / permissions / active (cambios desde Panel).
+      // Contraseña inicial solo en create; para reponerla → Panel → Usuarios.
       update: {
         fullName: u.fullName,
         title: u.title,
-        roleKey: u.roleKey,
-        entities: u.entities,
-        permissions: u.permissions,
-        active: true,
       },
     });
 
@@ -781,7 +776,8 @@ async function main() {
     await prisma.orgMembership.upsert({
       where: { organizationId_userId: { organizationId: org.id, userId: user.id } },
       create: { organizationId: org.id, userId: user.id, roleKey: u.roleKey },
-      update: { roleKey: u.roleKey },
+      // No reescribir roleKey en membership: el Panel puede haberlo cambiado.
+      update: {},
     });
 
     console.log(

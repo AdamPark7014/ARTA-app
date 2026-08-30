@@ -108,7 +108,7 @@ export const NAV_ITEMS: NavItem[] = [
   {
     href: '/purchase-orders',
     label: 'Órdenes de compra',
-    permissions: ['checklist.edit', 'po.authorize', 'po.mark_paid', 'everything'],
+    permissions: ['po.authorize', 'po.mark_paid', 'everything'],
     group: 'Control',
     requiresEventOps: true,
     keywords: 'oc procurement compras ventana',

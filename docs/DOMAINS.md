@@ -40,6 +40,30 @@ EOF
 
 Log: `/var/log/arta-traefik-ensure.log` (solo escribe cuando restaura o sincroniza).
 
+### Hook post-deploy Nexara (checklist Adam)
+
+Causa raíz: un deploy de Nexara puede vaciar o regenerar
+`/var/www/nexara-app/deploy/traefik/` y borrar `arta.yml`. El cron de 5 min es
+red de seguridad; lo correcto es que el **post-deploy de Nexara** restaure la
+ruta Arta al terminar:
+
+```bash
+# Añadir al final del script/hook de deploy de Nexara (en el server):
+/var/www/arta-app/deploy/ensure-traefik-route.sh
+# o, equivalente:
+cp /var/www/arta-app/deploy/traefik/arta.yml /var/www/nexara-app/deploy/traefik/arta.yml
+```
+
+Verificar después de un deploy Nexara:
+
+```bash
+test -f /var/www/nexara-app/deploy/traefik/arta.yml && echo OK
+curl -sI https://arta.artaproducciones.com/login | head -n1   # 200
+```
+
+**Pendiente Adam (fuera de código):** deploy key GitHub en Hetzner para que
+`deploy/update.sh` pueda hacer `git pull --ff-only` sin bundle SCP.
+
 ### Aislamiento Nexara ↔ Arta
 
 En el server comparten solo la red Docker `proxy` y el proceso Traefik (`traefik-main`). **No comparten** base de datos, volúmenes ni contenedores de app:
@@ -51,7 +75,13 @@ En el server comparten solo la red Docker `proxy` y el proceso Traefik (`traefik
 | Rutas TLS | `deploy/traefik/arta.yml` (copiado, no en git Nexara) | `deploy/traefik/nexara.yml` |
 | Hosts | `*.artaproducciones.com` | dominios Nexara (sin overlap) |
 
-Un deploy de Nexara **no debe** tocar contenedores Arta; el único efecto colateral observado fue borrar `arta.yml` del folder Traefik — mitigado con `ensure-traefik-route.sh` + cron. **No agregar `arta.yml` al repo Nexara** sin revisar prioridades de router.
+Un deploy de Nexara **no debe** tocar contenedores Arta; el único efecto colateral observado fue borrar `arta.yml` del folder Traefik — mitigado con `ensure-traefik-route.sh` + cron + **hook post-deploy Nexara** (ver arriba). **No agregar `arta.yml` al repo Nexara** sin revisar prioridades de router.
+
+### Backup y rollback (deploy)
+
+- `deploy/update.sh` hace `pg_dump` a `/root/arta-backups/YYYYMMDD-HHMM.sql.gz` (retiene últimos 10) y etiqueta imágenes corridas como `arta-web:prev` / `arta-api:prev` antes del build.
+- `deploy/rollback.sh` restaura esas tags y, opcionalmente, un dump (`--dump …` / `--list`).
+- Healthchecks: API `/ready`, web `/login`; web espera `api` healthy.
 
 ## SSO (patrón Nexara)
 

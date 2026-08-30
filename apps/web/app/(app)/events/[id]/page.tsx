@@ -67,6 +67,7 @@ function EventDetailInner() {
     lines: [{ concept: '', qty: 1, unitPrice: 0 }] as PoLine[],
   });
   const [msg, setMsg] = useState('');
+  const [msgVariant, setMsgVariant] = useState<'success' | 'error' | 'info' | 'warn'>('success');
   const [financeDraft, setFinanceDraft] = useState<FinanceData>(emptyFinance());
   const [financeId, setFinanceId] = useState<string | null>(null);
   const [financeLocked, setFinanceLocked] = useState(false);
@@ -273,6 +274,11 @@ function EventDetailInner() {
     return { avgProgress, showLabel, daysLabel };
   }, [event]);
 
+  function flash(text: string, variant: 'success' | 'error' | 'info' | 'warn' = 'success') {
+    setMsg(text);
+    setMsgVariant(variant);
+  }
+
   async function saveChecklist() {
     if (!activeChecklist || closed) return;
     setSaving(true);
@@ -283,10 +289,10 @@ function EventDetailInner() {
         body: JSON.stringify({ dataJson: activeChecklist.dataJson }),
       });
       setActiveChecklist(updated);
-      setMsg('Checklist guardado · PDF regenerado');
+      flash('Checklist guardado · PDF regenerado');
       await load();
     } catch (e) {
-      setMsg(e instanceof Error ? e.message : 'Error al guardar');
+      flash(e instanceof Error ? e.message : 'Error al guardar', 'error');
     } finally {
       setSaving(false);
     }
@@ -294,21 +300,29 @@ function EventDetailInner() {
 
   async function signChecklist(kind: 'ENTREGADO' | 'AUTORIZADO', payload: { imageDataUrl: string; signerName: string }) {
     if (!activeChecklist || closed) return;
-    const updated = await api<Checklist>(`/checklists/${activeChecklist.id}/sign`, {
-      method: 'POST',
-      body: JSON.stringify({ kind, ...payload }),
-    });
-    setActiveChecklist(updated);
-    setMsg(`Firma ${kind.toLowerCase()} guardada`);
-    await load();
+    try {
+      const updated = await api<Checklist>(`/checklists/${activeChecklist.id}/sign`, {
+        method: 'POST',
+        body: JSON.stringify({ kind, ...payload }),
+      });
+      setActiveChecklist(updated);
+      flash(`Firma ${kind.toLowerCase()} guardada`);
+      await load();
+    } catch (e) {
+      flash(e instanceof Error ? e.message : 'Error al firmar', 'error');
+    }
   }
 
   async function regeneratePdf() {
     if (!activeChecklist) return;
-    const updated = await api<Checklist>(`/checklists/${activeChecklist.id}/pdf`, { method: 'POST' });
-    setActiveChecklist(updated);
-    setMsg('PDF regenerado');
-    await load();
+    try {
+      const updated = await api<Checklist>(`/checklists/${activeChecklist.id}/pdf`, { method: 'POST' });
+      setActiveChecklist(updated);
+      flash('PDF regenerado');
+      await load();
+    } catch (e) {
+      flash(e instanceof Error ? e.message : 'Error al regenerar PDF', 'error');
+    }
   }
 
   async function restoreChecklistVersion(versionId: string) {
@@ -322,10 +336,10 @@ function EventDetailInner() {
       });
       const full = await api<Checklist>(`/checklists/${activeChecklist.id}`);
       setActiveChecklist({ ...updated, versions: full.versions });
-      setMsg('Versión restaurada · PDF regenerado');
+      flash('Versión restaurada · PDF regenerado');
       await load();
     } catch (e) {
-      setMsg(e instanceof Error ? e.message : 'Error al restaurar');
+      flash(e instanceof Error ? e.message : 'Error al restaurar', 'error');
     } finally {
       setSaving(false);
     }
@@ -370,7 +384,7 @@ function EventDetailInner() {
       });
     } catch (e) {
       // Fuera de la ventana de OC el servidor responde 403 con el horario.
-      setMsg(e instanceof Error ? e.message : 'No se pudo crear la OC');
+      flash(e instanceof Error ? e.message : 'No se pudo crear la OC', 'error');
       fetchPoWindow()
         .then(setPoWindow)
         .catch(() => undefined);
@@ -382,6 +396,7 @@ function EventDetailInner() {
       description: '',
       lines: [{ concept: '', qty: 1, unitPrice: 0 }],
     });
+    flash('OC creada');
     await load();
     selectTab('ocs');
   }
@@ -404,21 +419,26 @@ function EventDetailInner() {
           },
         }),
       });
-      setMsg('Campaña guardada');
+      flash('Campaña guardada');
       await load();
     } catch (e) {
-      setMsg(e instanceof Error ? e.message : 'Error');
+      flash(e instanceof Error ? e.message : 'Error al guardar campaña', 'error');
     } finally {
       setSaving(false);
     }
   }
 
   async function toggleCampaignAuth(authorized: boolean) {
-    await api(`/campaigns/event/${id}`, {
-      method: 'POST',
-      body: JSON.stringify({ authorized }),
-    });
-    await load();
+    try {
+      await api(`/campaigns/event/${id}`, {
+        method: 'POST',
+        body: JSON.stringify({ authorized }),
+      });
+      flash(authorized ? 'Campaña autorizada' : 'Autorización retirada');
+      await load();
+    } catch (e) {
+      flash(e instanceof Error ? e.message : 'Error al autorizar campaña', 'error');
+    }
   }
 
   async function saveTicketing() {
@@ -436,16 +456,16 @@ function EventDetailInner() {
       };
       if (editingTicketId) {
         await api(`/ticketing/${editingTicketId}`, { method: 'PATCH', body: JSON.stringify(payload) });
-        setMsg('Boletera actualizada');
+        flash('Boletera actualizada');
       } else {
         await api(`/ticketing/event/${id}`, { method: 'POST', body: JSON.stringify(payload) });
-        setMsg('Boletera creada');
+        flash('Boletera creada');
       }
       setEditingTicketId(null);
       setTicketForm((f) => ({ ...f, boletera: 'Arema', logoUrl: '', holdUntil: '', notes: '' }));
       await load();
     } catch (e) {
-      setMsg(e instanceof Error ? e.message : 'Error');
+      flash(e instanceof Error ? e.message : 'Error al guardar boletera', 'error');
     } finally {
       setSaving(false);
     }
@@ -473,17 +493,27 @@ function EventDetailInner() {
   }
 
   async function deleteTicketing(tid: string) {
-    await api(`/ticketing/${tid}`, { method: 'DELETE' });
-    if (editingTicketId === tid) setEditingTicketId(null);
-    await load();
+    try {
+      await api(`/ticketing/${tid}`, { method: 'DELETE' });
+      if (editingTicketId === tid) setEditingTicketId(null);
+      flash('Boletera eliminada');
+      await load();
+    } catch (e) {
+      flash(e instanceof Error ? e.message : 'Error al eliminar boletera', 'error');
+    }
   }
 
   const poLinesTotal = poForm.lines.reduce((s, l) => s + Number(l.qty || 0) * Number(l.unitPrice || 0), 0);
 
   async function setPoStatus(poId: string, status: string) {
     if (closed) return;
-    await api(`/purchase-orders/${poId}/status`, { method: 'PATCH', body: JSON.stringify({ status }) });
-    await load();
+    try {
+      await api(`/purchase-orders/${poId}/status`, { method: 'PATCH', body: JSON.stringify({ status }) });
+      flash('Estado de OC actualizado');
+      await load();
+    } catch (e) {
+      flash(e instanceof Error ? e.message : 'Error al cambiar estado de OC', 'error');
+    }
   }
 
   function startEditPo(po: Po) {
@@ -503,32 +533,40 @@ function EventDetailInner() {
   async function saveEditPo() {
     if (!editingPoId || closed) return;
     const lines = editPoLines.filter((l) => l.concept.trim());
-    await api(`/purchase-orders/${editingPoId}`, {
-      method: 'PATCH',
-      body: JSON.stringify({
-        vendorName: editPoMeta.vendorName || undefined,
-        description: editPoMeta.description || undefined,
-        lines: lines.map((l) => ({
-          concept: l.concept,
-          qty: Number(l.qty),
-          unitPrice: Number(l.unitPrice),
-        })),
-      }),
-    });
-    setEditingPoId(null);
-    setMsg('OC actualizada');
-    await load();
+    try {
+      await api(`/purchase-orders/${editingPoId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          vendorName: editPoMeta.vendorName || undefined,
+          description: editPoMeta.description || undefined,
+          lines: lines.map((l) => ({
+            concept: l.concept,
+            qty: Number(l.qty),
+            unitPrice: Number(l.unitPrice),
+          })),
+        }),
+      });
+      setEditingPoId(null);
+      flash('OC actualizada');
+      await load();
+    } catch (e) {
+      flash(e instanceof Error ? e.message : 'Error al actualizar OC', 'error');
+    }
   }
 
   async function onUpload(file: File) {
     if (closed) return;
-    const fd = new FormData();
-    fd.append('file', file);
-    fd.append('eventId', id);
-    if (activeChecklist) fd.append('checklistId', activeChecklist.id);
-    await api('/uploads', { method: 'POST', body: fd });
-    await load();
-    setMsg(`Archivo ${file.name} embebido`);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      fd.append('eventId', id);
+      if (activeChecklist) fd.append('checklistId', activeChecklist.id);
+      await api('/uploads', { method: 'POST', body: fd });
+      await load();
+      flash(`Archivo ${file.name} embebido`);
+    } catch (e) {
+      flash(e instanceof Error ? e.message : 'Error al subir archivo', 'error');
+    }
   }
 
   /**
@@ -538,127 +576,180 @@ function EventDetailInner() {
    */
   async function uploadCampaignFile(file: File) {
     if (closed || !canCampaign) return;
-    const fd = new FormData();
-    fd.append('file', file);
-    fd.append('eventId', id);
-    fd.append('module', CAMPAIGN_FILE_MODULE);
-    await api('/uploads', { method: 'POST', body: fd });
-    await load();
-    setMsg(`${file.name} agregado a la campaña`);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      fd.append('eventId', id);
+      fd.append('module', CAMPAIGN_FILE_MODULE);
+      await api('/uploads', { method: 'POST', body: fd });
+      await load();
+      flash(`${file.name} agregado a la campaña`);
+    } catch (e) {
+      flash(e instanceof Error ? e.message : 'Error al subir archivo de campaña', 'error');
+    }
   }
 
   /** Actualizar = subir la versión nueva y retirar la anterior. */
   async function replaceCampaignFile(fileId: string, file: File) {
     if (closed || !canCampaign) return;
-    const fd = new FormData();
-    fd.append('file', file);
-    fd.append('eventId', id);
-    fd.append('module', CAMPAIGN_FILE_MODULE);
-    await api('/uploads', { method: 'POST', body: fd });
-    await api(`/uploads/${fileId}`, { method: 'DELETE' }).catch(() => undefined);
-    await load();
-    setMsg(`Campaña actualizada con ${file.name}`);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      fd.append('eventId', id);
+      fd.append('module', CAMPAIGN_FILE_MODULE);
+      await api('/uploads', { method: 'POST', body: fd });
+      await api(`/uploads/${fileId}`, { method: 'DELETE' }).catch(() => undefined);
+      await load();
+      flash(`Campaña actualizada con ${file.name}`);
+    } catch (e) {
+      flash(e instanceof Error ? e.message : 'Error al actualizar archivo de campaña', 'error');
+    }
   }
 
   async function deleteCampaignFile(fileId: string) {
     if (closed || !canCampaign) return;
     if (!confirm('¿Eliminar este archivo de la campaña?')) return;
-    await api(`/uploads/${fileId}`, { method: 'DELETE' });
-    await load();
-    setMsg('Archivo de campaña eliminado');
+    try {
+      await api(`/uploads/${fileId}`, { method: 'DELETE' });
+      await load();
+      flash('Archivo de campaña eliminado');
+    } catch (e) {
+      flash(e instanceof Error ? e.message : 'Error al eliminar archivo', 'error');
+    }
   }
 
   async function closeEvent() {
     if (!confirm('¿Cerrar evento? La corrida quedará bloqueada.')) return;
-    await api(`/events/${id}/close`, { method: 'POST' });
-    setMsg('Evento cerrado');
-    await load();
+    try {
+      await api(`/events/${id}/close`, { method: 'POST' });
+      flash('Evento cerrado');
+      await load();
+    } catch (e) {
+      flash(e instanceof Error ? e.message : 'Error al cerrar evento', 'error');
+    }
   }
 
   async function reopenEvent() {
-    await api(`/events/${id}/reopen`, { method: 'POST' });
-    setMsg('Evento reabierto');
-    await load();
+    try {
+      await api(`/events/${id}/reopen`, { method: 'POST' });
+      flash('Evento reabierto');
+      await load();
+    } catch (e) {
+      flash(e instanceof Error ? e.message : 'Error al reabrir evento', 'error');
+    }
   }
 
   async function saveEventNotes() {
     if (closed) return;
-    await api(`/events/${id}`, {
-      method: 'PATCH',
-      body: JSON.stringify({ notes: eventNotes }),
-    });
-    setMsg('Notas del evento guardadas');
-    await load();
+    try {
+      await api(`/events/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ notes: eventNotes }),
+      });
+      flash('Notas del evento guardadas');
+      await load();
+    } catch (e) {
+      flash(e instanceof Error ? e.message : 'Error al guardar notas', 'error');
+    }
   }
 
   async function saveEventMeta() {
     if (closed) return;
-    await api(`/events/${id}`, {
-      method: 'PATCH',
-      body: JSON.stringify(metaForm),
-    });
-    setEditingMeta(false);
-    setMsg('Datos del evento actualizados');
-    await load();
+    try {
+      await api(`/events/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(metaForm),
+      });
+      setEditingMeta(false);
+      flash('Datos del evento actualizados');
+      await load();
+    } catch (e) {
+      flash(e instanceof Error ? e.message : 'Error al actualizar datos', 'error');
+    }
   }
 
   async function cancelEvent() {
     if (!confirm('¿Cancelar evento?')) return;
-    await api(`/events/${id}/cancel`, { method: 'POST' });
-    setMsg('Evento cancelado');
-    await load();
+    try {
+      await api(`/events/${id}/cancel`, { method: 'POST' });
+      flash('Evento cancelado');
+      await load();
+    } catch (e) {
+      flash(e instanceof Error ? e.message : 'Error al cancelar evento', 'error');
+    }
   }
 
   async function deleteEvent() {
     if (!confirm('¿ELIMINAR evento y todo su contenido? Esta acción no se puede deshacer.')) return;
-    await api(`/events/${id}`, { method: 'DELETE' });
-    window.location.href = '/events';
+    try {
+      await api(`/events/${id}`, { method: 'DELETE' });
+      window.location.href = '/events';
+    } catch (e) {
+      flash(e instanceof Error ? e.message : 'Error al eliminar evento', 'error');
+    }
   }
 
   async function deletePo(poId: string) {
     if (!confirm('¿Eliminar OC pendiente?')) return;
-    await api(`/purchase-orders/${poId}`, { method: 'DELETE' });
-    setMsg('OC eliminada');
-    await load();
+    try {
+      await api(`/purchase-orders/${poId}`, { method: 'DELETE' });
+      flash('OC eliminada');
+      await load();
+    } catch (e) {
+      flash(e instanceof Error ? e.message : 'Error al eliminar OC', 'error');
+    }
   }
 
   async function createVendorPin() {
     if (!pinForm.pin || pinForm.pin.length < 4) {
-      setMsg('PIN mínimo 4 caracteres');
+      flash('PIN mínimo 4 caracteres', 'warn');
       return;
     }
     if (!pinForm.scopes.length) {
-      setMsg('Elige al menos un scope');
+      flash('Elige al menos un scope', 'warn');
       return;
     }
-    const res = await api<{ id: string; portalPath: string; pin: string }>('/vendor/pins', {
-      method: 'POST',
-      body: JSON.stringify({
-        eventId: id,
-        label: pinForm.label,
-        pin: pinForm.pin,
-        scopes: pinForm.scopes,
-        expiresAt: pinForm.expiresAt || undefined,
-      }),
-    });
-    setRevealedPin({ path: res.portalPath, pin: res.pin });
-    setPinForm({ label: 'Vendor', pin: '', scopes: ['files', 'checklists'], expiresAt: '' });
-    const list = await api<typeof vendorPins>(`/vendor/event/${id}`);
-    setVendorPins(list);
-    setMsg('PIN vendor creado — cópialo ahora');
+    try {
+      const res = await api<{ id: string; portalPath: string; pin: string }>('/vendor/pins', {
+        method: 'POST',
+        body: JSON.stringify({
+          eventId: id,
+          label: pinForm.label,
+          pin: pinForm.pin,
+          scopes: pinForm.scopes,
+          expiresAt: pinForm.expiresAt || undefined,
+        }),
+      });
+      setRevealedPin({ path: res.portalPath, pin: res.pin });
+      setPinForm({ label: 'Vendor', pin: '', scopes: ['files', 'checklists'], expiresAt: '' });
+      const list = await api<typeof vendorPins>(`/vendor/event/${id}`);
+      setVendorPins(list);
+      flash('PIN vendor creado — cópialo ahora');
+    } catch (e) {
+      flash(e instanceof Error ? e.message : 'Error al crear PIN', 'error');
+    }
   }
 
   async function deactivatePin(pinId: string) {
-    await api(`/vendor/pins/${pinId}`, { method: 'DELETE' });
-    setVendorPins((prev) => prev.map((p) => (p.id === pinId ? { ...p, active: false } : p)));
+    try {
+      await api(`/vendor/pins/${pinId}`, { method: 'DELETE' });
+      setVendorPins((prev) => prev.map((p) => (p.id === pinId ? { ...p, active: false } : p)));
+      flash('PIN desactivado');
+    } catch (e) {
+      flash(e instanceof Error ? e.message : 'Error al desactivar PIN', 'error');
+    }
   }
 
   async function deleteFile(fileId: string) {
     if (!confirm('¿Eliminar archivo?')) return;
-    await api(`/uploads/${fileId}`, { method: 'DELETE' });
-    if (previewFile?.id === fileId) setPreviewFile(null);
-    setMsg('Archivo eliminado');
-    await load();
+    try {
+      await api(`/uploads/${fileId}`, { method: 'DELETE' });
+      if (previewFile?.id === fileId) setPreviewFile(null);
+      flash('Archivo eliminado');
+      await load();
+    } catch (e) {
+      flash(e instanceof Error ? e.message : 'Error al eliminar archivo', 'error');
+    }
   }
 
   async function saveFinance() {
@@ -669,10 +760,10 @@ function EventDetailInner() {
         method: 'PATCH',
         body: JSON.stringify({ dataJson: financeDraft }),
       });
-      setMsg('Corrida guardada');
+      flash('Corrida guardada');
       await load();
     } catch (e) {
-      setMsg(e instanceof Error ? e.message : 'Error');
+      flash(e instanceof Error ? e.message : 'Error al guardar corrida', 'error');
     } finally {
       setSaving(false);
     }
@@ -696,13 +787,13 @@ function EventDetailInner() {
         fd.append('eventId', id);
         fd.append('kind', 'excel');
         await api('/uploads', { method: 'POST', body: fd }).catch(() => undefined);
-        setMsg(`Importadas ${data.rows.length} filas desde Excel`);
+        flash(`Importadas ${data.rows.length} filas desde Excel`);
         await load();
       } else {
-        setMsg(`Vista previa: ${data.rows.length} filas (guarda para persistir)`);
+        flash(`Vista previa: ${data.rows.length} filas (guarda para persistir)`, 'info');
       }
     } catch (e) {
-      setMsg(e instanceof Error ? e.message : 'Error al importar');
+      flash(e instanceof Error ? e.message : 'Error al importar', 'error');
     } finally {
       setSaving(false);
     }
@@ -719,59 +810,80 @@ function EventDetailInner() {
 
   async function createTask() {
     if (!taskForm.title || closed) return;
-    await api('/tasks', {
-      method: 'POST',
-      body: JSON.stringify({
-        eventId: id,
-        title: taskForm.title,
-        module: taskForm.module || undefined,
-        detail: taskForm.detail || undefined,
-        assigneeId: taskForm.assigneeId || undefined,
-        dueAt: taskForm.dueAt || undefined,
-      }),
-    });
-    const who = directory.find((d) => d.id === taskForm.assigneeId)?.fullName;
-    setTaskForm({ title: '', module: '', assigneeId: '', dueAt: '', detail: '' });
-    setMsg(who ? `Tarea asignada a ${who} — le llega el aviso en su panel` : 'Tarea creada');
-    await load();
+    try {
+      await api('/tasks', {
+        method: 'POST',
+        body: JSON.stringify({
+          eventId: id,
+          title: taskForm.title,
+          module: taskForm.module || undefined,
+          detail: taskForm.detail || undefined,
+          assigneeId: taskForm.assigneeId || undefined,
+          dueAt: taskForm.dueAt || undefined,
+        }),
+      });
+      const who = directory.find((d) => d.id === taskForm.assigneeId)?.fullName;
+      setTaskForm({ title: '', module: '', assigneeId: '', dueAt: '', detail: '' });
+      flash(who ? `Tarea asignada a ${who} — le llega el aviso en su panel` : 'Tarea creada');
+      await load();
+    } catch (e) {
+      flash(e instanceof Error ? e.message : 'Error al crear tarea', 'error');
+    }
   }
 
   async function setTaskStatus(taskId: string, status: string) {
-    await api(`/tasks/${taskId}`, { method: 'PATCH', body: JSON.stringify({ status }) });
-    await load();
+    try {
+      await api(`/tasks/${taskId}`, { method: 'PATCH', body: JSON.stringify({ status }) });
+      await load();
+    } catch (e) {
+      flash(e instanceof Error ? e.message : 'Error al actualizar tarea', 'error');
+    }
   }
 
   /** Pasar la tarea a otra persona sin salir del evento. */
   async function reassignTask(taskId: string, assigneeId: string) {
-    await api(`/tasks/${taskId}`, {
-      method: 'PATCH',
-      body: JSON.stringify({ assigneeId: assigneeId || null }),
-    });
-    setMsg(assigneeId ? 'Tarea reasignada — se envió el aviso' : 'Tarea sin asignar');
-    await load();
+    try {
+      await api(`/tasks/${taskId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ assigneeId: assigneeId || null }),
+      });
+      flash(assigneeId ? 'Tarea reasignada — se envió el aviso' : 'Tarea sin asignar');
+      await load();
+    } catch (e) {
+      flash(e instanceof Error ? e.message : 'Error al reasignar tarea', 'error');
+    }
   }
 
   async function createSponsor() {
     if (!sponsorForm.name || closed) return;
-    await api('/sponsors', {
-      method: 'POST',
-      body: JSON.stringify({
-        eventId: id,
-        name: sponsorForm.name,
-        contact: sponsorForm.contact || undefined,
-        contribution: sponsorForm.contribution || undefined,
-        amount: sponsorForm.amount ? Number(sponsorForm.amount) : undefined,
-        notes: sponsorForm.notes || undefined,
-      }),
-    });
-    setSponsorForm({ name: '', contact: '', contribution: '', amount: '', notes: '' });
-    setMsg('Patrocinador agregado');
-    await load();
+    try {
+      await api('/sponsors', {
+        method: 'POST',
+        body: JSON.stringify({
+          eventId: id,
+          name: sponsorForm.name,
+          contact: sponsorForm.contact || undefined,
+          contribution: sponsorForm.contribution || undefined,
+          amount: sponsorForm.amount ? Number(sponsorForm.amount) : undefined,
+          notes: sponsorForm.notes || undefined,
+        }),
+      });
+      setSponsorForm({ name: '', contact: '', contribution: '', amount: '', notes: '' });
+      flash('Patrocinador agregado');
+      await load();
+    } catch (e) {
+      flash(e instanceof Error ? e.message : 'Error al agregar patrocinador', 'error');
+    }
   }
 
   async function removeSponsor(sid: string) {
-    await api(`/sponsors/${sid}`, { method: 'DELETE' });
-    await load();
+    try {
+      await api(`/sponsors/${sid}`, { method: 'DELETE' });
+      flash('Patrocinador eliminado');
+      await load();
+    } catch (e) {
+      flash(e instanceof Error ? e.message : 'Error al eliminar patrocinador', 'error');
+    }
   }
 
   if (loading && !event) {
@@ -847,7 +959,7 @@ function EventDetailInner() {
         <EventContextHint tab={tab} />
 
         {msg ? (
-          <FlashMessage variant="success" onDismiss={() => setMsg('')}>
+          <FlashMessage variant={msgVariant} onDismiss={() => setMsg('')}>
             {msg}
           </FlashMessage>
         ) : null}

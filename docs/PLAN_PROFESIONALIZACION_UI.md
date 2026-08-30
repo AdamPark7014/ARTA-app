@@ -37,11 +37,11 @@ para que el panel se sienta **profesional e intuitivo** de punta a punta.
 | Checklist captura **sobre** el PDF | ✅ | 59/80 backfill; 21 firmados intactos |
 | Ver/editar **en grande** | 🟡 | ExpandBox existe; falta abrir grande por defecto y workspace alto inline |
 | Menú auto-hide tipo Mac | 🟡 | Existe pero es opt-in; falta default sensato + hint en borde |
-| Finance / Users / Security polish | ❌ | Items 6–7 Fase A sin auditar |
-| Playwright hub (Campaña + OC) | ❌ | Ruta más pesada, menos cubierta |
-| Guía de uso con menú nuevo | ❌ | HTML sigue describiendo sidebar viejo |
+| Finance / Users / Security polish | ✅ | Copy ES + CTAs (2026-08-29) |
+| Playwright hub (Campaña + OC) | ✅ | `e2e/hub-critical.spec.ts` (mock API) |
+| Guía de uso con menú nuevo | ✅ | Sidebar + ExpandBox + Ctrl+S + campaña Excel |
 | Deploy key GitHub en server | ❌ | Operativo Adam |
-| Traefik: causa raíz Nexara | 🟡 | Cron parchea; falta hook en deploy Nexara |
+| Traefik: causa raíz Nexara | 🟡 | Cron + docs hook post-deploy; falta aplicar hook en Nexara |
 | A3-5 módulos (inventario, calendario, reportes) | ❌ | Un módulo a la vez, sin CRUD fuera del spine |
 | ENTERPRISE_ITERATION_W2.md | ❌ | Doc pendiente |
 
@@ -70,22 +70,25 @@ buscar el botón «Ampliar»; que el menú se esconda como en Mac sin tutorial.
 | -- | ------- | ------ |
 | P1-1 | Auditoría visual finance / users / security (Fase A 6–7) | ✅ Copy ES + CTAs (2026-08-29) |
 | P1-2 | Empty states + copy unificados en hub de evento | ✅ Campaña / archivos / corrida |
-| P1-3 | Specs Playwright: Campaña expandida + ventana OC + ExpandBox Esc | ❌ |
-| P1-4 | Actualizar `docs/guides/ARTA-Ops-Guia-de-Uso.html` al menú nuevo | ❌ |
+| P1-3 | Specs Playwright: Campaña expandida + ventana OC + ExpandBox Esc | ✅ `hub-critical.spec.ts` |
+| P1-4 | Actualizar `docs/guides/ARTA-Ops-Guia-de-Uso.html` al menú nuevo | ✅ |
 
-**Extra P1 (eficiencia diaria, mismo turno):** Ctrl/⌘+S en editores; Esc con
-confirmación si dirty; un clic a editar en campaña/archivos; DocEditor en
-ExpandBox; restablecer password inline; revocar todas las sesiones.
+**Extra P1 (eficiencia diaria):** Ctrl/⌘+S; Esc dirty; campaña/archivos un clic;
+DocEditor ExpandBox; password inline; revocar sesiones.
+
+**Extra hardening (2026-08-30):** no regenerar PDFs firmados desde boletera;
+seed no pisa ACL; flash error/success en hub; try/catch mutaciones; healthchecks
+compose + backup/rollback; OC nav sin `checklist.edit`; docs Traefik/Nexara.
 
 ### Fase P2 — Operación y escala
 
-| ID | Trabajo |
-| -- | ------- |
-| P2-1 | Deploy key en Hetzner → `update.sh` con `git pull` |
-| P2-2 | Hook post-deploy Nexara que no borre `arta.yml` (o lo restaure) |
-| P2-3 | Confirmar roster Monse/Kika; entregar credenciales (fuera de repo) |
-| P2-4 | Backfill `--include-signed` **solo si Adam lo pide** |
-| P2-5 | A3-5 un módulo operativo (calendario o inventario), sin CRUD paralelo |
+| ID | Trabajo | Estado |
+| -- | ------- | ------ |
+| P2-1 | Deploy key en Hetzner → `update.sh` con `git pull` | ❌ Adam |
+| P2-2 | Hook post-deploy Nexara que no borre `arta.yml` (o lo restaure) | 🟡 Doc + cron; falta hook Nexara |
+| P2-3 | Confirmar roster Monse/Kika; entregar credenciales (fuera de repo) | ❌ |
+| P2-4 | Backfill `--include-signed` **solo si Adam lo pide** | ❌ |
+| P2-5 | A3-5 un módulo operativo (calendario o inventario), sin CRUD paralelo | ❌ |
 
 ### Fase P3 — Enterprise
 

@@ -324,14 +324,16 @@ export class ChecklistPdfService {
     });
   }
 
-  /** After boletera/logo changes, refresh all checklist PDFs for the event. */
+  /** After boletera/logo changes, refresh draft checklist PDFs for the event.
+   * Never rewrite PDFs already authorized (authorizedAt / authorizedSignature). */
   async regenerateForEvent(eventId: string): Promise<number> {
-    const ids = await this.prisma.checklistInstance.findMany({
+    const rows = await this.prisma.checklistInstance.findMany({
       where: { eventId },
-      select: { id: true },
+      select: { id: true, authorizedAt: true, authorizedSignature: true },
     });
     let n = 0;
-    for (const row of ids) {
+    for (const row of rows) {
+      if (row.authorizedAt || row.authorizedSignature) continue;
       try {
         await this.regenerateInstance(row.id);
         n += 1;
