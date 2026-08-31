@@ -6,19 +6,20 @@
 
 ## Hecho en este turno
 
-**Usuarios CRUD dinámico (solo Directores Generales Arturo / José Luis):**
+**Usuarios — alta más usable para Arturo/José Luis + huecos CRUD:**
 
-1. **API** (`users.controller`): create con permisos opcionales; PATCH email/nombre/cargo/rol/entidades/activo/password/permisos; sync `orgMembership`; revoca sesiones al cambiar password o desactivar; **DELETE** = soft-delete (`active: false`) + sesiones + auditLog; no auto-eliminarse ni tocar `super_admin` sin serlo; catálogo de roles oculta `super_admin` a no–super_admin.
-2. **UI** `/users`: gate `users.manage` / dir_general; crear o invitar; directorio con Editar/Eliminar; panel editar completo (datos + entidades + activo + password opcional + permisos extra); mensaje «Solo dirección» si no aplica.
+1. **Alta inmediata:** tabs Alta / Invitar; rol con hint; entidades auto según rol; password generado + ver/copiar; permisos extra opcionales; tarjeta post-alta con panel/email/clave para copiar.
+2. **API:** reactivar si el email estaba dado de baja; `unlock` limpia bloqueo login; roles con hint/defaultEntities; permisos en español (`PERMISSION_LABELS` / `ROLE_HINTS`).
+3. **Directorio:** filtro por rol; Reactivar / Desbloquear; invitaciones pendientes + revocar.
 
 ## A medias
 
-Nada (pendiente deploy + smoke en prod).
+Nada (pendiente deploy).
 
 ## Siguiente paso
 
-1. Deploy Hetzner + hard-refresh Arturo/José Luis en `/users`.
-2. Smoke: crear usuario, editar rol/entidades, eliminar (desactivar), verificar que logística no ve el menú.
+1. Deploy + hard-refresh Arturo en `/users`.
+2. Smoke: Alta inmediata → copiar credenciales; Invitar; Reactivar baja; Desbloquear.
 
 ## No tocar
 

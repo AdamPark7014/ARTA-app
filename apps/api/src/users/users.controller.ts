@@ -1,5 +1,7 @@
 import {
+  BadRequestException,
   Body,
+  ConflictException,
   Controller,
   Delete,
   ForbiddenException,
@@ -20,8 +22,12 @@ import {
   ASSIGNABLE_PERMISSIONS,
   ALL_ROLES,
   hasPermission,
+  PERMISSION_LABELS,
   PERMISSIONS,
+  ROLE_DEFAULT_ENTITIES,
+  ROLE_HINTS,
   ROLE_LABELS,
+  ROLE_PERMISSIONS,
   type RoleKey,
 } from '../common/rbac/roles';
 import { assertSameTenant, tenantIdOf } from '../common/tenant';
@@ -121,16 +127,76 @@ export class UsersController {
       select: { organizationId: true },
     });
     const orgId = actor?.organizationId || 'org_arta_internal';
-    await assertUserSeatAvailable(this.prisma, orgId);
     const allowed = new Set(ASSIGNABLE_PERMISSIONS as string[]);
     const permissions = (dto.permissions || []).filter((p) => allowed.has(p));
-    return this.prisma.user.create({
+    const email = dto.email.toLowerCase().trim();
+    const entities =
+      dto.entities?.length > 0
+        ? dto.entities
+        : ROLE_DEFAULT_ENTITIES[dto.roleKey as RoleKey] || (['ARTA'] as EntityKey[]);
+
+    const existing = await this.prisma.user.findUnique({
+      where: { email },
+      select: { id: true, active: true, organizationId: true },
+    });
+    if (existing) {
+      if (existing.organizationId && existing.organizationId !== orgId) {
+        throw new ConflictException('Ese email pertenece a otra organización');
+      }
+      if (existing.active) {
+        throw new ConflictException('Ya existe un usuario activo con ese email');
+      }
+      // Reactivar baja anterior con los datos nuevos
+      const revived = await this.prisma.user.update({
+        where: { id: existing.id },
+        data: {
+          fullName: dto.fullName,
+          title: dto.title,
+          roleKey: dto.roleKey,
+          entities,
+          permissions,
+          passwordHash,
+          active: true,
+          failedLoginCount: 0,
+          lockedUntil: null,
+          organizationId: orgId,
+        },
+        select: {
+          id: true,
+          email: true,
+          fullName: true,
+          title: true,
+          roleKey: true,
+          entities: true,
+          permissions: true,
+          active: true,
+          organizationId: true,
+        },
+      });
+      await this.prisma.orgMembership.upsert({
+        where: { organizationId_userId: { organizationId: orgId, userId: existing.id } },
+        create: { organizationId: orgId, userId: existing.id, roleKey: dto.roleKey },
+        update: { roleKey: dto.roleKey },
+      });
+      await this.prisma.userSession.updateMany({
+        where: { userId: existing.id, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+      return {
+        ...revived,
+        roleLabel: ROLE_LABELS[revived.roleKey as RoleKey] ?? revived.roleKey,
+        reactivated: true,
+      };
+    }
+
+    await assertUserSeatAvailable(this.prisma, orgId);
+    const created = await this.prisma.user.create({
       data: {
-        email: dto.email.toLowerCase(),
+        email,
         fullName: dto.fullName,
         title: dto.title,
         roleKey: dto.roleKey,
-        entities: dto.entities,
+        entities,
         permissions,
         passwordHash,
         active: true,
@@ -151,6 +217,11 @@ export class UsersController {
         organizationId: true,
       },
     });
+    return {
+      ...created,
+      roleLabel: ROLE_LABELS[created.roleKey as RoleKey] ?? created.roleKey,
+      reactivated: false,
+    };
   }
 
   @Get('roles')
@@ -158,7 +229,13 @@ export class UsersController {
     this.assertUsersManage(req.user);
     const keys =
       req.user.roleKey === 'super_admin' ? ALL_ROLES : ALL_ROLES.filter((r) => r !== 'super_admin');
-    return keys.map((r) => ({ key: r, label: ROLE_LABELS[r] }));
+    return keys.map((r) => ({
+      key: r,
+      label: ROLE_LABELS[r],
+      hint: ROLE_HINTS[r],
+      defaultEntities: ROLE_DEFAULT_ENTITIES[r],
+      permissions: ROLE_PERMISSIONS[r] || [],
+    }));
   }
 
   @Get('permissions/catalog')
@@ -166,10 +243,7 @@ export class UsersController {
     this.assertUsersManage(req.user);
     return ASSIGNABLE_PERMISSIONS.map((key) => ({
       key,
-      label: key
-        .split('.')
-        .map((p) => p.charAt(0).toUpperCase() + p.slice(1))
-        .join(' · '),
+      label: PERMISSION_LABELS[key] || key,
     }));
   }
 
@@ -190,12 +264,14 @@ export class UsersController {
       active?: boolean;
       password?: string;
       permissions?: string[];
+      /** Limpia bloqueo por intentos fallidos de login */
+      unlock?: boolean;
     },
   ) {
     this.assertUsersManage(req.user);
     const target = await this.prisma.user.findUnique({
       where: { id },
-      select: { organizationId: true, roleKey: true },
+      select: { organizationId: true, roleKey: true, email: true },
     });
     if (!target) throw new NotFoundException('Usuario no encontrado');
     assertSameTenant(req.user, target.organizationId);
@@ -216,7 +292,15 @@ export class UsersController {
       active: body.active,
     };
     if (body.email?.trim()) {
-      data.email = body.email.trim().toLowerCase();
+      const nextEmail = body.email.trim().toLowerCase();
+      if (nextEmail !== target.email) {
+        const clash = await this.prisma.user.findUnique({
+          where: { email: nextEmail },
+          select: { id: true },
+        });
+        if (clash) throw new BadRequestException('Ese email ya está en uso');
+      }
+      data.email = nextEmail;
     }
     if (body.permissions) {
       const allowed = new Set(ASSIGNABLE_PERMISSIONS as string[]);
@@ -224,6 +308,10 @@ export class UsersController {
     }
     if (body.password && body.password.length >= 6) {
       data.passwordHash = await bcrypt.hash(body.password, 12);
+    }
+    if (body.unlock || body.active === true) {
+      data.failedLoginCount = 0;
+      data.lockedUntil = null;
     }
     const updated = await this.prisma.user.update({
       where: { id },

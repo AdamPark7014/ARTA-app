@@ -27,6 +27,35 @@ export const ROLE_LABELS: Record<RoleKey, string> = {
   enlace_gobierno: 'Enlace Gobierno y Pagos',
 };
 
+/** Texto corto para que dirección elija rol sin adivinar. */
+export const ROLE_HINTS: Record<RoleKey, string> = {
+  super_admin: 'Plataforma completa (solo Nexara).',
+  dir_general: 'Arturo / José Luis — todo el panel, altas de equipo.',
+  gerente_arta: 'Operación y finanzas Arta (Karla).',
+  dir_auditorio: 'Operación del Auditorio / Explanada.',
+  logistica: 'Producción, checklists, campaña, boletera.',
+  convenios: 'Patrocinios y convenios; ve tareas de todos.',
+  enlace_gobierno: 'Pagos gobierno, marcar OC pagadas.',
+};
+
+export const PERMISSION_LABELS: Record<string, string> = {
+  'finance.view': 'Ver finanzas',
+  'finance.edit': 'Editar finanzas / corrida',
+  'campaign.view': 'Ver campaña',
+  'campaign.edit': 'Editar campaña',
+  'po.authorize': 'Autorizar órdenes de compra',
+  'po.mark_paid': 'Marcar OC como pagada',
+  'event.create': 'Crear eventos',
+  'event.close': 'Cerrar eventos',
+  'checklist.edit': 'Editar checklists',
+  'studio.edit': 'Editar Studio / sitio',
+  'ticketing.edit': 'Editar boletera',
+  'folders.edit': 'Editar carpetas',
+  'vendor.pin': 'PINs de proveedor',
+  'users.manage': 'Gestionar usuarios',
+  everything: 'Acceso total',
+};
+
 export const ROLE_DEFAULT_ENTITIES: Record<RoleKey, EntityKey[]> = {
   super_admin: ['ARTA', 'EXPLANADA'],
   dir_general: ['ARTA', 'EXPLANADA'],

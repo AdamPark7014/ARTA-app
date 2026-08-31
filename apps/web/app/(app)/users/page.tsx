@@ -18,6 +18,8 @@ import { StatusBadge } from '@/components/ui/StatusBadge';
 import { api } from '@/lib/api';
 import { useUser } from '@/lib/user-context';
 import { userHasPermission } from '@/lib/access-matrix';
+import { panelLoginUrl } from '@/lib/domains';
+import { ROLE_DEFAULT_ENTITIES, ROLE_HINTS, type RoleKey } from '@arta/rbac';
 
 type UserRow = {
   id: string;
@@ -58,8 +60,24 @@ type UsersGov = {
   users: GovUser[];
 };
 
-type RoleOpt = { key: string; label: string };
+type RoleOpt = {
+  key: string;
+  label: string;
+  hint?: string;
+  defaultEntities?: string[];
+  permissions?: string[];
+};
 type PermOpt = { key: string; label: string };
+
+type InviteRow = {
+  id: string;
+  email: string;
+  roleKey: string;
+  entities: string[];
+  expiresAt: string;
+  acceptedAt?: string | null;
+  revokedAt?: string | null;
+};
 
 type EditDraft = {
   id: string;
@@ -73,14 +91,49 @@ type EditDraft = {
   password: string;
 };
 
-const EMPTY = {
+type CreateForm = {
+  email: string;
+  fullName: string;
+  title: string;
+  roleKey: string;
+  entities: string[];
+  password: string;
+  permissions: string[];
+};
+
+type CredsBox = {
+  email: string;
+  password: string;
+  fullName: string;
+  reactivated?: boolean;
+};
+
+const EMPTY: CreateForm = {
   email: '',
   fullName: '',
   title: '',
   roleKey: 'logistica',
-  entities: ['ARTA'] as string[],
+  entities: [...(ROLE_DEFAULT_ENTITIES.logistica || ['ARTA'])],
   password: '',
+  permissions: [],
 };
+
+function genPassword(len = 10): string {
+  const chars = 'abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  const buf = new Uint32Array(len);
+  if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+    crypto.getRandomValues(buf);
+  } else {
+    for (let i = 0; i < len; i++) buf[i] = Math.floor(Math.random() * 1e9);
+  }
+  let out = '';
+  for (let i = 0; i < len; i++) out += chars[buf[i]! % chars.length];
+  return out;
+}
+
+function entityLabel(e: string) {
+  return e === 'ARTA' ? 'Arta' : e === 'EXPLANADA' ? 'Auditorio' : e;
+}
 
 export default function UsersPage() {
   const { user: me } = useUser();
@@ -92,15 +145,23 @@ export default function UsersPage() {
   const [gov, setGov] = useState<UsersGov | null>(null);
   const [roles, setRoles] = useState<RoleOpt[]>([]);
   const [permCatalog, setPermCatalog] = useState<PermOpt[]>([]);
+  const [invites, setInvites] = useState<InviteRow[]>([]);
   const [error, setError] = useState('');
   const [msg, setMsg] = useState('');
-  const [form, setForm] = useState(EMPTY);
+  const [form, setForm] = useState<CreateForm>(() => ({
+    ...EMPTY,
+    password: genPassword(),
+  }));
   const [inviteMode, setInviteMode] = useState(false);
   const [inviteUrl, setInviteUrl] = useState('');
+  const [showPw, setShowPw] = useState(true);
+  const [showCreatePerms, setShowCreatePerms] = useState(false);
+  const [creds, setCreds] = useState<CredsBox | null>(null);
   const [orgId, setOrgId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [edit, setEdit] = useState<EditDraft | null>(null);
   const [riskFilter, setRiskFilter] = useState<'all' | 'high' | 'medium' | 'low'>('all');
+  const [roleFilter, setRoleFilter] = useState('all');
   const [q, setQ] = useState('');
   const [loading, setLoading] = useState(true);
   const [showInactive, setShowInactive] = useState(true);
@@ -115,7 +176,13 @@ export default function UsersPage() {
     setGov(g);
     setRoles(r);
     setPermCatalog(p);
-    if (meOrg?.id) setOrgId(meOrg.id);
+    if (meOrg?.id) {
+      setOrgId(meOrg.id);
+      const inv = await api<InviteRow[]>(`/organizations/${meOrg.id}/invites`).catch(
+        () => [] as InviteRow[],
+      );
+      setInvites(inv);
+    }
   }
 
   useEffect(() => {
@@ -130,11 +197,19 @@ export default function UsersPage() {
   }, [canManage]);
 
   const users = gov?.users || [];
+  const pendingInvites = useMemo(
+    () =>
+      invites.filter(
+        (i) => !i.acceptedAt && !i.revokedAt && new Date(i.expiresAt) > new Date(),
+      ),
+    [invites],
+  );
 
   const filtered = useMemo(() => {
     let list = users;
     if (!showInactive) list = list.filter((u) => u.active);
     if (riskFilter !== 'all') list = list.filter((u) => u.risk === riskFilter);
+    if (roleFilter !== 'all') list = list.filter((u) => u.roleKey === roleFilter);
     if (q.trim()) {
       const n = q.toLowerCase();
       list = list.filter(
@@ -146,12 +221,41 @@ export default function UsersPage() {
       );
     }
     return list;
-  }, [users, riskFilter, q, showInactive]);
+  }, [users, riskFilter, roleFilter, q, showInactive]);
+
+  const selectedRole = roles.find((r) => r.key === form.roleKey);
+  const roleHint =
+    selectedRole?.hint ||
+    ROLE_HINTS[form.roleKey as RoleKey] ||
+    '';
+
+  function applyRole(roleKey: string) {
+    const meta = roles.find((r) => r.key === roleKey);
+    const defaults =
+      meta?.defaultEntities ||
+      ROLE_DEFAULT_ENTITIES[roleKey as RoleKey] ||
+      (['ARTA'] as string[]);
+    setForm((f) => ({
+      ...f,
+      roleKey,
+      entities: [...defaults],
+      title: f.title.trim() ? f.title : meta?.label || f.title,
+    }));
+  }
 
   function toggleEntityCreate(ent: string) {
     setForm((f) => ({
       ...f,
       entities: f.entities.includes(ent) ? f.entities.filter((e) => e !== ent) : [...f.entities, ent],
+    }));
+  }
+
+  function toggleCreatePerm(key: string) {
+    setForm((f) => ({
+      ...f,
+      permissions: f.permissions.includes(key)
+        ? f.permissions.filter((p) => p !== key)
+        : [...f.permissions, key],
     }));
   }
 
@@ -169,6 +273,16 @@ export default function UsersPage() {
     });
     setMsg('');
     setError('');
+    setCreds(null);
+  }
+
+  async function copyText(text: string, okMsg: string) {
+    try {
+      await navigator.clipboard.writeText(text);
+      setMsg(okMsg);
+    } catch {
+      setMsg('No se pudo copiar — selecciónalo a mano');
+    }
   }
 
   async function onCreate(e: FormEvent) {
@@ -180,6 +294,7 @@ export default function UsersPage() {
     setSaving(true);
     setMsg('');
     setInviteUrl('');
+    setCreds(null);
     try {
       if (inviteMode) {
         if (!orgId) throw new Error('Sin organización activa');
@@ -190,21 +305,56 @@ export default function UsersPage() {
             email: form.email,
             roleKey: form.roleKey,
             entities: form.entities,
+            permissions: form.permissions,
           }),
         });
         setInviteUrl(created.acceptUrl);
-        setForm({ ...EMPTY, roleKey: form.roleKey, entities: form.entities });
-        setMsg('Invitación creada — copia el link si el correo no llega');
+        setForm({
+          ...EMPTY,
+          roleKey: form.roleKey,
+          entities: form.entities,
+          password: genPassword(),
+        });
+        setMsg('Invitación lista — copia el link y envíaselo (válido 7 días)');
+        await load();
       } else {
         if (!form.fullName.trim()) throw new Error('Nombre requerido');
-        await api('/users', {
+        if (form.password.trim().length < 6) throw new Error('Password mínimo 6 caracteres');
+        const created = await api<{
+          email: string;
+          fullName: string;
+          reactivated?: boolean;
+        }>('/users', {
           method: 'POST',
-          body: JSON.stringify(form),
+          body: JSON.stringify({
+            email: form.email,
+            fullName: form.fullName,
+            title: form.title || undefined,
+            roleKey: form.roleKey,
+            entities: form.entities,
+            password: form.password,
+            permissions: form.permissions,
+          }),
         });
-        setForm(EMPTY);
-        setMsg('Usuario creado');
+        setCreds({
+          email: created.email,
+          password: form.password,
+          fullName: created.fullName,
+          reactivated: created.reactivated,
+        });
+        setForm({
+          ...EMPTY,
+          roleKey: form.roleKey,
+          entities: form.entities,
+          password: genPassword(),
+        });
+        setMsg(
+          created.reactivated
+            ? 'Usuario reactivado con datos nuevos'
+            : 'Usuario creado — entrega email y clave al equipo',
+        );
+        await load();
       }
-      await load();
     } catch (err) {
       setMsg(err instanceof Error ? err.message : 'Error');
     } finally {
@@ -268,6 +418,52 @@ export default function UsersPage() {
     }
   }
 
+  async function reactivateUser(u: GovUser) {
+    setSaving(true);
+    try {
+      await api(`/users/${u.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ active: true, unlock: true }),
+      });
+      setMsg(`${u.fullName} reactivado`);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error al reactivar');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function unlockUser(u: GovUser) {
+    setSaving(true);
+    try {
+      await api(`/users/${u.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ unlock: true }),
+      });
+      setMsg(`Login desbloqueado para ${u.fullName}`);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error al desbloquear');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function revokeInvite(inviteId: string) {
+    if (!orgId) return;
+    setSaving(true);
+    try {
+      await api(`/organizations/${orgId}/invites/${inviteId}`, { method: 'DELETE' });
+      setMsg('Invitación revocada');
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error al revocar');
+    } finally {
+      setSaving(false);
+    }
+  }
+
   function toggleEditPerm(key: string) {
     if (!edit) return;
     setEdit({
@@ -280,11 +476,20 @@ export default function UsersPage() {
 
   const k = gov?.kpis;
   const msgVariant =
-    msg.includes('Elige') || msg.includes('requerido')
+    msg.includes('Elige') || msg.includes('requerido') || msg.includes('mínimo') || msg.includes('No se pudo')
       ? 'warn'
-      : msg.includes('creado') || msg.includes('actualizado') || msg.includes('Invitación') || msg.includes('eliminado')
+      : msg.includes('creado') ||
+          msg.includes('actualizado') ||
+          msg.includes('Invitación') ||
+          msg.includes('eliminado') ||
+          msg.includes('reactivado') ||
+          msg.includes('desbloqueado') ||
+          msg.includes('Copiado') ||
+          msg.includes('revocada')
         ? 'success'
         : 'error';
+
+  const loginUrl = panelLoginUrl('ARTA');
 
   if (!canManage) {
     return (
@@ -303,8 +508,8 @@ export default function UsersPage() {
     <AppShell title="Usuarios">
       <div className="page-workspace stack">
         <PageHeader
-          description="Alta, edición, roles, entidades, permisos extra y baja de cuentas. Solo Directores Generales (Arturo y José Luis)."
-          hint="Crear con password da acceso inmediato. Invitar por email deja que la persona elija su clave. Eliminar = desactivar + cerrar sesiones."
+          description="Alta, roles, entidades, permisos y bajas. Solo Directores Generales (Arturo y José Luis)."
+          hint="Alta inmediata = les das email + clave ya. Invitar = ellos eligen password con un link de 7 días."
         />
 
         {error ? (
@@ -383,20 +588,33 @@ export default function UsersPage() {
         <div className="users-layout">
           <div className="panel">
             <div className="panel-head">
-              <h2>{inviteMode ? 'Invitar usuario' : 'Crear usuario'}</h2>
-              <button
-                className="btn ghost btn-sm"
-                type="button"
-                onClick={() => {
-                  setInviteMode((v) => !v);
-                  setInviteUrl('');
-                  setMsg('');
-                }}
-              >
-                {inviteMode ? 'Crear con password' : 'Invitar por email'}
-              </button>
+              <h2>Nuevo integrante</h2>
             </div>
             <div className="panel-body">
+              <div className="row row--tight" style={{ marginBottom: '0.85rem' }}>
+                <button
+                  className={`btn btn-sm ${!inviteMode ? '' : 'ghost'}`}
+                  type="button"
+                  onClick={() => {
+                    setInviteMode(false);
+                    setInviteUrl('');
+                    if (!form.password) setForm((f) => ({ ...f, password: genPassword() }));
+                  }}
+                >
+                  Alta inmediata
+                </button>
+                <button
+                  className={`btn btn-sm ${inviteMode ? '' : 'ghost'}`}
+                  type="button"
+                  onClick={() => {
+                    setInviteMode(true);
+                    setCreds(null);
+                  }}
+                >
+                  Invitar por email
+                </button>
+              </div>
+
               <form className="form" onSubmit={onCreate}>
                 {!inviteMode ? (
                   <FormGrid>
@@ -406,18 +624,25 @@ export default function UsersPage() {
                         required
                         value={form.fullName}
                         onChange={(e) => setForm({ ...form, fullName: e.target.value })}
+                        placeholder="Ej. Ana López"
+                        autoComplete="off"
                       />
                     </label>
                     <label>
-                      Cargo
+                      Cargo (opcional)
                       <input
                         value={form.title}
                         onChange={(e) => setForm({ ...form, title: e.target.value })}
-                        placeholder="Ej. Logística"
+                        placeholder="Se sugiere según el rol"
                       />
                     </label>
                   </FormGrid>
-                ) : null}
+                ) : (
+                  <p className="muted kpi-sub" style={{ marginTop: 0 }}>
+                    Solo necesitas email + rol. La persona pone su nombre y password al abrir el link.
+                  </p>
+                )}
+
                 <label>
                   Email
                   <input
@@ -425,51 +650,158 @@ export default function UsersPage() {
                     type="email"
                     value={form.email}
                     onChange={(e) => setForm({ ...form, email: e.target.value })}
+                    placeholder="nombre@correo.com"
+                    autoComplete="off"
                   />
                 </label>
+
                 <label>
                   Rol
                   <FieldSelect
                     value={form.roleKey}
-                    onChange={(v) => setForm({ ...form, roleKey: v })}
+                    onChange={applyRole}
                     label="Rol del usuario"
                     options={roles.map((r) => ({ value: r.key, label: r.label }))}
                   />
                 </label>
-                {!inviteMode ? (
-                  <label>
-                    Password temporal
-                    <input
-                      required
-                      type="password"
-                      minLength={6}
-                      autoComplete="new-password"
-                      value={form.password}
-                      onChange={(e) => setForm({ ...form, password: e.target.value })}
-                    />
-                  </label>
-                ) : (
-                  <p className="muted kpi-sub" style={{ margin: 0 }}>
-                    Link de 7 días a <code>/invite/…</code> para que elija nombre y password.
+                {roleHint ? (
+                  <p className="muted kpi-sub" style={{ margin: '-0.35rem 0 0.5rem' }}>
+                    {roleHint}
                   </p>
-                )}
+                ) : null}
+
+                <div className="label">Acceso a</div>
                 <div className="row">
                   {(['ARTA', 'EXPLANADA'] as const).map((ent) => (
                     <FieldCheck
                       key={ent}
                       checked={form.entities.includes(ent)}
                       onChange={() => toggleEntityCreate(ent)}
-                      label={ent === 'ARTA' ? 'Arta' : 'Auditorio'}
+                      label={entityLabel(ent)}
                     />
                   ))}
                 </div>
-                {inviteUrl ? (
-                  <p className="muted" style={{ fontSize: 12, wordBreak: 'break-all' }}>
-                    <a href={inviteUrl}>{inviteUrl}</a>
-                  </p>
+
+                {!inviteMode ? (
+                  <label>
+                    Password temporal
+                    <div className="row row--tight" style={{ alignItems: 'center', marginTop: 4 }}>
+                      <input
+                        required
+                        type={showPw ? 'text' : 'password'}
+                        minLength={6}
+                        autoComplete="new-password"
+                        value={form.password}
+                        onChange={(e) => setForm({ ...form, password: e.target.value })}
+                        style={{ flex: 1 }}
+                      />
+                      <button
+                        className="btn ghost btn-sm"
+                        type="button"
+                        onClick={() => setShowPw((v) => !v)}
+                      >
+                        {showPw ? 'Ocultar' : 'Ver'}
+                      </button>
+                      <button
+                        className="btn ghost btn-sm"
+                        type="button"
+                        onClick={() => setForm((f) => ({ ...f, password: genPassword() }))}
+                      >
+                        Generar
+                      </button>
+                      <button
+                        className="btn ghost btn-sm"
+                        type="button"
+                        onClick={() => void copyText(form.password, 'Password copiado')}
+                      >
+                        Copiar
+                      </button>
+                    </div>
+                  </label>
                 ) : null}
+
+                <button
+                  className="btn ghost btn-sm"
+                  type="button"
+                  onClick={() => setShowCreatePerms((v) => !v)}
+                >
+                  {showCreatePerms ? 'Ocultar permisos extra' : 'Permisos extra (opcional)'}
+                </button>
+                {showCreatePerms ? (
+                  <FormGrid cols={2}>
+                    {permCatalog.map((p) => (
+                      <FieldCheck
+                        key={p.key}
+                        checked={form.permissions.includes(p.key)}
+                        onChange={() => toggleCreatePerm(p.key)}
+                        label={p.label || p.key}
+                      />
+                    ))}
+                  </FormGrid>
+                ) : null}
+
+                {inviteUrl ? (
+                  <div className="panel" style={{ margin: '0.5rem 0', padding: '0.75rem' }}>
+                    <div className="muted kpi-sub">Link de invitación</div>
+                    <p style={{ fontSize: 12, wordBreak: 'break-all', margin: '0.35rem 0' }}>
+                      <a href={inviteUrl}>{inviteUrl}</a>
+                    </p>
+                    <button
+                      className="btn btn-sm"
+                      type="button"
+                      onClick={() => void copyText(inviteUrl, 'Link copiado')}
+                    >
+                      Copiar link
+                    </button>
+                  </div>
+                ) : null}
+
+                {creds ? (
+                  <div className="panel" style={{ margin: '0.5rem 0', padding: '0.75rem' }}>
+                    <strong>
+                      {creds.reactivated ? 'Reactivado' : 'Listo'} · {creds.fullName}
+                    </strong>
+                    <p className="muted kpi-sub" style={{ margin: '0.35rem 0' }}>
+                      Entrégales esto (también puedes copiarlo todo):
+                    </p>
+                    <pre
+                      style={{
+                        fontSize: 12,
+                        whiteSpace: 'pre-wrap',
+                        margin: '0.35rem 0 0.6rem',
+                        padding: '0.55rem',
+                        background: 'var(--bg-soft)',
+                        borderRadius: 8,
+                      }}
+                    >{`Panel: ${loginUrl}
+Email: ${creds.email}
+Password: ${creds.password}`}</pre>
+                    <div className="row row--tight">
+                      <button
+                        className="btn btn-sm"
+                        type="button"
+                        onClick={() =>
+                          void copyText(
+                            `Panel: ${loginUrl}\nEmail: ${creds.email}\nPassword: ${creds.password}`,
+                            'Credenciales copiadas',
+                          )
+                        }
+                      >
+                        Copiar todo
+                      </button>
+                      <button className="btn ghost btn-sm" type="button" onClick={() => setCreds(null)}>
+                        Cerrar
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
+
                 <button className="btn" type="submit" disabled={saving}>
-                  {saving ? 'Guardando…' : inviteMode ? 'Enviar invitación' : 'Crear usuario'}
+                  {saving
+                    ? 'Guardando…'
+                    : inviteMode
+                      ? 'Crear invitación'
+                      : 'Crear usuario'}
                 </button>
               </form>
             </div>
@@ -486,7 +818,16 @@ export default function UsersPage() {
                   onChange={setQ}
                   placeholder="Nombre, email o rol…"
                   label="Buscar"
-                  maxWidth={240}
+                  maxWidth={220}
+                />
+                <FieldSelect
+                  value={roleFilter}
+                  onChange={setRoleFilter}
+                  label="Rol"
+                  options={[
+                    { value: 'all', label: 'Todos los roles' },
+                    ...roles.map((r) => ({ value: r.key, label: r.label })),
+                  ]}
                 />
                 <FieldSelect
                   value={riskFilter}
@@ -544,9 +885,7 @@ export default function UsersPage() {
                             ) : null}
                           </td>
                           <td className="muted kpi-sub">
-                            {u.entities
-                              .map((e) => (e === 'ARTA' ? 'Arta' : 'Auditorio'))
-                              .join(' · ') || '—'}
+                            {u.entities.map(entityLabel).join(' · ') || '—'}
                           </td>
                           <td>
                             <StatusBadge value={u.active ? 'Activo' : 'Inactivo'} kind="raw" />
@@ -560,7 +899,7 @@ export default function UsersPage() {
                               : 'Nunca'}
                           </td>
                           <td>
-                            <div className="row row--tight">
+                            <div className="row row--tight" style={{ flexWrap: 'wrap' }}>
                               <button
                                 className="btn btn-sm"
                                 type="button"
@@ -568,14 +907,36 @@ export default function UsersPage() {
                               >
                                 Editar
                               </button>
-                              <button
-                                className="btn ghost btn-sm btn-danger"
-                                type="button"
-                                disabled={saving || u.id === me?.id}
-                                onClick={() => void deleteUser(u)}
-                              >
-                                Eliminar
-                              </button>
+                              {!u.active ? (
+                                <button
+                                  className="btn ghost btn-sm"
+                                  type="button"
+                                  disabled={saving}
+                                  onClick={() => void reactivateUser(u)}
+                                >
+                                  Reactivar
+                                </button>
+                              ) : null}
+                              {u.locked ? (
+                                <button
+                                  className="btn ghost btn-sm"
+                                  type="button"
+                                  disabled={saving}
+                                  onClick={() => void unlockUser(u)}
+                                >
+                                  Desbloquear
+                                </button>
+                              ) : null}
+                              {u.active ? (
+                                <button
+                                  className="btn ghost btn-sm btn-danger"
+                                  type="button"
+                                  disabled={saving || u.id === me?.id}
+                                  onClick={() => void deleteUser(u)}
+                                >
+                                  Eliminar
+                                </button>
+                              ) : null}
                             </div>
                           </td>
                         </tr>
@@ -587,6 +948,55 @@ export default function UsersPage() {
             </div>
           </div>
         </div>
+
+        {pendingInvites.length ? (
+          <div className="panel">
+            <div className="panel-head">
+              <h2>Invitaciones pendientes · {pendingInvites.length}</h2>
+            </div>
+            <div className="panel-body">
+              <div className="table-wrap">
+                <table className="table table-sticky">
+                  <thead>
+                    <tr>
+                      <th>Email</th>
+                      <th>Rol</th>
+                      <th>Entidades</th>
+                      <th>Expira</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pendingInvites.map((inv) => (
+                      <tr key={inv.id}>
+                        <td>{inv.email}</td>
+                        <td className="muted">
+                          {roles.find((r) => r.key === inv.roleKey)?.label || inv.roleKey}
+                        </td>
+                        <td className="muted kpi-sub">
+                          {(inv.entities || []).map(entityLabel).join(' · ')}
+                        </td>
+                        <td className="muted kpi-sub">
+                          {new Date(inv.expiresAt).toLocaleDateString('es-MX')}
+                        </td>
+                        <td>
+                          <button
+                            className="btn ghost btn-sm btn-danger"
+                            type="button"
+                            disabled={saving}
+                            onClick={() => void revokeInvite(inv.id)}
+                          >
+                            Revocar
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        ) : null}
 
         {edit ? (
           <div className="panel">
@@ -627,7 +1037,18 @@ export default function UsersPage() {
                     Rol
                     <FieldSelect
                       value={edit.roleKey}
-                      onChange={(v) => setEdit({ ...edit, roleKey: v })}
+                      onChange={(v) => {
+                        const meta = roles.find((r) => r.key === v);
+                        const defaults =
+                          meta?.defaultEntities ||
+                          ROLE_DEFAULT_ENTITIES[v as RoleKey] ||
+                          edit.entities;
+                        setEdit({
+                          ...edit,
+                          roleKey: v,
+                          entities: [...defaults],
+                        });
+                      }}
                       label="Rol"
                       options={roles.map((r) => ({ value: r.key, label: r.label }))}
                     />
@@ -650,7 +1071,7 @@ export default function UsersPage() {
                             : [...edit.entities, ent],
                         })
                       }
-                      label={ent === 'ARTA' ? 'Arta' : 'Auditorio'}
+                      label={entityLabel(ent)}
                     />
                   ))}
                 </div>
@@ -663,14 +1084,24 @@ export default function UsersPage() {
 
                 <label>
                   Nueva contraseña (opcional)
-                  <input
-                    type="password"
-                    minLength={6}
-                    autoComplete="new-password"
-                    placeholder="Dejar vacío para no cambiar"
-                    value={edit.password}
-                    onChange={(e) => setEdit({ ...edit, password: e.target.value })}
-                  />
+                  <div className="row row--tight" style={{ alignItems: 'center', marginTop: 4 }}>
+                    <input
+                      type="password"
+                      minLength={6}
+                      autoComplete="new-password"
+                      placeholder="Dejar vacío para no cambiar"
+                      value={edit.password}
+                      onChange={(e) => setEdit({ ...edit, password: e.target.value })}
+                      style={{ flex: 1 }}
+                    />
+                    <button
+                      className="btn ghost btn-sm"
+                      type="button"
+                      onClick={() => setEdit({ ...edit, password: genPassword() })}
+                    >
+                      Generar
+                    </button>
+                  </div>
                 </label>
 
                 <div className="label" style={{ marginTop: '0.75rem' }}>
@@ -694,7 +1125,7 @@ export default function UsersPage() {
                   <button
                     className="btn ghost btn-danger"
                     type="button"
-                    disabled={saving || edit.id === me?.id}
+                    disabled={saving || edit.id === me?.id || !edit.active}
                     onClick={() => {
                       const u = users.find((x) => x.id === edit.id);
                       if (u) void deleteUser(u);
