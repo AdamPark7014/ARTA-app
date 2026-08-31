@@ -18,6 +18,7 @@ import { PoProofsBlock } from '@/components/purchase-orders/PoProofsBlock';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { api } from '@/lib/api';
 import { useUser } from '@/lib/user-context';
+import { userHasPermission } from '@/lib/access-matrix';
 
 type PoLine = { concept: string; qty: number; unitPrice: number; total: number };
 
@@ -61,7 +62,15 @@ function poStatusKind(status: string): 'po' | 'raw' {
 }
 
 export default function PurchaseOrdersPage() {
-  const { entity } = useUser();
+  const { entity, user } = useUser();
+  const canAuthorize = userHasPermission(user?.roleKey || '', user?.permissions || [], [
+    'po.authorize',
+    'everything',
+  ]);
+  const canMarkPaid = userHasPermission(user?.roleKey || '', user?.permissions || [], [
+    'po.mark_paid',
+    'everything',
+  ]);
   const [data, setData] = useState<PoAnalytics | null>(null);
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -351,7 +360,8 @@ export default function PurchaseOrdersPage() {
                                 >
                                   Partidas
                                 </button>
-                                {po.status === 'PENDING_AUTH' || po.status === 'DRAFT' ? (
+                                {canAuthorize &&
+                                (po.status === 'PENDING_AUTH' || po.status === 'DRAFT') ? (
                                   <button
                                     className="btn ghost btn-sm"
                                     type="button"
@@ -360,7 +370,7 @@ export default function PurchaseOrdersPage() {
                                     Autorizar
                                   </button>
                                 ) : null}
-                                {po.status === 'AUTHORIZED' ? (
+                                {canMarkPaid && po.status === 'AUTHORIZED' ? (
                                   <button
                                     className="btn ghost btn-sm"
                                     type="button"

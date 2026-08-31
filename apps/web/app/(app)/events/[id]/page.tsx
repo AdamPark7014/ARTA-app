@@ -127,9 +127,32 @@ function EventDetailInner() {
   const closed = event?.status === 'CLOSED' || event?.status === 'CANCELLED';
   const canClose = userHasPermission(user?.roleKey || '', user?.permissions || [], ['event.close', 'everything']);
   const canFinance = userHasPermission(user?.roleKey || '', user?.permissions || [], ['finance.edit', 'everything']);
+  const canSeeFinance = userHasPermission(user?.roleKey || '', user?.permissions || [], [
+    'finance.view',
+    'finance.edit',
+    'everything',
+  ]);
   const canCampaign = userHasPermission(user?.roleKey || '', user?.permissions || [], ['campaign.edit', 'everything']);
+  const canSeeCampaign = userHasPermission(user?.roleKey || '', user?.permissions || [], [
+    'campaign.view',
+    'campaign.edit',
+    'everything',
+  ]);
   const canTicketing = userHasPermission(user?.roleKey || '', user?.permissions || [], ['ticketing.edit', 'everything']);
   const canVendorPin = userHasPermission(user?.roleKey || '', user?.permissions || [], ['vendor.pin', 'everything']);
+  const canAuthorize = userHasPermission(user?.roleKey || '', user?.permissions || [], [
+    'po.authorize',
+    'everything',
+  ]);
+  const canMarkPaid = userHasPermission(user?.roleKey || '', user?.permissions || [], [
+    'po.mark_paid',
+    'everything',
+  ]);
+  const canChecklistEdit = userHasPermission(user?.roleKey || '', user?.permissions || [], [
+    'checklist.edit',
+    'everything',
+  ]);
+  const canSponsors = canChecklistEdit;
   const canPo = userHasPermission(user?.roleKey || '', user?.permissions || [], [
     'checklist.edit',
     'po.authorize',
@@ -252,8 +275,15 @@ function EventDetailInner() {
       { key: 'sponsors', label: 'Convenios y patrocinios', count: event.sponsors?.length || 0 },
       { key: 'files', label: 'Documentos', count: event.files.length },
     ] as const;
-    return all.filter((m) => (m.key === 'ocs' ? canPo : true));
-  }, [event, campaignFiles, canPo]);
+    return all.filter((m) => {
+      if (m.key === 'ocs') return canPo;
+      if (m.key === 'finance') return canSeeFinance;
+      if (m.key === 'campaign') return canSeeCampaign;
+      if (m.key === 'ticketing') return canTicketing;
+      if (m.key === 'sponsors') return canSponsors;
+      return true;
+    });
+  }, [event, campaignFiles, canPo, canSeeFinance, canSeeCampaign, canTicketing, canSponsors]);
 
   const heroStats = useMemo(() => {
     if (!event) return undefined;
@@ -1012,7 +1042,7 @@ function EventDetailInner() {
           <EventChecklistsPanel
             event={event}
             activeChecklist={activeChecklist}
-            closed={closed}
+            closed={closed || !canChecklistEdit}
             saving={saving}
             userFullName={user?.fullName || ''}
             onOpenChecklist={openChecklist}
@@ -1030,6 +1060,8 @@ function EventDetailInner() {
         {tab === 'ocs' && (
           <EventPurchaseOrdersPanel
             closed={closed}
+            canAuthorize={canAuthorize}
+            canMarkPaid={canMarkPaid}
             poForm={poForm}
             setPoForm={setPoForm}
             poLinesTotal={poLinesTotal}
@@ -1119,6 +1151,7 @@ function EventDetailInner() {
         {tab === 'sponsors' && (
           <EventSponsorsPanel
             closed={closed}
+            canEdit={canSponsors}
             sponsors={event.sponsors || []}
             sponsorForm={sponsorForm}
             setSponsorForm={setSponsorForm}
@@ -1131,7 +1164,7 @@ function EventDetailInner() {
         {tab === 'files' && (
           <EventFilesPanel
             eventId={id}
-            closed={closed}
+            closed={closed || !canChecklistEdit}
             files={event.files}
             previewFile={previewFile}
             setPreviewFile={setPreviewFile}

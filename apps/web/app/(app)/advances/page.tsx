@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/PageChrome';
 import { api } from '@/lib/api';
 import { useUser } from '@/lib/user-context';
+import { userHasPermission } from '@/lib/access-matrix';
 
 type EventOpt = { id: string; name: string; entity: string };
 type Advance = {
@@ -27,7 +28,11 @@ type Advance = {
 };
 
 export default function AdvancesPage() {
-  const { entity } = useUser();
+  const { entity, user } = useUser();
+  const canEdit = userHasPermission(user?.roleKey || '', user?.permissions || [], [
+    'finance.edit',
+    'everything',
+  ]);
   const [events, setEvents] = useState<EventOpt[]>([]);
   const [rows, setRows] = useState<Advance[]>([]);
   const [loading, setLoading] = useState(true);
@@ -164,6 +169,7 @@ export default function AdvancesPage() {
               </FilterBar>
             ) : null}
 
+            {canEdit ? (
             <div className="panel">
               <div className="panel-head">
                 <h2>Subir anticipo / comprobante</h2>
@@ -209,6 +215,7 @@ export default function AdvancesPage() {
                 )}
               </div>
             </div>
+            ) : null}
 
             <div className="panel">
               <div className="panel-head">

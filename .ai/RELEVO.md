@@ -6,18 +6,20 @@
 
 ## Hecho en este turno
 
-**Plan auditoría ultra profunda — ya cerrado** (commit `3efa71d`, deploy live).
+**W3 Oleada B — UI RBAC gates** (surgical):
 
-Verificación 2026-08-31: contenedores healthy; `/p/arta` SSR con texto + `@graph` + `EntertainmentBusiness`; feed/sitemap 200.
+- OC hub + torre: `canAuthorize` / `canMarkPaid` (`po.authorize` / `po.mark_paid`)
+- Event hub tabs: filtra finance/campaign/ticketing/sponsors; sponsors `canEdit`; checklists/files read-only sin `checklist.edit`
+- Tasks: tab Equipo solo gerencia; finance portfolio vía `userHasPermission`; ticketing/advances/vendor mutaciones gated
 
-No hay trabajo pendiente del plan en código. Todos w1–w5 completed.
+## A medias
 
-## Siguiente paso (ops Adam, fuera de código)
+Nada de este bloque UI RBAC. Siguiente oleada W3 (SEO mega / calendario) la lleva el plan padre si aplica.
 
-1. URLs redes → `NEXT_PUBLIC_SOCIAL_*` + verification GSC/Bing.
-2. Deploy key GitHub en Hetzner; hook post-deploy Nexara Traefik.
-3. Rich Results Test manual + GSC inspección URL.
-4. Confirmar Monse/Kika; enroll 2FA equipo.
+## Siguiente paso
+
+1. Continuar plan W3 (closed API ya salvado en turno previo `87ba30c`; SEO/calendario).
+2. Ops Adam: redes, deploy key, GSC, 2FA (sin cambio).
 
 ## No tocar
 

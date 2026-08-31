@@ -16,6 +16,7 @@ import {
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { api } from '@/lib/api';
 import { useUser } from '@/lib/user-context';
+import { userHasPermission } from '@/lib/access-matrix';
 
 type FinanceRow = {
   eventId: string;
@@ -60,12 +61,7 @@ export default function FinancePage() {
       .finally(() => setLoading(false));
   }, [entity]);
 
-  const canEdit =
-    user &&
-    (user.roleKey === 'dir_general' ||
-      user.roleKey === 'gerente_arta' ||
-      user.roleKey === 'super_admin' ||
-      user.permissions.includes('finance.edit'));
+  const canEdit = !!user && userHasPermission(user.roleKey, user.permissions, ['finance.edit', 'everything']);
 
   const rows = useMemo(() => {
     let list = data?.ranking || [];

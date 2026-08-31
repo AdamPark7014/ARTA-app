@@ -9,6 +9,8 @@ type SponsorForm = { name: string; contact: string; contribution: string; amount
 
 type EventSponsorsPanelProps = {
   closed: boolean;
+  /** Mutaciones (alta/edición/baja); `closed` ya bloquea por su cuenta */
+  canEdit?: boolean;
   sponsors: Sponsor[];
   sponsorForm: SponsorForm;
   setSponsorForm: (form: SponsorForm) => void;
@@ -22,6 +24,7 @@ type EventSponsorsPanelProps = {
 
 export function EventSponsorsPanel({
   closed,
+  canEdit = true,
   sponsors,
   sponsorForm,
   setSponsorForm,
@@ -78,7 +81,7 @@ export function EventSponsorsPanel({
         </div>
       </div>
 
-      {!closed ? (
+      {!closed && canEdit ? (
         <div className="panel">
           <div className="panel-head">
             <div>
@@ -238,7 +241,7 @@ export function EventSponsorsPanel({
                         <td>{s.contribution || '—'}</td>
                         <td>{s.amount != null ? `$${Number(s.amount).toLocaleString('es-MX')}` : '—'}</td>
                         <td>
-                          {!closed ? (
+                          {!closed && canEdit ? (
                             <div className="row row--tight">
                               <button
                                 className="btn ghost btn-sm"

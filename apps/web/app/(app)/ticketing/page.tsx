@@ -18,6 +18,7 @@ import {
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { api } from '@/lib/api';
 import { useUser } from '@/lib/user-context';
+import { userHasPermission } from '@/lib/access-matrix';
 import { BoleteraFields, resolveBoleteraName } from '@/components/ticketing/BoleteraFields';
 import { boleteraChoiceOf } from '@/lib/boletera';
 
@@ -50,7 +51,11 @@ function flashVariant(msg: string): 'info' | 'success' | 'error' | 'warn' {
 }
 
 export default function TicketingPage() {
-  const { entity } = useUser();
+  const { entity, user } = useUser();
+  const canEdit = userHasPermission(user?.roleKey || '', user?.permissions || [], [
+    'ticketing.edit',
+    'everything',
+  ]);
   const [rows, setRows] = useState<Setup[]>([]);
   const [events, setEvents] = useState<EventOpt[]>([]);
   const [kpis, setKpis] = useState<{
@@ -213,27 +218,29 @@ export default function TicketingPage() {
           description="Performance de boletera: aforo, vendidos, sell-through y revenue potencial vs realizado."
           hint="Sync rellena vendidos vía integración (Arema). Revisa holds vencidos — aparecen marcados en la tabla."
         >
-          <button
-            className="btn ghost"
-            type="button"
-            disabled={syncing}
-            onClick={async () => {
-              setSyncing(true);
-              try {
-                const res = await api<{ updated: number; total: number }>('/ticketing/sync', {
-                  method: 'POST',
-                });
-                setMsg(`Sync boletera · actualizados ${res.updated}/${res.total}`);
-                await load();
-              } catch (e) {
-                setMsg(e instanceof Error ? e.message : 'Error sync');
-              } finally {
-                setSyncing(false);
-              }
-            }}
-          >
-            {syncing ? 'Sincronizando…' : 'Sync boletera ahora'}
-          </button>
+          {canEdit ? (
+            <button
+              className="btn ghost"
+              type="button"
+              disabled={syncing}
+              onClick={async () => {
+                setSyncing(true);
+                try {
+                  const res = await api<{ updated: number; total: number }>('/ticketing/sync', {
+                    method: 'POST',
+                  });
+                  setMsg(`Sync boletera · actualizados ${res.updated}/${res.total}`);
+                  await load();
+                } catch (e) {
+                  setMsg(e instanceof Error ? e.message : 'Error sync');
+                } finally {
+                  setSyncing(false);
+                }
+              }}
+            >
+              {syncing ? 'Sincronizando…' : 'Sync boletera ahora'}
+            </button>
+          ) : null}
         </PageHeader>
 
         {msg ? (
@@ -284,6 +291,7 @@ export default function TicketingPage() {
           </div>
         ) : null}
 
+        {canEdit ? (
         <div className="panel">
           <div className="panel-head">
             <h2>{editingId ? 'Editar configuración' : 'Nueva configuración'}</h2>
@@ -412,6 +420,7 @@ export default function TicketingPage() {
             </form>
           </div>
         </div>
+        ) : null}
 
         <div className="panel">
           <div className="panel-head">
@@ -485,12 +494,16 @@ export default function TicketingPage() {
                           {(r.zonesJson || []).map((z) => `${z.zona}:${z.aforo}`).join(' · ')}
                         </td>
                         <td className="row">
-                          <button className="btn ghost" type="button" onClick={() => startEdit(r)}>
-                            Editar
-                          </button>
-                          <button className="btn ghost" type="button" onClick={() => remove(r.id)}>
-                            Eliminar
-                          </button>
+                          {canEdit ? (
+                            <>
+                              <button className="btn ghost" type="button" onClick={() => startEdit(r)}>
+                                Editar
+                              </button>
+                              <button className="btn ghost" type="button" onClick={() => remove(r.id)}>
+                                Eliminar
+                              </button>
+                            </>
+                          ) : null}
                         </td>
                       </tr>
                     );

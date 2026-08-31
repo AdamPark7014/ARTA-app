@@ -36,6 +36,10 @@ type EditPoMeta = { vendorName: string; description: string };
 
 type EventPurchaseOrdersPanelProps = {
   closed: boolean;
+  /** Autorizar OC (`po.authorize`) */
+  canAuthorize?: boolean;
+  /** Marcar pagado (`po.mark_paid`) */
+  canMarkPaid?: boolean;
   poForm: PoForm;
   setPoForm: (form: PoForm) => void;
   poLinesTotal: number;
@@ -74,6 +78,8 @@ function rubroLabel(key: string) {
 
 export function EventPurchaseOrdersPanel({
   closed,
+  canAuthorize = false,
+  canMarkPaid = false,
   poForm,
   setPoForm,
   poLinesTotal,
@@ -300,9 +306,11 @@ export function EventPurchaseOrdersPanel({
                         <button className="btn ghost btn-sm" type="button" onClick={() => onStartEditPo(po)}>
                           Editar
                         </button>
-                        <button className="btn btn-sm" type="button" onClick={() => onSetPoStatus(po.id, 'AUTHORIZED')}>
-                          Autorizar
-                        </button>
+                        {canAuthorize ? (
+                          <button className="btn btn-sm" type="button" onClick={() => onSetPoStatus(po.id, 'AUTHORIZED')}>
+                            Autorizar
+                          </button>
+                        ) : null}
                         <button
                           className="btn ghost btn-sm btn-danger"
                           type="button"
@@ -312,7 +320,7 @@ export function EventPurchaseOrdersPanel({
                         </button>
                       </>
                     ) : null}
-                    {!closed && po.status === 'AUTHORIZED' ? (
+                    {!closed && canMarkPaid && po.status === 'AUTHORIZED' ? (
                       <button className="btn btn-sm" type="button" onClick={() => onSetPoStatus(po.id, 'PAID')}>
                         Marcar pagado
                       </button>

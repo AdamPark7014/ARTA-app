@@ -58,8 +58,11 @@ function taskStatusTone(status: string): string {
 
 const emptyForm = { title: '', detail: '', module: '', assigneeId: '', eventId: '', dueAt: '' };
 
+const TEAM_ROLES = new Set(['super_admin', 'dir_general', 'gerente_arta', 'dir_auditorio']);
+
 export default function TasksPage() {
   const { entity, user } = useUser();
+  const canSeeTeam = TEAM_ROLES.has(user?.roleKey || '');
   const [view, setView] = useState<View>('mine');
   const [rows, setRows] = useState<Task[]>([]);
   const [directory, setDirectory] = useState<DirUser[]>([]);
@@ -71,6 +74,10 @@ export default function TasksPage() {
   const [creating, setCreating] = useState(false);
   const [msg, setMsg] = useState('');
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (view === 'team' && !canSeeTeam) setView('mine');
+  }, [view, canSeeTeam]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -301,7 +308,8 @@ export default function TasksPage() {
         </div>
 
         <div className="tab-bar" role="tablist" aria-label="Vista de tareas">
-          {(['mine', 'requested', 'team'] as const).map((v) => (
+          {((canSeeTeam ? ['mine', 'requested', 'team'] : ['mine', 'requested']) as View[]).map(
+            (v) => (
             <button
               key={v}
               type="button"
@@ -312,7 +320,8 @@ export default function TasksPage() {
             >
               {VIEW_LABEL[v]}
             </button>
-          ))}
+            ),
+          )}
         </div>
 
         {loading ? (

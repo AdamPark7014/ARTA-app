@@ -16,6 +16,7 @@ import {
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { api } from '@/lib/api';
 import { useUser } from '@/lib/user-context';
+import { userHasPermission } from '@/lib/access-matrix';
 
 type EventOpt = { id: string; name: string; entity: string };
 type Pin = {
@@ -38,7 +39,11 @@ function flashVariant(msg: string): 'info' | 'success' | 'error' | 'warn' {
 }
 
 export default function VendorPinsPage() {
-  const { entity } = useUser();
+  const { entity, user } = useUser();
+  const canPin = userHasPermission(user?.roleKey || '', user?.permissions || [], [
+    'vendor.pin',
+    'everything',
+  ]);
   const [events, setEvents] = useState<EventOpt[]>([]);
   const [eventId, setEventId] = useState('');
   const [pins, setPins] = useState<Pin[]>([]);
@@ -193,6 +198,7 @@ export default function VendorPinsPage() {
           <LoadingBlock rows={4} label="Cargando eventos…" />
         ) : (
           <div className="dash-split">
+            {canPin ? (
             <div className="panel">
               <div className="panel-head">
                 <h2>Nuevo PIN</h2>
@@ -270,6 +276,7 @@ export default function VendorPinsPage() {
                 )}
               </div>
             </div>
+            ) : null}
 
             <div className="panel">
               <div className="panel-head">
@@ -277,6 +284,14 @@ export default function VendorPinsPage() {
               </div>
               <div className="panel-body">
                 <FilterBar meta={`${filteredPins.length} de ${pins.length} PINs`}>
+                  {!canPin ? (
+                    <FieldSelect
+                      value={eventId}
+                      onChange={setEventId}
+                      options={eventOptions}
+                      label="Evento"
+                    />
+                  ) : null}
                   <FieldSearch
                     value={q}
                     onChange={setQ}
@@ -294,7 +309,7 @@ export default function VendorPinsPage() {
                   <EmptyState title="Sin coincidencias" description="Prueba otro término de búsqueda." />
                 ) : (
                   <>
-                    {rotateId ? (
+                    {canPin && rotateId ? (
                       <form
                         className="credential-rotate form"
                         onSubmit={(e) => {
@@ -360,6 +375,7 @@ export default function VendorPinsPage() {
                             {p.lastUsedAt ? new Date(p.lastUsedAt).toLocaleString() : '—'}
                           </td>
                           <td>
+                            {canPin ? (
                             <div className="row row--tight">
                               <button
                                 className="btn ghost btn-sm"
@@ -381,6 +397,7 @@ export default function VendorPinsPage() {
                                 </button>
                               ) : null}
                             </div>
+                            ) : null}
                           </td>
                         </tr>
                       ))}
