@@ -15,6 +15,8 @@ import {
 import { IsOptional, IsString } from 'class-validator';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { assertSameTenant, tenantIdOf } from '../common/tenant';
+import { assertEventNotClosed } from '../common/event-guards';
 import {
   canAccessEventOps,
   eventOpsEntities,
@@ -23,7 +25,6 @@ import {
   type EntityKey,
   type RoleKey,
 } from '../common/rbac/roles';
-import { assertSameTenant, tenantIdOf } from '../common/tenant';
 import { TicketingSyncService } from './ticketing-sync.service';
 import { ChecklistPdfService } from '../checklists/checklist-pdf.service';
 
@@ -105,6 +106,7 @@ export class TicketingController {
     if (!canAccessEventOps(req.user.entities as EntityKey[], req.user.roleKey as RoleKey, event.entity as EntityKey)) {
       throw new ForbiddenException();
     }
+    assertEventNotClosed(event.status);
 
     const zones =
       dto.zonesJson ??
@@ -159,6 +161,7 @@ export class TicketingController {
     ) {
       throw new ForbiddenException();
     }
+    assertEventNotClosed(existing.event.status);
     if (dto.boletera !== undefined) {
       const boletera = dto.boletera.trim();
       if (!boletera || boletera.toLowerCase() === 'otra') {
@@ -201,6 +204,7 @@ export class TicketingController {
     ) {
       throw new ForbiddenException();
     }
+    assertEventNotClosed(existing.event.status);
     await this.prisma.ticketingSetup.delete({ where: { id } });
     return { ok: true };
   }

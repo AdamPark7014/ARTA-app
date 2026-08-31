@@ -14,6 +14,7 @@ import { CampaignType } from '@prisma/client';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { assertSameTenant, tenantIdOf } from '../common/tenant';
+import { assertEventNotClosed } from '../common/event-guards';
 import {
   canAccessEventOps,
   eventOpsEntities,
@@ -50,8 +51,18 @@ export class CampaignsController {
     });
   }
 
+  private assertCampaignView(user: AuthUser) {
+    if (
+      !hasPermission(user.roleKey as RoleKey, user.permissions, PERMISSIONS.CAMPAIGN_VIEW) &&
+      !hasPermission(user.roleKey as RoleKey, user.permissions, PERMISSIONS.CAMPAIGN_EDIT)
+    ) {
+      throw new ForbiddenException('Sin permiso para ver campañas');
+    }
+  }
+
   @Get()
   async list(@Req() req: { user: AuthUser }) {
+    this.assertCampaignView(req.user);
     const allowed = eventOpsEntities(req.user.entities as EntityKey[], req.user.roleKey as RoleKey);
     if (!allowed.length) return [];
     const isSuper = req.user.roleKey === 'super_admin';
@@ -85,6 +96,7 @@ export class CampaignsController {
 
   @Get('event/:eventId')
   async byEvent(@Req() req: { user: AuthUser }, @Param('eventId') eventId: string) {
+    this.assertCampaignView(req.user);
     const event = await this.prisma.event.findUnique({ where: { id: eventId } });
     if (!event) throw new NotFoundException();
     if (!canAccessEventOps(req.user.entities as EntityKey[], req.user.roleKey as RoleKey, event.entity as EntityKey)) {
@@ -101,6 +113,7 @@ export class CampaignsController {
   /** Solo los archivos — para refrescar tras subir o reemplazar. */
   @Get('event/:eventId/files')
   async files(@Req() req: { user: AuthUser }, @Param('eventId') eventId: string) {
+    this.assertCampaignView(req.user);
     const event = await this.prisma.event.findUnique({ where: { id: eventId } });
     if (!event) throw new NotFoundException();
     if (!canAccessEventOps(req.user.entities as EntityKey[], req.user.roleKey as RoleKey, event.entity as EntityKey)) {
@@ -131,6 +144,7 @@ export class CampaignsController {
       throw new ForbiddenException();
     }
     assertSameTenant(req.user, event.organizationId);
+    assertEventNotClosed(event.status);
 
     const authorized = body.authorized;
     // Autorizar campaña: gerencia de Arta + dirección

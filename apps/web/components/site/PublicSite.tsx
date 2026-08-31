@@ -3,18 +3,14 @@
 import { useEffect, useState } from 'react';
 import { PublicSiteContent } from '@/components/site/PublicSiteContent';
 import { LoadingBlock } from '@/components/ui/LoadingBlock';
-import {
-  FALLBACK_NEWS,
-  FALLBACK_SLIDES,
-  type PublicSiteData,
-} from '@/lib/public-site-data';
+import { FALLBACK_SLIDES, type PublicSiteData } from '@/lib/public-site-data';
 
 /** Client preview wrapper (panel /site) — live public page uses SSR via PublicSiteShell. */
 export function PublicSite() {
   const [data, setData] = useState<PublicSiteData>({
     pages: [],
     slides: FALLBACK_SLIDES,
-    news: FALLBACK_NEWS,
+    news: [],
   });
   const [loading, setLoading] = useState(true);
 
@@ -26,14 +22,14 @@ export function PublicSite() {
         setData({
           pages: d.pages || [],
           slides: d.slides?.length ? d.slides : FALLBACK_SLIDES,
-          news: d.news?.length ? d.news : FALLBACK_NEWS,
+          news: d.news || [],
         });
       })
       .catch(console.error)
       .finally(() => setLoading(false));
   }, []);
 
-  if (loading && !data.pages.length && data.news === FALLBACK_NEWS) {
+  if (loading) {
     return <LoadingBlock rows={6} label="Cargando sitio…" />;
   }
 

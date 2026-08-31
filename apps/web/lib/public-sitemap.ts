@@ -1,9 +1,6 @@
 import type { MetadataRoute } from 'next';
 import { ROOT_DOMAIN } from '@/lib/domains';
 
-/** Slugs de respaldo si la API no responde (coinciden con PublicSite FALLBACK_NEWS). */
-const FALLBACK_NEWS_SLUGS = ['temporada-puebla', 'checklists-digitales', 'experiencia-show'];
-
 type NewsIndexRow = {
   slug: string;
   publishedAt?: string | null;
@@ -19,16 +16,17 @@ export function publicSiteBaseUrl(): string {
   return `https://${ROOT_DOMAIN}`;
 }
 
+/** Solo noticias reales publicadas — nunca slugs inventados. */
 export async function fetchPublishedNewsSlugs(): Promise<NewsIndexRow[]> {
   try {
     const res = await fetch(`${apiBase()}/studio/public/news-index`, {
       next: { revalidate: 3600 },
     });
-    if (!res.ok) return FALLBACK_NEWS_SLUGS.map((slug) => ({ slug }));
+    if (!res.ok) return [];
     const rows = (await res.json()) as NewsIndexRow[];
-    return rows.length ? rows : FALLBACK_NEWS_SLUGS.map((slug) => ({ slug }));
+    return Array.isArray(rows) ? rows.filter((r) => r?.slug) : [];
   } catch {
-    return FALLBACK_NEWS_SLUGS.map((slug) => ({ slug }));
+    return [];
   }
 }
 
@@ -43,6 +41,12 @@ export async function buildPublicSitemap(): Promise<MetadataRoute.Sitemap> {
       lastModified: now,
       changeFrequency: 'weekly',
       priority: 1,
+    },
+    {
+      url: `${base}/llms.txt`,
+      lastModified: now,
+      changeFrequency: 'monthly',
+      priority: 0.3,
     },
   ];
 

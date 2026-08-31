@@ -14,6 +14,7 @@ import { PrismaService } from '../common/prisma/prisma.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { hasPermission, canAccessEventOps, PERMISSIONS, type EntityKey, type RoleKey } from '../common/rbac/roles';
 import { assertSameTenant } from '../common/tenant';
+import { assertEventNotClosed } from '../common/event-guards';
 
 type FinancePayload = {
   rows?: Array<{ type?: string; amount?: number; concept?: string }>;
@@ -145,7 +146,14 @@ export class FinanceController {
     @Req() req: { user: AuthUser },
     @Body() body: { eventId: string; label?: string; amount?: number; fileUrl: string },
   ) {
-    await this.assertEventOps(req.user, body.eventId);
+    if (
+      !hasPermission(req.user.roleKey as RoleKey, req.user.permissions, PERMISSIONS.FINANCE_EDIT) &&
+      !hasPermission(req.user.roleKey as RoleKey, req.user.permissions, PERMISSIONS.FINANCE_VIEW)
+    ) {
+      throw new ForbiddenException('Sin permiso para registrar anticipos');
+    }
+    const event = await this.assertEventOps(req.user, body.eventId);
+    assertEventNotClosed(event.status);
     return this.prisma.paymentProof.create({
       data: {
         eventId: body.eventId,
@@ -180,9 +188,13 @@ export class FinanceController {
         'Solo gerencia de Arta y dirección general pueden editar corrida financiera',
       );
     }
-    const existing = await this.prisma.financeRun.findUnique({ where: { id } });
+    const existing = await this.prisma.financeRun.findUnique({
+      where: { id },
+      include: { event: { select: { status: true } } },
+    });
     if (!existing) throw new ForbiddenException('Corrida no encontrada');
     await this.assertEventOps(req.user, existing.eventId);
+    assertEventNotClosed(existing.event.status);
     if (existing.locked && body.locked !== false) {
       throw new ForbiddenException('Corrida bloqueada');
     }

@@ -26,6 +26,7 @@ import {
   type RoleKey,
 } from '../common/rbac/roles';
 import { assertSameTenant } from '../common/tenant';
+import { assertEventNotClosed } from '../common/event-guards';
 
 type AuthUser = {
   id: string;
@@ -217,6 +218,9 @@ export class VendorController {
   @UseGuards(JwtAuthGuard)
   @Get('event/:eventId')
   async list(@Req() req: { user: AuthUser }, @Param('eventId') eventId: string) {
+    if (!hasPermission(req.user.roleKey as RoleKey, req.user.permissions, PERMISSIONS.VENDOR_PIN)) {
+      throw new ForbiddenException('Sin permiso para ver PIN vendor');
+    }
     const event = await this.prisma.event.findUnique({ where: { id: eventId } });
     if (!event) throw new NotFoundException();
     assertSameTenant(req.user, event.organizationId);
@@ -262,6 +266,7 @@ export class VendorController {
     ) {
       throw new ForbiddenException();
     }
+    assertEventNotClosed(event.status);
     const scopes = normalizeScopes(dto.scopes);
     const pinHash = await bcrypt.hash(dto.pin, 10);
     const created = await this.prisma.vendorPin.create({
@@ -307,6 +312,7 @@ export class VendorController {
     ) {
       throw new ForbiddenException();
     }
+    assertEventNotClosed(pin.event.status);
     const pinHash = await bcrypt.hash(body.pin, 10);
     await this.prisma.vendorPin.update({
       where: { id },
@@ -333,6 +339,7 @@ export class VendorController {
     ) {
       throw new ForbiddenException();
     }
+    assertEventNotClosed(pin.event.status);
     await this.prisma.vendorPin.update({ where: { id }, data: { active: false } });
     return { ok: true };
   }

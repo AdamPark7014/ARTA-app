@@ -70,33 +70,6 @@ export const FALLBACK_SLIDES: PublicSiteSlide[] = [
   },
 ];
 
-export const FALLBACK_NEWS: PublicSiteNewsItem[] = [
-  {
-    id: 'n1',
-    slug: 'temporada-puebla',
-    title: 'Nueva temporada de shows en Puebla',
-    excerpt: 'Producción, artes y boletera alineadas de punta a punta.',
-    coverUrl: '/uploads/seed-news-1.jpg',
-    publishedAt: new Date().toISOString(),
-  },
-  {
-    id: 'n2',
-    slug: 'checklists-digitales',
-    title: 'Checklists digitales con firma',
-    excerpt: 'Entregado y autorizado quedan registrados en PDF por evento.',
-    coverUrl: '/uploads/seed-news-2.jpg',
-    publishedAt: new Date().toISOString(),
-  },
-  {
-    id: 'n3',
-    slug: 'experiencia-show',
-    title: 'La experiencia del Show',
-    excerpt: 'Montaje, corrida y cierre con el sello Arta en cada venue.',
-    coverUrl: '/uploads/seed-news-3.jpg',
-    publishedAt: new Date().toISOString(),
-  },
-];
-
 /** Server fetch for SSR public site (Studio CMS). */
 export async function fetchPublicSiteData(entity = 'ARTA'): Promise<PublicSiteData> {
   try {
@@ -104,16 +77,16 @@ export async function fetchPublicSiteData(entity = 'ARTA'): Promise<PublicSiteDa
       next: { revalidate: 3600 },
     });
     if (!res.ok) {
-      return { pages: [], slides: FALLBACK_SLIDES, news: FALLBACK_NEWS };
+      return { pages: [], slides: FALLBACK_SLIDES, news: [] };
     }
     const d = (await res.json()) as Partial<PublicSiteData>;
     return {
       pages: d.pages || [],
       slides: d.slides?.length ? d.slides : FALLBACK_SLIDES,
-      news: d.news?.length ? d.news : FALLBACK_NEWS,
+      news: d.news || [],
     };
   } catch {
-    return { pages: [], slides: FALLBACK_SLIDES, news: FALLBACK_NEWS };
+    return { pages: [], slides: FALLBACK_SLIDES, news: [] };
   }
 }
 

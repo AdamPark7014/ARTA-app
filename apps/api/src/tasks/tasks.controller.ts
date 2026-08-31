@@ -18,6 +18,7 @@ import { PrismaService } from '../common/prisma/prisma.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { NotificationsService } from '../notifications/notifications.service';
 import { assertSameTenant, tenantIdOf } from '../common/tenant';
+import { assertEventNotClosed } from '../common/event-guards';
 import { canAccessEventOps, eventOpsEntities, type EntityKey, type RoleKey } from '../common/rbac/roles';
 
 type AuthUser = {
@@ -64,6 +65,12 @@ export class TasksController {
       throw new ForbiddenException();
     }
     assertSameTenant(user, event.organizationId);
+    return event;
+  }
+
+  private async assertEventOpen(user: AuthUser, eventId: string) {
+    const event = await this.assertEvent(user, eventId);
+    assertEventNotClosed(event.status);
     return event;
   }
 
@@ -184,7 +191,7 @@ export class TasksController {
 
   @Post()
   async create(@Req() req: { user: AuthUser }, @Body() dto: CreateTaskDto) {
-    const event = dto.eventId ? await this.assertEvent(req.user, dto.eventId) : null;
+    const event = dto.eventId ? await this.assertEventOpen(req.user, dto.eventId) : null;
     const assignee = await this.assertAssigneeInOrg(req.user, dto.assigneeId);
 
     const task = await this.prisma.taskAssignment.create({
@@ -238,6 +245,7 @@ export class TasksController {
     });
     if (!task) throw new NotFoundException();
     await this.assertCanTouch(req.user, task);
+    if (task.eventId && task.event) assertEventNotClosed(task.event.status);
 
     const reassigned =
       body.assigneeId !== undefined && (body.assigneeId || null) !== (task.assigneeId || null);
@@ -297,9 +305,13 @@ export class TasksController {
 
   @Delete(':id')
   async remove(@Req() req: { user: AuthUser }, @Param('id') id: string) {
-    const task = await this.prisma.taskAssignment.findUnique({ where: { id } });
+    const task = await this.prisma.taskAssignment.findUnique({
+      where: { id },
+      include: { event: true },
+    });
     if (!task) throw new NotFoundException();
     await this.assertCanTouch(req.user, task);
+    if (task.event) assertEventNotClosed(task.event.status);
     await this.prisma.taskAssignment.delete({ where: { id } });
     return { ok: true };
   }

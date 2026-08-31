@@ -18,6 +18,7 @@ import { PrismaService } from '../common/prisma/prisma.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { hasPermission, canAccessEventOps, PERMISSIONS, type EntityKey, type RoleKey } from '../common/rbac/roles';
 import { assertSameTenant, tenantIdOf } from '../common/tenant';
+import { assertEventNotClosed } from '../common/event-guards';
 import {
   DEFAULT_PO_WINDOW,
   describeSchedule,
@@ -151,6 +152,15 @@ export class PurchaseOrdersController {
     return event;
   }
 
+  private async assertEventOpsOpen(
+    user: { entities: string[]; roleKey: string; organizationId?: string | null },
+    eventId: string,
+  ) {
+    const event = await this.assertEventOps(user, eventId);
+    assertEventNotClosed(event.status);
+    return event;
+  }
+
   private sumLines(lines: PoLineDto[]) {
     return lines.reduce((s, l) => s + Number(l.qty || 0) * Number(l.unitPrice || 0), 0);
   }
@@ -226,7 +236,7 @@ export class PurchaseOrdersController {
     ) {
       throw new ForbiddenException('Sin permiso para crear órdenes de compra');
     }
-    await this.assertEventOps(req.user, dto.eventId);
+    await this.assertEventOpsOpen(req.user, dto.eventId);
     await this.assertWindowOpen(req.user);
     const lines = dto.lines?.length ? dto.lines : undefined;
     const amount = lines ? this.sumLines(lines) : Number(dto.amount || 0);
@@ -268,7 +278,7 @@ export class PurchaseOrdersController {
     }
     const order = await this.prisma.purchaseOrder.findUnique({ where: { id } });
     if (!order) throw new NotFoundException('OC no encontrada');
-    await this.assertEventOps(req.user, order.eventId);
+    await this.assertEventOpsOpen(req.user, order.eventId);
     if (order.status === 'PAID' || order.status === 'AUTHORIZED') {
       throw new ForbiddenException('OC autorizada/pagada no se edita');
     }
@@ -323,6 +333,7 @@ export class PurchaseOrdersController {
       throw new ForbiddenException();
     }
     assertSameTenant(req.user, order.event.organizationId);
+    assertEventNotClosed(order.event.status);
     return this.prisma.paymentProof.create({
       data: {
         purchaseOrderId: id,
@@ -360,6 +371,7 @@ export class PurchaseOrdersController {
       throw new ForbiddenException();
     }
     assertSameTenant(req.user, order.event.organizationId);
+    assertEventNotClosed(order.event.status);
 
     if (body.status === 'AUTHORIZED') {
       if (!hasPermission(role, req.user.permissions, PERMISSIONS.PO_AUTHORIZE)) {
@@ -419,7 +431,7 @@ export class PurchaseOrdersController {
   ) {
     const order = await this.prisma.purchaseOrder.findUnique({ where: { id } });
     if (!order) throw new NotFoundException('OC no encontrada');
-    await this.assertEventOps(req.user, order.eventId);
+    await this.assertEventOpsOpen(req.user, order.eventId);
     if (order.status === 'AUTHORIZED' || order.status === 'PAID') {
       throw new ForbiddenException('No se puede eliminar OC autorizada/pagada');
     }

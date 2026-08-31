@@ -171,8 +171,13 @@ export class UsersController {
     });
     if (!target) throw new NotFoundException('Usuario no encontrado');
     assertSameTenant(req.user, target.organizationId);
-    if (body.roleKey === 'super_admin' && req.user.roleKey !== 'super_admin') {
-      throw new ForbiddenException('Solo super_admin puede otorgar ese rol');
+    if (body.roleKey) {
+      if (!ALL_ROLES.includes(body.roleKey as RoleKey)) {
+        throw new ForbiddenException('Rol inválido');
+      }
+      if (body.roleKey === 'super_admin' && req.user.roleKey !== 'super_admin') {
+        throw new ForbiddenException('Solo super_admin puede otorgar ese rol');
+      }
     }
     const data: Record<string, unknown> = {
       fullName: body.fullName,

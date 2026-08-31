@@ -126,13 +126,18 @@ export class WebhooksService {
   }
 
   async listEndpoints(organizationId: string) {
-    return this.prisma.webhookEndpoint.findMany({
+    const rows = await this.prisma.webhookEndpoint.findMany({
       where: { organizationId },
       orderBy: { createdAt: 'desc' },
       include: {
         _count: { select: { deliveries: true } },
       },
     });
+    return rows.map(({ secret, ...rest }) => ({
+      ...rest,
+      secretMasked: secret ? `${secret.slice(0, 4)}…${secret.slice(-4)}` : null,
+      hasSecret: Boolean(secret),
+    }));
   }
 
   async createEndpoint(data: {

@@ -21,6 +21,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { canAccessEventOps, hasPermission, PERMISSIONS, type EntityKey, type RoleKey } from '../common/rbac/roles';
 import { MULTER_OPTIONS, uploadRoot } from './upload-storage';
 import { assertSameTenant } from '../common/tenant';
+import { assertEventNotClosed } from '../common/event-guards';
 
 type AuthUser = {
   id: string;
@@ -97,9 +98,11 @@ export class UploadsController {
         throw new ForbiddenException('Sin acceso a archivos de este evento');
       }
       assertSameTenant(req.user, cl.event.organizationId);
+      assertEventNotClosed(cl.event.status);
       eventId = cl.eventId;
     } else if (eventId) {
-      await this.assertEventOps(req.user, eventId);
+      const event = await this.assertEventOps(req.user, eventId);
+      assertEventNotClosed(event.status);
     }
 
     const record = await this.prisma.eventFile.create({
@@ -199,6 +202,7 @@ export class UploadsController {
         throw new ForbiddenException();
       }
       assertSameTenant(req.user, file.event.organizationId);
+      assertEventNotClosed(file.event.status);
     }
 
     const name = basename(file.url);

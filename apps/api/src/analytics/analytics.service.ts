@@ -88,7 +88,10 @@ export class AnalyticsService {
         select: { eventId: true, locked: true, dataJson: true, updatedAt: true },
       }),
       this.prisma.auditLog.findMany({
-        where: { createdAt: { gte: day30 } },
+        where: {
+          createdAt: { gte: day30 },
+          user: { organizationId },
+        },
         orderBy: { createdAt: 'desc' },
         take: 8,
         include: { user: { select: { fullName: true } } },
@@ -807,7 +810,8 @@ export class AnalyticsService {
     const logs = await this.prisma.auditLog.findMany({
       where: {
         createdAt: { gte: day30 },
-        ...(organizationId ? { OR: [{ user: { organizationId } }, { userId: null }] } : {}),
+        // Solo logs de usuarios del tenant — no mezclar system logs (userId null) cross-tenant
+        ...(organizationId ? { user: { organizationId } } : {}),
       },
       orderBy: { createdAt: 'desc' },
       take: Math.min(take, 500),

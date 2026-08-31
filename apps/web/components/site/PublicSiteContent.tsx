@@ -4,11 +4,7 @@ import { HeroCarousel } from '@/components/site/HeroCarousel';
 import { SiteHeader } from '@/components/site/SiteHeader';
 import { VenueMap } from '@/components/site/VenueMap';
 import { panelLoginUrl } from '@/lib/domains';
-import {
-  FALLBACK_NEWS,
-  FALLBACK_SLIDES,
-  type PublicSiteData,
-} from '@/lib/public-site-data';
+import { FALLBACK_SLIDES, type PublicSiteData } from '@/lib/public-site-data';
 
 const CONTACT = {
   email: process.env.NEXT_PUBLIC_CONTACT_EMAIL || 'contacto@artaproducciones.com',
@@ -34,7 +30,7 @@ export function PublicSiteContent({ data }: PublicSiteContentProps) {
   const cta = pages.find((p) => p.sectionKey === 'home_cta')?.contentJson;
 
   const panelLogin = panelLoginUrl('ARTA');
-  const newsItems = news.length ? news : FALLBACK_NEWS;
+  const newsItems = news;
   const carouselSlides = slides.length ? slides : FALLBACK_SLIDES;
 
   return (
@@ -111,33 +107,37 @@ export function PublicSiteContent({ data }: PublicSiteContentProps) {
             ¿Tienes un show? Escríbenos
           </a>
         </div>
-        <div className="news-grid">
-          {newsItems.map((n) => (
-            <Link href={`/p/arta/noticias/${n.slug}`} className="news-card" key={n.id}>
-              <div className="news-cover">
-                {/* eslint-disable-next-line @next/next/no-img-element -- CMS URLs dinámicas */}
-                <img
-                  src={n.coverUrl || FALLBACK_SLIDES[0].imageUrl}
-                  alt={n.title}
-                  loading="lazy"
-                />
-              </div>
-              <div className="news-body">
-                <time className="muted" dateTime={n.publishedAt || undefined}>
-                  {n.publishedAt
-                    ? new Date(n.publishedAt).toLocaleDateString('es-MX', {
-                        day: 'numeric',
-                        month: 'long',
-                        year: 'numeric',
-                      })
-                    : ''}
-                </time>
-                <h3>{n.title}</h3>
-                <p>{n.excerpt}</p>
-              </div>
-            </Link>
-          ))}
-        </div>
+        {newsItems.length ? (
+          <div className="news-grid">
+            {newsItems.map((n) => (
+              <Link href={`/p/arta/noticias/${n.slug}`} className="news-card" key={n.id}>
+                <div className="news-cover">
+                  {/* eslint-disable-next-line @next/next/no-img-element -- CMS URLs dinámicas */}
+                  <img
+                    src={n.coverUrl || FALLBACK_SLIDES[0].imageUrl}
+                    alt={n.title}
+                    loading="lazy"
+                  />
+                </div>
+                <div className="news-body">
+                  <time className="muted" dateTime={n.publishedAt || undefined}>
+                    {n.publishedAt
+                      ? new Date(n.publishedAt).toLocaleDateString('es-MX', {
+                          day: 'numeric',
+                          month: 'long',
+                          year: 'numeric',
+                        })
+                      : ''}
+                  </time>
+                  <h3>{n.title}</h3>
+                  <p>{n.excerpt}</p>
+                </div>
+              </Link>
+            ))}
+          </div>
+        ) : (
+          <p className="muted lead">Pronto publicaremos novedades de la temporada.</p>
+        )}
       </section>
 
       <section className="site-section" id="ubicacion">

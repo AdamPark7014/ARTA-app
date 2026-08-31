@@ -504,6 +504,8 @@ export class ChecklistsController {
     const event = await this.prisma.event.findUnique({ where: { id: eventId } });
     if (!event) throw new BadRequestException('Evento no encontrado');
     this.assertEventAccess(req.user, event);
+    this.assertChecklistEdit(req.user);
+    assertEventNotClosed(event.status);
     const template = await this.prisma.checklistTemplate.findUnique({
       where: { id: body.templateId },
     });

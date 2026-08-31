@@ -53,7 +53,7 @@ class UpdateEventDto {
   @IsOptional() @IsString() city?: string;
   @IsOptional() @IsString() startsAt?: string;
   @IsOptional() @IsString() endsAt?: string;
-  @IsOptional() @IsEnum(EventStatus) status?: EventStatus;
+  /** Status solo vía POST close|cancel|reopen — no en PATCH (evita bypass EVENT_CLOSE). */
   @IsOptional() @IsEnum(CampaignType) campaignType?: CampaignType;
   @IsOptional() @IsString() notes?: string;
 }
@@ -376,7 +376,6 @@ export class EventsController {
         promoter: dto.promoter,
         venue: dto.venue,
         city: dto.city,
-        status: dto.status,
         campaignType: dto.campaignType,
         notes: dto.notes,
         startsAt: dto.startsAt ? new Date(dto.startsAt) : undefined,

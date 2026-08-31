@@ -55,6 +55,12 @@ export class AnalyticsController {
 
   @Get('finance')
   async finance(@Req() req: { user: AuthUser }, @Query('entity') entity?: EntityKey) {
+    if (
+      !hasPermission(req.user.roleKey as RoleKey, req.user.permissions, PERMISSIONS.FINANCE_VIEW) &&
+      !hasPermission(req.user.roleKey as RoleKey, req.user.permissions, PERMISSIONS.FINANCE_EDIT)
+    ) {
+      throw new ForbiddenException('Sin permiso para ver analytics de finanzas');
+    }
     const ent = this.resolveEntity(req.user, entity);
     return this.analytics.finance(ent, tenantIdOf(req.user));
   }
