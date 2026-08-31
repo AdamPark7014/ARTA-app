@@ -72,6 +72,7 @@ export function isPublicPath(pathname: string): boolean {
   if (pathname.startsWith('/invite')) return true;
   if (pathname.startsWith('/p/')) return true;
   if (pathname.startsWith('/v/')) return true;
+  if (pathname === '/sitemap.xml' || pathname === '/robots.txt') return true;
   if (pathname.startsWith('/_next')) return true;
   if (pathname.startsWith('/brand')) return true;
   if (pathname.startsWith('/uploads')) return true;

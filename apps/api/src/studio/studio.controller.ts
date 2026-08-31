@@ -61,6 +61,16 @@ export class StudioController {
     }
   }
 
+  /** Público — índice de noticias publicadas (sitemap) */
+  @Get('public/news-index')
+  async publicNewsIndex() {
+    return this.prisma.newsPost.findMany({
+      where: { entity: 'ARTA', published: true },
+      select: { slug: true, publishedAt: true, updatedAt: true },
+      orderBy: { publishedAt: 'desc' },
+    });
+  }
+
   /** Público — noticia por slug (antes de public/:entity) */
   @Get('public/news/:slug')
   async publicNews(@Param('slug') slug: string) {
