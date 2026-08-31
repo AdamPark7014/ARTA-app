@@ -1,203 +1,60 @@
-'use client';
-
-
-
-import { type ReactNode, useEffect, useState } from 'react';
-
-import Link from 'next/link';
-
-import { useParams } from 'next/navigation';
-
-import { SiteHeader } from '@/components/site/SiteHeader';
-
-import { EmptyState } from '@/components/ui/EmptyState';
-
-import { LoadingBlock } from '@/components/ui/LoadingBlock';
-
-
-
-type NewsPost = {
-
-  id: string;
-
-  slug: string;
-
-  title: string;
-
-  excerpt?: string | null;
-
-  body?: string | null;
-
-  coverUrl?: string | null;
-
-  publishedAt?: string | null;
-
-};
-
-
-
-function NewsShell({ children }: { children: ReactNode }) {
-
-  return (
-
-    <div className="site site-arta">
-
-      <SiteHeader mode="article" />
-
-      <article className="site-section news-article">{children}</article>
-
-      <footer className="news-article__footer">
-
-        <Link className="btn ghost" href="/p/arta#noticias">
-
-          ← Todas las noticias
-
-        </Link>
-
-        <Link className="btn" href="/p/arta#contacto">
-
-          Contactar a Arta
-
-        </Link>
-
-      </footer>
-
-    </div>
-
-  );
-
-}
-
-
-
-export default function NewsDetailPage() {
-
-  const params = useParams();
-
-  const slug = params.slug as string;
-
-  const [post, setPost] = useState<NewsPost | null>(null);
-
-  const [error, setError] = useState('');
-
-  const [loading, setLoading] = useState(true);
-
-
-
-  useEffect(() => {
-
-    setLoading(true);
-
-    fetch(`/api/studio/public/news/${slug}`)
-
-      .then(async (r) => {
-
-        if (!r.ok) throw new Error('Noticia no encontrada');
-
-        return r.json();
-
-      })
-
-      .then(setPost)
-
-      .catch((e) => setError(e.message))
-
-      .finally(() => setLoading(false));
-
-  }, [slug]);
-
-
-
-  if (loading) {
-
-    return (
-
-      <NewsShell>
-
-        <LoadingBlock rows={5} label="Cargando noticia…" />
-
-      </NewsShell>
-
-    );
-
+import type { Metadata } from 'next';
+import { JsonLd } from '@/components/seo/JsonLd';
+import {
+  articleJsonLd,
+  breadcrumbJsonLd,
+  buildPublicMetadata,
+  fetchPublicNews,
+} from '@/lib/site-seo';
+import { NewsDetailClient } from './NewsDetailClient';
+
+type Props = { params: { slug: string } };
+
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const post = await fetchPublicNews(params.slug);
+  if (!post) {
+    return buildPublicMetadata({
+      title: 'Noticia no encontrada',
+      description: 'La noticia que buscas no está disponible.',
+      path: `/p/arta/noticias/${params.slug}`,
+      noIndex: true,
+    });
   }
 
+  const description =
+    post.excerpt?.trim() ||
+    post.body?.slice(0, 160).trim() ||
+    `${post.title} — Arta Producciones`;
 
+  return buildPublicMetadata({
+    title: post.title,
+    description,
+    path: `/p/arta/noticias/${post.slug}`,
+    image: post.coverUrl,
+    type: 'article',
+    publishedTime: post.publishedAt,
+    modifiedTime: post.updatedAt || post.publishedAt,
+  });
+}
 
-  if (error || !post) {
+export default async function NewsDetailPage({ params }: Props) {
+  const post = await fetchPublicNews(params.slug);
 
-    return (
-
-      <NewsShell>
-
-        <EmptyState
-
-          title="Noticia no encontrada"
-
-          description={error || 'El enlace puede estar desactualizado o la noticia fue retirada.'}
-
-          actionHref="/p/arta#noticias"
-
-          actionLabel="Ver todas las noticias"
-
+  return (
+    <>
+      {post ? (
+        <JsonLd
+          data={[
+            articleJsonLd(post),
+            breadcrumbJsonLd([
+              { name: 'Inicio', path: '/p/arta' },
+              { name: 'Noticias', path: '/p/arta#noticias' },
+              { name: post.title, path: `/p/arta/noticias/${post.slug}` },
+            ]),
+          ]}
         />
-
-      </NewsShell>
-
-    );
-
-  }
-
-
-
-  return (
-
-    <NewsShell>
-
-      <div className="news-article__inner">
-
-        <time className="muted news-article__date">
-
-          {post.publishedAt
-
-            ? new Date(post.publishedAt).toLocaleDateString('es-MX', {
-
-                day: 'numeric',
-
-                month: 'long',
-
-                year: 'numeric',
-
-              })
-
-            : ''}
-
-        </time>
-
-        <h1 className="news-article__title">{post.title}</h1>
-
-        {post.excerpt ? <p className="lead news-article__excerpt">{post.excerpt}</p> : null}
-
-        {post.coverUrl ? (
-
-          <div className="news-article__cover">
-
-            {/* eslint-disable-next-line @next/next/no-img-element -- URL dinámica de Studio */}
-
-            <img src={post.coverUrl} alt={post.title} />
-
-          </div>
-
-        ) : null}
-
-        {post.body ? <div className="article-prose">{post.body}</div> : null}
-
-      </div>
-
-    </NewsShell>
-
+      ) : null}
+      <NewsDetailClient />
+    </>
   );
-
 }
-
-

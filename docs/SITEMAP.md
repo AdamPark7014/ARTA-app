@@ -28,7 +28,21 @@ curl -s https://artaproducciones.com/sitemap.xml | head -40
 curl -s https://artaproducciones.com/robots.txt
 ```
 
-## Código
+## Metadata y presencia social
+
+- **Open Graph / Twitter Card** en `/p/arta` y cada noticia (título, descripción, imagen).
+- **JSON-LD**: Organization, WebSite, NewsArticle, BreadcrumbList.
+- **Manifest** PWA: `/manifest.webmanifest`
+- **OG image dinámica**: `/p/arta/opengraph-image`
+- Código: [`apps/web/lib/site-seo.ts`](../apps/web/lib/site-seo.ts)
+
+Verificar meta tags:
+
+```bash
+curl -sI https://artaproducciones.com/p/arta | head -15
+```
+
+## Código (sitemap)
 
 - [`apps/web/app/sitemap.ts`](../apps/web/app/sitemap.ts)
 - [`apps/web/app/robots.ts`](../apps/web/app/robots.ts)

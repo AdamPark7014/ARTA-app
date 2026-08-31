@@ -6,17 +6,18 @@
 
 ## Hecho en este turno
 
-**Sitemap + robots.txt** para indexación del sitio público.
+**Metadata hiper-presencia SEO** (sitio público indexable).
 
-1. `GET /studio/public/news-index` — slugs de noticias publicadas.
-2. `app/sitemap.ts` + `app/robots.ts` + `lib/public-sitemap.ts`.
-3. `isPublicPath` incluye `/sitemap.xml` y `/robots.txt`.
-4. `docs/SITEMAP.md` — URLs y envío a Search Console.
+1. `lib/site-seo.ts` — OG, Twitter, canonical, keywords, JSON-LD helpers.
+2. Layouts: público `/p/arta` rich meta + Organization/WebSite; panel/auth/PIN `noindex`.
+3. Noticias: `generateMetadata` server-side + Article/Breadcrumb JSON-LD.
+4. `opengraph-image.tsx` dinámica 1200×630; `manifest.ts` PWA.
+5. `docs/SITEMAP.md` ampliado con sección metadata.
 
 ## Siguiente paso
 
-1. Deploy + verificar `curl …/sitemap.xml`.
-2. Adam: enviar sitemap en Google Search Console / Bing.
+1. Deploy + verificar OG en Facebook Sharing Debugger / Twitter Card Validator.
+2. Google Search Console: sitemap + inspección URL `/p/arta`.
 
 ## No tocar
 
