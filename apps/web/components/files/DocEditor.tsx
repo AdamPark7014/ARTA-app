@@ -191,7 +191,7 @@ export function DocEditor({ doc, canEdit, onSaved, onDeleted, onClose }: Props) 
   useSaveHotkey(canEdit && dirty && !saving, save);
 
   return (
-    <ExpandBox title={title || doc.title || 'Documento'} defaultExpanded dirty={dirty}>
+    <ExpandBox title={title || doc.title || 'Documento'} dirty={dirty}>
     <div className="stack">
       <div className="sheet-toolbar">
         <span className="muted kpi-sub">

@@ -257,13 +257,7 @@ export class EventsController {
         eventId: event.id,
         title: 'Corrida financiera',
         dataJson: {
-          rows: [
-            { concept: 'Taquilla estimada', type: 'income', amount: 0 },
-            { concept: 'Patrocinios', type: 'income', amount: 0 },
-            { concept: 'Producción', type: 'expense', amount: 0 },
-            { concept: 'Hospitality', type: 'expense', amount: 0 },
-            { concept: 'Marketing', type: 'expense', amount: 0 },
-          ],
+          rows: [],
           totalIncome: 0,
           totalExpense: 0,
         },

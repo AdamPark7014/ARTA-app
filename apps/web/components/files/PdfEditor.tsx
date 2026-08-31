@@ -253,7 +253,7 @@ export function PdfEditor({ url, fileName, canEdit, onSave, onSaved, note, saveL
   useSaveHotkey(canEdit && dirty && !saving, save);
 
   return (
-    <ExpandBox title={fileName} defaultExpanded dirty={dirty}>
+    <ExpandBox title={fileName} dirty={dirty}>
     <div className="stack" ref={boxRef}>
       <div className="sheet-toolbar">
         <span className="muted kpi-sub">

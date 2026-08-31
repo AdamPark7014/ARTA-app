@@ -6,24 +6,22 @@
 
 ## Hecho en este turno
 
-**W3 completo** (`5e7e246` + UI `1eb575a` + P0 `87ba30c`) y **deploy Hetzner** OK.
+**Feedback Arturo Taja — corrida + capas blancas en formatos:**
 
-Smoke prod:
-- `/p/arta`: FAQ visible + `@graph` FAQPage/Service + empty news state
-- `/llms.txt` 200; robots Allow `/llms.txt`
-- feed `language=es-mx`; calendar → login `?next=/calendar`
-- containers api/web healthy
+1. **Páginas en blanco encima de checklists/boletera:** ExpandBox ya no abre a pantalla completa por defecto (`FileViewer`, `ChecklistPdfEditor`, `PdfEditor`, `SheetEditor`, `DocEditor`). Vista previa PDF del checklist solo con «Ver PDF» (no monta iframe encima del formulario).
+2. **Corrida financiera:** Excel embebido editable como campaña — «Nueva hoja de corrida» / «Subir mi Excel» (`module=finance`, `SheetEditor`). Tabla HTML queda como resumen opcional oculto. Create event ya no siembra conceptos inventados.
+3. Plantilla `finance-sheet-template.ts`.
 
 ## A medias
 
-Nada W3.
+Nada. Pendiente imagen que Arturo mencionó (no llegó adjunta en el chat).
 
 ## Siguiente paso
 
-1. Ops Adam: redes (`NEXT_PUBLIC_SOCIAL_*`), GSC, deploy key, 2FA, Stripe prod.
-2. Push `origin/main` cuando quieras (rama ahead ~13).
+1. Deploy smoke: abrir checklist boletera (sin fullscreen blanco) + Corrida → Nueva hoja / Subir Excel.
+2. Si Adam adjunta la imagen de Arturo, atender ese hallazgo.
+3. Push origin cuando quieras.
 
 ## No tocar
 
 - `docs/ACCESS.md`, `.env.arta`, e2e API BD.
-- No `/p/explanada` ni inventario ERP.

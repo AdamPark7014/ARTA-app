@@ -395,7 +395,7 @@ export function SheetEditor({
   }
 
   return (
-    <ExpandBox title={fileName} defaultExpanded dirty={dirty}>
+    <ExpandBox title={fileName} dirty={dirty}>
       <div className="stack">
         <div className="sheet-toolbar">
           {sheetNames.length > 1 ? (

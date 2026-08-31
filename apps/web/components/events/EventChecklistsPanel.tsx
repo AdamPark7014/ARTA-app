@@ -53,6 +53,8 @@ export function EventChecklistsPanel({
   onFilesChanged,
 }: EventChecklistsPanelProps) {
   const [annotating, setAnnotating] = useState(false);
+  /** Vista previa PDF solo a demanda — evita capas blancas encima del formulario. */
+  const [showPdfPreview, setShowPdfPreview] = useState(false);
   /**
    * Cómo se captura el formato: escribiendo sobre el PDF (por defecto, si el
    * generador ya dejó el mapa de campos) o en el formulario clásico.
@@ -64,6 +66,7 @@ export function EventChecklistsPanel({
   // Al cambiar de formato se vuelve al modo que corresponda.
   useEffect(() => {
     setAnnotating(false);
+    setShowPdfPreview(false);
     setMode(canWriteOnPdf ? 'pdf' : 'form');
   }, [activeChecklist?.id, canWriteOnPdf]);
   const sections = (activeChecklist?.dataJson?.sections || []).filter((s) => s.id !== 'firmas');
@@ -326,13 +329,27 @@ export function EventChecklistsPanel({
                 <div className="check-section__head">
                   <h3>{annotating ? 'Escribiendo sobre el PDF' : 'Vista previa PDF'}</h3>
                   {activeChecklist.pdfUrl && !closed ? (
-                    <button
-                      className={annotating ? 'btn btn-sm' : 'btn ghost btn-sm'}
-                      type="button"
-                      onClick={() => setAnnotating((v) => !v)}
-                    >
-                      {annotating ? 'Volver a la vista' : 'Escribir encima'}
-                    </button>
+                    <div className="row row--tight">
+                      {!annotating ? (
+                        <button
+                          className={showPdfPreview ? 'btn btn-sm' : 'btn ghost btn-sm'}
+                          type="button"
+                          onClick={() => setShowPdfPreview((v) => !v)}
+                        >
+                          {showPdfPreview ? 'Ocultar PDF' : 'Ver PDF'}
+                        </button>
+                      ) : null}
+                      <button
+                        className={annotating ? 'btn btn-sm' : 'btn ghost btn-sm'}
+                        type="button"
+                        onClick={() => {
+                          setAnnotating((v) => !v);
+                          if (!annotating) setShowPdfPreview(false);
+                        }}
+                      >
+                        {annotating ? 'Volver a la vista' : 'Escribir encima'}
+                      </button>
+                    </div>
                   ) : null}
                 </div>
 
@@ -362,13 +379,18 @@ export function EventChecklistsPanel({
                       setAnnotating(false);
                     }}
                   />
-                ) : (
+                ) : showPdfPreview ? (
                   <FileViewer
                     url={activeChecklist.pdfUrl}
                     fileName={`${activeChecklist.title}.pdf`}
                     kind="pdf"
                     cacheKey={activeChecklist.pdfGeneratedAt || undefined}
                   />
+                ) : (
+                  <p className="muted kpi-sub">
+                    Pulsa «Ver PDF» si quieres la vista previa. El formato se edita arriba sin tapar
+                    las opciones.
+                  </p>
                 )}
               </div>
 

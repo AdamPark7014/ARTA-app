@@ -27,6 +27,7 @@ import { EventFilesPanel } from '@/components/events/EventFilesPanel';
 import {
   asFinance,
   CAMPAIGN_FILE_MODULE,
+  FINANCE_FILE_MODULE,
   emptyFinance,
   type Checklist,
   type DirUser,
@@ -259,12 +260,18 @@ function EventDetailInner() {
     [event],
   );
 
+  /** Excel / PDF de corrida financiera (module=finance). */
+  const financeFiles = useMemo(
+    () => (event?.files || []).filter((f) => f.module === FINANCE_FILE_MODULE),
+    [event],
+  );
+
   const modules = useMemo(() => {
     if (!event) return [];
     const all = [
       { key: 'checklists', label: 'Checklists', count: event.checklists.length },
       { key: 'ocs', label: 'Órdenes de compra', count: event.purchaseOrders.length },
-      { key: 'finance', label: 'Corrida', count: event.financeRuns.length },
+      { key: 'finance', label: 'Corrida', count: event.financeRuns.length + financeFiles.length },
       {
         key: 'campaign',
         label: 'Campaña',
@@ -283,7 +290,7 @@ function EventDetailInner() {
       if (m.key === 'sponsors') return canSponsors;
       return true;
     });
-  }, [event, campaignFiles, canPo, canSeeFinance, canSeeCampaign, canTicketing, canSponsors]);
+  }, [event, campaignFiles, financeFiles, canPo, canSeeFinance, canSeeCampaign, canTicketing, canSponsors]);
 
   const heroStats = useMemo(() => {
     if (!event) return undefined;
@@ -650,6 +657,49 @@ function EventDetailInner() {
       await api(`/uploads/${fileId}`, { method: 'DELETE' });
       await load();
       flash('Archivo de campaña eliminado');
+    } catch (e) {
+      flash(e instanceof Error ? e.message : 'Error al eliminar archivo', 'error');
+    }
+  }
+
+  async function uploadFinanceFile(file: File) {
+    if (closed || !canFinance) return;
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      fd.append('eventId', id);
+      fd.append('module', FINANCE_FILE_MODULE);
+      await api('/uploads', { method: 'POST', body: fd });
+      await load();
+      flash(`${file.name} agregado a la corrida`);
+    } catch (e) {
+      flash(e instanceof Error ? e.message : 'Error al subir archivo de corrida', 'error');
+    }
+  }
+
+  async function replaceFinanceFile(fileId: string, file: File) {
+    if (closed || !canFinance) return;
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      fd.append('eventId', id);
+      fd.append('module', FINANCE_FILE_MODULE);
+      await api('/uploads', { method: 'POST', body: fd });
+      await api(`/uploads/${fileId}`, { method: 'DELETE' }).catch(() => undefined);
+      await load();
+      flash(`Corrida actualizada con ${file.name}`);
+    } catch (e) {
+      flash(e instanceof Error ? e.message : 'Error al actualizar archivo de corrida', 'error');
+    }
+  }
+
+  async function deleteFinanceFile(fileId: string) {
+    if (closed || !canFinance) return;
+    if (!confirm('¿Eliminar este archivo de la corrida?')) return;
+    try {
+      await api(`/uploads/${fileId}`, { method: 'DELETE' });
+      await load();
+      flash('Archivo de corrida eliminado');
     } catch (e) {
       flash(e instanceof Error ? e.message : 'Error al eliminar archivo', 'error');
     }
@@ -1085,6 +1135,7 @@ function EventDetailInner() {
 
         {tab === 'finance' && (
           <EventFinancePanel
+            event={event}
             financeLocked={financeLocked}
             canFinance={canFinance}
             closed={closed}
@@ -1094,6 +1145,11 @@ function EventDetailInner() {
             onImportExcel={importFinanceExcel}
             onSaveFinance={saveFinance}
             onPatchRow={patchFinanceRow}
+            files={financeFiles}
+            onUploadFile={uploadFinanceFile}
+            onReplaceFile={replaceFinanceFile}
+            onDeleteFile={deleteFinanceFile}
+            onFilesChanged={load}
           />
         )}
 

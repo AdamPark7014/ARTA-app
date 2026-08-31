@@ -110,6 +110,7 @@ export type Task = {
 
 /** Etiqueta de `EventFile.module` que usa la sección de campaña. */
 export const CAMPAIGN_FILE_MODULE = 'campaign';
+export const FINANCE_FILE_MODULE = 'finance';
 
 export type EventFile = EventDetail['files'][number];
 
