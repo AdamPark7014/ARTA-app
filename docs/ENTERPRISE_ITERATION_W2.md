@@ -43,5 +43,5 @@ Síntesis de la oleada W2 (post metadata W1 / sitemap / hosts polish).
 
 - BullMQ / colas persistentes para digests y automations.
 - OpenTelemetry en API + web.
-- Sitio público Explanada `/p/explanada`.
-- Stripe producción / calendario-inventario.
+- Stripe producción / inventario ERP.
+- **No** `/p/explanada`: Explanada es panel interno (PRODUCT), no sitio marketing público.

@@ -1,5 +1,5 @@
 import { fetchPublicNewsList } from '@/lib/public-site-data';
-import { SITE_NAME, siteOrigin } from '@/lib/site-seo';
+import { SITE_NAME, absoluteMediaUrl, siteOrigin } from '@/lib/site-seo';
 
 export const revalidate = 3600;
 
@@ -10,6 +10,19 @@ function escapeXml(text: string): string {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&apos;');
+}
+
+function mediaBlock(coverUrl: string | null | undefined, title: string): string {
+  const abs = absoluteMediaUrl(coverUrl);
+  if (!abs) return '';
+  const safe = escapeXml(abs);
+  const alt = escapeXml(title);
+  return `
+  <enclosure url="${safe}" type="image/jpeg" length="0"/>
+  <media:content url="${safe}" medium="image" type="image/jpeg">
+    <media:title type="plain">${alt}</media:title>
+  </media:content>
+  <media:thumbnail url="${safe}"/>`;
 }
 
 export async function GET() {
@@ -25,13 +38,13 @@ export async function GET() {
   <link>${link}</link>
   <guid isPermaLink="true">${link}</guid>
   <pubDate>${pub}</pubDate>
-  <description>${desc}</description>
+  <description>${desc}</description>${mediaBlock(post.coverUrl, post.title)}
 </item>`;
     })
     .join('\n');
 
   const xml = `<?xml version="1.0" encoding="UTF-8"?>
-<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:media="http://search.yahoo.com/mrss/">
   <channel>
     <title>${escapeXml(SITE_NAME)} · Noticias</title>
     <link>${base}/p/arta#noticias</link>

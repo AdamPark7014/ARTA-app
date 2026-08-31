@@ -95,6 +95,13 @@ export const NAV_ITEMS: NavItem[] = [
     keywords: 'historico cerrados archivo',
   },
   {
+    href: '/calendar',
+    label: 'Calendario',
+    group: 'Eventos',
+    requiresEventOps: true,
+    keywords: 'agenda mes semana fechas shows',
+  },
+  {
     href: '/tasks',
     label: 'Tareas',
     group: 'Eventos',

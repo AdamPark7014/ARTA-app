@@ -98,6 +98,7 @@ export function buildPublicMetadata(opts: BuildMetadataOpts): Metadata {
     category: 'Entretenimiento',
     alternates: {
       canonical: url,
+      languages: { 'es-MX': url },
     },
     robots: noIndex
       ? { index: false, follow: false }
@@ -155,13 +156,23 @@ export function socialSameAs(): string[] {
 }
 
 export function organizationNode() {
+  const logoUrl = absoluteUrl('/brand/arta-logo.png');
   return {
     '@type': 'Organization',
     '@id': `${siteOrigin()}/#organization`,
     name: SITE_NAME,
     alternateName: ['ARTA', 'Arta Producciones S.A. de C.V.'],
     url: siteOrigin(),
-    logo: absoluteUrl('/brand/arta-logo.png'),
+    logo: {
+      '@type': 'ImageObject',
+      '@id': `${siteOrigin()}/#logo`,
+      url: logoUrl,
+      contentUrl: logoUrl,
+      width: 512,
+      height: 512,
+      caption: SITE_NAME,
+    },
+    image: { '@id': `${siteOrigin()}/#logo` },
     description: SITE_DESCRIPTION,
     email: CONTACT_EMAIL,
     areaServed: { '@type': 'Country', name: 'México' },
@@ -228,11 +239,85 @@ export function webPageNode(path = '/p/arta', name?: string) {
   };
 }
 
+/** Visible FAQ on `/p/arta#faq` — keep in sync with PublicSiteContent. */
+export const PUBLIC_FAQ: Array<{ question: string; answer: string }> = [
+  {
+    question: '¿Qué hace Arta Producciones?',
+    answer:
+      'Producción integral de conciertos y eventos: checklists operativos, hospitality, campaña, boletera, corrida financiera y cierre con firmas digitales.',
+  },
+  {
+    question: '¿Dónde opera Arta?',
+    answer:
+      'Base operativa en Puebla, Puebla (México), con venue aliado Auditorio Arema Explanada y shows en la región.',
+  },
+  {
+    question: '¿Qué incluye la operación del evento?',
+    answer:
+      'Producción técnica, hospitality, comercial (boletera y patrocinios), artes/campaña autorizada y cierre financiero con órdenes de compra y anticipos.',
+  },
+  {
+    question: '¿Cómo contacto a Arta para un show?',
+    answer: `Escríbenos a ${CONTACT_EMAIL} con fecha, venue y alcance. Respondemos con una propuesta de producción.`,
+  },
+];
+
+export function faqPageNode() {
+  return {
+    '@type': 'FAQPage',
+    '@id': `${absoluteUrl('/p/arta')}#faq-page`,
+    url: `${absoluteUrl('/p/arta')}#faq`,
+    isPartOf: { '@id': `${siteOrigin()}/#website` },
+    mainEntity: PUBLIC_FAQ.map((item) => ({
+      '@type': 'Question',
+      name: item.question,
+      acceptedAnswer: { '@type': 'Answer', text: item.answer },
+    })),
+  };
+}
+
+/** Service offers aligned with visible `#modulos` copy. */
+export function serviceNodes() {
+  const org = { '@id': `${siteOrigin()}/#organization` };
+  return [
+    {
+      '@type': 'Service',
+      '@id': `${siteOrigin()}/#service-produccion`,
+      name: 'Producción integral de conciertos',
+      description:
+        'Producción técnica, hospitality, artes, boletera, campaña y cierre financiero para shows en vivo.',
+      provider: org,
+      areaServed: { '@type': 'Country', name: 'México' },
+      url: `${absoluteUrl('/p/arta')}#modulos`,
+    },
+    {
+      '@type': 'Service',
+      '@id': `${siteOrigin()}/#service-venue-ops`,
+      name: 'Operación de venue y eventos',
+      description:
+        'Coordinación operativa con Auditorio Arema Explanada y venues aliados: riders, corrida y firmas digitales.',
+      provider: org,
+      areaServed: {
+        '@type': 'AdministrativeArea',
+        name: 'Puebla, México',
+      },
+      url: `${absoluteUrl('/p/arta')}#modulos`,
+    },
+  ];
+}
+
 /** Unified JSON-LD @graph for the public home page. */
 export function homePageGraphJsonLd() {
   return {
     '@context': 'https://schema.org',
-    '@graph': [organizationNode(), websiteNode(), webPageNode('/p/arta'), localBusinessNode()],
+    '@graph': [
+      organizationNode(),
+      websiteNode(),
+      webPageNode('/p/arta'),
+      localBusinessNode(),
+      faqPageNode(),
+      ...serviceNodes(),
+    ],
   };
 }
 

@@ -176,6 +176,8 @@ model User {
   handoffs            AuthHandoff[]
   memberships         OrgMembership[]
   totpChallenges      TotpChallenge[]
+
+  @@index([organizationId])
 }
 
 // ─── Eventos ─────────────────────────────────────────────────────────────────
@@ -212,6 +214,7 @@ model Event {
 
   @@index([organizationId, entity])
   @@index([organizationId, status, startsAt])
+  @@index([entity, startsAt])
 }
 
 // ─── Patrocinadores ──────────────────────────────────────────────────────────
@@ -300,6 +303,7 @@ model ChecklistInstance {
   signatures DigitalSignature[]
 
   @@index([eventId])
+  @@index([templateId])
 }
 
 model DigitalSignature {
@@ -355,6 +359,7 @@ model PurchaseOrder {
   proofs PaymentProof[]
 
   @@index([eventId])
+  @@index([eventId, status])
 }
 
 model PurchaseOrderLine {
@@ -365,6 +370,8 @@ model PurchaseOrderLine {
   qty       Decimal       @default(1) @db.Decimal(12, 2)
   unitPrice Decimal       @db.Decimal(14, 2)
   total     Decimal       @db.Decimal(14, 2)
+
+  @@index([orderId])
 }
 
 model PaymentProof {
@@ -378,6 +385,9 @@ model PaymentProof {
   uploadedById    String?
   uploadedBy      User?          @relation(fields: [uploadedById], references: [id])
   createdAt       DateTime       @default(now())
+
+  @@index([eventId])
+  @@index([purchaseOrderId])
 }
 
 // ─── Corrida financiera ──────────────────────────────────────────────────────

@@ -114,6 +114,8 @@ export default function StudioPage() {
     ctaHref: '',
   });
   const [tileDraft, setTileDraft] = useState<Array<{ title: string; body: string }>>([]);
+  const [aboutStatsDraft, setAboutStatsDraft] = useState<Array<{ label: string; text: string }>>([]);
+  const [aboutLocation, setAboutLocation] = useState('');
 
   const draftsCount = useMemo(
     () =>
@@ -206,6 +208,22 @@ export default function StudioPage() {
             ],
       );
     }
+    if (sectionKey === 'home_about') {
+      const c = page.contentJson as {
+        stats?: Array<{ label: string; text: string }>;
+        location?: string;
+      };
+      setAboutLocation(String(c.location || ''));
+      setAboutStatsDraft(
+        c.stats?.length
+          ? c.stats.map((s) => ({ label: s.label, text: s.text }))
+          : [
+              { label: 'Shows', text: 'Producción integral de conciertos' },
+              { label: 'Puebla', text: 'Base operativa y venues aliados' },
+              { label: 'Experiencia', text: 'Del rider al cierre del evento' },
+            ],
+      );
+    }
   }, [sectionKey, pages]);
 
   async function saveSection() {
@@ -229,6 +247,12 @@ export default function StudioPage() {
             ctaHref: draft.ctaHref || '#contacto',
             ...(sectionKey === 'home_modulos'
               ? { tiles: tileDraft.filter((t) => t.title.trim()) }
+              : {}),
+            ...(sectionKey === 'home_about'
+              ? {
+                  stats: aboutStatsDraft.filter((s) => s.label.trim()),
+                  location: aboutLocation,
+                }
               : {}),
           },
         }),
@@ -995,6 +1019,74 @@ export default function StudioPage() {
                               }
                             >
                               + Agregar tile
+                            </button>
+                          </div>
+                        ) : null}
+                        {sectionKey === 'home_about' ? (
+                          <div className="stack" style={{ marginTop: '1rem' }}>
+                            <label>
+                              Ubicación (texto visible)
+                              <textarea
+                                rows={3}
+                                value={aboutLocation}
+                                onChange={(e) => setAboutLocation(e.target.value)}
+                                placeholder="Base operativa en Puebla…"
+                              />
+                            </label>
+                            <p className="muted kpi-sub">
+                              Coordenadas del mapa: env{' '}
+                              <code>NEXT_PUBLIC_VENUE_LAT</code> / <code>NEXT_PUBLIC_VENUE_LNG</code> /{' '}
+                              <code>NEXT_PUBLIC_VENUE_ADDRESS</code>.
+                            </p>
+                            <div className="label">Stats (Nosotros)</div>
+                            {aboutStatsDraft.map((stat, idx) => (
+                              <div key={idx} className="panel" style={{ padding: '0.75rem' }}>
+                                <FormGrid>
+                                  <label>
+                                    Etiqueta
+                                    <input
+                                      value={stat.label}
+                                      onChange={(e) => {
+                                        const next = [...aboutStatsDraft];
+                                        next[idx] = { ...stat, label: e.target.value };
+                                        setAboutStatsDraft(next);
+                                      }}
+                                    />
+                                  </label>
+                                  <label>
+                                    &nbsp;
+                                    <button
+                                      className="btn ghost btn-sm btn-danger"
+                                      type="button"
+                                      onClick={() =>
+                                        setAboutStatsDraft(aboutStatsDraft.filter((_, i) => i !== idx))
+                                      }
+                                    >
+                                      Quitar
+                                    </button>
+                                  </label>
+                                </FormGrid>
+                                <label>
+                                  Texto
+                                  <input
+                                    value={stat.text}
+                                    onChange={(e) => {
+                                      const next = [...aboutStatsDraft];
+                                      next[idx] = { ...stat, text: e.target.value };
+                                      setAboutStatsDraft(next);
+                                    }}
+                                  />
+                                </label>
+                              </div>
+                            ))}
+                            <button
+                              className="btn ghost btn-sm"
+                              type="button"
+                              onClick={() =>
+                                setAboutStatsDraft([...aboutStatsDraft, { label: '', text: '' }])
+                              }
+                            >
+                              + Agregar stat
                             </button>
                           </div>
                         ) : null}

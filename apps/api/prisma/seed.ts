@@ -689,6 +689,22 @@ const STUDIO_CONTENT: Array<{ sectionKey: string; title: string; contentJson: Re
     },
   },
   {
+    sectionKey: 'home_about',
+    title: 'Nosotros',
+    contentJson: {
+      headline: 'Producimos el show completo',
+      body:
+        'Somos la productora detrás de la experiencia: producción técnica, hospitality, artes, boletera, campaña y cierre financiero. Operamos con el mismo rigor en cada concierto.',
+      location:
+        'Base operativa en Puebla y venue aliado Auditorio Arema Explanada. Producción integral de conciertos y eventos en la región.',
+      stats: [
+        { label: 'Shows', text: 'Producción integral de conciertos' },
+        { label: 'Puebla', text: 'Base operativa y venues aliados' },
+        { label: 'Experiencia', text: 'Del rider al cierre del evento' },
+      ],
+    },
+  },
+  {
     sectionKey: 'home_modulos',
     title: 'Módulos',
     contentJson: {

@@ -1,37 +1,37 @@
-# Enterprise transformation — Iteration W3
+# Enterprise iteration W3 — auditoría ultra profunda + mega presencia
 
-## Cambios realizados
-- Event Detail modularizado (~870 LOC orchestrator + paneles por tab).
-- `@nestjs/schedule` cron horario + dispatch de webhooks en señales.
-- Modelos Prisma: `UserSession`, `AuthHandoff`, `WebhookEndpoint`, `WebhookDelivery`.
-- SSO cross-host con código one-time (ya no JWT en query por defecto).
-- Sesiones activas: crear en login, listar/revocar en `/auth/sessions*`.
-- OpenAPI en `/docs` (Swagger).
-- Package compartido `@arta/rbac` (fuente única permisos).
-- Shell móvil con hamburger / drawer.
-- Página Admin Webhooks + Tasks workload KPIs.
-- Canvas de auditoría recalibrado (live).
+Síntesis de la oleada W3 (post W2 `3efa71d`). **No** construye `/p/explanada` ni ERP inventario (PRODUCT: Explanada = panel interno).
 
-## Justificación técnica
-Cerrar gaps High del audit: automatización real, auth harden, modularidad del hub,
-RBAC drift, DX API (OpenAPI), UX móvil.
+## Oleada A — P0
 
-## Beneficio de negocio
-- Alertas operativas salen hacia sistemas externos (Slack/Make/n8n vía webhook).
-- Menos riesgo de fuga de JWT en URLs/referrers.
-- Dirección ve sesiones y puede revocar.
-- Onboarding API vía Swagger.
+- `PATCH /events/:id`: sin `status` (solo `POST close|cancel|reopen`).
+- Analytics `auditLog`: filtrado por `user.organizationId` (overview + auditIntel).
+- Sitio público / sitemap: sin `FALLBACK_NEWS` ni slugs inventados.
 
-## Escalabilidad / mantenibilidad
-Event hub decomposable; jobs desacoplados; RBAC unificado.
+## Oleada B — Closed + RBAC
 
-## Riesgos mitigados
-JWT en query, cero jobs, god-page, drift RBAC, N/A mobile nav.
+- `assertEventNotClosed` en campaigns, ticketing, finance advances, OC, uploads, tasks, vendor pins, checklist from-template.
+- Gates: campaign view, finance view, vendor pin list, users PATCH role allowlist, webhooks secret mask.
+- UI: OC authorize/mark_paid, hub tabs, sponsors/checklists/files, tasks Equipo, finance/ticketing/advances/vendor.
 
-## Qué falta para ~80+ / vendible a N orgs (W4–W5)
-1. Multi-org tenancy (Organization model + isolation).
-2. HttpOnly cookie auth (salir de localStorage).
-3. 2FA / device trust.
-4. Sell-through boletera (API externa).
-5. Email/push digests.
-6. Cola durable (BullMQ) vs cron in-process.
+## Oleada C — SEO mega
+
+- RSS `enclosure` + `media:content` cuando hay cover.
+- Organization logo como `ImageObject`; home `@graph` con FAQPage + Service.
+- FAQ visible `#faq`; `/llms.txt` + robots allow; `alternates.languages` es-MX.
+- Studio `home_about`: stats + ubicación editables; env venue geo documentado.
+
+## Oleada D — Producto / datos
+
+- Calendario `/calendar` (mes, filtro estado, link al hub); nav Eventos.
+- Índices Prisma ronda 2: PaymentProof, PurchaseOrderLine, PO(eventId,status), User(organizationId), ChecklistInstance(templateId), Event(entity,startsAt).
+- e2e calendario + home sin fake news; specs P0 status strip + audit scope.
+
+## Fuera de este turno (Adam / P3)
+
+- Deploy key, Traefik, GSC, redes, 2FA enroll, Stripe prod, ticketing live URL.
+- BullMQ / OpenTelemetry / inventario ERP / sitio público Explanada.
+
+## Nota histórica
+
+El archivo `ENTERPRISE_ITERATION_W3.md` anterior documentaba modularización hub / webhooks / OpenAPI (ya shippeado). Esta revisión reemplaza esa narrativa con la oleada de auditoría W3; el código de modularización sigue en el repo.

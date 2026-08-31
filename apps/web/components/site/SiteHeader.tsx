@@ -89,6 +89,9 @@ export function SiteHeader({ mode = 'home' }: SiteHeaderProps) {
           <a href={newsHref} onClick={closeMenu}>
             Noticias
           </a>
+          <a href={`${homeHref}#faq`} onClick={closeMenu}>
+            FAQ
+          </a>
           <a href={`${homeHref}#ubicacion`} onClick={closeMenu}>
             Ubicación
           </a>

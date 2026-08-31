@@ -5,6 +5,7 @@ import { SiteHeader } from '@/components/site/SiteHeader';
 import { VenueMap } from '@/components/site/VenueMap';
 import { panelLoginUrl } from '@/lib/domains';
 import { FALLBACK_SLIDES, type PublicSiteData } from '@/lib/public-site-data';
+import { PUBLIC_FAQ } from '@/lib/site-seo';
 
 const CONTACT = {
   email: process.env.NEXT_PUBLIC_CONTACT_EMAIL || 'contacto@artaproducciones.com',
@@ -49,18 +50,18 @@ export function PublicSiteContent({ data }: PublicSiteContentProps) {
                 'Somos la productora detrás de la experiencia: producción técnica, hospitality, artes, boletera, campaña y cierre financiero. Operamos con el mismo rigor en cada concierto.'}
             </p>
             <div className="stat-row">
-              <div>
-                <strong>Shows</strong>
-                <span>Producción integral de conciertos</span>
-              </div>
-              <div>
-                <strong>Puebla</strong>
-                <span>Base operativa y venues aliados</span>
-              </div>
-              <div>
-                <strong>Experiencia</strong>
-                <span>Del rider al cierre del evento</span>
-              </div>
+              {(
+                about?.stats?.filter((s) => s.label?.trim()) || [
+                  { label: 'Shows', text: 'Producción integral de conciertos' },
+                  { label: 'Puebla', text: 'Base operativa y venues aliados' },
+                  { label: 'Experiencia', text: 'Del rider al cierre del evento' },
+                ]
+              ).map((s) => (
+                <div key={s.label}>
+                  <strong>{s.label}</strong>
+                  <span>{s.text}</span>
+                </div>
+              ))}
             </div>
           </div>
           <div
@@ -140,11 +141,24 @@ export function PublicSiteContent({ data }: PublicSiteContentProps) {
         )}
       </section>
 
+      <section className="site-section" id="faq">
+        <h2>Preguntas frecuentes</h2>
+        <p className="lead">Respuestas claras sobre producción, operación y contacto.</p>
+        <div className="site-faq">
+          {PUBLIC_FAQ.map((item) => (
+            <details className="site-faq__item" key={item.question}>
+              <summary>{item.question}</summary>
+              <p>{item.answer}</p>
+            </details>
+          ))}
+        </div>
+      </section>
+
       <section className="site-section" id="ubicacion">
         <h2>Ubicación</h2>
         <p className="lead">
-          Base operativa en Puebla y venue aliado Auditorio Arema Explanada. Producción integral de
-          conciertos y eventos en la región.
+          {about?.location ||
+            'Base operativa en Puebla y venue aliado Auditorio Arema Explanada. Producción integral de conciertos y eventos en la región.'}
         </p>
         <address className="lead" style={{ fontStyle: 'normal' }}>
           {VENUE_ADDRESS}
@@ -205,6 +219,7 @@ export function PublicSiteContent({ data }: PublicSiteContentProps) {
             <div className="label">Secciones</div>
             <a href="#nosotros">Nosotros</a>
             <a href="#modulos">Operación</a>
+            <a href="#faq">FAQ</a>
             <a href="#ubicacion">Mapa</a>
           </div>
           <div>

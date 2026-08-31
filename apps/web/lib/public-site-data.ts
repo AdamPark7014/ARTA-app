@@ -1,6 +1,7 @@
 import { apiBase, type PublicNewsPost } from './site-seo';
 
 export type PublicSiteTile = { title: string; body: string };
+export type PublicSiteStat = { label: string; text: string };
 
 export type PublicSiteContent = {
   brand?: string;
@@ -12,6 +13,10 @@ export type PublicSiteContent = {
   cta?: string;
   ctaHref?: string;
   tiles?: PublicSiteTile[];
+  /** Editable “Nosotros” stats (Studio `home_about`). */
+  stats?: PublicSiteStat[];
+  /** Visible location blurb under #ubicacion when set via Studio. */
+  location?: string;
 };
 
 export type PublicSitePage = {
