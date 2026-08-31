@@ -6,38 +6,24 @@
 
 ## Hecho en este turno
 
-**W3 auditoría ultra profunda + mega presencia** (oleadas A–D):
+**W3 completo** (`5e7e246` + UI `1eb575a` + P0 `87ba30c`) y **deploy Hetzner** OK.
 
-### P0 / integridad (ya en `87ba30c` + verificación)
-- PATCH events sin `status`; analytics audit tenant-scoped; sin FALLBACK_NEWS.
-
-### Closed + RBAC
-- API mutators + gates (WIP `87ba30c`); UI OC/hub/towers (`1eb575a`).
-
-### SEO mega
-- RSS `enclosure`/`media:content`; Organization logo ImageObject; home `@graph` FAQPage + Service.
-- FAQ visible `#faq`; `/llms.txt` + robots; `alternates.languages` es-MX.
-- Studio `home_about` stats + ubicación; seed `home_about`.
-
-### Producto / datos
-- Calendario `/calendar` + nav Eventos.
-- Índices Prisma ronda 2 + migración `20260831120000_w3_indexes_r2`.
-- Docs `ENTERPRISE_ITERATION_W3.md` + `SITEMAP.md`; W2 backlog sin `/p/explanada`.
-- e2e calendar + empty news; specs P0 status/audit.
-
-`tsc` api+web OK; jest P0 specs OK.
+Smoke prod:
+- `/p/arta`: FAQ visible + `@graph` FAQPage/Service + empty news state
+- `/llms.txt` 200; robots Allow `/llms.txt`
+- feed `language=es-mx`; calendar → login `?next=/calendar`
+- containers api/web healthy
 
 ## A medias
 
-Nada de código W3. Falta **deploy smoke** en Hetzner (siguiente si Adam pide, o este cierre).
+Nada W3.
 
 ## Siguiente paso
 
-1. Deploy archive → `update.sh --no-pull` → smoke: `/p/arta` FAQ, `/llms.txt`, calendario login, closed 403.
-2. Ops Adam: redes, GSC, deploy key, 2FA, Stripe prod (fuera de W3).
+1. Ops Adam: redes (`NEXT_PUBLIC_SOCIAL_*`), GSC, deploy key, 2FA, Stripe prod.
+2. Push `origin/main` cuando quieras (rama ahead ~13).
 
 ## No tocar
 
 - `docs/ACCESS.md`, `.env.arta`, e2e API BD.
-- No inventar `sameAs` sin URLs de Adam.
 - No `/p/explanada` ni inventario ERP.
