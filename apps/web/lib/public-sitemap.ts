@@ -8,6 +8,7 @@ type NewsIndexRow = {
   slug: string;
   publishedAt?: string | null;
   updatedAt?: string | null;
+  coverUrl?: string | null;
 };
 
 function apiBase(): string {
@@ -52,6 +53,11 @@ export async function buildPublicSitemap(): Promise<MetadataRoute.Sitemap> {
       lastModified: lastModified ? new Date(lastModified) : now,
       changeFrequency: 'monthly',
       priority: 0.7,
+      ...(row.coverUrl
+        ? {
+            images: [`${base}${row.coverUrl.startsWith('/') ? row.coverUrl : `/${row.coverUrl}`}`],
+          }
+        : {}),
     });
   }
 

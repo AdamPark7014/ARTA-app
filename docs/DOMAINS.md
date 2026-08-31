@@ -100,3 +100,18 @@ En `C:\Windows\System32\drivers\etc\hosts` (como admin):
 ```
 
 Abrir `http://arta.artaproducciones.com:3000` (cookie `Secure` off en http local).
+
+## Boletera (Arema)
+
+Por defecto `TICKETING_SYNC_MODE=stub` — la UI muestra banner demo y los vendidos se simulan.
+
+Para wiring live en producción:
+
+```env
+TICKETING_SYNC_MODE=live
+TICKETING_SYNC_URL=https://…/sync
+TICKETING_SYNC_TOKEN=…   # opcional Bearer
+NEXT_PUBLIC_TICKETING_SYNC_MODE=live   # quita banner demo en panel
+```
+
+Ver [`docs/ENTERPRISE_ITERATION_W10.md`](ENTERPRISE_ITERATION_W10.md) y health `/health` → `ticketing.sync`.

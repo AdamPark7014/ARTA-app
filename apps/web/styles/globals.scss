@@ -1660,8 +1660,15 @@ body.site-nav-open {
 
 .news-cover {
   height: 180px;
-  background-size: cover;
-  background-position: center;
+  overflow: hidden;
+  background: #111;
+
+  img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
 }
 
 .news-body {

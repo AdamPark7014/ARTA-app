@@ -56,6 +56,16 @@ export class FinanceController {
     return event;
   }
 
+  private assertFinanceView(user: AuthUser) {
+    const role = user.roleKey as RoleKey;
+    if (
+      !hasPermission(role, user.permissions, PERMISSIONS.FINANCE_VIEW) &&
+      !hasPermission(role, user.permissions, PERMISSIONS.FINANCE_EDIT)
+    ) {
+      throw new ForbiddenException('Sin permiso para ver finanzas');
+    }
+  }
+
   /** Mirror FinanceRun into CORRIDA_FINANCIERA checklist checks */
   private async syncCorridaChecklist(eventId: string, data: FinancePayload, locked: boolean) {
     const instance = await this.prisma.checklistInstance.findFirst({
@@ -125,6 +135,7 @@ export class FinanceController {
 
   @Get('event/:eventId')
   async list(@Req() req: { user: AuthUser }, @Param('eventId') eventId: string) {
+    this.assertFinanceView(req.user);
     await this.assertEventOps(req.user, eventId);
     return this.prisma.financeRun.findMany({ where: { eventId } });
   }
@@ -148,6 +159,7 @@ export class FinanceController {
 
   @Get('advances/event/:eventId')
   async advances(@Req() req: { user: AuthUser }, @Param('eventId') eventId: string) {
+    this.assertFinanceView(req.user);
     await this.assertEventOps(req.user, eventId);
     return this.prisma.paymentProof.findMany({
       where: { eventId, purchaseOrderId: null },

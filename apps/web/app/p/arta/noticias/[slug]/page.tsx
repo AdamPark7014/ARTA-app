@@ -1,12 +1,11 @@
 import type { Metadata } from 'next';
 import { JsonLd } from '@/components/seo/JsonLd';
 import {
-  articleJsonLd,
-  breadcrumbJsonLd,
   buildPublicMetadata,
   fetchPublicNews,
+  newsArticleGraphJsonLd,
 } from '@/lib/site-seo';
-import { NewsDetailClient } from './NewsDetailClient';
+import { NewsArticleView } from './NewsArticleView';
 
 type Props = { params: { slug: string } };
 
@@ -42,19 +41,8 @@ export default async function NewsDetailPage({ params }: Props) {
 
   return (
     <>
-      {post ? (
-        <JsonLd
-          data={[
-            articleJsonLd(post),
-            breadcrumbJsonLd([
-              { name: 'Inicio', path: '/p/arta' },
-              { name: 'Noticias', path: '/p/arta#noticias' },
-              { name: post.title, path: `/p/arta/noticias/${post.slug}` },
-            ]),
-          ]}
-        />
-      ) : null}
-      <NewsDetailClient />
+      {post ? <JsonLd data={newsArticleGraphJsonLd(post)} /> : null}
+      <NewsArticleView post={post} />
     </>
   );
 }

@@ -47,8 +47,11 @@ export class DigestsController {
   }
 
   @Post('flush-outbox')
-  flush(@Req() req: { user: { roleKey: string; permissions: string[] } }) {
+  flush(@Req() req: { user: TenantUser & { permissions: string[]; roleKey: string } }) {
     this.assertAdmin(req.user);
-    return this.digests.flushOutbox();
+    const globalFlush =
+      isPlatformAdmin(req.user) &&
+      hasPermission(req.user.roleKey as RoleKey, req.user.permissions, PERMISSIONS.EVERYTHING);
+    return this.digests.flushOutbox(globalFlush ? null : tenantIdOf(req.user));
   }
 }

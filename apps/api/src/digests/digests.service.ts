@@ -74,7 +74,7 @@ export class DigestsService {
         organizationId,
       );
 
-      await this.flushOutbox();
+      await this.flushOutbox(organizationId);
 
       await this.prisma.jobRun.update({
         where: { id: job.id },
@@ -158,9 +158,13 @@ export class DigestsService {
   }
 
   /** Flush pending email outbox (SMTP via nodemailer when configured). */
-  async flushOutbox(limit = 50) {
+  async flushOutbox(organizationId?: string | null, limit = 50) {
     const pending = await this.prisma.notificationOutbox.findMany({
-      where: { status: 'pending', channel: 'email' },
+      where: {
+        status: 'pending',
+        channel: 'email',
+        ...(organizationId ? { organizationId } : {}),
+      },
       take: limit,
       orderBy: { createdAt: 'asc' },
     });

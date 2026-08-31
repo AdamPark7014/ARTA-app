@@ -130,6 +130,12 @@ function EventDetailInner() {
   const canCampaign = userHasPermission(user?.roleKey || '', user?.permissions || [], ['campaign.edit', 'everything']);
   const canTicketing = userHasPermission(user?.roleKey || '', user?.permissions || [], ['ticketing.edit', 'everything']);
   const canVendorPin = userHasPermission(user?.roleKey || '', user?.permissions || [], ['vendor.pin', 'everything']);
+  const canPo = userHasPermission(user?.roleKey || '', user?.permissions || [], [
+    'checklist.edit',
+    'po.authorize',
+    'po.mark_paid',
+    'everything',
+  ]);
   const canReopen = user?.roleKey === 'dir_general' || user?.roleKey === 'super_admin';
   const canDeleteEvent = user?.roleKey === 'dir_general' || user?.roleKey === 'super_admin';
 
@@ -232,7 +238,7 @@ function EventDetailInner() {
 
   const modules = useMemo(() => {
     if (!event) return [];
-    return [
+    const all = [
       { key: 'checklists', label: 'Checklists', count: event.checklists.length },
       { key: 'ocs', label: 'Órdenes de compra', count: event.purchaseOrders.length },
       { key: 'finance', label: 'Corrida', count: event.financeRuns.length },
@@ -246,7 +252,8 @@ function EventDetailInner() {
       { key: 'sponsors', label: 'Convenios y patrocinios', count: event.sponsors?.length || 0 },
       { key: 'files', label: 'Documentos', count: event.files.length },
     ] as const;
-  }, [event, campaignFiles]);
+    return all.filter((m) => (m.key === 'ocs' ? canPo : true));
+  }, [event, campaignFiles, canPo]);
 
   const heroStats = useMemo(() => {
     if (!event) return undefined;
@@ -886,6 +893,19 @@ function EventDetailInner() {
     }
   }
 
+  async function updateSponsor(
+    sid: string,
+    patch: { name?: string; contact?: string; contribution?: string; amount?: number; notes?: string },
+  ) {
+    try {
+      await api(`/sponsors/${sid}`, { method: 'PATCH', body: JSON.stringify(patch) });
+      flash('Patrocinador actualizado');
+      await load();
+    } catch (e) {
+      flash(e instanceof Error ? e.message : 'Error al actualizar patrocinador', 'error');
+    }
+  }
+
   if (loading && !event) {
     return <EventDetailSkeleton />;
   }
@@ -1025,6 +1045,8 @@ function EventDetailInner() {
             onSaveEditPo={saveEditPo}
             onSetPoStatus={setPoStatus}
             onDeletePo={deletePo}
+            onProofsChange={load}
+            eventId={id}
             poWindow={poWindow}
           />
         )}
@@ -1102,6 +1124,7 @@ function EventDetailInner() {
             setSponsorForm={setSponsorForm}
             onCreateSponsor={createSponsor}
             onRemoveSponsor={removeSponsor}
+            onUpdateSponsor={updateSponsor}
           />
         )}
 

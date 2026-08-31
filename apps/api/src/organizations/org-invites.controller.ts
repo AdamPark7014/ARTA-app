@@ -217,7 +217,7 @@ export class OrgInvitesController {
 
     let emailFlushed = false;
     try {
-      const flushed = await this.digests.flushOutbox(5);
+      const flushed = await this.digests.flushOutbox(id, 5);
       emailFlushed = (flushed?.sent ?? 0) > 0;
     } catch {
       emailFlushed = false;

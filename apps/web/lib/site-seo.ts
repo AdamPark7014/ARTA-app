@@ -36,7 +36,7 @@ export function absoluteMediaUrl(url: string | null | undefined): string | undef
   return absoluteUrl(url.startsWith('/') ? url : `/${url}`);
 }
 
-const apiBase = () => process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+export const apiBase = () => process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 
 export type PublicNewsPost = {
   id: string;
@@ -142,9 +142,20 @@ export function buildPublicMetadata(opts: BuildMetadataOpts): Metadata {
   };
 }
 
-export function organizationJsonLd() {
+export function socialSameAs(): string[] {
+  const urls = [
+    process.env.NEXT_PUBLIC_SOCIAL_INSTAGRAM,
+    process.env.NEXT_PUBLIC_SOCIAL_FACEBOOK,
+    process.env.NEXT_PUBLIC_SOCIAL_YOUTUBE,
+    process.env.NEXT_PUBLIC_SOCIAL_TWITTER,
+    'https://arta.artaproducciones.com',
+    'https://auditorio.artaproducciones.com',
+  ];
+  return urls.filter((u): u is string => Boolean(u?.trim()));
+}
+
+export function organizationNode() {
   return {
-    '@context': 'https://schema.org',
     '@type': 'Organization',
     '@id': `${siteOrigin()}/#organization`,
     name: SITE_NAME,
@@ -160,16 +171,12 @@ export function organizationJsonLd() {
       addressRegion: 'Puebla',
       addressCountry: 'MX',
     },
-    sameAs: [
-      'https://arta.artaproducciones.com',
-      'https://auditorio.artaproducciones.com',
-    ],
+    sameAs: socialSameAs(),
   };
 }
 
-export function websiteJsonLd() {
+export function websiteNode() {
   return {
-    '@context': 'https://schema.org',
     '@type': 'WebSite',
     '@id': `${siteOrigin()}/#website`,
     name: SITE_NAME,
@@ -177,15 +184,111 @@ export function websiteJsonLd() {
     description: SITE_DESCRIPTION,
     publisher: { '@id': `${siteOrigin()}/#organization` },
     inLanguage: 'es-MX',
-    potentialAction: {
-      '@type': 'SearchAction',
-      target: {
-        '@type': 'EntryPoint',
-        urlTemplate: `${absoluteUrl('/p/arta')}#noticias`,
-      },
-      'query-input': 'required name=search_term_string',
+  };
+}
+
+export function localBusinessNode() {
+  const address =
+    process.env.NEXT_PUBLIC_VENUE_ADDRESS ||
+    'Auditorio Arema Explanada, Puebla, Puebla, México';
+  const lat = process.env.NEXT_PUBLIC_VENUE_LAT ? Number(process.env.NEXT_PUBLIC_VENUE_LAT) : 19.0414;
+  const lng = process.env.NEXT_PUBLIC_VENUE_LNG ? Number(process.env.NEXT_PUBLIC_VENUE_LNG) : -98.2063;
+  return {
+    '@type': ['EntertainmentBusiness', 'LocalBusiness'],
+    '@id': `${siteOrigin()}/#venue-explanada`,
+    name: 'Auditorio Arema Explanada',
+    parentOrganization: { '@id': `${siteOrigin()}/#organization` },
+    url: 'https://auditorio.artaproducciones.com',
+    address: {
+      '@type': 'PostalAddress',
+      streetAddress: address,
+      addressLocality: process.env.NEXT_PUBLIC_CITY || 'Puebla',
+      addressRegion: process.env.NEXT_PUBLIC_STATE || 'Puebla',
+      addressCountry: 'MX',
+    },
+    geo: {
+      '@type': 'GeoCoordinates',
+      latitude: lat,
+      longitude: lng,
     },
   };
+}
+
+export function webPageNode(path = '/p/arta', name?: string) {
+  const url = absoluteUrl(path);
+  return {
+    '@type': 'WebPage',
+    '@id': `${url}#webpage`,
+    url,
+    name: name || `${SITE_TAGLINE} · ${SITE_NAME}`,
+    description: SITE_DESCRIPTION,
+    isPartOf: { '@id': `${siteOrigin()}/#website` },
+    about: { '@id': `${siteOrigin()}/#organization` },
+    inLanguage: 'es-MX',
+  };
+}
+
+/** Unified JSON-LD @graph for the public home page. */
+export function homePageGraphJsonLd() {
+  return {
+    '@context': 'https://schema.org',
+    '@graph': [organizationNode(), websiteNode(), webPageNode('/p/arta'), localBusinessNode()],
+  };
+}
+
+/** @graph for a news article page. */
+export function newsArticleGraphJsonLd(post: PublicNewsPost) {
+  const url = absoluteUrl(`/p/arta/noticias/${post.slug}`);
+  return {
+    '@context': 'https://schema.org',
+    '@graph': [
+      organizationNode(),
+      websiteNode(),
+      {
+        '@type': 'NewsArticle',
+        '@id': `${url}#article`,
+        headline: post.title,
+        description: post.excerpt || SITE_DESCRIPTION,
+        image: absoluteMediaUrl(post.coverUrl)
+          ? [absoluteMediaUrl(post.coverUrl)]
+          : [absoluteUrl('/brand/arta-logo.png')],
+        datePublished: post.publishedAt || undefined,
+        dateModified: post.updatedAt || post.publishedAt || undefined,
+        author: { '@id': `${siteOrigin()}/#organization` },
+        publisher: { '@id': `${siteOrigin()}/#organization` },
+        mainEntityOfPage: { '@id': `${url}#webpage` },
+        url,
+        inLanguage: 'es-MX',
+      },
+      {
+        '@type': 'WebPage',
+        '@id': `${url}#webpage`,
+        url,
+        name: post.title,
+        isPartOf: { '@id': `${siteOrigin()}/#website` },
+        breadcrumb: { '@id': `${url}#breadcrumb` },
+      },
+      {
+        '@type': 'BreadcrumbList',
+        '@id': `${url}#breadcrumb`,
+        itemListElement: [
+          { '@type': 'ListItem', position: 1, name: 'Inicio', item: absoluteUrl('/p/arta') },
+          { '@type': 'ListItem', position: 2, name: 'Noticias', item: absoluteUrl('/p/arta#noticias') },
+          { '@type': 'ListItem', position: 3, name: post.title, item: url },
+        ],
+      },
+    ],
+  };
+}
+
+/** @deprecated Use organizationNode() inside @graph */
+export function organizationJsonLd() {
+  return { '@context': 'https://schema.org', ...organizationNode() };
+}
+
+/** @deprecated Use websiteNode() inside @graph — no fake SearchAction */
+export function websiteJsonLd() {
+  return { '@context': 'https://schema.org', ...websiteNode() };
 }
 
 export function articleJsonLd(post: PublicNewsPost) {

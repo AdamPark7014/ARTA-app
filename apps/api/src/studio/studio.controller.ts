@@ -66,7 +66,7 @@ export class StudioController {
   async publicNewsIndex() {
     return this.prisma.newsPost.findMany({
       where: { entity: 'ARTA', published: true },
-      select: { slug: true, publishedAt: true, updatedAt: true },
+      select: { slug: true, publishedAt: true, updatedAt: true, coverUrl: true, title: true, excerpt: true },
       orderBy: { publishedAt: 'desc' },
     });
   }

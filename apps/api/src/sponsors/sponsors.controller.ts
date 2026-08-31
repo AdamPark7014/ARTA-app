@@ -15,7 +15,14 @@ import { IsOptional, IsString } from 'class-validator';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { assertSameTenant } from '../common/tenant';
-import { canAccessEventOps, type EntityKey, type RoleKey } from '../common/rbac/roles';
+import { assertEventNotClosed } from '../common/event-guards';
+import {
+  canAccessEventOps,
+  hasPermission,
+  PERMISSIONS,
+  type EntityKey,
+  type RoleKey,
+} from '../common/rbac/roles';
 
 type AuthUser = {
   id: string;
@@ -39,6 +46,18 @@ class SponsorDto {
 export class SponsorsController {
   constructor(private prisma: PrismaService) {}
 
+  private assertSponsorEdit(user: AuthUser) {
+    if (
+      !hasPermission(
+        user.roleKey as RoleKey,
+        user.permissions || [],
+        PERMISSIONS.CHECKLIST_EDIT,
+      )
+    ) {
+      throw new ForbiddenException('Sin permiso para editar patrocinadores');
+    }
+  }
+
   @Get('event/:eventId')
   async list(@Req() req: { user: AuthUser }, @Param('eventId') eventId: string) {
     const event = await this.prisma.event.findUnique({ where: { id: eventId } });
@@ -55,12 +74,14 @@ export class SponsorsController {
 
   @Post()
   async create(@Req() req: { user: AuthUser }, @Body() dto: SponsorDto) {
+    this.assertSponsorEdit(req.user);
     const event = await this.prisma.event.findUnique({ where: { id: dto.eventId } });
     if (!event) throw new NotFoundException();
     if (!canAccessEventOps(req.user.entities as EntityKey[], req.user.roleKey as RoleKey, event.entity as EntityKey)) {
       throw new ForbiddenException();
     }
     assertSameTenant(req.user, event.organizationId);
+    assertEventNotClosed(event.status);
     return this.prisma.sponsor.create({
       data: {
         eventId: dto.eventId,
@@ -80,6 +101,7 @@ export class SponsorsController {
     @Param('id') id: string,
     @Body() body: Partial<SponsorDto>,
   ) {
+    this.assertSponsorEdit(req.user);
     const existing = await this.prisma.sponsor.findUnique({
       where: { id },
       include: { event: true },
@@ -95,6 +117,7 @@ export class SponsorsController {
       throw new ForbiddenException();
     }
     assertSameTenant(req.user, existing.event.organizationId);
+    assertEventNotClosed(existing.event.status);
     return this.prisma.sponsor.update({
       where: { id },
       data: {
@@ -109,6 +132,7 @@ export class SponsorsController {
 
   @Delete(':id')
   async remove(@Req() req: { user: AuthUser }, @Param('id') id: string) {
+    this.assertSponsorEdit(req.user);
     const existing = await this.prisma.sponsor.findUnique({
       where: { id },
       include: { event: true },
@@ -124,6 +148,7 @@ export class SponsorsController {
       throw new ForbiddenException();
     }
     assertSameTenant(req.user, existing.event.organizationId);
+    assertEventNotClosed(existing.event.status);
     await this.prisma.sponsor.delete({ where: { id } });
     return { ok: true };
   }

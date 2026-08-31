@@ -23,7 +23,7 @@ export class JobsService {
   @Cron(CronExpression.EVERY_5_MINUTES)
   async tick() {
     try {
-      const outbox = await this.digests.flushOutbox(30);
+      const outbox = await this.digests.flushOutbox(null, 30);
       if (outbox.sent) this.log.log(`Outbox flush: ${outbox.sent} (${outbox.mode || 'n/a'})`);
     } catch (e) {
       this.log.warn(`Outbox flush: ${e instanceof Error ? e.message : e}`);
@@ -62,7 +62,7 @@ export class JobsService {
       where: { id: { in: failed.map((f) => f.id) } },
       data: { status: 'pending', error: null },
     });
-    await this.digests.flushOutbox(failed.length);
+    await this.digests.flushOutbox(null, failed.length);
     return { requeued: failed.length };
   }
 

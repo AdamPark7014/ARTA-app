@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { FormGrid } from '@/components/ui/PageChrome';
 import type { Sponsor } from '@/components/events/event-detail.types';
@@ -14,6 +14,10 @@ type EventSponsorsPanelProps = {
   setSponsorForm: (form: SponsorForm) => void;
   onCreateSponsor: () => Promise<void>;
   onRemoveSponsor: (sponsorId: string) => Promise<void>;
+  onUpdateSponsor: (
+    sponsorId: string,
+    patch: { name?: string; contact?: string; contribution?: string; amount?: number; notes?: string },
+  ) => Promise<void>;
 };
 
 export function EventSponsorsPanel({
@@ -23,11 +27,43 @@ export function EventSponsorsPanel({
   setSponsorForm,
   onCreateSponsor,
   onRemoveSponsor,
+  onUpdateSponsor,
 }: EventSponsorsPanelProps) {
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState({
+    name: '',
+    contact: '',
+    contribution: '',
+    amount: '',
+    notes: '',
+  });
+
   const totalAmount = useMemo(
     () => (sponsors || []).reduce((s, sp) => s + Number(sp.amount || 0), 0),
     [sponsors],
   );
+
+  function startEdit(s: Sponsor) {
+    setEditingId(s.id);
+    setEditDraft({
+      name: s.name,
+      contact: s.contact || '',
+      contribution: s.contribution || '',
+      amount: s.amount != null ? String(s.amount) : '',
+      notes: s.notes || '',
+    });
+  }
+
+  async function saveEdit(id: string) {
+    await onUpdateSponsor(id, {
+      name: editDraft.name,
+      contact: editDraft.contact || undefined,
+      contribution: editDraft.contribution || undefined,
+      amount: editDraft.amount ? Number(editDraft.amount) : undefined,
+      notes: editDraft.notes || undefined,
+    });
+    setEditingId(null);
+  }
 
   return (
     <div className="stack">
@@ -134,27 +170,96 @@ export function EventSponsorsPanel({
                   </tr>
                 </thead>
                 <tbody>
-                  {sponsors.map((s) => (
-                    <tr key={s.id}>
-                      <td>
-                        <strong>{s.name}</strong>
-                      </td>
-                      <td className="muted kpi-sub">{s.contact || '—'}</td>
-                      <td>{s.contribution || '—'}</td>
-                      <td>{s.amount != null ? `$${Number(s.amount).toLocaleString('es-MX')}` : '—'}</td>
-                      <td>
-                        {!closed ? (
-                          <button
-                            className="btn ghost btn-sm btn-danger"
-                            type="button"
-                            onClick={() => onRemoveSponsor(s.id)}
-                          >
-                            Quitar
-                          </button>
-                        ) : null}
-                      </td>
-                    </tr>
-                  ))}
+                  {sponsors.map((s) =>
+                    editingId === s.id ? (
+                      <tr key={s.id}>
+                        <td colSpan={5}>
+                          <div className="form">
+                            <FormGrid>
+                              <label>
+                                Nombre
+                                <input
+                                  className="field"
+                                  value={editDraft.name}
+                                  onChange={(e) => setEditDraft({ ...editDraft, name: e.target.value })}
+                                />
+                              </label>
+                              <label>
+                                Contacto
+                                <input
+                                  className="field"
+                                  value={editDraft.contact}
+                                  onChange={(e) => setEditDraft({ ...editDraft, contact: e.target.value })}
+                                />
+                              </label>
+                            </FormGrid>
+                            <FormGrid>
+                              <label>
+                                Aportación
+                                <input
+                                  className="field"
+                                  value={editDraft.contribution}
+                                  onChange={(e) =>
+                                    setEditDraft({ ...editDraft, contribution: e.target.value })
+                                  }
+                                />
+                              </label>
+                              <label>
+                                Monto
+                                <input
+                                  className="field"
+                                  type="number"
+                                  value={editDraft.amount}
+                                  onChange={(e) => setEditDraft({ ...editDraft, amount: e.target.value })}
+                                />
+                              </label>
+                            </FormGrid>
+                            <div className="row row--tight">
+                              <button className="btn btn-sm" type="button" onClick={() => saveEdit(s.id)}>
+                                Guardar
+                              </button>
+                              <button
+                                className="btn ghost btn-sm"
+                                type="button"
+                                onClick={() => setEditingId(null)}
+                              >
+                                Cancelar
+                              </button>
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    ) : (
+                      <tr key={s.id}>
+                        <td>
+                          <strong>{s.name}</strong>
+                        </td>
+                        <td className="muted kpi-sub">{s.contact || '—'}</td>
+                        <td>{s.contribution || '—'}</td>
+                        <td>{s.amount != null ? `$${Number(s.amount).toLocaleString('es-MX')}` : '—'}</td>
+                        <td>
+                          {!closed ? (
+                            <div className="row row--tight">
+                              <button
+                                className="btn ghost btn-sm"
+                                type="button"
+                                onClick={() => startEdit(s)}
+                              >
+                                Editar
+                              </button>
+                              <button
+                                className="btn ghost btn-sm btn-danger"
+                                type="button"
+                                onClick={() => onRemoveSponsor(s.id)}
+                              >
+                                Quitar
+                              </button>
+                            </div>
+                          ) : null}
+                        </td>
+                      </tr>
+                    ),
+                  )}
                 </tbody>
               </table>
             </div>

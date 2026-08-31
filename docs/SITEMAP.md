@@ -42,6 +42,50 @@ Verificar meta tags:
 curl -sI https://artaproducciones.com/p/arta | head -15
 ```
 
+## Guía SEO ops (post W2)
+
+### Google Search Console
+
+1. Verificar propiedad con `NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION` en el layout `/p/arta`.
+2. Enviar sitemap: `https://artaproducciones.com/sitemap.xml`
+3. Inspección de URL en `/p/arta` y una noticia publicada → solicitar indexación.
+4. Revisar **Enhancements → Unparsable structured data** tras desplegar `@graph`.
+
+### Rich Results
+
+- Probar home y noticia en [Rich Results Test](https://search.google.com/test/rich-results).
+- Debe aparecer Organization + WebSite en home; NewsArticle en noticias.
+
+### RSS / Discover
+
+- Feed: `https://artaproducciones.com/p/arta/feed.xml`
+- Enlazado en `<link rel="alternate">` del layout público.
+
+### sameAs (redes sociales)
+
+Configurar en `.env.arta` cuando Adam confirme URLs:
+
+- `NEXT_PUBLIC_SOCIAL_INSTAGRAM`
+- `NEXT_PUBLIC_SOCIAL_FACEBOOK`
+- `NEXT_PUBLIC_SOCIAL_YOUTUBE`
+- `NEXT_PUBLIC_SOCIAL_TWITTER`
+
+Solo incluir perfiles verificados y visibles.
+
+### Bing
+
+- `NEXT_PUBLIC_BING_SITE_VERIFICATION` en layout.
+- Mismo sitemap en Bing Webmaster Tools.
+
+### Smoke post-deploy
+
+```bash
+curl -s https://artaproducciones.com/p/arta | grep -i "experiencia"
+curl -s https://artaproducciones.com/p/arta/feed.xml | head -20
+```
+
+El body de `/p/arta` debe contener texto de noticias/hero (SSR), no solo shell vacío.
+
 ## Código (sitemap)
 
 - [`apps/web/app/sitemap.ts`](../apps/web/app/sitemap.ts)

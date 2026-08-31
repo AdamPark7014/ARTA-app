@@ -18,7 +18,7 @@ import { extname, join, basename } from 'path';
 import { existsSync, unlinkSync } from 'fs';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { canAccessEventOps, type EntityKey, type RoleKey } from '../common/rbac/roles';
+import { canAccessEventOps, hasPermission, PERMISSIONS, type EntityKey, type RoleKey } from '../common/rbac/roles';
 import { MULTER_OPTIONS, uploadRoot } from './upload-storage';
 import { assertSameTenant } from '../common/tenant';
 
@@ -64,8 +64,19 @@ export class UploadsController {
 
     const url = `/uploads/${file.filename}`;
 
-    // Upload suelto (Studio, anticipos, etc.) — solo JWT
+    // Upload suelto (Studio, anticipos, etc.) — requiere permiso explícito
     if (!body.eventId && !body.checklistId) {
+      const perms = req.user.permissions || [];
+      const role = req.user.roleKey as RoleKey;
+      const allowedLoose =
+        hasPermission(role, perms, PERMISSIONS.STUDIO_EDIT) ||
+        hasPermission(role, perms, PERMISSIONS.CHECKLIST_EDIT) ||
+        hasPermission(role, perms, PERMISSIONS.EVERYTHING);
+      if (!allowedLoose) {
+        throw new ForbiddenException(
+          'Subida sin evento requiere permiso Studio o edición de checklists',
+        );
+      }
       return { id: null, url, fileName: file.originalname, mimeType: mime, kind, sizeBytes: file.size };
     }
 

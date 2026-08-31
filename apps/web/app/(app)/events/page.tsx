@@ -108,7 +108,7 @@ function EventsPageInner() {
   useEffect(() => {
     setLoading(true);
     Promise.all([
-      api<EventRow[]>(`/events?entity=${entity}`),
+      api<EventRow[]>(`/events?entity=${entity}&scope=${scope}`),
       api<Overview>(`/analytics/overview?entity=${entity}`).catch(() => null),
     ])
       .then(([ev, o]) => {
@@ -117,7 +117,7 @@ function EventsPageInner() {
       })
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, [entity]);
+  }, [entity, scope]);
 
   const healthMap = useMemo(() => new Map(health.map((h) => [h.id, h])), [health]);
 

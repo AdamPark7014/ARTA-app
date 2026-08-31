@@ -2,6 +2,7 @@
 
 import { useMemo } from 'react';
 import { PoWindowBanner } from '@/components/purchase-orders/PoWindowBanner';
+import { PoProofsBlock } from '@/components/purchase-orders/PoProofsBlock';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { FlowSteps } from '@/components/ui/FlowSteps';
 import { FormGrid } from '@/components/ui/PageChrome';
@@ -50,6 +51,9 @@ type EventPurchaseOrdersPanelProps = {
   onSaveEditPo: () => Promise<void>;
   onSetPoStatus: (poId: string, status: string) => Promise<void>;
   onDeletePo: (poId: string) => Promise<void>;
+  /** Recargar datos tras subir comprobante */
+  onProofsChange: () => void | Promise<void>;
+  eventId: string;
   /** Ventana configurable para solicitar OC (junta 2026-08-28) */
   poWindow?: PoWindowState | null;
 };
@@ -85,6 +89,8 @@ export function EventPurchaseOrdersPanel({
   onSaveEditPo,
   onSetPoStatus,
   onDeletePo,
+  onProofsChange,
+  eventId,
   poWindow,
 }: EventPurchaseOrdersPanelProps) {
   const stats = useMemo(() => {
@@ -437,6 +443,16 @@ export function EventPurchaseOrdersPanel({
                       </tbody>
                     </table>
                   </div>
+                ) : null}
+                {(po.status === 'AUTHORIZED' || po.status === 'PAID' || (po.proofs?.length ?? 0) > 0) ? (
+                  <PoProofsBlock
+                    poId={po.id}
+                    eventId={eventId}
+                    poAmount={Number(po.amount)}
+                    proofs={po.proofs}
+                    canUpload={!closed && po.status === 'AUTHORIZED'}
+                    onChange={onProofsChange}
+                  />
                 ) : null}
               </article>
             ))

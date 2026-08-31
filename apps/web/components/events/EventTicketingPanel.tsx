@@ -102,6 +102,12 @@ export function EventTicketingPanel({
           </button>
         ) : null}
       </PageHeader>
+      {(process.env.NEXT_PUBLIC_TICKETING_SYNC_MODE || 'stub') === 'stub' ? (
+        <FlashMessage variant="warn">
+          Sync boletera en modo demo (stub). Configura TICKETING_SYNC_MODE=live y TICKETING_SYNC_URL
+          para conectar Arema en producción.
+        </FlashMessage>
+      ) : null}
       {syncMsg ? <FlashMessage variant={syncFlashVariant(syncMsg)}>{syncMsg}</FlashMessage> : null}
 
       {canTicketing && !closed ? (

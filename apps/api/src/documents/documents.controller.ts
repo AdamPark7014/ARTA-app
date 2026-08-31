@@ -17,7 +17,14 @@ import { IsOptional, IsString } from 'class-validator';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { assertSameTenant } from '../common/tenant';
-import { canAccessEventOps, type EntityKey, type RoleKey } from '../common/rbac/roles';
+import { assertEventNotClosed } from '../common/event-guards';
+import {
+  canAccessEventOps,
+  hasPermission,
+  PERMISSIONS,
+  type EntityKey,
+  type RoleKey,
+} from '../common/rbac/roles';
 import { DocumentPdfService, normalizeBlocks } from './document-pdf.service';
 
 type AuthUser = {
@@ -25,6 +32,7 @@ type AuthUser = {
   roleKey: string;
   entities: string[];
   fullName: string;
+  permissions?: string[];
   organizationId?: string | null;
 };
 
@@ -74,8 +82,18 @@ export class DocumentsController {
   }
 
   private assertOpen(status: string) {
-    if (status === 'CLOSED' || status === 'CANCELLED') {
-      throw new ForbiddenException('Evento cerrado — los documentos quedan en solo lectura');
+    assertEventNotClosed(status);
+  }
+
+  private assertDocEdit(user: AuthUser) {
+    if (
+      !hasPermission(
+        user.roleKey as RoleKey,
+        user.permissions || [],
+        PERMISSIONS.CHECKLIST_EDIT,
+      )
+    ) {
+      throw new ForbiddenException('Sin permiso para editar documentos');
     }
   }
 
@@ -111,6 +129,7 @@ export class DocumentsController {
 
   @Post()
   async create(@Req() req: { user: AuthUser }, @Body() dto: CreateDocumentDto) {
+    this.assertDocEdit(req.user);
     const event = await this.assertEvent(req.user, dto.eventId);
     this.assertOpen(event.status);
     const blocks = normalizeBlocks(dto.blocks);
@@ -134,6 +153,7 @@ export class DocumentsController {
     @Param('id') id: string,
     @Body() body: { title?: string; blocks?: unknown },
   ) {
+    this.assertDocEdit(req.user);
     const doc = await this.load(req.user, id);
     this.assertOpen(doc.event.status);
 
@@ -209,6 +229,7 @@ export class DocumentsController {
 
   @Delete(':id')
   async remove(@Req() req: { user: AuthUser }, @Param('id') id: string) {
+    this.assertDocEdit(req.user);
     const doc = await this.load(req.user, id);
     this.assertOpen(doc.event.status);
     await this.prisma.eventDocument.delete({ where: { id } });

@@ -6,18 +6,19 @@
 
 ## Hecho en este turno
 
-**Metadata hiper-presencia SEO** (sitio público indexable).
+**Auditoría ultra profunda W2** (plan 6 oleadas).
 
-1. `lib/site-seo.ts` — OG, Twitter, canonical, keywords, JSON-LD helpers.
-2. Layouts: público `/p/arta` rich meta + Organization/WebSite; panel/auth/PIN `noindex`.
-3. Noticias: `generateMetadata` server-side + Article/Breadcrumb JSON-LD.
-4. `opengraph-image.tsx` dinámica 1200×630; `manifest.ts` PWA.
-5. `docs/SITEMAP.md` ampliado con sección metadata.
+1. **P0 API:** closed guards checklists/sponsors; RBAC checklist/docs/PO create; digests flush tenant-safe.
+2. **P0 UI:** comprobantes OC (`PoProofsBlock`) en hub y torre OC.
+3. **SEO:** SSR `/p/arta` + noticias; JSON-LD `@graph`; RSS; OG noticia; GSC/Bing verification env; LocalBusiness; sin SearchAction falso.
+4. **Módulos:** Studio tiles editor; sponsors inline edit; hub OC tab RBAC; events `?scope=`; boletera stub banner; uploads loose gated.
+5. **Datos:** migración índices Prisma; finance.view en list/advances; tasks workload gerencia.
+6. **Docs/e2e:** `ENTERPRISE_ITERATION_W2.md`, `SITEMAP.md` SEO ops, `DOMAINS.md` boletera; e2e public + vendor smoke.
 
 ## Siguiente paso
 
-1. Deploy + verificar OG en Facebook Sharing Debugger / Twitter Card Validator.
-2. Google Search Console: sitemap + inspección URL `/p/arta`.
+1. Deploy Hetzner + smoke: `curl /p/arta` body con texto; Rich Results Test; subir comprobante OC.
+2. Adam: URLs redes → `NEXT_PUBLIC_SOCIAL_*`; GSC verification strings.
 
 ## No tocar
 

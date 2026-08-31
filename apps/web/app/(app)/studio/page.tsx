@@ -113,6 +113,7 @@ export default function StudioPage() {
     ctaLabel: '',
     ctaHref: '',
   });
+  const [tileDraft, setTileDraft] = useState<Array<{ title: string; body: string }>>([]);
 
   const draftsCount = useMemo(
     () =>
@@ -194,6 +195,17 @@ export default function StudioPage() {
       lead: String(c.lead || ''),
     });
     setPublished(page.published);
+    if (sectionKey === 'home_modulos') {
+      const tiles = (page.contentJson as { tiles?: Array<{ title: string; body: string }> })?.tiles;
+      setTileDraft(
+        tiles?.length
+          ? tiles.map((t) => ({ title: t.title, body: t.body }))
+          : [
+              { title: 'Producción', body: 'Riders, plantas de luz, stage hands y minuto a minuto.' },
+              { title: 'Hospitality', body: 'Hospedaje, transporte, catering y camerinos.' },
+            ],
+      );
+    }
   }, [sectionKey, pages]);
 
   async function saveSection() {
@@ -215,8 +227,9 @@ export default function StudioPage() {
             body: draft.body,
             cta: draft.cta,
             ctaHref: draft.ctaHref || '#contacto',
-            tiles: (pages.find((p) => p.sectionKey === 'home_modulos')?.contentJson as { tiles?: unknown })
-              ?.tiles,
+            ...(sectionKey === 'home_modulos'
+              ? { tiles: tileDraft.filter((t) => t.title.trim()) }
+              : {}),
           },
         }),
       });
@@ -932,6 +945,59 @@ export default function StudioPage() {
                             />
                           </label>
                         </FormGrid>
+                        {sectionKey === 'home_modulos' ? (
+                          <div className="stack" style={{ marginTop: '1rem' }}>
+                            <div className="label">Tiles del home (módulos)</div>
+                            {tileDraft.map((tile, idx) => (
+                              <div key={idx} className="panel" style={{ padding: '0.75rem' }}>
+                                <FormGrid>
+                                  <label>
+                                    Título
+                                    <input
+                                      value={tile.title}
+                                      onChange={(e) => {
+                                        const next = [...tileDraft];
+                                        next[idx] = { ...tile, title: e.target.value };
+                                        setTileDraft(next);
+                                      }}
+                                    />
+                                  </label>
+                                  <label>
+                                    &nbsp;
+                                    <button
+                                      className="btn ghost btn-sm btn-danger"
+                                      type="button"
+                                      onClick={() => setTileDraft(tileDraft.filter((_, i) => i !== idx))}
+                                    >
+                                      Quitar
+                                    </button>
+                                  </label>
+                                </FormGrid>
+                                <label>
+                                  Texto
+                                  <textarea
+                                    rows={2}
+                                    value={tile.body}
+                                    onChange={(e) => {
+                                      const next = [...tileDraft];
+                                      next[idx] = { ...tile, body: e.target.value };
+                                      setTileDraft(next);
+                                    }}
+                                  />
+                                </label>
+                              </div>
+                            ))}
+                            <button
+                              className="btn ghost btn-sm"
+                              type="button"
+                              onClick={() =>
+                                setTileDraft([...tileDraft, { title: '', body: '' }])
+                              }
+                            >
+                              + Agregar tile
+                            </button>
+                          </div>
+                        ) : null}
                         <FieldCheck
                           checked={published}
                           onChange={setPublished}

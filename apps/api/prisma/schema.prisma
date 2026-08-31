@@ -211,6 +211,7 @@ model Event {
   documents       EventDocument[]
 
   @@index([organizationId, entity])
+  @@index([organizationId, status, startsAt])
 }
 
 // ─── Patrocinadores ──────────────────────────────────────────────────────────
@@ -352,6 +353,8 @@ model PurchaseOrder {
 
   lines  PurchaseOrderLine[]
   proofs PaymentProof[]
+
+  @@index([eventId])
 }
 
 model PurchaseOrderLine {
@@ -422,6 +425,8 @@ model TicketingSetup {
   notes     String?
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
+
+  @@index([eventId])
 }
 
 // ─── Tareas ──────────────────────────────────────────────────────────────────
@@ -632,6 +637,7 @@ model AuditLog {
   createdAt  DateTime @default(now())
 
   @@index([resource, resourceId])
+  @@index([createdAt])
 }
 
 // ─── Identity: sesiones activas ──────────────────────────────────────────────

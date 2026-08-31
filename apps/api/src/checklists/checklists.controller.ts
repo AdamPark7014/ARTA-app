@@ -15,6 +15,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { assertSameTenant } from '../common/tenant';
+import { assertEventNotClosed } from '../common/event-guards';
 import {
   canAccessEventOps,
   hasPermission,
@@ -69,11 +70,23 @@ export class ChecklistsController {
     private pdfs: ChecklistPdfService,
   ) {}
 
-  private assertEventAccess(user: AuthUser, event: { entity: string; organizationId?: string | null }) {
+  private assertEventAccess(user: AuthUser, event: { entity: string; organizationId?: string | null; status?: string }) {
     if (!canAccessEventOps(user.entities as EntityKey[], user.roleKey as RoleKey, event.entity as EntityKey)) {
       throw new ForbiddenException();
     }
     assertSameTenant(user, event.organizationId);
+  }
+
+  private assertChecklistEdit(user: AuthUser) {
+    if (
+      !hasPermission(
+        user.roleKey as RoleKey,
+        user.permissions || [],
+        PERMISSIONS.CHECKLIST_EDIT,
+      )
+    ) {
+      throw new ForbiddenException('Sin permiso para editar checklists');
+    }
   }
 
   private async regeneratePdf(id: string) {
@@ -283,6 +296,8 @@ export class ChecklistsController {
     });
     if (!existing) throw new BadRequestException('Checklist no encontrado');
     this.assertEventAccess(req.user, existing.event);
+    this.assertChecklistEdit(req.user);
+    assertEventNotClosed(existing.event.status);
 
     const progressPct = calcProgress(body.dataJson);
 
@@ -338,6 +353,8 @@ export class ChecklistsController {
     });
     if (!existing) throw new BadRequestException('Checklist no encontrado');
     this.assertEventAccess(req.user, existing.event);
+    this.assertChecklistEdit(req.user);
+    assertEventNotClosed(existing.event.status);
 
     // Autorizar: gerencia en Arta / dirección del Auditorio / dirección general
     if (body.kind === 'AUTORIZADO') {
@@ -435,6 +452,8 @@ export class ChecklistsController {
     });
     if (!existing) throw new BadRequestException('Checklist no encontrado');
     this.assertEventAccess(req.user, existing.event);
+    this.assertChecklistEdit(req.user);
+    assertEventNotClosed(existing.event.status);
 
     const version = await this.prisma.checklistVersion.findUnique({ where: { id: versionId } });
     if (!version || version.instanceId !== id) {

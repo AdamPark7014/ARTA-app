@@ -14,6 +14,7 @@ import {
   PageHeader,
 } from '@/components/ui/PageChrome';
 import { PoWindowBanner } from '@/components/purchase-orders/PoWindowBanner';
+import { PoProofsBlock } from '@/components/purchase-orders/PoProofsBlock';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { api } from '@/lib/api';
 import { useUser } from '@/lib/user-context';
@@ -65,6 +66,10 @@ export default function PurchaseOrdersPage() {
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [lines, setLines] = useState<Record<string, PoLine[]>>({});
+  const [proofs, setProofs] = useState<
+    Record<string, Array<{ id: string; fileUrl: string; label?: string | null; amount?: number }>>
+  >({});
+  const [poDetails, setPoDetails] = useState<Record<string, { amount: number; status: string }>>({});
   const [statusFilter, setStatusFilter] = useState('all');
   const [q, setQ] = useState('');
 
@@ -96,11 +101,40 @@ export default function PurchaseOrdersPage() {
       return;
     }
     setExpanded(id);
-    if (!lines[id]) {
-      const pos = await api<Array<{ id: string; lines?: PoLine[] }>>(`/purchase-orders/event/${eventId}`);
+    if (!lines[id] || !proofs[id]) {
+      const pos = await api<
+        Array<{
+          id: string;
+          amount: number;
+          status: string;
+          lines?: PoLine[];
+          proofs?: Array<{ id: string; fileUrl: string; label?: string | null; amount?: number }>;
+        }>
+      >(`/purchase-orders/event/${eventId}`);
       const found = pos.find((p) => p.id === id);
       setLines((prev) => ({ ...prev, [id]: found?.lines || [] }));
+      setProofs((prev) => ({ ...prev, [id]: found?.proofs || [] }));
+      if (found) {
+        setPoDetails((prev) => ({ ...prev, [id]: { amount: Number(found.amount), status: found.status } }));
+      }
     }
+  }
+
+  async function reloadPoDetails(poId: string, eventId: string) {
+    const pos = await api<
+      Array<{
+        id: string;
+        amount: number;
+        status: string;
+        proofs?: Array<{ id: string; fileUrl: string; label?: string | null; amount?: number }>;
+      }>
+    >(`/purchase-orders/event/${eventId}`);
+    const found = pos.find((p) => p.id === poId);
+    if (found) {
+      setProofs((prev) => ({ ...prev, [poId]: found.proofs || [] }));
+      setPoDetails((prev) => ({ ...prev, [poId]: { amount: Number(found.amount), status: found.status } }));
+    }
+    await load();
   }
 
   const rows = useMemo(() => {
@@ -370,6 +404,18 @@ export default function PurchaseOrdersPage() {
                                     </tbody>
                                   </table>
                                 </div>
+                                {(po.status === 'AUTHORIZED' ||
+                                  po.status === 'PAID' ||
+                                  (proofs[po.id]?.length ?? 0) > 0) ? (
+                                  <PoProofsBlock
+                                    poId={po.id}
+                                    eventId={po.eventId}
+                                    poAmount={poDetails[po.id]?.amount ?? po.amount}
+                                    proofs={proofs[po.id]}
+                                    canUpload={po.status === 'AUTHORIZED'}
+                                    onChange={() => reloadPoDetails(po.id, po.eventId)}
+                                  />
+                                ) : null}
                               </td>
                             </tr>
                           ) : null}

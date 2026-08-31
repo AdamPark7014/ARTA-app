@@ -95,14 +95,30 @@ export class EventsController {
   async list(
     @Req() req: { user: AuthUser },
     @Query('entity') entity?: EntityKey,
+    @Query('scope') scope?: 'active' | 'past' | 'all',
   ) {
     const allowed = eventOpsEntities(req.user.entities as EntityKey[], req.user.roleKey as RoleKey);
     if (!allowed.length) return [];
     const orgId = tenantIdOf(req.user);
-    const where =
+    const where: Prisma.EventWhereInput =
       entity && allowed.includes(entity)
         ? { entity, organizationId: orgId }
         : { entity: { in: allowed }, organizationId: orgId };
+
+    if (scope === 'past' || scope === 'active') {
+      const startOfToday = new Date();
+      startOfToday.setHours(0, 0, 0, 0);
+      const pastOr: Prisma.EventWhereInput[] = [
+        { status: { in: ['CLOSED', 'CANCELLED'] } },
+        { startsAt: { lt: startOfToday } },
+      ];
+      if (scope === 'past') {
+        where.OR = pastOr;
+      } else {
+        where.NOT = { OR: pastOr };
+      }
+    }
+
     return this.prisma.event.findMany({
       where,
       orderBy: { updatedAt: 'desc' },

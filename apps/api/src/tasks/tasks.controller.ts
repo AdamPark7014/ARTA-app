@@ -149,9 +149,13 @@ export class TasksController {
     });
   }
 
-  /** Carga de todo el equipo (quién tiene qué). Solo dentro del tenant. */
+  /** Carga de todo el equipo (quién tiene qué). Solo gerencia. */
   @Get('workload')
   workload(@Req() req: { user: AuthUser }, @Query('status') status?: string) {
+    const managers = ['super_admin', 'dir_general', 'gerente_arta', 'dir_auditorio'];
+    if (!managers.includes(req.user.roleKey)) {
+      throw new ForbiddenException('Vista de carga de equipo solo para gerencia');
+    }
     const isSuper = req.user.roleKey === 'super_admin';
     const orgId = tenantIdOf(req.user);
     const allowed = eventOpsEntities(req.user.entities as EntityKey[], req.user.roleKey as RoleKey);

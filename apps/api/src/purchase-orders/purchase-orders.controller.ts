@@ -217,6 +217,15 @@ export class PurchaseOrdersController {
     },
     @Body() dto: CreatePoDto,
   ) {
+    if (
+      !hasPermission(
+        req.user.roleKey as RoleKey,
+        req.user.permissions || [],
+        PERMISSIONS.CHECKLIST_EDIT,
+      )
+    ) {
+      throw new ForbiddenException('Sin permiso para crear órdenes de compra');
+    }
     await this.assertEventOps(req.user, dto.eventId);
     await this.assertWindowOpen(req.user);
     const lines = dto.lines?.length ? dto.lines : undefined;
@@ -248,6 +257,15 @@ export class PurchaseOrdersController {
       lines?: PoLineDto[];
     },
   ) {
+    if (
+      !hasPermission(
+        req.user.roleKey as RoleKey,
+        req.user.permissions,
+        PERMISSIONS.CHECKLIST_EDIT,
+      )
+    ) {
+      throw new ForbiddenException('Sin permiso para editar órdenes de compra');
+    }
     const order = await this.prisma.purchaseOrder.findUnique({ where: { id } });
     if (!order) throw new NotFoundException('OC no encontrada');
     await this.assertEventOps(req.user, order.eventId);
