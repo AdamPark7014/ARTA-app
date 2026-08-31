@@ -458,12 +458,15 @@ model TaskAssignment {
   detail         String?
   status         TaskStatus    @default(OPEN)
   dueAt          DateTime?
+  /// Cuando el asignado abrió «Mis tareas» / vio la actividad
+  seenAt         DateTime?
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
 
   @@index([assigneeId, status])
   @@index([organizationId, status])
   @@index([eventId])
+  @@index([createdById, status])
 }
 
 // ─── Notificaciones dentro de la plataforma ──────────────────────────────────

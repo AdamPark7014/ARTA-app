@@ -229,10 +229,10 @@ export function ChecklistPdfEditor({
                    * sin comerse la línea de arriba.
                    */
                   const style = {
-                    left: (f.x - 2) * scale,
-                    top: (f.y - 0.5) * scale,
-                    width: Math.max(f.type === 'check' ? 22 : 48, (f.w + 2) * scale),
-                    height: Math.max(f.type === 'check' ? 22 : 16, (f.h + 2) * scale),
+                    left: f.x * scale,
+                    top: f.y * scale,
+                    width: Math.max(f.type === 'check' ? 14 * scale : 40 * scale, f.w * scale),
+                    height: Math.max(12 * scale, f.h * scale),
                   };
 
                   if (f.type === 'check') {

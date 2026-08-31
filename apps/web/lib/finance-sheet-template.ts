@@ -1,8 +1,8 @@
 import * as XLSX from 'xlsx';
 
 /**
- * Plantilla de corrida financiera editable (ingresos / egresos / neto).
- * Misma filosofía que campaña: el Excel es la fuente de verdad embebida.
+ * Libro multi-hoja de corrida financiera (Resumen + Ingresos + Egresos + Notas).
+ * Editable en SheetEditor; se puede adjuntar cualquier .xlsx propio.
  */
 export type FinanceSheetMeta = {
   eventName: string;
@@ -12,8 +12,7 @@ export type FinanceSheetMeta = {
   artist?: string | null;
 };
 
-const HEADERS = ['CONCEPTO', 'TIPO', 'MONTO', 'NOTAS'] as const;
-const EMPTY_DATA_ROWS = 24;
+const EMPTY_ROWS = 20;
 
 function formatShowDate(iso?: string | null) {
   if (!iso) return '';
@@ -27,60 +26,112 @@ function formatShowDate(iso?: string | null) {
   }
 }
 
-/** Seed rows vacías + un par de ejemplos tipados (tipo = Ingreso | Egreso). */
+function metaBlock(meta: FinanceSheetMeta): (string | number)[][] {
+  return [
+    ['EVENTO', meta.eventName],
+    ['ARTISTA', meta.artist || ''],
+    ['FECHA', formatShowDate(meta.startsAt)],
+    ['RECINTO', [meta.venue, meta.city].filter(Boolean).join(' · ') || ''],
+    [],
+  ];
+}
+
+function buildIngresosSheet(meta: FinanceSheetMeta): XLSX.WorkSheet {
+  const rows: (string | number)[][] = [
+    ['INGRESOS'],
+    [],
+    ...metaBlock(meta),
+    ['CONCEPTO', 'MONTO', 'NOTAS'],
+  ];
+  for (let i = 0; i < EMPTY_ROWS; i += 1) {
+    rows.push(i === 0 ? ['Taquilla', 0, ''] : i === 1 ? ['Patrocinios / convenios', 0, ''] : ['', '', '']);
+  }
+  const headerExcel = 8; // 1-based row of CONCEPTO/MONTO/NOTAS
+  const first = headerExcel + 1;
+  const last = headerExcel + EMPTY_ROWS;
+  rows.push([]);
+  rows.push(['TOTAL INGRESOS', `=SUM(B${first}:B${last})`, '']);
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  const totalExcelRow = last + 2;
+  ws[XLSX.utils.encode_cell({ r: totalExcelRow - 1, c: 1 })] = {
+    t: 'n',
+    f: `SUM(B${first}:B${last})`,
+  };
+  ws['!cols'] = [{ wch: 36 }, { wch: 14 }, { wch: 28 }];
+  return ws;
+}
+
+function buildEgresosSheet(meta: FinanceSheetMeta): XLSX.WorkSheet {
+  const rows: (string | number)[][] = [
+    ['EGRESOS'],
+    [],
+    ...metaBlock(meta),
+    ['CONCEPTO', 'MONTO', 'NOTAS'],
+  ];
+  const starters = ['Producción', 'Hospitality', 'Marketing', 'Transporte'];
+  for (let i = 0; i < EMPTY_ROWS; i += 1) {
+    rows.push(starters[i] ? [starters[i], 0, ''] : ['', '', '']);
+  }
+  const headerExcel = 8;
+  const first = headerExcel + 1;
+  const last = headerExcel + EMPTY_ROWS;
+  rows.push([]);
+  rows.push(['TOTAL EGRESOS', `=SUM(B${first}:B${last})`, '']);
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  const totalExcelRow = last + 2;
+  ws[XLSX.utils.encode_cell({ r: totalExcelRow - 1, c: 1 })] = {
+    t: 'n',
+    f: `SUM(B${first}:B${last})`,
+  };
+  ws['!cols'] = [{ wch: 36 }, { wch: 14 }, { wch: 28 }];
+  return ws;
+}
+
+function buildResumenSheet(meta: FinanceSheetMeta): XLSX.WorkSheet {
+  const rows: (string | number)[][] = [
+    ['CORRIDA FINANCIERA — RESUMEN'],
+    [],
+    ...metaBlock(meta),
+    ['Concepto', 'Monto'],
+    ['Total ingresos (hoja Ingresos)', "='Ingresos'!B30"],
+    ['Total egresos (hoja Egresos)', "='Egresos'!B30"],
+    ['NETO', '=B8-B9'],
+    [],
+    ['Instrucciones'],
+    ['1. Completa la hoja Ingresos y la hoja Egresos (o pega tu formato).'],
+    ['2. Agrega más hojas con «+ Hoja» si tu corrida tiene más rubros.'],
+    ['3. Guarda el libro aquí o descárgalo para Excel de escritorio.'],
+  ];
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws[XLSX.utils.encode_cell({ r: 7, c: 1 })] = { t: 'n', f: "'Ingresos'!B30" };
+  ws[XLSX.utils.encode_cell({ r: 8, c: 1 })] = { t: 'n', f: "'Egresos'!B30" };
+  ws[XLSX.utils.encode_cell({ r: 9, c: 1 })] = { t: 'n', f: 'B8-B9' };
+  ws['!cols'] = [{ wch: 42 }, { wch: 18 }];
+  return ws;
+}
+
+function buildNotasSheet(): XLSX.WorkSheet {
+  const rows: (string | number)[][] = [
+    ['NOTAS DE LA CORRIDA'],
+    [],
+    ['Fecha', 'Autor', 'Nota'],
+    ['', '', ''],
+    ['', '', ''],
+    ['', '', ''],
+    ['', '', ''],
+    ['', '', ''],
+  ];
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = [{ wch: 14 }, { wch: 18 }, { wch: 48 }];
+  return ws;
+}
+
 export function buildFinanceCorridaWorkbook(meta: FinanceSheetMeta): XLSX.WorkBook {
   const wb = XLSX.utils.book_new();
-  const rows: (string | number)[][] = [];
-
-  rows.push(['CORRIDA FINANCIERA']);
-  rows.push([]);
-  rows.push(['EVENTO', meta.eventName]);
-  rows.push(['ARTISTA', meta.artist || '']);
-  rows.push(['FECHA', formatShowDate(meta.startsAt)]);
-  rows.push(['RECINTO', [meta.venue, meta.city].filter(Boolean).join(' · ') || '']);
-  rows.push([]);
-  rows.push([...HEADERS]);
-
-  const headerRow = 8;
-  const firstData = headerRow + 1;
-  const lastData = headerRow + EMPTY_DATA_ROWS;
-
-  // Primeras filas con guía (montos en 0 — el dueño pega su formato real o edita).
-  const starter: Array<[string, string]> = [
-    ['Taquilla', 'Ingreso'],
-    ['Patrocinios / convenios', 'Ingreso'],
-    ['Producción', 'Egreso'],
-    ['Hospitality', 'Egreso'],
-  ];
-  for (let i = 0; i < EMPTY_DATA_ROWS; i += 1) {
-    const guide = starter[i];
-    rows.push(guide ? [guide[0], guide[1], 0, ''] : ['', '', '', '']);
-  }
-
-  rows.push([]);
-  const totalRow = lastData + 2;
-  rows.push(['TOTAL INGRESOS', '', `=SUMIF(B${firstData}:B${lastData},"Ingreso",C${firstData}:C${lastData})`, '']);
-  rows.push(['TOTAL EGRESOS', '', `=SUMIF(B${firstData}:B${lastData},"Egreso",C${firstData}:C${lastData})`, '']);
-  rows.push(['NETO', '', `=C${totalRow}-C${totalRow + 1}`, '']);
-
-  const ws = XLSX.utils.aoa_to_sheet(rows);
-
-  ws[XLSX.utils.encode_cell({ r: totalRow - 1, c: 2 })] = {
-    t: 'n',
-    f: `SUMIF(B${firstData}:B${lastData},"Ingreso",C${firstData}:C${lastData})`,
-  };
-  ws[XLSX.utils.encode_cell({ r: totalRow, c: 2 })] = {
-    t: 'n',
-    f: `SUMIF(B${firstData}:B${lastData},"Egreso",C${firstData}:C${lastData})`,
-  };
-  ws[XLSX.utils.encode_cell({ r: totalRow + 1, c: 2 })] = {
-    t: 'n',
-    f: `C${totalRow}-C${totalRow + 1}`,
-  };
-
-  ws['!cols'] = [{ wch: 36 }, { wch: 12 }, { wch: 14 }, { wch: 28 }];
-
-  XLSX.utils.book_append_sheet(wb, ws, 'Corrida');
+  XLSX.utils.book_append_sheet(wb, buildResumenSheet(meta), 'Resumen');
+  XLSX.utils.book_append_sheet(wb, buildIngresosSheet(meta), 'Ingresos');
+  XLSX.utils.book_append_sheet(wb, buildEgresosSheet(meta), 'Egresos');
+  XLSX.utils.book_append_sheet(wb, buildNotasSheet(), 'Notas');
   return wb;
 }
 

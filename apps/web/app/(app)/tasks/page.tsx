@@ -25,6 +25,7 @@ type Task = {
   detail?: string | null;
   status: string;
   dueAt?: string | null;
+  seenAt?: string | null;
   assigneeId?: string | null;
   assignee?: { id: string; fullName: string } | null;
   createdById?: string | null;
@@ -38,9 +39,9 @@ type EventRow = { id: string; name: string; status: string };
 type View = 'mine' | 'requested' | 'team';
 
 const VIEW_LABEL: Record<View, string> = {
-  mine: 'Asignadas a mí',
-  requested: 'Que pedí a otros',
-  team: 'Equipo',
+  mine: 'Mis tareas',
+  requested: 'Que pedí',
+  team: 'Todas las tareas',
 };
 
 const VIEW_ENDPOINT: Record<View, string> = {
@@ -56,14 +57,30 @@ function taskStatusTone(status: string): string {
   return 'medium';
 }
 
+function engagementLabel(t: Task): { label: string; tone: string } {
+  if (t.status === 'DONE') return { label: 'Completada', tone: 'ok' };
+  if (t.status === 'BLOCKED') return { label: 'Bloqueada', tone: 'danger' };
+  if (t.status === 'IN_PROGRESS') return { label: 'En curso', tone: 'watch' };
+  if (!t.assigneeId) return { label: 'Sin asignar', tone: 'muted' };
+  if (!t.seenAt) return { label: 'Sin abrir', tone: 'warn' };
+  return { label: 'Vio · sin avance', tone: 'warn' };
+}
+
 const emptyForm = { title: '', detail: '', module: '', assigneeId: '', eventId: '', dueAt: '' };
 
-const TEAM_ROLES = new Set(['super_admin', 'dir_general', 'gerente_arta', 'dir_auditorio']);
+/** Arturo, José Luis, Marisol, Leida + gerencias. */
+const TEAM_ROLES = new Set([
+  'super_admin',
+  'dir_general',
+  'gerente_arta',
+  'dir_auditorio',
+  'convenios',
+]);
 
 export default function TasksPage() {
   const { entity, user } = useUser();
   const canSeeTeam = TEAM_ROLES.has(user?.roleKey || '');
-  const [view, setView] = useState<View>('mine');
+  const [view, setView] = useState<View>(canSeeTeam ? 'requested' : 'mine');
   const [rows, setRows] = useState<Task[]>([]);
   const [directory, setDirectory] = useState<DirUser[]>([]);
   const [events, setEvents] = useState<EventRow[]>([]);
@@ -196,10 +213,16 @@ export default function TasksPage() {
     <AppShell title="Tareas">
       <div className="stack page-workspace">
         <PageHeader
-          description={`Pide apoyo a cualquier integrante de la organización y da seguimiento. Entidad activa: ${
-            entity === 'ARTA' ? 'Arta Producciones' : 'Auditorio Arema'
-          }.`}
-          hint="Quien recibe una tarea ve el aviso en la campana del panel. Atiende primero vencidas y bloqueadas."
+          description={
+            canSeeTeam
+              ? `Seguimiento de actividades del equipo. «Que pedí» = las que asignaste; «Todas» = toda la organización. Entidad: ${
+                  entity === 'ARTA' ? 'Arta Producciones' : 'Auditorio Arema'
+                }.`
+              : `Tus tareas asignadas y las que pediste a otros. Entidad: ${
+                  entity === 'ARTA' ? 'Arta Producciones' : 'Auditorio Arema'
+                }.`
+          }
+          hint="Al abrir Mis tareas, el sistema marca que la persona ya vio la actividad. Si no cambia el status, verás «Vio · sin avance»."
         >
           <ActionLink href="/events" variant="ghost">
             Ir a eventos
@@ -408,6 +431,7 @@ export default function TasksPage() {
                         <th>Tarea</th>
                         <th>Asignada a</th>
                         <th>Pedida por</th>
+                        <th>Seguimiento</th>
                         <th>Vence</th>
                         <th>Status</th>
                         <th></th>
@@ -419,6 +443,7 @@ export default function TasksPage() {
                           t.dueAt &&
                           new Date(t.dueAt).getTime() < Date.now() &&
                           t.status !== 'DONE';
+                        const eng = engagementLabel(t);
                         return (
                           <tr key={t.id}>
                             <td>
@@ -451,6 +476,17 @@ export default function TasksPage() {
                               </select>
                             </td>
                             <td className="muted kpi-sub">{t.createdBy?.fullName || '—'}</td>
+                            <td>
+                              <span className={`badge ${eng.tone}`}>{eng.label}</span>
+                              {t.seenAt && t.status === 'OPEN' ? (
+                                <div className="muted kpi-sub">
+                                  Visto {new Date(t.seenAt).toLocaleString('es-MX', {
+                                    dateStyle: 'short',
+                                    timeStyle: 'short',
+                                  })}
+                                </div>
+                              ) : null}
+                            </td>
                             <td>
                               <span className={`badge ${overdue ? 'danger' : 'ok'}`}>
                                 {t.dueAt ? new Date(t.dueAt).toLocaleDateString('es-MX') : '—'}
@@ -495,7 +531,7 @@ export default function TasksPage() {
                       })}
                       {!filtered.length ? (
                         <tr>
-                          <td colSpan={6}>
+                          <td colSpan={7}>
                             <EmptyState
                               title={
                                 rows.length === 0

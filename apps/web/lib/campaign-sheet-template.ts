@@ -151,6 +151,33 @@ export function buildCampaignExpensesWorkbook(meta: CampaignSheetMeta): XLSX.Wor
   ];
 
   XLSX.utils.book_append_sheet(wb, ws, 'Campaña');
+
+  // Segunda hoja: plan de medios (vacía, lista para capturar)
+  const mediosRows: (string | number)[][] = [
+    ['PLAN DE MEDIOS'],
+    [],
+    ['PROMOTOR', meta.promoter || 'ARTA PRODUCCIONES'],
+    ['EVENTO', meta.eventName],
+    ['FECHA', formatShowDate(meta.startsAt)],
+    [],
+    ['CANAL', 'PIEZA', 'FECHA', 'INVERSIÓN', 'NOTAS'],
+  ];
+  for (let i = 0; i < 16; i += 1) mediosRows.push(['', '', '', '', '']);
+  const medios = XLSX.utils.aoa_to_sheet(mediosRows);
+  medios['!cols'] = [{ wch: 18 }, { wch: 28 }, { wch: 14 }, { wch: 12 }, { wch: 28 }];
+  XLSX.utils.book_append_sheet(wb, medios, 'Medios');
+
+  const notas = XLSX.utils.aoa_to_sheet([
+    ['NOTAS DE CAMPAÑA'],
+    [],
+    ['Fecha', 'Autor', 'Nota'],
+    ['', '', ''],
+    ['', '', ''],
+    ['', '', ''],
+  ]);
+  notas['!cols'] = [{ wch: 14 }, { wch: 18 }, { wch: 48 }];
+  XLSX.utils.book_append_sheet(wb, notas, 'Notas');
+
   return wb;
 }
 

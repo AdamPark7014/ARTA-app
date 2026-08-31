@@ -18,7 +18,7 @@ type Props = {
    * Modo campaña: barra de herramientas de gastos (insertar concepto, totales
    * B×C / E×F, llenado rápido). Ideal para «GASTOS DE PUBLICIDAD Y CONVENIOS».
    */
-  variant?: 'default' | 'campaign';
+  variant?: 'default' | 'campaign' | 'finance';
 };
 
 type Grid = string[][];
@@ -107,6 +107,8 @@ export function SheetEditor({
   const [msg, setMsg] = useState('');
   const [sel, setSel] = useState<Sel>(null);
   const campaign = variant === 'campaign';
+  const finance = variant === 'finance';
+  const richTools = campaign || finance;
 
   const loadSheet = useCallback((wb: XLSX.WorkBook, name: string) => {
     const ws = wb.Sheets[name];
@@ -122,10 +124,10 @@ export function SheetEditor({
         return cell === undefined || cell === null ? '' : String(cell);
       }),
     );
-    setGrid(padGrid(withFormulas as unknown[][], MIN_ROWS, campaign ? MIN_COLS : 8));
+    setGrid(padGrid(withFormulas as unknown[][], MIN_ROWS, campaign || finance ? MIN_COLS : 8));
     setVisibleRows(ROW_PAGE);
     setSel(null);
-  }, [campaign]);
+  }, [campaign, finance]);
 
   useEffect(() => {
     let cancelled = false;
@@ -173,13 +175,107 @@ export function SheetEditor({
     markDirty();
   }
 
-  function switchSheet(name: string) {
-    if (dirty && !confirm('Hay cambios sin guardar en esta hoja. ¿Cambiar de todos modos?')) return;
+  /** Escribe el grid actual en la hoja activa del workbook (sin generar Blob). */
+  function flushGridToWorkbook() {
     const wb = workbookRef.current;
-    if (!wb) return;
+    if (!wb || !activeSheet) return;
+    const ws = wb.Sheets[activeSheet] || {};
+    let maxRow = 0;
+    let maxCol = 0;
+    for (let r = 0; r < grid.length; r += 1) {
+      for (let c = 0; c < grid[r].length; c += 1) {
+        const addr = XLSX.utils.encode_cell({ r, c });
+        const text = grid[r][c];
+        const existing = ws[addr] as XLSX.CellObject | undefined;
+        const existingText =
+          existing?.f
+            ? `=${existing.f}`
+            : existing === undefined || existing.v === undefined || existing.v === null
+              ? ''
+              : String(existing.w ?? existing.v);
+
+        if (text === existingText) {
+          if (existing) {
+            maxRow = Math.max(maxRow, r);
+            maxCol = Math.max(maxCol, c);
+          }
+          continue;
+        }
+
+        if (!text) {
+          delete ws[addr];
+          continue;
+        }
+
+        if (text.startsWith('=')) {
+          ws[addr] = {
+            ...(existing || {}),
+            t: 'n',
+            f: text.slice(1),
+            v: undefined,
+            w: undefined,
+          } as XLSX.CellObject;
+        } else {
+          const { v, t } = toCellValue(text);
+          ws[addr] = { ...(existing || {}), t, v, w: undefined, f: undefined } as XLSX.CellObject;
+          delete (ws[addr] as Record<string, unknown>).f;
+          delete (ws[addr] as Record<string, unknown>).w;
+        }
+        maxRow = Math.max(maxRow, r);
+        maxCol = Math.max(maxCol, c);
+      }
+    }
+    ws['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: maxRow, c: maxCol } });
+    wb.Sheets[activeSheet] = ws;
+  }
+
+  function switchSheet(name: string) {
+    if (name === activeSheet) return;
+    const wb = workbookRef.current;
+    if (!wb || !wb.Sheets[name]) return;
+    if (dirty) flushGridToWorkbook();
     setActiveSheet(name);
     loadSheet(wb, name);
     setDirty(false);
+    setMsg(dirty ? `Cambiaste a «${name}» (cambios de la hoja anterior listos al Guardar)` : '');
+  }
+
+  function addSheet() {
+    const wb = workbookRef.current;
+    if (!wb || !canEdit) return;
+    if (dirty) flushGridToWorkbook();
+    let n = sheetNames.length + 1;
+    let name = `Hoja${n}`;
+    while (wb.SheetNames.includes(name)) {
+      n += 1;
+      name = `Hoja${n}`;
+    }
+    const ws = XLSX.utils.aoa_to_sheet([['']]);
+    XLSX.utils.book_append_sheet(wb, ws, name);
+    setSheetNames([...wb.SheetNames]);
+    setActiveSheet(name);
+    loadSheet(wb, name);
+    setDirty(true);
+    setMsg(`Hoja «${name}» creada`);
+  }
+
+  function renameActiveSheet() {
+    const wb = workbookRef.current;
+    if (!wb || !canEdit || !activeSheet) return;
+    const next = window.prompt('Nombre de la hoja', activeSheet)?.trim();
+    if (!next || next === activeSheet) return;
+    if (wb.SheetNames.includes(next)) {
+      setError('Ya existe una hoja con ese nombre');
+      return;
+    }
+    if (dirty) flushGridToWorkbook();
+    const idx = wb.SheetNames.indexOf(activeSheet);
+    wb.Sheets[next] = wb.Sheets[activeSheet];
+    delete wb.Sheets[activeSheet];
+    wb.SheetNames[idx] = next;
+    setSheetNames([...wb.SheetNames]);
+    setActiveSheet(next);
+    setDirty(true);
   }
 
   function insertRows(at: number, n = 1) {
@@ -300,62 +396,13 @@ export function SheetEditor({
   const buildFile = useCallback((): Blob | null => {
     const wb = workbookRef.current;
     if (!wb || !activeSheet) return null;
-    const ws = wb.Sheets[activeSheet] || {};
-
-    let maxRow = 0;
-    let maxCol = 0;
-
-    for (let r = 0; r < grid.length; r += 1) {
-      for (let c = 0; c < grid[r].length; c += 1) {
-        const addr = XLSX.utils.encode_cell({ r, c });
-        const text = grid[r][c];
-        const existing = ws[addr] as XLSX.CellObject | undefined;
-        const existingText =
-          existing?.f
-            ? `=${existing.f}`
-            : existing === undefined || existing.v === undefined || existing.v === null
-              ? ''
-              : String(existing.w ?? existing.v);
-
-        if (text === existingText) {
-          if (existing) {
-            maxRow = Math.max(maxRow, r);
-            maxCol = Math.max(maxCol, c);
-          }
-          continue;
-        }
-
-        if (!text) {
-          delete ws[addr];
-          continue;
-        }
-
-        if (text.startsWith('=')) {
-          ws[addr] = {
-            ...(existing || {}),
-            t: 'n',
-            f: text.slice(1),
-            v: undefined,
-            w: undefined,
-          } as XLSX.CellObject;
-        } else {
-          const { v, t } = toCellValue(text);
-          ws[addr] = { ...(existing || {}), t, v, w: undefined, f: undefined } as XLSX.CellObject;
-          delete (ws[addr] as Record<string, unknown>).f;
-          delete (ws[addr] as Record<string, unknown>).w;
-        }
-        maxRow = Math.max(maxRow, r);
-        maxCol = Math.max(maxCol, c);
-      }
-    }
-
-    ws['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: maxRow, c: maxCol } });
-    wb.Sheets[activeSheet] = ws;
-
+    flushGridToWorkbook();
     const out = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
     return new Blob([out], {
       type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     });
+    // flushGridToWorkbook cierra sobre grid/activeSheet actuales
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [grid, activeSheet]);
 
   async function save() {
@@ -398,46 +445,53 @@ export function SheetEditor({
     <ExpandBox title={fileName} dirty={dirty}>
       <div className="stack">
         <div className="sheet-toolbar">
-          {sheetNames.length > 1 ? (
-            <label className="sheet-toolbar__sheets">
-              <span className="muted kpi-sub">Hoja</span>
-              <select
-                className="field field--select"
-                value={activeSheet}
-                onChange={(e) => switchSheet(e.target.value)}
+          <div className="sheet-tabs" role="tablist" aria-label="Hojas del libro">
+            {sheetNames.map((n) => (
+              <button
+                key={n}
+                type="button"
+                role="tab"
+                aria-selected={n === activeSheet}
+                className={`sheet-tab ${n === activeSheet ? 'is-active' : ''}`}
+                onClick={() => switchSheet(n)}
               >
-                {sheetNames.map((n) => (
-                  <option key={n} value={n}>
-                    {n}
-                  </option>
-                ))}
-              </select>
-            </label>
-          ) : (
-            <span className="muted kpi-sub">
-              {activeSheet || 'Hoja 1'}
-              {sel ? ` · Celda ${selLabel}` : ''}
-            </span>
-          )}
-
-          <div className="row row--tight sheet-toolbar__actions">
+                {n}
+              </button>
+            ))}
             {canEdit ? (
               <>
+                <button className="btn ghost btn-sm" type="button" onClick={addSheet} title="Agregar hoja">
+                  + Hoja
+                </button>
                 <button
-                  className="btn btn-sm"
+                  className="btn ghost btn-sm"
                   type="button"
-                  disabled={!dirty || saving}
-                  onClick={save}
-                  title="Ctrl+S / ⌘S"
+                  onClick={renameActiveSheet}
+                  title="Renombrar hoja activa"
                 >
-                  {saving ? 'Guardando…' : dirty ? 'Guardar cambios' : 'Sin cambios'}
+                  Renombrar
                 </button>
               </>
+            ) : null}
+          </div>
+
+          <div className="row row--tight sheet-toolbar__actions">
+            <span className="muted kpi-sub">{sel ? `Celda ${selLabel}` : ''}</span>
+            {canEdit ? (
+              <button
+                className="btn btn-sm"
+                type="button"
+                disabled={!dirty || saving}
+                onClick={save}
+                title="Ctrl+S / ⌘S"
+              >
+                {saving ? 'Guardando…' : dirty ? 'Guardar libro' : 'Sin cambios'}
+              </button>
             ) : (
               <span className="muted kpi-sub">Solo lectura</span>
             )}
             <a className="btn ghost btn-sm" href={url} download={fileName}>
-              Descargar
+              Descargar .xlsx
             </a>
           </div>
         </div>
@@ -548,14 +602,24 @@ export function SheetEditor({
                 </button>
               </div>
             ) : null}
+            {finance ? (
+              <div className="sheet-tools__group sheet-tools__group--campaign">
+                <span className="sheet-tools__label">Corrida</span>
+                <button className="btn ghost btn-sm" type="button" onClick={() => sumColumn(2)}>
+                  Σ Montos (col C)
+                </button>
+              </div>
+            ) : null}
           </div>
         ) : null}
 
-        {campaign ? (
+        {richTools ? (
           <p className="muted kpi-sub">
-            Formato de gastos: CONCEPTO · CANTIDAD · COSTO · TOTAL · CANTIDAD ARTA · COSTO ARTA ·
-            TOTAL ARTA · PAGADO · POR PAGAR. Haz clic en una celda para seleccionar la fila y usar
-            las herramientas.
+            Libro multi-hoja: cambia de pestaña arriba, agrega hojas y descarga el .xlsx completo.
+            {campaign
+              ? ' Campaña: CONCEPTO · CANTIDAD · COSTO · TOTAL · columnas ARTA · PAGADO · POR PAGAR.'
+              : ' Corrida: usa las hojas Ingresos / Egresos / Resumen según tu formato.'}{' '}
+            Ctrl+S guarda el libro entero.
           </p>
         ) : null}
 

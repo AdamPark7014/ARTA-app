@@ -118,11 +118,11 @@ export class TasksController {
 
   /** Tareas asignadas a mí (de eventos que puedo ver, o sin evento). */
   @Get('mine')
-  mine(@Req() req: { user: AuthUser }) {
+  async mine(@Req() req: { user: AuthUser }) {
     const allowed = eventOpsEntities(req.user.entities as EntityKey[], req.user.roleKey as RoleKey);
     const isSuper = req.user.roleKey === 'super_admin';
     const orgId = tenantIdOf(req.user);
-    return this.prisma.taskAssignment.findMany({
+    const rows = await this.prisma.taskAssignment.findMany({
       where: {
         assigneeId: req.user.id,
         OR: [
@@ -143,6 +143,18 @@ export class TasksController {
       orderBy: { updatedAt: 'desc' },
       take: 100,
     });
+
+    // Abrir «Mis tareas» cuenta como visto (seguimiento para quien asignó).
+    const unseen = rows.filter((r) => !r.seenAt).map((r) => r.id);
+    if (unseen.length) {
+      const now = new Date();
+      await this.prisma.taskAssignment.updateMany({
+        where: { id: { in: unseen }, assigneeId: req.user.id },
+        data: { seenAt: now },
+      });
+      return rows.map((r) => (r.seenAt ? r : { ...r, seenAt: now }));
+    }
+    return rows;
   }
 
   /** Tareas que yo pedí a otros — para dar seguimiento al apoyo solicitado. */
@@ -156,12 +168,18 @@ export class TasksController {
     });
   }
 
-  /** Carga de todo el equipo (quién tiene qué). Solo gerencia. */
+  /** Carga de todo el equipo (quién tiene qué). Gerencia + convenios (Arturo/JL/Marisol/Leida). */
   @Get('workload')
   workload(@Req() req: { user: AuthUser }, @Query('status') status?: string) {
-    const managers = ['super_admin', 'dir_general', 'gerente_arta', 'dir_auditorio'];
+    const managers = [
+      'super_admin',
+      'dir_general',
+      'gerente_arta',
+      'dir_auditorio',
+      'convenios',
+    ];
     if (!managers.includes(req.user.roleKey)) {
-      throw new ForbiddenException('Vista de carga de equipo solo para gerencia');
+      throw new ForbiddenException('Vista de todas las tareas solo para dirección y convenios');
     }
     const isSuper = req.user.roleKey === 'super_admin';
     const orgId = tenantIdOf(req.user);
@@ -260,6 +278,7 @@ export class TasksController {
         assigneeId: body.assigneeId === null ? null : body.assigneeId,
         status: body.status,
         dueAt: body.dueAt === null ? null : body.dueAt ? new Date(body.dueAt) : undefined,
+        ...(reassigned ? { seenAt: null } : {}),
       },
       include: TASK_INCLUDE,
     });

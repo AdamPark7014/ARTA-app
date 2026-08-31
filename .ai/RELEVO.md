@@ -6,22 +6,21 @@
 
 ## Hecho en este turno
 
-**Feedback Arturo Taja — corrida + capas blancas en formatos:**
+**Feedback Arturo (2ª ronda) — Excel multi-hoja, checklists, tareas:**
 
-1. **Páginas en blanco encima de checklists/boletera:** ExpandBox ya no abre a pantalla completa por defecto (`FileViewer`, `ChecklistPdfEditor`, `PdfEditor`, `SheetEditor`, `DocEditor`). Vista previa PDF del checklist solo con «Ver PDF» (no monta iframe encima del formulario).
-2. **Corrida financiera:** Excel embebido editable como campaña — «Nueva hoja de corrida» / «Subir mi Excel» (`module=finance`, `SheetEditor`). Tabla HTML queda como resumen opcional oculto. Create event ya no siembra conceptos inventados.
-3. Plantilla `finance-sheet-template.ts`.
+1. **Corrida + Campaña Excel:** SheetEditor con pestañas multi-hoja (+ Hoja / Renombrar), flush al cambiar de hoja, descarga .xlsx completo. Plantilla corrida: Resumen / Ingresos / Egresos / Notas. Campaña: Campaña / Medios / Notas. variant `finance`.
+2. **Checklists:** modo por defecto = Formulario (claro). «Sobre el PDF» opcional; overlays semitransparentes, checks más chicos, sin `max-height: 70vh` que cortaba el PDF.
+3. **Tareas:** tabs Mis tareas / Que pedí / Todas las tareas. `seenAt` en TaskAssignment (abrir Mis tareas = visto). Badge Sin abrir / Vio · sin avance. `convenios` (Marisol/Leida) ven Todas. Migración `20260831220000_task_seen_at`.
 
 ## A medias
 
-Nada. Pendiente imagen que Arturo mencionó (no llegó adjunta en el chat).
+Nada.
 
 ## Siguiente paso
 
-1. Deploy smoke: abrir checklist boletera (sin fullscreen blanco) + Corrida → Nueva hoja / Subir Excel.
-2. Si Adam adjunta la imagen de Arturo, atender ese hallazgo.
-3. Push origin cuando quieras.
+1. Deploy + smoke: Corrida «Nueva hoja» (4 pestañas), checklist formulario, Tareas seguimiento.
+2. Que Arturo hard-refresh.
 
 ## No tocar
 
-- `docs/ACCESS.md`, `.env.arta`, e2e API BD.
+- `docs/ACCESS.md`, `.env.arta`.

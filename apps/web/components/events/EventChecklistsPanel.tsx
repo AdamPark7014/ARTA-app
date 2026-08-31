@@ -59,7 +59,7 @@ export function EventChecklistsPanel({
    * Cómo se captura el formato: escribiendo sobre el PDF (por defecto, si el
    * generador ya dejó el mapa de campos) o en el formulario clásico.
    */
-  const [mode, setMode] = useState<'pdf' | 'form'>('pdf');
+  const [mode, setMode] = useState<'pdf' | 'form'>('form');
   const fieldMap = activeChecklist?.pdfFieldsJson;
   const canWriteOnPdf = !!activeChecklist?.pdfUrl && !!fieldMap?.fields?.length;
 
@@ -67,7 +67,8 @@ export function EventChecklistsPanel({
   useEffect(() => {
     setAnnotating(false);
     setShowPdfPreview(false);
-    setMode(canWriteOnPdf ? 'pdf' : 'form');
+    // Formulario primero: más claro y profesional. PDF overlay es opcional.
+    setMode('form');
   }, [activeChecklist?.id, canWriteOnPdf]);
   const sections = (activeChecklist?.dataJson?.sections || []).filter((s) => s.id !== 'firmas');
   const doneItems = sections.reduce(
@@ -165,26 +166,13 @@ export function EventChecklistsPanel({
 
             {!closed ? (
               <div className="checklist-save-hint muted kpi-sub">
-                El formato se abre a pantalla completa. Esc o «Salir» para volver. Ctrl+S / ⌘S o
-                Guardar regenera el PDF y registra versión.
+                Completa el formulario abajo. Ctrl+S / ⌘S guarda y regenera el PDF. «Sobre el PDF» es
+                opcional si quieres marcar encima de la hoja (usa Ampliar si se ve pequeño).
               </div>
             ) : null}
 
             <div className="panel-body">
               <div className="checklist-mode">
-                <button
-                  className={mode === 'pdf' ? 'btn btn-sm' : 'btn ghost btn-sm'}
-                  type="button"
-                  disabled={!canWriteOnPdf}
-                  title={
-                    canWriteOnPdf
-                      ? 'Captura directamente sobre la hoja'
-                      : 'Pulsa «Generar PDF» para poder escribir sobre el formato'
-                  }
-                  onClick={() => setMode('pdf')}
-                >
-                  Escribir en el formato
-                </button>
                 <button
                   className={mode === 'form' ? 'btn btn-sm' : 'btn ghost btn-sm'}
                   type="button"
@@ -192,11 +180,23 @@ export function EventChecklistsPanel({
                 >
                   Formulario
                 </button>
+                <button
+                  className={mode === 'pdf' ? 'btn btn-sm' : 'btn ghost btn-sm'}
+                  type="button"
+                  disabled={!canWriteOnPdf}
+                  title={
+                    canWriteOnPdf
+                      ? 'Campos sobre el PDF (opcional)'
+                      : 'Pulsa «Generar PDF» para habilitar esta vista'
+                  }
+                  onClick={() => setMode('pdf')}
+                >
+                  Sobre el PDF
+                </button>
                 {!canWriteOnPdf ? (
                   <span className="muted kpi-sub">
-                    Este formato todavía no tiene el mapa del PDF. Pulsa «
-                    {activeChecklist.pdfUrl ? 'Regenerar' : 'Generar PDF'}» una vez y podrás escribir
-                    sobre la hoja.
+                    Genera el PDF una vez si quieres la vista «Sobre el PDF». El formulario siempre
+                    funciona.
                   </span>
                 ) : null}
               </div>

@@ -305,7 +305,7 @@ export function EventFinancePanel({
                             url={f.url}
                             fileName={f.fileName}
                             canEdit={canEditFiles}
-                            variant="campaign"
+                            variant="finance"
                             onSave={replaceEventFile(f.id)}
                             onSaved={onFilesChanged}
                           />

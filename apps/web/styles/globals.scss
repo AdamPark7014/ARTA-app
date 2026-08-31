@@ -4134,6 +4134,32 @@ body.site-nav-open {
   background: var(--bg-soft);
 }
 
+.sheet-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+  max-width: min(100%, 52rem);
+}
+
+.sheet-tab {
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.8rem;
+  padding: 0.28rem 0.65rem;
+  border-radius: 6px 6px 0 0;
+  cursor: pointer;
+}
+
+.sheet-tab.is-active {
+  color: var(--text);
+  background: var(--panel, var(--bg));
+  border-bottom-color: transparent;
+  font-weight: 600;
+}
+
 .sheet-toolbar__actions {
   flex-wrap: wrap;
 }
@@ -4267,8 +4293,8 @@ body.site-nav-open {
   display: grid;
   gap: 1rem;
   justify-items: center;
-  max-height: 70vh;
-  overflow: auto;
+  max-height: none;
+  overflow: visible;
   padding: 0.75rem;
   border: 1px solid var(--line);
   border-radius: var(--radius);
@@ -4524,7 +4550,9 @@ body.site-nav-open {
 /* En modo campos el PDF manda: se ve completo, sin recorte de altura */
 .pdfedit--fields {
   max-height: none;
-  background: #23232a;
+  overflow: visible;
+  background: #1a1a1f;
+  padding: 1rem 0.5rem 2rem;
 }
 
 .pdffield-hint {
@@ -4537,9 +4565,7 @@ body.site-nav-open {
   cursor: default;
 }
 
-/* Cada dato del formato, encima de donde el generador lo imprimió.
-   Fondo opaco + borde visible: si no, las reglas globales de `.shell input`
-   (fondo #141416) y el canvas los hacen invisibles o intocables. */
+/* Campos: borde fino; fondo solo al foco para no tapar el PDF */
 .shell .pdffield,
 .panel .pdffield,
 .pdffield {
@@ -4549,9 +4575,9 @@ body.site-nav-open {
   display: block;
   margin: 0;
   padding: 0 2px !important;
-  border: 1.5px solid color-mix(in srgb, var(--accent) 75%, #888) !important;
-  border-radius: 3px !important;
-  background: #fff !important;
+  border: 1px solid color-mix(in srgb, var(--accent) 55%, #888) !important;
+  border-radius: 2px !important;
+  background: rgba(255, 255, 255, 0.55) !important;
   color: #111 !important;
   -webkit-text-fill-color: #111 !important;
   caret-color: #111 !important;
@@ -4559,14 +4585,14 @@ body.site-nav-open {
   line-height: 1.1;
   box-sizing: border-box;
   pointer-events: auto;
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.9);
+  box-shadow: none;
 }
 
 .shell .pdffield:hover,
 .panel .pdffield:hover,
 .pdffield:hover {
   border-color: var(--accent) !important;
-  background: #fffdf5 !important;
+  background: rgba(255, 253, 245, 0.92) !important;
 }
 
 .shell .pdffield:focus,
@@ -4576,8 +4602,8 @@ body.site-nav-open {
 .pdffield:focus,
 .pdffield:focus-within {
   outline: 2px solid var(--accent);
-  outline-offset: 1px;
-  background: #fffdf5 !important;
+  outline-offset: 0;
+  background: #fff !important;
 }
 
 .shell .pdffield__input,
@@ -4587,13 +4613,17 @@ body.site-nav-open {
   min-width: 0 !important;
   max-width: none !important;
   height: 100% !important;
-  padding: 0 3px !important;
+  padding: 0 2px !important;
   border: 0 !important;
-  border-radius: 2px !important;
-  background: #fff !important;
+  border-radius: 1px !important;
+  background: transparent !important;
   color: #111 !important;
   -webkit-text-fill-color: #111 !important;
   color-scheme: light !important;
+}
+
+.pdffield__input:focus {
+  background: #fff !important;
 }
 
 .pdffield__input::placeholder {
@@ -4607,17 +4637,17 @@ body.site-nav-open {
   place-items: center;
   padding: 0 !important;
   cursor: pointer;
-  /* Hit target usable aunque el mapa mida ~12pt */
-  min-width: 22px;
-  min-height: 22px;
+  background: rgba(255, 255, 255, 0.35) !important;
+  min-width: 0;
+  min-height: 0;
 }
 
 .shell .pdffield--check input,
 .panel .pdffield--check input,
 .pdffield--check input {
-  width: 16px !important;
-  height: 16px !important;
-  max-width: 16px !important;
+  width: 12px !important;
+  height: 12px !important;
+  max-width: 14px !important;
   padding: 0 !important;
   margin: 0 !important;
   border: 1px solid #666 !important;
