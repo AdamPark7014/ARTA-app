@@ -16,6 +16,8 @@ import {
 } from '@/components/ui/PageChrome';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { api } from '@/lib/api';
+import { useUser } from '@/lib/user-context';
+import { userHasPermission } from '@/lib/access-matrix';
 
 type UserRow = {
   id: string;
@@ -59,6 +61,18 @@ type UsersGov = {
 type RoleOpt = { key: string; label: string };
 type PermOpt = { key: string; label: string };
 
+type EditDraft = {
+  id: string;
+  email: string;
+  fullName: string;
+  title: string;
+  roleKey: string;
+  entities: string[];
+  permissions: string[];
+  active: boolean;
+  password: string;
+};
+
 const EMPTY = {
   email: '',
   fullName: '',
@@ -69,22 +83,27 @@ const EMPTY = {
 };
 
 export default function UsersPage() {
+  const { user: me } = useUser();
+  const canManage = userHasPermission(me?.roleKey || '', me?.permissions || [], [
+    'users.manage',
+    'everything',
+  ]);
+
   const [gov, setGov] = useState<UsersGov | null>(null);
   const [roles, setRoles] = useState<RoleOpt[]>([]);
   const [permCatalog, setPermCatalog] = useState<PermOpt[]>([]);
   const [error, setError] = useState('');
   const [msg, setMsg] = useState('');
   const [form, setForm] = useState(EMPTY);
-  const [inviteMode, setInviteMode] = useState(true);
+  const [inviteMode, setInviteMode] = useState(false);
   const [inviteUrl, setInviteUrl] = useState('');
   const [orgId, setOrgId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [permsUserId, setPermsUserId] = useState<string | null>(null);
+  const [edit, setEdit] = useState<EditDraft | null>(null);
   const [riskFilter, setRiskFilter] = useState<'all' | 'high' | 'medium' | 'low'>('all');
   const [q, setQ] = useState('');
   const [loading, setLoading] = useState(true);
-  const [resetPwUserId, setResetPwUserId] = useState<string | null>(null);
-  const [resetPwValue, setResetPwValue] = useState('');
+  const [showInactive, setShowInactive] = useState(true);
 
   async function load() {
     const [g, r, p, meOrg] = await Promise.all([
@@ -100,16 +119,21 @@ export default function UsersPage() {
   }
 
   useEffect(() => {
+    if (!canManage) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     load()
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
-  }, []);
+  }, [canManage]);
 
   const users = gov?.users || [];
 
   const filtered = useMemo(() => {
     let list = users;
+    if (!showInactive) list = list.filter((u) => u.active);
     if (riskFilter !== 'all') list = list.filter((u) => u.risk === riskFilter);
     if (q.trim()) {
       const n = q.toLowerCase();
@@ -117,23 +141,40 @@ export default function UsersPage() {
         (u) =>
           u.fullName.toLowerCase().includes(n) ||
           u.email.toLowerCase().includes(n) ||
-          u.roleKey.toLowerCase().includes(n),
+          u.roleKey.toLowerCase().includes(n) ||
+          (u.roleLabel || '').toLowerCase().includes(n),
       );
     }
     return list;
-  }, [users, riskFilter, q]);
+  }, [users, riskFilter, q, showInactive]);
 
-  function toggleEntity(ent: string) {
+  function toggleEntityCreate(ent: string) {
     setForm((f) => ({
       ...f,
       entities: f.entities.includes(ent) ? f.entities.filter((e) => e !== ent) : [...f.entities, ent],
     }));
   }
 
+  function openEdit(u: GovUser) {
+    setEdit({
+      id: u.id,
+      email: u.email,
+      fullName: u.fullName,
+      title: u.title || '',
+      roleKey: u.roleKey,
+      entities: [...u.entities],
+      permissions: [...u.permissions],
+      active: u.active,
+      password: '',
+    });
+    setMsg('');
+    setError('');
+  }
+
   async function onCreate(e: FormEvent) {
     e.preventDefault();
     if (!form.entities.length) {
-      setMsg('Elige al menos una entidad');
+      setMsg('Elige al menos una entidad (Arta y/o Auditorio)');
       return;
     }
     setSaving(true);
@@ -153,8 +194,9 @@ export default function UsersPage() {
         });
         setInviteUrl(created.acceptUrl);
         setForm({ ...EMPTY, roleKey: form.roleKey, entities: form.entities });
-        setMsg('Invitación creada — copia el link si SMTP está off');
+        setMsg('Invitación creada — copia el link si el correo no llega');
       } else {
+        if (!form.fullName.trim()) throw new Error('Nombre requerido');
         await api('/users', {
           method: 'POST',
           body: JSON.stringify(form),
@@ -170,45 +212,99 @@ export default function UsersPage() {
     }
   }
 
-  async function setActive(id: string, active: boolean) {
-    await api(`/users/${id}`, { method: 'PATCH', body: JSON.stringify({ active }) });
-    await load();
+  async function saveEdit(e: FormEvent) {
+    e.preventDefault();
+    if (!edit) return;
+    if (!edit.entities.length) {
+      setError('Elige al menos una entidad');
+      return;
+    }
+    setSaving(true);
+    setError('');
+    try {
+      const body: Record<string, unknown> = {
+        email: edit.email,
+        fullName: edit.fullName,
+        title: edit.title || null,
+        roleKey: edit.roleKey,
+        entities: edit.entities,
+        permissions: edit.permissions,
+        active: edit.active,
+      };
+      if (edit.password.trim().length >= 6) body.password = edit.password.trim();
+      await api(`/users/${edit.id}`, { method: 'PATCH', body: JSON.stringify(body) });
+      setMsg('Usuario actualizado');
+      setEdit(null);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error al guardar');
+    } finally {
+      setSaving(false);
+    }
   }
 
-  async function patchUser(
-    id: string,
-    body: { roleKey?: string; entities?: string[]; password?: string; title?: string; permissions?: string[] },
-  ) {
-    await api(`/users/${id}`, { method: 'PATCH', body: JSON.stringify(body) });
-    setMsg('Usuario actualizado');
-    await load();
+  async function deleteUser(u: GovUser) {
+    if (u.id === me?.id) {
+      setError('No puedes eliminarte a ti mismo');
+      return;
+    }
+    if (
+      !confirm(
+        `¿Eliminar acceso de ${u.fullName}?\nSe desactiva la cuenta y se cierran sus sesiones. El historial se conserva.`,
+      )
+    ) {
+      return;
+    }
+    setSaving(true);
+    try {
+      await api(`/users/${u.id}`, { method: 'DELETE' });
+      setMsg(`${u.fullName} eliminado (desactivado)`);
+      if (edit?.id === u.id) setEdit(null);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error al eliminar');
+    } finally {
+      setSaving(false);
+    }
   }
 
-  function togglePerm(u: GovUser, key: string) {
-    const next = u.permissions.includes(key)
-      ? u.permissions.filter((p) => p !== key)
-      : [...u.permissions, key];
-    patchUser(u.id, { permissions: next }).catch((e) => setMsg(e.message));
+  function toggleEditPerm(key: string) {
+    if (!edit) return;
+    setEdit({
+      ...edit,
+      permissions: edit.permissions.includes(key)
+        ? edit.permissions.filter((p) => p !== key)
+        : [...edit.permissions, key],
+    });
   }
 
-  const editingUser = users.find((u) => u.id === permsUserId) || null;
   const k = gov?.kpis;
-
   const msgVariant =
-    msg === 'Elige al menos una entidad'
+    msg.includes('Elige') || msg.includes('requerido')
       ? 'warn'
-      : msg === 'Usuario creado' ||
-          msg === 'Usuario actualizado' ||
-          msg.startsWith('Invitación creada')
+      : msg.includes('creado') || msg.includes('actualizado') || msg.includes('Invitación') || msg.includes('eliminado')
         ? 'success'
         : 'error';
+
+  if (!canManage) {
+    return (
+      <AppShell title="Usuarios">
+        <div className="page-workspace">
+          <EmptyState
+            title="Solo dirección"
+            description="Arturo y José Luis (Directores Generales) gestionan altas, roles, permisos y bajas del equipo."
+          />
+        </div>
+      </AppShell>
+    );
+  }
 
   return (
     <AppShell title="Usuarios">
       <div className="page-workspace stack">
         <PageHeader
-          description="Cuentas del equipo: actividad, riesgo, bloqueos y privilegios. Solo dirección gestiona usuarios; el rol define el acceso base y los permisos extra se suman."
-          hint="Invitar por email deja que la persona elija su contraseña. «Crear con password» asigna una clave inicial."
+          description="Alta, edición, roles, entidades, permisos extra y baja de cuentas. Solo Directores Generales (Arturo y José Luis)."
+          hint="Crear con password da acceso inmediato. Invitar por email deja que la persona elija su clave. Eliminar = desactivar + cerrar sesiones."
         />
 
         {error ? (
@@ -225,7 +321,7 @@ export default function UsersPage() {
         {loading ? (
           <>
             <LoadingKpis count={6} />
-            <LoadingBlock rows={5} label="Cargando gobernanza de usuarios…" />
+            <LoadingBlock rows={5} label="Cargando usuarios…" />
           </>
         ) : null}
 
@@ -248,7 +344,7 @@ export default function UsersPage() {
               <div className="value">{k.inactive30d}</div>
             </div>
             <div className={`kpi ${k.lockedNow ? 'kpi--danger' : ''}`}>
-              <div className="label">Bloqueados ahora</div>
+              <div className="label">Bloqueados</div>
               <div className="value">{k.lockedNow}</div>
             </div>
             <div
@@ -260,7 +356,6 @@ export default function UsersPage() {
               onKeyDown={(e) => {
                 if (e.key === 'Enter' || e.key === ' ') setRiskFilter('high');
               }}
-              title="Filtrar alto riesgo"
             >
               <div className="label">Alto riesgo</div>
               <div className="value">{k.highRisk}</div>
@@ -288,9 +383,9 @@ export default function UsersPage() {
         <div className="users-layout">
           <div className="panel">
             <div className="panel-head">
-              <h2>{inviteMode ? 'Invitar usuario' : 'Nuevo usuario'}</h2>
+              <h2>{inviteMode ? 'Invitar usuario' : 'Crear usuario'}</h2>
               <button
-                className="btn ghost"
+                className="btn ghost btn-sm"
                 type="button"
                 onClick={() => {
                   setInviteMode((v) => !v);
@@ -306,7 +401,7 @@ export default function UsersPage() {
                 {!inviteMode ? (
                   <FormGrid>
                     <label>
-                      Nombre
+                      Nombre completo
                       <input
                         required
                         value={form.fullName}
@@ -318,6 +413,7 @@ export default function UsersPage() {
                       <input
                         value={form.title}
                         onChange={(e) => setForm({ ...form, title: e.target.value })}
+                        placeholder="Ej. Logística"
                       />
                     </label>
                   </FormGrid>
@@ -347,14 +443,14 @@ export default function UsersPage() {
                       required
                       type="password"
                       minLength={6}
+                      autoComplete="new-password"
                       value={form.password}
                       onChange={(e) => setForm({ ...form, password: e.target.value })}
                     />
                   </label>
                 ) : (
-                  <p className="muted" style={{ fontSize: 13, margin: 0 }}>
-                    Recibe un link de 7 días a <code>/invite/…</code> para elegir nombre y
-                    password. También aparece en Organizaciones.
+                  <p className="muted kpi-sub" style={{ margin: 0 }}>
+                    Link de 7 días a <code>/invite/…</code> para que elija nombre y password.
                   </p>
                 )}
                 <div className="row">
@@ -362,7 +458,7 @@ export default function UsersPage() {
                     <FieldCheck
                       key={ent}
                       checked={form.entities.includes(ent)}
-                      onChange={() => toggleEntity(ent)}
+                      onChange={() => toggleEntityCreate(ent)}
                       label={ent === 'ARTA' ? 'Arta' : 'Auditorio'}
                     />
                   ))}
@@ -373,11 +469,7 @@ export default function UsersPage() {
                   </p>
                 ) : null}
                 <button className="btn" type="submit" disabled={saving}>
-                  {saving
-                    ? 'Guardando…'
-                    : inviteMode
-                      ? 'Enviar invitación'
-                      : 'Crear usuario'}
+                  {saving ? 'Guardando…' : inviteMode ? 'Enviar invitación' : 'Crear usuario'}
                 </button>
               </form>
             </div>
@@ -388,18 +480,18 @@ export default function UsersPage() {
               <h2>Directorio · {filtered.length}</h2>
             </div>
             <div className="panel-body">
-              <FilterBar meta={`${filtered.length} de ${users.length} usuarios`}>
+              <FilterBar meta={`${filtered.length} de ${users.length}`}>
                 <FieldSearch
                   value={q}
                   onChange={setQ}
                   placeholder="Nombre, email o rol…"
-                  label="Buscar usuario"
+                  label="Buscar"
                   maxWidth={240}
                 />
                 <FieldSelect
                   value={riskFilter}
                   onChange={(v) => setRiskFilter(v as typeof riskFilter)}
-                  label="Filtrar por riesgo"
+                  label="Riesgo"
                   options={[
                     { value: 'all', label: 'Todo riesgo' },
                     { value: 'high', label: 'Alto' },
@@ -407,206 +499,214 @@ export default function UsersPage() {
                     { value: 'low', label: 'Bajo' },
                   ]}
                 />
+                <FieldCheck
+                  checked={showInactive}
+                  onChange={setShowInactive}
+                  label="Mostrar inactivos"
+                />
               </FilterBar>
               {!filtered.length ? (
                 <EmptyState
                   title={users.length ? 'Sin coincidencias' : 'Sin usuarios'}
                   description={
                     users.length
-                      ? 'Ajusta búsqueda o filtro de riesgo.'
-                      : 'Crea un usuario o envía una invitación desde el formulario de la izquierda.'
+                      ? 'Ajusta búsqueda o filtros.'
+                      : 'Crea el primer usuario con el formulario de la izquierda.'
                   }
                 />
               ) : (
-              <div className="table-wrap">
-                <table className="table table-sticky">
-                  <thead>
-                    <tr>
-                      <th>Nombre</th>
-                      <th>Riesgo</th>
-                      <th>Actividad 30d</th>
-                      <th>Sesiones</th>
-                      <th>Último acceso</th>
-                      <th>Rol</th>
-                      <th>Entidades</th>
-                      <th>Extras</th>
-                      <th>Estado</th>
-                      <th></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filtered.map((u) => (
-                      <tr key={u.id}>
-                        <td>
-                          <strong>{u.fullName}</strong>
-                          <div className="muted" style={{ fontSize: 12 }}>
-                            {u.email}
-                            {u.title ? ` · ${u.title}` : ''}
-                          </div>
-                        </td>
-                        <td>
-                          <StatusBadge value={u.risk} kind="risk" />
-                          {u.locked ? <div className="muted" style={{ fontSize: 11 }}>bloqueado</div> : null}
-                          {u.failedLoginCount > 0 ? (
-                            <div className="muted" style={{ fontSize: 11 }}>
-                              {u.failedLoginCount} fallos de login
+                <div className="table-wrap">
+                  <table className="table table-sticky">
+                    <thead>
+                      <tr>
+                        <th>Nombre</th>
+                        <th>Rol</th>
+                        <th>Entidades</th>
+                        <th>Estado</th>
+                        <th>Último acceso</th>
+                        <th></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filtered.map((u) => (
+                        <tr key={u.id} className={!u.active ? 'is-muted' : undefined}>
+                          <td>
+                            <strong>{u.fullName}</strong>
+                            <div className="muted kpi-sub">
+                              {u.email}
+                              {u.title ? ` · ${u.title}` : ''}
                             </div>
-                          ) : null}
-                        </td>
-                        <td className="muted" style={{ fontSize: 12 }}>
-                          {u.activity30d} auditoría
-                          <div>{u.checklistEdits30d} ediciones chk</div>
-                        </td>
-                        <td className="muted">{u.activeSessions ?? 0}</td>
-                        <td className="muted" style={{ fontSize: 12 }}>
-                          {u.lastLoginAt
-                            ? new Date(u.lastLoginAt).toLocaleString('es-MX')
-                            : 'Nunca'}
-                        </td>
-                        <td>
-                          <FieldSelect
-                            value={u.roleKey}
-                            onChange={(v) => patchUser(u.id, { roleKey: v })}
-                            label={`Rol de ${u.fullName}`}
-                            options={roles.map((r) => ({ value: r.key, label: r.label }))}
-                          />
-                        </td>
-                        <td>
-                          <div className="row">
-                            {(['ARTA', 'EXPLANADA'] as const).map((ent) => (
-                              <label
-                                key={ent}
-                                style={{ display: 'flex', gap: 4, alignItems: 'center', fontSize: 12 }}
-                              >
-                                <input
-                                  type="checkbox"
-                                  checked={u.entities.includes(ent)}
-                                  onChange={() => {
-                                    const next = u.entities.includes(ent)
-                                      ? u.entities.filter((x) => x !== ent)
-                                      : [...u.entities, ent];
-                                    if (!next.length) return;
-                                    patchUser(u.id, { entities: next });
-                                  }}
-                                />
-                                {ent === 'ARTA' ? 'Arta' : 'Auditorio'}
-                              </label>
-                            ))}
-                          </div>
-                        </td>
-                        <td>
-                          <button className="btn ghost btn-sm" type="button" onClick={() => setPermsUserId(u.id)}>
-                            {u.permissions.length ? `${u.permissions.length} extra` : 'Permisos'}
-                          </button>
-                        </td>
-                        <td>
-                          <StatusBadge value={u.active ? 'Activo' : 'Inactivo'} kind="raw" />
-                        </td>
-                        <td>
-                          <div className="row row--tight" style={{ flexWrap: 'wrap' }}>
-                            {resetPwUserId === u.id ? (
-                              <>
-                                <input
-                                  className="field"
-                                  type="password"
-                                  autoComplete="new-password"
-                                  placeholder="Nueva contraseña (mín. 6)"
-                                  value={resetPwValue}
-                                  onChange={(e) => setResetPwValue(e.target.value)}
-                                  style={{ minWidth: 160 }}
-                                />
-                                <button
-                                  className="btn btn-sm"
-                                  type="button"
-                                  onClick={() => {
-                                    if (resetPwValue.length < 6) {
-                                      setError('La contraseña debe tener al menos 6 caracteres');
-                                      return;
-                                    }
-                                    void patchUser(u.id, { password: resetPwValue }).then(() => {
-                                      setResetPwUserId(null);
-                                      setResetPwValue('');
-                                      setMsg('Contraseña actualizada');
-                                    });
-                                  }}
-                                >
-                                  Guardar
-                                </button>
-                                <button
-                                  className="btn ghost btn-sm"
-                                  type="button"
-                                  onClick={() => {
-                                    setResetPwUserId(null);
-                                    setResetPwValue('');
-                                  }}
-                                >
-                                  Cancelar
-                                </button>
-                              </>
-                            ) : (
+                          </td>
+                          <td>
+                            <div>{u.roleLabel || u.roleKey}</div>
+                            {u.permissions.length ? (
+                              <div className="muted kpi-sub">{u.permissions.length} permisos extra</div>
+                            ) : null}
+                          </td>
+                          <td className="muted kpi-sub">
+                            {u.entities
+                              .map((e) => (e === 'ARTA' ? 'Arta' : 'Auditorio'))
+                              .join(' · ') || '—'}
+                          </td>
+                          <td>
+                            <StatusBadge value={u.active ? 'Activo' : 'Inactivo'} kind="raw" />
+                            {u.locked ? (
+                              <div className="muted kpi-sub">login bloqueado</div>
+                            ) : null}
+                          </td>
+                          <td className="muted kpi-sub">
+                            {u.lastLoginAt
+                              ? new Date(u.lastLoginAt).toLocaleString('es-MX')
+                              : 'Nunca'}
+                          </td>
+                          <td>
+                            <div className="row row--tight">
                               <button
-                                className="btn ghost btn-sm"
+                                className="btn btn-sm"
                                 type="button"
-                                onClick={() => {
-                                  setResetPwUserId(u.id);
-                                  setResetPwValue('');
-                                }}
+                                onClick={() => openEdit(u)}
                               >
-                                Restablecer
+                                Editar
                               </button>
-                            )}
-                            {u.active ? (
                               <button
                                 className="btn ghost btn-sm btn-danger"
                                 type="button"
-                                onClick={() => setActive(u.id, false)}
+                                disabled={saving || u.id === me?.id}
+                                onClick={() => void deleteUser(u)}
                               >
-                                Desactivar
+                                Eliminar
                               </button>
-                            ) : (
-                              <button
-                                className="btn ghost btn-sm"
-                                type="button"
-                                onClick={() => setActive(u.id, true)}
-                              >
-                                Activar
-                              </button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               )}
             </div>
           </div>
         </div>
 
-        {editingUser ? (
+        {edit ? (
           <div className="panel">
             <div className="panel-head">
-              <h2>Permisos extra · {editingUser.fullName}</h2>
-              <button className="btn ghost" type="button" onClick={() => setPermsUserId(null)}>
+              <h2>Editar usuario · {edit.fullName}</h2>
+              <button className="btn ghost btn-sm" type="button" onClick={() => setEdit(null)}>
                 Cerrar
               </button>
             </div>
             <div className="panel-body">
-              <p className="muted" style={{ marginTop: 0 }}>
-                Se suman al rol base. Ejemplo: dar <code>campaign.edit</code> o <code>po.mark_paid</code>{' '}
-                sin cambiar el rol.
-              </p>
-              <FormGrid cols={3}>
-                {permCatalog.map((p) => (
-                  <FieldCheck
-                    key={p.key}
-                    checked={editingUser.permissions.includes(p.key)}
-                    onChange={() => togglePerm(editingUser, p.key)}
-                    label={p.key}
+              <form className="form" onSubmit={saveEdit}>
+                <FormGrid>
+                  <label>
+                    Nombre completo
+                    <input
+                      required
+                      value={edit.fullName}
+                      onChange={(e) => setEdit({ ...edit, fullName: e.target.value })}
+                    />
+                  </label>
+                  <label>
+                    Email
+                    <input
+                      required
+                      type="email"
+                      value={edit.email}
+                      onChange={(e) => setEdit({ ...edit, email: e.target.value })}
+                    />
+                  </label>
+                  <label>
+                    Cargo
+                    <input
+                      value={edit.title}
+                      onChange={(e) => setEdit({ ...edit, title: e.target.value })}
+                    />
+                  </label>
+                  <label>
+                    Rol
+                    <FieldSelect
+                      value={edit.roleKey}
+                      onChange={(v) => setEdit({ ...edit, roleKey: v })}
+                      label="Rol"
+                      options={roles.map((r) => ({ value: r.key, label: r.label }))}
+                    />
+                  </label>
+                </FormGrid>
+
+                <div className="label" style={{ marginTop: '0.75rem' }}>
+                  Entidades
+                </div>
+                <div className="row">
+                  {(['ARTA', 'EXPLANADA'] as const).map((ent) => (
+                    <FieldCheck
+                      key={ent}
+                      checked={edit.entities.includes(ent)}
+                      onChange={() =>
+                        setEdit({
+                          ...edit,
+                          entities: edit.entities.includes(ent)
+                            ? edit.entities.filter((x) => x !== ent)
+                            : [...edit.entities, ent],
+                        })
+                      }
+                      label={ent === 'ARTA' ? 'Arta' : 'Auditorio'}
+                    />
+                  ))}
+                </div>
+
+                <FieldCheck
+                  checked={edit.active}
+                  onChange={(v) => setEdit({ ...edit, active: v })}
+                  label="Cuenta activa (puede iniciar sesión)"
+                />
+
+                <label>
+                  Nueva contraseña (opcional)
+                  <input
+                    type="password"
+                    minLength={6}
+                    autoComplete="new-password"
+                    placeholder="Dejar vacío para no cambiar"
+                    value={edit.password}
+                    onChange={(e) => setEdit({ ...edit, password: e.target.value })}
                   />
-                ))}
-              </FormGrid>
+                </label>
+
+                <div className="label" style={{ marginTop: '0.75rem' }}>
+                  Permisos extra (se suman al rol)
+                </div>
+                <FormGrid cols={3}>
+                  {permCatalog.map((p) => (
+                    <FieldCheck
+                      key={p.key}
+                      checked={edit.permissions.includes(p.key)}
+                      onChange={() => toggleEditPerm(p.key)}
+                      label={p.label || p.key}
+                    />
+                  ))}
+                </FormGrid>
+
+                <div className="row row--tight" style={{ marginTop: '1rem' }}>
+                  <button className="btn" type="submit" disabled={saving}>
+                    {saving ? 'Guardando…' : 'Guardar cambios'}
+                  </button>
+                  <button
+                    className="btn ghost btn-danger"
+                    type="button"
+                    disabled={saving || edit.id === me?.id}
+                    onClick={() => {
+                      const u = users.find((x) => x.id === edit.id);
+                      if (u) void deleteUser(u);
+                    }}
+                  >
+                    Eliminar acceso
+                  </button>
+                  <button className="btn ghost" type="button" onClick={() => setEdit(null)}>
+                    Cancelar
+                  </button>
+                </div>
+              </form>
             </div>
           </div>
         ) : null}

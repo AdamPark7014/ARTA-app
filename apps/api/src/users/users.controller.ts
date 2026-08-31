@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   ForbiddenException,
   Get,
   NotFoundException,
@@ -10,12 +11,19 @@ import {
   Req,
   UseGuards,
 } from '@nestjs/common';
-import { IsEmail, IsOptional, IsString, MinLength } from 'class-validator';
+import { IsArray, IsEmail, IsOptional, IsString, MinLength } from 'class-validator';
 import * as bcrypt from 'bcryptjs';
 import { EntityKey } from '@prisma/client';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { ASSIGNABLE_PERMISSIONS, ALL_ROLES, hasPermission, PERMISSIONS, ROLE_LABELS, type RoleKey } from '../common/rbac/roles';
+import {
+  ASSIGNABLE_PERMISSIONS,
+  ALL_ROLES,
+  hasPermission,
+  PERMISSIONS,
+  ROLE_LABELS,
+  type RoleKey,
+} from '../common/rbac/roles';
 import { assertSameTenant, tenantIdOf } from '../common/tenant';
 import { assertUserSeatAvailable } from '../common/plan-limits';
 
@@ -26,12 +34,28 @@ class CreateUserDto {
   @IsString() roleKey!: string;
   entities!: EntityKey[];
   @IsString() @MinLength(6) password!: string;
+  @IsOptional() @IsArray() permissions?: string[];
 }
 
 @Controller('users')
 @UseGuards(JwtAuthGuard)
 export class UsersController {
   constructor(private prisma: PrismaService) {}
+
+  private assertUsersManage(user: { roleKey: string; permissions?: string[] }) {
+    if (!hasPermission(user.roleKey as RoleKey, user.permissions || [], PERMISSIONS.USERS_MANAGE)) {
+      throw new ForbiddenException('Solo Arturo y José Luis (dirección) gestionan usuarios');
+    }
+  }
+
+  private assertAssignableRole(actorRole: string, roleKey: string) {
+    if (!ALL_ROLES.includes(roleKey as RoleKey)) {
+      throw new ForbiddenException('Rol inválido');
+    }
+    if (roleKey === 'super_admin' && actorRole !== 'super_admin') {
+      throw new ForbiddenException('Solo super_admin puede otorgar ese rol');
+    }
+  }
 
   /**
    * Directorio para asignar tareas (cualquier autenticado).
@@ -56,11 +80,12 @@ export class UsersController {
 
   @Get()
   async list(
-    @Req() req: { user: { id: string; roleKey: string; permissions: string[]; organizationId?: string | null } },
+    @Req()
+    req: {
+      user: { id: string; roleKey: string; permissions: string[]; organizationId?: string | null };
+    },
   ) {
-    if (!hasPermission(req.user.roleKey as RoleKey, req.user.permissions, PERMISSIONS.USERS_MANAGE)) {
-      throw new ForbiddenException('Solo Arturo y Chacho gestionan usuarios');
-    }
+    this.assertUsersManage(req.user);
     const users = await this.prisma.user.findMany({
       where: { organizationId: tenantIdOf(req.user) },
       select: {
@@ -88,15 +113,8 @@ export class UsersController {
     @Req() req: { user: { id: string; roleKey: string; permissions: string[] } },
     @Body() dto: CreateUserDto,
   ) {
-    if (!hasPermission(req.user.roleKey as RoleKey, req.user.permissions, PERMISSIONS.USERS_MANAGE)) {
-      throw new ForbiddenException();
-    }
-    if (!ALL_ROLES.includes(dto.roleKey as RoleKey)) {
-      throw new ForbiddenException('Rol inválido');
-    }
-    if (dto.roleKey === 'super_admin' && req.user.roleKey !== 'super_admin') {
-      throw new ForbiddenException('Solo super_admin puede otorgar ese rol');
-    }
+    this.assertUsersManage(req.user);
+    this.assertAssignableRole(req.user.roleKey, dto.roleKey);
     const passwordHash = await bcrypt.hash(dto.password, 12);
     const actor = await this.prisma.user.findUnique({
       where: { id: req.user.id },
@@ -104,6 +122,8 @@ export class UsersController {
     });
     const orgId = actor?.organizationId || 'org_arta_internal';
     await assertUserSeatAvailable(this.prisma, orgId);
+    const allowed = new Set(ASSIGNABLE_PERMISSIONS as string[]);
+    const permissions = (dto.permissions || []).filter((p) => allowed.has(p));
     return this.prisma.user.create({
       data: {
         email: dto.email.toLowerCase(),
@@ -111,6 +131,7 @@ export class UsersController {
         title: dto.title,
         roleKey: dto.roleKey,
         entities: dto.entities,
+        permissions,
         passwordHash,
         active: true,
         organizationId: orgId,
@@ -125,6 +146,7 @@ export class UsersController {
         title: true,
         roleKey: true,
         entities: true,
+        permissions: true,
         active: true,
         organizationId: true,
       },
@@ -133,26 +155,34 @@ export class UsersController {
 
   @Get('roles')
   roles(@Req() req: { user: { roleKey: string; permissions: string[] } }) {
-    if (!hasPermission(req.user.roleKey as RoleKey, req.user.permissions, PERMISSIONS.USERS_MANAGE)) {
-      throw new ForbiddenException();
-    }
-    return ALL_ROLES.map((r) => ({ key: r, label: ROLE_LABELS[r] }));
+    this.assertUsersManage(req.user);
+    const keys =
+      req.user.roleKey === 'super_admin' ? ALL_ROLES : ALL_ROLES.filter((r) => r !== 'super_admin');
+    return keys.map((r) => ({ key: r, label: ROLE_LABELS[r] }));
   }
 
   @Get('permissions/catalog')
   permissionsCatalog(@Req() req: { user: { roleKey: string; permissions: string[] } }) {
-    if (!hasPermission(req.user.roleKey as RoleKey, req.user.permissions, PERMISSIONS.USERS_MANAGE)) {
-      throw new ForbiddenException();
-    }
-    return ASSIGNABLE_PERMISSIONS.map((key) => ({ key, label: key }));
+    this.assertUsersManage(req.user);
+    return ASSIGNABLE_PERMISSIONS.map((key) => ({
+      key,
+      label: key
+        .split('.')
+        .map((p) => p.charAt(0).toUpperCase() + p.slice(1))
+        .join(' · '),
+    }));
   }
 
   @Patch(':id')
   async update(
-    @Req() req: { user: { roleKey: string; permissions: string[]; organizationId?: string | null } },
+    @Req()
+    req: {
+      user: { id: string; roleKey: string; permissions: string[]; organizationId?: string | null };
+    },
     @Param('id') id: string,
     @Body()
     body: {
+      email?: string;
       fullName?: string;
       title?: string;
       roleKey?: string;
@@ -162,23 +192,22 @@ export class UsersController {
       permissions?: string[];
     },
   ) {
-    if (!hasPermission(req.user.roleKey as RoleKey, req.user.permissions, PERMISSIONS.USERS_MANAGE)) {
-      throw new ForbiddenException();
-    }
+    this.assertUsersManage(req.user);
     const target = await this.prisma.user.findUnique({
       where: { id },
-      select: { organizationId: true },
+      select: { organizationId: true, roleKey: true },
     });
     if (!target) throw new NotFoundException('Usuario no encontrado');
     assertSameTenant(req.user, target.organizationId);
-    if (body.roleKey) {
-      if (!ALL_ROLES.includes(body.roleKey as RoleKey)) {
-        throw new ForbiddenException('Rol inválido');
-      }
-      if (body.roleKey === 'super_admin' && req.user.roleKey !== 'super_admin') {
-        throw new ForbiddenException('Solo super_admin puede otorgar ese rol');
-      }
+    if (body.roleKey) this.assertAssignableRole(req.user.roleKey, body.roleKey);
+    if (
+      target.roleKey === 'super_admin' &&
+      req.user.roleKey !== 'super_admin' &&
+      (body.roleKey || body.active === false || body.permissions)
+    ) {
+      throw new ForbiddenException('No puedes modificar un super_admin');
     }
+
     const data: Record<string, unknown> = {
       fullName: body.fullName,
       title: body.title,
@@ -186,6 +215,9 @@ export class UsersController {
       entities: body.entities,
       active: body.active,
     };
+    if (body.email?.trim()) {
+      data.email = body.email.trim().toLowerCase();
+    }
     if (body.permissions) {
       const allowed = new Set(ASSIGNABLE_PERMISSIONS as string[]);
       data.permissions = body.permissions.filter((p) => allowed.has(p));
@@ -193,7 +225,7 @@ export class UsersController {
     if (body.password && body.password.length >= 6) {
       data.passwordHash = await bcrypt.hash(body.password, 12);
     }
-    return this.prisma.user.update({
+    const updated = await this.prisma.user.update({
       where: { id },
       data,
       select: {
@@ -207,6 +239,64 @@ export class UsersController {
         active: true,
       },
     });
+    if (body.roleKey && target.organizationId) {
+      await this.prisma.orgMembership.updateMany({
+        where: { userId: id, organizationId: target.organizationId },
+        data: { roleKey: body.roleKey },
+      });
+    }
+    if (body.password || body.active === false) {
+      await this.prisma.userSession.updateMany({
+        where: { userId: id, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+    }
+    return { ...updated, roleLabel: ROLE_LABELS[updated.roleKey as RoleKey] ?? updated.roleKey };
+  }
+
+  /**
+   * Eliminar acceso: desactiva + cierra sesiones.
+   * Conserva el row (historial de auditoría / tareas).
+   */
+  @Delete(':id')
+  async remove(
+    @Req()
+    req: {
+      user: { id: string; roleKey: string; permissions: string[]; organizationId?: string | null };
+    },
+    @Param('id') id: string,
+  ) {
+    this.assertUsersManage(req.user);
+    if (id === req.user.id) {
+      throw new ForbiddenException('No puedes eliminarte a ti mismo');
+    }
+    const target = await this.prisma.user.findUnique({
+      where: { id },
+      select: { organizationId: true, roleKey: true, fullName: true },
+    });
+    if (!target) throw new NotFoundException('Usuario no encontrado');
+    assertSameTenant(req.user, target.organizationId);
+    if (target.roleKey === 'super_admin' && req.user.roleKey !== 'super_admin') {
+      throw new ForbiddenException('No puedes eliminar un super_admin');
+    }
+    await this.prisma.user.update({
+      where: { id },
+      data: { active: false },
+    });
+    await this.prisma.userSession.updateMany({
+      where: { userId: id, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+    await this.prisma.auditLog.create({
+      data: {
+        userId: req.user.id,
+        action: 'user.deactivate',
+        resource: 'User',
+        resourceId: id,
+        metaJson: { fullName: target.fullName },
+      },
+    });
+    return { ok: true, id, active: false };
   }
 
   @Get('me/summary')

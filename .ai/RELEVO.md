@@ -6,20 +6,19 @@
 
 ## Hecho en este turno
 
-**Feedback Arturo (2ª ronda) — Excel multi-hoja, checklists, tareas:**
+**Usuarios CRUD dinámico (solo Directores Generales Arturo / José Luis):**
 
-1. **Corrida + Campaña Excel:** SheetEditor con pestañas multi-hoja (+ Hoja / Renombrar), flush al cambiar de hoja, descarga .xlsx completo. Plantilla corrida: Resumen / Ingresos / Egresos / Notas. Campaña: Campaña / Medios / Notas. variant `finance`.
-2. **Checklists:** modo por defecto = Formulario (claro). «Sobre el PDF» opcional; overlays semitransparentes, checks más chicos, sin `max-height: 70vh` que cortaba el PDF.
-3. **Tareas:** tabs Mis tareas / Que pedí / Todas las tareas. `seenAt` en TaskAssignment (abrir Mis tareas = visto). Badge Sin abrir / Vio · sin avance. `convenios` (Marisol/Leida) ven Todas. Migración `20260831220000_task_seen_at`.
+1. **API** (`users.controller`): create con permisos opcionales; PATCH email/nombre/cargo/rol/entidades/activo/password/permisos; sync `orgMembership`; revoca sesiones al cambiar password o desactivar; **DELETE** = soft-delete (`active: false`) + sesiones + auditLog; no auto-eliminarse ni tocar `super_admin` sin serlo; catálogo de roles oculta `super_admin` a no–super_admin.
+2. **UI** `/users`: gate `users.manage` / dir_general; crear o invitar; directorio con Editar/Eliminar; panel editar completo (datos + entidades + activo + password opcional + permisos extra); mensaje «Solo dirección» si no aplica.
 
 ## A medias
 
-Nada.
+Nada (pendiente deploy + smoke en prod).
 
 ## Siguiente paso
 
-1. Deploy + smoke: Corrida «Nueva hoja» (4 pestañas), checklist formulario, Tareas seguimiento.
-2. Que Arturo hard-refresh.
+1. Deploy Hetzner + hard-refresh Arturo/José Luis en `/users`.
+2. Smoke: crear usuario, editar rol/entidades, eliminar (desactivar), verificar que logística no ve el menú.
 
 ## No tocar
 
