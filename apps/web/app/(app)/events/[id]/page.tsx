@@ -1349,12 +1349,14 @@ function EventDetailInner() {
             closed={closed}
             tasks={event.tasks || []}
             directory={directory}
+            currentUserId={user?.id}
             taskForm={taskForm}
             setTaskForm={setTaskForm}
             onCreateTask={createTask}
             onSetTaskStatus={setTaskStatus}
             onReassignTask={reassignTask}
             onSetTaskDue={setTaskDue}
+            onTaskUpdated={patchTaskInPlace}
           />
         )}
 

@@ -40,6 +40,7 @@ enum PoStatus {
 enum TaskStatus {
   OPEN
   IN_PROGRESS
+  PENDING_APPROVAL
   DONE
   BLOCKED
 }
@@ -172,6 +173,10 @@ model User {
   purchaseOrders      PurchaseOrder[]            @relation("PoCreator")
   poAuthorizations    PurchaseOrder[]            @relation("PoAuthorizer")
   paymentsUploaded    PaymentProof[]
+  taskEvidences       TaskEvidence[]
+  taskActivities      TaskActivity[]
+  tasksApproved       TaskAssignment[]           @relation("TaskApprover")
+  tasksRejected       TaskAssignment[]           @relation("TaskRejecter")
   sessions            UserSession[]
   handoffs            AuthHandoff[]
   memberships         OrgMembership[]
@@ -460,13 +465,54 @@ model TaskAssignment {
   dueAt          DateTime?
   /// Cuando el asignado abrió «Mis tareas» / vio la actividad
   seenAt         DateTime?
+  /// Entrega con evidencia — espera visto bueno de quien pidió
+  submittedAt    DateTime?
+  completionNote String?
+  approvedById   String?
+  approvedBy     User?         @relation("TaskApprover", fields: [approvedById], references: [id])
+  approvedAt     DateTime?
+  rejectedById   String?
+  rejectedBy     User?         @relation("TaskRejecter", fields: [rejectedById], references: [id])
+  rejectedAt     DateTime?
+  rejectionNote  String?
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
+
+  evidences TaskEvidence[]
+  activities TaskActivity[]
 
   @@index([assigneeId, status])
   @@index([organizationId, status])
   @@index([eventId])
   @@index([createdById, status])
+}
+
+model TaskEvidence {
+  id           String         @id @default(cuid())
+  taskId       String
+  task         TaskAssignment @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  fileUrl      String
+  label        String?
+  note         String?
+  uploadedById String?
+  uploadedBy   User?          @relation(fields: [uploadedById], references: [id])
+  createdAt    DateTime       @default(now())
+
+  @@index([taskId])
+}
+
+model TaskActivity {
+  id        String         @id @default(cuid())
+  taskId    String
+  task      TaskAssignment @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  actorId   String?
+  actor     User?          @relation(fields: [actorId], references: [id])
+  action    String
+  detail    String?
+  metaJson  Json?
+  createdAt DateTime       @default(now())
+
+  @@index([taskId, createdAt])
 }
 
 // ─── Notificaciones dentro de la plataforma ──────────────────────────────────

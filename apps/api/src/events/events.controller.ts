@@ -154,7 +154,23 @@ export class EventsController {
         financeRuns: true,
         campaign: true,
         ticketingSetups: true,
-        tasks: { include: { assignee: { select: { id: true, fullName: true } } } },
+        tasks: {
+          include: {
+            assignee: { select: { id: true, fullName: true } },
+            createdBy: { select: { id: true, fullName: true } },
+            approvedBy: { select: { id: true, fullName: true } },
+            rejectedBy: { select: { id: true, fullName: true } },
+            evidences: {
+              include: { uploadedBy: { select: { id: true, fullName: true } } },
+              orderBy: { createdAt: 'asc' },
+            },
+            activities: {
+              include: { actor: { select: { id: true, fullName: true } } },
+              orderBy: { createdAt: 'asc' },
+              take: 80,
+            },
+          },
+        },
         sponsors: { orderBy: { createdAt: 'desc' } },
         files: { orderBy: { createdAt: 'desc' } },
       },

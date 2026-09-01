@@ -18,21 +18,14 @@ import {
 import { api } from '@/lib/api';
 import { useStickyState } from '@/lib/use-sticky-state';
 import { useUser } from '@/lib/user-context';
-
-type Task = {
-  id: string;
-  title: string;
-  module?: string | null;
-  detail?: string | null;
-  status: string;
-  dueAt?: string | null;
-  seenAt?: string | null;
-  assigneeId?: string | null;
-  assignee?: { id: string; fullName: string } | null;
-  createdById?: string | null;
-  createdBy?: { id: string; fullName: string } | null;
-  event?: { id: string; name: string; status: string } | null;
-};
+import { TaskApprovalActions } from '@/components/tasks/TaskApprovalActions';
+import { TaskActivityTimeline } from '@/components/tasks/TaskActivityTimeline';
+import { TaskDeliveryModal } from '@/components/tasks/TaskDeliveryModal';
+import {
+  TASK_STATUS_LABEL,
+  taskNeedsApproval,
+  type TaskRecord,
+} from '@/components/tasks/task-types';
 
 type DirUser = { id: string; fullName: string; title?: string | null; roleKey?: string };
 type EventRow = { id: string; name: string; status: string };
@@ -73,12 +66,7 @@ const QUICK_FILTERS: Array<{ key: QuickFilter; label: string }> = [
   { key: 'all', label: 'Todas' },
 ];
 
-const STATUS_LABEL: Record<string, string> = {
-  OPEN: 'Abierta',
-  IN_PROGRESS: 'En curso',
-  BLOCKED: 'Bloqueada',
-  DONE: 'Hecha',
-};
+const STATUS_LABEL = TASK_STATUS_LABEL;
 
 const emptyForm = { title: '', detail: '', module: '', assigneeId: '', eventId: '', dueAt: '' };
 
@@ -105,7 +93,7 @@ function daysBetween(fromKey: string, toKey: string) {
   return Math.round((Date.parse(`${toKey}T00:00:00Z`) - Date.parse(`${fromKey}T00:00:00Z`)) / 86400000);
 }
 
-function bucketOf(t: Task, today: string): Bucket {
+function bucketOf(t: TaskRecord, today: string): Bucket {
   if (t.status === 'DONE') return 'done';
   if (!t.dueAt) return 'someday';
   const diff = daysBetween(today, t.dueAt.slice(0, 10));
@@ -115,12 +103,13 @@ function bucketOf(t: Task, today: string): Bucket {
   return 'later';
 }
 
-function isOverdue(t: Task, today: string) {
+function isOverdue(t: TaskRecord, today: string) {
   return t.status !== 'DONE' && !!t.dueAt && bucketOf(t, today) === 'overdue';
 }
 
-function engagementLabel(t: Task): { label: string; tone: string } | null {
+function engagementLabel(t: TaskRecord): { label: string; tone: string } | null {
   if (t.status === 'DONE') return null;
+  if (t.status === 'PENDING_APPROVAL') return { label: 'Por aprobar', tone: 'warn' };
   if (t.status === 'BLOCKED') return { label: 'Bloqueada', tone: 'danger' };
   if (t.status === 'IN_PROGRESS') return { label: 'En curso', tone: 'warn' };
   if (!t.assigneeId) return { label: 'Sin asignar', tone: 'muted-tone' };
@@ -140,7 +129,7 @@ export default function TasksPage() {
   const [view, setView] = useStickyState<View>('tasks.view', canSeeTeam ? 'requested' : 'mine');
   const [quick, setQuick] = useStickyState<QuickFilter>('tasks.quick', 'open');
   const [group, setGroup] = useStickyState<GroupMode>('tasks.group', 'due');
-  const [rows, setRows] = useState<Task[]>([]);
+  const [rows, setRows] = useState<TaskRecord[]>([]);
   const [directory, setDirectory] = useState<DirUser[]>([]);
   const [events, setEvents] = useState<EventRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -154,6 +143,8 @@ export default function TasksPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set(['done']));
+  const [deliveryTask, setDeliveryTask] = useState<TaskRecord | null>(null);
+  const [historyOpen, setHistoryOpen] = useState<Set<string>>(new Set());
   const titleRef = useRef<HTMLInputElement>(null);
   const today = todayKey();
 
@@ -164,7 +155,7 @@ export default function TasksPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      setRows(await api<Task[]>(VIEW_ENDPOINT[view]));
+      setRows(await api<TaskRecord[]>(VIEW_ENDPOINT[view]));
       setSelected(new Set());
     } catch (e) {
       setError(e instanceof Error ? e.message : 'No se pudieron cargar las tareas');
@@ -190,7 +181,7 @@ export default function TasksPage() {
   }, [entity]);
 
   /** Sustituye la fila en memoria — nada de recargar 300 tareas por un clic. */
-  const patchRow = useCallback((task: Task) => {
+  const patchRow = useCallback((task: TaskRecord) => {
     setRows((prev) => prev.map((r) => (r.id === task.id ? task : r)));
   }, []);
 
@@ -223,7 +214,7 @@ export default function TasksPage() {
       return [{ key: 'all', label: `${VIEW_LABEL[view]} · ${filtered.length}`, tasks: filtered }];
     }
     if (group === 'assignee') {
-      const map = new Map<string, { key: string; label: string; tasks: Task[] }>();
+      const map = new Map<string, { key: string; label: string; tasks: TaskRecord[] }>();
       for (const t of filtered) {
         const key = t.assigneeId || 'none';
         const label = t.assignee?.fullName || 'Sin asignar';
@@ -235,7 +226,7 @@ export default function TasksPage() {
         (a, b) => b.tasks.length - a.tasks.length || a.label.localeCompare(b.label, 'es'),
       );
     }
-    const byBucket = new Map<Bucket, Task[]>();
+    const byBucket = new Map<Bucket, TaskRecord[]>();
     for (const t of filtered) {
       const b = bucketOf(t, today);
       byBucket.set(b, [...(byBucket.get(b) || []), t]);
@@ -263,11 +254,36 @@ export default function TasksPage() {
     const prev = rows;
     setRows((rs) => rs.map((r) => (r.id === id ? { ...r, status: next } : r)));
     try {
-      patchRow(await api<Task>(`/tasks/${id}`, { method: 'PATCH', body: JSON.stringify({ status: next }) }));
+      patchRow(await api<TaskRecord>(`/tasks/${id}`, { method: 'PATCH', body: JSON.stringify({ status: next }) }));
     } catch (e) {
       setRows(prev);
       setError(e instanceof Error ? e.message : 'No se pudo actualizar la tarea');
     }
+  }
+
+  function handleCompleteClick(t: TaskRecord) {
+    const done = t.status === 'DONE';
+    if (done || t.status === 'PENDING_APPROVAL') {
+      void setTaskStatus(t.id, 'OPEN');
+      return;
+    }
+    if (taskNeedsApproval(t) && t.assigneeId === user?.id) {
+      setDeliveryTask(t);
+      return;
+    }
+    void setTaskStatus(t.id, 'DONE');
+  }
+
+  async function bulkMarkDone() {
+    const ids = [...selected];
+    const blocked = rows.filter(
+      (r) => ids.includes(r.id) && taskNeedsApproval(r) && r.assigneeId === user?.id,
+    );
+    if (blocked.length) {
+      setError('Varias tareas piden entrega con evidencia — complétalas una por una');
+      return;
+    }
+    await bulkPatch({ status: 'DONE' }, 'marcadas como hechas');
   }
 
   async function reassign(id: string, assigneeId: string) {
@@ -283,7 +299,7 @@ export default function TasksPage() {
     );
     try {
       patchRow(
-        await api<Task>(`/tasks/${id}`, {
+        await api<TaskRecord>(`/tasks/${id}`, {
           method: 'PATCH',
           body: JSON.stringify({ assigneeId: assigneeId || null }),
         }),
@@ -301,7 +317,7 @@ export default function TasksPage() {
     setRows((rs) => rs.map((r) => (r.id === id ? { ...r, dueAt: dueAt || null } : r)));
     try {
       patchRow(
-        await api<Task>(`/tasks/${id}`, {
+        await api<TaskRecord>(`/tasks/${id}`, {
           method: 'PATCH',
           body: JSON.stringify({ dueAt: dueAt || null }),
         }),
@@ -313,7 +329,7 @@ export default function TasksPage() {
   }
 
   /** ¿La tarea recién creada pertenece a la vista abierta? */
-  function belongsToView(t: Task) {
+  function belongsToView(t: TaskRecord) {
     if (view === 'team') return true;
     if (view === 'mine') return t.assigneeId === user?.id;
     return t.createdById === user?.id && t.assigneeId !== user?.id;
@@ -328,7 +344,7 @@ export default function TasksPage() {
     setCreating(true);
     setError('');
     try {
-      const created = await api<Task>('/tasks', {
+      const created = await api<TaskRecord>('/tasks', {
         method: 'POST',
         body: JSON.stringify({
           title: form.title.trim(),
@@ -361,7 +377,7 @@ export default function TasksPage() {
     });
   }
 
-  function toggleGroupSelection(tasks: Task[], checked: boolean) {
+  function toggleGroupSelection(tasks: TaskRecord[], checked: boolean) {
     setSelected((prev) => {
       const next = new Set(prev);
       for (const t of tasks) {
@@ -377,9 +393,9 @@ export default function TasksPage() {
     setError('');
     const ids = [...selected];
     const results = await Promise.allSettled(
-      ids.map((id) => api<Task>(`/tasks/${id}`, { method: 'PATCH', body: JSON.stringify(body) })),
+      ids.map((id) => api<TaskRecord>(`/tasks/${id}`, { method: 'PATCH', body: JSON.stringify(body) })),
     );
-    const ok: Task[] = [];
+    const ok: TaskRecord[] = [];
     let failed = 0;
     for (const r of results) {
       if (r.status === 'fulfilled') ok.push(r.value);
@@ -403,7 +419,7 @@ export default function TasksPage() {
       <div className="stack page-workspace">
         <PageHeader
           description={`Todo lo que el equipo tiene pendiente en ${entity === 'ARTA' ? 'Arta Producciones' : 'Auditorio Arema'}. Escribe una tarea y pulsa Enter para asignarla.`}
-          hint="Al abrir «Mis tareas» el sistema marca la actividad como vista. Si no cambia el status, quien la pidió verá «Vio · sin avance»."
+          hint="Al entregar una tarea que pediste a otra persona, el responsable sube evidencia (nota + archivo) y tú la apruebas o rechazas en «Que pedí». Todo queda en el historial."
         >
           <ActionLink href="/events" variant="ghost">
             Ir a eventos
@@ -646,7 +662,7 @@ export default function TasksPage() {
                 className="btn btn-sm"
                 type="button"
                 disabled={bulkBusy}
-                onClick={() => bulkPatch({ status: 'DONE' }, 'marcadas como hechas')}
+                onClick={() => void bulkMarkDone()}
               >
                 Marcar hechas
               </button>
@@ -754,75 +770,129 @@ export default function TasksPage() {
                           const overdue = isOverdue(t, today);
                           const eng = engagementLabel(t);
                           const done = t.status === 'DONE';
+                          const pending = t.status === 'PENDING_APPROVAL';
+                          const needsDelivery =
+                            taskNeedsApproval(t) && t.assigneeId === user?.id && view === 'mine';
+                          const canReview =
+                            pending &&
+                            (t.createdById === user?.id || user?.roleKey === 'dir_general') &&
+                            (view === 'requested' || view === 'team');
                           return (
-                            <li
-                              key={t.id}
-                              className={`task-row ${done ? 'task-row--done' : ''} ${overdue ? 'task-row--overdue' : ''} ${selected.has(t.id) ? 'task-row--selected' : ''}`}
-                            >
-                              <SelectCheck
-                                checked={selected.has(t.id)}
-                                onChange={() => toggleSelected(t.id)}
-                                label={`Seleccionar ${t.title}`}
-                              />
-                              <button
-                                type="button"
-                                className={`task-row__check ${done ? 'is-done' : ''}`}
-                                aria-label={done ? `Reabrir ${t.title}` : `Marcar ${t.title} como hecha`}
-                                title={done ? 'Reabrir' : 'Marcar hecha'}
-                                onClick={() => setTaskStatus(t.id, done ? 'OPEN' : 'DONE')}
+                            <li key={t.id} className="task-row-wrap">
+                              <div
+                                className={`task-row ${done ? 'task-row--done' : ''} ${overdue ? 'task-row--overdue' : ''} ${pending ? 'task-row--pending' : ''} ${selected.has(t.id) ? 'task-row--selected' : ''}`}
                               >
-                                {done ? '✓' : ''}
-                              </button>
-                              <div className="task-row__main">
-                                <div className="task-row__title">{t.title}</div>
-                                <div className="task-row__meta muted kpi-sub">
-                                  {t.event ? (
-                                    <Link href={`/events/${t.event.id}?tab=tasks`}>{t.event.name}</Link>
-                                  ) : (
-                                    <span>Sin evento</span>
-                                  )}
-                                  {t.module ? <span>· {t.module}</span> : null}
-                                  {t.createdBy ? <span>· pidió {t.createdBy.fullName}</span> : null}
-                                  {eng ? <span className={`badge ${eng.tone}`}>{eng.label}</span> : null}
-                                  {done ? <span className="badge ok">{STATUS_LABEL.DONE}</span> : null}
+                                <SelectCheck
+                                  checked={selected.has(t.id)}
+                                  onChange={() => toggleSelected(t.id)}
+                                  label={`Seleccionar ${t.title}`}
+                                />
+                                <button
+                                  type="button"
+                                  className={`task-row__check ${done ? 'is-done' : ''} ${pending ? 'is-done' : ''}`}
+                                  aria-label={
+                                    done || pending
+                                      ? `Reabrir ${t.title}`
+                                      : needsDelivery
+                                        ? `Entregar ${t.title}`
+                                        : `Marcar ${t.title} como hecha`
+                                  }
+                                  title={
+                                    done || pending
+                                      ? 'Reabrir'
+                                      : needsDelivery
+                                        ? 'Entregar con evidencia'
+                                        : 'Marcar hecha'
+                                  }
+                                  onClick={() => handleCompleteClick(t)}
+                                >
+                                  {done || pending ? '✓' : needsDelivery ? '↑' : ''}
+                                </button>
+                                <div className="task-row__main">
+                                  <div className="task-row__title">{t.title}</div>
+                                  <div className="task-row__meta muted kpi-sub">
+                                    {t.event ? (
+                                      <Link href={`/events/${t.event.id}?tab=tasks`}>{t.event.name}</Link>
+                                    ) : (
+                                      <span>Sin evento</span>
+                                    )}
+                                    {t.module ? <span>· {t.module}</span> : null}
+                                    {t.createdBy ? <span>· pidió {t.createdBy.fullName}</span> : null}
+                                    {eng ? <span className={`badge ${eng.tone}`}>{eng.label}</span> : null}
+                                    {done ? <span className="badge ok">{STATUS_LABEL.DONE}</span> : null}
+                                    {pending ? <span className="badge warn">{STATUS_LABEL.PENDING_APPROVAL}</span> : null}
+                                  </div>
+                                  {t.detail ? <div className="task-row__detail muted">{t.detail}</div> : null}
+                                  {t.rejectionNote ? (
+                                    <div className="task-row__detail" style={{ color: 'var(--danger)' }}>
+                                      Corrección: {t.rejectionNote}
+                                    </div>
+                                  ) : null}
                                 </div>
-                                {t.detail ? <div className="task-row__detail muted">{t.detail}</div> : null}
+                                <AssigneeSelect
+                                  value={t.assigneeId || ''}
+                                  directory={directory}
+                                  onChange={(id) => reassign(t.id, id)}
+                                  label={`Responsable de ${t.title}`}
+                                />
+                                <input
+                                  className={`field field--date ${overdue ? 'field--overdue' : ''}`}
+                                  type="date"
+                                  aria-label={`Vencimiento de ${t.title}`}
+                                  value={toDateInput(t.dueAt)}
+                                  onChange={(e) => setDue(t.id, e.target.value)}
+                                />
+                                <div className="task-row__actions row row--tight">
+                                  {needsDelivery && !done && !pending ? (
+                                    <button
+                                      className="btn btn-sm"
+                                      type="button"
+                                      onClick={() => setDeliveryTask(t)}
+                                    >
+                                      Entregar
+                                    </button>
+                                  ) : null}
+                                  {!done && !pending && t.status !== 'IN_PROGRESS' ? (
+                                    <button
+                                      className="btn ghost btn-sm"
+                                      type="button"
+                                      onClick={() => setTaskStatus(t.id, 'IN_PROGRESS')}
+                                    >
+                                      En curso
+                                    </button>
+                                  ) : null}
+                                  {!done && !pending ? (
+                                    <button
+                                      className={`btn ghost btn-sm ${t.status === 'BLOCKED' ? '' : 'btn-danger'}`}
+                                      type="button"
+                                      onClick={() =>
+                                        setTaskStatus(t.id, t.status === 'BLOCKED' ? 'OPEN' : 'BLOCKED')
+                                      }
+                                    >
+                                      {t.status === 'BLOCKED' ? 'Desbloquear' : 'Bloquear'}
+                                    </button>
+                                  ) : null}
+                                </div>
                               </div>
-                              <AssigneeSelect
-                                value={t.assigneeId || ''}
-                                directory={directory}
-                                onChange={(id) => reassign(t.id, id)}
-                                label={`Responsable de ${t.title}`}
-                              />
-                              <input
-                                className={`field field--date ${overdue ? 'field--overdue' : ''}`}
-                                type="date"
-                                aria-label={`Vencimiento de ${t.title}`}
-                                value={toDateInput(t.dueAt)}
-                                onChange={(e) => setDue(t.id, e.target.value)}
-                              />
-                              <div className="task-row__actions row row--tight">
-                                {!done && t.status !== 'IN_PROGRESS' ? (
-                                  <button
-                                    className="btn ghost btn-sm"
-                                    type="button"
-                                    onClick={() => setTaskStatus(t.id, 'IN_PROGRESS')}
-                                  >
-                                    En curso
-                                  </button>
-                                ) : null}
-                                {!done ? (
-                                  <button
-                                    className={`btn ghost btn-sm ${t.status === 'BLOCKED' ? '' : 'btn-danger'}`}
-                                    type="button"
-                                    onClick={() =>
-                                      setTaskStatus(t.id, t.status === 'BLOCKED' ? 'OPEN' : 'BLOCKED')
+                              {(canReview || (t.activities?.length ?? 0) > 0) ? (
+                                <div className="task-row__extras">
+                                  {canReview ? (
+                                    <TaskApprovalActions task={t} onDone={patchRow} />
+                                  ) : null}
+                                  <TaskActivityTimeline
+                                    task={t}
+                                    expanded={historyOpen.has(t.id)}
+                                    onToggle={() =>
+                                      setHistoryOpen((prev) => {
+                                        const next = new Set(prev);
+                                        if (next.has(t.id)) next.delete(t.id);
+                                        else next.add(t.id);
+                                        return next;
+                                      })
                                     }
-                                  >
-                                    {t.status === 'BLOCKED' ? 'Desbloquear' : 'Bloquear'}
-                                  </button>
-                                ) : null}
-                              </div>
+                                  />
+                                </div>
+                              ) : null}
                             </li>
                           );
                         })}
@@ -835,6 +905,20 @@ export default function TasksPage() {
           </>
         )}
       </div>
+      {deliveryTask ? (
+        <TaskDeliveryModal
+          task={deliveryTask}
+          onClose={() => setDeliveryTask(null)}
+          onDone={(task) => {
+            patchRow(task);
+            setMsg(
+              task.status === 'PENDING_APPROVAL'
+                ? 'Entrega enviada — espera aprobación de quien pidió la tarea'
+                : 'Tarea completada',
+            );
+          }}
+        />
+      ) : null}
     </AppShell>
   );
 }

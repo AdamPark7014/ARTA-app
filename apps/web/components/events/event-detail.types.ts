@@ -102,10 +102,24 @@ export type Task = {
   detail?: string | null;
   status: string;
   dueAt?: string | null;
+  seenAt?: string | null;
+  submittedAt?: string | null;
+  completionNote?: string | null;
+  rejectionNote?: string | null;
   assigneeId?: string | null;
   assignee?: { id: string; fullName: string } | null;
   createdById?: string | null;
   createdBy?: { id: string; fullName: string } | null;
+  approvedBy?: { id: string; fullName: string } | null;
+  rejectedBy?: { id: string; fullName: string } | null;
+  evidences?: Array<{ id: string; fileUrl: string; label?: string | null }>;
+  activities?: Array<{
+    id: string;
+    action: string;
+    detail?: string | null;
+    createdAt: string;
+    actor?: { id: string; fullName: string } | null;
+  }>;
 };
 
 /** Etiqueta de `EventFile.module` que usa la sección de campaña. */

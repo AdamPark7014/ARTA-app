@@ -4,6 +4,10 @@ import { useMemo, useRef, useState } from 'react';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { AssigneeSelect } from '@/components/ui/AssigneeSelect';
 import { FormGrid } from '@/components/ui/PageChrome';
+import { TaskApprovalActions } from '@/components/tasks/TaskApprovalActions';
+import { TaskActivityTimeline } from '@/components/tasks/TaskActivityTimeline';
+import { TaskDeliveryModal } from '@/components/tasks/TaskDeliveryModal';
+import { taskNeedsApproval, TASK_STATUS_LABEL } from '@/components/tasks/task-types';
 import type { DirUser, Task } from '@/components/events/event-detail.types';
 
 type TaskForm = { title: string; module: string; assigneeId: string; dueAt: string; detail: string };
@@ -12,14 +16,14 @@ type EventTasksPanelProps = {
   closed: boolean;
   tasks: Task[];
   directory: DirUser[];
+  currentUserId?: string;
   taskForm: TaskForm;
   setTaskForm: (form: TaskForm) => void;
   onCreateTask: () => Promise<void>;
   onSetTaskStatus: (taskId: string, status: string) => Promise<void>;
-  /** Reasignar sin salir del evento (junta 2026-08-28) */
   onReassignTask?: (taskId: string, assigneeId: string) => Promise<void>;
-  /** Cambiar el vencimiento desde la propia lista */
   onSetTaskDue?: (taskId: string, dueAt: string) => Promise<void>;
+  onTaskUpdated?: (task: Task) => void;
 };
 
 function todayKey() {
@@ -27,7 +31,6 @@ function todayKey() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-/** Las fechas viajan como medianoche UTC: se compara la parte YYYY-MM-DD. */
 function dueKey(iso?: string | null) {
   return iso && /^\d{4}-\d{2}-\d{2}/.test(iso) ? iso.slice(0, 10) : '';
 }
@@ -36,16 +39,20 @@ export function EventTasksPanel({
   closed,
   tasks,
   directory,
+  currentUserId,
   taskForm,
   setTaskForm,
   onCreateTask,
   onSetTaskStatus,
   onReassignTask,
   onSetTaskDue,
+  onTaskUpdated,
 }: EventTasksPanelProps) {
   const [advanced, setAdvanced] = useState(false);
   const [showDone, setShowDone] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [deliveryTask, setDeliveryTask] = useState<Task | null>(null);
+  const [historyOpen, setHistoryOpen] = useState<Set<string>>(new Set());
   const titleRef = useRef<HTMLInputElement>(null);
   const today = todayKey();
 
@@ -75,67 +82,130 @@ export function EventTasksPanel({
     }
   }
 
+  function handleComplete(t: Task) {
+    const isDone = t.status === 'DONE';
+    if (isDone || t.status === 'PENDING_APPROVAL') {
+      void onSetTaskStatus(t.id, 'OPEN');
+      return;
+    }
+    if (taskNeedsApproval(t) && t.assigneeId === currentUserId) {
+      setDeliveryTask(t);
+      return;
+    }
+    void onSetTaskStatus(t.id, 'DONE');
+  }
+
   function renderRow(t: Task) {
     const isDone = t.status === 'DONE';
+    const pendingApproval = t.status === 'PENDING_APPROVAL';
     const key = dueKey(t.dueAt);
-    const late = !isDone && !!key && key < today;
+    const late = !isDone && !pendingApproval && !!key && key < today;
+    const needsDelivery = taskNeedsApproval(t) && t.assigneeId === currentUserId;
+    const canReview =
+      pendingApproval && t.createdById === currentUserId && t.createdById !== t.assigneeId;
+
     return (
-      <li
-        key={t.id}
-        className={`task-row ${isDone ? 'task-row--done' : ''} ${late ? 'task-row--overdue' : ''}`}
-      >
-        <button
-          type="button"
-          className={`task-row__check ${isDone ? 'is-done' : ''}`}
-          disabled={closed}
-          aria-label={isDone ? `Reabrir ${t.title}` : `Marcar ${t.title} como hecha`}
-          title={isDone ? 'Reabrir' : 'Marcar hecha'}
-          onClick={() => onSetTaskStatus(t.id, isDone ? 'OPEN' : 'DONE')}
+      <li key={t.id} className="task-row-wrap">
+        <div
+          className={`task-row ${isDone ? 'task-row--done' : ''} ${late ? 'task-row--overdue' : ''} ${pendingApproval ? 'task-row--pending' : ''}`}
         >
-          {isDone ? '✓' : ''}
-        </button>
-        <div className="task-row__main">
-          <div className="task-row__title">{t.title}</div>
-          <div className="task-row__meta muted kpi-sub">
-            {t.module ? <span>{t.module}</span> : <span>Sin módulo</span>}
-            {t.createdBy ? <span>· pidió {t.createdBy.fullName}</span> : null}
-            {t.status === 'BLOCKED' ? <span className="badge danger">Bloqueada</span> : null}
-            {isDone ? <span className="badge ok">Hecha</span> : null}
+          <button
+            type="button"
+            className={`task-row__check ${isDone || pendingApproval ? 'is-done' : ''}`}
+            disabled={closed}
+            aria-label={
+              isDone || pendingApproval
+                ? `Reabrir ${t.title}`
+                : needsDelivery
+                  ? `Entregar ${t.title}`
+                  : `Marcar ${t.title} como hecha`
+            }
+            title={
+              isDone || pendingApproval
+                ? 'Reabrir'
+                : needsDelivery
+                  ? 'Entregar con evidencia'
+                  : 'Marcar hecha'
+            }
+            onClick={() => handleComplete(t)}
+          >
+            {isDone || pendingApproval ? '✓' : needsDelivery ? '↑' : ''}
+          </button>
+          <div className="task-row__main">
+            <div className="task-row__title">{t.title}</div>
+            <div className="task-row__meta muted kpi-sub">
+              {t.module ? <span>{t.module}</span> : <span>Sin módulo</span>}
+              {t.createdBy ? <span>· pidió {t.createdBy.fullName}</span> : null}
+              {t.status === 'BLOCKED' ? <span className="badge danger">Bloqueada</span> : null}
+              {pendingApproval ? (
+                <span className="badge warn">{TASK_STATUS_LABEL.PENDING_APPROVAL}</span>
+              ) : null}
+              {isDone ? <span className="badge ok">{TASK_STATUS_LABEL.DONE}</span> : null}
+            </div>
+            {t.detail ? <div className="task-row__detail muted">{t.detail}</div> : null}
+            {t.rejectionNote ? (
+              <div className="task-row__detail" style={{ color: 'var(--danger)' }}>
+                Corrección: {t.rejectionNote}
+              </div>
+            ) : null}
           </div>
-          {t.detail ? <div className="task-row__detail muted">{t.detail}</div> : null}
+          {onReassignTask && !closed ? (
+            <AssigneeSelect
+              value={t.assigneeId || ''}
+              directory={directory}
+              onChange={(id) => onReassignTask(t.id, id)}
+              label={`Responsable de ${t.title}`}
+            />
+          ) : (
+            <span className="task-row__who muted">{t.assignee?.fullName || 'Sin asignar'}</span>
+          )}
+          {onSetTaskDue && !closed ? (
+            <input
+              className={`field field--date ${late ? 'field--overdue' : ''}`}
+              type="date"
+              aria-label={`Vencimiento de ${t.title}`}
+              value={key}
+              onChange={(e) => onSetTaskDue(t.id, e.target.value)}
+            />
+          ) : (
+            <span className="muted kpi-sub">{key || '—'}</span>
+          )}
+          <div className="task-row__actions row row--tight">
+            {needsDelivery && !isDone && !pendingApproval && !closed ? (
+              <button className="btn btn-sm" type="button" onClick={() => setDeliveryTask(t)}>
+                Entregar
+              </button>
+            ) : null}
+            {!isDone && !pendingApproval && !closed ? (
+              <button
+                className={`btn ghost btn-sm ${t.status === 'BLOCKED' ? '' : 'btn-danger'}`}
+                type="button"
+                onClick={() => onSetTaskStatus(t.id, t.status === 'BLOCKED' ? 'OPEN' : 'BLOCKED')}
+              >
+                {t.status === 'BLOCKED' ? 'Desbloquear' : 'Bloquear'}
+              </button>
+            ) : null}
+          </div>
         </div>
-        {onReassignTask && !closed ? (
-          <AssigneeSelect
-            value={t.assigneeId || ''}
-            directory={directory}
-            onChange={(id) => onReassignTask(t.id, id)}
-            label={`Responsable de ${t.title}`}
-          />
-        ) : (
-          <span className="task-row__who muted">{t.assignee?.fullName || 'Sin asignar'}</span>
+        {(canReview || (t.activities?.length ?? 0) > 0) && (
+          <div className="task-row__extras">
+            {canReview && onTaskUpdated ? (
+              <TaskApprovalActions task={t} onDone={onTaskUpdated} />
+            ) : null}
+            <TaskActivityTimeline
+              task={t}
+              expanded={historyOpen.has(t.id)}
+              onToggle={() =>
+                setHistoryOpen((prev) => {
+                  const next = new Set(prev);
+                  if (next.has(t.id)) next.delete(t.id);
+                  else next.add(t.id);
+                  return next;
+                })
+              }
+            />
+          </div>
         )}
-        {onSetTaskDue && !closed ? (
-          <input
-            className={`field field--date ${late ? 'field--overdue' : ''}`}
-            type="date"
-            aria-label={`Vencimiento de ${t.title}`}
-            value={key}
-            onChange={(e) => onSetTaskDue(t.id, e.target.value)}
-          />
-        ) : (
-          <span className="muted kpi-sub">{key || '—'}</span>
-        )}
-        <div className="task-row__actions row row--tight">
-          {!isDone && !closed ? (
-            <button
-              className={`btn ghost btn-sm ${t.status === 'BLOCKED' ? '' : 'btn-danger'}`}
-              type="button"
-              onClick={() => onSetTaskStatus(t.id, t.status === 'BLOCKED' ? 'OPEN' : 'BLOCKED')}
-            >
-              {t.status === 'BLOCKED' ? 'Desbloquear' : 'Bloquear'}
-            </button>
-          ) : null}
-        </div>
       </li>
     );
   }
@@ -253,6 +323,17 @@ export function EventTasksPanel({
           )}
         </div>
       </div>
+
+      {deliveryTask && onTaskUpdated ? (
+        <TaskDeliveryModal
+          task={deliveryTask}
+          onClose={() => setDeliveryTask(null)}
+          onDone={(task) => {
+            onTaskUpdated(task);
+            setDeliveryTask(null);
+          }}
+        />
+      ) : null}
     </div>
   );
 }

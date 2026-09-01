@@ -370,6 +370,91 @@
   }
 }
 
+.task-row-wrap {
+  border-bottom: 1px solid var(--line);
+}
+
+.task-row-wrap:last-child {
+  border-bottom: 0;
+}
+
+.task-row-wrap .task-row {
+  border-bottom: 0;
+}
+
+.task-row__extras {
+  padding: 0 0.9rem 0.85rem 3.6rem;
+}
+
+.task-row--pending .task-row__check {
+  border-color: var(--warn);
+  color: var(--warn);
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.modal {
+  width: min(520px, 100%);
+  max-height: 90vh;
+  overflow: auto;
+}
+
+.task-approval {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg-soft);
+}
+
+.task-approval__note {
+  margin: 0;
+  font-size: 0.88rem;
+}
+
+.task-evidence-list {
+  margin: 0;
+  padding-left: 1.1rem;
+  font-size: 0.85rem;
+}
+
+.task-timeline__toggle {
+  margin-bottom: 0.35rem;
+}
+
+.task-timeline__list {
+  margin: 0;
+  padding-left: 1rem;
+  border-left: 2px solid var(--line);
+  list-style: none;
+}
+
+.task-timeline__list li {
+  margin-bottom: 0.55rem;
+}
+
+.task-timeline__action {
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+
+.task-timeline__detail {
+  font-size: 0.85rem;
+  margin-top: 0.15rem;
+  color: var(--muted);
+}
+
 /* ── Estado del autoguardado ─────────────────────────────────────────────── */
 
 .save-status {
