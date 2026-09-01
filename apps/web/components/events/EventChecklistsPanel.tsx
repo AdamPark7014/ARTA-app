@@ -1,15 +1,21 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { SignaturePad } from '@/components/ui/SignaturePad';
 import { FileViewer } from '@/components/files/FileViewer';
 import { PdfEditor } from '@/components/files/PdfEditor';
 import { ChecklistPdfEditor } from '@/components/files/ChecklistPdfEditor';
 import { createEventFile } from '@/lib/file-save';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { SaveStatus } from '@/components/ui/SaveStatus';
 import { ChecklistPicker } from '@/components/events/ChecklistPicker';
+import { useAutosave } from '@/lib/use-autosave';
+import { useDirtyGuard } from '@/lib/use-dirty-guard';
 import { useSaveHotkey } from '@/lib/use-save-hotkey';
 import type { Checklist, EventDetail } from '@/components/events/event-detail.types';
+
+type Section = Checklist['dataJson']['sections'][number];
+type Item = Section['items'][number];
 
 type EventChecklistsPanelProps = {
   event: EventDetail;
@@ -17,16 +23,18 @@ type EventChecklistsPanelProps = {
   closed: boolean;
   saving: boolean;
   userFullName: string;
+  /** Sube cuando el checklist llega del servidor: re-sincroniza el autoguardado. */
+  revision: number;
   onOpenChecklist: (c: Checklist) => Promise<void>;
   onClearChecklist: () => void;
   onSaveChecklist: () => Promise<void>;
+  /** Guardado silencioso: sin regenerar PDF ni crear versión. */
+  onAutosaveChecklist: (dataJson: Checklist['dataJson']) => Promise<void>;
   onRegeneratePdf: () => Promise<void>;
   onUpload: (file: File) => Promise<void>;
-  onUpdateItem: (
-    sectionId: string,
-    itemId: string,
-    patch: Partial<Checklist['dataJson']['sections'][0]['items'][0]>,
-  ) => void;
+  onUpdateItem: (sectionId: string, itemId: string, patch: Partial<Item>) => void;
+  /** Marcar o desmarcar todas las casillas de una sección. */
+  onUpdateSection: (sectionId: string, done: boolean) => void;
   onSignChecklist: (
     kind: 'ENTREGADO' | 'AUTORIZADO',
     payload: { imageDataUrl: string; signerName: string },
@@ -36,18 +44,30 @@ type EventChecklistsPanelProps = {
   onFilesChanged: () => void | Promise<void>;
 };
 
+function isCheckItem(it: Item) {
+  return it.type === 'check' || !it.type;
+}
+
+function isItemDone(it: Item) {
+  if (isCheckItem(it)) return !!it.done;
+  return it.value !== null && it.value !== undefined && String(it.value).trim() !== '';
+}
+
 export function EventChecklistsPanel({
   event,
   activeChecklist,
   closed,
   saving,
   userFullName,
+  revision,
   onOpenChecklist,
   onClearChecklist,
   onSaveChecklist,
+  onAutosaveChecklist,
   onRegeneratePdf,
   onUpload,
   onUpdateItem,
+  onUpdateSection,
   onSignChecklist,
   onRestoreVersion,
   onFilesChanged,
@@ -60,6 +80,11 @@ export function EventChecklistsPanel({
    * generador ya dejó el mapa de campos) o en el formulario clásico.
    */
   const [mode, setMode] = useState<'pdf' | 'form'>('form');
+  const [q, setQ] = useState('');
+  const [onlyPending, setOnlyPending] = useState(false);
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const [showHistory, setShowHistory] = useState(false);
+
   const fieldMap = activeChecklist?.pdfFieldsJson;
   const canWriteOnPdf = !!activeChecklist?.pdfUrl && !!fieldMap?.fields?.length;
 
@@ -67,17 +92,107 @@ export function EventChecklistsPanel({
   useEffect(() => {
     setAnnotating(false);
     setShowPdfPreview(false);
+    setQ('');
+    setOnlyPending(false);
+    setCollapsed(new Set());
+    setShowHistory(false);
     // Formulario primero: más claro y profesional. PDF overlay es opcional.
     setMode('form');
-  }, [activeChecklist?.id, canWriteOnPdf]);
-  const sections = (activeChecklist?.dataJson?.sections || []).filter((s) => s.id !== 'firmas');
-  const doneItems = sections.reduce(
-    (acc, s) => acc + s.items.filter((i) => i.type === 'check' || !i.type ? i.done : !!i.value).length,
-    0,
-  );
-  const totalItems = sections.reduce((acc, s) => acc + s.items.length, 0);
+    // Solo al cambiar de formato: el detalle completo llega en una segunda
+    // petición y, si `canWriteOnPdf` disparara este efecto, sacaría al usuario
+    // del modo «Sobre el PDF» que acaba de elegir.
+  }, [activeChecklist?.id]);
 
-  useSaveHotkey(!!activeChecklist && !closed && !saving, onSaveChecklist);
+  const sections = useMemo(
+    () => (activeChecklist?.dataJson?.sections || []).filter((s) => s.id !== 'firmas'),
+    [activeChecklist],
+  );
+
+  const stats = useMemo(() => {
+    const perSection = sections.map((s) => {
+      const total = s.items.length;
+      const done = s.items.filter(isItemDone).length;
+      return { id: s.id, title: s.title, total, done };
+    });
+    return {
+      perSection,
+      done: perSection.reduce((n, s) => n + s.done, 0),
+      total: perSection.reduce((n, s) => n + s.total, 0),
+    };
+  }, [sections]);
+
+  /** Solo lo que falta / lo que coincide con la búsqueda. */
+  const visibleSections = useMemo(() => {
+    const needle = q.trim().toLowerCase();
+    if (!needle && !onlyPending) return sections;
+    return sections
+      .map((s) => ({
+        ...s,
+        items: s.items.filter(
+          (it) =>
+            (!onlyPending || !isItemDone(it)) &&
+            (!needle ||
+              it.label.toLowerCase().includes(needle) ||
+              s.title.toLowerCase().includes(needle)),
+        ),
+      }))
+      .filter((s) => s.items.length);
+  }, [sections, q, onlyPending]);
+
+  const autosave = useAutosave<Checklist['dataJson'] | null>({
+    value: activeChecklist?.dataJson ?? null,
+    enabled: !!activeChecklist && !closed,
+    save: async (data) => {
+      if (data) await onAutosaveChecklist(data);
+    },
+  });
+
+  // Cada vez que el servidor manda el checklist, esa pasa a ser la línea base.
+  useEffect(() => {
+    autosave.reset(activeChecklist?.dataJson ?? null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [revision]);
+
+  const confirmLeave = useDirtyGuard(
+    autosave.dirty,
+    'El formato tiene cambios sin guardar. ¿Salir de todas formas?',
+  );
+
+  useSaveHotkey(!!activeChecklist && !closed && !saving, async () => {
+    await onSaveChecklist();
+    autosave.reset(activeChecklist?.dataJson ?? null);
+  });
+
+  async function saveNow() {
+    await onSaveChecklist();
+    autosave.reset(activeChecklist?.dataJson ?? null);
+  }
+
+  function jumpTo(sectionId: string) {
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      next.delete(sectionId);
+      return next;
+    });
+    requestAnimationFrame(() => {
+      document.getElementById(`chk-sec-${sectionId}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  }
+
+  function toggleSection(sectionId: string) {
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(sectionId)) next.delete(sectionId);
+      else next.add(sectionId);
+      return next;
+    });
+  }
+
+  function collapseCompleted() {
+    setCollapsed(new Set(stats.perSection.filter((s) => s.total && s.done === s.total).map((s) => s.id)));
+  }
+
+  const progressPct = stats.total ? Math.round((stats.done / stats.total) * 100) : activeChecklist?.progressPct || 0;
 
   return (
     <div className={`checklist-workspace ${activeChecklist ? 'checklist-workspace--open' : ''}`}>
@@ -91,6 +206,7 @@ export function EventChecklistsPanel({
               checklists={event.checklists}
               activeId={activeChecklist?.id}
               onSelect={(c) => {
+                if (c.id !== activeChecklist?.id && !confirmLeave()) return;
                 onOpenChecklist(c).catch(console.error);
               }}
             />
@@ -106,38 +222,43 @@ export function EventChecklistsPanel({
                 <button
                   type="button"
                   className="checklist-back btn ghost btn-sm"
-                  onClick={onClearChecklist}
+                  onClick={() => {
+                    if (confirmLeave()) onClearChecklist();
+                  }}
                 >
                   ← Formatos
                 </button>
                 <h2>{activeChecklist.title}</h2>
-                <div className="checklist-summary muted kpi-sub">
-                  <span>{activeChecklist.progressPct}% completado</span>
-                  {totalItems ? (
-                    <span>
-                      · {doneItems}/{totalItems} ítems
-                    </span>
-                  ) : null}
-                  {activeChecklist.lastEditedBy ? (
-                    <span> · Última edición: {activeChecklist.lastEditedBy.fullName}</span>
-                  ) : null}
+                <div className="checklist-progress">
+                  <div className="progress">
+                    <span style={{ width: `${progressPct}%` }} />
+                  </div>
+                  <span className="muted kpi-sub">
+                    {progressPct}% · {stats.done}/{stats.total} campos
+                    {activeChecklist.lastEditedBy ? ` · última edición ${activeChecklist.lastEditedBy.fullName}` : ''}
+                  </span>
                 </div>
               </div>
               <div className="panel-head-actions">
+                {!closed ? <SaveStatus status={autosave.status} savedAt={autosave.savedAt} error={autosave.error} /> : null}
+                <button
+                  className="btn btn-sm"
+                  type="button"
+                  disabled={saving || closed}
+                  onClick={saveNow}
+                  title="Ctrl+S / ⌘S — guarda y regenera el PDF"
+                >
+                  {saving ? 'Guardando…' : 'Guardar y generar PDF'}
+                </button>
                 {activeChecklist.pdfUrl ? (
-                  <a className="btn btn-sm" href={activeChecklist.pdfUrl} target="_blank" rel="noreferrer">
+                  <a className="btn ghost btn-sm" href={activeChecklist.pdfUrl} target="_blank" rel="noreferrer">
                     Ver PDF
                   </a>
                 ) : (
-                  <button className="btn btn-sm" type="button" onClick={onRegeneratePdf}>
+                  <button className="btn ghost btn-sm" type="button" onClick={onRegeneratePdf}>
                     Generar PDF
                   </button>
                 )}
-                {activeChecklist.pdfUrl ? (
-                  <button className="btn ghost btn-sm" type="button" onClick={onRegeneratePdf}>
-                    Regenerar
-                  </button>
-                ) : null}
                 {!closed ? (
                   <label className="btn ghost btn-sm checklist-upload">
                     Adjuntar
@@ -147,58 +268,68 @@ export function EventChecklistsPanel({
                       accept=".pdf,.xlsx,.xls,.csv,image/*"
                       onChange={(e) => {
                         const f = e.target.files?.[0];
+                        e.target.value = '';
                         if (f) onUpload(f);
                       }}
                     />
                   </label>
                 ) : null}
-                <button
-                  className="btn btn-sm"
-                  type="button"
-                  disabled={saving || closed}
-                  onClick={onSaveChecklist}
-                  title="Ctrl+S / ⌘S"
-                >
-                  {saving ? 'Guardando…' : 'Guardar'}
-                </button>
               </div>
             </div>
 
             {!closed ? (
               <div className="checklist-save-hint muted kpi-sub">
-                Completa el formulario abajo. Ctrl+S / ⌘S guarda y regenera el PDF. «Sobre el PDF» es
-                opcional si quieres marcar encima de la hoja (usa Ampliar si se ve pequeño).
+                Se guarda solo mientras escribes. «Guardar y generar PDF» deja el formato firmado en
+                el expediente y crea una versión en el historial.
               </div>
             ) : null}
 
             <div className="panel-body">
-              <div className="checklist-mode">
+              <div className="checklist-toolbar">
+                <input
+                  className="field field--search"
+                  placeholder="Buscar campo dentro del formato…"
+                  aria-label="Buscar campo"
+                  value={q}
+                  onChange={(e) => setQ(e.target.value)}
+                />
                 <button
-                  className={mode === 'form' ? 'btn btn-sm' : 'btn ghost btn-sm'}
+                  className={`chip ${onlyPending ? 'is-on' : ''}`}
                   type="button"
-                  onClick={() => setMode('form')}
+                  aria-pressed={onlyPending}
+                  onClick={() => setOnlyPending((v) => !v)}
                 >
-                  Formulario
+                  Solo pendientes
                 </button>
-                <button
-                  className={mode === 'pdf' ? 'btn btn-sm' : 'btn ghost btn-sm'}
-                  type="button"
-                  disabled={!canWriteOnPdf}
-                  title={
-                    canWriteOnPdf
-                      ? 'Campos sobre el PDF (opcional)'
-                      : 'Pulsa «Generar PDF» para habilitar esta vista'
-                  }
-                  onClick={() => setMode('pdf')}
-                >
-                  Sobre el PDF
+                <button className="chip" type="button" onClick={collapseCompleted}>
+                  Contraer completadas
                 </button>
-                {!canWriteOnPdf ? (
-                  <span className="muted kpi-sub">
-                    Genera el PDF una vez si quieres la vista «Sobre el PDF». El formulario siempre
-                    funciona.
-                  </span>
-                ) : null}
+                <button className="chip" type="button" onClick={() => setCollapsed(new Set())}>
+                  Abrir todas
+                </button>
+                <div className="checklist-toolbar__spacer" />
+                <div className="checklist-mode">
+                  <button
+                    className={mode === 'form' ? 'btn btn-sm' : 'btn ghost btn-sm'}
+                    type="button"
+                    onClick={() => setMode('form')}
+                  >
+                    Formulario
+                  </button>
+                  <button
+                    className={mode === 'pdf' ? 'btn btn-sm' : 'btn ghost btn-sm'}
+                    type="button"
+                    disabled={!canWriteOnPdf}
+                    title={
+                      canWriteOnPdf
+                        ? 'Campos sobre el PDF (opcional)'
+                        : 'Pulsa «Generar PDF» para habilitar esta vista'
+                    }
+                    onClick={() => setMode('pdf')}
+                  >
+                    Sobre el PDF
+                  </button>
+                </div>
               </div>
 
               {mode === 'pdf' && canWriteOnPdf ? (
@@ -213,96 +344,175 @@ export function EventChecklistsPanel({
                 />
               ) : null}
 
-              {mode === 'form'
-                ? sections.map((section) => (
-                <div className="check-section" key={section.id}>
-                  <h3>{section.title}</h3>
-                  {section.items.map((item) => (
-                    <div className="check-item" key={item.id}>
-                      {item.type === 'check' || !item.type ? (
-                        <input
-                          type="checkbox"
-                          disabled={closed}
-                          checked={!!item.done}
-                          aria-label={item.label}
-                          onChange={(e) => onUpdateItem(section.id, item.id, { done: e.target.checked })}
-                        />
-                      ) : (
-                        <span className="check-item__bullet" aria-hidden />
-                      )}
-                      <div className="check-item__body">
-                        <div className="check-item__label">{item.label}</div>
-                        {item.type === 'text' || item.type === 'number' || item.type === 'date' ? (
-                          <input
-                            className="field check-item__field"
-                            type={item.type === 'text' ? 'text' : item.type}
-                            disabled={closed}
-                            value={item.value ?? ''}
-                            placeholder={item.type === 'date' ? 'Fecha' : 'Respuesta…'}
-                            onChange={(e) =>
-                              onUpdateItem(section.id, item.id, {
-                                value: item.type === 'number' ? Number(e.target.value) : e.target.value,
-                              })
-                            }
-                          />
-                        ) : null}
-                        {item.type === 'select' ? (
-                          (() => {
-                            const opts = item.options || [];
-                            const otra = opts.find((o) => /^otra$/i.test(o));
-                            const raw = String(item.value ?? '');
-                            const known = opts.filter((o) => !/^otra$/i.test(o));
-                            const choice = known.includes(raw)
-                              ? raw
-                              : otra && (raw === otra || (raw && !known.includes(raw)))
-                                ? otra
-                                : raw || '';
-                            const custom = otra && choice === otra && raw !== otra ? raw : '';
-                            return (
-                              <div className="check-item__field-stack">
-                                <select
-                                  className="field"
-                                  disabled={closed}
-                                  value={choice}
-                                  onChange={(e) => {
-                                    const next = e.target.value;
-                                    if (otra && next === otra) {
-                                      onUpdateItem(section.id, item.id, { value: custom || otra });
-                                    } else {
-                                      onUpdateItem(section.id, item.id, { value: next });
-                                    }
-                                  }}
-                                >
-                                  <option value="">Selecciona…</option>
-                                  {opts.map((o) => (
-                                    <option key={o} value={o}>
-                                      {o}
-                                    </option>
-                                  ))}
-                                </select>
-                                {otra && choice === otra ? (
-                                  <input
-                                    className="field"
-                                    disabled={closed}
-                                    placeholder="Especifica (ej. Ticketmaster)"
-                                    value={custom}
-                                    onChange={(e) =>
-                                      onUpdateItem(section.id, item.id, {
-                                        value: e.target.value.trim() || otra,
-                                      })
-                                    }
-                                  />
+              {mode === 'form' ? (
+                <div className="checklist-form-layout">
+                  {stats.perSection.length > 1 ? (
+                    <nav className="checklist-index" aria-label="Secciones del formato">
+                      <span className="checklist-index__title muted kpi-sub">Secciones</span>
+                      {stats.perSection.map((s) => {
+                        const complete = s.total > 0 && s.done === s.total;
+                        return (
+                          <button
+                            key={s.id}
+                            type="button"
+                            className={`checklist-index__item ${complete ? 'is-complete' : ''}`}
+                            onClick={() => jumpTo(s.id)}
+                          >
+                            <span className="checklist-index__label">{s.title}</span>
+                            <span className={`checklist-index__count ${complete ? 'ok' : ''}`}>
+                              {s.done}/{s.total}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </nav>
+                  ) : null}
+
+                  <div className="checklist-sections">
+                    {!visibleSections.length ? (
+                      <EmptyState
+                        title={onlyPending ? 'No queda nada pendiente' : 'Sin coincidencias'}
+                        description={
+                          onlyPending
+                            ? 'Todos los campos de este formato están completos. Guarda para regenerar el PDF y firmar.'
+                            : 'Prueba otro término de búsqueda o quita el filtro de pendientes.'
+                        }
+                      />
+                    ) : (
+                      visibleSections.map((section) => {
+                        const stat = stats.perSection.find((s) => s.id === section.id);
+                        const isCollapsed = collapsed.has(section.id);
+                        const checkItems = section.items.filter(isCheckItem);
+                        const allChecked = checkItems.length > 0 && checkItems.every((it) => it.done);
+                        return (
+                          <div className="check-section" key={section.id} id={`chk-sec-${section.id}`}>
+                            <div className="check-section__head">
+                              <button
+                                type="button"
+                                className="check-section__toggle"
+                                aria-expanded={!isCollapsed}
+                                onClick={() => toggleSection(section.id)}
+                              >
+                                <span aria-hidden>{isCollapsed ? '▸' : '▾'}</span>
+                                <h3>{section.title}</h3>
+                                {stat ? (
+                                  <span
+                                    className={`badge ${stat.total && stat.done === stat.total ? 'ok' : 'muted-tone'}`}
+                                  >
+                                    {stat.done}/{stat.total}
+                                  </span>
                                 ) : null}
-                              </div>
-                            );
-                          })()
-                        ) : null}
-                      </div>
-                    </div>
-                  ))}
+                              </button>
+                              {checkItems.length > 1 && !closed ? (
+                                <button
+                                  className="btn ghost btn-sm"
+                                  type="button"
+                                  onClick={() => onUpdateSection(section.id, !allChecked)}
+                                >
+                                  {allChecked ? 'Desmarcar todo' : 'Marcar todo'}
+                                </button>
+                              ) : null}
+                            </div>
+
+                            {!isCollapsed
+                              ? section.items.map((item) => (
+                                  <div className="check-item" key={item.id}>
+                                    {isCheckItem(item) ? (
+                                      <input
+                                        type="checkbox"
+                                        disabled={closed}
+                                        checked={!!item.done}
+                                        aria-label={item.label}
+                                        onChange={(e) =>
+                                          onUpdateItem(section.id, item.id, { done: e.target.checked })
+                                        }
+                                      />
+                                    ) : (
+                                      <span className="check-item__bullet" aria-hidden />
+                                    )}
+                                    <div className="check-item__body">
+                                      <div className="check-item__label">{item.label}</div>
+                                      {item.type === 'text' || item.type === 'number' || item.type === 'date' ? (
+                                        <input
+                                          className="field check-item__field"
+                                          type={item.type === 'text' ? 'text' : item.type}
+                                          disabled={closed}
+                                          value={item.value ?? ''}
+                                          placeholder={item.type === 'date' ? 'Fecha' : 'Respuesta…'}
+                                          onChange={(e) =>
+                                            onUpdateItem(section.id, item.id, {
+                                              value:
+                                                item.type === 'number'
+                                                  ? Number(e.target.value)
+                                                  : e.target.value,
+                                            })
+                                          }
+                                        />
+                                      ) : null}
+                                      {item.type === 'select' ? (
+                                        (() => {
+                                          const opts = item.options || [];
+                                          const otra = opts.find((o) => /^otra$/i.test(o));
+                                          const raw = String(item.value ?? '');
+                                          const known = opts.filter((o) => !/^otra$/i.test(o));
+                                          const choice = known.includes(raw)
+                                            ? raw
+                                            : otra && (raw === otra || (raw && !known.includes(raw)))
+                                              ? otra
+                                              : raw || '';
+                                          const custom = otra && choice === otra && raw !== otra ? raw : '';
+                                          return (
+                                            <div className="check-item__field-stack">
+                                              <select
+                                                className="field"
+                                                disabled={closed}
+                                                value={choice}
+                                                onChange={(e) => {
+                                                  const next = e.target.value;
+                                                  if (otra && next === otra) {
+                                                    onUpdateItem(section.id, item.id, {
+                                                      value: custom || otra,
+                                                    });
+                                                  } else {
+                                                    onUpdateItem(section.id, item.id, { value: next });
+                                                  }
+                                                }}
+                                              >
+                                                <option value="">Selecciona…</option>
+                                                {opts.map((o) => (
+                                                  <option key={o} value={o}>
+                                                    {o}
+                                                  </option>
+                                                ))}
+                                              </select>
+                                              {otra && choice === otra ? (
+                                                <input
+                                                  className="field"
+                                                  disabled={closed}
+                                                  placeholder="Especifica (ej. Ticketmaster)"
+                                                  value={custom}
+                                                  onChange={(e) =>
+                                                    onUpdateItem(section.id, item.id, {
+                                                      value: e.target.value.trim() || otra,
+                                                    })
+                                                  }
+                                                />
+                                              ) : null}
+                                            </div>
+                                          );
+                                        })()
+                                      ) : null}
+                                    </div>
+                                  </div>
+                                ))
+                              : null}
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
                 </div>
-                  ))
-                : null}
+              ) : null}
 
               <div className="check-section check-section--highlight">
                 <h3>Firmas digitales</h3>
@@ -356,7 +566,7 @@ export function EventChecklistsPanel({
                 {!activeChecklist.pdfUrl ? (
                   <EmptyState
                     title="Aún no hay PDF"
-                    description="Completa el formato y pulsa Guardar o Generar PDF — aparecerá aquí automáticamente."
+                    description="Completa el formato y pulsa «Guardar y generar PDF» — aparecerá aquí automáticamente."
                   />
                 ) : annotating ? (
                   <PdfEditor
@@ -395,48 +605,60 @@ export function EventChecklistsPanel({
               </div>
 
               <div className="check-section">
-                <h3>Historial de versiones</h3>
-                {(activeChecklist.versions || []).length ? (
-                  <div className="table-wrap">
-                    <table className="table">
-                      <thead>
-                        <tr>
-                          <th>Fecha</th>
-                          <th>Editor</th>
-                          <th>Nota</th>
-                          <th />
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {(activeChecklist.versions || []).map((v) => (
-                          <tr key={v.id}>
-                            <td className="muted kpi-sub">
-                              {new Date(v.createdAt).toLocaleString('es-MX')}
-                            </td>
-                            <td>{v.editedBy?.fullName || '—'}</td>
-                            <td className="muted">{v.note || '—'}</td>
-                            <td>
-                              {!closed ? (
-                                <button
-                                  className="btn ghost btn-sm"
-                                  type="button"
-                                  disabled={saving}
-                                  onClick={() => onRestoreVersion(v.id)}
-                                >
-                                  Restaurar
-                                </button>
-                              ) : null}
-                            </td>
+                <div className="check-section__head">
+                  <h3>Historial de versiones</h3>
+                  <button
+                    className="btn ghost btn-sm"
+                    type="button"
+                    aria-expanded={showHistory}
+                    onClick={() => setShowHistory((v) => !v)}
+                  >
+                    {showHistory ? 'Ocultar' : `Ver (${(activeChecklist.versions || []).length})`}
+                  </button>
+                </div>
+                {showHistory ? (
+                  (activeChecklist.versions || []).length ? (
+                    <div className="table-wrap">
+                      <table className="table">
+                        <thead>
+                          <tr>
+                            <th>Fecha</th>
+                            <th>Editor</th>
+                            <th>Nota</th>
+                            <th />
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                ) : (
-                  <p className="muted kpi-sub">
-                    Las versiones aparecen cada vez que guardas cambios en el formato.
-                  </p>
-                )}
+                        </thead>
+                        <tbody>
+                          {(activeChecklist.versions || []).map((v) => (
+                            <tr key={v.id}>
+                              <td className="muted kpi-sub">
+                                {new Date(v.createdAt).toLocaleString('es-MX')}
+                              </td>
+                              <td>{v.editedBy?.fullName || '—'}</td>
+                              <td className="muted">{v.note || '—'}</td>
+                              <td>
+                                {!closed ? (
+                                  <button
+                                    className="btn ghost btn-sm"
+                                    type="button"
+                                    disabled={saving}
+                                    onClick={() => onRestoreVersion(v.id)}
+                                  >
+                                    Restaurar
+                                  </button>
+                                ) : null}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <p className="muted kpi-sub">
+                      Las versiones se crean con «Guardar y generar PDF», no con el autoguardado.
+                    </p>
+                  )
+                ) : null}
               </div>
             </div>
           </div>
@@ -448,8 +670,8 @@ export function EventChecklistsPanel({
                 description="A la izquierda están todos los checklists del evento. Empieza por los que tienen menor avance."
                 steps={[
                   'Abre un formato de la lista',
-                  'Marca ítems y completa campos',
-                  'Guarda y firma entregado / autorizado',
+                  'Marca ítems y completa campos — se guarda solo',
+                  'Guarda y genera el PDF, luego firma entregado / autorizado',
                 ]}
               />
             </div>

@@ -27,7 +27,11 @@ export function AppShell({
   const [navQuery, setNavQuery] = useState('');
   /**
    * Menú que se esconde solo y vuelve al acercar el cursor al borde izquierdo,
-   * como el Dock de macOS. Por defecto activo en escritorio; se recuerda.
+   * como el Dock de macOS.
+   *
+   * Arranca APAGADO: escondido de fábrica, quien entra por primera vez no
+   * encuentra la navegación — solo queda un filo dorado de 6 px que hay que
+   * adivinar. Se activa desde «Esconder menú» y a partir de ahí se recuerda.
    */
   const [autoHide, setAutoHide] = useState(false);
   const [autoHideReady, setAutoHideReady] = useState(false);
@@ -35,12 +39,7 @@ export function AppShell({
   useEffect(() => {
     try {
       const stored = localStorage.getItem('arta_nav_autohide');
-      if (stored === '1' || stored === '0') {
-        setAutoHide(stored === '1');
-      } else {
-        // Primera visita en desktop: menú automático (más superficie para documentos)
-        setAutoHide(window.matchMedia('(min-width: 901px)').matches);
-      }
+      if (stored === '1' || stored === '0') setAutoHide(stored === '1');
     } catch {
       /* modo privado: se queda fijo */
     }

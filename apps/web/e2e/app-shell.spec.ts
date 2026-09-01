@@ -28,7 +28,7 @@ test.describe('App shell', () => {
 
     const nav = page.getByRole('navigation', { name: 'Módulos del panel' });
     await expect(nav).toBeVisible();
-    await expect(nav.getByRole('link', { name: 'Dashboard' })).toBeVisible();
+    await expect(nav.getByRole('link', { name: 'Inicio' })).toBeVisible();
     await expect(nav.getByRole('link', { name: 'Crear evento' })).toBeVisible();
     await expect(nav.getByRole('link', { name: 'Eventos actuales' })).toBeVisible();
     await expect(nav.getByRole('link', { name: 'Eventos pasados' })).toBeVisible();

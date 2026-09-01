@@ -288,7 +288,15 @@ export class ChecklistsController {
   async update(
     @Req() req: { user: AuthUser },
     @Param('id') id: string,
-    @Body() body: { dataJson: object; note?: string; regeneratePdf?: boolean },
+    @Body()
+    body: {
+      dataJson: object;
+      note?: string;
+      /** `false` en autoguardados: regenerar el PDF en cada tecleo era carísimo. */
+      regeneratePdf?: boolean;
+      /** Autoguardado: no crea versión ni entrada de auditoría. */
+      draft?: boolean;
+    },
   ) {
     const existing = await this.prisma.checklistInstance.findUnique({
       where: { id },
@@ -300,8 +308,9 @@ export class ChecklistsController {
     assertEventNotClosed(existing.event.status);
 
     const progressPct = calcProgress(body.dataJson);
+    const draft = body.draft === true;
 
-    await this.prisma.checklistInstance.update({
+    const updated = await this.prisma.checklistInstance.update({
       where: { id },
       data: {
         dataJson: body.dataJson as Prisma.InputJsonValue,
@@ -309,28 +318,37 @@ export class ChecklistsController {
         lastEditedById: req.user.id,
         lastEditedAt: new Date(),
       },
-    });
-
-    await this.prisma.checklistVersion.create({
-      data: {
-        instanceId: id,
-        dataJson: body.dataJson as Prisma.InputJsonValue,
-        editedById: req.user.id,
-        note: body.note,
+      include: {
+        template: true,
+        lastEditedBy: { select: { id: true, fullName: true, email: true } },
       },
     });
 
-    await this.prisma.auditLog.create({
-      data: {
-        userId: req.user.id,
-        action: 'checklist.update',
-        resource: 'ChecklistInstance',
-        resourceId: id,
-        metaJson: { progressPct, note: body.note ?? null },
-      },
-    });
+    // El historial se llena con guardados explícitos: si cada autoguardado
+    // dejara versión, el historial sería ilegible y la tabla crecería sola.
+    if (!draft) {
+      await this.prisma.checklistVersion.create({
+        data: {
+          instanceId: id,
+          dataJson: body.dataJson as Prisma.InputJsonValue,
+          editedById: req.user.id,
+          note: body.note,
+        },
+      });
 
-    // Siempre regenerar PDF editable/descargable al guardar
+      await this.prisma.auditLog.create({
+        data: {
+          userId: req.user.id,
+          action: 'checklist.update',
+          resource: 'ChecklistInstance',
+          resourceId: id,
+          metaJson: { progressPct, note: body.note ?? null },
+        },
+      });
+    }
+
+    // El PDF se regenera al guardar de verdad, no en cada autoguardado.
+    if (draft || body.regeneratePdf === false) return updated;
     return this.regeneratePdf(id);
   }
 

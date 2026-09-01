@@ -150,7 +150,7 @@ export default function FinancePage() {
                 <div className="panel-body">
                   <div className="muted kpi-sub">Neto por status de evento</div>
                   <DistBar
-                    segments={Object.entries(data.byStatus).map(([status, v]) => ({
+                    segments={Object.entries(data.byStatus ?? {}).map(([status, v]) => ({
                       label: status,
                       value: Math.max(0, v.net) || v.count,
                       tone: status === 'ACTIVE' ? 'ok' : status === 'CLOSED' ? 'warn' : 'muted',

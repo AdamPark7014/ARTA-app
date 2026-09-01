@@ -250,7 +250,9 @@ export function EventFilesPanel({
               Se escriben aquí como en Word y se descargan en PDF.
             </p>
           </div>
-          {canEdit ? (
+          {/* Sin documentos manda el botón del estado vacío, que además explica
+              para qué sirve: dos «Nuevo documento» idénticos solo confunden. */}
+          {canEdit && docs.length ? (
             <button className="btn btn-sm" type="button" disabled={busy === 'doc'} onClick={createDoc}>
               {busy === 'doc' ? 'Creando…' : 'Nuevo documento'}
             </button>

@@ -228,11 +228,24 @@ export function ChecklistPdfEditor({
                    * De alto, 14pt: la línea mide ~13.9pt, así que tapa el valor
                    * sin comerse la línea de arriba.
                    */
+                  const left = f.x * scale;
+                  const top = f.y * scale;
+                  /*
+                   * El ancho mínimo hace legible una caja estrecha, pero cerca
+                   * del margen derecho empujaba el campo fuera de la hoja. Se
+                   * recorta contra el borde de la página.
+                   */
                   const style = {
-                    left: f.x * scale,
-                    top: f.y * scale,
-                    width: Math.max(f.type === 'check' ? 14 * scale : 40 * scale, f.w * scale),
-                    height: Math.max(12 * scale, f.h * scale),
+                    left,
+                    top,
+                    width: Math.min(
+                      Math.max(f.type === 'check' ? 14 * scale : 40 * scale, f.w * scale),
+                      Math.max(0, p.width - left),
+                    ),
+                    height: Math.min(
+                      Math.max(12 * scale, f.h * scale),
+                      Math.max(0, p.height - top),
+                    ),
                   };
 
                   if (f.type === 'check') {

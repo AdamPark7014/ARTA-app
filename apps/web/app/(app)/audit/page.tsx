@@ -120,14 +120,14 @@ export default function AuditPage() {
                   </div>
                   <div className="panel-body">
                     <DistBar
-                      segments={data.topActions.slice(0, 6).map((a, i) => ({
+                      segments={(data.topActions ?? []).slice(0, 6).map((a, i) => ({
                         label: a.action,
                         value: a.count,
                         tone: (['ok', 'warn', 'muted', 'danger'] as const)[i % 4],
                       }))}
                     />
                     <ul className="compact-list" style={{ marginTop: 12 }}>
-                      {data.topActions.map((a) => (
+                      {(data.topActions ?? []).map((a) => (
                         <li key={a.action}>
                           <code style={{ fontSize: 12 }}>{a.action}</code>
                           <span className="muted">{a.count}</span>
@@ -141,14 +141,14 @@ export default function AuditPage() {
                     <h2>Anomalías / riesgo</h2>
                   </div>
                   <div className="panel-body">
-                    {!data.anomalies.length ? (
+                    {!(data.anomalies ?? []).length ? (
                       <EmptyState
                         title="Sin señales destructivas"
                         description="No hay acciones de alto riesgo en la ventana reciente."
                       />
                     ) : (
                       <ul className="compact-list">
-                        {data.anomalies.map((a) => (
+                        {(data.anomalies ?? []).map((a) => (
                           <li key={a.id}>
                             <span>
                               <strong>{a.action}</strong>
@@ -166,7 +166,7 @@ export default function AuditPage() {
               </div>
             ) : null}
 
-            <FilterBar meta={`${rows.length} de ${data?.logs.length ?? 0} eventos`}>
+            <FilterBar meta={`${rows.length} de ${data?.logs?.length ?? 0} eventos`}>
               <FieldSearch
                 value={q}
                 onChange={setQ}
@@ -203,17 +203,17 @@ export default function AuditPage() {
                 {!rows.length ? (
                   <EmptyState
                     title={
-                      (data?.logs.length || 0) === 0
+                      (data?.logs?.length ?? 0) === 0
                         ? 'Sin eventos de auditoría'
                         : 'Sin coincidencias en el filtro'
                     }
                     description={
-                      (data?.logs.length || 0) === 0
+                      (data?.logs?.length ?? 0) === 0
                         ? 'Las acciones de usuarios aparecerán aquí conforme operen el sistema.'
                         : 'Cambia recurso o limpia la búsqueda.'
                     }
                   >
-                    {filterActive && (data?.logs.length || 0) > 0 ? (
+                    {filterActive && (data?.logs?.length ?? 0) > 0 ? (
                       <button
                         className="btn ghost"
                         type="button"

@@ -38,6 +38,7 @@ import {
   type PoLine,
   type Po,
   type Tab,
+  type Task,
   type TicketingSetup,
 } from '@/components/events/event-detail.types';
 
@@ -60,6 +61,9 @@ function EventDetailInner() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [activeChecklist, setActiveChecklist] = useState<Checklist | null>(null);
+  /** Sube cada vez que el checklist viene del servidor: el autoguardado del
+   * panel usa esto para volver a tomar la línea base y no reenviar lo mismo. */
+  const [checklistRevision, setChecklistRevision] = useState(0);
   const [saving, setSaving] = useState(false);
   const [poForm, setPoForm] = useState({
     rubro: 'audio',
@@ -171,9 +175,13 @@ function EventDetailInner() {
       try {
         const full = await api<Checklist>(`/checklists/${activeChecklist.id}`);
         setActiveChecklist(full);
+        setChecklistRevision((r) => r + 1);
       } catch {
         const refreshed = data.checklists.find((c) => c.id === activeChecklist.id);
-        if (refreshed) setActiveChecklist(refreshed);
+        if (refreshed) {
+          setActiveChecklist(refreshed);
+          setChecklistRevision((r) => r + 1);
+        }
       }
     }
     const run = data.financeRuns?.[0];
@@ -215,9 +223,11 @@ function EventDetailInner() {
   async function openChecklist(c: Checklist) {
     selectTab('checklists', { checklist: c.id });
     setActiveChecklist(c);
+    setChecklistRevision((r) => r + 1);
     try {
       const full = await api<Checklist>(`/checklists/${c.id}`);
       setActiveChecklist(full);
+      setChecklistRevision((r) => r + 1);
     } catch {
       /* keep list payload */
     }
@@ -323,6 +333,58 @@ function EventDetailInner() {
     setMsgVariant(variant);
   }
 
+  /**
+   * Refleja en la lista lateral lo que cambió del formato abierto, sin volver
+   * a pedir el evento completo (checklists + OC + finanzas + boletera).
+   */
+  function mergeChecklistIntoEvent(c: Checklist) {
+    setEvent((prev) =>
+      prev
+        ? {
+            ...prev,
+            checklists: prev.checklists.map((x) =>
+              x.id === c.id
+                ? {
+                    ...x,
+                    progressPct: c.progressPct,
+                    pdfUrl: c.pdfUrl ?? x.pdfUrl,
+                    pdfGeneratedAt: c.pdfGeneratedAt ?? x.pdfGeneratedAt,
+                    deliveredAt: c.deliveredAt ?? x.deliveredAt,
+                    authorizedAt: c.authorizedAt ?? x.authorizedAt,
+                    lastEditedBy: c.lastEditedBy ?? x.lastEditedBy,
+                  }
+                : x,
+            ),
+          }
+        : prev,
+    );
+  }
+
+  /** Checklist recién traído del servidor: re-sincroniza el autoguardado. */
+  function applyChecklist(c: Checklist) {
+    setActiveChecklist(c);
+    setChecklistRevision((r) => r + 1);
+    mergeChecklistIntoEvent(c);
+  }
+
+  /**
+   * Autoguardado: guarda el JSON sin regenerar el PDF ni crear versión. Solo
+   * se refleja el avance, nunca se pisa lo que la persona sigue escribiendo.
+   */
+  async function saveChecklistDraft(dataJson: Checklist['dataJson']) {
+    if (!activeChecklist || closed) return;
+    const updated = await api<Checklist>(`/checklists/${activeChecklist.id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ dataJson, draft: true }),
+    });
+    setActiveChecklist((prev) =>
+      prev && prev.id === updated.id
+        ? { ...prev, progressPct: updated.progressPct, lastEditedAt: updated.lastEditedAt, lastEditedBy: updated.lastEditedBy }
+        : prev,
+    );
+    mergeChecklistIntoEvent(updated);
+  }
+
   async function saveChecklist() {
     if (!activeChecklist || closed) return;
     setSaving(true);
@@ -332,9 +394,8 @@ function EventDetailInner() {
         method: 'PATCH',
         body: JSON.stringify({ dataJson: activeChecklist.dataJson }),
       });
-      setActiveChecklist(updated);
+      applyChecklist({ ...updated, versions: activeChecklist.versions });
       flash('Checklist guardado · PDF regenerado');
-      await load();
     } catch (e) {
       flash(e instanceof Error ? e.message : 'Error al guardar', 'error');
     } finally {
@@ -349,9 +410,8 @@ function EventDetailInner() {
         method: 'POST',
         body: JSON.stringify({ kind, ...payload }),
       });
-      setActiveChecklist(updated);
+      applyChecklist(updated);
       flash(`Firma ${kind.toLowerCase()} guardada`);
-      await load();
     } catch (e) {
       flash(e instanceof Error ? e.message : 'Error al firmar', 'error');
     }
@@ -361,9 +421,8 @@ function EventDetailInner() {
     if (!activeChecklist) return;
     try {
       const updated = await api<Checklist>(`/checklists/${activeChecklist.id}/pdf`, { method: 'POST' });
-      setActiveChecklist(updated);
+      applyChecklist({ ...updated, versions: activeChecklist.versions });
       flash('PDF regenerado');
-      await load();
     } catch (e) {
       flash(e instanceof Error ? e.message : 'Error al regenerar PDF', 'error');
     }
@@ -379,9 +438,8 @@ function EventDetailInner() {
         method: 'POST',
       });
       const full = await api<Checklist>(`/checklists/${activeChecklist.id}`);
-      setActiveChecklist({ ...updated, versions: full.versions });
+      applyChecklist({ ...updated, versions: full.versions });
       flash('Versión restaurada · PDF regenerado');
-      await load();
     } catch (e) {
       flash(e instanceof Error ? e.message : 'Error al restaurar', 'error');
     } finally {
@@ -390,17 +448,45 @@ function EventDetailInner() {
   }
 
   function updateItem(sectionId: string, itemId: string, patch: Partial<Checklist['dataJson']['sections'][0]['items'][0]>) {
-    if (!activeChecklist) return;
-    setActiveChecklist({
-      ...activeChecklist,
-      dataJson: {
-        sections: activeChecklist.dataJson.sections.map((s) =>
-          s.id !== sectionId
-            ? s
-            : { ...s, items: s.items.map((it) => (it.id === itemId ? { ...it, ...patch } : it)) },
-        ),
-      },
-    });
+    // Actualización funcional: «marcar toda la sección» dispara N cambios en
+    // el mismo tick y con la forma anterior solo sobrevivía el último.
+    setActiveChecklist((prev) =>
+      prev
+        ? {
+            ...prev,
+            dataJson: {
+              sections: prev.dataJson.sections.map((s) =>
+                s.id !== sectionId
+                  ? s
+                  : { ...s, items: s.items.map((it) => (it.id === itemId ? { ...it, ...patch } : it)) },
+              ),
+            },
+          }
+        : prev,
+    );
+  }
+
+  /** Marcar / desmarcar de un golpe todas las casillas de una sección. */
+  function updateSection(sectionId: string, done: boolean) {
+    setActiveChecklist((prev) =>
+      prev
+        ? {
+            ...prev,
+            dataJson: {
+              sections: prev.dataJson.sections.map((s) =>
+                s.id !== sectionId
+                  ? s
+                  : {
+                      ...s,
+                      items: s.items.map((it) =>
+                        it.type === 'check' || !it.type ? { ...it, done } : it,
+                      ),
+                    },
+              ),
+            },
+          }
+        : prev,
+    );
   }
 
   async function createPo() {
@@ -895,10 +981,21 @@ function EventDetailInner() {
     });
   }
 
+  /**
+   * Las acciones de tareas tocan una fila: recargar el evento completo
+   * (checklists, OC, finanzas, boletera…) por un clic era el mayor
+   * desperdicio de la pantalla.
+   */
+  function patchTaskInPlace(task: Task) {
+    setEvent((prev) =>
+      prev ? { ...prev, tasks: (prev.tasks || []).map((t) => (t.id === task.id ? task : t)) } : prev,
+    );
+  }
+
   async function createTask() {
     if (!taskForm.title || closed) return;
     try {
-      await api('/tasks', {
+      const created = await api<Task>('/tasks', {
         method: 'POST',
         body: JSON.stringify({
           eventId: id,
@@ -910,33 +1007,86 @@ function EventDetailInner() {
         }),
       });
       const who = directory.find((d) => d.id === taskForm.assigneeId)?.fullName;
-      setTaskForm({ title: '', module: '', assigneeId: '', dueAt: '', detail: '' });
+      // Se conserva responsable y fecha: casi siempre se cargan varias seguidas.
+      setTaskForm({ ...taskForm, title: '', detail: '' });
       flash(who ? `Tarea asignada a ${who} — le llega el aviso en su panel` : 'Tarea creada');
-      await load();
+      setEvent((prev) => (prev ? { ...prev, tasks: [created, ...(prev.tasks || [])] } : prev));
     } catch (e) {
       flash(e instanceof Error ? e.message : 'Error al crear tarea', 'error');
     }
   }
 
   async function setTaskStatus(taskId: string, status: string) {
+    const snapshot = event?.tasks || [];
+    setEvent((prev) =>
+      prev
+        ? { ...prev, tasks: (prev.tasks || []).map((t) => (t.id === taskId ? { ...t, status } : t)) }
+        : prev,
+    );
     try {
-      await api(`/tasks/${taskId}`, { method: 'PATCH', body: JSON.stringify({ status }) });
-      await load();
+      patchTaskInPlace(
+        await api<Task>(`/tasks/${taskId}`, { method: 'PATCH', body: JSON.stringify({ status }) }),
+      );
     } catch (e) {
+      setEvent((prev) => (prev ? { ...prev, tasks: snapshot } : prev));
       flash(e instanceof Error ? e.message : 'Error al actualizar tarea', 'error');
+    }
+  }
+
+  /** Poner o mover el vencimiento desde la propia lista. */
+  async function setTaskDue(taskId: string, dueAt: string) {
+    const snapshot = event?.tasks || [];
+    setEvent((prev) =>
+      prev
+        ? {
+            ...prev,
+            tasks: (prev.tasks || []).map((t) => (t.id === taskId ? { ...t, dueAt: dueAt || null } : t)),
+          }
+        : prev,
+    );
+    try {
+      patchTaskInPlace(
+        await api<Task>(`/tasks/${taskId}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ dueAt: dueAt || null }),
+        }),
+      );
+    } catch (e) {
+      setEvent((prev) => (prev ? { ...prev, tasks: snapshot } : prev));
+      flash(e instanceof Error ? e.message : 'Error al cambiar la fecha', 'error');
     }
   }
 
   /** Pasar la tarea a otra persona sin salir del evento. */
   async function reassignTask(taskId: string, assigneeId: string) {
+    const snapshot = event?.tasks || [];
+    const person = directory.find((d) => d.id === assigneeId);
+    setEvent((prev) =>
+      prev
+        ? {
+            ...prev,
+            tasks: (prev.tasks || []).map((t) =>
+              t.id === taskId
+                ? {
+                    ...t,
+                    assigneeId: assigneeId || null,
+                    assignee: person ? { id: person.id, fullName: person.fullName } : null,
+                  }
+                : t,
+            ),
+          }
+        : prev,
+    );
     try {
-      await api(`/tasks/${taskId}`, {
-        method: 'PATCH',
-        body: JSON.stringify({ assigneeId: assigneeId || null }),
-      });
+      patchTaskInPlace(
+        await api<Task>(`/tasks/${taskId}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ assigneeId: assigneeId || null }),
+        }),
+      );
       flash(assigneeId ? 'Tarea reasignada — se envió el aviso' : 'Tarea sin asignar');
-      await load();
     } catch (e) {
+      setEvent((prev) => (prev ? { ...prev, tasks: snapshot } : prev));
       flash(e instanceof Error ? e.message : 'Error al reasignar tarea', 'error');
     }
   }
@@ -1095,12 +1245,15 @@ function EventDetailInner() {
             closed={closed || !canChecklistEdit}
             saving={saving}
             userFullName={user?.fullName || ''}
+            revision={checklistRevision}
             onOpenChecklist={openChecklist}
             onClearChecklist={() => setActiveChecklist(null)}
             onSaveChecklist={saveChecklist}
+            onAutosaveChecklist={saveChecklistDraft}
             onRegeneratePdf={regeneratePdf}
             onUpload={onUpload}
             onUpdateItem={updateItem}
+            onUpdateSection={updateSection}
             onSignChecklist={signChecklist}
             onRestoreVersion={restoreChecklistVersion}
             onFilesChanged={load}
@@ -1201,6 +1354,7 @@ function EventDetailInner() {
             onCreateTask={createTask}
             onSetTaskStatus={setTaskStatus}
             onReassignTask={reassignTask}
+            onSetTaskDue={setTaskDue}
           />
         )}
 

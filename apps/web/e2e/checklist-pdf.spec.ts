@@ -64,6 +64,9 @@ async function openChecklist(page: import('@playwright/test').Page, baseURL: str
   );
   await page.setViewportSize({ width: 1500, height: 1100 });
   await page.goto('/events/evt-e2e-1?tab=checklists&checklist=chk-demo');
+  // El formato abre en formulario (decisión de la junta: sin overlays encima
+  // de las opciones). La captura sobre la hoja es un modo que se pide.
+  await page.getByRole('button', { name: 'Sobre el PDF' }).click();
   await page.locator('.pdfedit__canvas').first().waitFor({ timeout: 25000 });
 }
 
@@ -71,8 +74,8 @@ test.describe('Checklist sobre el PDF', () => {
   test('se captura encima del documento, sin formulario aparte', async ({ page, baseURL }) => {
     await openChecklist(page, baseURL!);
 
-    // El modo por defecto es escribir sobre la hoja
-    await expect(page.getByRole('button', { name: 'Escribir en el formato' })).toBeVisible();
+    // En el modo «Sobre el PDF» se escribe encima de la hoja
+    await expect(page.getByText(/campos? editables sobre la hoja/i)).toBeVisible();
 
     // Cada campo llega con el valor vivo del checklist, encima de lo impreso
     await expect(page.getByLabel('Recinto', { exact: true })).toHaveValue('Auditorio Arema');
@@ -113,6 +116,7 @@ test.describe('Checklist sobre el PDF', () => {
     await page.getByRole('button', { name: 'Formulario' }).click();
 
     await expect(page.locator('.pdfedit__canvas')).toHaveCount(0);
-    await expect(page.getByText('Datos del show')).toBeVisible();
+    // El índice lateral repite el nombre de la sección: se ancla al encabezado.
+    await expect(page.getByRole('heading', { name: 'Datos del show' })).toBeVisible();
   });
 });

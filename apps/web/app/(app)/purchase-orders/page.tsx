@@ -147,7 +147,7 @@ export default function PurchaseOrdersPage() {
   }
 
   const rows = useMemo(() => {
-    let list = data?.orders || [];
+    let list = data?.orders ?? [];
     if (statusFilter !== 'all') list = list.filter((r) => r.status === statusFilter);
     if (q.trim()) {
       const n = q.toLowerCase();
@@ -160,6 +160,20 @@ export default function PurchaseOrdersPage() {
     }
     return list;
   }, [data, statusFilter, q]);
+
+  /**
+   * El analytics puede llegar incompleto (versión del API distinta, permisos
+   * recortados). Antes eso tumbaba la pantalla entera con «Algo salió mal».
+   */
+  const view = useMemo(
+    () => ({
+      agingBuckets: data?.agingBuckets ?? { d0_3: 0, d4_7: 0, d8_14: 0, d15plus: 0 },
+      agingQueue: data?.agingQueue ?? [],
+      byRubro: data?.byRubro ?? [],
+      orders: data?.orders ?? [],
+    }),
+    [data],
+  );
 
   const k = data?.kpis;
 
@@ -231,14 +245,14 @@ export default function PurchaseOrdersPage() {
               <div className="panel-body stack">
                 <DistBar
                   segments={[
-                    { label: '0-3d', value: data.agingBuckets.d0_3, tone: 'ok' },
-                    { label: '4-7d', value: data.agingBuckets.d4_7, tone: 'warn' },
-                    { label: '8-14d', value: data.agingBuckets.d8_14, tone: 'danger' },
-                    { label: '15d+', value: data.agingBuckets.d15plus, tone: 'danger' },
+                    { label: '0-3d', value: view.agingBuckets.d0_3, tone: 'ok' },
+                    { label: '4-7d', value: view.agingBuckets.d4_7, tone: 'warn' },
+                    { label: '8-14d', value: view.agingBuckets.d8_14, tone: 'danger' },
+                    { label: '15d+', value: view.agingBuckets.d15plus, tone: 'danger' },
                   ]}
                 />
                 <ul className="compact-list">
-                  {data.agingQueue.slice(0, 6).map((o) => (
+                  {view.agingQueue.slice(0, 6).map((o) => (
                     <li key={o.id}>
                       <span>
                         <strong>{o.eventName}</strong> · {o.rubro}
@@ -248,7 +262,7 @@ export default function PurchaseOrdersPage() {
                       </span>
                     </li>
                   ))}
-                  {!data.agingQueue.length ? (
+                  {!view.agingQueue.length ? (
                     <li className="muted kpi-sub">Cola limpia — sin OC estancadas</li>
                   ) : null}
                 </ul>
@@ -269,7 +283,7 @@ export default function PurchaseOrdersPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {data.byRubro.slice(0, 8).map((r) => (
+                      {view.byRubro.slice(0, 8).map((r) => (
                         <tr key={r.rubro}>
                           <td>{r.rubro}</td>
                           <td>{r.count}</td>
@@ -436,12 +450,12 @@ export default function PurchaseOrdersPage() {
                           <td colSpan={7}>
                             <EmptyState
                               title={
-                                (data.orders?.length || 0) === 0
+                                view.orders.length === 0
                                   ? 'Sin órdenes de compra'
                                   : 'Sin OC en este filtro'
                               }
                               description={
-                                (data.orders?.length || 0) === 0
+                                view.orders.length === 0
                                   ? 'Crea OC desde el detalle de un evento (pestaña OC).'
                                   : 'Cambia el estado o limpia la búsqueda para ver más resultados.'
                               }

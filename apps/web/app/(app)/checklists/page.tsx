@@ -6,6 +6,7 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { LoadingBlock } from '@/components/ui/LoadingBlock';
 import { FieldSearch, FilterBar, FlashMessage, PageHeader } from '@/components/ui/PageChrome';
 import { api } from '@/lib/api';
+import { useStickyState } from '@/lib/use-sticky-state';
 import { useUser } from '@/lib/user-context';
 import { TemplateSchemaEditor } from '@/components/checklists/TemplateSchemaEditor';
 import type { SchemaSection } from '@/components/checklists/TemplateSchemaEditor';
@@ -68,6 +69,7 @@ export default function ChecklistsTemplatesPage() {
   const [msg, setMsg] = useState('');
   const [restoring, setRestoring] = useState(false);
   const [q, setQ] = useState('');
+  const [scope, setScope] = useStickyState<'all' | 'active' | 'inactive'>('templates.scope', 'all');
   const [loading, setLoading] = useState(true);
 
   const canManage =
@@ -97,25 +99,37 @@ export default function ChecklistsTemplatesPage() {
   }, [entity, canManage]);
 
   const filtered = useMemo(() => {
-    if (!q.trim()) return templates;
+    let list = templates;
+    if (scope === 'active') list = list.filter((t) => t.active);
+    if (scope === 'inactive') list = list.filter((t) => !t.active);
+    if (!q.trim()) return list;
     const n = q.toLowerCase();
-    return templates.filter(
+    return list.filter(
       (t) =>
         t.name.toLowerCase().includes(n) ||
         t.key.toLowerCase().includes(n) ||
         (t.description || '').toLowerCase().includes(n),
     );
-  }, [templates, q]);
+  }, [templates, q, scope]);
 
   async function toggleActive(t: Template) {
     if (!canManage) return;
-    await api(`/checklists/templates/${t.id}`, {
-      method: 'PATCH',
-      body: JSON.stringify({ active: !t.active }),
-    });
-    setMsg(`${t.name} → ${!t.active ? 'activa' : 'inactiva'}`);
-    await load();
-    if (preview?.id === t.id) setPreview({ ...t, active: !t.active });
+    const next = !t.active;
+    const snapshot = templates;
+    // Optimista: activar una plantilla no justifica recargar el catálogo.
+    setTemplates((list) => list.map((x) => (x.id === t.id ? { ...x, active: next } : x)));
+    if (preview?.id === t.id) setPreview({ ...preview, active: next });
+    try {
+      await api(`/checklists/templates/${t.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ active: next }),
+      });
+      setMsg(`${t.name} → ${next ? 'activa' : 'inactiva'}`);
+    } catch (e) {
+      setTemplates(snapshot);
+      if (preview?.id === t.id) setPreview({ ...preview, active: t.active });
+      setMsg(e instanceof Error ? e.message : 'Error al cambiar la plantilla');
+    }
   }
 
   async function openPreview(t: Template, edit = false) {
@@ -169,6 +183,25 @@ export default function ChecklistsTemplatesPage() {
                 placeholder="Buscar plantilla…"
                 label="Buscar plantillas"
               />
+              <div className="chip-row" role="group" aria-label="Filtrar plantillas">
+                {(
+                  [
+                    { key: 'all', label: 'Todas' },
+                    { key: 'active', label: 'Activas' },
+                    { key: 'inactive', label: 'Inactivas' },
+                  ] as Array<{ key: 'all' | 'active' | 'inactive'; label: string }>
+                ).map((s) => (
+                  <button
+                    key={s.key}
+                    type="button"
+                    className={`chip ${scope === s.key ? 'is-on' : ''}`}
+                    aria-pressed={scope === s.key}
+                    onClick={() => setScope(s.key)}
+                  >
+                    {s.label}
+                  </button>
+                ))}
+              </div>
             </FilterBar>
 
             <div className={preview ? 'studio-split' : 'stack'}>

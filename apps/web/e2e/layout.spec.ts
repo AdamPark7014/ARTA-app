@@ -65,6 +65,7 @@ test.describe('Ver en grande y menú automático', () => {
     await page.setViewportSize({ width: 1500, height: 1000 });
 
     await page.goto('/events/evt-e2e-1?tab=checklists&checklist=chk-demo');
+    await page.getByRole('button', { name: 'Sobre el PDF' }).click();
     await page.locator('.pdfedit__canvas').first().waitFor({ timeout: 25000 });
 
     const antes = (await page.locator('.pdfedit__page').first().boundingBox())!.width;

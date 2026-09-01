@@ -94,11 +94,11 @@ test.describe('Editores embebidos', () => {
     await page.getByLabel('Celda A4', { exact: true }).fill('Transporte');
     await page.getByLabel('Celda B4', { exact: true }).fill('4500');
 
-    const guardar = page.getByRole('button', { name: 'Guardar cambios' });
+    const guardar = page.getByRole('button', { name: 'Guardar libro' });
     await expect(guardar).toBeEnabled();
     await guardar.click();
 
-    await expect(page.getByText(/el archivo quedó actualizado/i)).toBeVisible();
+    await expect(page.getByText('Guardado', { exact: true })).toBeVisible();
     expect(saved).toHaveLength(1);
     // Se subió un .xlsx reconstruido de verdad, no un cuerpo vacío
     expect(saved[0].bytes).toBeGreaterThan(1000);

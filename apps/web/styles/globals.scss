@@ -4609,10 +4609,11 @@ body.site-nav-open {
 .shell .pdffield__input,
 .panel .pdffield__input,
 .pdffield__input {
-  width: 100% !important;
+  /* Alto y ancho los fija el mapa de campos del PDF (estilo en línea). Con
+     `width/height: 100% !important` cada caja se estiraba a la hoja entera y
+     tapaba el documento: el control y la caja son el mismo elemento. */
   min-width: 0 !important;
   max-width: none !important;
-  height: 100% !important;
   padding: 0 2px !important;
   border: 0 !important;
   border-radius: 1px !important;
@@ -4903,3 +4904,7 @@ body.site-nav-open {
     transform: translateX(0);
   }
 }
+
+
+/* Eficiencia operativa: alta rapida, filtros de un clic, acciones en lote. */
+@import "./efficiency";

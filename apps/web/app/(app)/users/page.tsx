@@ -575,7 +575,7 @@ export default function UsersPage() {
                 Distribución por rol
               </div>
               <DistBar
-                segments={Object.entries(gov.byRole).map(([label, value], i) => ({
+                segments={Object.entries(gov.byRole ?? {}).map(([label, value], i) => ({
                   label,
                   value,
                   tone: (['ok', 'warn', 'muted', 'danger'] as const)[i % 4],

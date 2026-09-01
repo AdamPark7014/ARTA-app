@@ -86,9 +86,9 @@ export async function fetchPublicSiteData(entity = 'ARTA'): Promise<PublicSiteDa
     }
     const d = (await res.json()) as Partial<PublicSiteData>;
     return {
-      pages: d.pages || [],
-      slides: d.slides?.length ? d.slides : FALLBACK_SLIDES,
-      news: d.news || [],
+      pages: Array.isArray(d?.pages) ? d.pages : [],
+      slides: Array.isArray(d?.slides) && d.slides.length ? d.slides : FALLBACK_SLIDES,
+      news: Array.isArray(d?.news) ? d.news : [],
     };
   } catch {
     return { pages: [], slides: FALLBACK_SLIDES, news: [] };
@@ -101,7 +101,10 @@ export async function fetchPublicNewsList(): Promise<PublicNewsPost[]> {
       next: { revalidate: 3600 },
     });
     if (!res.ok) return [];
-    return (await res.json()) as PublicNewsPost[];
+    const data = await res.json();
+    // El feed RSS se prerenderiza en `next build`: si el API contesta algo que
+    // no es una lista, un `.map` reventaba el build entero del sitio.
+    return Array.isArray(data) ? (data as PublicNewsPost[]) : [];
   } catch {
     return [];
   }

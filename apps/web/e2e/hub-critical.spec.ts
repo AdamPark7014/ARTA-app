@@ -107,7 +107,9 @@ test.describe('Hub crítico', () => {
     await page.getByRole('button', { name: /Archivos \(1\)/ }).click();
     await page.getByRole('button', { name: 'Editar hoja' }).click();
     await expect(page.getByLabel('Celda A1', { exact: true })).toHaveValue('Concepto');
-    await expect(page.getByRole('button', { name: /Salir de pantalla completa/ })).toBeVisible();
+    // La hoja abre embebida en la campaña; ampliar es opcional (junta: sin
+    // overlays blancos encima del contenido).
+    await expect(page.getByRole('button', { name: /Ampliar a pantalla completa/ })).toBeVisible();
   });
 
   test('ExpandBox: Esc con dirty pide confirmación', async ({ page, baseURL }) => {
@@ -128,6 +130,7 @@ test.describe('Hub crítico', () => {
 
     await page.goto('/events/evt-e2e-1?tab=files');
     await page.getByRole('button', { name: 'Editar hoja' }).click();
+    await page.getByRole('button', { name: /Ampliar a pantalla completa/ }).click();
     await page.getByLabel('Celda A4', { exact: true }).fill('Transporte');
 
     page.once('dialog', async (dialog) => {
@@ -219,7 +222,10 @@ test.describe('Hub crítico', () => {
     });
 
     await page.goto('/events/evt-e2e-1?tab=finance');
-    const saveBtn = page.getByRole('button', { name: 'Guardar corrida' });
+    // La corrida oficial es el Excel; la tabla simple es un resumen opcional
+    // que se despliega a mano.
+    await page.getByRole('button', { name: 'Mostrar tabla simple' }).click();
+    const saveBtn = page.getByRole('button', { name: 'Guardar resumen' });
     await expect(saveBtn).toBeVisible();
     await saveBtn.click();
     await expect.poll(() => patched).toBe(true);

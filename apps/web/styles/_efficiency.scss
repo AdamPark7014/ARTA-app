@@ -1,0 +1,624 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   Eficiencia operativa: alta rápida, filtros de un clic, acciones en lote y
+   listas de trabajo. Sustituye a los formularios siempre desplegados y a las
+   tablas con un desplegable por fila.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Alta rápida (tareas) ────────────────────────────────────────────────── */
+
+.quick-add {
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  padding: 0.7rem 0.8rem;
+  box-shadow: var(--shadow-sm);
+}
+
+.quick-add__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.quick-add__title {
+  flex: 1 1 260px;
+  min-width: 200px;
+  font-size: 0.98rem;
+}
+
+.quick-add__who {
+  flex: 0 1 190px;
+  min-width: 150px;
+}
+
+.quick-add__due {
+  flex: 0 0 auto;
+  width: 9.5rem;
+  color-scheme: dark;
+}
+
+.quick-add__more {
+  display: grid;
+  gap: 0.6rem;
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--line);
+}
+
+.quick-add__more label {
+  display: grid;
+  gap: 0.3rem;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+/* ── Chips de filtro ─────────────────────────────────────────────────────── */
+
+.chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.chip {
+  border: 1px solid var(--line-strong);
+  background: transparent;
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 0.34rem 0.75rem;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.chip:hover {
+  color: var(--text);
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line-strong));
+}
+
+.chip.is-on {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  color: var(--text);
+}
+
+.chip:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ── KPI que además filtra ───────────────────────────────────────────────── */
+
+.kpi--action {
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+  width: 100%;
+}
+
+.kpi--action:hover {
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--line));
+}
+
+.kpi--on {
+  border-color: color-mix(in srgb, var(--accent) 65%, var(--line));
+  background: color-mix(in srgb, var(--accent) 8%, var(--bg-elev));
+}
+
+.kpi--action:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ── Acciones en lote ────────────────────────────────────────────────────── */
+
+.bulk-bar {
+  position: sticky;
+  top: 0.5rem;
+  z-index: 5;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  padding: 0.6rem 0.85rem;
+  border-radius: var(--radius);
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--line-strong));
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg-elev));
+  box-shadow: var(--shadow-md);
+}
+
+.bulk-bar__count {
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+
+.select-check {
+  width: 1rem;
+  height: 1rem;
+  accent-color: var(--accent);
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+
+.col-check {
+  width: 2.2rem;
+}
+
+.row--selected td {
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+}
+
+.link-cell {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.link-cell:hover strong {
+  color: var(--accent);
+}
+
+.link-cell:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* ── Lista de trabajo (tareas) ───────────────────────────────────────────── */
+
+.task-group {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--bg-elev);
+  overflow: hidden;
+}
+
+.task-group--urgent {
+  border-color: color-mix(in srgb, var(--danger) 45%, var(--line));
+}
+
+.task-group__head {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.6rem 0.9rem;
+  background: hsla(0, 0%, 100%, 0.03);
+  border-bottom: 1px solid var(--line);
+}
+
+.task-group--urgent .task-group__head {
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+}
+
+.task-group__toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 1;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.task-group__toggle h2 {
+  margin: 0;
+  font-size: 0.82rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.task-group--urgent .task-group__toggle h2 {
+  color: var(--danger);
+}
+
+.task-group__toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+.task-group__caret {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.task-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.task-row {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr) 11rem 9.5rem auto;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.6rem 0.9rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.task-row:last-child {
+  border-bottom: 0;
+}
+
+.task-row:hover {
+  background: hsla(0, 0%, 100%, 0.025);
+}
+
+.task-row--selected {
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+}
+
+.task-row--overdue .task-row__title {
+  color: var(--danger);
+}
+
+.task-row--done .task-row__title {
+  color: var(--muted);
+  text-decoration: line-through;
+}
+
+.task-row__check {
+  width: 1.25rem;
+  height: 1.25rem;
+  border-radius: 50%;
+  border: 1.5px solid var(--line-strong);
+  background: transparent;
+  color: var(--bg);
+  font-size: 0.72rem;
+  line-height: 1;
+  cursor: pointer;
+  flex: 0 0 auto;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.task-row__check:hover {
+  border-color: var(--ok);
+}
+
+.task-row__check.is-done {
+  background: var(--ok);
+  border-color: var(--ok);
+}
+
+.task-row__check:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.task-row__main {
+  min-width: 0;
+}
+
+.task-row__title {
+  font-size: 0.94rem;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+.task-row__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 0.2rem;
+}
+
+.task-row__meta a:hover {
+  color: var(--accent);
+}
+
+.task-row__detail {
+  font-size: 0.82rem;
+  margin-top: 0.2rem;
+  color: var(--muted);
+}
+
+.task-row__who {
+  font-size: 0.85rem;
+}
+
+.task-row__actions {
+  justify-content: flex-end;
+}
+
+.field--assignee {
+  max-width: 11rem;
+}
+
+.field--date {
+  width: 9.5rem;
+  color-scheme: dark;
+}
+
+.field--overdue {
+  border-color: color-mix(in srgb, var(--danger) 55%, var(--line-strong));
+  color: var(--danger);
+}
+
+@media (max-width: 900px) {
+  .task-row {
+    grid-template-columns: auto auto minmax(0, 1fr);
+    row-gap: 0.45rem;
+  }
+
+  .task-row .field--assignee,
+  .task-row .field--date,
+  .task-row__actions {
+    grid-column: 3;
+    max-width: none;
+    width: 100%;
+  }
+
+  .task-row__actions {
+    justify-content: flex-start;
+  }
+}
+
+/* ── Estado del autoguardado ─────────────────────────────────────────────── */
+
+.save-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.78rem;
+  color: var(--muted);
+  padding: 0.25rem 0.6rem;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: hsla(0, 0%, 100%, 0.03);
+  white-space: nowrap;
+}
+
+.save-status__dot {
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 50%;
+  background: var(--muted);
+}
+
+.save-status.is-clean .save-status__dot {
+  background: var(--ok);
+}
+
+.save-status.is-saving .save-status__dot {
+  background: var(--warn);
+  animation: save-pulse 1s ease-in-out infinite;
+}
+
+.save-status.is-dirty {
+  color: var(--warn);
+  border-color: color-mix(in srgb, var(--warn) 40%, var(--line));
+}
+
+.save-status.is-dirty .save-status__dot {
+  background: var(--warn);
+}
+
+.save-status.is-error {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 45%, var(--line));
+}
+
+.save-status.is-error .save-status__dot {
+  background: var(--danger);
+}
+
+@keyframes save-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.3;
+  }
+}
+
+/* ── Checklist: barra de trabajo e índice de secciones ───────────────────── */
+
+.checklist-progress {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+  margin-top: 0.35rem;
+}
+
+.checklist-progress .progress {
+  width: 160px;
+}
+
+.checklist-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  padding-bottom: 0.9rem;
+  margin-bottom: 0.9rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.checklist-toolbar .field--search {
+  flex: 1 1 220px;
+  max-width: 320px;
+}
+
+.checklist-toolbar__spacer {
+  flex: 1 1 auto;
+}
+
+.checklist-toolbar .checklist-mode {
+  margin-bottom: 0;
+}
+
+.checklist-form-layout {
+  display: grid;
+  grid-template-columns: 210px minmax(0, 1fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+.checklist-index {
+  position: sticky;
+  top: 0.5rem;
+  display: grid;
+  gap: 0.15rem;
+  padding: 0.6rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg-soft);
+  max-height: calc(100vh - 6rem);
+  overflow: auto;
+}
+
+.checklist-index__title {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.7rem;
+  padding: 0 0.35rem 0.3rem;
+}
+
+.checklist-index__item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  padding: 0.4rem 0.35rem;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.82rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.checklist-index__item:hover {
+  background: hsla(0, 0%, 100%, 0.05);
+  color: var(--text);
+}
+
+.checklist-index__item.is-complete {
+  color: color-mix(in srgb, var(--ok) 70%, var(--muted));
+}
+
+.checklist-index__item:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.checklist-index__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.checklist-index__count {
+  flex: 0 0 auto;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.75rem;
+  opacity: 0.85;
+}
+
+.checklist-index__count.ok {
+  color: var(--ok);
+}
+
+.checklist-sections {
+  display: grid;
+  gap: 0.9rem;
+  min-width: 0;
+}
+
+.check-section__toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 1;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.check-section__toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+.panel--strip .panel-body {
+  padding-top: 0.7rem;
+  padding-bottom: 0.7rem;
+}
+
+@media (max-width: 1100px) {
+  .checklist-form-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .checklist-index {
+    position: static;
+    max-height: none;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(140px, 1fr);
+    overflow-x: auto;
+  }
+
+  .checklist-index__title {
+    display: none;
+  }
+}
+
+/* ── Menú lateral: alto fijo y scroll propio ─────────────────────────────────
+   Con iconos y grupos la lista creció por encima de la pantalla y las últimas
+   entradas quedaban fuera del viewport: se veían, pero no se podían pulsar.
+   Solo aplica al layout de escritorio; en móvil y en «menú automático» el
+   `.sidebar` ya va `position: fixed` con sus propios topes. */
+
+@media (min-width: 901px) {
+  .shell:not(.shell--nav-auto) > .sidebar {
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    overflow: hidden;
+  }
+}
+
+.nav {
+  min-height: 0;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}
+
+/* ── Caja ampliable: volver del modo grande ──────────────────────────────────
+   `.expandbox` es un grid y sus hijos arrancan con `min-width: auto`, así que
+   al salir de pantalla completa el PDF —todavía rasterizado a 1416 px— seguía
+   estirando el cuerpo y el observador de ancho nunca veía que la columna se
+   había encogido: la hoja se quedaba enorme, saliéndose del panel. */
+
+.expandbox__body {
+  min-width: 0;
+}
+
+.expandbox--inline .expandbox__body {
+  overflow-x: auto;
+}
