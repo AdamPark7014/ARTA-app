@@ -15,12 +15,8 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { hasPermission, canAccessEventOps, PERMISSIONS, type EntityKey, type RoleKey } from '../common/rbac/roles';
 import { assertSameTenant } from '../common/tenant';
 import { assertEventNotClosed } from '../common/event-guards';
-
-type FinancePayload = {
-  rows?: Array<{ type?: string; amount?: number; concept?: string }>;
-  totalIncome?: number;
-  totalExpense?: number;
-};
+import { calcProgress } from '../common/checklist-progress';
+import { withServerTotals, type FinancePayload } from './finance-totals';
 
 type AuthUser = {
   id: string;
@@ -29,18 +25,6 @@ type AuthUser = {
   entities: string[];
   organizationId?: string | null;
 };
-
-function totals(dataJson: FinancePayload) {
-  const rows = dataJson.rows || [];
-  const income = rows.filter((r) => r.type === 'income').reduce((s, r) => s + Number(r.amount || 0), 0);
-  const expense = rows.filter((r) => r.type === 'expense').reduce((s, r) => s + Number(r.amount || 0), 0);
-  return {
-    ...dataJson,
-    rows,
-    totalIncome: income,
-    totalExpense: expense,
-  };
-}
 
 @Controller('finance')
 @UseGuards(JwtAuthGuard)
@@ -117,12 +101,8 @@ export class FinanceController {
     if (summaryIdx >= 0) nextSections[summaryIdx] = summarySection;
     else nextSections = [...nextSections, summarySection];
 
-    const items = nextSections.flatMap((s) => s.items || []);
-    const scored = items.filter((i) => {
-      if (i.type === 'check' || !i.type) return !!i.done;
-      return i.value !== null && i.value !== undefined && String(i.value).trim() !== '';
-    }).length;
-    const progressPct = items.length ? Math.round((scored / items.length) * 100) : 0;
+    // Misma fórmula que el resto del sistema (una sola implementación).
+    const progressPct = calcProgress({ sections: nextSections });
 
     await this.prisma.checklistInstance.update({
       where: { id: instance.id },
@@ -195,12 +175,37 @@ export class FinanceController {
     if (!existing) throw new ForbiddenException('Corrida no encontrada');
     await this.assertEventOps(req.user, existing.eventId);
     assertEventNotClosed(existing.event.status);
-    if (existing.locked && body.locked !== false) {
-      throw new ForbiddenException('Corrida bloqueada');
+
+    /*
+     * Sellar y editar son acciones distintas.
+     *
+     * Antes la guarda era `if (existing.locked && body.locked !== false)`, así
+     * que mandando `{ locked: false, dataJson: {...} }` se desbloqueaba y se
+     * editaba en la MISMA petición: el sello no protegía nada. Ahora una
+     * corrida sellada no acepta cambios, y quitar el sello es una operación
+     * aparte reservada a dirección, igual que reabrir un evento.
+     */
+    const wantsUnlock = body.locked === false;
+    const wantsContentChange = body.dataJson !== undefined || body.title !== undefined;
+
+    if (existing.locked) {
+      if (wantsContentChange) {
+        throw new ForbiddenException(
+          'Corrida sellada — quita el sello primero (solo dirección) y vuelve a intentarlo',
+        );
+      }
+      if (wantsUnlock && role !== 'dir_general' && role !== 'super_admin') {
+        throw new ForbiddenException('Solo dirección general puede quitar el sello de una corrida');
+      }
     }
 
     let dataJson = body.dataJson as FinancePayload | undefined;
-    if (dataJson?.rows) dataJson = totals(dataJson);
+    /*
+     * Los totales SIEMPRE los recalcula el servidor. Antes solo se recalculaban
+     * `if (dataJson.rows)`, así que mandando el payload sin `rows` se persistían
+     * `totalIncome`/`totalExpense` inventados que el dashboard daba por buenos.
+     */
+    if (dataJson) dataJson = withServerTotals(dataJson);
 
     const updated = await this.prisma.financeRun.update({
       where: { id },
@@ -212,7 +217,7 @@ export class FinanceController {
     });
 
     const payload = (dataJson || updated.dataJson) as FinancePayload;
-    await this.syncCorridaChecklist(updated.eventId, totals(payload), updated.locked);
+    await this.syncCorridaChecklist(updated.eventId, withServerTotals(payload), updated.locked);
 
     return updated;
   }

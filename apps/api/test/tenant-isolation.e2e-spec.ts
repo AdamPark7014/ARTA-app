@@ -145,7 +145,9 @@ describe('Multi-org tenant isolation (e2e, real DB)', () => {
     let controller: ChecklistsController;
 
     beforeAll(() => {
-      controller = new ChecklistsController(prisma as never, new ChecklistPdfService());
+      // `ChecklistPdfService` exige PrismaService; sin argumento esto no
+      // compilaba y el spec entero se apoyaba en un error de tipos.
+      controller = new ChecklistsController(prisma as never, new ChecklistPdfService(prisma as never));
     });
 
     it('lets a user read a checklist that belongs to their own org', async () => {

@@ -5,6 +5,7 @@ import * as XLSX from 'xlsx';
 import type { SaveFile } from '@/lib/file-save';
 import { ExpandBox } from '@/components/ui/ExpandBox';
 import { useSaveHotkey } from '@/lib/use-save-hotkey';
+import { useDirtyGuard } from '@/lib/use-dirty-guard';
 
 type Props = {
   url: string;
@@ -233,11 +234,21 @@ export function SheetEditor({
     if (name === activeSheet) return;
     const wb = workbookRef.current;
     if (!wb || !wb.Sheets[name]) return;
+    const hadPendingChanges = dirty;
     if (dirty) flushGridToWorkbook();
     setActiveSheet(name);
     loadSheet(wb, name);
-    setDirty(false);
-    setMsg(dirty ? `Cambiaste a «${name}» (cambios de la hoja anterior listos al Guardar)` : '');
+    /*
+     * `dirty` NO se apaga aquí. Los cambios de la hoja anterior están en el
+     * libro en memoria, pero todavía no en el servidor: apagarlo dejaba
+     * «Guardar» deshabilitado y Ctrl+S mudo, así que el mensaje prometía un
+     * guardado que la persona ya no podía hacer y al cerrar se perdía la hoja.
+     */
+    setMsg(
+      hadPendingChanges
+        ? `Cambiaste a «${name}» — lo de la hoja anterior se guarda al pulsar Guardar`
+        : '',
+    );
   }
 
   function addSheet() {
@@ -428,6 +439,8 @@ export function SheetEditor({
   }
 
   useSaveHotkey(canEdit && dirty && !saving, save);
+  // Cerrar la pestaña con celdas sin guardar se llevaba el trabajo sin avisar.
+  useDirtyGuard(canEdit && dirty, 'La hoja tiene cambios sin guardar. ¿Salir de todas formas?');
 
   const shownRows = useMemo(() => grid.slice(0, visibleRows), [grid, visibleRows]);
   const selLabel = sel ? `${colLabel(sel.c)}${sel.r + 1}` : 'ninguna';

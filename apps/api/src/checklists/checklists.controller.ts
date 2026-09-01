@@ -13,6 +13,7 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../common/prisma/prisma.service';
+import { calcProgress } from '../common/checklist-progress';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { assertSameTenant } from '../common/tenant';
 import { assertEventNotClosed } from '../common/event-guards';
@@ -39,28 +40,6 @@ type SigBody = {
   imageDataUrl: string;
   signerName?: string;
 };
-
-function calcProgress(data: unknown): number {
-  if (!data || typeof data !== 'object') return 0;
-  const root = data as {
-    sections?: Array<{ items?: Array<{ done?: boolean; type?: string; value?: unknown }> }>;
-  };
-  const items = (root.sections ?? []).flatMap((s) => s.items ?? []);
-  if (!items.length) return 0;
-  let scored = 0;
-  let total = 0;
-  for (const i of items) {
-    if (i.type === 'signature') continue;
-    total += 1;
-    if (i.type === 'check' || !i.type) {
-      if (i.done) scored += 1;
-    } else if (i.value !== null && i.value !== undefined && String(i.value).trim() !== '') {
-      scored += 1;
-    }
-  }
-  if (!total) return 0;
-  return Math.round((scored / total) * 100);
-}
 
 @Controller('checklists')
 @UseGuards(JwtAuthGuard)
@@ -89,8 +68,8 @@ export class ChecklistsController {
     }
   }
 
-  private async regeneratePdf(id: string) {
-    return this.pdfs.regenerateInstance(id);
+  private async regeneratePdf(id: string, options?: { force?: boolean }) {
+    return this.pdfs.regenerateInstance(id, options);
   }
 
   @Get('templates')
@@ -444,7 +423,9 @@ export class ChecklistsController {
       },
     });
 
-    return this.regeneratePdf(id);
+    // Único caso que fuerza la reimpresión de un formato autorizado: la firma
+    // que acaba de registrarse tiene que quedar dentro del PDF.
+    return this.regeneratePdf(id, { force: true });
   }
 
   @Post(':id/pdf')
@@ -455,6 +436,17 @@ export class ChecklistsController {
     });
     if (!existing) throw new BadRequestException('Checklist no encontrado');
     this.assertEventAccess(req.user, existing.event);
+    // Regenerar el PDF reescribe el archivo del formato: no es una lectura.
+    // Antes bastaba con poder ver el evento.
+    this.assertChecklistEdit(req.user);
+    assertEventNotClosed(existing.event.status);
+    // `regenerateForEvent` ya protege los formatos firmados; esta puerta no lo
+    // hacía, así que se podía reimprimir un documento ya autorizado.
+    if (existing.authorizedAt || existing.authorizedSignature) {
+      throw new ForbiddenException(
+        'Formato autorizado — no se reimprime. Restaura una versión si necesitas cambiarlo.',
+      );
+    }
     return this.regeneratePdf(id);
   }
 

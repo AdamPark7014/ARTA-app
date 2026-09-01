@@ -5,6 +5,7 @@ import type { SaveFile } from '@/lib/file-save';
 import { ExpandBox } from '@/components/ui/ExpandBox';
 import { useElementWidth } from '@/lib/use-element-width';
 import { useSaveHotkey } from '@/lib/use-save-hotkey';
+import { useDirtyGuard } from '@/lib/use-dirty-guard';
 
 type Props = {
   url: string;
@@ -251,6 +252,7 @@ export function PdfEditor({ url, fileName, canEdit, onSave, onSaved, note, saveL
   const dirty = pending > 0;
 
   useSaveHotkey(canEdit && dirty && !saving, save);
+  useDirtyGuard(canEdit && dirty, 'Hay texto sin guardar en el PDF. ¿Salir de todas formas?');
 
   return (
     <ExpandBox title={fileName} dirty={dirty}>

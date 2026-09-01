@@ -265,7 +265,12 @@ export class ChecklistPdfService {
   }
 
   /** Regenerate PDF for one checklist instance; returns updated row or null. */
-  async regenerateInstance(checklistId: string) {
+  /**
+   * @param force  Solo el flujo de firma lo usa: es el único caso en que hay
+   *               que reimprimir un formato autorizado, porque justo acaba de
+   *               firmarse y la firma tiene que quedar dentro del PDF.
+   */
+  async regenerateInstance(checklistId: string, options?: { force?: boolean }) {
     const item = await this.prisma.checklistInstance.findUnique({
       where: { id: checklistId },
       include: {
@@ -275,6 +280,16 @@ export class ChecklistPdfService {
       },
     });
     if (!item) return null;
+
+    /*
+     * Un formato autorizado no se vuelve a imprimir. Antes cualquier guardado
+     * posterior a la firma reescribía el PDF con la imagen de la firma pegada
+     * encima del contenido NUEVO: el documento parecía autorizado sin serlo.
+     * `regenerateForEvent` ya protegía esto; por aquí se colaba.
+     */
+    if (!options?.force && (item.authorizedAt || item.authorizedSignature)) {
+      return item;
+    }
 
     const delivered = item.deliveredSignature as SignaturePayload | null;
     const authorized = item.authorizedSignature as SignaturePayload | null;

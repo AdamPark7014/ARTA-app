@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { api } from '@/lib/api';
 import { ExpandBox } from '@/components/ui/ExpandBox';
 import { useSaveHotkey } from '@/lib/use-save-hotkey';
+import { useDirtyGuard } from '@/lib/use-dirty-guard';
 
 export type DocBlockType = 'h1' | 'h2' | 'p' | 'bullet' | 'divider';
 export type DocBlock = { type: DocBlockType; text: string };
@@ -189,6 +190,7 @@ export function DocEditor({ doc, canEdit, onSaved, onDeleted, onClose }: Props) 
   }
 
   useSaveHotkey(canEdit && dirty && !saving, save);
+  useDirtyGuard(canEdit && dirty, 'El documento tiene cambios sin guardar. ¿Salir de todas formas?');
 
   return (
     <ExpandBox title={title || doc.title || 'Documento'} dirty={dirty}>

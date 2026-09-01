@@ -19,7 +19,7 @@ import { existsSync, unlinkSync } from 'fs';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { canAccessEventOps, hasPermission, PERMISSIONS, type EntityKey, type RoleKey } from '../common/rbac/roles';
-import { MULTER_OPTIONS, uploadRoot } from './upload-storage';
+import { MULTER_OPTIONS, contentMatchesExtension, discardUpload, uploadRoot } from './upload-storage';
 import { assertSameTenant } from '../common/tenant';
 import { assertEventNotClosed } from '../common/event-guards';
 
@@ -46,6 +46,49 @@ export class UploadsController {
     return event;
   }
 
+  /**
+   * Reemplazar o borrar un adjunto exige el permiso de SU sección, no solo
+   * acceso operativo al evento: el Excel de la corrida lo podían pisar o
+   * borrar roles que únicamente tienen `finance.view`.
+   */
+  private assertFileEditPermission(user: AuthUser, module?: string | null) {
+    const needed =
+      module === 'finance'
+        ? PERMISSIONS.FINANCE_EDIT
+        : module === 'campaign'
+          ? PERMISSIONS.CAMPAIGN_EDIT
+          : PERMISSIONS.CHECKLIST_EDIT;
+    if (!hasPermission(user.roleKey as RoleKey, user.permissions, needed)) {
+      throw new ForbiddenException('Sin permiso para modificar los archivos de esta sección');
+    }
+  }
+
+  /**
+   * Un `EventFile` sin evento no tiene contra qué comprobar acceso, así que
+   * antes se saltaba TODOS los controles. Se exige el mismo permiso elevado
+   * que ya pide la subida sin evento.
+   */
+  /**
+   * El nombre y el `Content-Type` los pone quien sube: hay que mirar el
+   * contenido. Si no cuadra, el archivo ya está en disco (multer escribe
+   * antes), así que se borra.
+   */
+  private assertRealFileType(file: Express.Multer.File) {
+    if (!contentMatchesExtension(file.path, file.originalname)) {
+      discardUpload(file.path);
+      throw new BadRequestException(
+        'El contenido del archivo no corresponde a su extensión',
+      );
+    }
+  }
+
+  private assertOrphanFileEdit(user: AuthUser) {
+    const allowed =
+      hasPermission(user.roleKey as RoleKey, user.permissions, PERMISSIONS.CHECKLIST_EDIT) ||
+      hasPermission(user.roleKey as RoleKey, user.permissions, PERMISSIONS.STUDIO_EDIT);
+    if (!allowed) throw new ForbiddenException('Sin permiso sobre archivos fuera de un evento');
+  }
+
   @Post()
   @UseInterceptors(FileInterceptor('file', MULTER_OPTIONS))
   async upload(
@@ -54,6 +97,7 @@ export class UploadsController {
     @Body() body: { eventId?: string; checklistId?: string; kind?: string; module?: string },
   ) {
     if (!file) throw new BadRequestException('Archivo requerido');
+    this.assertRealFileType(file);
     const mime = file.mimetype || 'application/octet-stream';
     let kind = body.kind || 'other';
     if (!body.kind) {
@@ -116,6 +160,9 @@ export class UploadsController {
         kind,
         // Sección del evento (campaign, finance…) para poder listar por módulo
         module: body.module ? String(body.module).slice(0, 40) : undefined,
+        // Un archivo recién subido no tenía autor en la base: nadie sabía
+        // quién lo puso.
+        updatedById: req.user.id,
       },
     });
     return record;
@@ -140,6 +187,7 @@ export class UploadsController {
     @UploadedFile() file: Express.Multer.File,
   ) {
     if (!file) throw new BadRequestException('Archivo requerido');
+    this.assertRealFileType(file);
 
     const current = await this.prisma.eventFile.findUnique({
       where: { id },
@@ -160,12 +208,16 @@ export class UploadsController {
       if (current.event.status === 'CLOSED' || current.event.status === 'CANCELLED') {
         throw new ForbiddenException('Evento cerrado — los archivos quedan en solo lectura');
       }
+      this.assertFileEditPermission(req.user, current.module);
+    } else {
+      this.assertOrphanFileEdit(req.user);
     }
 
     // El tipo no puede cambiar a media edición: un .xlsx se guarda como .xlsx.
     const wasExt = extname(current.fileName || current.url).toLowerCase();
     const nowExt = extname(file.originalname).toLowerCase();
     if (wasExt && nowExt && wasExt !== nowExt) {
+      discardUpload(file.path);
       throw new BadRequestException(
         `El archivo guardado debe seguir siendo ${wasExt} (llegó ${nowExt})`,
       );
@@ -203,6 +255,9 @@ export class UploadsController {
       }
       assertSameTenant(req.user, file.event.organizationId);
       assertEventNotClosed(file.event.status);
+      this.assertFileEditPermission(req.user, file.module);
+    } else {
+      this.assertOrphanFileEdit(req.user);
     }
 
     const name = basename(file.url);

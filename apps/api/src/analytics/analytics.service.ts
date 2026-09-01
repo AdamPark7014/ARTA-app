@@ -1,25 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { ChecklistTemplateKey, EntityKey } from '@prisma/client';
 import { PrismaService } from '../common/prisma/prisma.service';
-
-type FinancePayload = {
-  rows?: Array<{ type?: string; amount?: number }>;
-  totalIncome?: number;
-  totalExpense?: number;
-};
-
-function financeTotals(dataJson: unknown) {
-  const data = (dataJson || {}) as FinancePayload;
-  const rows = data.rows || [];
-  if (rows.length) {
-    const income = rows.filter((r) => r.type === 'income').reduce((s, r) => s + Number(r.amount || 0), 0);
-    const expense = rows.filter((r) => r.type === 'expense').reduce((s, r) => s + Number(r.amount || 0), 0);
-    return { income, expense, net: income - expense };
-  }
-  const income = Number(data.totalIncome || 0);
-  const expense = Number(data.totalExpense || 0);
-  return { income, expense, net: income - expense };
-}
+import { financeTotals } from '../finance/finance-totals';
 
 function monthKey(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
