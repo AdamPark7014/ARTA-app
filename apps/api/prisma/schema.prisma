@@ -351,11 +351,15 @@ model ChecklistInstance {
   @@index([templateId])
 }
 
+/// Firma de un formato. `contentHash` es la prueba de QUÉ se firmó: sin él no
+/// se podía demostrar que el documento actual sea el que alguien autorizó.
 model DigitalSignature {
   id           String            @id @default(cuid())
   checklistId  String
   checklist    ChecklistInstance @relation(fields: [checklistId], references: [id], onDelete: Cascade)
   kind         String // ENTREGADO | AUTORIZADO
+  /// sha256 del `dataJson` exacto que se firmó.
+  contentHash  String?
   signerName   String
   signerUserId String?
   imageDataUrl String            @db.Text

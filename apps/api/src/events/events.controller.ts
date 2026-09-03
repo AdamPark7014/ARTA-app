@@ -307,7 +307,15 @@ export class EventsController {
       where: { id },
       data: { status: 'CLOSED' },
     });
-    await this.prisma.financeRun.updateMany({ where: { eventId: id }, data: { locked: true } });
+    /*
+     * Cerrar el evento NO sella la corrida.
+     *
+     * Cerrar es operativo; sellar es un acto de responsabilidad con firmante y
+     * fecha. Confundirlos implicaba que reabrir DES-sellara — y así era: el
+     * `reopen` ponía `locked: false` en todas las corridas del evento, echando
+     * abajo un sello que alguien había puesto a conciencia. El evento cerrado
+     * ya deja todo en solo lectura a través de `docWriteBlock`.
+     */
     await this.prisma.auditLog.create({
       data: { userId: req.user.id, action: 'event.close', resource: 'Event', resourceId: id },
     });
@@ -324,7 +332,9 @@ export class EventsController {
       throw new ForbiddenException('Solo dirección puede reabrir');
     }
     const event = await this.prisma.event.update({ where: { id }, data: { status: 'ACTIVE' } });
-    await this.prisma.financeRun.updateMany({ where: { eventId: id }, data: { locked: false } });
+    // Reabrir el evento devuelve cada documento a SU propio estado; jamás
+    // degrada un sellado. Para eso está `POST /finance/:id/unlock`, con motivo.
+
     await this.prisma.auditLog.create({
       data: { userId: req.user.id, action: 'event.reopen', resource: 'Event', resourceId: id },
     });
@@ -344,7 +354,7 @@ export class EventsController {
       where: { id },
       data: { status: 'CANCELLED' },
     });
-    await this.prisma.financeRun.updateMany({ where: { eventId: id }, data: { locked: true } });
+    // Igual que al cerrar: cancelar no sella, el oráculo ya bloquea.
     await this.prisma.auditLog.create({
       data: { userId: req.user.id, action: 'event.cancel', resource: 'Event', resourceId: id },
     });

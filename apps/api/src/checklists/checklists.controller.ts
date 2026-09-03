@@ -11,7 +11,8 @@ import {
   Req,
   UseGuards,
 } from '@nestjs/common';
-import { DocType, Prisma } from '@prisma/client';
+import { DocStatus, DocType, Prisma } from '@prisma/client';
+import { createHash } from 'crypto';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { calcProgress } from '../common/checklist-progress';
 import { diffChecklistData } from '../common/doc-diff';
@@ -23,6 +24,13 @@ import {
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { assertSameTenant } from '../common/tenant';
 import { assertEventNotClosed } from '../common/event-guards';
+import {
+  assertCanReopen,
+  assertCanTransition,
+  assertDocWritable,
+  assertTransitionAllowed,
+  DOC_STATUS_LABEL,
+} from '../common/doc-guards';
 import {
   canAccessEventOps,
   hasPermission,
@@ -298,7 +306,8 @@ export class ChecklistsController {
     if (!existing) throw new BadRequestException('Checklist no encontrado');
     this.assertEventAccess(req.user, existing.event);
     this.assertChecklistEdit(req.user);
-    assertEventNotClosed(existing.event.status);
+    // Oráculo único: estado del documento + estado del evento, en un solo sitio.
+    assertDocWritable(existing, existing.event);
 
     const progressPct = calcProgress(body.dataJson);
     const draft = body.draft === true;
@@ -410,7 +419,7 @@ export class ChecklistsController {
     if (!existing) throw new BadRequestException('Checklist no encontrado');
     this.assertEventAccess(req.user, existing.event);
     this.assertChecklistEdit(req.user);
-    assertEventNotClosed(existing.event.status);
+    assertDocWritable(existing, existing.event);
 
     // Autorizar: gerencia en Arta / dirección del Auditorio / dirección general
     if (body.kind === 'AUTORIZADO') {
@@ -439,6 +448,11 @@ export class ChecklistsController {
       data: {
         checklistId: id,
         kind: body.kind,
+        // Prueba de QUÉ se firmó: sin esto no se puede demostrar que el
+        // documento actual sea el que alguien autorizó.
+        contentHash: createHash('sha256')
+          .update(JSON.stringify(existing.dataJson ?? null))
+          .digest('hex'),
         signerName,
         signerUserId: req.user.id,
         imageDataUrl: body.imageDataUrl,
@@ -509,6 +523,87 @@ export class ChecklistsController {
     return this.regeneratePdf(id);
   }
 
+  /**
+   * Cambiar el estado del formato: Borrador → Revisión → Aprobado → Sellado.
+   *
+   * Pedir revisión es autoservicio; aprobar y sellar son de gerencia/dirección;
+   * reabrir algo sellado es solo de dirección y **con motivo por escrito**, que
+   * queda en el historial. Cada transición deja su propia revisión.
+   */
+  @Post(':id/status')
+  async changeStatus(
+    @Req() req: { user: AuthUser; ip?: string; headers?: Record<string, string> },
+    @Param('id') id: string,
+    @Body() body: { status: DocStatus; reason?: string },
+  ) {
+    const to = body?.status;
+    if (!to || !Object.values(DocStatus).includes(to)) {
+      throw new BadRequestException('Estado inválido');
+    }
+
+    const existing = await this.prisma.checklistInstance.findUnique({
+      where: { id },
+      include: { event: true },
+    });
+    if (!existing) throw new BadRequestException('Checklist no encontrado');
+    this.assertEventAccess(req.user, existing.event);
+    this.assertChecklistEdit(req.user);
+    assertEventNotClosed(existing.event.status);
+
+    const from = existing.status;
+    assertTransitionAllowed(from, to);
+
+    const reopening = from === DocStatus.SEALED;
+    if (reopening) assertCanReopen(req.user.roleKey, body.reason || '');
+    else assertCanTransition(req.user.roleKey, to, body.reason);
+
+    const now = new Date();
+    const updated = await this.prisma.checklistInstance.update({
+      where: { id },
+      data: {
+        status: to,
+        revision: { increment: 1 },
+        ...(to === DocStatus.REVIEW ? { submittedById: req.user.id, submittedAt: now } : {}),
+        ...(to === DocStatus.APPROVED ? { approvedById: req.user.id, approvedAt: now } : {}),
+        ...(to === DocStatus.SEALED ? { sealedById: req.user.id, sealedAt: now } : {}),
+        ...(reopening ? { reopenReason: body.reason, sealedAt: null, sealedById: null } : {}),
+      },
+      include: {
+        template: true,
+        lastEditedBy: { select: { id: true, fullName: true, email: true } },
+      },
+    });
+
+    await this.revisions.record({
+      organizationId: existing.event.organizationId || '(sin-organizacion)',
+      eventId: existing.eventId,
+      docType: DocType.CHECKLIST,
+      docId: id,
+      revision: updated.revision,
+      fromStatus: from,
+      toStatus: to,
+      note: reopening
+        ? `Reabierto: ${body.reason}`
+        : `${DOC_STATUS_LABEL[from]} → ${DOC_STATUS_LABEL[to]}`,
+      actor: actorFrom(req as never),
+    });
+
+    await this.prisma.auditLog.create({
+      data: {
+        userId: req.user.id,
+        organizationId: existing.event.organizationId,
+        action: reopening ? 'checklist.reopen' : `checklist.status.${to.toLowerCase()}`,
+        resource: 'ChecklistInstance',
+        resourceId: id,
+        metaJson: { from, to, reason: body.reason ?? null },
+        ip: req.ip,
+        userAgent: req.headers?.['user-agent']?.slice(0, 300),
+      },
+    });
+
+    return updated;
+  }
+
   @Post(':id/restore/:versionId')
   async restoreVersion(
     @Req() req: { user: AuthUser },
@@ -522,7 +617,7 @@ export class ChecklistsController {
     if (!existing) throw new BadRequestException('Checklist no encontrado');
     this.assertEventAccess(req.user, existing.event);
     this.assertChecklistEdit(req.user);
-    assertEventNotClosed(existing.event.status);
+    assertDocWritable(existing, existing.event);
 
     const version = await this.prisma.checklistVersion.findUnique({ where: { id: versionId } });
     if (!version || version.instanceId !== id) {

@@ -20,6 +20,10 @@ export type Checklist = {
   /** Contador de revisiones y token de bloqueo optimista. */
   revision?: number;
   status?: DocStatus;
+  sealedAt?: string | null;
+  sealedBy?: { fullName: string } | null;
+  approvedAt?: string | null;
+  submittedAt?: string | null;
   lastEditedAt?: string | null;
   lastEditedBy?: { fullName: string } | null;
   template?: { key: string };

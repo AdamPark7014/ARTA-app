@@ -887,3 +887,25 @@
 .conflict-notice__actions {
   justify-content: flex-start;
 }
+
+/* ── Estados del documento ───────────────────────────────────────────────── */
+
+.checklist-status-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+  margin-top: 0.4rem;
+}
+
+.status-reopen {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.status-reopen .field {
+  min-width: 260px;
+  flex: 1 1 260px;
+}

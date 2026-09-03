@@ -32,6 +32,7 @@ import {
   emptyFinance,
   type Checklist,
   type DirUser,
+  type DocStatus,
   type EventDetail,
   type FinanceRow,
   type FinanceData,
@@ -434,6 +435,32 @@ function EventDetailInner() {
         return;
       }
       flash(e instanceof Error ? e.message : 'Error al guardar', 'error');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  /** Borrador → Revisión → Aprobado → Sellado, y reabrir con motivo. */
+  async function changeChecklistStatus(next: DocStatus, reason?: string) {
+    if (!activeChecklist) return;
+    setSaving(true);
+    try {
+      const updated = await api<Checklist>(`/checklists/${activeChecklist.id}/status`, {
+        method: 'POST',
+        body: JSON.stringify({ status: next, reason }),
+      });
+      applyChecklist({ ...updated, versions: activeChecklist.versions });
+      flash(
+        next === 'SEALED'
+          ? 'Formato sellado — queda en solo lectura'
+          : next === 'APPROVED'
+            ? 'Formato aprobado'
+            : next === 'REVIEW'
+              ? 'Mandado a revisión'
+              : 'De vuelta en borrador',
+      );
+    } catch (e) {
+      flash(e instanceof Error ? e.message : 'No se pudo cambiar el estado', 'error');
     } finally {
       setSaving(false);
     }
@@ -1327,6 +1354,8 @@ function EventDetailInner() {
             onOpenChecklist={openChecklist}
             onClearChecklist={() => setActiveChecklist(null)}
             onSaveChecklist={saveChecklist}
+            onChangeStatus={changeChecklistStatus}
+            roleKey={user?.roleKey || ''}
             onAutosaveChecklist={saveChecklistDraft}
             onRegeneratePdf={regeneratePdf}
             onUpload={onUpload}

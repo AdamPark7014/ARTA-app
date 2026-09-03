@@ -13,7 +13,8 @@ import { ChecklistPicker } from '@/components/events/ChecklistPicker';
 import { useAutosave } from '@/lib/use-autosave';
 import { useDirtyGuard } from '@/lib/use-dirty-guard';
 import { useSaveHotkey } from '@/lib/use-save-hotkey';
-import type { Checklist, EventDetail } from '@/components/events/event-detail.types';
+import { DocStatusBadge, DocStatusControl } from '@/components/ui/DocStatusControl';
+import type { Checklist, DocStatus, EventDetail } from '@/components/events/event-detail.types';
 
 type Section = Checklist['dataJson']['sections'][number];
 type Item = Section['items'][number];
@@ -29,6 +30,10 @@ type EventChecklistsPanelProps = {
   onOpenChecklist: (c: Checklist) => Promise<void>;
   onClearChecklist: () => void;
   onSaveChecklist: () => Promise<void>;
+  /** Cambiar el estado del formato (Borrador → Revisión → Aprobado → Sellado). */
+  onChangeStatus?: (next: DocStatus, reason?: string) => Promise<void> | void;
+  /** Rol de quien mira: decide qué botones de estado tienen sentido enseñar. */
+  roleKey?: string;
   /** Guardado silencioso: sin regenerar PDF ni crear versión. */
   onAutosaveChecklist: (dataJson: Checklist['dataJson']) => Promise<void>;
   onRegeneratePdf: () => Promise<void>;
@@ -64,6 +69,8 @@ export function EventChecklistsPanel({
   onOpenChecklist,
   onClearChecklist,
   onSaveChecklist,
+  onChangeStatus,
+  roleKey = '',
   onAutosaveChecklist,
   onRegeneratePdf,
   onUpload,
@@ -88,6 +95,14 @@ export function EventChecklistsPanel({
 
   const fieldMap = activeChecklist?.pdfFieldsJson;
   const canWriteOnPdf = !!activeChecklist?.pdfUrl && !!fieldMap?.fields?.length;
+  /*
+   * Un formato aprobado o sellado no se edita. `REVIEW` sí: es una bandera
+   * para pedir revisión, no un candado — si bloqueara, nadie cerraría su
+   * formato de noche porque quien aprueba está dormido.
+   */
+  const status = (activeChecklist?.status || 'DRAFT') as DocStatus;
+  const lockedByStatus = status === 'APPROVED' || status === 'SEALED';
+  const readOnly = closed || lockedByStatus;
 
   // Al cambiar de formato se vuelve al modo que corresponda.
   useEffect(() => {
@@ -142,7 +157,7 @@ export function EventChecklistsPanel({
 
   const autosave = useAutosave<Checklist['dataJson'] | null>({
     value: activeChecklist?.dataJson ?? null,
-    enabled: !!activeChecklist && !closed,
+    enabled: !!activeChecklist && !readOnly,
     save: async (data) => {
       if (data) await onAutosaveChecklist(data);
     },
@@ -159,7 +174,7 @@ export function EventChecklistsPanel({
     'El formato tiene cambios sin guardar. ¿Salir de todas formas?',
   );
 
-  useSaveHotkey(!!activeChecklist && !closed && !saving, async () => {
+  useSaveHotkey(!!activeChecklist && !readOnly && !saving, async () => {
     await onSaveChecklist();
     autosave.reset(activeChecklist?.dataJson ?? null);
   });
@@ -229,7 +244,28 @@ export function EventChecklistsPanel({
                 >
                   ← Formatos
                 </button>
-                <h2>{activeChecklist.title}</h2>
+                <h2>
+                  {activeChecklist.title} <DocStatusBadge status={status} />
+                </h2>
+                {onChangeStatus && !closed ? (
+                  <div className="checklist-status-row">
+                    <DocStatusControl
+                      status={status}
+                      roleKey={roleKey}
+                      busy={saving}
+                      onChange={onChangeStatus}
+                    />
+                    {activeChecklist.sealedAt ? (
+                      <span className="muted kpi-sub">
+                        Sellado el{' '}
+                        {new Date(activeChecklist.sealedAt).toLocaleDateString('es-MX', {
+                          dateStyle: 'medium',
+                        })}
+                        {activeChecklist.sealedBy ? ` por ${activeChecklist.sealedBy.fullName}` : ''}
+                      </span>
+                    ) : null}
+                  </div>
+                ) : null}
                 <div className="checklist-progress">
                   <div className="progress">
                     <span style={{ width: `${progressPct}%` }} />
@@ -241,11 +277,13 @@ export function EventChecklistsPanel({
                 </div>
               </div>
               <div className="panel-head-actions">
-                {!closed ? <SaveStatus status={autosave.status} savedAt={autosave.savedAt} error={autosave.error} /> : null}
+                {!readOnly ? (
+                  <SaveStatus status={autosave.status} savedAt={autosave.savedAt} error={autosave.error} />
+                ) : null}
                 <button
                   className="btn btn-sm"
                   type="button"
-                  disabled={saving || closed}
+                  disabled={saving || readOnly}
                   onClick={saveNow}
                   title="Ctrl+S / ⌘S — guarda y regenera el PDF"
                 >
@@ -278,7 +316,15 @@ export function EventChecklistsPanel({
               </div>
             </div>
 
-            {!closed ? (
+            {lockedByStatus ? (
+              <div className="module-banner module-banner--warn" role="status">
+                {status === 'SEALED'
+                  ? 'Formato sellado: queda como evidencia y no se edita. Solo dirección puede reabrirlo, dejando el motivo.'
+                  : 'Formato aprobado: para editarlo hay que devolverlo a borrador.'}
+              </div>
+            ) : null}
+
+            {!readOnly ? (
               <div className="checklist-save-hint muted kpi-sub">
                 Se guarda solo mientras escribes. «Guardar y generar PDF» deja el formato firmado en
                 el expediente y crea una versión en el historial.
@@ -340,7 +386,7 @@ export function EventChecklistsPanel({
                   cacheKey={activeChecklist.pdfGeneratedAt || undefined}
                   fieldMap={fieldMap!}
                   sections={sections}
-                  canEdit={!closed}
+                  canEdit={!readOnly}
                   onUpdateItem={onUpdateItem}
                 />
               ) : null}
@@ -421,7 +467,7 @@ export function EventChecklistsPanel({
                                     {isCheckItem(item) ? (
                                       <input
                                         type="checkbox"
-                                        disabled={closed}
+                                        disabled={readOnly}
                                         checked={!!item.done}
                                         aria-label={item.label}
                                         onChange={(e) =>
@@ -437,7 +483,7 @@ export function EventChecklistsPanel({
                                         <input
                                           className="field check-item__field"
                                           type={item.type === 'text' ? 'text' : item.type}
-                                          disabled={closed}
+                                          disabled={readOnly}
                                           value={item.value ?? ''}
                                           placeholder={item.type === 'date' ? 'Fecha' : 'Respuesta…'}
                                           onChange={(e) =>
@@ -466,7 +512,7 @@ export function EventChecklistsPanel({
                                             <div className="check-item__field-stack">
                                               <select
                                                 className="field"
-                                                disabled={closed}
+                                                disabled={readOnly}
                                                 value={choice}
                                                 onChange={(e) => {
                                                   const next = e.target.value;
@@ -489,7 +535,7 @@ export function EventChecklistsPanel({
                                               {otra && choice === otra ? (
                                                 <input
                                                   className="field"
-                                                  disabled={closed}
+                                                  disabled={readOnly}
                                                   placeholder="Especifica (ej. Ticketmaster)"
                                                   value={custom}
                                                   onChange={(e) =>
@@ -574,7 +620,7 @@ export function EventChecklistsPanel({
                     key={activeChecklist.id}
                     url={activeChecklist.pdfUrl}
                     fileName={`${activeChecklist.title} — anotado.pdf`}
-                    canEdit={!closed}
+                    canEdit={!readOnly}
                     saveLabel="Guardar copia anotada"
                     note={
                       'Este PDF lo regenera el sistema cada vez que guardas el formato, así que lo ' +

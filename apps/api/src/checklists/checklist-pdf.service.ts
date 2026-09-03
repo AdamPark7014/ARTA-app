@@ -105,9 +105,16 @@ export class ChecklistPdfService {
   async generate(
     checklistId: string,
     input: PdfInput,
+    /**
+     * Revisión del formato. El archivo lleva el número en el nombre, así que
+     * **cada versión queda en disco**: el PDF que alguien firmó no se puede
+     * pisar. Antes todo se escribía siempre en `<id>.pdf` y cada regeneración
+     * borraba el documento anterior, firmas incluidas.
+     */
+    revision?: number,
   ): Promise<{ url: string; filePath: string; fieldMap: PdfFieldMap }> {
     const dir = this.uploadRoot();
-    const fileName = `${checklistId}.pdf`;
+    const fileName = revision === undefined ? `${checklistId}.pdf` : `${checklistId}-r${revision}.pdf`;
     const filePath = join(dir, fileName);
 
     const PAGE_WIDTH = 612;
@@ -300,26 +307,30 @@ export class ChecklistPdfService {
       select: { boletera: true, logoUrl: true },
     });
 
-    const { url, fieldMap } = await this.generate(checklistId, {
-      title: item.title,
-      eventName: item.event.name,
-      entity: item.event.entity,
-      artist: item.event.artist,
-      venue: item.event.venue,
-      city: item.event.city,
-      templateKey: item.template?.key,
-      data: item.dataJson as ChecklistData,
-      delivered: delivered
-        ? { ...delivered, signedAt: delivered.signedAt || item.deliveredAt?.toISOString() }
-        : null,
-      authorized: authorized
-        ? { ...authorized, signedAt: authorized.signedAt || item.authorizedAt?.toISOString() }
-        : null,
-      editedBy: item.lastEditedBy?.fullName,
-      editedAt: item.lastEditedAt,
-      boleteraName: ticketing?.boletera || null,
-      boleteraLogoPath: this.resolveUploadPath(ticketing?.logoUrl),
-    });
+    const { url, fieldMap } = await this.generate(
+      checklistId,
+      {
+        title: item.title,
+        eventName: item.event.name,
+        entity: item.event.entity,
+        artist: item.event.artist,
+        venue: item.event.venue,
+        city: item.event.city,
+        templateKey: item.template?.key,
+        data: item.dataJson as ChecklistData,
+        delivered: delivered
+          ? { ...delivered, signedAt: delivered.signedAt || item.deliveredAt?.toISOString() }
+          : null,
+        authorized: authorized
+          ? { ...authorized, signedAt: authorized.signedAt || item.authorizedAt?.toISOString() }
+          : null,
+        editedBy: item.lastEditedBy?.fullName,
+        editedAt: item.lastEditedAt,
+        boleteraName: ticketing?.boletera || null,
+        boleteraLogoPath: this.resolveUploadPath(ticketing?.logoUrl),
+      },
+      item.revision,
+    );
 
     return this.prisma.checklistInstance.update({
       where: { id: checklistId },

@@ -1,94 +1,71 @@
 # RELEVO
 
 - **Último turno:** claude-code
-- **Fecha:** 2026-09-02
+- **Fecha:** 2026-09-03
 - **Rama:** main
 
 ## Hecho en este turno
 
-**Fase 2 del plan de robustez: el Excel deja de destruirse al guardar, y la
-corrida deja de ser un agujero negro.**
+**Fase 3: los estados por fin protegen algo. Firmar congela el documento.**
 
-### 1. Guardar un Excel ya no destruye su formato
+### 1. Un solo oráculo para tres candados
 
-Hasta ahora, abrir un `.xlsx` en el panel, tocar UNA celda y guardar reescribía
-el libro entero desde el navegador con SheetJS Community — cuyo *writer* emite
-una fuente fija Calibri 12 y tiene formato condicional y validación de datos
-literalmente sin implementar. Colores, bordes, anchos y validaciones se perdían
-en **todo** el libro, incluidas las hojas que nadie abrió.
+Había tres candados que se solapaban —el estado del documento, el `locked` de la
+corrida y el estado del evento— y cada endpoint los comprobaba por su cuenta.
+Así nació el bug que ya costó caro: `if (existing.locked && body.locked !== false)`,
+que dejaba desbloquear y editar en la misma petición.
 
-Ahora el editor manda **solo las celdas que tocó** (`flushGridToWorkbook` ya las
-calculaba: solo había que emitirlas) y el servidor las aplica con **ExcelJS**
-sobre el archivo real, en `PATCH /uploads/:id/cells`.
+Ahora hay **un único sitio** donde se decide si algo se puede escribir:
+`common/doc-guards.ts`. Todo endpoint de escritura pasa por `assertDocWritable`.
+**17 pruebas** cubren la matriz completa.
 
-Probado, no supuesto: `xlsx-patch.service.spec.ts` construye un libro con
-negritas, relleno, formato de moneda, bordes, anchos, fórmulas y dos hojas,
-parchea una celda y **comprueba que todo lo demás sobrevive**.
+### 2. Las reglas, y por qué son así
 
-**Por qué NO se migró ExcelJS al navegador**, como decía el plan original:
-ExcelJS tampoco hace round-trip conservador —parsea a su modelo y re-serializa,
-tirando gráficas y tablas dinámicas— y duplicaba el bundle. Se cambió de rumbo
-con Adam de acuerdo.
+- **Pedir revisión es autoservicio.** Nadie tiene que pedir permiso para pedir
+  que le revisen.
+- **`REVIEW` NO bloquea la edición.** Es una bandera, no un candado. Si
+  bloqueara, nadie cerraría su formato a las 23 h antes de un show porque quien
+  aprueba está dormido — y el atajo del equipo acabaría siendo tocar la base.
+- **`APPROVED` y `SEALED` sí bloquean.** Un aprobado se devuelve a borrador para
+  editarlo; un sellado solo lo reabre **dirección, con motivo por escrito** que
+  queda en el historial.
+- **Sellado es de un solo sentido**: no se puede volver a «aprobado» ni a
+  «revisión», solo reabrir.
+- Los botones que darían 403 **no se enseñan**: quien no puede aprobar no ve
+  «Aprobar».
 
-### 2. Guarda de compatibilidad, en vez de comerse el archivo
+### 3. Cerrar un evento ya NO sella (decisión de producto)
 
-Un libro con gráficas, tablas dinámicas, macros o segmentaciones se marca
-`panelEditable = false` al subirlo (se detecta leyendo los nombres de entrada
-del zip, sin descomprimir) y el panel lo abre en **solo lectura diciendo por
-qué**: *«Este libro tiene gráficas. Edítalo en Excel y vuelve a subirlo — aquí
-se ve, pero no se edita para no estropearlo.»*
+Cerrar es operativo; sellar es un acto de responsabilidad con firmante y fecha.
+Confundirlos implicaba que **reabrir DES-sellaba** — y así era literalmente: el
+`reopen` hacía `financeRun.updateMany({ locked: false })` sobre todas las
+corridas del evento, echando abajo un sello que alguien había puesto a
+conciencia. Ahora reabrir devuelve cada documento a *su* propio estado y jamás
+degrada un sellado. El evento cerrado sigue dejando todo en solo lectura, pero a
+través del oráculo.
 
-### 3. Los archivos ya no se pierden
+### 4. El PDF firmado deja de sobrescribirse
 
-- **Historial real**: cada guardado archiva la versión anterior como
-  `DocRevision` con su `sha256`. Antes el blob viejo quedaba huérfano en disco,
-  sin ninguna fila que lo mencionara — irrecuperable desde la aplicación.
-  Nuevo `GET /uploads/:id/revisions`.
-- **Borrado reversible**: `DELETE /uploads/:id` marca `deletedAt` y audita, en
-  lugar de `unlinkSync` + borrar la fila. Nuevo `POST /uploads/:id/restore`.
-  Antes, borrar el Excel de la corrida era irreversible, anónimo y sin rastro.
-- **Los dos botones «actualizar» hacían cosas opuestas** en el panel de corrida:
-  uno versionaba, el otro subía un archivo nuevo y **borraba el anterior del
-  disco**. Ahora los dos van por `PUT :id/content`.
+El archivo se escribía siempre en `<id>.pdf`, así que **cada regeneración
+borraba el documento anterior, firmas incluidas**. Ahora lleva la revisión en el
+nombre (`<id>-r<n>.pdf`): cada versión queda en disco y el PDF que alguien firmó
+no se puede pisar.
 
-### 4. La corrida deja de reportar ceros
+### 5. Prueba de qué se firmó
 
-El panel llama al Excel «la corrida viva», pero **el servidor nunca lo leía**:
-los KPIs de dirección salían de `FinanceRun.dataJson`, que casi siempre estaba
-vacío porque la tabla simple está colapsada y marcada como «Resumen rápido
-(opcional)». El dashboard reportaba ceros con la corrida llena.
+`DigitalSignature` gana `contentHash`: el sha256 del `dataJson` exacto que se
+firmó. Antes no había forma de demostrar que el documento actual fuera el que
+alguien autorizó.
 
-`FinanceExtractService` lee el libro con ExcelJS al guardarlo y extrae los
-renglones: salta el bloque de metadatos, ignora las filas TOTAL (el doble
-conteo clásico) y toma el resultado de las celdas con fórmula. **7 pruebas.**
+### 6. Pruebas
 
-Además la corrida gana lo que le faltaba: `revision`, `lastEditedBy`, historial
-con diff de renglones (`GET /finance/:id/revisions`) y auditoría — era el único
-documento del sistema sin autor ni rastro.
-
-### 5. Sellado de la corrida, de verdad
-
-Nuevo `POST /finance/:id/unlock`, solo dirección y **con motivo obligatorio**
-que queda en el historial. Antes bastaba mandar `{ locked: false, dataJson: … }`
-para desbloquear y editar en la misma petición.
-
-### 6. Plantilla e importador
-
-- La hoja Resumen sumaba `'Ingresos'!B30` — la celda concreta del total. Al
-  insertar o borrar una fila dejaba de ser el total y el Resumen mentía en
-  silencio. Ahora suma el **rango** (`SUM('Ingresos'!B9:B29)`).
-- El importador leía **siempre la primera hoja**, que en la plantilla propia es
-  *Resumen*: importar la plantilla del sistema daba basura. Ahora busca las
-  hojas de datos por nombre.
-
-### 7. Pruebas
-
-- **139 unitarias** (antes 116) y **35 de integración** contra Postgres real.
+- **156 unitarias** (antes 139) y **45 de integración** contra Postgres real
+  (antes 35), con `doc-status-flow.e2e-spec.ts` recorriendo el flujo completo:
+  logística pide revisión → sigue editando → no puede aprobar → gerencia aprueba
+  → ya no se edita → sella → dirección reabre con motivo → cada transición dejó
+  su revisión.
 - Playwright **26 de 28**. Los 2 rojos son `public-site.spec.ts` (SSR contra el
   API en `127.0.0.1:4000`, no levantado aquí — no es regresión).
-- `editors.spec.ts` se actualizó al contrato nuevo: ahora verifica que se manda
-  **un parche con exactamente las dos celdas tocadas**, en vez de un libro
-  reconstruido de más de 1 KB. Es una prueba mejor.
 
 ## A medias
 
@@ -97,18 +74,19 @@ Nada roto. Pendientes conocidos, por orden de importancia:
 1. **Insertar o borrar filas desde el panel no reajusta las fórmulas.** Una
    `=B9*C9` desplazada a la fila 10 sigue apuntando a la 9 → cálculos mal en
    silencio. Es el fallo más serio que queda en el editor de hojas.
-2. **`EventDocument` sigue sin revisiones**: tiene las columnas de Fase 1 pero
-   su controlador aún no las usa.
-3. **Los estados (`DocStatus`) siguen sin bloquear nada** — se ven, no
-   restringen. Es la Fase 3, a propósito.
-4. **`folders`** (SharedFile) no tiene guardado por celdas ni versionado: es
-   otro modelo y quedó fuera.
+2. **Los estados solo se aplican en checklists.** `FinanceRun` y `EventDocument`
+   tienen las columnas y la corrida ya tiene su `unlock`, pero sus endpoints aún
+   no usan el oráculo ni exponen transiciones.
+3. **`locked` sigue existiendo** en `FinanceRun` como columna real. El oráculo ya
+   lo lee, pero falta la migración que lo elimine cuando todo pase por `status`.
+4. **`EventDocument` sigue sin revisiones.**
+5. **`folders`** (SharedFile) quedó fuera de todo: otro modelo.
 
 ## Siguiente paso
 
-1. **Deploy + `prisma migrate deploy`** en Hetzner. Hay **tres** migraciones
-   pendientes acumuladas: tareas con evidencia (cursor), `doc_revisions_and_status`
-   y `file_revisions_and_panel_editable`.
+1. **Deploy + `prisma migrate deploy`** en Hetzner. Hay **cuatro** migraciones
+   acumuladas: tareas con evidencia (cursor), `doc_revisions_and_status`,
+   `file_revisions_and_panel_editable` y `signature_content_hash`.
 2. **Backfill del avance** tras el deploy (viene de Fase 0):
    ```
    docker exec -w /app/apps/api arta-api npx ts-node --transpile-only \
@@ -116,13 +94,21 @@ Nada roto. Pendientes conocidos, por orden de importancia:
    ```
    ⚠️ Los porcentajes bajan y las alertas de riesgo suben. Avisar al equipo el
    mismo día y silenciar digests 24 h.
-3. **Smoke con un Excel real de Arta**: abrir una corrida con formato, editar
-   una celda, guardar, descargar y abrir en Excel. Deben sobrevivir colores,
-   moneda, anchos y las fórmulas no tocadas.
-4. **Smoke de concurrencia**: mismo formato en dos navegadores, guardar en uno y
+3. **Smoke con Arturo/José Luis**: llenar un formato → mandarlo a revisión →
+   aprobarlo → intentar editarlo (debe negarse) → sellarlo → reabrirlo con
+   motivo → ver el rastro completo en el historial.
+4. **Smoke con un Excel real de Arta** (viene de Fase 2): abrir una corrida con
+   formato, editar una celda, guardar, descargar y abrir en Excel. Deben
+   sobrevivir colores, moneda, anchos y las fórmulas no tocadas.
+5. **Smoke de concurrencia**: mismo formato en dos navegadores, guardar en uno y
    luego en el otro → aviso con diff, sin perder nada.
-5. Fase 3: aplicar los estados (Borrador → Revisión → Aprobado → Sellado) con un
-   único oráculo `doc-guards.ts`, y PDF de checklist con nombre versionado.
+
+### Si el equipo se queja de fricción
+
+Los estados salieron pensados para no estorbar (revisión no bloquea, pedir
+revisión es autoservicio). Si aun así molestan la primera semana, **se relaja el
+flujo, no se abandona el historial**: el valor está en `DocRevision`, no en los
+candados.
 
 ## No tocar
 
