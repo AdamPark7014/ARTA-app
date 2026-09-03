@@ -707,3 +707,183 @@
 .expandbox--inline .expandbox__body {
   overflow-x: auto;
 }
+
+/* ── Historial con diff y choques de edición ─────────────────────────────────
+   Antes el historial solo decía «fecha · editor · nota» y no había forma de
+   responder «¿quién cambió el aforo de 4200 a 3800?». Y dos personas editando
+   se pisaban sin enterarse. */
+
+.revision-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.revision-item {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg-soft);
+  overflow: hidden;
+}
+
+.revision-item__head {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  width: 100%;
+  padding: 0.5rem 0.7rem;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.revision-item__head:disabled {
+  cursor: default;
+}
+
+.revision-item__head:hover:not(:disabled) {
+  background: hsla(0, 0%, 100%, 0.04);
+}
+
+.revision-item__head:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.revision-item__num {
+  flex: 0 0 auto;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.75rem;
+  color: var(--accent);
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+  border-radius: 999px;
+  padding: 0.1rem 0.45rem;
+}
+
+.revision-item__main {
+  display: grid;
+  gap: 0.1rem;
+  min-width: 0;
+  flex: 1;
+}
+
+.revision-item__who {
+  font-size: 0.88rem;
+  font-weight: 500;
+}
+
+.revision-item__caret {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.revision-item__body {
+  padding: 0.2rem 0.7rem 0.7rem;
+  border-top: 1px solid var(--line);
+}
+
+.revision-restore summary {
+  cursor: pointer;
+  padding: 0.4rem 0;
+}
+
+/* ── Diff campo por campo ────────────────────────────────────────────────── */
+
+.field-diff {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.field-diff__scope {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--muted);
+  margin-bottom: 0.25rem;
+}
+
+.field-diff__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.25rem;
+}
+
+.field-diff__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.5rem;
+  padding: 0.3rem 0.5rem;
+  border-radius: 6px;
+  background: hsla(0, 0%, 100%, 0.03);
+  font-size: 0.85rem;
+}
+
+.field-diff__label {
+  font-weight: 500;
+  flex: 1 1 40%;
+  min-width: 0;
+}
+
+.field-diff__values {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.field-diff__before {
+  color: var(--danger);
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+}
+
+.field-diff__after {
+  color: var(--ok);
+}
+
+.field-diff__arrow {
+  color: var(--muted);
+}
+
+.field-diff__row--added .field-diff__before,
+.field-diff__row--removed .field-diff__after {
+  opacity: 0.6;
+}
+
+/* ── Aviso de edición concurrente ────────────────────────────────────────── */
+
+.conflict-notice {
+  display: grid;
+  gap: 0.6rem;
+  padding: 0.85rem 1rem;
+  border-radius: var(--radius-lg);
+  border: 1px solid color-mix(in srgb, var(--warn) 55%, var(--line-strong));
+  background: color-mix(in srgb, var(--warn) 10%, var(--bg-elev));
+}
+
+.conflict-notice__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.6rem;
+}
+
+.conflict-notice__diff {
+  padding: 0.6rem;
+  border-radius: var(--radius);
+  background: var(--bg-soft);
+  max-height: 40vh;
+  overflow: auto;
+}
+
+.conflict-notice__actions {
+  justify-content: flex-start;
+}

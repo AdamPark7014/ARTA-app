@@ -8,6 +8,7 @@ import { ChecklistPdfEditor } from '@/components/files/ChecklistPdfEditor';
 import { createEventFile } from '@/lib/file-save';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { SaveStatus } from '@/components/ui/SaveStatus';
+import { RevisionHistory } from '@/components/ui/RevisionHistory';
 import { ChecklistPicker } from '@/components/events/ChecklistPicker';
 import { useAutosave } from '@/lib/use-autosave';
 import { useDirtyGuard } from '@/lib/use-dirty-guard';
@@ -613,51 +614,56 @@ export function EventChecklistsPanel({
                     aria-expanded={showHistory}
                     onClick={() => setShowHistory((v) => !v)}
                   >
-                    {showHistory ? 'Ocultar' : `Ver (${(activeChecklist.versions || []).length})`}
+                    {showHistory ? 'Ocultar' : 'Ver quién cambió qué'}
                   </button>
                 </div>
                 {showHistory ? (
-                  (activeChecklist.versions || []).length ? (
-                    <div className="table-wrap">
-                      <table className="table">
-                        <thead>
-                          <tr>
-                            <th>Fecha</th>
-                            <th>Editor</th>
-                            <th>Nota</th>
-                            <th />
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {(activeChecklist.versions || []).map((v) => (
-                            <tr key={v.id}>
-                              <td className="muted kpi-sub">
-                                {new Date(v.createdAt).toLocaleString('es-MX')}
-                              </td>
-                              <td>{v.editedBy?.fullName || '—'}</td>
-                              <td className="muted">{v.note || '—'}</td>
-                              <td>
-                                {!closed ? (
-                                  <button
-                                    className="btn ghost btn-sm"
-                                    type="button"
-                                    disabled={saving}
-                                    onClick={() => onRestoreVersion(v.id)}
-                                  >
-                                    Restaurar
-                                  </button>
-                                ) : null}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  ) : (
-                    <p className="muted kpi-sub">
-                      Las versiones se crean con «Guardar y generar PDF», no con el autoguardado.
-                    </p>
-                  )
+                  <div className="stack">
+                    {/* Quién cambió qué campo, no solo quién tocó el formato. */}
+                    <RevisionHistory
+                      path={`/checklists/${activeChecklist.id}/revisions`}
+                      reloadKey={revision}
+                      emptyHint="Las revisiones se crean con «Guardar y generar PDF», no con el autoguardado."
+                    />
+                    {(activeChecklist.versions || []).length && !closed ? (
+                      <details className="revision-restore">
+                        <summary className="muted kpi-sub">Restaurar una versión anterior</summary>
+                        <div className="table-wrap">
+                          <table className="table">
+                            <thead>
+                              <tr>
+                                <th>Fecha</th>
+                                <th>Editor</th>
+                                <th>Nota</th>
+                                <th />
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {(activeChecklist.versions || []).map((v) => (
+                                <tr key={v.id}>
+                                  <td className="muted kpi-sub">
+                                    {new Date(v.createdAt).toLocaleString('es-MX')}
+                                  </td>
+                                  <td>{v.editedBy?.fullName || '—'}</td>
+                                  <td className="muted">{v.note || '—'}</td>
+                                  <td>
+                                    <button
+                                      className="btn ghost btn-sm"
+                                      type="button"
+                                      disabled={saving}
+                                      onClick={() => onRestoreVersion(v.id)}
+                                    >
+                                      Restaurar
+                                    </button>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </details>
+                    ) : null}
+                  </div>
                 ) : null}
               </div>
             </div>

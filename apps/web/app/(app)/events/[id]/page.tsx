@@ -10,7 +10,8 @@ import { useEventTab } from '@/components/events/useEventTab';
 import { EventHero } from '@/components/ui/EventHero';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { FlashMessage } from '@/components/ui/PageChrome';
-import { api } from '@/lib/api';
+import { api, isRevisionConflict, type RevisionConflict } from '@/lib/api';
+import { ConflictNotice } from '@/components/ui/ConflictNotice';
 import { useUser } from '@/lib/user-context';
 import { userHasPermission } from '@/lib/access-matrix';
 import { importFinanceFromFile } from '@/lib/finance-import';
@@ -64,6 +65,9 @@ function EventDetailInner() {
   /** Sube cada vez que el checklist viene del servidor: el autoguardado del
    * panel usa esto para volver a tomar la línea base y no reenviar lo mismo. */
   const [checklistRevision, setChecklistRevision] = useState(0);
+  /** Choque de edición concurrente pendiente de resolver por la persona. */
+  const [conflict, setConflict] = useState<RevisionConflict | null>(null);
+  const [resolvingConflict, setResolvingConflict] = useState(false);
   const [saving, setSaving] = useState(false);
   const [poForm, setPoForm] = useState({
     rubro: 'audio',
@@ -373,33 +377,91 @@ function EventDetailInner() {
    */
   async function saveChecklistDraft(dataJson: Checklist['dataJson']) {
     if (!activeChecklist || closed) return;
+    /*
+     * `baseRevision` es lo que convierte el autoguardado en seguro: si alguien
+     * guardó mientras tanto, el servidor responde 409 con el diff en vez de
+     * dejar que se pisen. Y hay que quedarse con la revisión que devuelve, o
+     * el siguiente autoguardado chocaría contra uno mismo.
+     */
     const updated = await api<Checklist>(`/checklists/${activeChecklist.id}`, {
       method: 'PATCH',
-      body: JSON.stringify({ dataJson, draft: true }),
+      body: JSON.stringify({
+        dataJson,
+        draft: true,
+        baseRevision: activeChecklist.revision,
+      }),
+    }).catch((e) => {
+      // Se relanza a propósito: así la píldora de estado no dice «guardado».
+      if (isRevisionConflict(e)) setConflict(e.body);
+      throw e;
     });
     setActiveChecklist((prev) =>
       prev && prev.id === updated.id
-        ? { ...prev, progressPct: updated.progressPct, lastEditedAt: updated.lastEditedAt, lastEditedBy: updated.lastEditedBy }
+        ? {
+            ...prev,
+            // Sin quedarse con la revisión nueva, el siguiente autoguardado
+            // chocaría contra uno mismo.
+            revision: updated.revision,
+            progressPct: updated.progressPct,
+            lastEditedAt: updated.lastEditedAt,
+            lastEditedBy: updated.lastEditedBy,
+          }
         : prev,
     );
     mergeChecklistIntoEvent(updated);
   }
 
-  async function saveChecklist() {
+  async function saveChecklist(options?: { overwrite?: boolean }) {
     if (!activeChecklist || closed) return;
     setSaving(true);
     setMsg('');
     try {
       const updated = await api<Checklist>(`/checklists/${activeChecklist.id}`, {
         method: 'PATCH',
-        body: JSON.stringify({ dataJson: activeChecklist.dataJson }),
+        body: JSON.stringify({
+          dataJson: activeChecklist.dataJson,
+          // Al pisar a propósito se manda la revisión del servidor, no la mía.
+          baseRevision: options?.overwrite ? conflict?.currentRevision : activeChecklist.revision,
+        }),
       });
       applyChecklist({ ...updated, versions: activeChecklist.versions });
+      setConflict(null);
       flash('Checklist guardado · PDF regenerado');
     } catch (e) {
+      if (isRevisionConflict(e)) {
+        // Nada de pisar ni de perder lo tecleado: decide la persona.
+        setConflict(e.body);
+        return;
+      }
       flash(e instanceof Error ? e.message : 'Error al guardar', 'error');
     } finally {
       setSaving(false);
+    }
+  }
+
+  /** Descartar lo mío y quedarme con lo que hay guardado. */
+  async function takeTheirs() {
+    if (!activeChecklist) return;
+    setResolvingConflict(true);
+    try {
+      const full = await api<Checklist>(`/checklists/${activeChecklist.id}`);
+      applyChecklist(full);
+      setConflict(null);
+      flash('Se cargó la versión guardada');
+    } catch (e) {
+      flash(e instanceof Error ? e.message : 'No se pudo recargar', 'error');
+    } finally {
+      setResolvingConflict(false);
+    }
+  }
+
+  /** Guardar lo mío encima, con constancia en el historial. */
+  async function keepMine() {
+    setResolvingConflict(true);
+    try {
+      await saveChecklist({ overwrite: true });
+    } finally {
+      setResolvingConflict(false);
     }
   }
 
@@ -1237,6 +1299,16 @@ function EventDetailInner() {
             onGoModule={selectModule}
           />
         )}
+
+        {conflict && tab === 'checklists' ? (
+          <ConflictNotice
+            conflict={conflict}
+            busy={resolvingConflict || saving}
+            onTakeTheirs={takeTheirs}
+            onKeepMine={keepMine}
+            onDismiss={() => setConflict(null)}
+          />
+        ) : null}
 
         {tab === 'checklists' && (
           <EventChecklistsPanel

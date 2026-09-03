@@ -4,6 +4,7 @@ import { ConfigModule } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { PrismaModule } from './common/prisma/prisma.module';
+import { RevisionsModule } from './common/revisions/revisions.module';
 import { CsrfMiddleware } from './common/csrf.middleware';
 import { RequestIdMiddleware } from './common/logging/request-id.middleware';
 import { AuthModule } from './auth/auth.module';
@@ -38,6 +39,7 @@ import { HealthModule } from './health/health.module';
     ScheduleModule.forRoot(),
     ThrottlerModule.forRoot([{ name: 'default', ttl: 60_000, limit: 240 }]),
     PrismaModule,
+    RevisionsModule,
     HealthModule,
     AuthModule,
     EventsModule,

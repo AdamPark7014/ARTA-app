@@ -11,9 +11,15 @@ import {
   Req,
   UseGuards,
 } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { DocType, Prisma } from '@prisma/client';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { calcProgress } from '../common/checklist-progress';
+import { diffChecklistData } from '../common/doc-diff';
+import {
+  actorFrom,
+  RevisionConflictException,
+  RevisionService,
+} from '../common/revisions/revision.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { assertSameTenant } from '../common/tenant';
 import { assertEventNotClosed } from '../common/event-guards';
@@ -47,6 +53,7 @@ export class ChecklistsController {
   constructor(
     private prisma: PrismaService,
     private pdfs: ChecklistPdfService,
+    private revisions: RevisionService,
   ) {}
 
   private assertEventAccess(user: AuthUser, event: { entity: string; organizationId?: string | null; status?: string }) {
@@ -265,7 +272,7 @@ export class ChecklistsController {
 
   @Patch(':id')
   async update(
-    @Req() req: { user: AuthUser },
+    @Req() req: { user: AuthUser; ip?: string; headers?: Record<string, string> },
     @Param('id') id: string,
     @Body()
     body: {
@@ -273,13 +280,20 @@ export class ChecklistsController {
       note?: string;
       /** `false` en autoguardados: regenerar el PDF en cada tecleo era carísimo. */
       regeneratePdf?: boolean;
-      /** Autoguardado: no crea versión ni entrada de auditoría. */
+      /** Autoguardado: no crea revisión ni entrada de auditoría. */
       draft?: boolean;
+      /**
+       * Revisión sobre la que se editó. Si el servidor va por otra, alguien
+       * guardó mientras tanto y se responde 409 con el diff en vez de pisarlo.
+       * Opcional por compatibilidad: sin él se mantiene el comportamiento
+       * anterior (último en escribir gana).
+       */
+      baseRevision?: number;
     },
   ) {
     const existing = await this.prisma.checklistInstance.findUnique({
       where: { id },
-      include: { event: true },
+      include: { event: true, lastEditedBy: { select: { fullName: true } } },
     });
     if (!existing) throw new BadRequestException('Checklist no encontrado');
     this.assertEventAccess(req.user, existing.event);
@@ -288,15 +302,40 @@ export class ChecklistsController {
 
     const progressPct = calcProgress(body.dataJson);
     const draft = body.draft === true;
+    const base = body.baseRevision;
 
-    const updated = await this.prisma.checklistInstance.update({
-      where: { id },
+    /*
+     * UPDATE atómico con el número de revisión en el WHERE: si otra petición
+     * se adelantó, no casa ninguna fila y `count` viene en 0. El contador es a
+     * la vez historial y candado, así que no hace falta un `SELECT ... FOR
+     * UPDATE` aparte.
+     */
+    const { count } = await this.prisma.checklistInstance.updateMany({
+      where: { id, ...(base !== undefined ? { revision: base } : {}) },
       data: {
         dataJson: body.dataJson as Prisma.InputJsonValue,
         progressPct,
         lastEditedById: req.user.id,
         lastEditedAt: new Date(),
+        revision: { increment: 1 },
       },
+    });
+
+    if (!count) {
+      const current = await this.prisma.checklistInstance.findUnique({
+        where: { id },
+        include: { lastEditedBy: { select: { fullName: true } } },
+      });
+      throw new RevisionConflictException({
+        currentRevision: current?.revision ?? existing.revision,
+        diff: diffChecklistData(body.dataJson, current?.dataJson),
+        theirs: current?.dataJson,
+        author: current?.lastEditedBy?.fullName ?? null,
+      });
+    }
+
+    const updated = await this.prisma.checklistInstance.findUniqueOrThrow({
+      where: { id },
       include: {
         template: true,
         lastEditedBy: { select: { id: true, fullName: true, email: true } },
@@ -304,24 +343,32 @@ export class ChecklistsController {
     });
 
     // El historial se llena con guardados explícitos: si cada autoguardado
-    // dejara versión, el historial sería ilegible y la tabla crecería sola.
+    // dejara revisión, el historial sería ilegible y la tabla crecería sola.
     if (!draft) {
-      await this.prisma.checklistVersion.create({
-        data: {
-          instanceId: id,
-          dataJson: body.dataJson as Prisma.InputJsonValue,
-          editedById: req.user.id,
-          note: body.note,
-        },
+      const diff = diffChecklistData(existing.dataJson, body.dataJson);
+
+      await this.revisions.record({
+        organizationId: existing.event.organizationId || '(sin-organizacion)',
+        eventId: existing.eventId,
+        docType: DocType.CHECKLIST,
+        docId: id,
+        revision: updated.revision,
+        snapshotJson: body.dataJson,
+        diff,
+        note: body.note ?? null,
+        actor: actorFrom(req),
       });
 
       await this.prisma.auditLog.create({
         data: {
           userId: req.user.id,
+          organizationId: existing.event.organizationId,
           action: 'checklist.update',
           resource: 'ChecklistInstance',
           resourceId: id,
-          metaJson: { progressPct, note: body.note ?? null },
+          metaJson: { progressPct, note: body.note ?? null, changes: diff.summary },
+          ip: req.ip,
+          userAgent: req.headers?.['user-agent']?.slice(0, 300),
         },
       });
     }
@@ -329,6 +376,18 @@ export class ChecklistsController {
     // El PDF se regenera al guardar de verdad, no en cada autoguardado.
     if (draft || body.regeneratePdf === false) return updated;
     return this.regeneratePdf(id);
+  }
+
+  /** Historial de revisiones del formato, con el diff ya calculado. */
+  @Get(':id/revisions')
+  async revisionHistory(@Req() req: { user: AuthUser }, @Param('id') id: string) {
+    const item = await this.prisma.checklistInstance.findUnique({
+      where: { id },
+      include: { event: true },
+    });
+    if (!item) throw new BadRequestException('Checklist no encontrado');
+    this.assertEventAccess(req.user, item.event);
+    return this.revisions.history(DocType.CHECKLIST, id);
   }
 
   @Post(':id/sign')

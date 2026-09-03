@@ -51,6 +51,52 @@ export function hasSessionHint(): boolean {
 
 import { shouldAuthRedirectOn401 } from '@/lib/domains';
 
+/**
+ * Error del API que conserva el cuerpo.
+ *
+ * Antes todo se aplanaba a `new Error(string)`, así que un 409 de edición
+ * concurrente llegaba a la pantalla como un texto suelto y no había forma de
+ * enseñar QUÉ cambió ni ofrecer «conservar lo mío / tomar lo suyo».
+ */
+export class ApiError<B = unknown> extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly body: B,
+  ) {
+    super(message);
+    this.name = 'ApiError';
+  }
+}
+
+/** Choque de edición concurrente: alguien guardó mientras editabas. */
+export type RevisionConflict = {
+  code: 'REVISION_CONFLICT';
+  message: string;
+  currentRevision: number;
+  author?: string | null;
+  diff: { changes: FieldChange[]; summary: { added: number; removed: number; changed: number } } | null;
+  theirs?: unknown;
+};
+
+export type FieldChange = {
+  scope: string;
+  key: string;
+  label: string;
+  kind: 'added' | 'removed' | 'changed';
+  before: string | null;
+  after: string | null;
+};
+
+export function isRevisionConflict(e: unknown): e is ApiError<RevisionConflict> {
+  return (
+    e instanceof ApiError &&
+    e.status === 409 &&
+    !!e.body &&
+    (e.body as RevisionConflict).code === 'REVISION_CONFLICT'
+  );
+}
+
 export async function api<T = unknown>(
   path: string,
   options: RequestInit = {},
@@ -86,7 +132,7 @@ export async function api<T = unknown>(
   }
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(err.message || `Error ${res.status}`);
+    throw new ApiError(err?.message || `Error ${res.status}`, res.status, err);
   }
   if (res.status === 204) return undefined as T;
   return res.json();

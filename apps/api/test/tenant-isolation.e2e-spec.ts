@@ -4,6 +4,8 @@ import { ChecklistsController } from '../src/checklists/checklists.controller';
 import { ChecklistPdfService } from '../src/checklists/checklist-pdf.service';
 import { CampaignsController } from '../src/campaigns/campaigns.controller';
 import { TasksController } from '../src/tasks/tasks.controller';
+import { NotificationsService } from '../src/notifications/notifications.service';
+import { RevisionService } from '../src/common/revisions/revision.service';
 import { SponsorsController } from '../src/sponsors/sponsors.controller';
 import { FoldersController } from '../src/folders/folders.controller';
 import { DigestsController } from '../src/digests/digests.controller';
@@ -147,7 +149,11 @@ describe('Multi-org tenant isolation (e2e, real DB)', () => {
     beforeAll(() => {
       // `ChecklistPdfService` exige PrismaService; sin argumento esto no
       // compilaba y el spec entero se apoyaba en un error de tipos.
-      controller = new ChecklistsController(prisma as never, new ChecklistPdfService(prisma as never));
+      controller = new ChecklistsController(
+        prisma as never,
+        new ChecklistPdfService(prisma as never),
+        new RevisionService(prisma as never),
+      );
     });
 
     it('lets a user read a checklist that belongs to their own org', async () => {
@@ -203,7 +209,9 @@ describe('Multi-org tenant isolation (e2e, real DB)', () => {
     let controller: TasksController;
 
     beforeAll(() => {
-      controller = new TasksController(prisma as never);
+      // `TasksController` recibe NotificationsService desde el turno de
+      // evidencia/aprobación de tareas.
+      controller = new TasksController(prisma as never, new NotificationsService(prisma as never));
     });
 
     it('blocks listing tasks for another org event', async () => {

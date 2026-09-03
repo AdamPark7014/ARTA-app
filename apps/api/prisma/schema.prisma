@@ -45,6 +45,23 @@ enum TaskStatus {
   BLOCKED
 }
 
+/// Ciclo de vida de un documento: checklist, corrida o documento del evento.
+/// SEALED es de un solo sentido — solo dirección lo revierte, con motivo.
+enum DocStatus {
+  DRAFT
+  REVIEW
+  APPROVED
+  SEALED
+}
+
+/// Qué tipo de documento versiona una `DocRevision`.
+enum DocType {
+  CHECKLIST
+  FINANCE
+  DOCUMENT
+  FILE
+}
+
 enum ChecklistTemplateKey {
   EVENTO_GENERAL
   PRODUCCION
@@ -175,6 +192,10 @@ model User {
   paymentsUploaded    PaymentProof[]
   taskEvidences       TaskEvidence[]
   taskActivities      TaskActivity[]
+  checklistsCreated   ChecklistInstance[]        @relation("ChecklistCreator")
+  financeRunsCreated  FinanceRun[]               @relation("FinanceCreator")
+  financeRunsEdited   FinanceRun[]               @relation("FinanceEditor")
+  docRevisions        DocRevision[]              @relation("RevisionAuthor")
   tasksApproved       TaskAssignment[]           @relation("TaskApprover")
   tasksRejected       TaskAssignment[]           @relation("TaskRejecter")
   sessions            UserSession[]
@@ -216,6 +237,7 @@ model Event {
   sponsors        Sponsor[]
   vendorPins      VendorPin[]
   documents       EventDocument[]
+  docRevisions    DocRevision[]
 
   @@index([organizationId, entity])
   @@index([organizationId, status, startsAt])
@@ -300,6 +322,22 @@ model ChecklistInstance {
   authorizedById      String?
   authorizedBy        User?             @relation("ChecklistAuthorized", fields: [authorizedById], references: [id])
   authorizedSignature Json?
+  /// Borrador → Revisión → Aprobado → Sellado
+  status              DocStatus         @default(DRAFT)
+  /// Contador de revisiones Y token de bloqueo optimista: se incrementa en el
+  /// mismo UPDATE que escribe los datos, así dos guardados concurrentes no
+  /// pueden pisarse en silencio.
+  revision            Int               @default(0)
+  createdById         String?
+  createdBy           User?             @relation("ChecklistCreator", fields: [createdById], references: [id])
+  submittedById       String?
+  submittedAt         DateTime?
+  approvedById        String?
+  approvedAt          DateTime?
+  sealedById          String?
+  sealedAt            DateTime?
+  /// Obligatorio al reabrir algo sellado: queda en el historial.
+  reopenReason        String?
   createdAt           DateTime          @default(now())
   updatedAt           DateTime          @updatedAt
 
@@ -397,15 +435,28 @@ model PaymentProof {
 
 // ─── Corrida financiera ──────────────────────────────────────────────────────
 model FinanceRun {
-  id        String   @id @default(cuid())
-  eventId   String
-  event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  title     String   @default("Corrida financiera")
+  id             String    @id @default(cuid())
+  eventId        String
+  event          Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  title          String    @default("Corrida financiera")
   /// Filas/budget embebido (compatible con Excel import)
-  dataJson  Json
-  locked    Boolean  @default(false)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  dataJson       Json
+  /// Derivado de `status` y del ciclo de vida del evento. Se conserva porque
+  /// `events.controller` todavía lo escribe al cerrar/reabrir; desaparece en
+  /// una migración posterior, cuando todo pase por el guard de estado.
+  locked         Boolean   @default(false)
+  status         DocStatus @default(DRAFT)
+  revision       Int       @default(0)
+  createdById    String?
+  createdBy      User?     @relation("FinanceCreator", fields: [createdById], references: [id])
+  lastEditedById String?
+  lastEditedBy   User?     @relation("FinanceEditor", fields: [lastEditedById], references: [id])
+  lastEditedAt   DateTime?
+  sealedById     String?
+  sealedAt       DateTime?
+  reopenReason   String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   @@index([eventId])
 }
@@ -582,6 +633,8 @@ model EventDocument {
   createdBy    User?    @relation("DocumentCreator", fields: [createdById], references: [id])
   updatedById  String?
   updatedBy    User?    @relation("DocumentEditor", fields: [updatedById], references: [id])
+  status       DocStatus @default(DRAFT)
+  revision     Int       @default(0)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -686,17 +739,67 @@ model VendorPin {
 
 // ─── Audit ───────────────────────────────────────────────────────────────────
 model AuditLog {
-  id         String   @id @default(cuid())
-  userId     String?
-  user       User?    @relation(fields: [userId], references: [id])
-  action     String
-  resource   String
-  resourceId String?
-  metaJson   Json?
-  createdAt  DateTime @default(now())
+  id             String   @id @default(cuid())
+  userId         String?
+  user           User?    @relation(fields: [userId], references: [id])
+  /// Propio, no inferido por el autor: los registros de sistema (`userId`
+  /// nulo) eran invisibles para todos salvo super_admin.
+  organizationId String?
+  action         String
+  resource       String
+  resourceId     String?
+  metaJson       Json?
+  ip             String?
+  userAgent      String?
+  createdAt      DateTime @default(now())
 
   @@index([resource, resourceId])
   @@index([createdAt])
+  @@index([userId, createdAt])
+  @@index([organizationId, createdAt])
+}
+
+/// Historial unificado de los documentos del evento.
+///
+/// Una sola tabla para checklist, corrida, documento y archivo: comparten
+/// ciclo de vida, visor de diff y lista de revisiones. Cuatro tablas paralelas
+/// obligarían a cuadruplicar servicio, endpoint y panel. El repo ya usa este
+/// patrón en `AuditLog(resource, resourceId)`.
+///
+/// `eventId` SÍ es FK real: sin ella, borrar un evento dejaría cientos de
+/// revisiones huérfanas para siempre. `(docType, docId)` es la clave lógica.
+model DocRevision {
+  id             String       @id @default(cuid())
+  organizationId String
+  eventId        String
+  event          Event        @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  docType        DocType
+  docId          String
+  /// Consecutivo por documento; sale del contador `revision` del padre.
+  revision       Int
+  /// Estado completo tras el cambio. Es la VERDAD.
+  snapshotJson   Json?
+  /// Qué cambió respecto a la revisión anterior. Caché regenerable a partir de
+  /// los snapshots: si algún día discrepan, manda `snapshotJson`.
+  diffJson       Json?
+  /// Binarios: dónde quedó ESA versión del archivo, y su huella.
+  fileUrl        String?
+  fileHash       String?
+  sizeBytes      Int?
+  fromStatus     DocStatus?
+  toStatus       DocStatus?
+  note           String?
+  authorId       String?
+  author         User?        @relation("RevisionAuthor", fields: [authorId], references: [id])
+  ip             String?
+  userAgent      String?
+  createdAt      DateTime     @default(now())
+
+  @@unique([docType, docId, revision])
+  @@index([organizationId, createdAt])
+  @@index([eventId, createdAt])
+  @@index([authorId, createdAt])
+  @@index([docType, docId, createdAt])
 }
 
 // ─── Identity: sesiones activas ──────────────────────────────────────────────

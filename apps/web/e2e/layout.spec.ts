@@ -68,28 +68,31 @@ test.describe('Ver en grande y menú automático', () => {
     await page.getByRole('button', { name: 'Sobre el PDF' }).click();
     await page.locator('.pdfedit__canvas').first().waitFor({ timeout: 25000 });
 
-    const antes = (await page.locator('.pdfedit__page').first().boundingBox())!.width;
+    /*
+     * El canvas aparece antes de que la hoja tenga tamaño: medir aquí sin
+     * esperar daba `boundingBox()` nulo y el test reventaba bajo carga, no por
+     * un fallo del producto. Se espera a que la página tenga ancho real.
+     */
+    const hoja = page.locator('.pdfedit__page').first();
+    await expect.poll(async () => (await hoja.boundingBox())?.width ?? 0, { timeout: 15000 }).toBeGreaterThan(0);
+    const antes = (await hoja.boundingBox())!.width;
 
     await page.getByRole('button', { name: 'Ampliar' }).first().click();
     // El PDF se vuelve a rasterizar al ancho nuevo
     await expect
-      .poll(async () => (await page.locator('.pdfedit__page').first().boundingBox())!.width, {
-        timeout: 15000,
-      })
+      .poll(async () => (await hoja.boundingBox())?.width ?? 0, { timeout: 15000 })
       .toBeGreaterThan(antes + 200);
 
     // Y los campos siguen cuadrando sobre el documento ya grande
     await expect(page.getByLabel('Recinto', { exact: true })).toHaveValue('Auditorio Arema');
-    const pageBox = (await page.locator('.pdfedit__page').first().boundingBox())!;
+    const pageBox = (await hoja.boundingBox())!;
     const campo = (await page.getByLabel('Aforo autorizado', { exact: true }).boundingBox())!;
     expect(campo.x).toBeGreaterThanOrEqual(pageBox.x - 1);
     expect(campo.x + campo.width).toBeLessThanOrEqual(pageBox.x + pageBox.width + 1);
 
     await page.keyboard.press('Escape');
     await expect
-      .poll(async () => (await page.locator('.pdfedit__page').first().boundingBox())!.width, {
-        timeout: 15000,
-      })
+      .poll(async () => (await hoja.boundingBox())?.width ?? Number.MAX_SAFE_INTEGER, { timeout: 15000 })
       .toBeLessThan(antes + 200);
   });
 

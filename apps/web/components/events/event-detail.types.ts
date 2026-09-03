@@ -11,10 +11,15 @@ export type ChecklistVersion = {
   editedBy?: { fullName: string } | null;
 };
 
+export type DocStatus = 'DRAFT' | 'REVIEW' | 'APPROVED' | 'SEALED';
+
 export type Checklist = {
   id: string;
   title: string;
   progressPct: number;
+  /** Contador de revisiones y token de bloqueo optimista. */
+  revision?: number;
+  status?: DocStatus;
   lastEditedAt?: string | null;
   lastEditedBy?: { fullName: string } | null;
   template?: { key: string };
