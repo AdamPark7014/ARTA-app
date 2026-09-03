@@ -182,6 +182,8 @@ model User {
   assignedTasks       TaskAssignment[]           @relation("TaskAssignee")
   createdTasks        TaskAssignment[]           @relation("TaskCreator")
   filesEdited         EventFile[]                @relation("FileEditor")
+  filesUploaded       EventFile[]                @relation("FileUploader")
+  filesDeleted        EventFile[]                @relation("FileDeleter")
   documentsCreated    EventDocument[]            @relation("DocumentCreator")
   documentsEdited     EventDocument[]            @relation("DocumentEditor")
   notifications       Notification[]             @relation("NotificationRecipient")
@@ -605,12 +607,28 @@ model EventFile {
   module      String?
   /// Sube cada vez que alguien guarda el archivo editado desde el panel
   version     Int                @default(1)
+  /// Huella del contenido actual. Permite saber si un guardado cambió algo y
+  /// direccionar las versiones anteriores sin depender del nombre en disco.
+  sha256      String?
+  createdById String?
+  createdBy   User?              @relation("FileUploader", fields: [createdById], references: [id])
   updatedById String?
   updatedBy   User?              @relation("FileEditor", fields: [updatedById], references: [id])
+  /// Borrado reversible: antes `DELETE` hacía `unlinkSync` y la fila
+  /// desaparecía — irreversible, anónimo y sin auditoría.
+  deletedAt   DateTime?
+  deletedById String?
+  deletedBy   User?              @relation("FileDeleter", fields: [deletedById], references: [id])
+  /// `false` cuando el libro trae gráficas, tablas dinámicas o macros: el
+  /// round-trip las perdería, así que en el panel se ve pero no se edita.
+  panelEditable Boolean          @default(true)
+  /// Por qué no es editable, para poder explicárselo a la persona.
+  panelBlockReason String?
   createdAt   DateTime           @default(now())
   updatedAt   DateTime           @default(now()) @updatedAt
 
   @@index([eventId, module])
+  @@index([eventId, deletedAt])
 }
 
 /// Documento editable tipo Word: se escribe en el panel y se descarga en PDF.

@@ -93,8 +93,8 @@ function buildResumenSheet(meta: FinanceSheetMeta): XLSX.WorkSheet {
     [],
     ...metaBlock(meta),
     ['Concepto', 'Monto'],
-    ['Total ingresos (hoja Ingresos)', "='Ingresos'!B30"],
-    ['Total egresos (hoja Egresos)', "='Egresos'!B30"],
+    ['Total ingresos (hoja Ingresos)', "=SUM('Ingresos'!B9:B29)"],
+    ['Total egresos (hoja Egresos)', "=SUM('Egresos'!B9:B29)"],
     ['NETO', '=B8-B9'],
     [],
     ['Instrucciones'],
@@ -103,8 +103,16 @@ function buildResumenSheet(meta: FinanceSheetMeta): XLSX.WorkSheet {
     ['3. Guarda el libro aquí o descárgalo para Excel de escritorio.'],
   ];
   const ws = XLSX.utils.aoa_to_sheet(rows);
-  ws[XLSX.utils.encode_cell({ r: 7, c: 1 })] = { t: 'n', f: "'Ingresos'!B30" };
-  ws[XLSX.utils.encode_cell({ r: 8, c: 1 })] = { t: 'n', f: "'Egresos'!B30" };
+  /*
+   * Se suma el RANGO de datos, no la celda del total.
+   *
+   * Antes apuntaba a `'Ingresos'!B30` — la celda concreta donde estaba el
+   * TOTAL. En cuanto alguien insertaba o borraba una fila, esa celda dejaba de
+   * ser el total y el Resumen mentía en silencio. Sumando el rango, el
+   * resultado sigue siendo correcto aunque el bloque crezca.
+   */
+  ws[XLSX.utils.encode_cell({ r: 7, c: 1 })] = { t: 'n', f: "SUM('Ingresos'!B9:B29)" };
+  ws[XLSX.utils.encode_cell({ r: 8, c: 1 })] = { t: 'n', f: "SUM('Egresos'!B9:B29)" };
   ws[XLSX.utils.encode_cell({ r: 9, c: 1 })] = { t: 'n', f: 'B8-B9' };
   ws['!cols'] = [{ wch: 42 }, { wch: 18 }];
   return ws;

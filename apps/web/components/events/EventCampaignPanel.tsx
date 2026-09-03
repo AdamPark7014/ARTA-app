@@ -9,7 +9,7 @@ import {
   campaignExpensesFileName,
   workbookToXlsxBlob,
 } from '@/lib/campaign-sheet-template';
-import { replaceEventFile } from '@/lib/file-save';
+import { patchEventFileCells, replaceEventFile } from '@/lib/file-save';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { FlowSteps } from '@/components/ui/FlowSteps';
 import { FormGrid } from '@/components/ui/PageChrome';
@@ -421,6 +421,9 @@ export function EventCampaignPanel({
                             canEdit={canEditFiles}
                             variant="campaign"
                             onSave={replaceEventFile(f.id)}
+                            onSaveCells={patchEventFileCells(f.id)}
+                            panelEditable={f.panelEditable !== false}
+                            blockReason={f.panelBlockReason}
                             onSaved={onFilesChanged}
                           />
                         ) : (

@@ -7,7 +7,7 @@ import { money } from '@/components/charts/SparkBars';
 import { FileViewer } from '@/components/files/FileViewer';
 import { SheetEditor } from '@/components/files/SheetEditor';
 import { PdfEditor } from '@/components/files/PdfEditor';
-import { replaceEventFile } from '@/lib/file-save';
+import { patchEventFileCells, replaceEventFile } from '@/lib/file-save';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { LoadingBlock, LoadingKpis } from '@/components/ui/LoadingBlock';
 import { BulkBar, SelectCheck } from '@/components/ui/BulkBar';
@@ -42,6 +42,9 @@ type CampaignFile = {
   fileName: string;
   url: string;
   kind?: string | null;
+  /** `false` si el libro trae gráficas o tablas dinámicas: se ve, no se edita. */
+  panelEditable?: boolean;
+  panelBlockReason?: string | null;
   createdAt?: string;
 };
 
@@ -580,6 +583,9 @@ export default function CampaignsPage() {
                                                       fileName={f.fileName}
                                                       canEdit={canEdit}
                                                       onSave={replaceEventFile(f.id)}
+                                                      onSaveCells={patchEventFileCells(f.id)}
+                                                      panelEditable={f.panelEditable !== false}
+                                                      blockReason={f.panelBlockReason}
                                                       onSaved={() => refreshFiles(r.event.id)}
                                                     />
                                                   ) : (

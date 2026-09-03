@@ -9,7 +9,7 @@ import {
   financeCorridaFileName,
   workbookToXlsxBlob,
 } from '@/lib/finance-sheet-template';
-import { replaceEventFile } from '@/lib/file-save';
+import { patchEventFileCells, replaceEventFile } from '@/lib/file-save';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { FormGrid } from '@/components/ui/PageChrome';
 import { StatusBadge } from '@/components/ui/StatusBadge';
@@ -307,6 +307,9 @@ export function EventFinancePanel({
                             canEdit={canEditFiles}
                             variant="finance"
                             onSave={replaceEventFile(f.id)}
+                            onSaveCells={patchEventFileCells(f.id)}
+                            panelEditable={f.panelEditable !== false}
+                            blockReason={f.panelBlockReason}
                             onSaved={onFilesChanged}
                           />
                         ) : (

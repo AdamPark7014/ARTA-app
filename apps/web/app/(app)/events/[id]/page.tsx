@@ -825,15 +825,21 @@ function EventDetailInner() {
     }
   }
 
+  /**
+   * Reemplaza el Excel de la corrida CONSERVANDO el historial.
+   *
+   * Antes subía un archivo nuevo y borraba el anterior del disco, mientras el
+   * otro botón «actualizar» del mismo panel sí versionaba: dos acciones con el
+   * mismo nombre y comportamientos opuestos, una de ellas destructiva. Ahora
+   * las dos van por `PUT :id/content`, que mantiene el id, sube la versión y
+   * archiva la anterior.
+   */
   async function replaceFinanceFile(fileId: string, file: File) {
     if (closed || !canFinance) return;
     try {
       const fd = new FormData();
       fd.append('file', file);
-      fd.append('eventId', id);
-      fd.append('module', FINANCE_FILE_MODULE);
-      await api('/uploads', { method: 'POST', body: fd });
-      await api(`/uploads/${fileId}`, { method: 'DELETE' }).catch(() => undefined);
+      await api(`/uploads/${fileId}/content`, { method: 'PUT', body: fd });
       await load();
       flash(`Corrida actualizada con ${file.name}`);
     } catch (e) {

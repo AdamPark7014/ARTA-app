@@ -48,3 +48,19 @@ export function createEventFile(opts: {
     await api('/uploads', { method: 'POST', body: fd });
   };
 }
+
+/**
+ * Guardado por celdas de una hoja del evento.
+ *
+ * Manda solo el delta; el servidor lo aplica con ExcelJS sobre el archivo real.
+ * Es lo que evita que cada guardado destruya estilos, formato condicional y
+ * validaciones del libro entero.
+ */
+export function patchEventFileCells(fileId: string) {
+  return async (patch: { cells: Array<Record<string, unknown>> }) => {
+    await api(`/uploads/${fileId}/cells`, {
+      method: 'PATCH',
+      body: JSON.stringify(patch),
+    });
+  };
+}

@@ -106,7 +106,7 @@ export class VendorController {
     const scopes = pin.scopes;
     const files = scopes.includes('files')
       ? await this.prisma.eventFile.findMany({
-          where: { eventId: pin.eventId },
+          where: { eventId: pin.eventId, deletedAt: null },
           orderBy: { createdAt: 'desc' },
           take: 60,
           select: { id: true, fileName: true, url: true, kind: true, createdAt: true },
@@ -173,6 +173,7 @@ export class VendorController {
       hospitalityFiles = await this.prisma.eventFile.findMany({
         where: {
           eventId: pin.eventId,
+          deletedAt: null,
           OR: [
             { fileName: { contains: 'rider', mode: 'insensitive' } },
             { fileName: { contains: 'hospital', mode: 'insensitive' } },

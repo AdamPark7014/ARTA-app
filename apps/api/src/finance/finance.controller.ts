@@ -1,21 +1,25 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   ForbiddenException,
   Get,
+  NotFoundException,
   Param,
   Patch,
   Post,
   Req,
   UseGuards,
 } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { DocType, Prisma } from '@prisma/client';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { hasPermission, canAccessEventOps, PERMISSIONS, type EntityKey, type RoleKey } from '../common/rbac/roles';
 import { assertSameTenant } from '../common/tenant';
 import { assertEventNotClosed } from '../common/event-guards';
 import { calcProgress } from '../common/checklist-progress';
+import { diffFinanceRows } from '../common/doc-diff';
+import { actorFrom, RevisionService } from '../common/revisions/revision.service';
 import { withServerTotals, type FinancePayload } from './finance-totals';
 
 type AuthUser = {
@@ -29,7 +33,10 @@ type AuthUser = {
 @Controller('finance')
 @UseGuards(JwtAuthGuard)
 export class FinanceController {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private revisions: RevisionService,
+  ) {}
 
   private async assertEventOps(user: AuthUser, eventId: string) {
     const event = await this.prisma.event.findUnique({ where: { id: eventId } });
@@ -158,7 +165,7 @@ export class FinanceController {
 
   @Patch(':id')
   async update(
-    @Req() req: { user: AuthUser },
+    @Req() req: { user: AuthUser; ip?: string; headers?: Record<string, string> },
     @Param('id') id: string,
     @Body() body: { dataJson?: object; title?: string; locked?: boolean },
   ) {
@@ -213,12 +220,123 @@ export class FinanceController {
         dataJson: dataJson as Prisma.InputJsonValue | undefined,
         title: body.title,
         locked: body.locked,
+        lastEditedById: req.user.id,
+        lastEditedAt: new Date(),
+        revision: { increment: 1 },
       },
+      include: { event: { select: { organizationId: true } } },
     });
+
+    // La corrida deja de ser el único documento sin autor ni historial.
+    if (dataJson) {
+      await this.revisions.record({
+        organizationId: updated.event?.organizationId || '(sin-organizacion)',
+        eventId: updated.eventId,
+        docType: DocType.FINANCE,
+        docId: updated.id,
+        revision: updated.revision,
+        snapshotJson: dataJson as unknown,
+        diff: diffFinanceRows(existing.dataJson, dataJson),
+        note: body.title ? `Título: ${body.title}` : null,
+        actor: actorFrom(req as never),
+      });
+
+      await this.prisma.auditLog.create({
+        data: {
+          userId: req.user.id,
+          organizationId: updated.event?.organizationId,
+          action: 'finance.update',
+          resource: 'FinanceRun',
+          resourceId: id,
+          metaJson: { totalIncome: dataJson.totalIncome, totalExpense: dataJson.totalExpense },
+          ip: req.ip,
+          userAgent: req.headers?.['user-agent']?.slice(0, 300),
+        },
+      });
+    }
 
     const payload = (dataJson || updated.dataJson) as FinancePayload;
     await this.syncCorridaChecklist(updated.eventId, withServerTotals(payload), updated.locked);
 
     return updated;
+  }
+
+  /**
+   * Quitar el sello de una corrida — acción propia, no un campo del PATCH.
+   *
+   * Antes bastaba mandar `{ locked: false, dataJson: {...} }` para desbloquear
+   * y editar en la misma petición: el sello no protegía nada y nadie quedaba
+   * registrado.
+   */
+  @Post(':id/unlock')
+  async unlock(
+    @Req() req: { user: AuthUser; ip?: string; headers?: Record<string, string> },
+    @Param('id') id: string,
+    @Body() body: { reason?: string },
+  ) {
+    const role = req.user.roleKey as RoleKey;
+    if (role !== 'dir_general' && role !== 'super_admin') {
+      throw new ForbiddenException('Solo dirección general puede quitar el sello de una corrida');
+    }
+    const reason = (body.reason || '').trim();
+    if (reason.length < 5) {
+      throw new BadRequestException('Hace falta un motivo para quitar el sello');
+    }
+
+    const existing = await this.prisma.financeRun.findUnique({
+      where: { id },
+      include: { event: { select: { status: true, organizationId: true } } },
+    });
+    if (!existing) throw new NotFoundException('Corrida no encontrada');
+    await this.assertEventOps(req.user, existing.eventId);
+
+    const updated = await this.prisma.financeRun.update({
+      where: { id },
+      data: {
+        locked: false,
+        status: 'DRAFT',
+        reopenReason: reason,
+        revision: { increment: 1 },
+        lastEditedById: req.user.id,
+        lastEditedAt: new Date(),
+      },
+    });
+
+    await this.revisions.record({
+      organizationId: existing.event?.organizationId || '(sin-organizacion)',
+      eventId: existing.eventId,
+      docType: DocType.FINANCE,
+      docId: id,
+      revision: updated.revision,
+      fromStatus: 'SEALED',
+      toStatus: 'DRAFT',
+      note: `Sello retirado: ${reason}`,
+      actor: actorFrom(req as never),
+    });
+
+    await this.prisma.auditLog.create({
+      data: {
+        userId: req.user.id,
+        organizationId: existing.event?.organizationId,
+        action: 'finance.unlock',
+        resource: 'FinanceRun',
+        resourceId: id,
+        metaJson: { reason },
+        ip: req.ip,
+        userAgent: req.headers?.['user-agent']?.slice(0, 300),
+      },
+    });
+
+    return updated;
+  }
+
+  /** Historial de la corrida, con el diff de renglones. */
+  @Get(':id/revisions')
+  async revisionHistory(@Req() req: { user: AuthUser }, @Param('id') id: string) {
+    this.assertFinanceView(req.user);
+    const run = await this.prisma.financeRun.findUnique({ where: { id } });
+    if (!run) throw new NotFoundException('Corrida no encontrada');
+    await this.assertEventOps(req.user, run.eventId);
+    return this.revisions.history(DocType.FINANCE, id);
   }
 }

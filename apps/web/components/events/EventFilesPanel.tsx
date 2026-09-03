@@ -6,7 +6,7 @@ import { SheetEditor } from '@/components/files/SheetEditor';
 import { PdfEditor } from '@/components/files/PdfEditor';
 import { DocEditor, type EventDocumentRow } from '@/components/files/DocEditor';
 import { pdfToBlocks } from '@/lib/pdf-to-blocks';
-import { replaceEventFile } from '@/lib/file-save';
+import { patchEventFileCells, replaceEventFile } from '@/lib/file-save';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { api } from '@/lib/api';
@@ -195,6 +195,9 @@ export function EventFilesPanel({
                 canEdit={canEdit}
                 variant={editing.module === 'campaign' ? 'campaign' : 'default'}
                 onSave={replaceEventFile(editing.id)}
+                onSaveCells={patchEventFileCells(editing.id)}
+                panelEditable={editing.panelEditable !== false}
+                blockReason={editing.panelBlockReason}
                 onSaved={onFilesChanged}
               />
             ) : (

@@ -172,7 +172,8 @@ export class EventsController {
           },
         },
         sponsors: { orderBy: { createdAt: 'desc' } },
-        files: { orderBy: { createdAt: 'desc' } },
+        // Los borrados quedan en la base para poder deshacerlos, pero no se listan.
+        files: { where: { deletedAt: null }, orderBy: { createdAt: 'desc' } },
       },
     });
     if (!event) throw new BadRequestException('Evento no encontrado');

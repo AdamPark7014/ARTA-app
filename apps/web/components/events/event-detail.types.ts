@@ -174,6 +174,9 @@ export type EventDetail = {
     kind?: string | null;
     /** Sección del evento: campaign | finance | general… */
     module?: string | null;
+    /** `false` si el libro trae gráficas o tablas dinámicas: se ve, no se edita. */
+    panelEditable?: boolean;
+    panelBlockReason?: string | null;
     createdAt?: string;
   }>;
   tasks?: Task[];

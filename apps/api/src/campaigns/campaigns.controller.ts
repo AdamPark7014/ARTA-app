@@ -46,7 +46,7 @@ export class CampaignsController {
    */
   private campaignFiles(eventIds: string[]) {
     return this.prisma.eventFile.findMany({
-      where: { eventId: { in: eventIds }, module: CAMPAIGN_MODULE },
+      where: { eventId: { in: eventIds }, module: CAMPAIGN_MODULE, deletedAt: null },
       orderBy: { createdAt: 'desc' },
     });
   }

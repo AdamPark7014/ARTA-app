@@ -33,7 +33,16 @@ function detectType(raw: unknown, amount: number): 'income' | 'expense' {
 export async function importFinanceFromFile(file: File): Promise<FinanceData> {
   const buf = await file.arrayBuffer();
   const wb = XLSX.read(buf, { type: 'array' });
-  const sheet = wb.Sheets[wb.SheetNames[0]];
+
+  /*
+   * Antes se leía siempre `SheetNames[0]`. En la plantilla que genera este
+   * mismo sistema la primera hoja es «Resumen», así que importar la plantilla
+   * propia devolvía basura. Se buscan por nombre las hojas de datos y, si el
+   * libro es de otro sitio, se cae a la primera.
+   */
+  const dataSheets = wb.SheetNames.filter((n) => /ingres|egres|gasto|concepto|corrida/i.test(n));
+  const chosen = dataSheets.length ? dataSheets : [wb.SheetNames[0]];
+  const sheet = wb.Sheets[chosen[0]];
   if (!sheet) throw new Error('Excel vacío');
 
   const matrix = XLSX.utils.sheet_to_json<(string | number)[]>(sheet, {

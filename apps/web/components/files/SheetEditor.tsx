@@ -11,8 +11,17 @@ type Props = {
   url: string;
   fileName: string;
   canEdit: boolean;
-  /** Dónde se guarda el .xlsx reconstruido */
+  /** Dónde se guarda el .xlsx reconstruido (respaldo si no hay guardado por celdas) */
   onSave: SaveFile;
+  /**
+   * Guardado por celdas: la vía buena. Si viene, se manda el delta y el
+   * servidor lo aplica con ExcelJS sin degradar el resto del libro.
+   */
+  onSaveCells?: (patch: { cells: CellChange[] }) => Promise<void>;
+  /** `false` cuando el libro trae gráficas o tablas dinámicas. */
+  panelEditable?: boolean;
+  /** Por qué no se puede editar, para poder explicárselo a la persona. */
+  blockReason?: string | null;
   /** Se llama tras guardar, para refrescar la lista de quien lo muestra */
   onSaved?: () => void | Promise<void>;
   /**
@@ -20,6 +29,14 @@ type Props = {
    * B×C / E×F, llenado rápido). Ideal para «GASTOS DE PUBLICIDAD Y CONVENIOS».
    */
   variant?: 'default' | 'campaign' | 'finance';
+};
+
+/** Una celda cambiada, en el formato que espera `PATCH /uploads/:id/cells`. */
+export type CellChange = {
+  sheet: string;
+  ref: string;
+  formula?: string | null;
+  value?: string | number | null;
 };
 
 type Grid = string[][];
@@ -91,12 +108,27 @@ function parseMoney(text: string): number {
 export function SheetEditor({
   url,
   fileName,
-  canEdit,
+  canEdit: canEditProp,
   onSave,
+  onSaveCells,
   onSaved,
+  panelEditable = true,
+  blockReason,
   variant = 'default',
 }: Props) {
+  // Un libro con gráficas se ve, pero no se edita: el round-trip las perdería.
+  const canEdit = canEditProp && panelEditable;
   const workbookRef = useRef<XLSX.WorkBook | null>(null);
+  /**
+   * Celdas tocadas desde que se abrió el archivo, por hoja.
+   *
+   * Es lo que se manda al servidor: un delta, no un libro reconstruido. Con la
+   * edición Community de SheetJS, reescribir el `.xlsx` completo desde el
+   * navegador emite una fuente fija y tira formato condicional y validaciones
+   * de TODO el libro. Mandando solo el delta, ExcelJS lo aplica en el servidor
+   * sobre el archivo real y lo que nadie tocó sobrevive.
+   */
+  const pendingCellsRef = useRef<Map<string, Map<string, CellChange>>>(new Map());
   const [sheetNames, setSheetNames] = useState<string[]>([]);
   const [activeSheet, setActiveSheet] = useState('');
   const [grid, setGrid] = useState<Grid>([]);
@@ -135,6 +167,8 @@ export function SheetEditor({
     setLoading(true);
     setError('');
     setDirty(false);
+    // Archivo nuevo: el delta anterior ya no aplica.
+    pendingCellsRef.current = new Map();
     fetch(url, { credentials: 'same-origin', cache: 'no-store' })
       .then((r) => {
         if (!r.ok) throw new Error(`No se pudo abrir el archivo (${r.status})`);
@@ -176,6 +210,27 @@ export function SheetEditor({
     markDirty();
   }
 
+  /** Anota una celda tocada, para mandarla como delta al guardar. */
+  function recordCellChange(sheet: string, ref: string, text: string) {
+    const bySheet = pendingCellsRef.current.get(sheet) || new Map<string, CellChange>();
+    if (text.startsWith('=')) {
+      bySheet.set(ref, { sheet, ref, formula: text.slice(1) });
+    } else if (!text) {
+      bySheet.set(ref, { sheet, ref, value: null });
+    } else {
+      const { v } = toCellValue(text);
+      bySheet.set(ref, { sheet, ref, value: v });
+    }
+    pendingCellsRef.current.set(sheet, bySheet);
+  }
+
+  /** Todas las celdas tocadas desde que se abrió el archivo. */
+  function collectPendingCells(): CellChange[] {
+    const out: CellChange[] = [];
+    for (const bySheet of pendingCellsRef.current.values()) out.push(...bySheet.values());
+    return out;
+  }
+
   /** Escribe el grid actual en la hoja activa del workbook (sin generar Blob). */
   function flushGridToWorkbook() {
     const wb = workbookRef.current;
@@ -202,6 +257,9 @@ export function SheetEditor({
           }
           continue;
         }
+
+        // Se anota el cambio: esto es exactamente el delta que va al servidor.
+        recordCellChange(activeSheet, addr, text);
 
         if (!text) {
           delete ws[addr];
@@ -422,12 +480,32 @@ export function SheetEditor({
     setError('');
     setMsg('');
     try {
-      const blob = buildFile();
-      if (!blob) throw new Error('No hay hoja abierta');
-      const name = /\.xlsx?$/i.test(fileName)
-        ? fileName.replace(/\.xls$/i, '.xlsx')
-        : `${fileName}.xlsx`;
-      await onSave(blob, name);
+      /*
+       * Vía buena: mandar SOLO las celdas tocadas y que el servidor las aplique
+       * con ExcelJS sobre el archivo real. Reconstruir el libro aquí con la
+       * edición Community de SheetJS emite una fuente fija y tira formato
+       * condicional y validaciones de TODO el libro, incluso de las hojas que
+       * nadie abrió.
+       */
+      if (onSaveCells && /\.xlsx$/i.test(fileName)) {
+        flushGridToWorkbook();
+        const cells = collectPendingCells();
+        if (!cells.length) {
+          setDirty(false);
+          setMsg('Sin cambios que guardar');
+          return;
+        }
+        await onSaveCells({ cells });
+        pendingCellsRef.current = new Map();
+      } else {
+        // Respaldo para `.xls` antiguos y para quien no pase `onSaveCells`.
+        const blob = buildFile();
+        if (!blob) throw new Error('No hay hoja abierta');
+        const name = /\.xlsx?$/i.test(fileName)
+          ? fileName.replace(/\.xls$/i, '.xlsx')
+          : `${fileName}.xlsx`;
+        await onSave(blob, name);
+      }
       setDirty(false);
       setMsg('Guardado');
       await onSaved?.();
@@ -445,6 +523,17 @@ export function SheetEditor({
   const shownRows = useMemo(() => grid.slice(0, visibleRows), [grid, visibleRows]);
   const selLabel = sel ? `${colLabel(sel.c)}${sel.r + 1}` : 'ninguna';
 
+  /*
+   * Ni gráficas ni tablas dinámicas sobreviven al round-trip, así que en vez de
+   * comérselas en silencio el libro se abre en solo lectura y se dice por qué.
+   */
+  const blockNotice =
+    !panelEditable && blockReason ? (
+      <div className="module-banner module-banner--warn" role="status">
+        {blockReason}
+      </div>
+    ) : null;
+
   if (loading) return <p className="muted kpi-sub">Abriendo hoja de cálculo…</p>;
   if (error && !grid.length) {
     return (
@@ -457,6 +546,7 @@ export function SheetEditor({
   return (
     <ExpandBox title={fileName} dirty={dirty}>
       <div className="stack">
+        {blockNotice}
         <div className="sheet-toolbar">
           <div className="sheet-tabs" role="tablist" aria-label="Hojas del libro">
             {sheetNames.map((n) => (
@@ -501,7 +591,9 @@ export function SheetEditor({
                 {saving ? 'Guardando…' : dirty ? 'Guardar libro' : 'Sin cambios'}
               </button>
             ) : (
-              <span className="muted kpi-sub">Solo lectura</span>
+              <span className="muted kpi-sub">
+                {panelEditable ? 'Solo lectura' : 'No editable aquí'}
+              </span>
             )}
             <a className="btn ghost btn-sm" href={url} download={fileName}>
               Descargar .xlsx

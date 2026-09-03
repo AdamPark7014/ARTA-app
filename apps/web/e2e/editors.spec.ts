@@ -54,16 +54,18 @@ test.describe('Editores embebidos', () => {
     page,
     baseURL,
   }) => {
-    const saved: Array<{ id: string; bytes: number }> = [];
+    type CellChange = { sheet: string; ref: string; value?: unknown; formula?: string };
+    const patches: Array<{ cells: CellChange[] }> = [];
 
     await seedSession(page, baseURL!);
     await mockAuthenticatedApi(page, {
       '/events/evt-e2e-1': EVENT,
       '/documents/event/evt-e2e-1': [],
       '/vendor/event/evt-e2e-1': [],
-      '/uploads/file-xlsx/content': (route: Route) => {
-        const post = route.request().postDataBuffer();
-        saved.push({ id: 'file-xlsx', bytes: post?.length || 0 });
+      // El editor ya no reconstruye el libro en el navegador: manda el delta y
+      // el servidor lo aplica con ExcelJS sobre el archivo real.
+      '/uploads/file-xlsx/cells': (route: Route) => {
+        patches.push(JSON.parse(route.request().postData() || '{}'));
         return route.fulfill({
           status: 200,
           contentType: 'application/json',
@@ -99,9 +101,14 @@ test.describe('Editores embebidos', () => {
     await guardar.click();
 
     await expect(page.getByText('Guardado', { exact: true })).toBeVisible();
-    expect(saved).toHaveLength(1);
-    // Se subió un .xlsx reconstruido de verdad, no un cuerpo vacío
-    expect(saved[0].bytes).toBeGreaterThan(1000);
+
+    // Se mandó UN parche, con exactamente las dos celdas tocadas: ni el libro
+    // entero ni celdas que nadie editó.
+    expect(patches).toHaveLength(1);
+    const cells = patches[0].cells;
+    expect(cells).toHaveLength(2);
+    expect(cells).toContainEqual({ sheet: 'Presupuesto', ref: 'A4', value: 'Transporte' });
+    expect(cells).toContainEqual({ sheet: 'Presupuesto', ref: 'B4', value: 4500 });
   });
 
   test('un documento nuevo se escribe y se exporta a PDF', async ({ page, baseURL }) => {
