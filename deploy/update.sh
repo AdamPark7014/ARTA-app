@@ -44,6 +44,9 @@ set -a
 source "$ENV_FILE"
 set +a
 
+# git archive / tar often drop +x; cron needs the ensure script executable.
+chmod +x "$SCRIPT_DIR"/*.sh 2>/dev/null || true
+
 echo "Installing Traefik route → $TRAEFIK_DST"
 bash "$SCRIPT_DIR/ensure-traefik-route.sh"
 
