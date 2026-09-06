@@ -1,12 +1,15 @@
 #!/usr/bin/env bash
-# Keeps ARTA Traefik routes present in nexara's shared Traefik file provider dir.
-# Nexara deploy/traefik/ is git-tracked without arta.yml; a Nexara pull or cleanup
-# can remove the copied file and take artaproducciones.com offline (404).
+# Keeps ARTA Traefik routes in the stable shared file-provider dir.
+#
+# Traefik reads /opt/traefik/config (NOT nexara-app/deploy/traefik).
+# Guest routes used to live inside Nexara's git tree; a Nexara pull/clean
+# wiped arta.yml and took artaproducciones.com offline (404).
 set -Eeuo pipefail
 
 ARTA_ROOT="${ARTA_ROOT:-/var/www/arta-app}"
 SRC="$ARTA_ROOT/deploy/traefik/arta.yml"
-DST="${ARTA_TRAEFIK_DST:-/var/www/nexara-app/deploy/traefik/arta.yml}"
+# Stable Traefik file provider (outside every app repo)
+DST="${ARTA_TRAEFIK_DST:-/opt/traefik/config/arta.yml}"
 LOG_TAG="arta-traefik-ensure"
 
 log() {

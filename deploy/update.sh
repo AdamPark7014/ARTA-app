@@ -6,7 +6,7 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 COMPOSE_FILE="$SCRIPT_DIR/docker-compose.arta.yml"
 ENV_FILE="$SCRIPT_DIR/.env.arta"
 TRAEFIK_SRC="$SCRIPT_DIR/traefik/arta.yml"
-TRAEFIK_DST="/var/www/nexara-app/deploy/traefik/arta.yml"
+TRAEFIK_DST="/opt/traefik/config/arta.yml"
 BACKUP_DIR="${ARTA_BACKUP_DIR:-/root/arta-backups}"
 BACKUP_KEEP="${ARTA_BACKUP_KEEP:-10}"
 

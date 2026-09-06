@@ -1,11 +1,18 @@
-## Traefik routing for ARTA Operaciones
-##
-## Hosts:
-##   artaproducciones.com / www  → sitio público Arta
-##   arta.artaproducciones.com   → panel ARTA
-##   auditorio.artaproducciones.com → panel Auditorio
-##
-## /api y /uploads (paneles) van a arta-api con prioridad > Nexara.
+# Traefik dynamic routes for ARTA Operaciones.
+#
+# Installed to the STABLE shared provider dir:
+#   /opt/traefik/config/arta.yml
+#
+# Do NOT copy this into /var/www/nexara-app/deploy/traefik/ — that folder is
+# git-managed by Nexara and guest files get wiped on Nexara deploy/clean.
+# Use: bash deploy/ensure-traefik-route.sh  (or deploy/update.sh)
+#
+# Hosts:
+#   artaproducciones.com / www  → sitio público Arta
+#   arta.artaproducciones.com   → panel ARTA
+#   auditorio.artaproducciones.com → panel Auditorio
+#
+# /api y /uploads (paneles) van a arta-api con prioridad > Nexara.
 
 http:
   routers:
