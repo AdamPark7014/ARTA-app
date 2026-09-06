@@ -6,26 +6,33 @@
 
 ## Hecho en este turno
 
-**ARTA ya no depende del árbol git de Nexara para Traefik (fin del 404 al deployar otros proyectos):**
+**Aislamiento de plataforma: proyectos no se pisan entre sí.**
 
-1. **Causa raíz:** Traefik montaba `/opt/traefik/config` → symlink a `/var/www/nexara-app/deploy/traefik`. Los YAML huéspedes (`arta.yml`, `school.yml`) vivían *dentro* del repo Nexara (untracked). Un pull/clean/rsync de Nexara los borraba → 404 negro de Traefik aunque `arta-web` estuviera healthy.
-2. **Fix estructural:** `/opt/traefik/config` es ahora un **directorio real** con copias. ARTA se instala en `/opt/traefik/config/arta.yml` desde `/var/www/arta-app/deploy/traefik/arta.yml`.
-3. **Cron cada minuto** (`/etc/cron.d/traefik-guest-routes`) con `bash …` (no depende de `+x`): restaura arta/school/udlagora + nexara-owned.
-4. **Hook en** `/var/www/nexara-app/deploy/update.sh`: tras el deploy solo sincroniza YAML de Nexara (`sync-nexara-routes.sh`) y reasegura guests — **nunca borra** arta/school.
-5. Quitados los YAML huéspedes del folder de Nexara + README de aviso.
-6. Probado wipe → restore → HTTP 200 en arta/auditorio.
+1. **Principio aplicado en el VPS:** Traefik y rutas viven en `/opt/traefik/` (fuera de `/var/www/*`). Cada app solo instala **su** YAML; nada borra el de otra.
+2. **Toolkit plataforma:**
+   - `/opt/traefik/bin/install-route.sh` — instala un archivo (atómico, sin borrar vecinos)
+   - `/opt/traefik/bin/sync-all-routes.sh` — junta `/var/www/*/deploy/traefik/*.yml` + `/opt/traefik/platform/`
+   - `/opt/traefik/platform/` — última copia buena de rutas de plataforma (nexara.yml, tls, …)
+   - `/opt/traefik/README.md` — reglas de oro
+3. **Cron** cada minuto → `sync-all-routes.sh`.
+4. **Hook Nexara** ya llama sync sin borrar guests; README en su carpeta traefik.
+5. **ARTA:** `ensure-traefik-route.sh` usa el instalador de plataforma; doc `deploy/ISOLATION.md`.
+6. Probado: wipe `arta.yml` → sync restaura; `school.yml` intacto; HTTP 200.
+
+Compose projects ya estaban separados (`arta`, `nexara`, `agora`…): `--remove-orphans` no cruza proyectos.
 
 ## A medias
 
-Nada de este incidente. Pendientes Claude (Fases 0–3 deploy/smoke) siguen aparte.
+Nada. Pendientes de producto Claude (Fases 0–3 deploy) aparte.
 
 ## Siguiente paso
 
-1. Hard-refresh Arturo en `arta.artaproducciones.com`.
-2. Cuando se despliegue Nexara de nuevo, confirmar que el hook corre y ARTA no cae.
-3. Deploy completo de `main` ARTA (doc status etc.) cuando Adam lo pida.
+1. Hard-refresh panel ARTA.
+2. Al deployar Nexara/otros, confirmar que ARTA no cae.
+3. Deploy producto ARTA cuando Adam lo pida.
 
 ## No tocar
 
 - `docs/ACCESS.md`, `.env.arta`.
-- No volver a copiar `arta.yml` dentro de `nexara-app/deploy/traefik/`.
+- No meter YAML huésped en `nexara-app/deploy/traefik/`.
+- No volver a symlinkar `/opt/traefik/config` → un repo de app.
