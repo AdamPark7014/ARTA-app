@@ -87,6 +87,23 @@ export type CampaignData = {
   mediaPlan?: string;
   creatives?: string;
   timeline?: string;
+  /**
+   * Catálogo del show: cada concepto con precio interno / externo.
+   * El encabezado del PDF es fijo; aquí cambian los conceptos por concierto
+   * (pedido Arta / Dashboard WhatsApp 2026-09-07).
+   */
+  concepts?: CampaignConceptRow[];
+};
+
+/** Fila editable en la página de campaña (antes de generar el Excel). */
+export type CampaignConceptRow = {
+  concept: string;
+  convenio?: boolean;
+  description?: string;
+  precioInterno?: number | null;
+  precioExterno?: number | null;
+  /** Si false, no entra a la hoja de este show. Default true. */
+  included?: boolean;
 };
 
 export type TicketingSetup = {

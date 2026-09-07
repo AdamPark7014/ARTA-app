@@ -410,44 +410,38 @@ export function SheetEditor({
     markDirty();
   }
 
-  /** Inserta un renglón de concepto con fórmulas de total (campaña). */
+  /** Inserta un renglón CONCEPTO | CANTIDAD | COSTO | COSTO TOTAL (=B×C). */
   function insertCampaignConcept() {
-    const at = sel ? sel.r + 1 : Math.min(grid.length, 9);
-    const excelRow = at + 1; // 1-based after insert we'll fix formulas for that row
+    const at = sel ? sel.r + 1 : Math.min(grid.length, 8);
     setGrid((prev) => {
-      const width = Math.max(prev[0]?.length || 0, 9);
+      const width = Math.max(prev[0]?.length || 0, 4);
       const row = Array(width).fill('');
-      // D = B*C , G = E*F  (se ajusta al número de fila Excel tras insertar)
-      const blank = Array.from({ length: 1 }, () => {
-        const r = row.slice();
-        return r;
-      });
-      const next = [...prev.slice(0, at), ...blank, ...prev.slice(at)];
+      const next = [...prev.slice(0, at), row, ...prev.slice(at)];
       const excel = at + 1;
       next[at][3] = `=B${excel}*C${excel}`;
-      next[at][6] = `=E${excel}*F${excel}`;
       return next;
     });
     setVisibleRows((v) => Math.max(v, at + 5));
     setSel({ r: at, c: 0 });
     markDirty();
-    void excelRow;
-    setMsg('Renglón de concepto insertado — escribe en CONCEPTO, CANTIDAD y COSTO');
+    setMsg(
+      'Concepto insertado — CANTIDAD×COSTO → COSTO TOTAL. En convenios: descripción en CANTIDAD y cortesías en COSTO.',
+    );
   }
 
-  /** Recalcula totales visibles B×C y E×F en la fila seleccionada (valores, no fórmula). */
+  /** Recalcula COSTO TOTAL = CANTIDAD × COSTO en la fila seleccionada. */
   function computeSelectedRowTotals() {
     if (!sel) return;
     const r = sel.r;
     const qty = parseMoney(grid[r][1] || '');
     const cost = parseMoney(grid[r][2] || '');
-    const qtyArta = parseMoney(grid[r][4] || '');
-    const costArta = parseMoney(grid[r][5] || '');
+    if (!qty && !cost) {
+      setMsg('Esta fila no tiene cantidad/costo numéricos (¿es un convenio con cortesías?)');
+      return;
+    }
     setGrid((prev) => {
       const next = prev.map((row) => row.slice());
-      next[r][3] = qty || cost ? String(Math.round(qty * cost * 100) / 100) : next[r][3];
-      next[r][6] =
-        qtyArta || costArta ? String(Math.round(qtyArta * costArta * 100) / 100) : next[r][6];
+      next[r][3] = String(Math.round(qty * cost * 100) / 100);
       return next;
     });
     markDirty();
@@ -695,15 +689,12 @@ export function SheetEditor({
                   type="button"
                   disabled={!sel}
                   onClick={computeSelectedRowTotals}
-                  title="COSTO TOTAL = CANTIDAD × COSTO y lo mismo en columnas ARTA"
+                  title="COSTO TOTAL = CANTIDAD × COSTO"
                 >
                   Calcular fila
                 </button>
                 <button className="btn ghost btn-sm" type="button" onClick={() => sumColumn(3)}>
-                  Σ Total
-                </button>
-                <button className="btn ghost btn-sm" type="button" onClick={() => sumColumn(6)}>
-                  Σ Total ARTA
+                  Σ COSTO TOTAL
                 </button>
               </div>
             ) : null}
@@ -722,7 +713,7 @@ export function SheetEditor({
           <p className="muted kpi-sub">
             Libro multi-hoja: cambia de pestaña arriba, agrega hojas y descarga el .xlsx completo.
             {campaign
-              ? ' Campaña: CONCEPTO · CANTIDAD · COSTO · TOTAL · columnas ARTA · PAGADO · POR PAGAR.'
+              ? ' Campaña: CONCEPTO · CANTIDAD · COSTO · COSTO TOTAL (como el PDF de gastos). Convenios: descripción en CANTIDAD, cortesías en COSTO. Hoja Precios = catálogo interno/externo.'
               : ' Corrida: usa las hojas Ingresos / Egresos / Resumen según tu formato.'}{' '}
             Ctrl+S guarda el libro entero.
           </p>

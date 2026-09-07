@@ -7,7 +7,10 @@ import { PdfEditor } from '@/components/files/PdfEditor';
 import {
   buildCampaignExpensesWorkbook,
   campaignExpensesFileName,
+  catalogFromPageConcepts,
+  defaultCampaignConceptRows,
   workbookToXlsxBlob,
+  type CampaignConceptPageRow,
 } from '@/lib/campaign-sheet-template';
 import { patchEventFileCells, replaceEventFile } from '@/lib/file-save';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -24,6 +27,7 @@ type CampaignForm = {
   mediaPlan: string;
   creatives: string;
   timeline: string;
+  concepts: CampaignConceptPageRow[];
 };
 
 type EventCampaignPanelProps = {
@@ -115,13 +119,19 @@ export function EventCampaignPanel({
 
   async function createExpensesSheet() {
     await withBusy(async () => {
-      const wb = buildCampaignExpensesWorkbook({
-        eventName: event.name,
-        venue: event.venue,
-        city: event.city,
-        startsAt: event.startsAt,
-        promoter: event.promoter || 'ARTA PRODUCCIONES',
-      });
+      const wb = buildCampaignExpensesWorkbook(
+        {
+          eventName: event.name,
+          venue: event.venue,
+          city: event.city,
+          startsAt: event.startsAt,
+          promoter: event.promoter || 'ARTA PRODUCCIONES',
+        },
+        {
+          campaignType: campaignForm.type || event.campaign?.type,
+          catalog: catalogFromPageConcepts(campaignForm.concepts),
+        },
+      );
       const blob = workbookToXlsxBlob(wb);
       const name = campaignExpensesFileName(event.name);
       const file = new File([blob], name, {
@@ -132,7 +142,45 @@ export function EventCampaignPanel({
     });
   }
 
+  function patchConcept(idx: number, patch: Partial<CampaignConceptPageRow>) {
+    const concepts = campaignForm.concepts.map((row, i) =>
+      i === idx ? { ...row, ...patch } : row,
+    );
+    setCampaignForm({ ...campaignForm, concepts });
+  }
+
+  function addConcept() {
+    setCampaignForm({
+      ...campaignForm,
+      concepts: [
+        ...campaignForm.concepts,
+        {
+          concept: '',
+          included: true,
+          convenio: false,
+          precioInterno: null,
+          precioExterno: null,
+        },
+      ],
+    });
+  }
+
+  function removeConcept(idx: number) {
+    setCampaignForm({
+      ...campaignForm,
+      concepts: campaignForm.concepts.filter((_, i) => i !== idx),
+    });
+  }
+
+  function resetConceptsFromCatalog() {
+    setCampaignForm({
+      ...campaignForm,
+      concepts: defaultCampaignConceptRows(),
+    });
+  }
+
   const canEditFiles = canCampaign && !closed;
+  const canEditConcepts = canEditFiles;
 
   return (
     <div className="stack">
@@ -149,7 +197,8 @@ export function EventCampaignPanel({
           <div>
             <h2>Campaña publicitaria</h2>
             <p className="muted kpi-sub" style={{ margin: '0.25rem 0 0' }}>
-              Plan de medios, creativos y presupuesto. Autoriza cuando esté listo para producción.
+              Encabezado y formato fijos (como el PDF). Los conceptos cambian por show — aquí van
+              con precio interno y externo para armar la hoja automáticamente.
             </p>
           </div>
           <div className="panel-head-actions">
@@ -264,10 +313,153 @@ export function EventCampaignPanel({
       <div className="panel">
         <div className="panel-head">
           <div>
-            <h2>Archivos de la campaña · {files.length}</h2>
+            <h2>Conceptos · precio interno / externo</h2>
             <p className="muted kpi-sub" style={{ margin: '0.25rem 0 0' }}>
-              Edita el Excel de gastos (agregar/quitar conceptos, totales). El PDF es para anotar o
-              presentar; la tabla viva es la hoja.
+              Lista en página: cada concepto con su precio. Al crear la hoja, el COSTO se toma del
+              precio interno (campaña Interna) o externo (Externa). Marca cuáles van en este show.
+            </p>
+          </div>
+          {canEditConcepts ? (
+            <div className="panel-head-actions">
+              <button className="btn ghost btn-sm" type="button" onClick={addConcept}>
+                + Concepto
+              </button>
+              <button className="btn ghost btn-sm" type="button" onClick={resetConceptsFromCatalog}>
+                Restaurar catálogo base
+              </button>
+            </div>
+          ) : null}
+        </div>
+        <div className="panel-body">
+          {!campaignForm.concepts.length ? (
+            <EmptyState
+              title="Sin conceptos"
+              description="Carga el catálogo base del PDF o agrega conceptos a mano. Después podrás pegar precios interno/externo."
+            >
+              {canEditConcepts ? (
+                <button
+                  className="btn btn-sm"
+                  type="button"
+                  style={{ marginTop: '0.75rem' }}
+                  onClick={resetConceptsFromCatalog}
+                >
+                  Cargar catálogo base
+                </button>
+              ) : null}
+            </EmptyState>
+          ) : (
+            <div className="table-wrap">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th style={{ width: '2.5rem' }}>Show</th>
+                    <th>Concepto</th>
+                    <th style={{ width: '5.5rem' }}>Convenio</th>
+                    <th style={{ width: '8rem' }}>Precio interno</th>
+                    <th style={{ width: '8rem' }}>Precio externo</th>
+                    <th>Descripción (convenios)</th>
+                    {canEditConcepts ? <th style={{ width: '4rem' }} /> : null}
+                  </tr>
+                </thead>
+                <tbody>
+                  {campaignForm.concepts.map((row, idx) => (
+                    <tr key={`${idx}-${row.concept.slice(0, 12)}`}>
+                      <td>
+                        <input
+                          type="checkbox"
+                          checked={row.included !== false}
+                          disabled={!canEditConcepts}
+                          title="Incluir en la hoja de este show"
+                          onChange={(e) => patchConcept(idx, { included: e.target.checked })}
+                        />
+                      </td>
+                      <td>
+                        <input
+                          className="field"
+                          disabled={!canEditConcepts}
+                          value={row.concept}
+                          onChange={(e) => patchConcept(idx, { concept: e.target.value })}
+                          placeholder="CONCEPTO"
+                        />
+                      </td>
+                      <td>
+                        <input
+                          type="checkbox"
+                          checked={!!row.convenio}
+                          disabled={!canEditConcepts}
+                          title="Convenio / medio (cortesías en lugar de costo monetario)"
+                          onChange={(e) => patchConcept(idx, { convenio: e.target.checked })}
+                        />
+                      </td>
+                      <td>
+                        <input
+                          className="field"
+                          type="number"
+                          disabled={!canEditConcepts || !!row.convenio}
+                          value={row.precioInterno ?? ''}
+                          onChange={(e) =>
+                            patchConcept(idx, {
+                              precioInterno: e.target.value === '' ? null : Number(e.target.value),
+                            })
+                          }
+                          placeholder="—"
+                        />
+                      </td>
+                      <td>
+                        <input
+                          className="field"
+                          type="number"
+                          disabled={!canEditConcepts || !!row.convenio}
+                          value={row.precioExterno ?? ''}
+                          onChange={(e) =>
+                            patchConcept(idx, {
+                              precioExterno: e.target.value === '' ? null : Number(e.target.value),
+                            })
+                          }
+                          placeholder="—"
+                        />
+                      </td>
+                      <td>
+                        <input
+                          className="field"
+                          disabled={!canEditConcepts || !row.convenio}
+                          value={row.description || ''}
+                          onChange={(e) => patchConcept(idx, { description: e.target.value })}
+                          placeholder={row.convenio ? 'Detalle del acuerdo…' : ''}
+                        />
+                      </td>
+                      {canEditConcepts ? (
+                        <td>
+                          <button
+                            className="btn ghost btn-sm btn-danger"
+                            type="button"
+                            onClick={() => removeConcept(idx)}
+                          >
+                            Quitar
+                          </button>
+                        </td>
+                      ) : null}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          <p className="muted kpi-sub" style={{ marginTop: '0.75rem' }}>
+            Guarda la campaña para persistir precios. «Nueva hoja de gastos» usa esta lista (solo
+            filas marcadas) y el tipo Interna/Externa para el COSTO.
+          </p>
+        </div>
+      </div>
+
+      <div className="panel">
+        <div className="panel-head">
+          <div>
+            <h2>Campaña · Excel de gastos · {files.length}</h2>
+            <p className="muted kpi-sub" style={{ margin: '0.25rem 0 0' }}>
+              Formato «GASTOS DE PUBLICIDAD Y CONVENIOS» (CONCEPTO · CANTIDAD · COSTO · COSTO
+              TOTAL), igual que el PDF operativo. Crea la hoja aquí o sube la tuya; el PDF solo
+              sirve para presentar — la campaña viva es el Excel.
             </p>
           </div>
           {canEditFiles ? (
@@ -281,7 +473,7 @@ export function EventCampaignPanel({
                 Nueva hoja de gastos
               </button>
               <label className="btn ghost btn-sm module-upload">
-                {busy ? 'Subiendo…' : 'Subir archivo'}
+                {busy ? 'Subiendo…' : 'Subir mi Excel'}
                 <input
                   type="file"
                   hidden
@@ -300,11 +492,11 @@ export function EventCampaignPanel({
         <div className="panel-body">
           {!files.length ? (
             <EmptyState
-              title="Sin Excel ni PDF de campaña"
+              title="Sin Excel de campaña"
               description={
                 canEditFiles
-                  ? 'Crea una hoja de gastos (formato publicidad/convenios) o sube tu Excel/PDF. La hoja se edita aquí: filas, columnas y totales.'
-                  : 'Cuando el equipo de campaña suba el plan de medios o la presentación, se verán aquí sin necesidad de descargarlos.'
+                  ? 'Crea una hoja con los conceptos de publicidad/convenios (como el PDF de Arta) o sube el Excel que ya usan. Se edita aquí sin descargar.'
+                  : 'Cuando el equipo de campaña suba el plan, se verá aquí embebido.'
               }
             >
               {canEditFiles ? (

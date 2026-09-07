@@ -23,10 +23,15 @@ fila, insertar/borrar columna, llenar abajo, sumar columna. Las fórmulas que
 empiezan con `=` se guardan como fórmula del libro.
 
 **Modo campaña** (`variant="campaign"`): barra extra para gastos de publicidad —
-«+ Concepto (con totales)» escribe fórmulas `B×C` y `E×F`, y botones para
-calcular la fila o sumar totales. En Campaña del evento, **Nueva hoja de gastos**
-crea un Excel con el formato CONCEPTO / CANTIDAD / COSTO / TOTAL / ARTA /
-PAGADO / POR PAGAR (`lib/campaign-sheet-template.ts`).
+«+ Concepto (con totales)» escribe `COSTO TOTAL = CANTIDAD × COSTO`, y botones para
+calcular la fila o sumar el total. En Campaña del evento:
+
+1. Tabla en página **Conceptos · precio interno / externo** (formato fijo del PDF;
+   conceptos variables por show — feedback Arta 2026-09-07).
+2. **Nueva hoja de gastos** genera el Excel
+   `CONCEPTO | CANTIDAD | COSTO | COSTO TOTAL` + TOTAL / TOTAL CORTESIAS /
+   PLATINO·DORADA·BLANCA·LILA desde esa lista (`lib/campaign-sheet-template.ts`).
+3. El COSTO de la hoja usa precio interno o externo según tipo de campaña.
 
 **Qué se conserva.** El libro original se mantiene en memoria y al guardar solo
 se tocan las celdas que la persona editó, así que **las fórmulas y el formato de

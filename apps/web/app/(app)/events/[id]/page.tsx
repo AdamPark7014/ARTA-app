@@ -15,6 +15,7 @@ import { ConflictNotice } from '@/components/ui/ConflictNotice';
 import { useUser } from '@/lib/user-context';
 import { userHasPermission } from '@/lib/access-matrix';
 import { importFinanceFromFile } from '@/lib/finance-import';
+import { defaultCampaignConceptRows } from '@/lib/campaign-sheet-template';
 import { fetchPoWindow, type PoWindowState } from '@/lib/po-window';
 import { EventOverviewPanel } from '@/components/events/EventOverviewPanel';
 import { EventChecklistsPanel } from '@/components/events/EventChecklistsPanel';
@@ -94,6 +95,7 @@ function EventDetailInner() {
     mediaPlan: '',
     creatives: '',
     timeline: '',
+    concepts: defaultCampaignConceptRows(),
   });
   const [ticketForm, setTicketForm] = useState({
     boletera: 'Arema',
@@ -205,6 +207,17 @@ function EventDetailInner() {
       mediaPlan: dj.mediaPlan || '',
       creatives: dj.creatives || '',
       timeline: dj.timeline || '',
+      concepts:
+        Array.isArray(dj.concepts) && dj.concepts.length
+          ? dj.concepts.map((c) => ({
+              concept: c.concept || '',
+              convenio: !!c.convenio,
+              description: c.description || '',
+              precioInterno: c.precioInterno ?? null,
+              precioExterno: c.precioExterno ?? null,
+              included: c.included !== false,
+            }))
+          : defaultCampaignConceptRows(),
     });
     setEventNotes(data.notes || '');
     setMetaForm({
@@ -635,6 +648,7 @@ function EventDetailInner() {
             mediaPlan: campaignForm.mediaPlan,
             creatives: campaignForm.creatives,
             timeline: campaignForm.timeline,
+            concepts: campaignForm.concepts,
           },
         }),
       });
