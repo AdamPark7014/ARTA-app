@@ -163,6 +163,33 @@ export class PurchaseOrdersController {
     return event;
   }
 
+  /**
+   * Toda decisión de dinero deja rastro.
+   *
+   * Hasta aquí este módulo no escribía una sola línea de auditoría: autorizar
+   * una OC —la firma que compromete el gasto— y marcarla pagada eran acciones
+   * anónimas. `createdBy`/`authorizedBy` guardan el último estado, no la
+   * historia: si alguien rechaza y vuelve a autorizar, el rastro desaparece.
+   */
+  private async audit(
+    user: { id: string; organizationId?: string | null },
+    organizationId: string | null,
+    action: string,
+    orderId: string,
+    meta: Record<string, unknown>,
+  ) {
+    await this.prisma.auditLog.create({
+      data: {
+        userId: user.id,
+        organizationId: organizationId ?? user.organizationId ?? null,
+        action,
+        resource: 'PurchaseOrder',
+        resourceId: orderId,
+        metaJson: meta as Prisma.InputJsonValue,
+      },
+    });
+  }
+
   private sumLines(lines: PoLineDto[]) {
     return lines.reduce((s, l) => s + Number(l.qty || 0) * Number(l.unitPrice || 0), 0);
   }
@@ -238,11 +265,19 @@ export class PurchaseOrdersController {
     ) {
       throw new ForbiddenException('Sin permiso para crear órdenes de compra');
     }
-    await this.assertEventOpsOpen(req.user, dto.eventId);
+    const event = await this.assertEventOpsOpen(req.user, dto.eventId);
     await this.assertWindowOpen(req.user);
     const lines = dto.lines?.length ? dto.lines : undefined;
     const amount = lines ? this.sumLines(lines) : Number(dto.amount || 0);
-    return this.prisma.purchaseOrder.create({
+    // Una OC de cero pesos no es una orden de compra: es una fila vacía que
+    // alguien tiene que autorizar. Se colaban al pulsar «Crear» sin capturar
+    // nada, y el panel respondía «OC creada» tan contento.
+    if (!(amount > 0)) {
+      throw new BadRequestException(
+        'La orden necesita un monto: captura al menos una partida con cantidad y precio',
+      );
+    }
+    const created = await this.prisma.purchaseOrder.create({
       data: {
         eventId: dto.eventId,
         rubro: dto.rubro,
@@ -256,6 +291,14 @@ export class PurchaseOrdersController {
       },
       include: { lines: true, proofs: true },
     });
+    await this.audit(req.user, event.organizationId, 'po.create', created.id, {
+      eventId: dto.eventId,
+      rubro: dto.rubro,
+      vendorName: dto.vendorName ?? null,
+      amount,
+      paymentMethod: created.paymentMethod,
+    });
+    return created;
   }
 
   @Patch(':id')
@@ -282,7 +325,7 @@ export class PurchaseOrdersController {
     }
     const order = await this.prisma.purchaseOrder.findUnique({ where: { id } });
     if (!order) throw new NotFoundException('OC no encontrada');
-    await this.assertEventOpsOpen(req.user, order.eventId);
+    const event = await this.assertEventOpsOpen(req.user, order.eventId);
     if (order.status === 'PAID' || order.status === 'AUTHORIZED') {
       throw new ForbiddenException('OC autorizada/pagada no se edita');
     }
@@ -301,11 +344,20 @@ export class PurchaseOrdersController {
       data.lines = { create: this.lineCreates(body.lines) };
     }
 
-    return this.prisma.purchaseOrder.update({
+    const updated = await this.prisma.purchaseOrder.update({
       where: { id },
       data,
       include: { lines: true, proofs: true },
     });
+    await this.audit(req.user, event.organizationId, 'po.update', id, {
+      amountBefore: Number(order.amount),
+      amountAfter: Number(updated.amount),
+      ...(body.paymentMethod && body.paymentMethod !== order.paymentMethod
+        ? { paymentMethodFrom: order.paymentMethod, paymentMethodTo: body.paymentMethod }
+        : {}),
+      linesReplaced: !!body.lines,
+    });
+    return updated;
   }
 
   @Post(':id/proofs')
@@ -344,7 +396,7 @@ export class PurchaseOrdersController {
         'Esta OC es en efectivo: no se adjuntan comprobantes',
       );
     }
-    return this.prisma.paymentProof.create({
+    const proof = await this.prisma.paymentProof.create({
       data: {
         purchaseOrderId: id,
         eventId: order.eventId,
@@ -354,6 +406,12 @@ export class PurchaseOrdersController {
         uploadedById: req.user.id,
       },
     });
+    await this.audit(req.user, order.event.organizationId, 'po.proof.add', id, {
+      proofId: proof.id,
+      fileUrl: proof.fileUrl,
+      amount: Number(proof.amount ?? 0),
+    });
+    return proof;
   }
 
   @Patch(':id/status')
@@ -393,7 +451,7 @@ export class PurchaseOrdersController {
       if (role === 'dir_auditorio' && order.event.entity !== 'EXPLANADA') {
         throw new ForbiddenException('Rodrigo solo autoriza OC del Auditorio');
       }
-      return this.prisma.purchaseOrder.update({
+      const authorized = await this.prisma.purchaseOrder.update({
         where: { id },
         data: {
           status: 'AUTHORIZED',
@@ -403,6 +461,14 @@ export class PurchaseOrdersController {
         },
         include: { lines: true, proofs: true },
       });
+      await this.audit(req.user, order.event.organizationId, 'po.authorize', id, {
+        eventId: order.eventId,
+        rubro: order.rubro,
+        vendorName: order.vendorName ?? null,
+        amount: Number(order.amount),
+        paymentMethod: authorized.paymentMethod,
+      });
+      return authorized;
     }
     if (body.status === 'PAID') {
       if (!hasPermission(role, req.user.permissions, PERMISSIONS.PO_MARK_PAID)) {
@@ -410,12 +476,42 @@ export class PurchaseOrdersController {
       }
       const method = body.paymentMethod || order.paymentMethod;
       const needsProof = method !== 'EFECTIVO';
-      if (needsProof && !(order.proofs?.length > 0)) {
+      const proofCount = order.proofs?.length ?? 0;
+      if (needsProof && proofCount === 0) {
         throw new BadRequestException(
           'Para transferencias y otros pagos no en efectivo, adjunta el comprobante antes de marcar pagado',
         );
       }
-      return this.prisma.purchaseOrder.update({
+
+      /**
+       * Cambiar la forma de pago EN LA MISMA petición que marca pagado es la
+       * única vía para saltarse el comprobante: mandar `EFECTIVO` apaga la
+       * exigencia. Es legítimo —al final se pagó en efectivo y hay que poder
+       * registrarlo— pero no puede pasar callado, que es justo la forma del
+       * bug que ya costó caro en la corrida (`locked: false` en el mismo
+       * update que editaba). Lleva su propia línea de auditoría para que la
+       * supervisión lo vea sin abrir el detalle.
+       */
+      const switchedToCash =
+        !!body.paymentMethod &&
+        body.paymentMethod !== order.paymentMethod &&
+        body.paymentMethod === 'EFECTIVO';
+      if (switchedToCash && proofCount === 0) {
+        await this.audit(
+          req.user,
+          order.event.organizationId,
+          'po.payment_method.cash_at_payment',
+          id,
+          {
+            from: order.paymentMethod,
+            to: 'EFECTIVO',
+            amount: Number(order.amount),
+            skippedProof: true,
+          },
+        );
+      }
+
+      const paid = await this.prisma.purchaseOrder.update({
         where: { id },
         data: {
           status: 'PAID',
@@ -424,13 +520,22 @@ export class PurchaseOrdersController {
         },
         include: { lines: true, proofs: true },
       });
+      await this.audit(req.user, order.event.organizationId, 'po.pay', id, {
+        eventId: order.eventId,
+        rubro: order.rubro,
+        vendorName: order.vendorName ?? null,
+        amount: Number(order.amount),
+        paymentMethod: method,
+        proofCount,
+      });
+      return paid;
     }
     // Any other transition (REJECTED/CANCELLED/DRAFT/PENDING_AUTH) is still an
     // authorization-flow action — gate it the same as approving, not left open.
     if (!hasPermission(role, req.user.permissions, PERMISSIONS.PO_AUTHORIZE)) {
       throw new ForbiddenException('No puedes cambiar el estatus de esta OC');
     }
-    return this.prisma.purchaseOrder.update({
+    const moved = await this.prisma.purchaseOrder.update({
       where: { id },
       data: {
         status: body.status,
@@ -438,6 +543,12 @@ export class PurchaseOrdersController {
       },
       include: { lines: true, proofs: true },
     });
+    await this.audit(req.user, order.event.organizationId, 'po.status', id, {
+      from: order.status,
+      to: body.status,
+      amount: Number(order.amount),
+    });
+    return moved;
   }
 
   @Delete(':id')
@@ -454,13 +565,33 @@ export class PurchaseOrdersController {
     },
     @Param('id') id: string,
   ) {
+    // Crear y editar piden `CHECKLIST_EDIT`; borrar no pedía más que acceso al
+    // evento. Hoy ningún rol se cuela por ahí —todos traen `checklist.edit`—
+    // pero la asimetría es una trampa puesta para el primer rol de solo
+    // consulta que alguien dé de alta.
+    if (
+      !hasPermission(
+        req.user.roleKey as RoleKey,
+        req.user.permissions,
+        PERMISSIONS.CHECKLIST_EDIT,
+      )
+    ) {
+      throw new ForbiddenException('Sin permiso para eliminar órdenes de compra');
+    }
     const order = await this.prisma.purchaseOrder.findUnique({ where: { id } });
     if (!order) throw new NotFoundException('OC no encontrada');
-    await this.assertEventOpsOpen(req.user, order.eventId);
+    const event = await this.assertEventOpsOpen(req.user, order.eventId);
     if (order.status === 'AUTHORIZED' || order.status === 'PAID') {
       throw new ForbiddenException('No se puede eliminar OC autorizada/pagada');
     }
     await this.prisma.purchaseOrder.delete({ where: { id } });
+    await this.audit(req.user, event.organizationId, 'po.delete', id, {
+      eventId: order.eventId,
+      rubro: order.rubro,
+      vendorName: order.vendorName ?? null,
+      amount: Number(order.amount),
+      status: order.status,
+    });
     return { ok: true };
   }
 }

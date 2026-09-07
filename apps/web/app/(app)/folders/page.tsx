@@ -322,7 +322,7 @@ export default function FoldersPage() {
                                       {editing
                                         ? 'Cerrar editor'
                                         : isSheet(file.fileName)
-                                          ? 'Editar hoja'
+                                          ? 'Editar aquí'
                                           : 'Escribir encima'}
                                     </button>
                                   ) : null}

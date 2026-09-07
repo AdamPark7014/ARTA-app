@@ -17,7 +17,7 @@ import { PoWindowBanner } from '@/components/purchase-orders/PoWindowBanner';
 import { PoProofsBlock } from '@/components/purchase-orders/PoProofsBlock';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { api } from '@/lib/api';
-import { poNeedsProof, poPaymentLabel } from '@/lib/po-payment';
+import { poNeedsProof, poNextStep, poPaymentLabel } from '@/lib/po-payment';
 import { useUser } from '@/lib/user-context';
 import { userHasPermission } from '@/lib/access-matrix';
 
@@ -206,8 +206,8 @@ export default function PurchaseOrdersPage() {
     <AppShell title="Órdenes de compra">
       <div className="stack page-workspace">
         <PageHeader
-          description="Control tower de compras: pipeline de cash, aging, tasa de autorización y cola prioritaria."
-          hint="Flujo recomendado: borrador → pendiente de autorización → autorizada → pagada. Prioriza OC con más de 7 días abiertas."
+          description="Todas las órdenes de compra de la entidad: cuánto falta por pagar, cuáles llevan más esperando y qué le toca a cada una."
+          hint="El camino es: se pide → dirección la autoriza → se sube el comprobante (salvo en efectivo) → se marca pagada. Atiende primero las que llevan más de 7 días."
         >
           <ActionLink href="/events" variant="ghost">
             Ir a eventos
@@ -222,41 +222,41 @@ export default function PurchaseOrdersPage() {
         {loading && !data ? (
           <>
             <LoadingKpis count={6} />
-            <LoadingBlock rows={5} label="Cargando procurement…" />
+            <LoadingBlock rows={5} label="Cargando órdenes…" />
           </>
         ) : null}
 
         {!loading && k ? (
           <div className="grid-cards kpi-grid-dense">
             <div className="kpi">
-              <div className="label">OC totales</div>
+              <div className="label">Órdenes</div>
               <div className="value">{k.total}</div>
               <div className="kpi-sub muted">En la entidad activa</div>
             </div>
             <div className="kpi">
-              <div className="label">Pipeline</div>
+              <div className="label">Falta por pagar</div>
               <div className="value value--money">{money(k.pipeline)}</div>
-              <div className="kpi-sub muted">Pendiente de pago</div>
+              <div className="kpi-sub muted">Dinero comprometido sin salir</div>
             </div>
             <div className="kpi">
-              <div className="label">Pagado</div>
+              <div className="label">Ya pagado</div>
               <div className="value value--money">{money(k.paid)}</div>
-              <div className="kpi-sub muted">Cash ejecutado</div>
+              <div className="kpi-sub muted">Dinero que ya salió</div>
             </div>
             <div className="kpi">
-              <div className="label">Auth rate</div>
+              <div className="label">Autorizadas</div>
               <div className="value">{k.authRate}%</div>
-              <div className="kpi-sub muted">Tasa de autorización</div>
+              <div className="kpi-sub muted">De todas las que se pidieron</div>
             </div>
             <div className="kpi">
-              <div className="label">Aging medio</div>
-              <div className="value">{k.avgAgingDays}d</div>
-              <div className="kpi-sub muted">Días abiertas en promedio</div>
+              <div className="label">Espera promedio</div>
+              <div className="value">{k.avgAgingDays} días</div>
+              <div className="kpi-sub muted">Desde que se pidió</div>
             </div>
             <div className={`kpi ${k.agingOver7 ? 'kpi--danger' : ''}`}>
-              <div className="label">&gt;7 días abiertas</div>
+              <div className="label">Llevan más de 7 días</div>
               <div className="value">{k.agingOver7}</div>
-              <div className="kpi-sub muted">Requieren seguimiento</div>
+              <div className="kpi-sub muted">Atiéndelas primero</div>
             </div>
           </div>
         ) : null}
@@ -265,7 +265,7 @@ export default function PurchaseOrdersPage() {
           <div className="dash-split">
             <div className="panel">
               <div className="panel-head">
-                <h2>Cola de aging</h2>
+                <h2>Las que llevan más esperando</h2>
               </div>
               <div className="panel-body stack">
                 <DistBar
@@ -288,7 +288,7 @@ export default function PurchaseOrdersPage() {
                     </li>
                   ))}
                   {!view.agingQueue.length ? (
-                    <li className="muted kpi-sub">Cola limpia — sin OC estancadas</li>
+                    <li className="muted kpi-sub">Ninguna atorada — todo al día</li>
                   ) : null}
                 </ul>
               </div>
@@ -329,7 +329,7 @@ export default function PurchaseOrdersPage() {
               <FieldSearch
                 value={q}
                 onChange={setQ}
-                placeholder="Buscar evento, vendor, rubro…"
+                placeholder="Buscar evento, proveedor, rubro…"
                 label="Buscar OC"
                 maxWidth={280}
               />
@@ -359,12 +359,12 @@ export default function PurchaseOrdersPage() {
                       <tr>
                         <th>Evento</th>
                         <th>Rubro</th>
-                        <th>Vendor</th>
-                        <th>Pago</th>
+                        <th>Proveedor</th>
+                        <th>Cómo se paga</th>
                         <th className="num">Monto</th>
-                        <th>Aging</th>
-                        <th>Status</th>
-                        <th>Acciones</th>
+                        <th>Espera</th>
+                        <th>Estado</th>
+                        <th>Qué sigue</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -378,6 +378,9 @@ export default function PurchaseOrdersPage() {
                           canMarkPaid &&
                           po.status === 'AUTHORIZED' &&
                           (!needsProof || proofCount > 0);
+                        const next = poNextStep({ ...po, paymentMethod: method, proofCount });
+                        const needsUpload =
+                          po.status === 'AUTHORIZED' && needsProof && proofCount === 0;
 
                         return (
                         <Fragment key={po.id}>
@@ -391,9 +394,13 @@ export default function PurchaseOrdersPage() {
                             <td>{po.vendorName || '—'}</td>
                             <td>
                               <span className="muted kpi-sub">{poPaymentLabel(method)}</span>
-                              {needsProof && po.status === 'AUTHORIZED' && proofCount === 0 ? (
-                                <div className="muted kpi-sub">Sin comprobante</div>
-                              ) : null}
+                              <div className="muted kpi-sub">
+                                {needsProof
+                                  ? proofCount > 0
+                                    ? `${proofCount} comprobante${proofCount > 1 ? 's' : ''}`
+                                    : 'Pide comprobante'
+                                  : 'No pide comprobante'}
+                              </div>
                             </td>
                             <td className="num">{money(po.amount)}</td>
                             <td>
@@ -409,37 +416,47 @@ export default function PurchaseOrdersPage() {
                               <StatusBadge value={po.status} kind={poStatusKind(po.status)} />
                             </td>
                             <td>
+                              <div className={`po-next po-next--${next.tone}`}>{next.label}</div>
                               <div className="row row--tight">
                                 <button
                                   className="btn ghost btn-sm"
                                   type="button"
                                   onClick={() => toggleExpand(po.id, po.eventId)}
                                 >
-                                  Partidas
+                                  {expanded === po.id ? 'Ocultar detalle' : 'Ver detalle'}
                                 </button>
                                 {canAuthorize &&
                                 (po.status === 'PENDING_AUTH' || po.status === 'DRAFT') ? (
                                   <button
-                                    className="btn ghost btn-sm"
+                                    className="btn btn-sm"
                                     type="button"
                                     onClick={() => setStatus(po.id, 'AUTHORIZED')}
                                   >
                                     Autorizar
                                   </button>
                                 ) : null}
-                                {canMarkPaid && po.status === 'AUTHORIZED' ? (
+                                {/*
+                                  Antes aquí vivía un «Pagado» apagado cuyo motivo
+                                  estaba en un `title` que el navegador no enseña en
+                                  botones deshabilitados. Ahora el botón dice lo que
+                                  toca: si falta el comprobante, lleva a subirlo.
+                                */}
+                                {canMarkPaid && needsUpload ? (
                                   <button
-                                    className="btn ghost btn-sm"
+                                    className="btn btn-sm"
                                     type="button"
-                                    disabled={!canPay}
-                                    title={
-                                      canPay
-                                        ? 'Marcar como pagada'
-                                        : 'Sube el comprobante antes de marcar pagado'
-                                    }
+                                    onClick={() => toggleExpand(po.id, po.eventId)}
+                                  >
+                                    Subir comprobante
+                                  </button>
+                                ) : null}
+                                {canMarkPaid && po.status === 'AUTHORIZED' && canPay ? (
+                                  <button
+                                    className="btn btn-sm"
+                                    type="button"
                                     onClick={() => setStatus(po.id, 'PAID')}
                                   >
-                                    Pagado
+                                    Marcar pagada
                                   </button>
                                 ) : null}
                               </div>
@@ -514,7 +531,7 @@ export default function PurchaseOrdersPage() {
                               }
                               description={
                                 view.orders.length === 0
-                                  ? 'Crea OC desde el detalle de un evento (pestaña OC).'
+                                  ? 'Crea la primera desde el detalle de un evento, en la pestaña OC.'
                                   : 'Cambia el estado o limpia la búsqueda para ver más resultados.'
                               }
                               actionHref="/events"

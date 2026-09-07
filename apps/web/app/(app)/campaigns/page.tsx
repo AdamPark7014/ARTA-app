@@ -559,7 +559,7 @@ export default function CampaignsPage() {
                                                       {editingFile
                                                         ? 'Cerrar editor'
                                                         : isSheetFile(f.fileName, f.kind)
-                                                          ? 'Editar hoja'
+                                                          ? 'Editar aquí'
                                                           : 'Escribir encima'}
                                                     </button>
                                                   ) : null}

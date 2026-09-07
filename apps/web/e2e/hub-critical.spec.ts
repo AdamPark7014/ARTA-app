@@ -105,7 +105,7 @@ test.describe('Hub crítico', () => {
 
     await page.goto('/campaigns');
     await page.getByRole('button', { name: /Archivos \(1\)/ }).click();
-    await page.getByRole('button', { name: 'Editar hoja' }).click();
+    await page.getByRole('button', { name: 'Editar aquí' }).click();
     await expect(page.getByLabel('Celda A1', { exact: true })).toHaveValue('Concepto');
     // La hoja abre embebida en la campaña; ampliar es opcional (junta: sin
     // overlays blancos encima del contenido).
@@ -129,7 +129,7 @@ test.describe('Hub crítico', () => {
     );
 
     await page.goto('/events/evt-e2e-1?tab=files');
-    await page.getByRole('button', { name: 'Editar hoja' }).click();
+    await page.getByRole('button', { name: 'Editar aquí' }).click();
     await page.getByRole('button', { name: /Ampliar a pantalla completa/ }).click();
     await page.getByLabel('Celda A4', { exact: true }).fill('Transporte');
 

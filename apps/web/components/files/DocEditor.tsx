@@ -131,9 +131,21 @@ export function DocEditor({ doc, canEdit, onSaved, onDeleted, onClose }: Props) 
     setPdfUrl(doc.pdfUrl || '');
     setPdfStale(!!doc.pdfUrl && doc.pdfVersion !== doc.version);
     setDirty(false);
+  }, [doc.id, doc.version, doc.blocksJson, doc.title, doc.pdfUrl, doc.pdfVersion]);
+
+  /**
+   * El aviso se limpia al cambiar DE documento, y solo entonces.
+   *
+   * Estaba dentro del efecto de arriba, que depende de `doc.version`: al
+   * guardar, `onSaved()` sube la versión en el padre, el efecto se volvía a
+   * ejecutar y borraba el «Guardado» un instante después de escribirlo. Así
+   * que ni guardar ni salir en PDF confirmaban nada — la persona apretaba el
+   * botón y no pasaba nada visible.
+   */
+  useEffect(() => {
     setMsg('');
     setError('');
-  }, [doc.id, doc.version, doc.blocksJson, doc.title, doc.pdfUrl, doc.pdfVersion]);
+  }, [doc.id]);
 
   useEffect(() => {
     if (focusNext.current === null) return;

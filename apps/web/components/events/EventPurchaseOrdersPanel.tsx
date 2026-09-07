@@ -13,6 +13,7 @@ import {
   PO_PAYMENT_METHODS,
   PO_PAYMENT_LABELS,
   poNeedsProof,
+  poNextStep,
   poPaymentLabel,
   type PoPaymentMethod,
 } from '@/lib/po-payment';
@@ -116,6 +117,14 @@ export function EventPurchaseOrdersPanel({
   }, [purchaseOrders]);
 
   const createNeedsProof = poNeedsProof(poForm.paymentMethod);
+  /**
+   * Sin esto, «Crear orden de compra» sobre el formulario vacío creaba una OC
+   * de $0 sin concepto, contestaba «OC creada» y dejaba a alguien con una fila
+   * fantasma que autorizar. Se pide lo mínimo para que la orden signifique
+   * algo: un concepto y un importe.
+   */
+  const missingConcept = !poForm.lines.some((l) => l.concept.trim());
+  const canCreate = !missingConcept && poLinesTotal > 0;
 
   return (
     <div className="stack">
@@ -190,7 +199,7 @@ export function EventPurchaseOrdersPanel({
                     className="field"
                     value={poForm.vendorName}
                     onChange={(e) => setPoForm({ ...poForm, vendorName: e.target.value })}
-                    placeholder="Nombre del vendor"
+                    placeholder="A quién se le paga"
                   />
                 </label>
               </FormGrid>
@@ -310,8 +319,15 @@ export function EventPurchaseOrdersPanel({
                   + Agregar partida
                 </button>
               </div>
-              <button className="btn" type="button" onClick={onCreatePo}>
-                Crear orden de compra
+              {!canCreate ? (
+                <p className="po-next-hint" role="note">
+                  {missingConcept
+                    ? 'Escribe al menos un concepto en las partidas — qué se está comprando.'
+                    : 'Pon cantidad y precio para que la orden tenga importe.'}
+                </p>
+              ) : null}
+              <button className="btn" type="button" disabled={!canCreate} onClick={onCreatePo}>
+                {canCreate ? `Crear orden de compra por ${money(poLinesTotal)}` : 'Crear orden de compra'}
               </button>
             </div>
           </div>
@@ -349,6 +365,11 @@ export function EventPurchaseOrdersPanel({
                 canMarkPaid &&
                 po.status === 'AUTHORIZED' &&
                 (!needsProof || hasProof);
+              const next = poNextStep({
+                status: po.status,
+                paymentMethod: method,
+                proofCount: po.proofs?.length ?? 0,
+              });
 
               return (
                 <article key={po.id} className="po-card">
@@ -358,19 +379,23 @@ export function EventPurchaseOrdersPanel({
                       <span className="muted kpi-sub"> · {po.vendorName || 'Sin proveedor'}</span>
                       <div className="po-card__meta-row">
                         <StatusBadge value={poPaymentLabel(method)} kind="raw" className="ok" />
+                        {/*
+                          En efectivo no «falta» el comprobante: no aplica. Y
+                          cuando sí falta, ya lo dice la píldora de «qué sigue»
+                          arriba, así que aquí basta con el hecho.
+                        */}
                         {!needsProof ? (
-                          <StatusBadge value="Sin comprobante" kind="raw" />
+                          <StatusBadge value="No lleva comprobante" kind="raw" />
                         ) : hasProof ? (
                           <StatusBadge value="Con comprobante" kind="raw" className="ok" />
-                        ) : (
-                          <StatusBadge value="Falta comprobante" kind="raw" className="warn" />
-                        )}
+                        ) : null}
                       </div>
                       <div className="po-card__amount">{money(Number(po.amount))}</div>
                       {po.description ? <p className="muted kpi-sub">{po.description}</p> : null}
                       <FlowSteps steps={PO_FLOW} activeIndex={poFlowIndex(po.status)} />
                     </div>
                     <div className="panel-head-actions">
+                      <div className={`po-next po-next--${next.tone}`}>{next.label}</div>
                       <StatusBadge value={poStatusValue(po.status)} kind="po" />
                       {!closed && po.status === 'PENDING_AUTH' ? (
                         <>
@@ -399,19 +424,20 @@ export function EventPurchaseOrdersPanel({
                           </button>
                         </>
                       ) : null}
-                      {!closed && canMarkPaid && po.status === 'AUTHORIZED' ? (
+                      {/*
+                        El botón solo aparece cuando de verdad se puede apretar.
+                        Antes se enseñaba apagado con el motivo en un `title`, que
+                        en un botón deshabilitado el navegador ni siquiera muestra:
+                        quedaba un botón muerto sin explicación. Si falta algo, lo
+                        dice `.po-next-hint` con todas sus letras.
+                      */}
+                      {canPay ? (
                         <button
                           className="btn btn-sm"
                           type="button"
-                          disabled={!canPay}
-                          title={
-                            canPay
-                              ? 'Marcar como pagada'
-                              : 'Sube el comprobante antes de marcar pagado'
-                          }
                           onClick={() => onSetPoStatus(po.id, 'PAID')}
                         >
-                          Marcar pagado
+                          Marcar pagada
                         </button>
                       ) : null}
                     </div>
@@ -572,8 +598,18 @@ export function EventPurchaseOrdersPanel({
                     </div>
                   ) : null}
 
-                  {!needsProof &&
-                  (po.status === 'AUTHORIZED' || po.status === 'PAID') ? (
+                  {po.status !== 'PAID' ? (
+                    <p
+                      className={`po-next-hint ${
+                        next.tone === 'todo' ? 'po-next-hint--todo' : ''
+                      }`}
+                      role="note"
+                    >
+                      {next.hint}
+                    </p>
+                  ) : null}
+
+                  {!needsProof && po.status === 'PAID' ? (
                     <div className="module-banner module-banner--ok" role="status">
                       Pagada en efectivo — no requiere comprobante.
                     </div>

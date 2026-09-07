@@ -13,6 +13,12 @@ import {
   PageHeader,
 } from '@/components/ui/PageChrome';
 import { api } from '@/lib/api';
+import {
+  auditActionLabel,
+  auditResourceLabel,
+  hasAuditActionLabel,
+  isNotableAction,
+} from '@/lib/audit-labels';
 
 type AuditIntel = {
   kpis: {
@@ -67,8 +73,10 @@ export default function AuditPage() {
       list = list.filter(
         (r) =>
           r.action.toLowerCase().includes(n) ||
+          auditActionLabel(r.action).toLowerCase().includes(n) ||
           (r.user?.fullName || '').toLowerCase().includes(n) ||
-          r.resource.toLowerCase().includes(n),
+          r.resource.toLowerCase().includes(n) ||
+          auditResourceLabel(r.resource).toLowerCase().includes(n),
       );
     }
     return list;
@@ -81,13 +89,14 @@ export default function AuditPage() {
     <AppShell title="Auditoría">
       <div className="stack page-workspace">
         <PageHeader
-          description="Inteligencia de auditoría: volumen, actores, acciones destructivas y anomalías (30 días)."
+          description="Quién tocó qué en los últimos 30 días: cada movimiento con su autor, su fecha y el documento al que le pasó."
+          hint="Las acciones marcadas en ámbar deshacen, borran o esquivan un control — no son errores, son las que conviene poder explicar."
         />
 
         {loading && !data ? (
           <>
             <LoadingKpis count={4} />
-            <LoadingBlock rows={6} label="Cargando timeline de auditoría…" />
+            <LoadingBlock rows={6} label="Cargando movimientos…" />
           </>
         ) : (
           <>
@@ -116,12 +125,12 @@ export default function AuditPage() {
               <div className="dash-split">
                 <div className="panel">
                   <div className="panel-head">
-                    <h2>Top acciones</h2>
+                    <h2>Lo que más se hace</h2>
                   </div>
                   <div className="panel-body">
                     <DistBar
                       segments={(data.topActions ?? []).slice(0, 6).map((a, i) => ({
-                        label: a.action,
+                        label: auditActionLabel(a.action),
                         value: a.count,
                         tone: (['ok', 'warn', 'muted', 'danger'] as const)[i % 4],
                       }))}
@@ -129,7 +138,7 @@ export default function AuditPage() {
                     <ul className="compact-list" style={{ marginTop: 12 }}>
                       {(data.topActions ?? []).map((a) => (
                         <li key={a.action}>
-                          <code style={{ fontSize: 12 }}>{a.action}</code>
+                          <span>{auditActionLabel(a.action)}</span>
                           <span className="muted">{a.count}</span>
                         </li>
                       ))}
@@ -138,22 +147,22 @@ export default function AuditPage() {
                 </div>
                 <div className="panel">
                   <div className="panel-head">
-                    <h2>Anomalías / riesgo</h2>
+                    <h2>Para revisar</h2>
                   </div>
                   <div className="panel-body">
                     {!(data.anomalies ?? []).length ? (
                       <EmptyState
-                        title="Sin señales destructivas"
-                        description="No hay acciones de alto riesgo en la ventana reciente."
+                        title="Nada que revisar"
+                        description="Nadie borró ni deshizo nada en los últimos 30 días."
                       />
                     ) : (
                       <ul className="compact-list">
                         {(data.anomalies ?? []).map((a) => (
                           <li key={a.id}>
                             <span>
-                              <strong>{a.action}</strong>
+                              <strong>{auditActionLabel(a.action)}</strong>
                               <div className="muted" style={{ fontSize: 11 }}>
-                                {a.user} · {a.resource}
+                                {a.user} · {auditResourceLabel(a.resource)}
                               </div>
                             </span>
                             <span className="muted">{new Date(a.at).toLocaleDateString('es-MX')}</span>
@@ -170,7 +179,7 @@ export default function AuditPage() {
               <FieldSearch
                 value={q}
                 onChange={setQ}
-                placeholder="Buscar acción o usuario…"
+                placeholder="Buscar persona, acción o documento…"
                 label="Buscar acción o usuario"
                 maxWidth={260}
               />
@@ -179,10 +188,14 @@ export default function AuditPage() {
                 onChange={setResource}
                 label="Filtrar por recurso"
                 options={[
-                  { value: '', label: 'Todos los recursos' },
-                  { value: 'Event', label: 'Evento' },
-                  { value: 'ChecklistInstance', label: 'Checklist' },
-                  { value: 'PageContent', label: 'Studio' },
+                  { value: '', label: 'Todo' },
+                  { value: 'Event', label: 'Eventos' },
+                  { value: 'ChecklistInstance', label: 'Formatos' },
+                  { value: 'PurchaseOrder', label: 'Órdenes de compra' },
+                  { value: 'FinanceRun', label: 'Corridas' },
+                  { value: 'EventFile', label: 'Archivos' },
+                  { value: 'User', label: 'Personas' },
+                  { value: 'PageContent', label: 'Sitio público' },
                   { value: 'System', label: 'Sistema' },
                 ]}
               />
@@ -197,7 +210,7 @@ export default function AuditPage() {
             ) : null}
             <div className="panel">
               <div className="panel-head">
-                <h2>Timeline · {rows.length}</h2>
+                <h2>Movimientos · {rows.length}</h2>
               </div>
               <div className="panel-body">
                 {!rows.length ? (
@@ -209,7 +222,7 @@ export default function AuditPage() {
                     }
                     description={
                       (data?.logs?.length ?? 0) === 0
-                        ? 'Las acciones de usuarios aparecerán aquí conforme operen el sistema.'
+                        ? 'Cada movimiento del equipo se irá anotando aquí conforme trabajen.'
                         : 'Cambia recurso o limpia la búsqueda.'
                     }
                   >
@@ -231,11 +244,11 @@ export default function AuditPage() {
                     <table className="table table-sticky">
                       <thead>
                         <tr>
-                          <th>Fecha</th>
-                          <th>Usuario</th>
-                          <th>Acción</th>
-                          <th>Recurso</th>
-                          <th>ID</th>
+                          <th>Cuándo</th>
+                          <th>Quién</th>
+                          <th>Qué hizo</th>
+                          <th>Dónde</th>
+                          <th>Referencia</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -251,9 +264,19 @@ export default function AuditPage() {
                               </div>
                             </td>
                             <td>
-                              <code>{r.action}</code>
+                              <span className={isNotableAction(r.action) ? 'audit-notable' : ''}>
+                                {auditActionLabel(r.action)}
+                              </span>
+                              {/*
+                                El identificador crudo se queda a la vista, en
+                                pequeño: cuando algo se discute en serio hace
+                                falta el dato exacto, no la traducción.
+                              */}
+                              {hasAuditActionLabel(r.action) ? (
+                                <div className="muted audit-raw">{r.action}</div>
+                              ) : null}
                             </td>
-                            <td>{r.resource}</td>
+                            <td>{auditResourceLabel(r.resource)}</td>
                             <td className="muted" style={{ fontSize: 11 }}>
                               {r.resourceId || '—'}
                             </td>

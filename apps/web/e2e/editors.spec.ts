@@ -85,7 +85,7 @@ test.describe('Editores embebidos', () => {
 
     await page.goto('/events/evt-e2e-1?tab=files');
 
-    await page.getByRole('button', { name: 'Editar hoja' }).click();
+    await page.getByRole('button', { name: 'Editar aquí' }).click();
 
     // El contenido real del archivo llega a la cuadrícula
     const a1 = page.getByLabel('Celda A1', { exact: true });
@@ -96,11 +96,13 @@ test.describe('Editores embebidos', () => {
     await page.getByLabel('Celda A4', { exact: true }).fill('Transporte');
     await page.getByLabel('Celda B4', { exact: true }).fill('4500');
 
-    const guardar = page.getByRole('button', { name: 'Guardar libro' });
+    const guardar = page.getByRole('button', { name: 'Guardar', exact: true });
     await expect(guardar).toBeEnabled();
     await guardar.click();
 
-    await expect(page.getByText('Guardado', { exact: true })).toBeVisible();
+    // Se afirma lo que importa —que el guardado quedó registrado— y no la
+    // frase entera, que se ha reescrito ya dos veces por motivos de tono.
+    await expect(page.getByText(/edición registrada/i)).toBeVisible();
 
     // Se mandó UN parche, con exactamente las dos celdas tocadas: ni el libro
     // entero ni celdas que nadie editó.
@@ -160,6 +162,6 @@ test.describe('Editores embebidos', () => {
     await expect(guardar).toBeEnabled();
     await guardar.click();
 
-    await expect(page.getByText('Documento guardado')).toBeVisible();
+    await expect(page.getByText(/quedó registrada/i)).toBeVisible();
   });
 });

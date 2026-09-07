@@ -1129,6 +1129,31 @@ select.field option {
   transform: scale(0.98);
 }
 
+/**
+ * Un botón apagado tiene que verse apagado.
+ *
+ * No había ni una regla `:disabled` en toda la hoja, así que «Marcar pagado»,
+ * «Guardar» o «Crear» deshabilitados salían con el dorado de acento, idénticos
+ * a los que sí responden. La persona apretaba, no pasaba nada, y no había
+ * forma de saber por qué. El `cursor: not-allowed` es la otra mitad del aviso.
+ */
+.btn:disabled,
+.btn[aria-disabled='true'] {
+  opacity: 0.45;
+  cursor: not-allowed;
+  filter: none;
+}
+
+.btn:disabled:hover,
+.btn[aria-disabled='true']:hover {
+  filter: none;
+}
+
+.btn:disabled:active,
+.btn[aria-disabled='true']:active {
+  transform: none;
+}
+
 .btn.ghost {
   background: transparent;
   color: var(--text);
@@ -2282,7 +2307,7 @@ body.site-nav-open {
 }
 
 .totp-enroll-secret code {
-  color: var(--fg, inherit);
+  color: var(--text);
   font-weight: 600;
 }
 
@@ -3465,6 +3490,98 @@ body.site-nav-open {
   flex-wrap: wrap;
   gap: 0.35rem;
   margin-top: 0.35rem;
+}
+
+/**
+ * «Qué sigue»: la frase que sustituyó al botón apagado.
+ *
+ * El panel enseñaba «Marcar pagado» deshabilitado con el motivo escondido en
+ * un `title` —que el navegador no muestra en botones deshabilitados—, así que
+ * la persona veía un botón muerto y ninguna explicación. Estas píldoras dicen
+ * en una línea a quién le toca mover la orden.
+ */
+.po-next {
+  display: inline-block;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.25;
+  padding: 0.2rem 0.5rem;
+  margin-bottom: 0.4rem;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  color: var(--muted);
+  background: var(--bg-soft);
+  white-space: nowrap;
+}
+
+/* Espera a otra persona: gris, sin urgencia. */
+.po-next--wait {
+  color: var(--muted);
+}
+
+/* Te toca a ti y falta algo concreto. */
+.po-next--todo {
+  color: var(--warn);
+  border-color: color-mix(in srgb, var(--warn) 40%, var(--line));
+  background: color-mix(in srgb, var(--warn) 12%, transparent);
+}
+
+/* Todo listo, solo falta apretar el botón. */
+.po-next--ready {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--line));
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.po-next--done {
+  color: var(--ok);
+  border-color: color-mix(in srgb, var(--ok) 35%, var(--line));
+  background: color-mix(in srgb, var(--ok) 10%, transparent);
+}
+
+.po-next--stop {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 35%, var(--line));
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+}
+
+/**
+ * Auditoría legible.
+ *
+ * `.audit-notable` marca lo que deshace, borra o esquiva un control. No es una
+ * alarma —son actos legítimos— sino lo que uno quiere poder explicar después.
+ */
+.audit-notable {
+  color: var(--warn);
+  font-weight: 600;
+}
+
+/* El identificador crudo, para cuando hace falta el dato exacto. */
+.audit-raw {
+  font-family: ui-monospace, "SFMono-Regular", "Consolas", monospace;
+  font-size: 0.68rem;
+  opacity: 0.7;
+  margin-top: 0.1rem;
+}
+
+/* La frase larga, debajo de la píldora, en la tarjeta del evento. */
+.po-next-hint {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.4rem;
+  margin-top: 0.5rem;
+  padding: 0.5rem 0.65rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: var(--bg-soft);
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.po-next-hint--todo {
+  border-color: color-mix(in srgb, var(--warn) 35%, var(--line));
+  background: color-mix(in srgb, var(--warn) 8%, var(--bg-soft));
+  color: var(--text);
 }
 
 .po-proofs {

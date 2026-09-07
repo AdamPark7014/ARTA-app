@@ -66,7 +66,8 @@ async function openChecklist(page: import('@playwright/test').Page, baseURL: str
   await page.goto('/events/evt-e2e-1?tab=checklists&checklist=chk-demo');
   // El formato abre en formulario (decisión de la junta: sin overlays encima
   // de las opciones). La captura sobre la hoja es un modo que se pide.
-  await page.getByRole('button', { name: 'Sobre el PDF' }).click();
+  // `exact` porque la tarjeta «Copia anotada del PDF» también contiene «PDF».
+  await page.getByRole('button', { name: 'Sobre el PDF', exact: true }).click();
   await page.locator('.pdfedit__canvas').first().waitFor({ timeout: 25000 });
 }
 
