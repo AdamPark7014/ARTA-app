@@ -104,8 +104,26 @@ export function DocEditor({ doc, canEdit, onSaved, onDeleted, onClose }: Props) 
   );
   const [showHistory, setShowHistory] = useState(false);
   const [revKey, setRevKey] = useState(0);
+  const [showCoach, setShowCoach] = useState(false);
   const refs = useRef<Array<HTMLTextAreaElement | null>>([]);
   const focusNext = useRef<number | null>(null);
+
+  useEffect(() => {
+    try {
+      if (sessionStorage.getItem('arta-doc-coach') !== '1') setShowCoach(true);
+    } catch {
+      setShowCoach(true);
+    }
+  }, []);
+
+  function dismissCoach() {
+    try {
+      sessionStorage.setItem('arta-doc-coach', '1');
+    } catch {
+      /* ignore quota / private mode */
+    }
+    setShowCoach(false);
+  }
 
   useEffect(() => {
     setTitle(doc.title);
@@ -242,6 +260,22 @@ export function DocEditor({ doc, canEdit, onSaved, onDeleted, onClose }: Props) 
   return (
     <ExpandBox title={title || doc.title || 'Documento'} dirty={dirty}>
       <div className="docedit-app">
+        {showCoach ? (
+          <div className="editor-coach" role="note">
+            <p className="editor-coach__text">
+              Escribe → <strong>Guardar</strong> → <strong>Salir en PDF</strong>.
+            </p>
+            <button
+              type="button"
+              className="editor-coach__dismiss"
+              onClick={dismissCoach}
+              aria-label="Cerrar guía"
+            >
+              Entendido
+            </button>
+          </div>
+        ) : null}
+
         <div className="docedit-bar">
           <div className="docedit-bar__meta" aria-live="polite">
             <span className="docedit-pill docedit-pill--version">v{doc.version}</span>

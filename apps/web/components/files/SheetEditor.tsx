@@ -148,9 +148,27 @@ export function SheetEditor({
   const [error, setError] = useState('');
   const [msg, setMsg] = useState('');
   const [sel, setSel] = useState<Sel>(null);
+  const [showCoach, setShowCoach] = useState(false);
   const campaign = variant === 'campaign';
   const finance = variant === 'finance';
   const richTools = campaign || finance;
+
+  useEffect(() => {
+    try {
+      if (sessionStorage.getItem('arta-sheet-coach') !== '1') setShowCoach(true);
+    } catch {
+      setShowCoach(true);
+    }
+  }, []);
+
+  function dismissCoach() {
+    try {
+      sessionStorage.setItem('arta-sheet-coach', '1');
+    } catch {
+      /* ignore quota / private mode */
+    }
+    setShowCoach(false);
+  }
 
   const loadSheet = useCallback((wb: XLSX.WorkBook, name: string) => {
     const ws = wb.Sheets[name];
@@ -612,6 +630,22 @@ export function SheetEditor({
     <ExpandBox title={fileName} dirty={dirty}>
       <div className="stack sheet-editor">
         {blockNotice}
+
+        {showCoach ? (
+          <div className="editor-coach" role="note">
+            <p className="editor-coach__text">
+              Edita celdas → <strong>Guardar</strong> → <strong>Salir en PDF</strong>.
+            </p>
+            <button
+              type="button"
+              className="editor-coach__dismiss"
+              onClick={dismissCoach}
+              aria-label="Cerrar guía"
+            >
+              Entendido
+            </button>
+          </div>
+        ) : null}
 
         <div className="sheet-chrome">
           <div className="sheet-toolbar">

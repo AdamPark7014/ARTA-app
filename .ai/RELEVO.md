@@ -6,25 +6,21 @@
 
 ## Hecho en este turno
 
-**Hubs de archivos por sección: más claros y profesionales (copy + UI).**
+**Polish UX editores embebidos (sin commit — padre cierra).**
 
-1. **`SectionFileCreate`**: iconos por tono (Excel/PDF/Word/Subir), etiqueta «Qué pasa después», énfasis primary/secondary, modo `compact` / `hideHint`.
-2. **Campaña / Corrida**: con archivos existentes las tarjetas de crear quedan compactas; badges «Copia de trabajo» vs «PDF oficial» (`(salida).pdf`); acciones «Editar aquí» / «Ver PDF» / «Abrir PDF» (sin «Descargar» en xlsx). Tabla de conceptos intacta.
-3. **Checklists · Archivos**: empty state más amable + create cards con after-copy; «Ver PDF» en adjuntos.
-4. **Documentos**: blurb del modelo (entra Word/Excel → edita embebido → sale PDF); grupos con contador; badges de rol; «Editar aquí» / «Ver PDF».
-5. **Helpers** en `file-modules.ts`: `isSalidaPdf`, `isWorkSheet`, `fileRoleLabel`.
-6. **SCSS**: compact cards, after microcopy, iconos, `file-section-group__count`, `file-card__badges`.
-
-Handlers/props existentes preservados (solo UX/copy/visual).
+1. **`globals.scss`**: sheet-chrome / toolbar / fxbar (espaciado, focus rings, wrap móvil ≤640px); `editor-coach`; file-create cards (focus-visible, gaps); docedit paper/bar/chips focus + toolbar wrap ≤720px.
+2. **`SheetEditor`**: coach dismissible (`sessionStorage` `arta-sheet-coach`): «Edita celdas → Guardar → Salir en PDF».
+3. **`DocEditor`**: mismo patrón (`arta-doc-coach`): «Escribe → Guardar → Salir en PDF».
+4. APIs/props sin cambios. Sin deploy.
 
 ## A medias
 
-Nada de este alcance.
+Nada de este alcance (falta commit del padre).
 
 ## Siguiente paso
 
-1. Hard-refresh de un evento: revisar Campaña, Corrida, Checklists (adjuntos) y Documentos.
-2. Confirmar badges cuando haya un `(salida).pdf` generado desde SheetEditor/DocEditor.
+1. Commit del polish (padre).
+2. Hard-refresh: abrir hoja y doc — coach una vez por sesión; toolbars en viewport estrecho.
 3. Deploy producto ARTA cuando Adam lo pida.
 
 ## No tocar
