@@ -3539,6 +3539,10 @@ body.site-nav-open {
   min-width: 0;
 }
 
+.file-card__meta strong {
+  word-break: break-word;
+}
+
 @media (max-width: 640px) {
   .files-table-desktop {
     display: none;
@@ -4036,6 +4040,11 @@ body.site-nav-open {
   align-items: center;
   gap: 0.5rem;
   min-width: 0;
+}
+
+.campaign-file__meta strong {
+  word-break: break-word;
+  margin-right: 0.15rem;
 }
 
 .campaign-file__body {
@@ -4711,6 +4720,29 @@ body.site-nav-open {
 .file-section-group__head h3 {
   margin: 0;
   font-size: 0.95rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.file-section-group__count {
+  display: inline-grid;
+  place-items: center;
+  min-width: 1.45rem;
+  height: 1.45rem;
+  padding: 0 0.4rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  background: color-mix(in srgb, var(--accent) 14%, var(--bg-soft));
+  color: var(--text);
+}
+
+.file-card__badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: center;
 }
 
 /* PDF con escritura encima */

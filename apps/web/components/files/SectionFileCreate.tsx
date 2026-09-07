@@ -143,7 +143,7 @@ export function SectionFileCreate({
               </span>
               <strong className="file-create-card__title">{a.title}</strong>
               <span className="file-create-card__desc">{a.description}</span>
-              {a.after ? (
+              {a.after && !compact ? (
                 <span className="file-create-card__after">
                   <span className="file-create-card__after-label">Qué pasa después</span>
                   {a.after}
