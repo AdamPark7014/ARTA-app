@@ -625,7 +625,7 @@ export function EventCampaignPanel({
                           <div className="stack">
                             <div className="module-banner">
                               Un PDF de campaña (como el de gastos) no se reescribe celda a celda.
-                              Usa <strong>Nueva hoja de gastos</strong> o <strong>Editar hoja</strong>{' '}
+                              Usa <strong>Nueva hoja de gastos</strong> o <strong>Editar aquí</strong>{' '}
                               en el Excel para agregar/quitar conceptos y totales. Aquí solo puedes
                               anotar texto encima del PDF.
                             </div>
