@@ -20,9 +20,17 @@ import { api } from '@/lib/api';
 import { useUser } from '@/lib/user-context';
 import { userHasPermission } from '@/lib/access-matrix';
 import { BoleteraFields, resolveBoleteraName } from '@/components/ticketing/BoleteraFields';
+import { TicketZonesEditor } from '@/components/ticketing/TicketZonesEditor';
 import { boleteraChoiceOf } from '@/lib/boletera';
+import {
+  DEFAULT_TICKET_ZONES,
+  cloneTicketZones,
+  normalizeTicketZones,
+  ticketZonesReady,
+  type TicketZone,
+} from '@/lib/ticket-zones';
 
-type Zone = { zona: string; aforo: number; precio: number; sold?: number };
+type Zone = TicketZone;
 type Setup = {
   id: string;
   boletera: string;
@@ -37,15 +45,8 @@ type Setup = {
 
 type EventOpt = { id: string; name: string; entity: string };
 
-const DEFAULT_ZONES: Zone[] = [
-  { zona: 'Diamante', aforo: 0, precio: 0, sold: 0 },
-  { zona: 'Oro', aforo: 0, precio: 0, sold: 0 },
-  { zona: 'Plata', aforo: 0, precio: 0, sold: 0 },
-  { zona: 'Bronce', aforo: 0, precio: 0, sold: 0 },
-];
-
 function flashVariant(msg: string): 'info' | 'success' | 'error' | 'warn' {
-  if (/error|inválid/i.test(msg)) return 'error';
+  if (/error|inválid|escribe|zona/i.test(msg)) return 'error';
   if (/cread|actualiz|copiad|sync/i.test(msg)) return 'success';
   return 'info';
 }
@@ -78,7 +79,7 @@ export default function TicketingPage() {
     promoter: '',
     notes: '',
   });
-  const [zones, setZones] = useState<Zone[]>(DEFAULT_ZONES);
+  const [zones, setZones] = useState<Zone[]>(cloneTicketZones(DEFAULT_TICKET_ZONES));
   const [msg, setMsg] = useState('');
   const [syncing, setSyncing] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -159,7 +160,7 @@ export default function TicketingPage() {
 
   function resetForm() {
     setEditingId(null);
-    setZones(DEFAULT_ZONES.map((z) => ({ ...z })));
+    setZones(cloneTicketZones(DEFAULT_TICKET_ZONES));
     setForm((f) => ({
       ...f,
       boletera: 'Arema',
@@ -178,6 +179,10 @@ export default function TicketingPage() {
       setMsg('Escribe el nombre de la boletera (no dejes solo “Otra”).');
       return;
     }
+    if (!ticketZonesReady(zones)) {
+      setMsg('Nombra al menos una zona del venue.');
+      return;
+    }
     const payload = {
       boletera: form.boletera,
       logoUrl: form.logoUrl || '',
@@ -185,7 +190,7 @@ export default function TicketingPage() {
       artist: form.artist || undefined,
       promoter: form.promoter || undefined,
       notes: form.notes || undefined,
-      zonesJson: zones,
+      zonesJson: normalizeTicketZones(zones),
     };
     try {
       if (editingId) {
@@ -335,6 +340,7 @@ export default function TicketingPage() {
                 <label>
                   Hold hasta
                   <input
+                    className="field"
                     type="date"
                     value={form.holdUntil}
                     onChange={(e) => setForm({ ...form, holdUntil: e.target.value })}
@@ -343,75 +349,33 @@ export default function TicketingPage() {
                 <label>
                   Artista
                   <input
+                    className="field"
                     value={form.artist}
                     onChange={(e) => setForm({ ...form, artist: e.target.value })}
+                    placeholder="Nombre artístico en cartel"
                   />
                 </label>
                 <label>
                   Promotor
                   <input
+                    className="field"
                     value={form.promoter}
                     onChange={(e) => setForm({ ...form, promoter: e.target.value })}
+                    placeholder="Quién promueve el show"
                   />
                 </label>
               </FormGrid>
 
-              <div className="table-wrap">
-              <table className="table">
-                <thead>
-                  <tr>
-                    <th>Zona</th>
-                    <th>Aforo</th>
-                    <th>Vendidos</th>
-                    <th>Precio</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {zones.map((z, i) => (
-                    <tr key={z.zona}>
-                      <td>{z.zona}</td>
-                      <td>
-                        <input
-                          type="number"
-                          value={z.aforo}
-                          onChange={(e) => {
-                            const next = [...zones];
-                            next[i] = { ...z, aforo: Number(e.target.value) };
-                            setZones(next);
-                          }}
-                        />
-                      </td>
-                      <td>
-                        <input
-                          type="number"
-                          value={z.sold ?? 0}
-                          onChange={(e) => {
-                            const next = [...zones];
-                            next[i] = { ...z, sold: Number(e.target.value) };
-                            setZones(next);
-                          }}
-                        />
-                      </td>
-                      <td>
-                        <input
-                          type="number"
-                          value={z.precio}
-                          onChange={(e) => {
-                            const next = [...zones];
-                            next[i] = { ...z, precio: Number(e.target.value) };
-                            setZones(next);
-                          }}
-                        />
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              </div>
+              <TicketZonesEditor zones={zones} onChange={setZones} />
 
               <label>
                 Notas
-                <input value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
+                <input
+                  className="field"
+                  value={form.notes}
+                  onChange={(e) => setForm({ ...form, notes: e.target.value })}
+                  placeholder="Cortesías, cortes de hold, observaciones…"
+                />
               </label>
 
               <button className="btn" type="submit" disabled={!editingId && !form.eventId}>

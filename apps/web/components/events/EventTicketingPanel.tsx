@@ -4,7 +4,15 @@ import { useState } from 'react';
 import Link from 'next/link';
 import type { TicketingSetup } from '@/components/events/event-detail.types';
 import { BoleteraFields, resolveBoleteraName } from '@/components/ticketing/BoleteraFields';
+import { TicketZonesEditor } from '@/components/ticketing/TicketZonesEditor';
 import { boleteraChoiceOf } from '@/lib/boletera';
+import {
+  DEFAULT_TICKET_ZONES,
+  cloneTicketZones,
+  ticketZonesReady,
+  ticketZonesSummary,
+  type TicketZone,
+} from '@/lib/ticket-zones';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { FlashMessage, FormGrid, PageHeader } from '@/components/ui/PageChrome';
 import { api } from '@/lib/api';
@@ -17,8 +25,6 @@ type TicketForm = {
   promoter: string;
   notes: string;
 };
-
-type TicketZone = { zona: string; aforo: number; precio: number; sold: number };
 
 type EventTicketingPanelProps = {
   closed: boolean;
@@ -38,17 +44,14 @@ type EventTicketingPanelProps = {
   onSynced?: () => Promise<void>;
 };
 
-function zoneSummary(zones: Array<{ aforo: number; sold?: number }>) {
-  const aforo = zones.reduce((s, z) => s + Number(z.aforo || 0), 0);
-  const sold = zones.reduce((s, z) => s + Number(z.sold || 0), 0);
-  const pct = aforo > 0 ? Math.round((sold / aforo) * 100) : 0;
-  return { aforo, sold, pct };
-}
-
 function syncFlashVariant(message: string): 'error' | 'success' | 'info' {
-  if (/error|escribe|dejes/i.test(message)) return 'error';
+  if (/error|escribe|dejes|zona/i.test(message)) return 'error';
   if (/sync ·/i.test(message)) return 'success';
   return 'info';
+}
+
+function money(n: number) {
+  return n.toLocaleString('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 });
 }
 
 export function EventTicketingPanel({
@@ -90,12 +93,21 @@ export function EventTicketingPanel({
       setSyncMsg('Escribe el nombre de la boletera (no dejes solo “Otra”).');
       return;
     }
+    if (!ticketZonesReady(ticketZones)) {
+      setSyncMsg('Nombra al menos una zona del venue.');
+      return;
+    }
     await onSaveTicketing();
+  }
+
+  function cancelEdit() {
+    setEditingTicketId(null);
+    setTicketZones(cloneTicketZones(DEFAULT_TICKET_ZONES));
   }
 
   return (
     <div className="stack">
-      <PageHeader description="Aforo, vendidos y sell-through por zona. Sync rellena vendidos desde el provider (stub o TICKETING_SYNC_URL).">
+      <PageHeader description="Configura la boletera del show: proveedor, hold y zonas del venue (cada auditorio es distinto).">
         {canTicketing && !closed ? (
           <button className="btn ghost" type="button" disabled={syncing} onClick={() => syncSold()}>
             {syncing ? 'Sincronizando…' : 'Sync boletera'}
@@ -104,8 +116,7 @@ export function EventTicketingPanel({
       </PageHeader>
       {(process.env.NEXT_PUBLIC_TICKETING_SYNC_MODE || 'stub') === 'stub' ? (
         <FlashMessage variant="warn">
-          Sync boletera en modo demo (stub). Configura TICKETING_SYNC_MODE=live y TICKETING_SYNC_URL
-          para conectar Arema en producción.
+          Sync en modo demo. En producción conecta TICKETING_SYNC_MODE=live y TICKETING_SYNC_URL.
         </FlashMessage>
       ) : null}
       {syncMsg ? <FlashMessage variant={syncFlashVariant(syncMsg)}>{syncMsg}</FlashMessage> : null}
@@ -113,102 +124,83 @@ export function EventTicketingPanel({
       {canTicketing && !closed ? (
         <div className="panel">
           <div className="panel-head">
-            <h2>{editingTicketId ? 'Editar boletera' : 'Nueva boletera'}</h2>
+            <div>
+              <h2>{editingTicketId ? 'Editar boletera' : 'Nueva boletera'}</h2>
+              <p className="muted kpi-sub" style={{ margin: '0.25rem 0 0' }}>
+                Elige proveedor, fechas y el mapa de zonas del recinto.
+              </p>
+            </div>
             {editingTicketId ? (
-              <button className="btn ghost" type="button" onClick={() => setEditingTicketId(null)}>
+              <button className="btn ghost" type="button" onClick={cancelEdit}>
                 Cancelar edición
               </button>
             ) : null}
           </div>
           <div className="panel-body">
-            <div className="form">
-              <FormGrid>
-                <BoleteraFields
-                  eventId={eventId}
-                  boletera={ticketForm.boletera}
-                  logoUrl={ticketForm.logoUrl || null}
-                  onBoleteraChange={(boletera) => setTicketForm({ ...ticketForm, boletera })}
-                  onLogoUrlChange={(logoUrl) => setTicketForm({ ...ticketForm, logoUrl: logoUrl || '' })}
-                />
-              </FormGrid>
-              <FormGrid cols={3}>
+            <div className="form ticket-create-form">
+              <section className="ticket-form-section">
+                <h3 className="ticket-form-section__title">Proveedor y hold</h3>
+                <FormGrid>
+                  <BoleteraFields
+                    eventId={eventId}
+                    boletera={ticketForm.boletera}
+                    logoUrl={ticketForm.logoUrl || null}
+                    onBoleteraChange={(boletera) => setTicketForm({ ...ticketForm, boletera })}
+                    onLogoUrlChange={(logoUrl) =>
+                      setTicketForm({ ...ticketForm, logoUrl: logoUrl || '' })
+                    }
+                  />
+                </FormGrid>
+                <FormGrid cols={3}>
+                  <label>
+                    Hold hasta
+                    <input
+                      className="field"
+                      type="date"
+                      value={ticketForm.holdUntil}
+                      onChange={(e) => setTicketForm({ ...ticketForm, holdUntil: e.target.value })}
+                    />
+                  </label>
+                  <label>
+                    Artista
+                    <input
+                      className="field"
+                      value={ticketForm.artist}
+                      onChange={(e) => setTicketForm({ ...ticketForm, artist: e.target.value })}
+                      placeholder="Nombre artístico en cartel"
+                    />
+                  </label>
+                  <label>
+                    Promotor
+                    <input
+                      className="field"
+                      value={ticketForm.promoter}
+                      onChange={(e) => setTicketForm({ ...ticketForm, promoter: e.target.value })}
+                      placeholder="Quién promueve el show"
+                    />
+                  </label>
+                </FormGrid>
                 <label>
-                  Hold hasta
+                  Notas
                   <input
-                    type="date"
-                    value={ticketForm.holdUntil}
-                    onChange={(e) => setTicketForm({ ...ticketForm, holdUntil: e.target.value })}
+                    className="field"
+                    value={ticketForm.notes}
+                    onChange={(e) => setTicketForm({ ...ticketForm, notes: e.target.value })}
+                    placeholder="Cortesías, cortes de hold, observaciones…"
                   />
                 </label>
-                <label>
-                  Artista
-                  <input
-                    value={ticketForm.artist}
-                    onChange={(e) => setTicketForm({ ...ticketForm, artist: e.target.value })}
-                  />
-                </label>
-              </FormGrid>
-              <div className="table-wrap">
-                <table className="table">
-                  <thead>
-                    <tr>
-                      <th>Zona</th>
-                      <th className="num">Aforo</th>
-                      <th className="num">Vendidos</th>
-                      <th className="num">Precio</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {ticketZones.map((z, i) => (
-                      <tr key={z.zona}>
-                        <td>{z.zona}</td>
-                        <td className="num">
-                          <input
-                            type="number"
-                            value={z.aforo}
-                            onChange={(e) => {
-                              const next = [...ticketZones];
-                              next[i] = { ...z, aforo: Number(e.target.value) };
-                              setTicketZones(next);
-                            }}
-                          />
-                        </td>
-                        <td className="num">
-                          <input
-                            type="number"
-                            value={z.sold}
-                            onChange={(e) => {
-                              const next = [...ticketZones];
-                              next[i] = { ...z, sold: Number(e.target.value) };
-                              setTicketZones(next);
-                            }}
-                          />
-                        </td>
-                        <td className="num">
-                          <input
-                            type="number"
-                            value={z.precio}
-                            onChange={(e) => {
-                              const next = [...ticketZones];
-                              next[i] = { ...z, precio: Number(e.target.value) };
-                              setTicketZones(next);
-                            }}
-                          />
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              <label>
-                Notas
-                <input
-                  value={ticketForm.notes}
-                  onChange={(e) => setTicketForm({ ...ticketForm, notes: e.target.value })}
-                />
-              </label>
+              </section>
+
+              <section className="ticket-form-section">
+                <TicketZonesEditor zones={ticketZones} onChange={setTicketZones} />
+              </section>
+
               <button className="btn" type="button" disabled={saving} onClick={handleSave}>
-                {saving ? 'Guardando…' : editingTicketId ? 'Actualizar' : 'Crear boletera'}
+                {saving
+                  ? 'Guardando…'
+                  : editingTicketId
+                    ? 'Actualizar boletera'
+                    : 'Crear boletera'}
               </button>
             </div>
           </div>
@@ -225,30 +217,32 @@ export function EventTicketingPanel({
         <div className="panel-body stack">
           {(ticketingSetups || []).map((t) => {
             const zones = (t.zonesJson || []) as TicketZone[];
-            const s = zoneSummary(zones);
+            const s = ticketZonesSummary(zones);
             return (
               <article key={t.id} className="ticket-card">
                 <div className="ticket-card__head">
                   <div className="row row--tight" style={{ alignItems: 'center' }}>
                     {t.logoUrl ? (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={t.logoUrl}
-                        alt=""
-                        className="ticket-card__logo"
-                      />
+                      <img src={t.logoUrl} alt="" className="ticket-card__logo" />
                     ) : null}
                     <div>
                       <strong>{t.boletera}</strong>
                       <div className="muted kpi-sub">
-                        Hold: {t.holdUntil ? new Date(t.holdUntil).toLocaleDateString('es-MX') : '—'}
+                        Hold:{' '}
+                        {t.holdUntil ? new Date(t.holdUntil).toLocaleDateString('es-MX') : '—'}
+                        {t.artist ? ` · ${t.artist}` : ''}
                       </div>
                     </div>
                   </div>
                   <div className="panel-head-actions">
                     {canTicketing && !closed ? (
                       <>
-                        <button className="btn ghost btn-sm" type="button" onClick={() => onEditTicketing(t)}>
+                        <button
+                          className="btn ghost btn-sm"
+                          type="button"
+                          onClick={() => onEditTicketing(t)}
+                        >
                           Editar
                         </button>
                         <button
@@ -268,6 +262,7 @@ export function EventTicketingPanel({
                     <strong>{s.pct}%</strong>
                     <span className="muted kpi-sub">
                       {s.sold.toLocaleString('es-MX')} / {s.aforo.toLocaleString('es-MX')} boletos
+                      · {money(s.realized)} de {money(s.potential)}
                     </span>
                   </div>
                   <div className="progress">
@@ -275,7 +270,8 @@ export function EventTicketingPanel({
                   </div>
                 </div>
                 <p className="muted kpi-sub ticket-card__zones">
-                  {zones.map((z) => `${z.zona}: ${z.sold ?? 0}/${z.aforo}`).join(' · ')}
+                  {zones.map((z) => `${z.zona}: ${z.sold ?? 0}/${z.aforo}`).join(' · ') ||
+                    'Sin zonas'}
                 </p>
               </article>
             );
@@ -283,8 +279,12 @@ export function EventTicketingPanel({
           {!ticketingSetups?.length ? (
             <EmptyState
               title="Sin boletera aún"
-              description="Configura zonas y aforo para medir sell-through del show."
-              steps={['Elige boletera', 'Captura aforo y precios', 'Registra vendidos o corre Sync']}
+              description="Arma las zonas del venue (pueden ser distintas en cada auditorio), captura aforo y precios."
+              steps={[
+                'Elige boletera (o escribe otra)',
+                'Aplica un preset o nombra tus zonas',
+                'Captura aforo / precio y guarda',
+              ]}
             />
           ) : null}
         </div>

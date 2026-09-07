@@ -19,6 +19,11 @@ import { defaultCampaignConceptRows } from '@/lib/campaign-sheet-template';
 import { fetchPoWindow, type PoWindowState } from '@/lib/po-window';
 import { joinPoDescription, splitPoDescription } from '@/lib/po-payment';
 import { parsePoRubro, resolvePoRubro } from '@/lib/po-rubro';
+import {
+  DEFAULT_TICKET_ZONES,
+  cloneTicketZones,
+  normalizeTicketZones,
+} from '@/lib/ticket-zones';
 import { EventOverviewPanel } from '@/components/events/EventOverviewPanel';
 import { EventChecklistsPanel } from '@/components/events/EventChecklistsPanel';
 import { EventPurchaseOrdersPanel } from '@/components/events/EventPurchaseOrdersPanel';
@@ -112,12 +117,7 @@ function EventDetailInner() {
     promoter: '',
     notes: '',
   });
-  const [ticketZones, setTicketZones] = useState([
-    { zona: 'Diamante', aforo: 0, precio: 0, sold: 0 },
-    { zona: 'Oro', aforo: 0, precio: 0, sold: 0 },
-    { zona: 'Plata', aforo: 0, precio: 0, sold: 0 },
-    { zona: 'Bronce', aforo: 0, precio: 0, sold: 0 },
-  ]);
+  const [ticketZones, setTicketZones] = useState(cloneTicketZones(DEFAULT_TICKET_ZONES));
   const [editingTicketId, setEditingTicketId] = useState<string | null>(null);
 
   const [editingPoId, setEditingPoId] = useState<string | null>(null);
@@ -707,6 +707,11 @@ function EventDetailInner() {
 
   async function saveTicketing() {
     if (!canTicketing || closed) return;
+    const zones = normalizeTicketZones(ticketZones);
+    if (!zones.length) {
+      flash('Nombra al menos una zona del venue', 'error');
+      return;
+    }
     setSaving(true);
     try {
       const payload = {
@@ -716,7 +721,7 @@ function EventDetailInner() {
         artist: ticketForm.artist || undefined,
         promoter: ticketForm.promoter || undefined,
         notes: ticketForm.notes || undefined,
-        zonesJson: ticketZones,
+        zonesJson: zones,
       };
       if (editingTicketId) {
         await api(`/ticketing/${editingTicketId}`, { method: 'PATCH', body: JSON.stringify(payload) });
@@ -726,7 +731,16 @@ function EventDetailInner() {
         flash('Boletera creada');
       }
       setEditingTicketId(null);
-      setTicketForm((f) => ({ ...f, boletera: 'Arema', logoUrl: '', holdUntil: '', notes: '' }));
+      setTicketForm((f) => ({
+        ...f,
+        boletera: 'Arema',
+        logoUrl: '',
+        holdUntil: '',
+        artist: '',
+        promoter: '',
+        notes: '',
+      }));
+      setTicketZones(cloneTicketZones(DEFAULT_TICKET_ZONES));
       await load();
     } catch (e) {
       flash(e instanceof Error ? e.message : 'Error al guardar boletera', 'error');

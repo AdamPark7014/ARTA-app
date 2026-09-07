@@ -59,7 +59,7 @@ export function BoleteraFields({
               {b}
             </option>
           ))}
-          <option value="Otra">Otra</option>
+          <option value="Otra">Otra (especificar)</option>
         </select>
       </label>
       {choice === 'Otra' ? (
@@ -69,26 +69,30 @@ export function BoleteraFields({
             className="field"
             disabled={disabled}
             required
-            placeholder="Ej. Ticketmaster, Boletomóvil…"
+            placeholder="Ej. Ticketmaster, Boletomóvil, Superboletos…"
             value={custom}
             onChange={(e) => onBoleteraChange(e.target.value || 'Otra')}
+            autoComplete="organization"
           />
         </label>
       ) : null}
       <label>
-        Logo (checklists / PDF)
-        <div className="row">
-          <input
-            className="field"
-            type="file"
-            accept="image/png,image/jpeg,image/webp"
-            disabled={disabled}
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              if (f) uploadLogo(f).catch(console.error);
-              e.target.value = '';
-            }}
-          />
+        Logo
+        <div className="row row--tight" style={{ alignItems: 'center' }}>
+          <label className="btn ghost btn-sm module-upload">
+            {logoUrl ? 'Cambiar logo' : 'Subir logo'}
+            <input
+              type="file"
+              hidden
+              accept="image/png,image/jpeg,image/webp"
+              disabled={disabled}
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) uploadLogo(f).catch(console.error);
+                e.target.value = '';
+              }}
+            />
+          </label>
           {logoUrl ? (
             <>
               {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -99,12 +103,17 @@ export function BoleteraFields({
                 width={120}
                 style={{ objectFit: 'contain', background: '#fff', borderRadius: 4, padding: 2 }}
               />
-              <button className="btn ghost btn-sm" type="button" disabled={disabled} onClick={() => onLogoUrlChange(null)}>
+              <button
+                className="btn ghost btn-sm"
+                type="button"
+                disabled={disabled}
+                onClick={() => onLogoUrlChange(null)}
+              >
                 Quitar
               </button>
             </>
           ) : (
-            <span className="muted">Opcional · aparece en PDFs de checklist</span>
+            <span className="muted kpi-sub">Opcional · aparece en PDFs de checklist</span>
           )}
         </div>
       </label>
