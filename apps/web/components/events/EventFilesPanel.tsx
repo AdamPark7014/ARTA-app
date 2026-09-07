@@ -15,6 +15,8 @@ import {
   GENERAL_FILE_MODULE,
   fileKindLabel,
   fileModuleLabel,
+  fileRoleLabel,
+  isSalidaPdf,
 } from '@/lib/file-modules';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { StatusBadge } from '@/components/ui/StatusBadge';
@@ -247,21 +249,32 @@ export function EventFilesPanel({
     const active = previewFile?.id === f.id;
     const isEditing = editing?.id === f.id;
     const editable = isSheet(f) || isPdf(f);
+    const role = fileRoleLabel(f.kind, f.fileName);
+    const official = isSalidaPdf(f.fileName);
     return (
       <div key={f.id} className={`file-card ${active || isEditing ? 'file-card--active' : ''}`}>
         <div className="file-card__meta">
           <strong>{f.fileName}</strong>
-          <StatusBadge value={fileKindLabel(f.kind, f.fileName)} kind="raw" />
-          <StatusBadge
-            value={fileModuleLabel(f.module, checklistTitle(f.checklistId))}
-            kind="raw"
-            className="ok"
-          />
+          <div className="file-card__badges">
+            <StatusBadge value={fileKindLabel(f.kind, f.fileName)} kind="raw" />
+            {role ? (
+              <StatusBadge
+                value={role}
+                kind="raw"
+                className={official ? 'ok' : isSheet(f) ? 'warn' : undefined}
+              />
+            ) : null}
+            <StatusBadge
+              value={fileModuleLabel(f.module, checklistTitle(f.checklistId))}
+              kind="raw"
+              className="ok"
+            />
+          </div>
         </div>
         <div className="panel-head-actions">
           {editable ? (
             <button className="btn btn-sm" type="button" onClick={() => onEditar(f)}>
-              {isEditing ? 'Cerrar' : isSheet(f) ? 'Editar hoja' : 'Escribir encima'}
+              {isEditing ? 'Cerrar' : isSheet(f) ? 'Editar aquí' : 'Escribir encima'}
             </button>
           ) : (
             <button
@@ -274,7 +287,7 @@ export function EventFilesPanel({
           )}
           {editable && !isEditing ? (
             <button className="btn ghost btn-sm" type="button" onClick={() => onVer(f)}>
-              {active ? 'Ocultar vista' : 'Vista previa'}
+              {active ? 'Ocultar vista' : isPdf(f) ? 'Ver PDF' : 'Vista previa'}
             </button>
           ) : null}
           {isPdf(f) && canEdit ? (
@@ -290,17 +303,9 @@ export function EventFilesPanel({
           ) : null}
           {isPdf(f) ? (
             <a className="btn ghost btn-sm" href={f.url} download={f.fileName}>
-              Descargar PDF
+              Abrir PDF
             </a>
-          ) : isSheet(f) ? (
-            <button className="btn ghost btn-sm" type="button" onClick={() => onEditar(f)}>
-              Editar · salir en PDF
-            </button>
-          ) : (
-            <a className="btn ghost btn-sm" href={f.url} download={f.fileName}>
-              Descargar
-            </a>
-          )}
+          ) : null}
           {canEdit ? (
             <button
               className="btn ghost btn-sm btn-danger"
@@ -431,7 +436,8 @@ export function EventFilesPanel({
           <div>
             <h2>Documentos · {docs.length}</h2>
             <p className="muted kpi-sub" style={{ margin: '0.25rem 0 0' }}>
-              Actas y cartas: Word entra · se edita aquí · sale PDF.
+              Entra Word (.docx) o Excel (.xlsx) como copia de trabajo → se edita embebido aquí →
+              sale el PDF oficial. Actas y cartas se escriben en el documento y se descargan en PDF.
             </p>
           </div>
           {canEdit && docs.length ? (
@@ -444,13 +450,15 @@ export function EventFilesPanel({
           {canEdit ? (
             <SectionFileCreate
               staysIn="Documentos"
-              busy={busy === 'doc'}
+              busy={busy === 'doc' || busy === 'docx'}
+              compact={docs.length > 0 || files.length > 0}
+              hideHint
               actions={[
                 {
                   id: 'doc',
                   title: 'Nuevo documento',
-                  description: 'Acta o carta en blanco, tipo Word.',
-                  after: 'Se escribe aquí y sale en PDF.',
+                  description: 'Acta o carta embebida. Se escribe aquí.',
+                  after: 'Se abre el editor; al terminar sales en PDF.',
                   tone: 'doc',
                   emphasis: 'primary',
                   onClick: () => void createDoc(),
@@ -458,27 +466,27 @@ export function EventFilesPanel({
                 {
                   id: 'import-docx',
                   title: 'Importar Word (.docx)',
-                  description: 'Trae el archivo una sola vez.',
-                  after: 'Después solo se reedita aquí.',
+                  description: 'Entra una vez; después solo se reedita aquí.',
+                  after: 'Queda como documento embebido; sale en PDF.',
                   tone: 'doc',
-                  emphasis: 'primary',
+                  emphasis: 'secondary',
                   accept: '.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document',
                   onFile: (f) => void importDocx(f),
                 },
                 {
                   id: 'upload',
                   title: 'Subir Excel de trabajo',
-                  description: 'Copia de trabajo .xlsx / .xls.',
-                  after: 'Se edita embebido y sale en PDF.',
+                  description: 'Copia de trabajo .xlsx para editar embebido.',
+                  after: 'Aparece en Documentos generales; el PDF se saca desde el editor.',
                   tone: 'excel',
-                  emphasis: 'primary',
+                  emphasis: 'secondary',
                   accept: '.xlsx,.xls,.csv',
                   onFile: (f) => void onUpload(f),
                 },
                 {
                   id: 'upload-other',
                   title: 'Subir PDF / imagen',
-                  description: 'Referencias o PDF ya listos.',
+                  description: 'Referencias o salidas ya en PDF.',
                   after: 'Quedan en Documentos generales.',
                   tone: 'upload',
                   emphasis: 'secondary',
@@ -491,7 +499,7 @@ export function EventFilesPanel({
           {!docs.length ? (
             <EmptyState
               title="Sin documentos todavía"
-              description="Crea un acta o una carta: se escribe aquí y al descargarlo sale en PDF con el formato de Arta."
+              description="Crea un acta o importa un Word: se edita aquí y al salir queda en PDF con el formato de Arta."
             />
           ) : (
             <div className="file-card-list file-card-list--always">
@@ -502,7 +510,14 @@ export function EventFilesPanel({
                 >
                   <div className="file-card__meta">
                     <strong>{d.title}</strong>
-                    <StatusBadge value="Documento" kind="raw" />
+                    <div className="file-card__badges">
+                      <StatusBadge value="Documento" kind="raw" />
+                      {d.pdfUrl ? (
+                        <StatusBadge value="PDF oficial" kind="raw" className="ok" />
+                      ) : (
+                        <StatusBadge value="Copia de trabajo" kind="raw" className="warn" />
+                      )}
+                    </div>
                     <span className="muted kpi-sub">
                       v{d.version}
                       {d.updatedBy ? ` · ${d.updatedBy.fullName}` : ''}
@@ -514,11 +529,11 @@ export function EventFilesPanel({
                       type="button"
                       onClick={() => setOpenDoc(openDoc?.id === d.id ? null : d)}
                     >
-                      {openDoc?.id === d.id ? 'Cerrar' : 'Abrir'}
+                      {openDoc?.id === d.id ? 'Cerrar' : 'Editar aquí'}
                     </button>
                     {d.pdfUrl ? (
                       <a className="btn ghost btn-sm" href={d.pdfUrl} target="_blank" rel="noreferrer">
-                        PDF
+                        Ver PDF
                       </a>
                     ) : null}
                   </div>
@@ -535,7 +550,7 @@ export function EventFilesPanel({
             <h2>Archivos del evento · {files.length}</h2>
             <p className="muted kpi-sub" style={{ margin: '0.25rem 0 0' }}>
               Inventario por sección. Cada archivo también vive en su pestaña (Campaña, Corrida,
-              Checklists…).
+              Checklists…). Excel = copia de trabajo; «(salida).pdf» = PDF oficial.
             </p>
           </div>
         </div>
@@ -543,14 +558,17 @@ export function EventFilesPanel({
           {!files.length ? (
             <EmptyState
               title="Sin archivos aún"
-              description="Sube desde Campaña, Corrida o un checklist — o usa «Subir archivo general» arriba. Así sabes en qué sección quedó."
+              description="Sube desde Campaña, Corrida o un checklist — o usa las tarjetas de arriba. Así sabes en qué sección quedó."
             />
           ) : (
             <div className="stack">
               {groups.map((g) => (
                 <div key={g.key} className="file-section-group">
                   <div className="file-section-group__head">
-                    <h3>{g.label}</h3>
+                    <h3>
+                      {g.label}{' '}
+                      <span className="file-section-group__count">{g.files.length}</span>
+                    </h3>
                     <span className="muted kpi-sub">{g.hint}</span>
                   </div>
                   <div className="file-card-list file-card-list--always">

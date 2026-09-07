@@ -4532,13 +4532,23 @@ body.site-nav-open {
   margin-bottom: 1rem;
 }
 
+.file-create--compact .file-create__grid {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.file-create--compact .file-create-card {
+  min-height: 0;
+  padding: 0.85rem 0.9rem;
+}
+
 .file-create__hint {
-  margin: 0 0 0.65rem;
+  margin: 0 0 0.75rem;
+  line-height: 1.45;
 }
 
 .file-create__grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
   gap: 0.75rem;
 }
 
@@ -4546,9 +4556,9 @@ body.site-nav-open {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 0.35rem;
+  gap: 0.4rem;
   text-align: left;
-  padding: 1rem 1.05rem;
+  padding: 1.05rem 1.1rem;
   border: 1px solid var(--line);
   border-radius: 12px;
   background: var(--bg-soft, var(--panel));
@@ -4556,7 +4566,16 @@ body.site-nav-open {
   transition: border-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
   font: inherit;
   color: inherit;
-  min-height: 7.5rem;
+  min-height: 8.25rem;
+}
+
+.file-create-card--primary {
+  border-color: color-mix(in srgb, var(--accent) 28%, var(--line));
+  background: color-mix(in srgb, var(--accent) 6%, var(--bg-soft));
+}
+
+.file-create-card--secondary {
+  opacity: 0.96;
 }
 
 .file-create-card:hover:not(.is-disabled) {
@@ -4568,6 +4587,44 @@ body.site-nav-open {
 .file-create-card.is-disabled {
   opacity: 0.55;
   cursor: not-allowed;
+}
+
+.file-create-card__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  width: 100%;
+}
+
+.file-create-card__icon {
+  display: grid;
+  place-items: center;
+  width: 2.1rem;
+  height: 2.1rem;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--muted);
+}
+
+.file-create-card--excel .file-create-card__icon {
+  background: #e8f5ee;
+  color: #217346;
+}
+
+.file-create-card--pdf .file-create-card__icon {
+  background: #fdecea;
+  color: #b42318;
+}
+
+.file-create-card--upload .file-create-card__icon {
+  background: #eef2ff;
+  color: #3538cd;
+}
+
+.file-create-card--doc .file-create-card__icon {
+  background: #eef4ff;
+  color: #175cd3;
 }
 
 .file-create-card__badge {
@@ -4611,6 +4668,25 @@ body.site-nav-open {
   font-size: 0.82rem;
   color: var(--muted);
   line-height: 1.35;
+}
+
+.file-create-card__after {
+  display: grid;
+  gap: 0.15rem;
+  margin-top: 0.15rem;
+  padding-top: 0.45rem;
+  border-top: 1px dashed color-mix(in srgb, var(--line) 80%, transparent);
+  font-size: 0.78rem;
+  color: color-mix(in srgb, var(--text) 75%, var(--muted));
+  line-height: 1.35;
+}
+
+.file-create-card__after-label {
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
 }
 
 .file-section-group {
@@ -4903,6 +4979,7 @@ body.site-nav-open {
 .docedit__body {
   display: grid;
   gap: 0.15rem;
+  padding-top: 0.35rem;
 }
 
 .docedit__block {
@@ -5044,7 +5121,7 @@ body.site-nav-open {
 .docedit__block--h1 .docedit__text {
   font-family: var(--font-display);
   font-size: 1.28rem !important;
-  font-weight: 650;
+  font-weight: 600;
   line-height: 1.35;
   margin-top: 0.55rem;
   color: #111 !important;
@@ -5151,7 +5228,7 @@ body.site-nav-open {
 .docedit-history__head h3 {
   margin: 0;
   font-size: 0.95rem;
-  font-weight: 650;
+  font-weight: 600;
 }
 
 .docedit-history__head p {

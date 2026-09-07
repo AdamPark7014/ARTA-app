@@ -6,24 +6,26 @@
 
 ## Hecho en este turno
 
-**SheetEditor UX: jerarquía clara, barra de fórmulas y estados amables.**
+**DocEditor UX: hoja tipo Word, toolbar clara y chips de bloque.**
 
-1. Toolbar sticky (`sheet-chrome`) con CTA primario **Salir en PDF**, secundario **Guardar**, terciario historial.
-2. Barra de fórmulas (`sheet-fxbar`) con ref de celda + edición del valor/fórmula.
-3. Selección más visible (anillo verde, columna/fila resaltadas); Esc limpia selección; Ctrl+S intacto.
-4. Estados loading/error/vacío en español; tip contextual campaña/finanzas; franja de éxito PDF con enlace; historial enmarcado.
-5. Chrome Excel más compacto (letras de columna, nº de fila). `fileId` sigue opcional. Sin «Descargar .xlsx».
+1. Documento como **página blanca** sobre lienzo suave (`docedit-canvas` + `.docedit`).
+2. Toolbar: primario **Salir en PDF**, secundario Guardar, Quién editó, Cerrar; versión + último editor siempre visibles.
+3. Chips visuales de tipo de bloque (Título/Subtítulo/Párrafo/Viñeta/Separador); Enter/Backspace fluidos; hint de teclado.
+4. Banner de política corto: Word → editar aquí → sale PDF. Estados ok/error/warn claros. Historial enmarcado.
+5. `SectionFileCreate`: hint más corto; estilos para iconos / `after` / primary-secondary. Copy en Documentos (EventFilesPanel).
 
-Archivos: `SheetEditor.tsx`, `globals.scss` (clases `sheet-*`).
+Archivos: `DocEditor.tsx`, `SectionFileCreate.tsx`, `EventFilesPanel.tsx`, `globals.scss` (`docedit-*`, `file-create-*`).
+
+API contracts sin cambio.
 
 ## A medias
 
-Nada de este turno. El rescate previo (`b58122a`) trae WIP de documentos/PDF/event panels — no tocado aquí salvo estilos `sheet-*` compartidos.
+Nada de este turno.
 
 ## Siguiente paso
 
-1. Probar SheetEditor en evento (campaña/finanzas) y en carpetas sin `fileId`.
-2. Continuar WIP rescatado de documentos/PDF si Adam lo pide.
+1. Probar DocEditor en un evento (nuevo + import .docx + Salir en PDF + Quién editó).
+2. Probar SheetEditor (turno previo) en campaña/finanzas.
 3. Hard-refresh panel ARTA al desplegar.
 
 ## No tocar
