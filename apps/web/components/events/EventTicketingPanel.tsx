@@ -114,11 +114,6 @@ export function EventTicketingPanel({
           </button>
         ) : null}
       </PageHeader>
-      {(process.env.NEXT_PUBLIC_TICKETING_SYNC_MODE || 'stub') === 'stub' ? (
-        <FlashMessage variant="warn">
-          Sync en modo demo. En producción conecta TICKETING_SYNC_MODE=live y TICKETING_SYNC_URL.
-        </FlashMessage>
-      ) : null}
       {syncMsg ? <FlashMessage variant={syncFlashVariant(syncMsg)}>{syncMsg}</FlashMessage> : null}
 
       {canTicketing && !closed ? (

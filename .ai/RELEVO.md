@@ -6,14 +6,9 @@
 
 ## Hecho en este turno
 
-**Boletera profesional + zonas editables por venue.**
-
-1. `TicketZonesEditor`: renombrar zonas, agregar/quitar, reordenar (↑↓).
-2. Presets de arranque: Metal/VIP, Teatro, Estadio, Una sola zona, En blanco.
-3. Totales de aforo / vendidos / potencial en vivo.
-4. Formulario de boletera en secciones; «Otra» boletera más clara; logo con
-   botón Subir (no input feo).
-5. Misma UX en pestaña del evento y `/ticketing`.
+Quitado el banner falso de «Sync boletera en modo demo / TICKETING_SYNC_*»
+en la pestaña de boletera del evento. Esa integración no está en uso y no
+debía verse.
 
 ## A medias
 
@@ -22,13 +17,10 @@
 3. Estados oráculo solo en checklists.
 4. `locked` en FinanceRun; EventDocument sin revisiones.
 5. Auditoría incompleta fuera de OC/checklists.
-6. Migraciones acumuladas en Hetzner (si aún no corrieron).
 
 ## Siguiente paso
 
-1. Smoke boletera: preset teatro → renombrar zona → guardar → editar.
-2. Smoke OC Otro + efectivo/transferencia.
-3. Deploy si falta en el entorno donde se prueba.
+Deploy de este commit si se prueba en producción.
 
 ## No tocar
 
