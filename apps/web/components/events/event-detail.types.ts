@@ -157,6 +157,7 @@ export {
   CHECKLIST_FILE_MODULE,
   GENERAL_FILE_MODULE,
   OC_PROOF_FILE_MODULE,
+  SPONSORS_FILE_MODULE,
   fileModuleLabel,
   fileKindLabel,
 } from '@/lib/file-modules';
@@ -166,9 +167,19 @@ export type EventFile = EventDetail['files'][number];
 export type Sponsor = {
   id: string;
   name: string;
+  tier?: string | null;
+  status?: string | null;
   contact?: string | null;
+  contactName?: string | null;
+  contactEmail?: string | null;
+  contactPhone?: string | null;
   contribution?: string | null;
   amount?: string | number | null;
+  benefits?: string | null;
+  deliverables?: string | null;
+  paymentTerms?: string | null;
+  validFrom?: string | null;
+  validUntil?: string | null;
   notes?: string | null;
 };
 

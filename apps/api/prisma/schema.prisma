@@ -256,19 +256,34 @@ model Event {
 
 // ─── Patrocinadores ──────────────────────────────────────────────────────────
 model Sponsor {
-  id           String   @id @default(cuid())
+  id           String    @id @default(cuid())
   eventId      String
-  event        Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  event        Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
   name         String
+  /// Nivel comercial: Oro, Plata, Bronce, Media, Otro…
+  tier         String?
+  /// PROPOSED | NEGOTIATING | SIGNED | ACTIVE | CLOSED | CANCELLED
+  status       String    @default("PROPOSED")
   contact      String?
+  contactName  String?
+  contactEmail String?
+  contactPhone String?
   contribution String?
-  amount       Decimal? @db.Decimal(14, 2)
+  amount       Decimal?  @db.Decimal(14, 2)
+  /// Qué recibe la marca (visibilidad, activaciones…).
+  benefits     String?
+  /// Qué entrega Arta / el evento (piezas, menciones, stands…).
+  deliverables String?
+  paymentTerms String?
+  validFrom    DateTime?
+  validUntil   DateTime?
   notes        String?
   createdById  String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
   @@index([eventId])
+  @@index([eventId, status])
 }
 
 // ─── Plantillas de checklist (jerárquicas) ───────────────────────────────────

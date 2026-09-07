@@ -11,7 +11,7 @@ import {
   Req,
   UseGuards,
 } from '@nestjs/common';
-import { IsOptional, IsString } from 'class-validator';
+import { IsNumber, IsOptional, IsString } from 'class-validator';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { assertSameTenant } from '../common/tenant';
@@ -35,10 +35,26 @@ type AuthUser = {
 class SponsorDto {
   @IsString() eventId!: string;
   @IsString() name!: string;
+  @IsOptional() @IsString() tier?: string;
+  @IsOptional() @IsString() status?: string;
   @IsOptional() @IsString() contact?: string;
+  @IsOptional() @IsString() contactName?: string;
+  @IsOptional() @IsString() contactEmail?: string;
+  @IsOptional() @IsString() contactPhone?: string;
   @IsOptional() @IsString() contribution?: string;
-  @IsOptional() amount?: number;
+  @IsOptional() @IsNumber() amount?: number;
+  @IsOptional() @IsString() benefits?: string;
+  @IsOptional() @IsString() deliverables?: string;
+  @IsOptional() @IsString() paymentTerms?: string;
+  @IsOptional() @IsString() validFrom?: string;
+  @IsOptional() @IsString() validUntil?: string;
   @IsOptional() @IsString() notes?: string;
+}
+
+function dateOrUndef(v?: string | null) {
+  if (!v) return undefined;
+  const d = new Date(v);
+  return Number.isNaN(d.getTime()) ? undefined : d;
 }
 
 @Controller('sponsors')
@@ -58,6 +74,26 @@ export class SponsorsController {
     }
   }
 
+  private sponsorData(body: Partial<SponsorDto>) {
+    return {
+      name: body.name,
+      tier: body.tier,
+      status: body.status,
+      contact: body.contact,
+      contactName: body.contactName,
+      contactEmail: body.contactEmail,
+      contactPhone: body.contactPhone,
+      contribution: body.contribution,
+      amount: body.amount,
+      benefits: body.benefits,
+      deliverables: body.deliverables,
+      paymentTerms: body.paymentTerms,
+      validFrom: dateOrUndef(body.validFrom),
+      validUntil: dateOrUndef(body.validUntil),
+      notes: body.notes,
+    };
+  }
+
   @Get('event/:eventId')
   async list(@Req() req: { user: AuthUser }, @Param('eventId') eventId: string) {
     const event = await this.prisma.event.findUnique({ where: { id: eventId } });
@@ -68,7 +104,7 @@ export class SponsorsController {
     assertSameTenant(req.user, event.organizationId);
     return this.prisma.sponsor.findMany({
       where: { eventId },
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ status: 'asc' }, { createdAt: 'desc' }],
     });
   }
 
@@ -82,14 +118,25 @@ export class SponsorsController {
     }
     assertSameTenant(req.user, event.organizationId);
     assertEventNotClosed(event.status);
+    const data = this.sponsorData(dto);
     return this.prisma.sponsor.create({
       data: {
         eventId: dto.eventId,
         name: dto.name,
-        contact: dto.contact,
-        contribution: dto.contribution,
-        amount: dto.amount,
-        notes: dto.notes,
+        tier: data.tier,
+        status: data.status || 'PROPOSED',
+        contact: data.contact,
+        contactName: data.contactName,
+        contactEmail: data.contactEmail,
+        contactPhone: data.contactPhone,
+        contribution: data.contribution,
+        amount: data.amount,
+        benefits: data.benefits,
+        deliverables: data.deliverables,
+        paymentTerms: data.paymentTerms,
+        validFrom: data.validFrom,
+        validUntil: data.validUntil,
+        notes: data.notes,
         createdById: req.user.id,
       },
     });
@@ -118,14 +165,25 @@ export class SponsorsController {
     }
     assertSameTenant(req.user, existing.event.organizationId);
     assertEventNotClosed(existing.event.status);
+    const data = this.sponsorData(body);
     return this.prisma.sponsor.update({
       where: { id },
       data: {
-        name: body.name,
-        contact: body.contact,
-        contribution: body.contribution,
-        amount: body.amount,
-        notes: body.notes,
+        ...(body.name !== undefined ? { name: body.name } : {}),
+        ...(body.tier !== undefined ? { tier: body.tier } : {}),
+        ...(body.status !== undefined ? { status: body.status } : {}),
+        ...(body.contact !== undefined ? { contact: body.contact } : {}),
+        ...(body.contactName !== undefined ? { contactName: body.contactName } : {}),
+        ...(body.contactEmail !== undefined ? { contactEmail: body.contactEmail } : {}),
+        ...(body.contactPhone !== undefined ? { contactPhone: body.contactPhone } : {}),
+        ...(body.contribution !== undefined ? { contribution: body.contribution } : {}),
+        ...(body.amount !== undefined ? { amount: body.amount } : {}),
+        ...(body.benefits !== undefined ? { benefits: body.benefits } : {}),
+        ...(body.deliverables !== undefined ? { deliverables: body.deliverables } : {}),
+        ...(body.paymentTerms !== undefined ? { paymentTerms: body.paymentTerms } : {}),
+        ...(body.validFrom !== undefined ? { validFrom: data.validFrom ?? null } : {}),
+        ...(body.validUntil !== undefined ? { validUntil: data.validUntil ?? null } : {}),
+        ...(body.notes !== undefined ? { notes: body.notes } : {}),
       },
     });
   }

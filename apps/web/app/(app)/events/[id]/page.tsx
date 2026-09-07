@@ -39,6 +39,7 @@ import {
   FINANCE_FILE_MODULE,
   CHECKLIST_FILE_MODULE,
   GENERAL_FILE_MODULE,
+  SPONSORS_FILE_MODULE,
   emptyFinance,
   type Checklist,
   type DirUser,
@@ -53,6 +54,7 @@ import {
   type Task,
   type TicketingSetup,
 } from '@/components/events/event-detail.types';
+import { emptySponsorForm } from '@/lib/sponsor-constants';
 
 export default function EventDetailPage() {
   return (
@@ -96,7 +98,7 @@ function EventDetailInner() {
   const [financeLocked, setFinanceLocked] = useState(false);
   const [directory, setDirectory] = useState<DirUser[]>([]);
   const [taskForm, setTaskForm] = useState({ title: '', module: '', assigneeId: '', dueAt: '', detail: '' });
-  const [sponsorForm, setSponsorForm] = useState({ name: '', contact: '', contribution: '', amount: '', notes: '' });
+  const [sponsorForm, setSponsorForm] = useState(emptySponsorForm());
   const [previewFile, setPreviewFile] = useState<EventDetail['files'][0] | null>(null);
   const [poWindow, setPoWindow] = useState<PoWindowState | null>(null);
   const [campaignForm, setCampaignForm] = useState({
@@ -308,6 +310,12 @@ function EventDetailInner() {
     [event],
   );
 
+  /** Convenios Excel/PDF (module=sponsors). */
+  const sponsorFiles = useMemo(
+    () => (event?.files || []).filter((f) => f.module === SPONSORS_FILE_MODULE),
+    [event],
+  );
+
   const modules = useMemo(() => {
     if (!event) return [];
     const all = [
@@ -321,7 +329,7 @@ function EventDetailInner() {
       },
       { key: 'ticketing', label: 'Boletera', count: event.ticketingSetups?.length || 0 },
       { key: 'tasks', label: 'Tareas', count: event.tasks?.length || 0 },
-      { key: 'sponsors', label: 'Convenios y patrocinios', count: event.sponsors?.length || 0 },
+      { key: 'sponsors', label: 'Convenios y patrocinios', count: (event.sponsors?.length || 0) + sponsorFiles.length },
       { key: 'files', label: 'Documentos', count: event.files.length },
     ] as const;
     return all.filter((m) => {
@@ -332,7 +340,7 @@ function EventDetailInner() {
       if (m.key === 'sponsors') return canSponsors;
       return true;
     });
-  }, [event, campaignFiles, financeFiles, canPo, canSeeFinance, canSeeCampaign, canTicketing, canSponsors]);
+  }, [event, campaignFiles, financeFiles, sponsorFiles, canPo, canSeeFinance, canSeeCampaign, canTicketing, canSponsors]);
 
   const heroStats = useMemo(() => {
     if (!event) return undefined;
@@ -1287,14 +1295,28 @@ function EventDetailInner() {
         body: JSON.stringify({
           eventId: id,
           name: sponsorForm.name,
-          contact: sponsorForm.contact || undefined,
+          tier: sponsorForm.tier || undefined,
+          status: sponsorForm.status || undefined,
+          contactName: sponsorForm.contactName || undefined,
+          contactEmail: sponsorForm.contactEmail || undefined,
+          contactPhone: sponsorForm.contactPhone || undefined,
+          contact:
+            sponsorForm.contactPhone ||
+            sponsorForm.contactEmail ||
+            sponsorForm.contactName ||
+            undefined,
           contribution: sponsorForm.contribution || undefined,
           amount: sponsorForm.amount ? Number(sponsorForm.amount) : undefined,
+          benefits: sponsorForm.benefits || undefined,
+          deliverables: sponsorForm.deliverables || undefined,
+          paymentTerms: sponsorForm.paymentTerms || undefined,
+          validFrom: sponsorForm.validFrom || undefined,
+          validUntil: sponsorForm.validUntil || undefined,
           notes: sponsorForm.notes || undefined,
         }),
       });
-      setSponsorForm({ name: '', contact: '', contribution: '', amount: '', notes: '' });
-      flash('Patrocinador agregado');
+      setSponsorForm(emptySponsorForm());
+      flash('Convenio guardado');
       await load();
     } catch (e) {
       flash(e instanceof Error ? e.message : 'Error al agregar patrocinador', 'error');
@@ -1311,16 +1333,28 @@ function EventDetailInner() {
     }
   }
 
-  async function updateSponsor(
-    sid: string,
-    patch: { name?: string; contact?: string; contribution?: string; amount?: number; notes?: string },
-  ) {
+  async function updateSponsor(sid: string, patch: Record<string, unknown>) {
     try {
       await api(`/sponsors/${sid}`, { method: 'PATCH', body: JSON.stringify(patch) });
-      flash('Patrocinador actualizado');
+      flash('Convenio actualizado');
       await load();
     } catch (e) {
       flash(e instanceof Error ? e.message : 'Error al actualizar patrocinador', 'error');
+    }
+  }
+
+  async function uploadSponsorFile(file: File) {
+    if (closed) return;
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      fd.append('eventId', id);
+      fd.append('module', SPONSORS_FILE_MODULE);
+      await api('/uploads', { method: 'POST', body: fd });
+      flash('Documento de convenio guardado');
+      await load();
+    } catch (e) {
+      flash(e instanceof Error ? e.message : 'Error al subir convenio', 'error');
     }
   }
 
@@ -1564,12 +1598,24 @@ function EventDetailInner() {
           <EventSponsorsPanel
             closed={closed}
             canEdit={canSponsors}
+            event={{
+              id: event.id,
+              name: event.name,
+              artist: event.artist,
+              venue: event.venue,
+              city: event.city,
+              startsAt: event.startsAt,
+              promoter: event.promoter,
+            }}
             sponsors={event.sponsors || []}
+            files={sponsorFiles}
             sponsorForm={sponsorForm}
             setSponsorForm={setSponsorForm}
             onCreateSponsor={createSponsor}
             onRemoveSponsor={removeSponsor}
             onUpdateSponsor={updateSponsor}
+            onUploadFile={uploadSponsorFile}
+            onDeleteFile={deleteFile}
           />
         )}
 

@@ -6,9 +6,15 @@
 
 ## Hecho en este turno
 
-Quitado el banner falso de «Sync boletera en modo demo / TICKETING_SYNC_*»
-en la pestaña de boletera del evento. Esa integración no está en uso y no
-debía verse.
+**Convenios / patrocinios a nivel profesional.**
+
+1. Schema: tier, status, contacto estructurado, benefits, deliverables,
+   paymentTerms, vigencia (`20260907180000_sponsor_convenio_fields`).
+2. Formulario por secciones (marca, aportación, contacto, alcance).
+3. Generadores: Excel convenio (4 hojas), PDF convenio, Excel portafolio del
+   evento — se suben como `module=sponsors`.
+4. Subir convenio firmado (PDF/Excel/Word).
+5. Documentos agrupa «Convenios y patrocinios».
 
 ## A medias
 
@@ -17,10 +23,12 @@ debía verse.
 3. Estados oráculo solo en checklists.
 4. `locked` en FinanceRun; EventDocument sin revisiones.
 5. Auditoría incompleta fuera de OC/checklists.
+6. Editor embebido de Excel/PDF de patrocinio (hoy Abrir / Documentos).
 
 ## Siguiente paso
 
-Deploy de este commit si se prueba en producción.
+1. Deploy + migrate `sponsor_convenio_fields`.
+2. Smoke: crear convenio Oro → Excel → PDF → subir firmado.
 
 ## No tocar
 

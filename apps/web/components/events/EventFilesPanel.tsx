@@ -60,6 +60,7 @@ function groupKey(f: EventFile): string {
     return f.checklistId ? `checklist:${f.checklistId}` : 'checklist';
   }
   if (f.module === 'oc' || f.kind === 'proof') return 'oc';
+  if (f.module === 'sponsors') return 'sponsors';
   if (f.module === GENERAL_FILE_MODULE || !f.module) return 'general';
   return f.module;
 }
@@ -97,7 +98,7 @@ export function EventFilesPanel({
       buckets.set(k, list);
     }
 
-    const order = ['campaign', 'finance', 'checklist', 'oc', 'general'];
+    const order = ['campaign', 'finance', 'checklist', 'sponsors', 'oc', 'general'];
     const out: FileGroup[] = [];
 
     const push = (key: string, label: string, hint: string, list: EventFile[]) => {
@@ -131,9 +132,15 @@ export function EventFilesPanel({
     }
 
     push(
+      'sponsors',
+      'Convenios y patrocinios',
+      'También se generan y adjuntan en la pestaña Convenios.',
+      buckets.get('sponsors') || [],
+    );
+    push(
       'oc',
       'Órdenes de compra',
-      'Comprobantes: también en la pestaña OCs.',
+      'Comprobantes: también se ven en la pestaña OCs.',
       buckets.get('oc') || [],
     );
     push(
