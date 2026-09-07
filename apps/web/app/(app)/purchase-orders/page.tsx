@@ -18,6 +18,7 @@ import { PoProofsBlock } from '@/components/purchase-orders/PoProofsBlock';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { api } from '@/lib/api';
 import { poNeedsProof, poNextStep, poPaymentLabel } from '@/lib/po-payment';
+import { poRubroLabel } from '@/lib/po-rubro';
 import { useUser } from '@/lib/user-context';
 import { userHasPermission } from '@/lib/access-matrix';
 
@@ -280,7 +281,7 @@ export default function PurchaseOrdersPage() {
                   {view.agingQueue.slice(0, 6).map((o) => (
                     <li key={o.id}>
                       <span>
-                        <strong>{o.eventName}</strong> · {o.rubro}
+                        <strong>{o.eventName}</strong> · {poRubroLabel(o.rubro)}
                       </span>
                       <span className="muted kpi-sub">
                         {o.ageDays}d · {money(o.amount)}
@@ -310,7 +311,7 @@ export default function PurchaseOrdersPage() {
                     <tbody>
                       {view.byRubro.slice(0, 8).map((r) => (
                         <tr key={r.rubro}>
-                          <td>{r.rubro}</td>
+                          <td>{poRubroLabel(r.rubro)}</td>
                           <td>{r.count}</td>
                           <td className="num">{money(r.amount)}</td>
                         </tr>
@@ -390,7 +391,7 @@ export default function PurchaseOrdersPage() {
                                 <strong>{po.eventName}</strong>
                               </Link>
                             </td>
-                            <td>{po.rubro}</td>
+                            <td>{poRubroLabel(po.rubro)}</td>
                             <td>{po.vendorName || '—'}</td>
                             <td>
                               <span className="muted kpi-sub">{poPaymentLabel(method)}</span>

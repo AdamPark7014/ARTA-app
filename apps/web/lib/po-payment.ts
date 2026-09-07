@@ -24,9 +24,39 @@ export function poNeedsProof(method?: string | null): boolean {
   return method !== 'EFECTIVO';
 }
 
-export function poPaymentLabel(method?: string | null): string {
+export function poPaymentLabel(method?: string | null, paymentOther?: string | null): string {
+  if (method === 'OTRO' && paymentOther?.trim()) return paymentOther.trim();
   if (method && isPoPaymentMethod(method)) return PO_PAYMENT_LABELS[method];
   return 'Transferencia';
+}
+
+/** Nota libre cuando el método es OTRO, guardada al inicio de description. */
+const PAY_NOTE_RE = /^Forma de pago:\s*(.+?)(?:\n|$)/i;
+
+export function splitPoDescription(desc?: string | null): {
+  paymentOther: string;
+  description: string;
+} {
+  if (!desc) return { paymentOther: '', description: '' };
+  const m = desc.match(PAY_NOTE_RE);
+  if (!m) return { paymentOther: '', description: desc };
+  return {
+    paymentOther: m[1].trim(),
+    description: desc.slice(m[0].length).replace(/^\n/, '').trim(),
+  };
+}
+
+export function joinPoDescription(
+  method: string,
+  paymentOther: string,
+  description: string,
+): string | undefined {
+  const parts: string[] = [];
+  if (method === 'OTRO' && paymentOther.trim()) {
+    parts.push(`Forma de pago: ${paymentOther.trim()}`);
+  }
+  if (description.trim()) parts.push(description.trim());
+  return parts.length ? parts.join('\n') : undefined;
 }
 
 export type PoNextStepTone = 'wait' | 'todo' | 'ready' | 'done' | 'stop';

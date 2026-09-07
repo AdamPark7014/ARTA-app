@@ -15,33 +15,38 @@ import {
   poNeedsProof,
   poNextStep,
   poPaymentLabel,
+  splitPoDescription,
   type PoPaymentMethod,
 } from '@/lib/po-payment';
-
-const RUBROS = ['audio', 'luces', 'planta_luz', 'hospedaje', 'transporte', 'catering', 'artes', 'otro'] as const;
-
-const RUBRO_LABELS: Record<string, string> = {
-  audio: 'Audio',
-  luces: 'Luces',
-  planta_luz: 'Planta de luz',
-  hospedaje: 'Hospedaje',
-  transporte: 'Transporte',
-  catering: 'Catering',
-  artes: 'Artes',
-  otro: 'Otro',
-};
+import {
+  PO_RUBRO_KEYS,
+  PO_RUBRO_LABELS,
+  poRubroLabel,
+  resolvePoRubro,
+} from '@/lib/po-rubro';
 
 const PO_FLOW = ['Pendiente', 'Autorizada', 'Pagada'];
 
 type PoForm = {
+  /** Clave del catálogo; si es «otro», el nombre real va en rubroOther. */
   rubro: string;
+  rubroOther: string;
   vendorName: string;
   description: string;
   paymentMethod: string;
+  /** Cuando la forma de pago es OTRO: cheque, depósito, etc. */
+  paymentOther: string;
   lines: PoLine[];
 };
 
-type EditPoMeta = { vendorName: string; description: string; paymentMethod: string };
+type EditPoMeta = {
+  rubro: string;
+  rubroOther: string;
+  vendorName: string;
+  description: string;
+  paymentMethod: string;
+  paymentOther: string;
+};
 
 type EventPurchaseOrdersPanelProps = {
   closed: boolean;
@@ -75,10 +80,6 @@ function poFlowIndex(status: string) {
   if (status === 'PAID') return 2;
   if (status === 'AUTHORIZED') return 1;
   return 0;
-}
-
-function rubroLabel(key: string) {
-  return RUBRO_LABELS[key] || key;
 }
 
 function money(n: number) {
@@ -117,6 +118,10 @@ export function EventPurchaseOrdersPanel({
   }, [purchaseOrders]);
 
   const createNeedsProof = poNeedsProof(poForm.paymentMethod);
+  const resolvedRubro = resolvePoRubro(poForm.rubro, poForm.rubroOther);
+  const missingRubro = !resolvedRubro;
+  const missingPaymentOther =
+    poForm.paymentMethod === 'OTRO' && !poForm.paymentOther.trim();
   /**
    * Sin esto, «Crear orden de compra» sobre el formulario vacío creaba una OC
    * de $0 sin concepto, contestaba «OC creada» y dejaba a alguien con una fila
@@ -124,7 +129,20 @@ export function EventPurchaseOrdersPanel({
    * algo: un concepto y un importe.
    */
   const missingConcept = !poForm.lines.some((l) => l.concept.trim());
-  const canCreate = !missingConcept && poLinesTotal > 0;
+  const canCreate =
+    !missingConcept && !missingRubro && !missingPaymentOther && poLinesTotal > 0;
+
+  let createBlockReason = '';
+  if (missingRubro) {
+    createBlockReason =
+      'Elige un rubro del catálogo o, si es «Otro», escribe el nombre del área.';
+  } else if (missingPaymentOther) {
+    createBlockReason = 'Si la forma de pago es «Otro», especifica cómo se paga (cheque, depósito…).';
+  } else if (missingConcept) {
+    createBlockReason = 'Escribe al menos un concepto en las partidas — qué se está comprando.';
+  } else if (poLinesTotal <= 0) {
+    createBlockReason = 'Pon cantidad y precio para que la orden tenga importe.';
+  }
 
   return (
     <div className="stack">
@@ -157,89 +175,137 @@ export function EventPurchaseOrdersPanel({
             <div>
               <h2>Nueva orden de compra</h2>
               <p className="muted kpi-sub" style={{ margin: '0.25rem 0 0' }}>
-                Rubro, forma de pago y partidas. Total estimado:{' '}
+                Completa el área, la forma de pago y las partidas. Total estimado:{' '}
                 <strong>{money(poLinesTotal)}</strong>
               </p>
             </div>
           </div>
           <div className="panel-body">
-            <div className="form panel--narrow">
-              <FormGrid>
+            <div className="form po-create-form">
+              <section className="po-form-section">
+                <h3 className="po-form-section__title">Datos de la orden</h3>
+                <FormGrid>
+                  <label>
+                    Rubro / área
+                    <select
+                      className="field"
+                      value={poForm.rubro}
+                      onChange={(e) =>
+                        setPoForm({
+                          ...poForm,
+                          rubro: e.target.value,
+                          rubroOther: e.target.value === 'otro' ? poForm.rubroOther : '',
+                        })
+                      }
+                    >
+                      {PO_RUBRO_KEYS.map((r) => (
+                        <option key={r} value={r}>
+                          {PO_RUBRO_LABELS[r]}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  {poForm.rubro === 'otro' ? (
+                    <label>
+                      Especificar rubro
+                      <input
+                        className="field"
+                        value={poForm.rubroOther}
+                        onChange={(e) => setPoForm({ ...poForm, rubroOther: e.target.value })}
+                        placeholder="Ej. Escenografía, seguridad, renta de equipo…"
+                        autoComplete="off"
+                      />
+                    </label>
+                  ) : null}
+                  <label>
+                    Forma de pago
+                    <select
+                      className="field"
+                      value={poForm.paymentMethod}
+                      onChange={(e) =>
+                        setPoForm({
+                          ...poForm,
+                          paymentMethod: e.target.value,
+                          paymentOther:
+                            e.target.value === 'OTRO' ? poForm.paymentOther : '',
+                        })
+                      }
+                    >
+                      {PO_PAYMENT_METHODS.map((m) => (
+                        <option key={m} value={m}>
+                          {m === 'OTRO' ? 'Otro (especificar)' : PO_PAYMENT_LABELS[m]}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  {poForm.paymentMethod === 'OTRO' ? (
+                    <label>
+                      Especificar forma de pago
+                      <input
+                        className="field"
+                        value={poForm.paymentOther}
+                        onChange={(e) => setPoForm({ ...poForm, paymentOther: e.target.value })}
+                        placeholder="Ej. Cheque, depósito en ventanilla…"
+                        autoComplete="off"
+                      />
+                    </label>
+                  ) : null}
+                  <label>
+                    Proveedor
+                    <input
+                      className="field"
+                      value={poForm.vendorName}
+                      onChange={(e) => setPoForm({ ...poForm, vendorName: e.target.value })}
+                      placeholder="Razón social o nombre comercial"
+                      autoComplete="organization"
+                    />
+                  </label>
+                </FormGrid>
+
+                <div
+                  className={`module-banner ${createNeedsProof ? '' : 'module-banner--ok'}`}
+                  role="note"
+                >
+                  {createNeedsProof ? (
+                    <>
+                      Pago por{' '}
+                      <strong>
+                        {poForm.paymentMethod === 'OTRO' && poForm.paymentOther.trim()
+                          ? poForm.paymentOther.trim()
+                          : poPaymentLabel(poForm.paymentMethod)}
+                      </strong>
+                      : al liquidar se pedirá <strong>comprobante</strong>.
+                    </>
+                  ) : (
+                    <>
+                      Pago en <strong>efectivo</strong>: no se pide comprobante.
+                    </>
+                  )}
+                </div>
+
                 <label>
-                  Rubro
-                  <select
-                    className="field"
-                    value={poForm.rubro}
-                    onChange={(e) => setPoForm({ ...poForm, rubro: e.target.value })}
-                  >
-                    {RUBROS.map((r) => (
-                      <option key={r} value={r}>
-                        {rubroLabel(r)}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label>
-                  Forma de pago
-                  <select
-                    className="field"
-                    value={poForm.paymentMethod}
-                    onChange={(e) => setPoForm({ ...poForm, paymentMethod: e.target.value })}
-                  >
-                    {PO_PAYMENT_METHODS.map((m) => (
-                      <option key={m} value={m}>
-                        {PO_PAYMENT_LABELS[m]}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label>
-                  Proveedor
+                  Descripción
                   <input
                     className="field"
-                    value={poForm.vendorName}
-                    onChange={(e) => setPoForm({ ...poForm, vendorName: e.target.value })}
-                    placeholder="A quién se le paga"
+                    value={poForm.description}
+                    onChange={(e) => setPoForm({ ...poForm, description: e.target.value })}
+                    placeholder="Detalle de lo que cubre esta orden (opcional)"
                   />
                 </label>
-              </FormGrid>
+              </section>
 
-              <div
-                className={`module-banner ${createNeedsProof ? '' : 'module-banner--ok'}`}
-                role="note"
-              >
-                {createNeedsProof ? (
-                  <>
-                    Pago por <strong>{poPaymentLabel(poForm.paymentMethod)}</strong>: al liquidar se
-                    pedirá <strong>comprobante</strong> (transferencia, tarjeta u otro).
-                  </>
-                ) : (
-                  <>
-                    Pago en <strong>efectivo</strong>: no se pide comprobante.
-                  </>
-                )}
-              </div>
-
-              <label>
-                Descripción
-                <input
-                  className="field"
-                  value={poForm.description}
-                  onChange={(e) => setPoForm({ ...poForm, description: e.target.value })}
-                  placeholder="Qué cubre esta OC…"
-                />
-              </label>
-              <div>
-                <div className="muted kpi-sub" style={{ marginBottom: 8 }}>
-                  Partidas
+              <section className="po-form-section">
+                <div className="po-form-section__head">
+                  <h3 className="po-form-section__title">Partidas</h3>
+                  <span className="muted kpi-sub">Concepto, cantidad y precio unitario</span>
                 </div>
                 <div className="table-wrap">
-                  <table className="table">
+                  <table className="table po-lines-table">
                     <thead>
                       <tr>
                         <th>Concepto</th>
-                        <th>Cant.</th>
-                        <th>P. unit.</th>
+                        <th>Cantidad</th>
+                        <th>Precio unitario</th>
                         <th>Total</th>
                         <th />
                       </tr>
@@ -256,31 +322,37 @@ export function EventPurchaseOrdersPanel({
                                 lines[idx] = { ...line, concept: e.target.value };
                                 setPoForm({ ...poForm, lines });
                               }}
-                              placeholder="Concepto"
+                              placeholder="Qué se compra o contrata"
                             />
                           </td>
                           <td>
                             <input
                               className="field"
                               type="number"
+                              min={0}
+                              step="any"
                               value={line.qty}
                               onChange={(e) => {
                                 const lines = [...poForm.lines];
                                 lines[idx] = { ...line, qty: Number(e.target.value) };
                                 setPoForm({ ...poForm, lines });
                               }}
+                              aria-label="Cantidad"
                             />
                           </td>
                           <td>
                             <input
                               className="field"
                               type="number"
+                              min={0}
+                              step="any"
                               value={line.unitPrice}
                               onChange={(e) => {
                                 const lines = [...poForm.lines];
                                 lines[idx] = { ...line, unitPrice: Number(e.target.value) };
                                 setPoForm({ ...poForm, lines });
                               }}
+                              aria-label="Precio unitario"
                             />
                           </td>
                           <td className="muted kpi-sub">
@@ -318,16 +390,17 @@ export function EventPurchaseOrdersPanel({
                 >
                   + Agregar partida
                 </button>
-              </div>
-              {!canCreate ? (
+              </section>
+
+              {!canCreate && createBlockReason ? (
                 <p className="po-next-hint" role="note">
-                  {missingConcept
-                    ? 'Escribe al menos un concepto en las partidas — qué se está comprando.'
-                    : 'Pon cantidad y precio para que la orden tenga importe.'}
+                  {createBlockReason}
                 </p>
               ) : null}
               <button className="btn" type="button" disabled={!canCreate} onClick={onCreatePo}>
-                {canCreate ? `Crear orden de compra por ${money(poLinesTotal)}` : 'Crear orden de compra'}
+                {canCreate
+                  ? `Crear orden de compra por ${money(poLinesTotal)}`
+                  : 'Crear orden de compra'}
               </button>
             </div>
           </div>
@@ -370,15 +443,20 @@ export function EventPurchaseOrdersPanel({
                 paymentMethod: method,
                 proofCount: po.proofs?.length ?? 0,
               });
+              const descParts = splitPoDescription(po.description);
 
               return (
                 <article key={po.id} className="po-card">
                   <div className="po-card__head">
                     <div>
-                      <strong>{rubroLabel(po.rubro)}</strong>
+                      <strong>{poRubroLabel(po.rubro)}</strong>
                       <span className="muted kpi-sub"> · {po.vendorName || 'Sin proveedor'}</span>
                       <div className="po-card__meta-row">
-                        <StatusBadge value={poPaymentLabel(method)} kind="raw" className="ok" />
+                        <StatusBadge
+                          value={poPaymentLabel(method, descParts.paymentOther)}
+                          kind="raw"
+                          className="ok"
+                        />
                         {/*
                           En efectivo no «falta» el comprobante: no aplica. Y
                           cuando sí falta, ya lo dice la píldora de «qué sigue»
@@ -391,7 +469,9 @@ export function EventPurchaseOrdersPanel({
                         ) : null}
                       </div>
                       <div className="po-card__amount">{money(Number(po.amount))}</div>
-                      {po.description ? <p className="muted kpi-sub">{po.description}</p> : null}
+                      {descParts.description ? (
+                        <p className="muted kpi-sub">{descParts.description}</p>
+                      ) : null}
                       <FlowSteps steps={PO_FLOW} activeIndex={poFlowIndex(po.status)} />
                     </div>
                     <div className="panel-head-actions">
@@ -447,6 +527,40 @@ export function EventPurchaseOrdersPanel({
                     <div className="po-card__edit form">
                       <FormGrid>
                         <label>
+                          Rubro / área
+                          <select
+                            className="field"
+                            value={editPoMeta.rubro}
+                            onChange={(e) =>
+                              setEditPoMeta({
+                                ...editPoMeta,
+                                rubro: e.target.value,
+                                rubroOther:
+                                  e.target.value === 'otro' ? editPoMeta.rubroOther : '',
+                              })
+                            }
+                          >
+                            {PO_RUBRO_KEYS.map((r) => (
+                              <option key={r} value={r}>
+                                {PO_RUBRO_LABELS[r]}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        {editPoMeta.rubro === 'otro' ? (
+                          <label>
+                            Especificar rubro
+                            <input
+                              className="field"
+                              value={editPoMeta.rubroOther}
+                              onChange={(e) =>
+                                setEditPoMeta({ ...editPoMeta, rubroOther: e.target.value })
+                              }
+                              placeholder="Ej. Escenografía, seguridad…"
+                            />
+                          </label>
+                        ) : null}
+                        <label>
                           Proveedor
                           <input
                             className="field"
@@ -454,6 +568,7 @@ export function EventPurchaseOrdersPanel({
                             onChange={(e) =>
                               setEditPoMeta({ ...editPoMeta, vendorName: e.target.value })
                             }
+                            placeholder="Razón social o nombre comercial"
                           />
                         </label>
                         <label>
@@ -462,16 +577,34 @@ export function EventPurchaseOrdersPanel({
                             className="field"
                             value={editPoMeta.paymentMethod}
                             onChange={(e) =>
-                              setEditPoMeta({ ...editPoMeta, paymentMethod: e.target.value })
+                              setEditPoMeta({
+                                ...editPoMeta,
+                                paymentMethod: e.target.value,
+                                paymentOther:
+                                  e.target.value === 'OTRO' ? editPoMeta.paymentOther : '',
+                              })
                             }
                           >
                             {PO_PAYMENT_METHODS.map((m) => (
                               <option key={m} value={m}>
-                                {PO_PAYMENT_LABELS[m]}
+                                {m === 'OTRO' ? 'Otro (especificar)' : PO_PAYMENT_LABELS[m]}
                               </option>
                             ))}
                           </select>
                         </label>
+                        {editPoMeta.paymentMethod === 'OTRO' ? (
+                          <label>
+                            Especificar forma de pago
+                            <input
+                              className="field"
+                              value={editPoMeta.paymentOther}
+                              onChange={(e) =>
+                                setEditPoMeta({ ...editPoMeta, paymentOther: e.target.value })
+                              }
+                              placeholder="Ej. Cheque, depósito…"
+                            />
+                          </label>
+                        ) : null}
                         <label>
                           Descripción
                           <input
@@ -480,6 +613,7 @@ export function EventPurchaseOrdersPanel({
                             onChange={(e) =>
                               setEditPoMeta({ ...editPoMeta, description: e.target.value })
                             }
+                            placeholder="Detalle de lo que cubre (opcional)"
                           />
                         </label>
                       </FormGrid>

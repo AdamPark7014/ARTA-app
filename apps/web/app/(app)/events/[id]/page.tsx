@@ -17,6 +17,8 @@ import { userHasPermission } from '@/lib/access-matrix';
 import { importFinanceFromFile } from '@/lib/finance-import';
 import { defaultCampaignConceptRows } from '@/lib/campaign-sheet-template';
 import { fetchPoWindow, type PoWindowState } from '@/lib/po-window';
+import { joinPoDescription, splitPoDescription } from '@/lib/po-payment';
+import { parsePoRubro, resolvePoRubro } from '@/lib/po-rubro';
 import { EventOverviewPanel } from '@/components/events/EventOverviewPanel';
 import { EventChecklistsPanel } from '@/components/events/EventChecklistsPanel';
 import { EventPurchaseOrdersPanel } from '@/components/events/EventPurchaseOrdersPanel';
@@ -75,9 +77,11 @@ function EventDetailInner() {
   const [saving, setSaving] = useState(false);
   const [poForm, setPoForm] = useState({
     rubro: 'audio',
+    rubroOther: '',
     vendorName: '',
     description: '',
     paymentMethod: 'TRANSFERENCIA',
+    paymentOther: '',
     lines: [{ concept: '', qty: 1, unitPrice: 0 }] as PoLine[],
   });
   const [msg, setMsg] = useState('');
@@ -119,9 +123,12 @@ function EventDetailInner() {
   const [editingPoId, setEditingPoId] = useState<string | null>(null);
   const [editPoLines, setEditPoLines] = useState<PoLine[]>([]);
   const [editPoMeta, setEditPoMeta] = useState({
+    rubro: 'audio',
+    rubroOther: '',
     vendorName: '',
     description: '',
     paymentMethod: 'TRANSFERENCIA',
+    paymentOther: '',
   });
   const [eventNotes, setEventNotes] = useState('');
   const [editingMeta, setEditingMeta] = useState(false);
@@ -601,15 +608,28 @@ function EventDetailInner() {
   async function createPo() {
     if (closed) return;
     const lines = poForm.lines.filter((l) => l.concept.trim());
+    const rubro = resolvePoRubro(poForm.rubro, poForm.rubroOther);
+    if (!rubro) {
+      flash('Especifica el rubro cuando eliges «Otro»', 'error');
+      return;
+    }
+    if (poForm.paymentMethod === 'OTRO' && !poForm.paymentOther.trim()) {
+      flash('Especifica la forma de pago cuando eliges «Otro»', 'error');
+      return;
+    }
     setMsg('');
     try {
       await api('/purchase-orders', {
         method: 'POST',
         body: JSON.stringify({
           eventId: id,
-          rubro: poForm.rubro,
+          rubro,
           vendorName: poForm.vendorName || undefined,
-          description: poForm.description || undefined,
+          description: joinPoDescription(
+            poForm.paymentMethod,
+            poForm.paymentOther,
+            poForm.description,
+          ),
           paymentMethod: poForm.paymentMethod || 'TRANSFERENCIA',
           ...(lines.length
             ? {
@@ -632,9 +652,11 @@ function EventDetailInner() {
     }
     setPoForm({
       rubro: 'audio',
+      rubroOther: '',
       vendorName: '',
       description: '',
       paymentMethod: 'TRANSFERENCIA',
+      paymentOther: '',
       lines: [{ concept: '', qty: 1, unitPrice: 0 }],
     });
     flash('OC creada');
@@ -760,10 +782,15 @@ function EventDetailInner() {
 
   function startEditPo(po: Po) {
     setEditingPoId(po.id);
+    const parsedRubro = parsePoRubro(po.rubro);
+    const parsedDesc = splitPoDescription(po.description);
     setEditPoMeta({
+      rubro: parsedRubro.key,
+      rubroOther: parsedRubro.other,
       vendorName: po.vendorName || '',
-      description: po.description || '',
+      description: parsedDesc.description,
       paymentMethod: po.paymentMethod || 'TRANSFERENCIA',
+      paymentOther: parsedDesc.paymentOther,
     });
     setEditPoLines(
       po.lines?.length
@@ -779,12 +806,26 @@ function EventDetailInner() {
   async function saveEditPo() {
     if (!editingPoId || closed) return;
     const lines = editPoLines.filter((l) => l.concept.trim());
+    const rubro = resolvePoRubro(editPoMeta.rubro, editPoMeta.rubroOther);
+    if (!rubro) {
+      flash('Especifica el rubro cuando eliges «Otro»', 'error');
+      return;
+    }
+    if (editPoMeta.paymentMethod === 'OTRO' && !editPoMeta.paymentOther.trim()) {
+      flash('Especifica la forma de pago cuando eliges «Otro»', 'error');
+      return;
+    }
     try {
       await api(`/purchase-orders/${editingPoId}`, {
         method: 'PATCH',
         body: JSON.stringify({
+          rubro,
           vendorName: editPoMeta.vendorName || undefined,
-          description: editPoMeta.description || undefined,
+          description: joinPoDescription(
+            editPoMeta.paymentMethod,
+            editPoMeta.paymentOther,
+            editPoMeta.description,
+          ),
           paymentMethod: editPoMeta.paymentMethod || 'TRANSFERENCIA',
           lines: lines.map((l) => ({
             concept: l.concept,
