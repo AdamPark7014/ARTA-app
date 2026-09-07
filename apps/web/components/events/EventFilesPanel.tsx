@@ -1,12 +1,21 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { FileViewer } from '@/components/files/FileViewer';
 import { SheetEditor } from '@/components/files/SheetEditor';
 import { PdfEditor } from '@/components/files/PdfEditor';
 import { DocEditor, type EventDocumentRow } from '@/components/files/DocEditor';
+import { SectionFileCreate } from '@/components/files/SectionFileCreate';
 import { pdfToBlocks } from '@/lib/pdf-to-blocks';
 import { patchEventFileCells, replaceEventFile } from '@/lib/file-save';
+import {
+  CAMPAIGN_FILE_MODULE,
+  CHECKLIST_FILE_MODULE,
+  FINANCE_FILE_MODULE,
+  GENERAL_FILE_MODULE,
+  fileKindLabel,
+  fileModuleLabel,
+} from '@/lib/file-modules';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { api } from '@/lib/api';
@@ -18,27 +27,21 @@ type EventFilesPanelProps = {
   eventId: string;
   closed: boolean;
   files: EventFile[];
+  /** Para etiquetar adjuntos de checklist con el nombre del formato. */
+  checklists?: Array<{ id: string; title: string }>;
   previewFile: EventFile | null;
   setPreviewFile: (file: EventFile | null) => void;
   onUpload: (file: File) => Promise<void>;
   onDeleteFile: (fileId: string) => Promise<void>;
-  /** Recarga el evento tras guardar un archivo editado */
   onFilesChanged: () => void | Promise<void>;
 };
 
-function kindLabel(kind?: string | null) {
-  if (kind === 'excel') return 'Excel';
-  if (kind === 'pdf') return 'PDF';
-  if (kind === 'image') return 'Imagen';
-  return kind || 'Archivo';
-}
-
-/** De qué sección del evento viene el archivo (campaña, corrida…). */
-function moduleLabel(module?: string | null) {
-  if (module === 'campaign') return 'Campaña';
-  if (module === 'finance') return 'Corrida';
-  return null;
-}
+type FileGroup = {
+  key: string;
+  label: string;
+  hint: string;
+  files: EventFile[];
+};
 
 function isSheet(f: EventFile) {
   return f.kind === 'excel' || /\.(xlsx?|csv)$/i.test(f.fileName);
@@ -48,10 +51,22 @@ function isPdf(f: EventFile) {
   return f.kind === 'pdf' || /\.pdf$/i.test(f.fileName);
 }
 
+function groupKey(f: EventFile): string {
+  if (f.module === CAMPAIGN_FILE_MODULE) return 'campaign';
+  if (f.module === FINANCE_FILE_MODULE) return 'finance';
+  if (f.module === CHECKLIST_FILE_MODULE || f.checklistId) {
+    return f.checklistId ? `checklist:${f.checklistId}` : 'checklist';
+  }
+  if (f.module === 'oc' || f.kind === 'proof') return 'oc';
+  if (f.module === GENERAL_FILE_MODULE || !f.module) return 'general';
+  return f.module;
+}
+
 export function EventFilesPanel({
   eventId,
   closed,
   files,
+  checklists = [],
   previewFile,
   setPreviewFile,
   onUpload,
@@ -66,6 +81,74 @@ export function EventFilesPanel({
   const [error, setError] = useState('');
 
   const canEdit = !closed;
+  const checklistTitle = useMemo(() => {
+    const map = new Map(checklists.map((c) => [c.id, c.title]));
+    return (id?: string | null) => (id ? map.get(id) : undefined);
+  }, [checklists]);
+
+  const groups = useMemo((): FileGroup[] => {
+    const buckets = new Map<string, EventFile[]>();
+    for (const f of files) {
+      const k = groupKey(f);
+      const list = buckets.get(k) || [];
+      list.push(f);
+      buckets.set(k, list);
+    }
+
+    const order = ['campaign', 'finance', 'checklist', 'oc', 'general'];
+    const out: FileGroup[] = [];
+
+    const push = (key: string, label: string, hint: string, list: EventFile[]) => {
+      if (!list.length) return;
+      out.push({ key, label, hint, files: list });
+    };
+
+    push(
+      'campaign',
+      'Campaña',
+      'También se editan en la pestaña Campaña del evento.',
+      buckets.get('campaign') || [],
+    );
+    push(
+      'finance',
+      'Corrida financiera',
+      'También se editan en la pestaña Corrida.',
+      buckets.get('finance') || [],
+    );
+
+    for (const [k, list] of buckets) {
+      if (!k.startsWith('checklist')) continue;
+      const cid = k.includes(':') ? k.split(':')[1] : null;
+      const title = checklistTitle(cid);
+      push(
+        k,
+        title ? `Checklist · ${title}` : 'Checklists',
+        'También se ven dentro del formato en la pestaña Checklists.',
+        list,
+      );
+    }
+
+    push(
+      'oc',
+      'Órdenes de compra',
+      'Comprobantes: también en la pestaña OCs.',
+      buckets.get('oc') || [],
+    );
+    push(
+      'general',
+      'Documentos generales',
+      'Archivos subidos desde esta pestaña.',
+      buckets.get('general') || [],
+    );
+
+    // Cualquier módulo raro
+    for (const [k, list] of buckets) {
+      if (order.some((o) => k === o || k.startsWith('checklist'))) continue;
+      push(k, fileModuleLabel(k), 'Archivo de otra sección.', list);
+    }
+
+    return out;
+  }, [files, checklistTitle]);
 
   useEffect(() => {
     api<EventDocumentRow[]>(`/documents/event/${eventId}`)
@@ -88,6 +171,28 @@ export function EventFilesPanel({
     setEditing(editing?.id === file.id ? null : file);
   }
 
+  async function importDocx(file: File) {
+    setBusy('docx');
+    setError('');
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      fd.append('eventId', eventId);
+      fd.append('module', 'general');
+      fd.append('title', file.name.replace(/\.docx$/i, ''));
+      const doc = await api<EventDocumentRow>('/documents/import-docx', {
+        method: 'POST',
+        body: fd,
+      });
+      setDocs((prev) => [doc, ...prev]);
+      setOpenDoc(doc);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se pudo importar el Word');
+    } finally {
+      setBusy('');
+    }
+  }
+
   async function createDoc() {
     setBusy('doc');
     setError('');
@@ -105,7 +210,6 @@ export function EventFilesPanel({
     }
   }
 
-  /** PDF → documento editable: extrae el texto y abre el editor. */
   async function pdfToDoc(file: EventFile) {
     setBusy(file.id);
     setError('');
@@ -139,9 +243,80 @@ export function EventFilesPanel({
     }
   }
 
+  function renderFileCard(f: EventFile) {
+    const active = previewFile?.id === f.id;
+    const isEditing = editing?.id === f.id;
+    const editable = isSheet(f) || isPdf(f);
+    return (
+      <div key={f.id} className={`file-card ${active || isEditing ? 'file-card--active' : ''}`}>
+        <div className="file-card__meta">
+          <strong>{f.fileName}</strong>
+          <StatusBadge value={fileKindLabel(f.kind, f.fileName)} kind="raw" />
+          <StatusBadge
+            value={fileModuleLabel(f.module, checklistTitle(f.checklistId))}
+            kind="raw"
+            className="ok"
+          />
+        </div>
+        <div className="panel-head-actions">
+          {editable ? (
+            <button className="btn btn-sm" type="button" onClick={() => onEditar(f)}>
+              {isEditing ? 'Cerrar' : isSheet(f) ? 'Editar hoja' : 'Escribir encima'}
+            </button>
+          ) : (
+            <button
+              className={active ? 'btn btn-sm' : 'btn ghost btn-sm'}
+              type="button"
+              onClick={() => onVer(f)}
+            >
+              {active ? 'Ocultar' : 'Ver'}
+            </button>
+          )}
+          {editable && !isEditing ? (
+            <button className="btn ghost btn-sm" type="button" onClick={() => onVer(f)}>
+              {active ? 'Ocultar vista' : 'Vista previa'}
+            </button>
+          ) : null}
+          {isPdf(f) && canEdit ? (
+            <button
+              className="btn ghost btn-sm"
+              type="button"
+              disabled={busy === f.id}
+              title="Extrae el texto del PDF a un documento que puedes reescribir"
+              onClick={() => pdfToDoc(f)}
+            >
+              {busy === f.id ? 'Convirtiendo…' : 'Pasar a documento'}
+            </button>
+          ) : null}
+          {isPdf(f) ? (
+            <a className="btn ghost btn-sm" href={f.url} download={f.fileName}>
+              Descargar PDF
+            </a>
+          ) : isSheet(f) ? (
+            <button className="btn ghost btn-sm" type="button" onClick={() => onEditar(f)}>
+              Editar · salir en PDF
+            </button>
+          ) : (
+            <a className="btn ghost btn-sm" href={f.url} download={f.fileName}>
+              Descargar
+            </a>
+          )}
+          {canEdit ? (
+            <button
+              className="btn ghost btn-sm btn-danger"
+              type="button"
+              onClick={() => onDeleteFile(f.id)}
+            >
+              Eliminar
+            </button>
+          ) : null}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="stack">
-      {/* ── Documento abierto ─────────────────────────────────────────────── */}
       {openDoc ? (
         <div className="panel" ref={previewRef}>
           <div className="panel-head">
@@ -172,14 +347,14 @@ export function EventFilesPanel({
         </div>
       ) : null}
 
-      {/* ── Archivo en edición ────────────────────────────────────────────── */}
       {editing ? (
         <div className="panel" ref={openDoc ? undefined : previewRef}>
           <div className="panel-head">
             <div>
               <h2>Editando · {editing.fileName}</h2>
               <p className="muted kpi-sub" style={{ margin: '0.2rem 0 0' }}>
-                Los cambios se guardan sobre el mismo archivo del evento.
+                Los cambios se guardan sobre el mismo archivo · sección{' '}
+                {fileModuleLabel(editing.module, checklistTitle(editing.checklistId))}.
               </p>
             </div>
             <button className="btn ghost btn-sm" type="button" onClick={() => setEditing(null)}>
@@ -192,8 +367,15 @@ export function EventFilesPanel({
                 key={editing.id}
                 url={editing.url}
                 fileName={editing.fileName}
+                fileId={editing.id}
                 canEdit={canEdit}
-                variant={editing.module === 'campaign' ? 'campaign' : 'default'}
+                variant={
+                  editing.module === CAMPAIGN_FILE_MODULE
+                    ? 'campaign'
+                    : editing.module === FINANCE_FILE_MODULE
+                      ? 'finance'
+                      : 'default'
+                }
                 onSave={replaceEventFile(editing.id)}
                 onSaveCells={patchEventFileCells(editing.id)}
                 panelEditable={editing.panelEditable !== false}
@@ -214,14 +396,14 @@ export function EventFilesPanel({
         </div>
       ) : null}
 
-      {/* ── Vista previa ──────────────────────────────────────────────────── */}
       {previewFile && !editing ? (
         <div className="panel" ref={openDoc ? undefined : previewRef}>
           <div className="panel-head">
             <div>
               <h2>Vista previa</h2>
               <p className="muted kpi-sub" style={{ margin: '0.2rem 0 0' }}>
-                {previewFile.fileName}
+                {previewFile.fileName} ·{' '}
+                {fileModuleLabel(previewFile.module, checklistTitle(previewFile.checklistId))}
               </p>
             </div>
             <button className="btn ghost btn-sm" type="button" onClick={() => setPreviewFile(null)}>
@@ -244,17 +426,14 @@ export function EventFilesPanel({
         </div>
       ) : null}
 
-      {/* ── Documentos editables ──────────────────────────────────────────── */}
       <div className="panel">
         <div className="panel-head">
           <div>
             <h2>Documentos · {docs.length}</h2>
             <p className="muted kpi-sub" style={{ margin: '0.25rem 0 0' }}>
-              Se escriben aquí como en Word y se descargan en PDF.
+              Actas y cartas: se escriben aquí y se descargan en PDF.
             </p>
           </div>
-          {/* Sin documentos manda el botón del estado vacío, que además explica
-              para qué sirve: dos «Nuevo documento» idénticos solo confunden. */}
           {canEdit && docs.length ? (
             <button className="btn btn-sm" type="button" disabled={busy === 'doc'} onClick={createDoc}>
               {busy === 'doc' ? 'Creando…' : 'Nuevo documento'}
@@ -262,24 +441,50 @@ export function EventFilesPanel({
           ) : null}
         </div>
         <div className="panel-body">
+          {canEdit ? (
+            <SectionFileCreate
+              staysIn="Documentos"
+              busy={busy === 'doc'}
+              actions={[
+                {
+                  id: 'doc',
+                  title: 'Nuevo documento',
+                  description: 'Tipo Word embebido. Se escribe aquí y sale en PDF.',
+                  tone: 'doc',
+                  onClick: () => void createDoc(),
+                },
+                {
+                  id: 'import-docx',
+                  title: 'Importar Word (.docx)',
+                  description: 'Entra una vez; después solo se reedita aquí y sale en PDF.',
+                  tone: 'doc',
+                  accept: '.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                  onFile: (f) => void importDocx(f),
+                },
+                {
+                  id: 'upload',
+                  title: 'Subir Excel de trabajo',
+                  description: 'Entra el .xlsx; se edita embebido y sale en PDF desde su sección.',
+                  tone: 'excel',
+                  accept: '.xlsx,.xls,.csv',
+                  onFile: (f) => void onUpload(f),
+                },
+                {
+                  id: 'upload-other',
+                  title: 'Subir PDF / imagen',
+                  description: 'Referencias o salidas ya en PDF. Quedan en Documentos generales.',
+                  tone: 'upload',
+                  accept: '.pdf,image/*',
+                  onFile: (f) => void onUpload(f),
+                },
+              ]}
+            />
+          ) : null}
           {!docs.length ? (
             <EmptyState
               title="Sin documentos todavía"
-              description="Crea un acta, un minuto a minuto o una carta: se escribe aquí y al descargarlo sale en PDF con el formato de Arta."
-            >
-              {canEdit ? (
-                <div className="row row--tight" style={{ marginTop: '0.75rem' }}>
-                  <button
-                    className="btn btn-sm"
-                    type="button"
-                    disabled={busy === 'doc'}
-                    onClick={() => void createDoc()}
-                  >
-                    {busy === 'doc' ? 'Creando…' : 'Nuevo documento'}
-                  </button>
-                </div>
-              ) : null}
-            </EmptyState>
+              description="Crea un acta o una carta: se escribe aquí y al descargarlo sale en PDF con el formato de Arta."
+            />
           ) : (
             <div className="file-card-list file-card-list--always">
               {docs.map((d) => (
@@ -316,129 +521,35 @@ export function EventFilesPanel({
         </div>
       </div>
 
-      {/* ── Archivos ──────────────────────────────────────────────────────── */}
       <div className="panel">
         <div className="panel-head">
           <div>
             <h2>Archivos del evento · {files.length}</h2>
             <p className="muted kpi-sub" style={{ margin: '0.25rem 0 0' }}>
-              Excel y PDF se abren y se editan aquí mismo; lo que guardes queda para todo el equipo.
+              Inventario por sección. Cada archivo también vive en su pestaña (Campaña, Corrida,
+              Checklists…).
             </p>
           </div>
-          {canEdit ? (
-            <label className="btn btn-sm module-upload">
-              Subir archivo
-              <input
-                type="file"
-                hidden
-                accept=".pdf,.xlsx,.xls,.csv,image/*"
-                onChange={(e) => {
-                  const f = e.target.files?.[0];
-                  if (f) onUpload(f);
-                  e.target.value = '';
-                }}
-              />
-            </label>
-          ) : null}
         </div>
         <div className="panel-body">
           {!files.length ? (
             <EmptyState
               title="Sin archivos aún"
-              description="Sube corrida en Excel, riders en PDF o referencias visuales. Se abren embebidos y se editan sin salir del evento."
-            >
-              {canEdit ? (
-                <label className="btn btn-sm module-upload" style={{ marginTop: '0.75rem' }}>
-                  Subir archivo
-                  <input
-                    type="file"
-                    hidden
-                    accept=".pdf,.xlsx,.xls,.csv,image/*"
-                    onChange={(e) => {
-                      const f = e.target.files?.[0];
-                      if (f) onUpload(f);
-                      e.target.value = '';
-                    }}
-                  />
-                </label>
-              ) : null}
-            </EmptyState>
+              description="Sube desde Campaña, Corrida o un checklist — o usa «Subir archivo general» arriba. Así sabes en qué sección quedó."
+            />
           ) : (
-            <div className="file-card-list file-card-list--always">
-              {files.map((f) => {
-                const active = previewFile?.id === f.id;
-                const isEditing = editing?.id === f.id;
-                const editable = isSheet(f) || isPdf(f);
-                return (
-                  <div
-                    key={f.id}
-                    className={`file-card ${active || isEditing ? 'file-card--active' : ''}`}
-                  >
-                    <div className="file-card__meta">
-                      <strong>{f.fileName}</strong>
-                      <StatusBadge value={kindLabel(f.kind)} kind="raw" />
-                      {moduleLabel(f.module) ? (
-                        <StatusBadge value={moduleLabel(f.module)!} kind="raw" />
-                      ) : null}
-                    </div>
-                    <div className="panel-head-actions">
-                      {editable ? (
-                        <button
-                          className="btn btn-sm"
-                          type="button"
-                          onClick={() => onEditar(f)}
-                        >
-                          {isEditing
-                            ? 'Cerrar'
-                            : isSheet(f)
-                              ? 'Editar hoja'
-                              : 'Escribir encima'}
-                        </button>
-                      ) : (
-                        <button
-                          className={active ? 'btn btn-sm' : 'btn ghost btn-sm'}
-                          type="button"
-                          onClick={() => onVer(f)}
-                        >
-                          {active ? 'Ocultar' : 'Ver'}
-                        </button>
-                      )}
-                      {editable && !isEditing ? (
-                        <button
-                          className="btn ghost btn-sm"
-                          type="button"
-                          onClick={() => onVer(f)}
-                        >
-                          {active ? 'Ocultar vista' : 'Vista previa'}
-                        </button>
-                      ) : null}
-                      {isPdf(f) && canEdit ? (
-                        <button
-                          className="btn ghost btn-sm"
-                          type="button"
-                          disabled={busy === f.id}
-                          title="Extrae el texto del PDF a un documento que puedes reescribir"
-                          onClick={() => pdfToDoc(f)}
-                        >
-                          {busy === f.id ? 'Convirtiendo…' : 'Pasar a documento'}
-                        </button>
-                      ) : null}
-                      <a className="btn ghost btn-sm" href={f.url} download={f.fileName}>
-                        Descargar
-                      </a>
-                      {canEdit ? (
-                        <button
-                          className="btn ghost btn-sm btn-danger"
-                          type="button"
-                          onClick={() => onDeleteFile(f.id)}
-                        >
-                          Eliminar
-                        </button>
-                      ) : null}
-                    </div>
+            <div className="stack">
+              {groups.map((g) => (
+                <div key={g.key} className="file-section-group">
+                  <div className="file-section-group__head">
+                    <h3>{g.label}</h3>
+                    <span className="muted kpi-sub">{g.hint}</span>
                   </div>
-                );
-              })}
+                  <div className="file-card-list file-card-list--always">
+                    {g.files.map(renderFileCard)}
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </div>

@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -10,10 +11,15 @@ import {
   Post,
   Query,
   Req,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { DocType, Prisma } from '@prisma/client';
 import { IsOptional, IsString } from 'class-validator';
+import { readFileSync } from 'fs';
+import * as mammoth from 'mammoth';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { assertSameTenant } from '../common/tenant';
@@ -25,7 +31,13 @@ import {
   type EntityKey,
   type RoleKey,
 } from '../common/rbac/roles';
-import { DocumentPdfService, normalizeBlocks } from './document-pdf.service';
+import { actorFrom, RevisionService } from '../common/revisions/revision.service';
+import { MULTER_OPTIONS, discardUpload } from '../uploads/upload-storage';
+import {
+  DocumentPdfService,
+  normalizeBlocks,
+  type DocBlock,
+} from './document-pdf.service';
 
 type AuthUser = {
   id: string;
@@ -41,7 +53,6 @@ class CreateDocumentDto {
   @IsString() title!: string;
   @IsOptional() @IsString() module?: string;
   @IsOptional() blocks?: unknown;
-  /** Id del EventFile del que se importó el texto, si vino de un PDF */
   @IsOptional() @IsString() sourceFileId?: string;
 }
 
@@ -50,12 +61,48 @@ const DOC_INCLUDE = {
   updatedBy: { select: { id: true, fullName: true } },
 } satisfies Prisma.EventDocumentInclude;
 
+/** .docx (HTML de mammoth) → bloques del editor embebido. */
+function htmlToBlocks(html: string): DocBlock[] {
+  const blocks: DocBlock[] = [];
+  const re =
+    /<(h1|h2|p|li)[^>]*>([\s\S]*?)<\/\1>|<hr\s*\/?>/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(html))) {
+    if (m[0].toLowerCase().startsWith('<hr')) {
+      blocks.push({ type: 'divider', text: '' });
+      continue;
+    }
+    const tag = m[1].toLowerCase();
+    const text = m[2]
+      .replace(/<[^>]+>/g, '')
+      .replace(/&nbsp;/g, ' ')
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .trim();
+    if (!text && tag !== 'p') continue;
+    if (tag === 'h1') blocks.push({ type: 'h1', text });
+    else if (tag === 'h2') blocks.push({ type: 'h2', text });
+    else if (tag === 'li') blocks.push({ type: 'bullet', text });
+    else blocks.push({ type: 'p', text });
+  }
+  if (!blocks.length) {
+    const plain = html
+      .replace(/<[^>]+>/g, '\n')
+      .split(/\n+/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    for (const line of plain.slice(0, 500)) blocks.push({ type: 'p', text: line });
+  }
+  return normalizeBlocks(blocks.length ? blocks : [{ type: 'p', text: '' }]);
+}
+
 /**
- * Documentos editables del evento.
+ * Documentos tipo Word embebidos.
  *
- * Se escriben en el panel como bloques y se descargan en PDF. El PDF generado
- * se registra además como `EventFile`, así que aparece en la pestaña de
- * archivos del evento junto con lo demás.
+ * Entrada: crear en blanco o importar .docx/.pdf→texto.
+ * Trabajo: editar solo dentro del panel (auditoría por revisión).
+ * Salida: PDF oficial registrado como EventFile.
  */
 @Controller('documents')
 @UseGuards(JwtAuthGuard)
@@ -63,6 +110,7 @@ export class DocumentsController {
   constructor(
     private prisma: PrismaService,
     private pdfs: DocumentPdfService,
+    private revisions: RevisionService,
   ) {}
 
   private async assertEvent(user: AuthUser, eventId: string) {
@@ -121,9 +169,15 @@ export class DocumentsController {
     });
   }
 
+  @Get(':id/revisions')
+  async docRevisions(@Req() req: { user: AuthUser }, @Param('id') id: string) {
+    await this.load(req.user, id);
+    return this.revisions.history(DocType.DOCUMENT, id);
+  }
+
   @Get(':id')
   async one(@Req() req: { user: AuthUser }, @Param('id') id: string) {
-    const { event, ...doc } = await this.load(req.user, id);
+    const { event: _e, ...doc } = await this.load(req.user, id);
     return doc;
   }
 
@@ -133,7 +187,7 @@ export class DocumentsController {
     const event = await this.assertEvent(req.user, dto.eventId);
     this.assertOpen(event.status);
     const blocks = normalizeBlocks(dto.blocks);
-    return this.prisma.eventDocument.create({
+    const created = await this.prisma.eventDocument.create({
       data: {
         eventId: dto.eventId,
         module: dto.module,
@@ -142,9 +196,87 @@ export class DocumentsController {
         sourceFileId: dto.sourceFileId,
         createdById: req.user.id,
         updatedById: req.user.id,
+        revision: 1,
       },
       include: DOC_INCLUDE,
     });
+    await this.revisions.record({
+      organizationId: event.organizationId || '(sin-organizacion)',
+      eventId: event.id,
+      docType: DocType.DOCUMENT,
+      docId: created.id,
+      revision: 1,
+      snapshotJson: { title: created.title, blocks },
+      note: 'Documento creado',
+      actor: actorFrom(req as never),
+    });
+    return created;
+  }
+
+  /**
+   * Importa un .docx como documento embebido (entrada única).
+   * Después solo se edita en el panel y se sale en PDF.
+   */
+  @Post('import-docx')
+  @UseInterceptors(FileInterceptor('file', MULTER_OPTIONS))
+  async importDocx(
+    @Req() req: { user: AuthUser },
+    @UploadedFile() file: Express.Multer.File,
+    @Body() body: { eventId?: string; module?: string; title?: string },
+  ) {
+    this.assertDocEdit(req.user);
+    if (!file) throw new BadRequestException('Archivo .docx requerido');
+    if (!body.eventId) {
+      discardUpload(file.path);
+      throw new BadRequestException('eventId requerido');
+    }
+    const event = await this.assertEvent(req.user, body.eventId);
+    this.assertOpen(event.status);
+    if (!/\.docx$/i.test(file.originalname)) {
+      discardUpload(file.path);
+      throw new BadRequestException('Solo se importa Word (.docx)');
+    }
+
+    let html = '';
+    try {
+      const result = await mammoth.convertToHtml({ buffer: readFileSync(file.path) });
+      html = result.value || '';
+    } catch {
+      discardUpload(file.path);
+      throw new BadRequestException('No se pudo leer el Word');
+    }
+    discardUpload(file.path);
+
+    const blocks = htmlToBlocks(html);
+    const title =
+      (body.title || file.originalname.replace(/\.docx$/i, '')).slice(0, 200) ||
+      'Documento importado';
+
+    const created = await this.prisma.eventDocument.create({
+      data: {
+        eventId: event.id,
+        module: body.module || 'general',
+        title,
+        blocksJson: blocks as Prisma.InputJsonValue,
+        createdById: req.user.id,
+        updatedById: req.user.id,
+        revision: 1,
+      },
+      include: DOC_INCLUDE,
+    });
+
+    await this.revisions.record({
+      organizationId: event.organizationId || '(sin-organizacion)',
+      eventId: event.id,
+      docType: DocType.DOCUMENT,
+      docId: created.id,
+      revision: 1,
+      snapshotJson: { title, blocks },
+      note: `Importado desde Word «${file.originalname}»`,
+      actor: actorFrom(req as never),
+    });
+
+    return created;
   }
 
   @Patch(':id')
@@ -157,26 +289,46 @@ export class DocumentsController {
     const doc = await this.load(req.user, id);
     this.assertOpen(doc.event.status);
 
-    const data: Prisma.EventDocumentUpdateInput = { updatedBy: { connect: { id: req.user.id } } };
+    const data: Prisma.EventDocumentUpdateInput = {
+      updatedBy: { connect: { id: req.user.id } },
+    };
     if (typeof body.title === 'string' && body.title.trim()) {
       data.title = body.title.slice(0, 200);
     }
-    if (body.blocks !== undefined) {
+    const blocksChanged = body.blocks !== undefined;
+    if (blocksChanged) {
       data.blocksJson = normalizeBlocks(body.blocks) as Prisma.InputJsonValue;
-      // Cada guardado es una versión: el PDF exportado queda obsoleto.
       data.version = { increment: 1 };
+      data.revision = { increment: 1 };
     }
 
-    return this.prisma.eventDocument.update({
+    const updated = await this.prisma.eventDocument.update({
       where: { id },
       data,
       include: DOC_INCLUDE,
     });
+
+    if (blocksChanged) {
+      await this.revisions.record({
+        organizationId: doc.event.organizationId || '(sin-organizacion)',
+        eventId: doc.eventId,
+        docType: DocType.DOCUMENT,
+        docId: updated.id,
+        revision: updated.revision,
+        snapshotJson: {
+          title: updated.title,
+          blocks: normalizeBlocks(updated.blocksJson),
+        },
+        note: 'Edición en panel',
+        actor: actorFrom(req as never),
+      });
+    }
+
+    return updated;
   }
 
   /**
-   * Exporta a PDF y lo deja como archivo del evento, para que se descargue y
-   * se vea embebido igual que cualquier otro adjunto.
+   * Salida oficial: PDF. El Word/docx original no vuelve a salir.
    */
   @Post(':id/pdf')
   async exportPdf(@Req() req: { user: AuthUser }, @Param('id') id: string) {
@@ -187,12 +339,11 @@ export class DocumentsController {
       eventName: doc.event.name,
       entity: doc.event.entity,
       blocks: normalizeBlocks(doc.blocksJson),
-      updatedBy: doc.updatedBy?.fullName || null,
+      updatedBy: doc.updatedBy?.fullName || req.user.fullName || null,
       updatedAt: doc.updatedAt,
     });
 
-    const fileName = `${doc.title}.pdf`;
-    // Un solo EventFile por documento: se actualiza en vez de acumular copias.
+    const fileName = `${doc.title} (salida).pdf`;
     const existing = await this.prisma.eventFile.findFirst({
       where: { eventId: doc.eventId, url: { startsWith: `/uploads/documents/${doc.id}-` } },
     });
@@ -205,6 +356,7 @@ export class DocumentsController {
             fileName,
             version: { increment: 1 },
             updatedById: req.user.id,
+            module: doc.module || 'general',
           },
         })
       : await this.prisma.eventFile.create({
@@ -214,7 +366,7 @@ export class DocumentsController {
             mimeType: 'application/pdf',
             url,
             kind: 'pdf',
-            module: doc.module,
+            module: doc.module || 'general',
             updatedById: req.user.id,
           },
         });
@@ -222,6 +374,17 @@ export class DocumentsController {
     await this.prisma.eventDocument.update({
       where: { id: doc.id },
       data: { pdfUrl: url, pdfVersion: doc.version },
+    });
+
+    await this.revisions.record({
+      organizationId: doc.event.organizationId || '(sin-organizacion)',
+      eventId: doc.eventId,
+      docType: DocType.DOCUMENT,
+      docId: doc.id,
+      revision: doc.revision,
+      fileUrl: url,
+      note: `Salida PDF v${doc.version}`,
+      actor: actorFrom(req as never),
     });
 
     return { url, fileId: file.id, version: doc.version };

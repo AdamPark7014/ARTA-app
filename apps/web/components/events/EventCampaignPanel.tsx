@@ -13,11 +13,13 @@ import {
   type CampaignConceptPageRow,
 } from '@/lib/campaign-sheet-template';
 import { patchEventFileCells, replaceEventFile } from '@/lib/file-save';
+import { SectionFileCreate } from '@/components/files/SectionFileCreate';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { FlowSteps } from '@/components/ui/FlowSteps';
 import { FormGrid } from '@/components/ui/PageChrome';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import type { EventDetail, EventFile } from '@/components/events/event-detail.types';
+import { fileKindLabel } from '@/lib/file-modules';
 
 type CampaignForm = {
   type: string;
@@ -50,11 +52,8 @@ type EventCampaignPanelProps = {
 
 const CAMPAIGN_FLOW = ['Borrador', 'Guardada', 'Autorizada'];
 
-function kindLabel(kind?: string | null) {
-  if (kind === 'excel') return 'Excel';
-  if (kind === 'pdf') return 'PDF';
-  if (kind === 'image') return 'Imagen';
-  return kind || 'Archivo';
+function kindLabel(kind?: string | null, fileName?: string) {
+  return fileKindLabel(kind, fileName);
 }
 
 function isSheet(name: string, kind?: string | null) {
@@ -462,56 +461,40 @@ export function EventCampaignPanel({
               sirve para presentar — la campaña viva es el Excel.
             </p>
           </div>
-          {canEditFiles ? (
-            <div className="panel-head-actions">
-              <button
-                className="btn btn-sm"
-                type="button"
-                disabled={busy}
-                onClick={() => void createExpensesSheet()}
-              >
-                Nueva hoja de gastos
-              </button>
-              <label className="btn ghost btn-sm module-upload">
-                {busy ? 'Subiendo…' : 'Subir mi Excel'}
-                <input
-                  type="file"
-                  hidden
-                  disabled={busy}
-                  accept=".pdf,.xlsx,.xls,.csv,image/*"
-                  onChange={(e) => {
-                    const f = e.target.files?.[0];
-                    e.target.value = '';
-                    if (f) withBusy(() => onUploadFile(f));
-                  }}
-                />
-              </label>
-            </div>
-          ) : null}
         </div>
         <div className="panel-body">
+          {canEditFiles ? (
+            <SectionFileCreate
+              staysIn="Campaña"
+              busy={busy}
+              actions={[
+                {
+                  id: 'new-sheet',
+                  title: 'Nueva hoja de gastos',
+                  description: 'Plantilla PDF: conceptos, costos y cortesías. Se abre para editar.',
+                  tone: 'excel',
+                  onClick: () => void createExpensesSheet(),
+                },
+                {
+                  id: 'upload',
+                  title: 'Subir mi Excel o PDF',
+                  description: 'Si ya tienen el archivo del show, súbelo aquí — queda en Campaña.',
+                  tone: 'upload',
+                  accept: '.pdf,.xlsx,.xls,.csv,image/*',
+                  onFile: (f) => void withBusy(() => onUploadFile(f)),
+                },
+              ]}
+            />
+          ) : null}
           {!files.length ? (
             <EmptyState
               title="Sin Excel de campaña"
               description={
                 canEditFiles
-                  ? 'Crea una hoja con los conceptos de publicidad/convenios (como el PDF de Arta) o sube el Excel que ya usan. Se edita aquí sin descargar.'
+                  ? 'Crea la hoja con los conceptos o sube el Excel/PDF del show. Todo queda en esta pestaña.'
                   : 'Cuando el equipo de campaña suba el plan, se verá aquí embebido.'
               }
-            >
-              {canEditFiles ? (
-                <div className="row row--tight" style={{ marginTop: '0.75rem' }}>
-                  <button
-                    className="btn btn-sm"
-                    type="button"
-                    disabled={busy}
-                    onClick={() => void createExpensesSheet()}
-                  >
-                    Nueva hoja de gastos
-                  </button>
-                </div>
-              ) : null}
-            </EmptyState>
+            />
           ) : (
             <div className="campaign-files">
               {files.map((f) => {
@@ -526,7 +509,8 @@ export function EventCampaignPanel({
                     <div className="campaign-file__head">
                       <div className="campaign-file__meta">
                         <strong>{f.fileName}</strong>
-                        <StatusBadge value={kindLabel(f.kind)} kind="raw" />
+                        <StatusBadge value={kindLabel(f.kind, f.fileName)} kind="raw" />
+                        <StatusBadge value="Campaña" kind="raw" className="ok" />
                         {f.createdAt ? (
                           <span className="muted kpi-sub">
                             {new Date(f.createdAt).toLocaleDateString('es-MX')}
@@ -610,6 +594,7 @@ export function EventCampaignPanel({
                             key={f.id}
                             url={f.url}
                             fileName={f.fileName}
+                            fileId={f.id}
                             canEdit={canEditFiles}
                             variant="campaign"
                             onSave={replaceEventFile(f.id)}

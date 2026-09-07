@@ -39,6 +39,7 @@ export function PoProofsBlock({
       fd.append('file', file);
       fd.append('eventId', eventId);
       fd.append('kind', 'proof');
+      fd.append('module', 'oc');
       const uploaded = await api<{ url: string }>('/uploads', { method: 'POST', body: fd });
       await api(`/purchase-orders/${poId}/proofs`, {
         method: 'POST',

@@ -30,6 +30,8 @@ import {
   asFinance,
   CAMPAIGN_FILE_MODULE,
   FINANCE_FILE_MODULE,
+  CHECKLIST_FILE_MODULE,
+  GENERAL_FILE_MODULE,
   emptyFinance,
   type Checklist,
   type DirUser,
@@ -793,10 +795,19 @@ function EventDetailInner() {
       const fd = new FormData();
       fd.append('file', file);
       fd.append('eventId', id);
-      if (activeChecklist) fd.append('checklistId', activeChecklist.id);
+      if (activeChecklist) {
+        fd.append('checklistId', activeChecklist.id);
+        fd.append('module', CHECKLIST_FILE_MODULE);
+      } else {
+        fd.append('module', GENERAL_FILE_MODULE);
+      }
       await api('/uploads', { method: 'POST', body: fd });
       await load();
-      flash(`Archivo ${file.name} embebido`);
+      flash(
+        activeChecklist
+          ? `${file.name} quedó en el checklist «${activeChecklist.title}»`
+          : `${file.name} quedó en Documentos generales`,
+      );
     } catch (e) {
       flash(e instanceof Error ? e.message : 'Error al subir archivo', 'error');
     }
@@ -1068,6 +1079,7 @@ function EventDetailInner() {
         fd.append('file', file);
         fd.append('eventId', id);
         fd.append('kind', 'excel');
+        fd.append('module', FINANCE_FILE_MODULE);
         await api('/uploads', { method: 'POST', body: fd }).catch(() => undefined);
         flash(`Importadas ${data.rows.length} filas desde Excel`);
         await load();
@@ -1499,6 +1511,7 @@ function EventDetailInner() {
             eventId={id}
             closed={closed || !canChecklistEdit}
             files={event.files}
+            checklists={event.checklists.map((c) => ({ id: c.id, title: c.title }))}
             previewFile={previewFile}
             setPreviewFile={setPreviewFile}
             onUpload={onUpload}

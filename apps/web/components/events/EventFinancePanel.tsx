@@ -10,10 +10,12 @@ import {
   workbookToXlsxBlob,
 } from '@/lib/finance-sheet-template';
 import { patchEventFileCells, replaceEventFile } from '@/lib/file-save';
+import { SectionFileCreate } from '@/components/files/SectionFileCreate';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { FormGrid } from '@/components/ui/PageChrome';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { useSaveHotkey } from '@/lib/use-save-hotkey';
+import { fileKindLabel } from '@/lib/file-modules';
 import type { EventDetail, EventFile, FinanceData, FinanceRow } from '@/components/events/event-detail.types';
 
 type EventFinancePanelProps = {
@@ -36,11 +38,8 @@ type EventFinancePanelProps = {
   onFilesChanged: () => void | Promise<void>;
 };
 
-function kindLabel(kind?: string | null) {
-  if (kind === 'excel') return 'Excel';
-  if (kind === 'pdf') return 'PDF';
-  if (kind === 'image') return 'Imagen';
-  return kind || 'Archivo';
+function kindLabel(kind?: string | null, fileName?: string) {
+  return fileKindLabel(kind, fileName);
 }
 
 function isSheet(name: string, kind?: string | null) {
@@ -159,54 +158,42 @@ export function EventFinancePanel({
           {canEditFiles ? (
             <div className="panel-head-actions">
               {financeLocked ? <StatusBadge value="Bloqueada" kind="raw" className="warn" /> : null}
-              <button
-                className="btn btn-sm"
-                type="button"
-                disabled={busy}
-                onClick={() => void createCorridaSheet()}
-              >
-                Nueva hoja de corrida
-              </button>
-              <label className="btn ghost btn-sm module-upload">
-                {busy ? 'Subiendo…' : 'Subir mi Excel'}
-                <input
-                  type="file"
-                  hidden
-                  disabled={busy}
-                  accept=".xlsx,.xls,.csv,.pdf"
-                  onChange={(e) => {
-                    const f = e.target.files?.[0];
-                    e.target.value = '';
-                    if (f) withBusy(() => onUploadFile(f));
-                  }}
-                />
-              </label>
             </div>
           ) : null}
         </div>
         <div className="panel-body">
+          {canEditFiles ? (
+            <SectionFileCreate
+              staysIn="Corrida financiera"
+              busy={busy}
+              actions={[
+                {
+                  id: 'new-sheet',
+                  title: 'Nueva hoja de corrida',
+                  description: 'Ingresos, egresos y resumen. Se abre aquí para editar.',
+                  tone: 'excel',
+                  onClick: () => void createCorridaSheet(),
+                },
+                {
+                  id: 'upload',
+                  title: 'Subir mi Excel o PDF',
+                  description: 'Tu formato de siempre. Queda en esta pestaña de Corrida.',
+                  tone: 'upload',
+                  accept: '.xlsx,.xls,.csv,.pdf',
+                  onFile: (f) => void withBusy(() => onUploadFile(f)),
+                },
+              ]}
+            />
+          ) : null}
           {!files.length ? (
             <EmptyState
               title="Sin Excel de corrida"
               description={
                 canEditFiles
-                  ? 'Crea una hoja con ingresos/egresos o sube el Excel que ya usan en Arta. Se edita aquí sin descargar.'
+                  ? 'Crea la hoja o sube el Excel — se guarda en Corrida (también aparece en Documentos).'
                   : 'Cuando finanzas suba la corrida, se verá aquí embebida.'
               }
-            >
-              {canEditFiles ? (
-                <div className="row row--tight" style={{ marginTop: '0.75rem' }}>
-                  <button
-                    className="btn btn-sm"
-                    type="button"
-                    disabled={busy}
-                    onClick={() => void createCorridaSheet()}
-                  >
-                    Nueva hoja de corrida
-                  </button>
-                </div>
-              ) : null}
-            </EmptyState>
+            />
           ) : (
             <div className="campaign-files">
               {files.map((f) => {
@@ -221,7 +208,8 @@ export function EventFinancePanel({
                     <div className="campaign-file__head">
                       <div className="campaign-file__meta">
                         <strong>{f.fileName}</strong>
-                        <StatusBadge value={kindLabel(f.kind)} kind="raw" />
+                        <StatusBadge value={kindLabel(f.kind, f.fileName)} kind="raw" />
+                        <StatusBadge value="Corrida" kind="raw" className="ok" />
                         {f.createdAt ? (
                           <span className="muted kpi-sub">
                             {new Date(f.createdAt).toLocaleDateString('es-MX')}
@@ -304,6 +292,7 @@ export function EventFinancePanel({
                             key={f.id}
                             url={f.url}
                             fileName={f.fileName}
+                            fileId={f.id}
                             canEdit={canEditFiles}
                             variant="finance"
                             onSave={replaceEventFile(f.id)}

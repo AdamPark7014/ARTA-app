@@ -1,12 +1,20 @@
 # Documentos editables dentro del evento
 
 Pedido de Adam (29-08-2026): que los Excel y PDF del evento se vean embebidos y
-se puedan **editar ahí mismo**, escribiendo encima, como si abrieras Excel o un
-PDF en tu computadora; y que haya algo tipo Word que **al descargarse salga en
-PDF**.
+se puedan **editar ahí mismo**. Evolución (2026-09-07): **entrada Word/Excel →
+trabajo solo embebido → salida oficial PDF**, con auditoría de quién editó.
 
-Todo vive en la pestaña **Documentos** del evento (antes «Excel / PDF») y en la
-sección de archivos de **Campaña**.
+## Política de salida
+
+| Tipo | Entra | Se edita | Sale |
+|------|-------|----------|------|
+| Vertical / acta / carta | `.docx` o documento nuevo | DocEditor (bloques) | **PDF** (`Salir en PDF`) |
+| Campaña / corrida / tablas | `.xlsx` o plantilla | SheetEditor | **PDF** (`Salir en PDF`) |
+| Checklist estructurado | Formulario del sistema | Panel checklist | **PDF** del formato |
+
+El `.xlsx` / contenido Word **no se descarga como salida oficial** desde el panel
+de evento: es copia de trabajo. Cada guardado y cada exportación deja revisión
+(quién / cuándo).
 
 ---
 

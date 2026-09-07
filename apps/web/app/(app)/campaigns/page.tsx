@@ -581,6 +581,7 @@ export default function CampaignsPage() {
                                                       key={f.id}
                                                       url={f.url}
                                                       fileName={f.fileName}
+                                                      fileId={f.id}
                                                       canEdit={canEdit}
                                                       onSave={replaceEventFile(f.id)}
                                                       onSaveCells={patchEventFileCells(f.id)}

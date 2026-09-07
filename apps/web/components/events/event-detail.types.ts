@@ -148,9 +148,16 @@ export type Task = {
   }>;
 };
 
-/** Etiqueta de `EventFile.module` que usa la sección de campaña. */
-export const CAMPAIGN_FILE_MODULE = 'campaign';
-export const FINANCE_FILE_MODULE = 'finance';
+/** Etiqueta de `EventFile.module` — reexport desde file-modules. */
+export {
+  CAMPAIGN_FILE_MODULE,
+  FINANCE_FILE_MODULE,
+  CHECKLIST_FILE_MODULE,
+  GENERAL_FILE_MODULE,
+  OC_PROOF_FILE_MODULE,
+  fileModuleLabel,
+  fileKindLabel,
+} from '@/lib/file-modules';
 
 export type EventFile = EventDetail['files'][number];
 
@@ -193,8 +200,10 @@ export type EventDetail = {
     fileName: string;
     url: string;
     kind?: string | null;
-    /** Sección del evento: campaign | finance | general… */
+    /** Sección: campaign | finance | checklist | general | oc … */
     module?: string | null;
+    /** Si cuelga de un formato concreto del evento. */
+    checklistId?: string | null;
     /** `false` si el libro trae gráficas o tablas dinámicas: se ve, no se edita. */
     panelEditable?: boolean;
     panelBlockReason?: string | null;

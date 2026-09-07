@@ -4128,10 +4128,11 @@ body.site-nav-open {
   align-items: center;
   justify-content: space-between;
   gap: 0.65rem;
-  padding: 0.6rem 0.75rem;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: var(--bg-soft);
+  padding: 0.65rem 0.85rem;
+  border: 1px solid #d8dee6;
+  border-radius: 8px 8px 0 0;
+  background: #f7f9fc;
+  border-bottom: 0;
 }
 
 .sheet-tabs {
@@ -4143,21 +4144,23 @@ body.site-nav-open {
 }
 
 .sheet-tab {
-  border: 1px solid var(--line);
-  background: transparent;
-  color: var(--muted);
+  border: 1px solid #d0d7e0;
+  background: #fff;
+  color: #5b6b7c;
   font: inherit;
   font-size: 0.8rem;
-  padding: 0.28rem 0.65rem;
+  padding: 0.32rem 0.7rem;
   border-radius: 6px 6px 0 0;
   cursor: pointer;
 }
 
 .sheet-tab.is-active {
-  color: var(--text);
-  background: var(--panel, var(--bg));
-  border-bottom-color: transparent;
+  color: #1a2330;
+  background: #fff;
+  border-color: #c5cdd8;
+  border-bottom-color: #fff;
   font-weight: 600;
+  box-shadow: 0 -1px 0 #217346 inset;
 }
 
 .sheet-toolbar__actions {
@@ -4169,9 +4172,9 @@ body.site-nav-open {
   flex-wrap: wrap;
   gap: 0.75rem 1rem;
   padding: 0.55rem 0.75rem;
-  border: 1px dashed var(--line-strong);
-  border-radius: var(--radius);
-  background: rgba(0, 0, 0, 0.15);
+  border: 1px solid #d8dee6;
+  border-radius: 8px;
+  background: #f4f7fb;
 }
 
 .sheet-tools__group {
@@ -4183,24 +4186,26 @@ body.site-nav-open {
 
 .sheet-tools__group--campaign {
   padding-left: 0.5rem;
-  border-left: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  border-left: 2px solid #217346;
 }
 
 .sheet-tools__label {
   font-size: 0.72rem;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: var(--muted);
+  color: #5b6b7c;
   margin-right: 0.25rem;
 }
 
 .sheet__row--sel .sheet__rownum {
-  color: var(--accent);
+  color: #217346;
+  background: #e8f5ee !important;
 }
 
 .sheet__td--sel {
-  outline: 1px solid color-mix(in srgb, var(--accent) 70%, transparent);
-  outline-offset: -1px;
+  outline: 2px solid #217346;
+  outline-offset: -2px;
+  z-index: 1;
 }
 
 .sheet-toolbar__sheets {
@@ -4215,36 +4220,39 @@ body.site-nav-open {
   min-width: 140px;
 }
 
-/* Hoja de cálculo */
+/* Hoja de cálculo — look claro tipo Excel, no tabla oscura */
 .sheet-wrap {
   overflow: auto;
   max-height: 62vh;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: var(--bg-elev);
+  border: 1px solid #c5cdd8;
+  border-radius: 0 0 8px 8px;
+  background: #ffffff;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
 }
 
 .sheet {
   border-collapse: separate;
   border-spacing: 0;
-  font-size: 0.82rem;
+  font-size: 0.84rem;
   table-layout: fixed;
+  color: #1a2330;
+  background: #fff;
 }
 
 .sheet th {
   position: sticky;
   top: 0;
   z-index: 2;
-  background: var(--bg-soft);
-  color: var(--muted);
+  background: #eef2f6;
+  color: #4a5568;
   font-weight: 600;
-  font-size: 0.7rem;
-  letter-spacing: 0.06em;
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
   text-align: center;
-  padding: 0.3rem 0.4rem;
-  border-right: 1px solid var(--line);
-  border-bottom: 1px solid var(--line);
-  min-width: 120px;
+  padding: 0.35rem 0.4rem;
+  border-right: 1px solid #d5dde6;
+  border-bottom: 1px solid #c5cdd8;
+  min-width: 110px;
 }
 
 .sheet__corner,
@@ -4252,9 +4260,13 @@ body.site-nav-open {
   position: sticky;
   left: 0;
   z-index: 3;
-  min-width: 46px !important;
-  width: 46px;
-  background: var(--bg-soft);
+  min-width: 42px !important;
+  width: 42px;
+  background: #eef2f6;
+  color: #5b6b7c;
+  font-weight: 600;
+  font-size: 0.72rem;
+  text-align: center;
 }
 
 .sheet__rownum {
@@ -4264,28 +4276,146 @@ body.site-nav-open {
 
 .sheet td {
   padding: 0;
-  border-right: 1px solid var(--line);
-  border-bottom: 1px solid var(--line);
+  border-right: 1px solid #e6ebf1;
+  border-bottom: 1px solid #e6ebf1;
+  background: #fff;
+}
+
+.sheet tr:nth-child(even) td {
+  background: #fafbfc;
 }
 
 .sheet__cell {
   width: 100% !important;
-  min-width: 120px;
-  padding: 0.35rem 0.45rem !important;
+  min-width: 110px;
+  padding: 0.4rem 0.5rem !important;
   border: 0 !important;
   border-radius: 0 !important;
   background: transparent !important;
-  font-size: 0.82rem;
+  color: #1a2330 !important;
+  font-size: 0.84rem;
+  font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
   outline-offset: -2px;
 }
 
 .sheet__cell:focus {
-  outline: 2px solid var(--accent);
-  background: hsla(0, 0%, 100%, 0.04) !important;
+  outline: 2px solid #217346;
+  background: #f3fbf6 !important;
+  box-shadow: inset 0 0 0 1px #217346;
 }
 
 .sheet__cell[readonly] {
+  color: #6b7785 !important;
+}
+
+/* Creación visual de archivos por sección */
+.file-create {
+  margin-bottom: 1rem;
+}
+
+.file-create__hint {
+  margin: 0 0 0.65rem;
+}
+
+.file-create__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 0.75rem;
+}
+
+.file-create-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.35rem;
+  text-align: left;
+  padding: 1rem 1.05rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--bg-soft, var(--panel));
+  cursor: pointer;
+  transition: border-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+  font: inherit;
+  color: inherit;
+  min-height: 7.5rem;
+}
+
+.file-create-card:hover:not(.is-disabled) {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
+  transform: translateY(-1px);
+}
+
+.file-create-card.is-disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.file-create-card__badge {
+  display: inline-block;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 0.18rem 0.45rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
   color: var(--muted);
+}
+
+.file-create-card--excel .file-create-card__badge {
+  background: #e8f5ee;
+  color: #217346;
+}
+
+.file-create-card--pdf .file-create-card__badge {
+  background: #fdecea;
+  color: #b42318;
+}
+
+.file-create-card--upload .file-create-card__badge {
+  background: #eef2ff;
+  color: #3538cd;
+}
+
+.file-create-card--doc .file-create-card__badge {
+  background: #eef4ff;
+  color: #175cd3;
+}
+
+.file-create-card__title {
+  font-size: 1rem;
+  line-height: 1.25;
+}
+
+.file-create-card__desc {
+  font-size: 0.82rem;
+  color: var(--muted);
+  line-height: 1.35;
+}
+
+.file-section-group {
+  display: grid;
+  gap: 0.55rem;
+  padding: 0.85rem 0;
+  border-top: 1px solid var(--line);
+}
+
+.file-section-group:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.file-section-group__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.5rem 1rem;
+}
+
+.file-section-group__head h3 {
+  margin: 0;
+  font-size: 0.95rem;
 }
 
 /* PDF con escritura encima */

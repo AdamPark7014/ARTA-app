@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '@/lib/api';
 import { ExpandBox } from '@/components/ui/ExpandBox';
+import { RevisionHistory } from '@/components/ui/RevisionHistory';
 import { useSaveHotkey } from '@/lib/use-save-hotkey';
 import { useDirtyGuard } from '@/lib/use-dirty-guard';
 
@@ -73,6 +74,8 @@ export function DocEditor({ doc, canEdit, onSaved, onDeleted, onClose }: Props) 
   const [pdfStale, setPdfStale] = useState(
     !!doc.pdfUrl && doc.pdfVersion !== doc.version,
   );
+  const [showHistory, setShowHistory] = useState(false);
+  const [revKey, setRevKey] = useState(0);
   const refs = useRef<Array<HTMLTextAreaElement | null>>([]);
   const focusNext = useRef<number | null>(null);
 
@@ -153,7 +156,8 @@ export function DocEditor({ doc, canEdit, onSaved, onDeleted, onClose }: Props) 
       });
       setDirty(false);
       setPdfStale(!!saved.pdfUrl);
-      setMsg('Documento guardado');
+      setMsg('Documento guardado — edición registrada');
+      setRevKey((k) => k + 1);
       onSaved(saved);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'No se pudo guardar');
@@ -167,10 +171,15 @@ export function DocEditor({ doc, canEdit, onSaved, onDeleted, onClose }: Props) 
     setError('');
     try {
       if (dirty && canEdit) await save();
-      const res = await api<{ url: string }>(`/documents/${doc.id}/pdf`, { method: 'POST' });
+      const res = await api<{ url: string; version: number }>(`/documents/${doc.id}/pdf`, {
+        method: 'POST',
+      });
       setPdfUrl(res.url);
       setPdfStale(false);
-      setMsg('PDF generado y guardado en los archivos del evento');
+      setMsg('PDF de salida listo — el documento solo se reedita aquí dentro');
+      setRevKey((k) => k + 1);
+      const refreshed = await api<EventDocumentRow>(`/documents/${doc.id}`);
+      onSaved(refreshed);
       window.open(res.url, '_blank', 'noopener');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'No se pudo generar el PDF');
@@ -204,7 +213,7 @@ export function DocEditor({ doc, canEdit, onSaved, onDeleted, onClose }: Props) 
         <div className="row row--tight">
           {canEdit ? (
             <button
-              className="btn btn-sm"
+              className="btn ghost btn-sm"
               type="button"
               disabled={!dirty || saving}
               onClick={save}
@@ -213,23 +222,35 @@ export function DocEditor({ doc, canEdit, onSaved, onDeleted, onClose }: Props) 
               {saving ? 'Guardando…' : dirty ? 'Guardar' : 'Sin cambios'}
             </button>
           ) : null}
-          <button className="btn ghost btn-sm" type="button" disabled={exporting} onClick={exportPdf}>
-            {exporting ? 'Generando…' : 'Descargar PDF'}
+          <button className="btn btn-sm" type="button" disabled={exporting} onClick={exportPdf}>
+            {exporting ? 'Generando…' : 'Salir en PDF'}
           </button>
           {pdfUrl && !pdfStale ? (
             <a className="btn ghost btn-sm" href={pdfUrl} target="_blank" rel="noreferrer">
-              Ver último PDF
+              Ver PDF
             </a>
           ) : null}
+          <button
+            className="btn ghost btn-sm"
+            type="button"
+            onClick={() => setShowHistory((v) => !v)}
+          >
+            {showHistory ? 'Ocultar historial' : 'Quién editó'}
+          </button>
+          <button className="btn ghost btn-sm" type="button" onClick={onClose}>
+            Cerrar
+          </button>
           {canEdit ? (
             <button className="btn ghost btn-sm btn-danger" type="button" onClick={removeDoc}>
               Eliminar
             </button>
           ) : null}
-          <button className="btn ghost btn-sm" type="button" onClick={onClose}>
-            Cerrar
-          </button>
         </div>
+      </div>
+
+      <div className="module-banner" role="note">
+        Documento embebido (tipo Word). Se importa .docx una vez; después solo se reedita aquí y{' '}
+        <strong>sale en PDF</strong>. Cada cambio queda con nombre y fecha.
       </div>
 
       {msg ? (
@@ -336,6 +357,17 @@ export function DocEditor({ doc, canEdit, onSaved, onDeleted, onClose }: Props) 
           </div>
         ) : null}
       </div>
+
+      {showHistory ? (
+        <div className="check-section">
+          <h3>Historial de ediciones</h3>
+          <RevisionHistory
+            path={`/documents/${doc.id}/revisions`}
+            reloadKey={revKey}
+            emptyHint="Cada guardado y cada salida PDF queda con quién lo hizo."
+          />
+        </div>
+      ) : null}
     </div>
     </ExpandBox>
   );

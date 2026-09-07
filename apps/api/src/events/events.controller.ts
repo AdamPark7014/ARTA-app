@@ -259,6 +259,7 @@ export class EventsController {
           mimeType: 'application/pdf',
           url,
           kind: 'pdf',
+          module: 'checklist',
         },
       });
     }

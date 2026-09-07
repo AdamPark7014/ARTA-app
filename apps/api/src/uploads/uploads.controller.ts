@@ -29,6 +29,7 @@ import { assertEventNotClosed } from '../common/event-guards';
 import { actorFrom, RevisionService } from '../common/revisions/revision.service';
 import { diffBinary } from '../common/doc-diff';
 import { XlsxPatchService, type CellPatch } from './xlsx-patch.service';
+import { ExcelPdfService } from './excel-pdf.service';
 import { FinanceExtractService } from '../finance/finance-extract.service';
 
 type AuthUser = {
@@ -46,6 +47,7 @@ export class UploadsController {
     private prisma: PrismaService,
     private revisions: RevisionService,
     private xlsx: XlsxPatchService,
+    private excelPdf: ExcelPdfService,
     private financeExtract: FinanceExtractService,
   ) {}
 
@@ -68,7 +70,9 @@ export class UploadsController {
   }
 
   private diskPathOf(url: string): string {
-    return join(uploadRoot, basename(url));
+    // `/uploads/foo.xlsx` o `/uploads/sheet-pdfs/foo.pdf`
+    const rel = url.replace(/^\/uploads\//, '');
+    return join(uploadRoot, rel);
   }
 
   /**
@@ -452,6 +456,170 @@ export class UploadsController {
       assertSameTenant(req.user, file.event.organizationId);
     }
     return this.revisions.history(DocType.FILE, id);
+  }
+
+  /**
+   * Salida oficial del Excel embebido: genera PDF, lo registra como EventFile
+   * de la misma sección y deja auditoría de quién exportó.
+   *
+   * El .xlsx sigue siendo la copia de trabajo interna; lo que circula fuera
+   * del sistema es el PDF.
+   */
+  @Post(':id/pdf')
+  async exportPdf(
+    @Req() req: { user: AuthUser; ip?: string; headers?: Record<string, string> },
+    @Param('id') id: string,
+  ) {
+    const current = await this.prisma.eventFile.findUnique({
+      where: { id },
+      include: {
+        event: true,
+        updatedBy: { select: { fullName: true } },
+      },
+    });
+    if (!current) throw new NotFoundException('Archivo no encontrado');
+    if (!current.eventId || !current.event) {
+      throw new BadRequestException('Solo se exporta Excel ligado a un evento');
+    }
+    if (
+      !canAccessEventOps(
+        req.user.entities as EntityKey[],
+        req.user.roleKey as RoleKey,
+        current.event.entity as EntityKey,
+      )
+    ) {
+      throw new ForbiddenException('Sin acceso a archivos de este evento');
+    }
+    assertSameTenant(req.user, current.event.organizationId);
+    assertEventNotClosed(current.event.status);
+
+    const ext = extname(current.fileName || current.url).toLowerCase();
+    if (!['.xlsx', '.xls', '.csv'].includes(ext) && current.kind !== 'excel') {
+      throw new BadRequestException('Solo se puede salir en PDF desde un Excel');
+    }
+
+    const exporter = await this.prisma.user.findUnique({
+      where: { id: req.user.id },
+      select: { fullName: true },
+    });
+
+    const sourcePath = this.diskPathOf(current.url);
+    if (!existsSync(sourcePath)) {
+      throw new NotFoundException('El Excel ya no está en disco');
+    }
+
+    const { url } = await this.excelPdf.generate(current.id, current.version, sourcePath, {
+      eventName: current.event.name,
+      entity: current.event.entity,
+      fileName: current.fileName,
+      exportedBy: exporter?.fullName || null,
+    });
+
+    const outName = current.fileName.replace(/\.(xlsx?|csv)$/i, '') + ' (salida).pdf';
+    const existing = await this.prisma.eventFile.findFirst({
+      where: {
+        eventId: current.eventId,
+        kind: 'pdf',
+        fileName: outName,
+        deletedAt: null,
+      },
+    });
+
+    const pdfFile = existing
+      ? await this.prisma.eventFile.update({
+          where: { id: existing.id },
+          data: {
+            url,
+            version: { increment: 1 },
+            updatedById: req.user.id,
+            module: current.module,
+            checklistId: current.checklistId,
+            sha256: this.hashOf(this.diskPathOf(url)),
+          },
+          include: { event: { select: { organizationId: true } } },
+        })
+      : await this.prisma.eventFile.create({
+          data: {
+            eventId: current.eventId,
+            checklistId: current.checklistId,
+            fileName: outName,
+            mimeType: 'application/pdf',
+            url,
+            kind: 'pdf',
+            module: current.module,
+            updatedById: req.user.id,
+            sha256: null,
+          },
+          include: { event: { select: { organizationId: true } } },
+        });
+
+    // Huella tras create (path ya existe)
+    if (!pdfFile.sha256) {
+      const hash = this.hashOf(this.diskPathOf(url));
+      if (hash) {
+        await this.prisma.eventFile.update({
+          where: { id: pdfFile.id },
+          data: { sha256: hash },
+        });
+      }
+    }
+
+    await this.recordFileRevision(
+      {
+        id: current.id,
+        eventId: current.eventId,
+        url: current.url,
+        fileName: current.fileName,
+        sizeBytes: current.sizeBytes,
+        sha256: current.sha256,
+        version: current.version,
+      },
+      current.event,
+      null,
+      req,
+      `Salida PDF v${current.version}` +
+        (exporter?.fullName ? ` · ${exporter.fullName}` : ''),
+    );
+
+    await this.recordFileRevision(
+      {
+        id: pdfFile.id,
+        eventId: pdfFile.eventId,
+        url: pdfFile.url,
+        fileName: pdfFile.fileName,
+        sizeBytes: pdfFile.sizeBytes,
+        sha256: pdfFile.sha256,
+        version: pdfFile.version,
+      },
+      pdfFile.event,
+      null,
+      req,
+      `Generado desde Excel «${current.fileName}» v${current.version}`,
+    );
+
+    await this.prisma.auditLog.create({
+      data: {
+        userId: req.user.id,
+        organizationId: current.event.organizationId,
+        action: 'file.export_pdf',
+        resource: 'EventFile',
+        resourceId: current.id,
+        metaJson: {
+          pdfFileId: pdfFile.id,
+          sourceVersion: current.version,
+          fileName: current.fileName,
+        },
+        ip: req.ip,
+        userAgent: req.headers?.['user-agent']?.slice(0, 300),
+      },
+    });
+
+    return {
+      url,
+      fileId: pdfFile.id,
+      version: current.version,
+      message: 'PDF de salida listo — el Excel sigue solo dentro del sistema',
+    };
   }
 
   @Delete(':id')

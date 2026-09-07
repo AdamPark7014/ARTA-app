@@ -3,13 +3,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as XLSX from 'xlsx';
 import type { SaveFile } from '@/lib/file-save';
+import { api } from '@/lib/api';
 import { ExpandBox } from '@/components/ui/ExpandBox';
+import { RevisionHistory } from '@/components/ui/RevisionHistory';
 import { useSaveHotkey } from '@/lib/use-save-hotkey';
 import { useDirtyGuard } from '@/lib/use-dirty-guard';
 
 type Props = {
   url: string;
   fileName: string;
+  /** Id del EventFile — necesario para salir en PDF y ver historial. */
+  fileId?: string;
   canEdit: boolean;
   /** Dónde se guarda el .xlsx reconstruido (respaldo si no hay guardado por celdas) */
   onSave: SaveFile;
@@ -108,6 +112,7 @@ function parseMoney(text: string): number {
 export function SheetEditor({
   url,
   fileName,
+  fileId,
   canEdit: canEditProp,
   onSave,
   onSaveCells,
@@ -136,6 +141,10 @@ export function SheetEditor({
   const [dirty, setDirty] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [pdfUrl, setPdfUrl] = useState('');
+  const [showHistory, setShowHistory] = useState(false);
+  const [revKey, setRevKey] = useState(0);
   const [error, setError] = useState('');
   const [msg, setMsg] = useState('');
   const [sel, setSel] = useState<Sel>(null);
@@ -501,12 +510,38 @@ export function SheetEditor({
         await onSave(blob, name);
       }
       setDirty(false);
-      setMsg('Guardado');
+      setMsg('Guardado — edición registrada en el historial');
+      setRevKey((k) => k + 1);
       await onSaved?.();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'No se pudo guardar');
     } finally {
       setSaving(false);
+    }
+  }
+
+  /** Salida oficial: PDF. El Excel solo vive embebido. */
+  async function exitAsPdf() {
+    if (!fileId) {
+      setError('Falta el id del archivo para generar la salida PDF');
+      return;
+    }
+    setExporting(true);
+    setError('');
+    try {
+      if (dirty && canEdit) await save();
+      const res = await api<{ url: string; message?: string }>(`/uploads/${fileId}/pdf`, {
+        method: 'POST',
+      });
+      setPdfUrl(res.url);
+      setMsg(res.message || 'PDF de salida listo');
+      setRevKey((k) => k + 1);
+      await onSaved?.();
+      window.open(res.url, '_blank', 'noopener');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se pudo generar el PDF');
+    } finally {
+      setExporting(false);
     }
   }
 
@@ -576,23 +611,50 @@ export function SheetEditor({
             <span className="muted kpi-sub">{sel ? `Celda ${selLabel}` : ''}</span>
             {canEdit ? (
               <button
-                className="btn btn-sm"
+                className="btn ghost btn-sm"
                 type="button"
                 disabled={!dirty || saving}
                 onClick={save}
-                title="Ctrl+S / ⌘S"
+                title="Ctrl+S / ⌘S — guarda la copia de trabajo (auditoría)"
               >
-                {saving ? 'Guardando…' : dirty ? 'Guardar libro' : 'Sin cambios'}
+                {saving ? 'Guardando…' : dirty ? 'Guardar' : 'Sin cambios'}
               </button>
             ) : (
               <span className="muted kpi-sub">
                 {panelEditable ? 'Solo lectura' : 'No editable aquí'}
               </span>
             )}
-            <a className="btn ghost btn-sm" href={url} download={fileName}>
-              Descargar .xlsx
-            </a>
+            {fileId ? (
+              <button
+                className="btn btn-sm"
+                type="button"
+                disabled={exporting || saving}
+                onClick={() => void exitAsPdf()}
+                title="Genera el PDF oficial. El Excel no sale del sistema."
+              >
+                {exporting ? 'Generando PDF…' : 'Salir en PDF'}
+              </button>
+            ) : null}
+            {pdfUrl ? (
+              <a className="btn ghost btn-sm" href={pdfUrl} target="_blank" rel="noreferrer">
+                Ver PDF
+              </a>
+            ) : null}
+            {fileId ? (
+              <button
+                className="btn ghost btn-sm"
+                type="button"
+                onClick={() => setShowHistory((v) => !v)}
+              >
+                {showHistory ? 'Ocultar historial' : 'Quién editó'}
+              </button>
+            ) : null}
           </div>
+        </div>
+
+        <div className="module-banner" role="note">
+          Copia de trabajo embebida (Excel). Lo que circula fuera del sistema es el{' '}
+          <strong>PDF de salida</strong>. Cada guardado queda auditado.
         </div>
 
         {canEdit ? (
@@ -711,11 +773,11 @@ export function SheetEditor({
 
         {richTools ? (
           <p className="muted kpi-sub">
-            Libro multi-hoja: cambia de pestaña arriba, agrega hojas y descarga el .xlsx completo.
             {campaign
-              ? ' Campaña: CONCEPTO · CANTIDAD · COSTO · COSTO TOTAL (como el PDF de gastos). Convenios: descripción en CANTIDAD, cortesías en COSTO. Hoja Precios = catálogo interno/externo.'
-              : ' Corrida: usa las hojas Ingresos / Egresos / Resumen según tu formato.'}{' '}
-            Ctrl+S guarda el libro entero.
+              ? 'Escribe en las celdas blancas como en Excel. Ctrl+S guarda. Conceptos y totales abajo a la derecha.'
+              : finance
+                ? 'Completa Ingresos y Egresos; el Resumen se actualiza. Ctrl+S guarda el libro.'
+                : 'Cambia de hoja arriba. Ctrl+S guarda.'}
           </p>
         ) : null}
 
@@ -776,6 +838,17 @@ export function SheetEditor({
           Las fórmulas que empiezan con = se guardan como fórmula. Si escribes un número encima, la
           celda pasa a valor fijo — igual que en Excel.
         </p>
+
+        {fileId && showHistory ? (
+          <div className="check-section">
+            <h3>Historial de ediciones</h3>
+            <RevisionHistory
+              path={`/uploads/${fileId}/revisions`}
+              reloadKey={revKey}
+              emptyHint="Cada «Guardar» y cada «Salir en PDF» deja quién y cuándo."
+            />
+          </div>
+        ) : null}
       </div>
     </ExpandBox>
   );

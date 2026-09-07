@@ -10,11 +10,14 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { SaveStatus } from '@/components/ui/SaveStatus';
 import { RevisionHistory } from '@/components/ui/RevisionHistory';
 import { ChecklistPicker } from '@/components/events/ChecklistPicker';
+import { SectionFileCreate } from '@/components/files/SectionFileCreate';
+import { StatusBadge } from '@/components/ui/StatusBadge';
+import { fileKindLabel, CHECKLIST_FILE_MODULE } from '@/lib/file-modules';
 import { useAutosave } from '@/lib/use-autosave';
 import { useDirtyGuard } from '@/lib/use-dirty-guard';
 import { useSaveHotkey } from '@/lib/use-save-hotkey';
 import { DocStatusBadge, DocStatusControl } from '@/components/ui/DocStatusControl';
-import type { Checklist, DocStatus, EventDetail } from '@/components/events/event-detail.types';
+import type { Checklist, DocStatus, EventDetail, EventFile } from '@/components/events/event-detail.types';
 
 type Section = Checklist['dataJson']['sections'][number];
 type Item = Section['items'][number];
@@ -92,6 +95,16 @@ export function EventChecklistsPanel({
   const [onlyPending, setOnlyPending] = useState(false);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [showHistory, setShowHistory] = useState(false);
+  const [previewAttach, setPreviewAttach] = useState<EventFile | null>(null);
+
+  const checklistFiles = useMemo(() => {
+    if (!activeChecklist) return [] as EventFile[];
+    return (event.files || []).filter(
+      (f) =>
+        f.checklistId === activeChecklist.id ||
+        (f.module === CHECKLIST_FILE_MODULE && f.checklistId === activeChecklist.id),
+    );
+  }, [event.files, activeChecklist]);
 
   const fieldMap = activeChecklist?.pdfFieldsJson;
   const canWriteOnPdf = !!activeChecklist?.pdfUrl && !!fieldMap?.fields?.length;
@@ -298,21 +311,6 @@ export function EventChecklistsPanel({
                     Generar PDF
                   </button>
                 )}
-                {!closed ? (
-                  <label className="btn ghost btn-sm checklist-upload">
-                    Adjuntar
-                    <input
-                      type="file"
-                      hidden
-                      accept=".pdf,.xlsx,.xls,.csv,image/*"
-                      onChange={(e) => {
-                        const f = e.target.files?.[0];
-                        e.target.value = '';
-                        if (f) onUpload(f);
-                      }}
-                    />
-                  </label>
-                ) : null}
               </div>
             </div>
 
@@ -623,13 +621,13 @@ export function EventChecklistsPanel({
                     canEdit={!readOnly}
                     saveLabel="Guardar copia anotada"
                     note={
-                      'Este PDF lo regenera el sistema cada vez que guardas el formato, así que lo ' +
-                      'que escribas se guarda como una copia aparte en la pestaña Documentos del ' +
-                      'evento. Así no se borra al siguiente guardado.'
+                      'La copia anotada se guarda en este checklist (y también aparece en Documentos ' +
+                      'bajo «Checklists»). Así no se borra cuando regeneras el PDF del formato.'
                     }
                     onSave={createEventFile({
                       eventId: event.id,
                       checklistId: activeChecklist.id,
+                      module: 'checklist',
                     })}
                     onSaved={async () => {
                       await onFilesChanged();
@@ -649,6 +647,82 @@ export function EventChecklistsPanel({
                     las opciones.
                   </p>
                 )}
+              </div>
+
+              <div className="check-section">
+                <div className="check-section__head">
+                  <h3>Archivos de este checklist · {checklistFiles.length}</h3>
+                </div>
+                {!closed ? (
+                  <SectionFileCreate
+                    staysIn={`el checklist «${activeChecklist.title}»`}
+                    actions={[
+                      {
+                        id: 'upload',
+                        title: 'Subir archivo',
+                        description: 'PDF, Excel o imagen. Queda ligado a este formato.',
+                        tone: 'upload',
+                        accept: '.pdf,.xlsx,.xls,.csv,image/*',
+                        onFile: (f) => void onUpload(f),
+                      },
+                      {
+                        id: 'annotate',
+                        title: 'Copia anotada del PDF',
+                        description: 'Escribe encima del PDF del formato y guárdala aquí.',
+                        tone: 'pdf',
+                        disabled: !activeChecklist.pdfUrl,
+                        onClick: () => {
+                          setAnnotating(true);
+                          setShowPdfPreview(false);
+                        },
+                      },
+                    ]}
+                  />
+                ) : null}
+                {!checklistFiles.length ? (
+                  <EmptyState
+                    title="Sin adjuntos en este formato"
+                    description="Todo lo que subas o anotes aquí se ve en este checklist — no se pierde en Documentos."
+                  />
+                ) : (
+                  <div className="file-card-list file-card-list--always" style={{ marginTop: '0.75rem' }}>
+                    {checklistFiles.map((f) => (
+                      <div
+                        key={f.id}
+                        className={`file-card ${previewAttach?.id === f.id ? 'file-card--active' : ''}`}
+                      >
+                        <div className="file-card__meta">
+                          <strong>{f.fileName}</strong>
+                          <StatusBadge value={fileKindLabel(f.kind, f.fileName)} kind="raw" />
+                        </div>
+                        <div className="panel-head-actions">
+                          <button
+                            className={previewAttach?.id === f.id ? 'btn btn-sm' : 'btn ghost btn-sm'}
+                            type="button"
+                            onClick={() =>
+                              setPreviewAttach(previewAttach?.id === f.id ? null : f)
+                            }
+                          >
+                            {previewAttach?.id === f.id ? 'Ocultar' : 'Ver aquí'}
+                          </button>
+                          <a className="btn ghost btn-sm" href={f.url} target="_blank" rel="noreferrer">
+                            Abrir
+                          </a>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {previewAttach ? (
+                  <div className="campaign-file__body" style={{ marginTop: '0.75rem' }}>
+                    <FileViewer
+                      url={previewAttach.url}
+                      fileName={previewAttach.fileName}
+                      kind={previewAttach.kind}
+                      cacheKey={previewAttach.createdAt}
+                    />
+                  </div>
+                ) : null}
               </div>
 
               <div className="check-section">
