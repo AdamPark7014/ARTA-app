@@ -6,13 +6,14 @@
 
 ## Hecho en este turno
 
-**Checklist: campos ampliables.**
+**Checklist: llenado más eficiente (sin modal).**
 
-1. Sobre el PDF: clic en una caja de texto abre un editor grande (textarea /
-   fecha / número) con título del campo; Esc o «Listo» cierra. El valor se
-   guarda al instante; Guardar regenera el PDF.
-2. En formulario: los campos de texto son textarea que crecen al escribir.
-3. Hint actualizado: «Haz clic para ampliarla».
+1. Sobre el PDF: se escribe directo en las cajas; al enfocar crecen en sitio
+   (textarea ~320×96). Tab al siguiente. Sin modal ni clic extra.
+2. PDF abre a pantalla completa; al abrir un formato la lista izquierda se
+   oculta (← Formatos) para usar todo el ancho.
+3. Formulario rápido: sin ExpandBox de más; textareas que crecen.
+4. CSS del modal muerto eliminado; e2e alineados.
 
 ## A medias
 
@@ -25,8 +26,8 @@
 
 ## Siguiente paso
 
-Deploy + smoke: Sobre el PDF → clic en «Show / concierto» → escribir largo →
-Listo → Guardar.
+Deploy + smoke: Sobre el PDF → clic en caja → escribir largo sin modal →
+Tab → Guardar.
 
 ## No tocar
 

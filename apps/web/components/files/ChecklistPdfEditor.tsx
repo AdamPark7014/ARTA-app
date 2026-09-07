@@ -218,14 +218,18 @@ export function ChecklistPdfEditor({
                       Math.max(14 * scale, f.h * scale),
                       Math.max(0, p.height - top),
                     );
+                    const isLongText =
+                      !item.options?.length && item.type !== 'number' && item.type !== 'date';
                     // Al enfocar crece en sitio (sin modal): más ancho y alto para teclear.
                     const style = {
                       left,
                       top,
                       width: isFocused
-                        ? Math.min(Math.max(baseW, 240), Math.max(0, p.width - left))
+                        ? Math.min(Math.max(baseW, isLongText ? 320 : 200), Math.max(0, p.width - left))
                         : baseW,
-                      height: isFocused ? Math.max(baseH, 36) : baseH,
+                      height: isFocused
+                        ? Math.max(baseH, isLongText ? 96 : 36)
+                        : baseH,
                       zIndex: isFocused ? 30 : 3,
                       fontSize: isFocused
                         ? Math.max(PDF_FONT_SIZE * scale, 14)
@@ -281,30 +285,49 @@ export function ChecklistPdfEditor({
                       );
                     }
 
-                    const inputType =
-                      item.type === 'number' ? 'number' : item.type === 'date' ? 'date' : 'text';
+                    if (item.type === 'number' || item.type === 'date') {
+                      return (
+                        <input
+                          key={fieldKey}
+                          className={`pdffield pdffield__input ${isFocused ? 'is-focused' : ''}`}
+                          style={style}
+                          type={item.type}
+                          value={value}
+                          readOnly={!canEdit}
+                          aria-label={item.label}
+                          title={item.label}
+                          onFocus={() => setFocusedKey(fieldKey)}
+                          onBlur={() => setFocusedKey((k) => (k === fieldKey ? null : k))}
+                          onChange={(e) =>
+                            onUpdateItem(f.sectionId, f.itemId, {
+                              value:
+                                item.type === 'number'
+                                  ? e.target.value === ''
+                                    ? ''
+                                    : Number(e.target.value)
+                                  : e.target.value,
+                            })
+                          }
+                        />
+                      );
+                    }
 
                     return (
-                      <input
+                      <textarea
                         key={fieldKey}
-                        className={`pdffield pdffield__input ${isFocused ? 'is-focused' : ''}`}
+                        className={`pdffield pdffield__input pdffield__input--text ${
+                          isFocused ? 'is-focused' : ''
+                        }`}
                         style={style}
-                        type={inputType}
                         value={value}
                         readOnly={!canEdit}
+                        rows={isFocused ? 4 : 1}
                         aria-label={item.label}
                         title={item.label}
                         onFocus={() => setFocusedKey(fieldKey)}
                         onBlur={() => setFocusedKey((k) => (k === fieldKey ? null : k))}
                         onChange={(e) =>
-                          onUpdateItem(f.sectionId, f.itemId, {
-                            value:
-                              item.type === 'number'
-                                ? e.target.value === ''
-                                  ? ''
-                                  : Number(e.target.value)
-                                : e.target.value,
-                          })
+                          onUpdateItem(f.sectionId, f.itemId, { value: e.target.value })
                         }
                       />
                     );

@@ -5,7 +5,6 @@ import { SignaturePad } from '@/components/ui/SignaturePad';
 import { FileViewer } from '@/components/files/FileViewer';
 import { PdfEditor } from '@/components/files/PdfEditor';
 import { ChecklistPdfEditor } from '@/components/files/ChecklistPdfEditor';
-import { ExpandBox } from '@/components/ui/ExpandBox';
 import { createEventFile } from '@/lib/file-save';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { SaveStatus } from '@/components/ui/SaveStatus';
@@ -391,7 +390,6 @@ export function EventChecklistsPanel({
               ) : null}
 
               {mode === 'form' ? (
-                <ExpandBox title="Formulario del checklist" defaultExpanded={false}>
                 <div className="checklist-form-layout">
                   {stats.perSection.length > 1 ? (
                     <nav className="checklist-index" aria-label="Secciones del formato">
@@ -582,7 +580,6 @@ export function EventChecklistsPanel({
                     )}
                   </div>
                 </div>
-                </ExpandBox>
               ) : null}
 
               <div className="check-section check-section--highlight">

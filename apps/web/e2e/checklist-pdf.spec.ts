@@ -76,7 +76,7 @@ test.describe('Checklist sobre el PDF', () => {
     await openChecklist(page, baseURL!);
 
     // En el modo «Sobre el PDF» se escribe encima de la hoja
-    await expect(page.getByText(/campos? editables sobre la hoja/i)).toBeVisible();
+    await expect(page.getByText(/Escribe directo en las cajas/i)).toBeVisible();
 
     // Cada campo llega con el valor vivo del checklist, encima de lo impreso
     await expect(page.getByLabel('Recinto', { exact: true })).toHaveValue('Auditorio Arema');
@@ -114,7 +114,7 @@ test.describe('Checklist sobre el PDF', () => {
   test('se puede volver al formulario clásico', async ({ page, baseURL }) => {
     await openChecklist(page, baseURL!);
 
-    await page.getByRole('button', { name: 'Formulario' }).click();
+    await page.getByRole('button', { name: 'Formulario rápido' }).click();
 
     await expect(page.locator('.pdfedit__canvas')).toHaveCount(0);
     // El índice lateral repite el nombre de la sección: se ancla al encabezado.

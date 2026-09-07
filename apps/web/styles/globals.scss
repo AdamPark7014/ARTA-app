@@ -5945,73 +5945,13 @@ body.site-nav-open {
   color: #b9b2a4;
 }
 
-.pdffield--expandable {
-  display: flex !important;
-  align-items: center;
-  text-align: left;
-  cursor: text;
-  overflow: hidden;
-  white-space: nowrap;
-}
-
-.pdffield--expandable .pdffield__preview {
-  display: block;
-  width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.pdffield--expandable.is-active,
-.pdffield--expandable:focus {
-  background: #fff !important;
-  outline: 2px solid var(--accent);
-  outline-offset: 0;
-}
-
-.pdffield-expand {
-  position: fixed;
-  inset: 0;
-  z-index: 140;
-  display: grid;
-  place-items: center;
-  padding: 1rem;
-}
-
-.pdffield-expand__backdrop {
-  position: absolute;
-  inset: 0;
-  border: 0;
-  background: rgba(0, 0, 0, 0.55);
-  cursor: pointer;
-}
-
-.pdffield-expand__card {
-  position: relative;
-  z-index: 1;
-  width: min(36rem, 100%);
-  display: grid;
-  gap: 0.75rem;
-  padding: 1rem 1.1rem;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-lg);
-  background: var(--bg);
-  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.35);
-}
-
-.pdffield-expand__head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-}
-
-.pdffield-expand__input {
-  width: 100%;
-  min-height: 3rem;
-  font-size: 1rem;
-  line-height: 1.45;
-  resize: vertical;
+textarea.pdffield__input--text {
+  resize: none !important;
+  white-space: pre-wrap !important;
+  line-height: 1.25 !important;
+  overflow: auto !important;
+  padding: 2px 4px !important;
+  box-sizing: border-box !important;
 }
 
 .shell .pdffield--check,

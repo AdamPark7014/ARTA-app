@@ -75,9 +75,16 @@ test.describe('Ver en grande y menú automático', () => {
      */
     const hoja = page.locator('.pdfedit__page').first();
     await expect.poll(async () => (await hoja.boundingBox())?.width ?? 0, { timeout: 15000 }).toBeGreaterThan(0);
+
+    // «Sobre el PDF» abre ya a pantalla completa: salir y volver a ampliar
+    // comprueba que el raster crece de verdad (no solo un overlay).
+    await expect(page.getByRole('button', { name: /Salir de pantalla completa/ })).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('button', { name: /Ampliar a pantalla completa/ })).toBeVisible();
+
     const antes = (await hoja.boundingBox())!.width;
 
-    await page.getByRole('button', { name: 'Ampliar' }).first().click();
+    await page.getByRole('button', { name: /Ampliar a pantalla completa/ }).first().click();
     // El PDF se vuelve a rasterizar al ancho nuevo
     await expect
       .poll(async () => (await hoja.boundingBox())?.width ?? 0, { timeout: 15000 })
