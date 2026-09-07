@@ -34,7 +34,6 @@ type Section = { id: string; title: string; items: Item[] };
 
 type Props = {
   url: string;
-  /** Cambia cuando el PDF se regenera, para no servir el anterior de caché */
   cacheKey?: string | null;
   fieldMap: PdfFieldMap;
   sections: Section[];
@@ -42,28 +41,17 @@ type Props = {
   onUpdateItem: (sectionId: string, itemId: string, patch: Partial<Item>) => void;
 };
 
-/** Límites del ancho de dibujado: legible en columna, grande a pantalla completa */
 const MIN_RENDER_WIDTH = 560;
 const MAX_RENDER_WIDTH = 1700;
-/** Tamaño de la letra con la que el generador escribe los ítems (puntos PDF) */
 const PDF_FONT_SIZE = 10;
 
-type ExpandedField = {
-  key: string;
-  sectionId: string;
-  itemId: string;
-  label: string;
-  value: string;
-  isNumber: boolean;
-  isDate: boolean;
-};
-
 /**
- * El PDF del checklist, editable encima del propio documento.
+ * PDF editable encima del documento.
  *
- * Las cajas sobre la hoja son pequeñas (caben en la línea impresa). Al hacer
- * clic se abren en grande para escribir con comodidad; al cerrar el valor
- * queda en el mapa y al guardar regenera el PDF.
+ * Se escribe directo en cada caja (Tab al siguiente). Al enfocar, la caja
+ * crece en su sitio —sin modal ni clic extra— para poder teclear cómodo.
+ * Arranca a pantalla completa: llenar el formato en una columna estrecha
+ * no sirve.
  */
 export function ChecklistPdfEditor({
   url,
@@ -74,11 +62,10 @@ export function ChecklistPdfEditor({
   onUpdateItem,
 }: Props) {
   const pageHostsRef = useRef(new Map<number, HTMLDivElement>());
-  const expandTextRef = useRef<HTMLTextAreaElement | HTMLInputElement | null>(null);
   const [pages, setPages] = useState<Array<{ index: number; width: number; height: number }>>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [expanded, setExpanded] = useState<ExpandedField | null>(null);
+  const [focusedKey, setFocusedKey] = useState<string | null>(null);
   const { ref: boxRef, width: boxWidth } = useElementWidth();
 
   const renderWidth = Math.min(
@@ -168,46 +155,8 @@ export function ChecklistPdfEditor({
     };
   }, [pages, src, renderWidth]);
 
-  useEffect(() => {
-    if (!expanded) return;
-    const el = expandTextRef.current;
-    el?.focus();
-    if (el && 'setSelectionRange' in el) {
-      const len = el.value.length;
-      el.setSelectionRange(len, len);
-    }
-    function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        setExpanded(null);
-      }
-    }
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [expanded?.key]);
-
   function findItem(sectionId: string, itemId: string): Item | undefined {
     return sections.find((s) => s.id === sectionId)?.items.find((i) => i.id === itemId);
-  }
-
-  function openExpand(sectionId: string, itemId: string, item: Item) {
-    if (!canEdit) return;
-    const value = item.value === null || item.value === undefined ? '' : String(item.value);
-    setExpanded({
-      key: `${sectionId}:${itemId}`,
-      sectionId,
-      itemId,
-      label: item.label,
-      value,
-      isNumber: item.type === 'number',
-      isDate: item.type === 'date',
-    });
-  }
-
-  function commitExpand(nextValue: string, field: ExpandedField) {
-    onUpdateItem(field.sectionId, field.itemId, {
-      value: field.isNumber ? (nextValue === '' ? '' : Number(nextValue)) : nextValue,
-    });
   }
 
   const scale = renderWidth / fieldMap.pageWidth;
@@ -222,15 +171,14 @@ export function ChecklistPdfEditor({
   }
 
   return (
-    <ExpandBox title="Formato del checklist" defaultExpanded={false}>
+    <ExpandBox title="Formato del checklist" defaultExpanded>
       <div className="stack" ref={boxRef}>
         {loading ? <p className="muted kpi-sub">Abriendo el formato…</p> : null}
 
         {!loading && matchedFields > 0 ? (
           <p className="pdffield-hint">
-            {matchedFields} campo{matchedFields === 1 ? '' : 's'} editables sobre la hoja. Haz clic
-            en una caja para <strong>ampliarla</strong> y escribir cómodo; luego Guardar regenera el
-            PDF.
+            Escribe directo en las cajas doradas. Al enfocar se agrandan. Tab pasa al siguiente ·
+            Esc sale de pantalla completa.
           </p>
         ) : null}
 
@@ -260,23 +208,34 @@ export function ChecklistPdfEditor({
                     if (!item) return null;
                     const left = f.x * scale;
                     const top = f.y * scale;
+                    const fieldKey = `${f.sectionId}:${f.itemId}`;
+                    const isFocused = focusedKey === fieldKey;
+                    const baseW = Math.min(
+                      Math.max(f.type === 'check' ? 14 * scale : 56 * scale, f.w * scale),
+                      Math.max(0, p.width - left),
+                    );
+                    const baseH = Math.min(
+                      Math.max(14 * scale, f.h * scale),
+                      Math.max(0, p.height - top),
+                    );
+                    // Al enfocar crece en sitio (sin modal): más ancho y alto para teclear.
                     const style = {
                       left,
                       top,
-                      width: Math.min(
-                        Math.max(f.type === 'check' ? 14 * scale : 56 * scale, f.w * scale),
-                        Math.max(0, p.width - left),
-                      ),
-                      height: Math.min(
-                        Math.max(14 * scale, f.h * scale),
-                        Math.max(0, p.height - top),
-                      ),
+                      width: isFocused
+                        ? Math.min(Math.max(baseW, 240), Math.max(0, p.width - left))
+                        : baseW,
+                      height: isFocused ? Math.max(baseH, 36) : baseH,
+                      zIndex: isFocused ? 30 : 3,
+                      fontSize: isFocused
+                        ? Math.max(PDF_FONT_SIZE * scale, 14)
+                        : PDF_FONT_SIZE * scale,
                     };
 
                     if (f.type === 'check') {
                       return (
                         <label
-                          key={`${f.sectionId}:${f.itemId}`}
+                          key={fieldKey}
                           className="pdffield pdffield--check"
                           style={style}
                           title={item.label}
@@ -296,17 +255,18 @@ export function ChecklistPdfEditor({
 
                     const value =
                       item.value === null || item.value === undefined ? '' : String(item.value);
-                    const fieldKey = `${f.sectionId}:${f.itemId}`;
 
                     if (item.options?.length) {
                       return (
                         <select
                           key={fieldKey}
-                          className="pdffield pdffield__input"
-                          style={{ ...style, fontSize: PDF_FONT_SIZE * scale }}
+                          className={`pdffield pdffield__input ${isFocused ? 'is-focused' : ''}`}
+                          style={style}
                           value={value}
                           disabled={!canEdit}
                           aria-label={item.label}
+                          onFocus={() => setFocusedKey(fieldKey)}
+                          onBlur={() => setFocusedKey((k) => (k === fieldKey ? null : k))}
                           onChange={(e) =>
                             onUpdateItem(f.sectionId, f.itemId, { value: e.target.value })
                           }
@@ -321,21 +281,32 @@ export function ChecklistPdfEditor({
                       );
                     }
 
+                    const inputType =
+                      item.type === 'number' ? 'number' : item.type === 'date' ? 'date' : 'text';
+
                     return (
-                      <button
+                      <input
                         key={fieldKey}
-                        type="button"
-                        className={`pdffield pdffield--expandable ${
-                          expanded?.key === fieldKey ? 'is-active' : ''
-                        }`}
-                        style={{ ...style, fontSize: PDF_FONT_SIZE * scale }}
-                        disabled={!canEdit}
-                        aria-label={`${item.label}${value ? `: ${value}` : ''} — ampliar para editar`}
-                        title={`${item.label} — clic para ampliar`}
-                        onClick={() => openExpand(f.sectionId, f.itemId, item)}
-                      >
-                        <span className="pdffield__preview">{value || '…'}</span>
-                      </button>
+                        className={`pdffield pdffield__input ${isFocused ? 'is-focused' : ''}`}
+                        style={style}
+                        type={inputType}
+                        value={value}
+                        readOnly={!canEdit}
+                        aria-label={item.label}
+                        title={item.label}
+                        onFocus={() => setFocusedKey(fieldKey)}
+                        onBlur={() => setFocusedKey((k) => (k === fieldKey ? null : k))}
+                        onChange={(e) =>
+                          onUpdateItem(f.sectionId, f.itemId, {
+                            value:
+                              item.type === 'number'
+                                ? e.target.value === ''
+                                  ? ''
+                                  : Number(e.target.value)
+                                : e.target.value,
+                          })
+                        }
+                      />
                     );
                   })}
               </div>
@@ -343,87 +314,9 @@ export function ChecklistPdfEditor({
           ))}
         </div>
 
-        {expanded ? (
-          <div
-            className="pdffield-expand"
-            role="dialog"
-            aria-modal="true"
-            aria-label={expanded.label}
-          >
-            <button
-              type="button"
-              className="pdffield-expand__backdrop"
-              aria-label="Cerrar"
-              onClick={() => setExpanded(null)}
-            />
-            <div className="pdffield-expand__card">
-              <div className="pdffield-expand__head">
-                <strong>{expanded.label}</strong>
-                <button
-                  className="btn ghost btn-sm"
-                  type="button"
-                  onClick={() => setExpanded(null)}
-                >
-                  Listo (Esc)
-                </button>
-              </div>
-              {expanded.isDate ? (
-                <input
-                  ref={(el) => {
-                    expandTextRef.current = el;
-                  }}
-                  className="field pdffield-expand__input"
-                  type="date"
-                  value={expanded.value}
-                  onChange={(e) => {
-                    const v = e.target.value;
-                    const next = { ...expanded, value: v };
-                    setExpanded(next);
-                    commitExpand(v, next);
-                  }}
-                />
-              ) : expanded.isNumber ? (
-                <input
-                  ref={(el) => {
-                    expandTextRef.current = el;
-                  }}
-                  className="field pdffield-expand__input"
-                  type="number"
-                  value={expanded.value}
-                  onChange={(e) => {
-                    const v = e.target.value;
-                    const next = { ...expanded, value: v };
-                    setExpanded(next);
-                    commitExpand(v, next);
-                  }}
-                />
-              ) : (
-                <textarea
-                  ref={(el) => {
-                    expandTextRef.current = el;
-                  }}
-                  className="field pdffield-expand__input"
-                  rows={5}
-                  value={expanded.value}
-                  placeholder="Escribe aquí con espacio de sobra…"
-                  onChange={(e) => {
-                    const v = e.target.value;
-                    const next = { ...expanded, value: v };
-                    setExpanded(next);
-                    commitExpand(v, next);
-                  }}
-                />
-              )}
-              <p className="muted kpi-sub" style={{ margin: 0 }}>
-                Se guarda en el formato al instante. Pulsa Guardar arriba para regenerar el PDF.
-              </p>
-            </div>
-          </div>
-        ) : null}
-
         <p className="muted kpi-sub">
-          Escribes directamente sobre el formato. Al guardar, el PDF se vuelve a generar con lo que
-          capturaste y queda listo para firmar y descargar.
+          Autoguardado mientras escribes. «Guardar y generar PDF» deja la versión firmable en el
+          expediente.
         </p>
       </div>
     </ExpandBox>

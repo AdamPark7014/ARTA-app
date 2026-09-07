@@ -3267,6 +3267,23 @@ body.site-nav-open {
   align-items: start;
 }
 
+/* Al abrir un formato, el editor usa todo el ancho: la lista de formatos
+   se oculta (queda «← Formatos»). Llenar con la columna izquierda abierta
+   era el mayor desperdicio de espacio. */
+@media (min-width: 981px) {
+  .checklist-workspace--open {
+    grid-template-columns: 1fr;
+  }
+
+  .checklist-workspace--open .checklist-workspace__nav--collapsed {
+    display: none;
+  }
+
+  .checklist-workspace--open .checklist-back {
+    display: inline-flex;
+  }
+}
+
 .checklist-workspace__empty .panel-body {
   min-height: 240px;
   display: grid;
@@ -5917,8 +5934,11 @@ body.site-nav-open {
   color-scheme: light !important;
 }
 
+.pdffield__input.is-focused,
 .pdffield__input:focus {
   background: #fff !important;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
+  transition: width 0.12s ease, height 0.12s ease, font-size 0.12s ease;
 }
 
 .pdffield__input::placeholder {

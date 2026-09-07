@@ -5,6 +5,7 @@ import { SignaturePad } from '@/components/ui/SignaturePad';
 import { FileViewer } from '@/components/files/FileViewer';
 import { PdfEditor } from '@/components/files/PdfEditor';
 import { ChecklistPdfEditor } from '@/components/files/ChecklistPdfEditor';
+import { ExpandBox } from '@/components/ui/ExpandBox';
 import { createEventFile } from '@/lib/file-save';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { SaveStatus } from '@/components/ui/SaveStatus';
@@ -359,7 +360,7 @@ export function EventChecklistsPanel({
                     type="button"
                     onClick={() => setMode('form')}
                   >
-                    Formulario
+                    Formulario rápido
                   </button>
                   <button
                     className={mode === 'pdf' ? 'btn btn-sm' : 'btn ghost btn-sm'}
@@ -367,7 +368,7 @@ export function EventChecklistsPanel({
                     disabled={!canWriteOnPdf}
                     title={
                       canWriteOnPdf
-                        ? 'Campos sobre el PDF (opcional)'
+                        ? 'Escribe sobre la hoja (pantalla completa, Tab al siguiente)'
                         : 'Pulsa «Generar PDF» para habilitar esta vista'
                     }
                     onClick={() => setMode('pdf')}
@@ -390,6 +391,7 @@ export function EventChecklistsPanel({
               ) : null}
 
               {mode === 'form' ? (
+                <ExpandBox title="Formulario del checklist" defaultExpanded={false}>
                 <div className="checklist-form-layout">
                   {stats.perSection.length > 1 ? (
                     <nav className="checklist-index" aria-label="Secciones del formato">
@@ -580,6 +582,7 @@ export function EventChecklistsPanel({
                     )}
                   </div>
                 </div>
+                </ExpandBox>
               ) : null}
 
               <div className="check-section check-section--highlight">
