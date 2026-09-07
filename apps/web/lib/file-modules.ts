@@ -35,3 +35,25 @@ export function fileKindLabel(kind?: string | null, fileName?: string) {
   if (kind === 'proof') return 'Comprobante';
   return kind || 'Archivo';
 }
+
+/** PDF generado desde Word/Excel embebido — el que circula fuera del sistema. */
+export function isSalidaPdf(fileName?: string | null) {
+  return !!fileName && /\(salida\)\.pdf$/i.test(fileName);
+}
+
+export function isWorkSheet(kind?: string | null, fileName?: string | null) {
+  return kind === 'excel' || (!!fileName && /\.(xlsx?|csv)$/i.test(fileName));
+}
+
+/**
+ * Rol del archivo en el modelo Arta:
+ * - Copia de trabajo = Word/Excel embebido
+ * - PDF oficial = salida generada `(salida).pdf`
+ * - PDF = otros PDF (referencia / subido)
+ */
+export function fileRoleLabel(kind?: string | null, fileName?: string | null): string | null {
+  if (isSalidaPdf(fileName)) return 'PDF oficial';
+  if (isWorkSheet(kind, fileName)) return 'Copia de trabajo';
+  if (kind === 'pdf' || (fileName && /\.pdf$/i.test(fileName))) return 'PDF';
+  return null;
+}

@@ -1,38 +1,34 @@
 # RELEVO
 
 - **Último turno:** cursor
-- **Fecha:** 2026-09-06
+- **Fecha:** 2026-09-07
 - **Rama:** main
 
 ## Hecho en este turno
 
-**Aislamiento de plataforma: proyectos no se pisan entre sí.**
+**SheetEditor UX: jerarquía clara, barra de fórmulas y estados amables.**
 
-1. **Principio aplicado en el VPS:** Traefik y rutas viven en `/opt/traefik/` (fuera de `/var/www/*`). Cada app solo instala **su** YAML; nada borra el de otra.
-2. **Toolkit plataforma:**
-   - `/opt/traefik/bin/install-route.sh` — instala un archivo (atómico, sin borrar vecinos)
-   - `/opt/traefik/bin/sync-all-routes.sh` — junta `/var/www/*/deploy/traefik/*.yml` + `/opt/traefik/platform/`
-   - `/opt/traefik/platform/` — última copia buena de rutas de plataforma (nexara.yml, tls, …)
-   - `/opt/traefik/README.md` — reglas de oro
-3. **Cron** cada minuto → `sync-all-routes.sh`.
-4. **Hook Nexara** ya llama sync sin borrar guests; README en su carpeta traefik.
-5. **ARTA:** `ensure-traefik-route.sh` usa el instalador de plataforma; doc `deploy/ISOLATION.md`.
-6. Probado: wipe `arta.yml` → sync restaura; `school.yml` intacto; HTTP 200.
+1. Toolbar sticky (`sheet-chrome`) con CTA primario **Salir en PDF**, secundario **Guardar**, terciario historial.
+2. Barra de fórmulas (`sheet-fxbar`) con ref de celda + edición del valor/fórmula.
+3. Selección más visible (anillo verde, columna/fila resaltadas); Esc limpia selección; Ctrl+S intacto.
+4. Estados loading/error/vacío en español; tip contextual campaña/finanzas; franja de éxito PDF con enlace; historial enmarcado.
+5. Chrome Excel más compacto (letras de columna, nº de fila). `fileId` sigue opcional. Sin «Descargar .xlsx».
 
-Compose projects ya estaban separados (`arta`, `nexara`, `agora`…): `--remove-orphans` no cruza proyectos.
+Archivos: `SheetEditor.tsx`, `globals.scss` (clases `sheet-*`).
 
 ## A medias
 
-Nada. Pendientes de producto Claude (Fases 0–3 deploy) aparte.
+Nada de este turno. El rescate previo (`b58122a`) trae WIP de documentos/PDF/event panels — no tocado aquí salvo estilos `sheet-*` compartidos.
 
 ## Siguiente paso
 
-1. Hard-refresh panel ARTA.
-2. Al deployar Nexara/otros, confirmar que ARTA no cae.
-3. Deploy producto ARTA cuando Adam lo pida.
+1. Probar SheetEditor en evento (campaña/finanzas) y en carpetas sin `fileId`.
+2. Continuar WIP rescatado de documentos/PDF si Adam lo pide.
+3. Hard-refresh panel ARTA al desplegar.
 
 ## No tocar
 
 - `docs/ACCESS.md`, `.env.arta`.
 - No meter YAML huésped en `nexara-app/deploy/traefik/`.
 - No volver a symlinkar `/opt/traefik/config` → un repo de app.
+- No reintroducir descarga .xlsx como acción primaria en el editor.

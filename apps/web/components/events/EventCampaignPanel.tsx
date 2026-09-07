@@ -19,7 +19,7 @@ import { FlowSteps } from '@/components/ui/FlowSteps';
 import { FormGrid } from '@/components/ui/PageChrome';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import type { EventDetail, EventFile } from '@/components/events/event-detail.types';
-import { fileKindLabel } from '@/lib/file-modules';
+import { fileKindLabel, fileRoleLabel, isSalidaPdf } from '@/lib/file-modules';
 
 type CampaignForm = {
   type: string;
@@ -456,9 +456,8 @@ export function EventCampaignPanel({
           <div>
             <h2>Campaña · Excel de gastos · {files.length}</h2>
             <p className="muted kpi-sub" style={{ margin: '0.25rem 0 0' }}>
-              Formato «GASTOS DE PUBLICIDAD Y CONVENIOS» (CONCEPTO · CANTIDAD · COSTO · COSTO
-              TOTAL), igual que el PDF operativo. Crea la hoja aquí o sube la tuya; el PDF solo
-              sirve para presentar — la campaña viva es el Excel.
+              Formato «GASTOS DE PUBLICIDAD Y CONVENIOS». La hoja (.xlsx) es la copia de trabajo;
+              el PDF oficial se genera desde el editor. Todo queda en esta pestaña.
             </p>
           </div>
         </div>
@@ -467,19 +466,25 @@ export function EventCampaignPanel({
             <SectionFileCreate
               staysIn="Campaña"
               busy={busy}
+              compact={files.length > 0}
+              hideHint={files.length > 0}
               actions={[
                 {
                   id: 'new-sheet',
                   title: 'Nueva hoja de gastos',
-                  description: 'Plantilla PDF: conceptos, costos y cortesías. Se abre para editar.',
+                  description: 'Plantilla con conceptos, costos y cortesías del show.',
+                  after: 'Se abre aquí para editar. Luego puedes sacar el PDF oficial.',
                   tone: 'excel',
+                  emphasis: 'primary',
                   onClick: () => void createExpensesSheet(),
                 },
                 {
                   id: 'upload',
                   title: 'Subir mi Excel o PDF',
-                  description: 'Si ya tienen el archivo del show, súbelo aquí — queda en Campaña.',
+                  description: 'Si ya tienen el archivo del show, súbelo aquí.',
+                  after: 'Queda listado abajo, en Campaña.',
                   tone: 'upload',
+                  emphasis: 'secondary',
                   accept: '.pdf,.xlsx,.xls,.csv,image/*',
                   onFile: (f) => void withBusy(() => onUploadFile(f)),
                 },
@@ -500,7 +505,11 @@ export function EventCampaignPanel({
               {files.map((f) => {
                 const open = expandedId === f.id;
                 const editing = editingId === f.id;
-                const editable = isSheet(f.fileName, f.kind) || isPdf(f.fileName, f.kind);
+                const sheet = isSheet(f.fileName, f.kind);
+                const pdf = isPdf(f.fileName, f.kind);
+                const editable = sheet || pdf;
+                const role = fileRoleLabel(f.kind, f.fileName);
+                const official = isSalidaPdf(f.fileName);
                 return (
                   <div
                     key={f.id}
@@ -510,6 +519,13 @@ export function EventCampaignPanel({
                       <div className="campaign-file__meta">
                         <strong>{f.fileName}</strong>
                         <StatusBadge value={kindLabel(f.kind, f.fileName)} kind="raw" />
+                        {role ? (
+                          <StatusBadge
+                            value={role}
+                            kind="raw"
+                            className={official ? 'ok' : sheet ? 'warn' : undefined}
+                          />
+                        ) : null}
                         <StatusBadge value="Campaña" kind="raw" className="ok" />
                         {f.createdAt ? (
                           <span className="muted kpi-sub">
@@ -529,8 +545,8 @@ export function EventCampaignPanel({
                           >
                             {editing
                               ? 'Cerrar editor'
-                              : isSheet(f.fileName, f.kind)
-                                ? 'Editar hoja'
+                              : sheet
+                                ? 'Editar aquí'
                                 : 'Anotar PDF'}
                           </button>
                         ) : null}
@@ -543,11 +559,11 @@ export function EventCampaignPanel({
                             setExpandedId(open ? null : f.id);
                           }}
                         >
-                          {open ? 'Contraer' : 'Vista previa'}
+                          {open ? 'Contraer' : pdf ? 'Ver PDF' : 'Vista previa'}
                         </button>
                         {canEditFiles ? (
                           <label className="btn ghost btn-sm module-upload">
-                            Actualizar
+                            Reemplazar
                             <input
                               type="file"
                               hidden
@@ -561,9 +577,11 @@ export function EventCampaignPanel({
                             />
                           </label>
                         ) : null}
-                        <a className="btn ghost btn-sm" href={f.url} target="_blank" rel="noreferrer">
-                          Descargar
-                        </a>
+                        {pdf ? (
+                          <a className="btn ghost btn-sm" href={f.url} target="_blank" rel="noreferrer">
+                            Abrir PDF
+                          </a>
+                        ) : null}
                         {canEditFiles ? (
                           <button
                             className="btn ghost btn-sm btn-danger"

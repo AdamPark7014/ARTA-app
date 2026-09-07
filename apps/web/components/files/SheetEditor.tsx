@@ -176,6 +176,9 @@ export function SheetEditor({
     setLoading(true);
     setError('');
     setDirty(false);
+    setPdfUrl('');
+    setShowHistory(false);
+    setMsg('');
     // Archivo nuevo: el delta anterior ya no aplica.
     pendingCellsRef.current = new Map();
     fetch(url, { credentials: 'same-origin', cache: 'no-store' })
@@ -528,6 +531,7 @@ export function SheetEditor({
     }
     setExporting(true);
     setError('');
+    setPdfUrl('');
     try {
       if (dirty && canEdit) await save();
       const res = await api<{ url: string; message?: string }>(`/uploads/${fileId}/pdf`, {
@@ -549,8 +553,31 @@ export function SheetEditor({
   // Cerrar la pestaña con celdas sin guardar se llevaba el trabajo sin avisar.
   useDirtyGuard(canEdit && dirty, 'La hoja tiene cambios sin guardar. ¿Salir de todas formas?');
 
+  // Esc quita la selección (y sale del input de celda / barra de fórmulas).
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== 'Escape' || !sel) return;
+      const el = e.target as HTMLElement | null;
+      if (
+        el?.classList.contains('sheet__cell') ||
+        el?.classList.contains('sheet-fxbar__input')
+      ) {
+        el.blur();
+      }
+      setSel(null);
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [sel]);
+
   const shownRows = useMemo(() => grid.slice(0, visibleRows), [grid, visibleRows]);
-  const selLabel = sel ? `${colLabel(sel.c)}${sel.r + 1}` : 'ninguna';
+  const selLabel = sel ? `${colLabel(sel.c)}${sel.r + 1}` : '';
+  const fxValue = sel ? (grid[sel.r]?.[sel.c] ?? '') : '';
+
+  function setFxValue(value: string) {
+    if (!sel || !canEdit) return;
+    setCell(sel.r, sel.c, value);
+  }
 
   /*
    * Ni gráficas ni tablas dinámicas sobreviven al round-trip, así que en vez de
@@ -563,99 +590,132 @@ export function SheetEditor({
       </div>
     ) : null;
 
-  if (loading) return <p className="muted kpi-sub">Abriendo hoja de cálculo…</p>;
+  if (loading) {
+    return (
+      <div className="sheet-state sheet-state--loading" role="status">
+        <p className="sheet-state__title">Abriendo la hoja…</p>
+        <p className="sheet-state__hint">Cargamos el Excel embebido para que edites aquí, sin descargas.</p>
+      </div>
+    );
+  }
   if (error && !grid.length) {
     return (
-      <div className="form-error" role="alert">
-        {error}
+      <div className="sheet-state sheet-state--error" role="alert">
+        <p className="sheet-state__title">No se pudo abrir</p>
+        <p className="sheet-state__hint">{error}</p>
+        <p className="sheet-state__hint">Prueba de nuevo o pide a quien subió el archivo que lo vuelva a cargar.</p>
       </div>
     );
   }
 
   return (
     <ExpandBox title={fileName} dirty={dirty}>
-      <div className="stack">
+      <div className="stack sheet-editor">
         {blockNotice}
-        <div className="sheet-toolbar">
-          <div className="sheet-tabs" role="tablist" aria-label="Hojas del libro">
-            {sheetNames.map((n) => (
-              <button
-                key={n}
-                type="button"
-                role="tab"
-                aria-selected={n === activeSheet}
-                className={`sheet-tab ${n === activeSheet ? 'is-active' : ''}`}
-                onClick={() => switchSheet(n)}
-              >
-                {n}
-              </button>
-            ))}
-            {canEdit ? (
-              <>
-                <button className="btn ghost btn-sm" type="button" onClick={addSheet} title="Agregar hoja">
-                  + Hoja
+
+        <div className="sheet-chrome">
+          <div className="sheet-toolbar">
+            <div className="sheet-tabs" role="tablist" aria-label="Hojas del libro">
+              {sheetNames.map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  role="tab"
+                  aria-selected={n === activeSheet}
+                  className={`sheet-tab ${n === activeSheet ? 'is-active' : ''}`}
+                  onClick={() => switchSheet(n)}
+                >
+                  {n}
                 </button>
+              ))}
+              {canEdit ? (
+                <>
+                  <button className="btn ghost btn-sm" type="button" onClick={addSheet} title="Agregar hoja">
+                    + Hoja
+                  </button>
+                  <button
+                    className="btn ghost btn-sm"
+                    type="button"
+                    onClick={renameActiveSheet}
+                    title="Renombrar hoja activa"
+                  >
+                    Renombrar
+                  </button>
+                </>
+              ) : null}
+            </div>
+
+            <div className="row row--tight sheet-toolbar__actions">
+              {fileId ? (
+                <button
+                  className="btn btn-sm sheet-toolbar__primary"
+                  type="button"
+                  disabled={exporting || saving}
+                  onClick={() => void exitAsPdf()}
+                  title="Genera el PDF oficial. El Excel no sale del sistema."
+                >
+                  {exporting ? 'Generando PDF…' : 'Salir en PDF'}
+                </button>
+              ) : null}
+              {canEdit ? (
                 <button
                   className="btn ghost btn-sm"
                   type="button"
-                  onClick={renameActiveSheet}
-                  title="Renombrar hoja activa"
+                  disabled={!dirty || saving}
+                  onClick={save}
+                  title="Ctrl+S / ⌘S — guarda la copia de trabajo (auditoría)"
                 >
-                  Renombrar
+                  {saving ? 'Guardando…' : dirty ? 'Guardar' : 'Sin cambios'}
                 </button>
-              </>
-            ) : null}
+              ) : (
+                <span className="muted kpi-sub sheet-toolbar__readonly">
+                  {panelEditable ? 'Solo lectura' : 'No editable aquí'}
+                </span>
+              )}
+              {fileId ? (
+                <button
+                  className="btn ghost btn-sm sheet-toolbar__tertiary"
+                  type="button"
+                  onClick={() => setShowHistory((v) => !v)}
+                  aria-expanded={showHistory}
+                >
+                  {showHistory ? 'Ocultar historial' : 'Quién editó'}
+                </button>
+              ) : null}
+            </div>
           </div>
 
-          <div className="row row--tight sheet-toolbar__actions">
-            <span className="muted kpi-sub">{sel ? `Celda ${selLabel}` : ''}</span>
-            {canEdit ? (
-              <button
-                className="btn ghost btn-sm"
-                type="button"
-                disabled={!dirty || saving}
-                onClick={save}
-                title="Ctrl+S / ⌘S — guarda la copia de trabajo (auditoría)"
-              >
-                {saving ? 'Guardando…' : dirty ? 'Guardar' : 'Sin cambios'}
-              </button>
-            ) : (
-              <span className="muted kpi-sub">
-                {panelEditable ? 'Solo lectura' : 'No editable aquí'}
-              </span>
-            )}
-            {fileId ? (
-              <button
-                className="btn btn-sm"
-                type="button"
-                disabled={exporting || saving}
-                onClick={() => void exitAsPdf()}
-                title="Genera el PDF oficial. El Excel no sale del sistema."
-              >
-                {exporting ? 'Generando PDF…' : 'Salir en PDF'}
-              </button>
-            ) : null}
-            {pdfUrl ? (
-              <a className="btn ghost btn-sm" href={pdfUrl} target="_blank" rel="noreferrer">
-                Ver PDF
-              </a>
-            ) : null}
-            {fileId ? (
-              <button
-                className="btn ghost btn-sm"
-                type="button"
-                onClick={() => setShowHistory((v) => !v)}
-              >
-                {showHistory ? 'Ocultar historial' : 'Quién editó'}
-              </button>
-            ) : null}
+          <div className="sheet-fxbar" role="group" aria-label="Barra de fórmulas">
+            <span className="sheet-fxbar__ref" title="Celda activa">
+              {selLabel || '—'}
+            </span>
+            <span className="sheet-fxbar__fx" aria-hidden="true">
+              fx
+            </span>
+            <input
+              className="sheet-fxbar__input"
+              value={fxValue}
+              readOnly={!canEdit || !sel}
+              disabled={!sel}
+              placeholder={sel ? 'Valor o fórmula (=A1*B1)' : 'Selecciona una celda'}
+              aria-label={sel ? `Editar ${selLabel}` : 'Sin celda seleccionada'}
+              onChange={(e) => setFxValue(e.target.value)}
+            />
           </div>
         </div>
 
-        <div className="module-banner" role="note">
-          Copia de trabajo embebida (Excel). Lo que circula fuera del sistema es el{' '}
-          <strong>PDF de salida</strong>. Cada guardado queda auditado.
-        </div>
+        <p className="sheet-note muted kpi-sub" role="note">
+          Copia de trabajo interna. Lo que circula fuera es el <strong>PDF de salida</strong>.
+          {canEdit ? ' Ctrl+S guarda · Esc quita la selección.' : ''}
+        </p>
+
+        {richTools ? (
+          <p className="sheet-tip" role="note">
+            {campaign
+              ? 'Campaña: usa «+ Concepto» para CANTIDAD × COSTO → total. En convenios, describe en CANTIDAD y pon cortesías en COSTO.'
+              : 'Corrida financiera: completa Ingresos y Egresos; «Σ Montos» verifica la columna C. El Resumen se actualiza al guardar.'}
+          </p>
+        ) : null}
 
         {canEdit ? (
           <div className="sheet-tools" role="toolbar" aria-label="Herramientas de hoja">
@@ -771,20 +831,27 @@ export function SheetEditor({
           </div>
         ) : null}
 
-        {richTools ? (
-          <p className="muted kpi-sub">
-            {campaign
-              ? 'Escribe en las celdas blancas como en Excel. Ctrl+S guarda. Conceptos y totales abajo a la derecha.'
-              : finance
-                ? 'Completa Ingresos y Egresos; el Resumen se actualiza. Ctrl+S guarda el libro.'
-                : 'Cambia de hoja arriba. Ctrl+S guarda.'}
-          </p>
+        {pdfUrl ? (
+          <div className="sheet-pdf-success" role="status">
+            <div className="sheet-pdf-success__text">
+              <strong>PDF listo</strong>
+              <span> — tu salida oficial quedó generada.</span>
+            </div>
+            <a className="btn btn-sm" href={pdfUrl} target="_blank" rel="noreferrer">
+              Abrir PDF
+            </a>
+          </div>
         ) : null}
 
-        {msg ? (
+        {msg && !pdfUrl ? (
           <div className="module-banner module-banner--ok" role="status">
             {msg}
           </div>
+        ) : null}
+        {msg && pdfUrl ? (
+          <p className="muted kpi-sub" role="status">
+            {msg}
+          </p>
         ) : null}
         {error ? (
           <div className="form-error" role="alert">
@@ -792,37 +859,61 @@ export function SheetEditor({
           </div>
         ) : null}
 
-        <div className="sheet-wrap">
-          <table className="sheet">
-            <thead>
-              <tr>
-                <th className="sheet__corner" />
-                {Array.from({ length: cols }, (_, c) => (
-                  <th key={c}>{colLabel(c)}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {shownRows.map((row, r) => (
-                <tr key={r} className={sel?.r === r ? 'sheet__row--sel' : undefined}>
-                  <th className="sheet__rownum">{r + 1}</th>
-                  {row.map((cell, c) => (
-                    <td key={c} className={sel?.r === r && sel?.c === c ? 'sheet__td--sel' : undefined}>
-                      <input
-                        className="sheet__cell"
-                        value={cell}
-                        readOnly={!canEdit}
-                        aria-label={`Celda ${colLabel(c)}${r + 1}`}
-                        onFocus={() => setSel({ r, c })}
-                        onChange={(e) => setCell(r, c, e.target.value)}
-                      />
-                    </td>
+        {!shownRows.length ? (
+          <div className="sheet-state sheet-state--empty" role="status">
+            <p className="sheet-state__title">Hoja vacía</p>
+            <p className="sheet-state__hint">
+              {canEdit
+                ? 'Haz clic en una celda y empieza a escribir. O agrega filas desde la barra de herramientas.'
+                : 'Este libro no tiene datos visibles en esta hoja.'}
+            </p>
+          </div>
+        ) : (
+          <div className="sheet-wrap">
+            <table className="sheet">
+              <thead>
+                <tr>
+                  <th className="sheet__corner" scope="col">
+                    <span className="sr-only">Fila / columna</span>
+                  </th>
+                  {Array.from({ length: cols }, (_, c) => (
+                    <th
+                      key={c}
+                      scope="col"
+                      className={sel?.c === c ? 'sheet__col--sel' : undefined}
+                    >
+                      {colLabel(c)}
+                    </th>
                   ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {shownRows.map((row, r) => (
+                  <tr key={r} className={sel?.r === r ? 'sheet__row--sel' : undefined}>
+                    <th className="sheet__rownum" scope="row">
+                      {r + 1}
+                    </th>
+                    {row.map((cell, c) => (
+                      <td
+                        key={c}
+                        className={sel?.r === r && sel?.c === c ? 'sheet__td--sel' : undefined}
+                      >
+                        <input
+                          className="sheet__cell"
+                          value={cell}
+                          readOnly={!canEdit}
+                          aria-label={`Celda ${colLabel(c)}${r + 1}`}
+                          onFocus={() => setSel({ r, c })}
+                          onChange={(e) => setCell(r, c, e.target.value)}
+                        />
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
 
         {grid.length > visibleRows ? (
           <button
@@ -834,14 +925,28 @@ export function SheetEditor({
           </button>
         ) : null}
 
-        <p className="muted kpi-sub">
-          Las fórmulas que empiezan con = se guardan como fórmula. Si escribes un número encima, la
-          celda pasa a valor fijo — igual que en Excel.
+        <p className="muted kpi-sub sheet-footnote">
+          Las fórmulas con = se conservan. Si escribes un número encima, la celda pasa a valor fijo —
+          igual que en Excel.
         </p>
 
         {fileId && showHistory ? (
-          <div className="check-section">
-            <h3>Historial de ediciones</h3>
+          <div className="sheet-history" role="region" aria-label="Historial de ediciones">
+            <div className="sheet-history__head">
+              <div>
+                <h3 className="sheet-history__title">Historial de ediciones</h3>
+                <p className="sheet-history__sub muted kpi-sub">
+                  Quién guardó o generó PDF, y cuándo.
+                </p>
+              </div>
+              <button
+                className="btn ghost btn-sm"
+                type="button"
+                onClick={() => setShowHistory(false)}
+              >
+                Cerrar
+              </button>
+            </div>
             <RevisionHistory
               path={`/uploads/${fileId}/revisions`}
               reloadKey={revKey}

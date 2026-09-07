@@ -323,7 +323,7 @@ export function EventFilesPanel({
             <div>
               <h2>Documento</h2>
               <p className="muted kpi-sub" style={{ margin: '0.2rem 0 0' }}>
-                Se escribe aquí y se descarga en PDF.
+                Se escribe aquí · la salida oficial es el PDF.
               </p>
             </div>
           </div>
@@ -431,7 +431,7 @@ export function EventFilesPanel({
           <div>
             <h2>Documentos · {docs.length}</h2>
             <p className="muted kpi-sub" style={{ margin: '0.25rem 0 0' }}>
-              Actas y cartas: se escriben aquí y se descargan en PDF.
+              Actas y cartas: Word entra · se edita aquí · sale PDF.
             </p>
           </div>
           {canEdit && docs.length ? (
@@ -449,31 +449,39 @@ export function EventFilesPanel({
                 {
                   id: 'doc',
                   title: 'Nuevo documento',
-                  description: 'Tipo Word embebido. Se escribe aquí y sale en PDF.',
+                  description: 'Acta o carta en blanco, tipo Word.',
+                  after: 'Se escribe aquí y sale en PDF.',
                   tone: 'doc',
+                  emphasis: 'primary',
                   onClick: () => void createDoc(),
                 },
                 {
                   id: 'import-docx',
                   title: 'Importar Word (.docx)',
-                  description: 'Entra una vez; después solo se reedita aquí y sale en PDF.',
+                  description: 'Trae el archivo una sola vez.',
+                  after: 'Después solo se reedita aquí.',
                   tone: 'doc',
+                  emphasis: 'primary',
                   accept: '.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document',
                   onFile: (f) => void importDocx(f),
                 },
                 {
                   id: 'upload',
                   title: 'Subir Excel de trabajo',
-                  description: 'Entra el .xlsx; se edita embebido y sale en PDF desde su sección.',
+                  description: 'Copia de trabajo .xlsx / .xls.',
+                  after: 'Se edita embebido y sale en PDF.',
                   tone: 'excel',
+                  emphasis: 'primary',
                   accept: '.xlsx,.xls,.csv',
                   onFile: (f) => void onUpload(f),
                 },
                 {
                   id: 'upload-other',
                   title: 'Subir PDF / imagen',
-                  description: 'Referencias o salidas ya en PDF. Quedan en Documentos generales.',
+                  description: 'Referencias o PDF ya listos.',
+                  after: 'Quedan en Documentos generales.',
                   tone: 'upload',
+                  emphasis: 'secondary',
                   accept: '.pdf,image/*',
                   onFile: (f) => void onUpload(f),
                 },

@@ -15,7 +15,7 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { FormGrid } from '@/components/ui/PageChrome';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { useSaveHotkey } from '@/lib/use-save-hotkey';
-import { fileKindLabel } from '@/lib/file-modules';
+import { fileKindLabel, fileRoleLabel, isSalidaPdf } from '@/lib/file-modules';
 import type { EventDetail, EventFile, FinanceData, FinanceRow } from '@/components/events/event-detail.types';
 
 type EventFinancePanelProps = {
@@ -151,8 +151,8 @@ export function EventFinancePanel({
           <div>
             <h2>Corrida financiera · Excel · {files.length}</h2>
             <p className="muted kpi-sub" style={{ margin: '0.25rem 0 0' }}>
-              Sube tu formato Excel o crea una hoja editable aquí (filas, totales). El PDF solo sirve
-              para presentar; la corrida viva es la hoja.
+              La hoja (.xlsx) es la copia de trabajo; el PDF oficial se genera desde el editor. La
+              corrida viva se edita aquí.
             </p>
           </div>
           {canEditFiles ? (
@@ -166,19 +166,25 @@ export function EventFinancePanel({
             <SectionFileCreate
               staysIn="Corrida financiera"
               busy={busy}
+              compact={files.length > 0}
+              hideHint={files.length > 0}
               actions={[
                 {
                   id: 'new-sheet',
                   title: 'Nueva hoja de corrida',
-                  description: 'Ingresos, egresos y resumen. Se abre aquí para editar.',
+                  description: 'Ingresos, egresos y resumen listos para editar.',
+                  after: 'Se abre aquí. Cuando esté lista, saca el PDF oficial.',
                   tone: 'excel',
+                  emphasis: 'primary',
                   onClick: () => void createCorridaSheet(),
                 },
                 {
                   id: 'upload',
                   title: 'Subir mi Excel o PDF',
-                  description: 'Tu formato de siempre. Queda en esta pestaña de Corrida.',
+                  description: 'Tu formato de siempre, en esta pestaña de Corrida.',
+                  after: 'Queda listado abajo, en Corrida.',
                   tone: 'upload',
+                  emphasis: 'secondary',
                   accept: '.xlsx,.xls,.csv,.pdf',
                   onFile: (f) => void withBusy(() => onUploadFile(f)),
                 },
@@ -199,7 +205,11 @@ export function EventFinancePanel({
               {files.map((f) => {
                 const open = expandedId === f.id;
                 const editing = editingId === f.id;
-                const editable = isSheet(f.fileName, f.kind) || isPdf(f.fileName, f.kind);
+                const sheet = isSheet(f.fileName, f.kind);
+                const pdf = isPdf(f.fileName, f.kind);
+                const editable = sheet || pdf;
+                const role = fileRoleLabel(f.kind, f.fileName);
+                const official = isSalidaPdf(f.fileName);
                 return (
                   <div
                     key={f.id}
@@ -209,6 +219,13 @@ export function EventFinancePanel({
                       <div className="campaign-file__meta">
                         <strong>{f.fileName}</strong>
                         <StatusBadge value={kindLabel(f.kind, f.fileName)} kind="raw" />
+                        {role ? (
+                          <StatusBadge
+                            value={role}
+                            kind="raw"
+                            className={official ? 'ok' : sheet ? 'warn' : undefined}
+                          />
+                        ) : null}
                         <StatusBadge value="Corrida" kind="raw" className="ok" />
                         {f.createdAt ? (
                           <span className="muted kpi-sub">
@@ -228,8 +245,8 @@ export function EventFinancePanel({
                           >
                             {editing
                               ? 'Cerrar editor'
-                              : isSheet(f.fileName, f.kind)
-                                ? 'Editar hoja'
+                              : sheet
+                                ? 'Editar aquí'
                                 : 'Anotar PDF'}
                           </button>
                         ) : null}
@@ -242,11 +259,11 @@ export function EventFinancePanel({
                             setExpandedId(open ? null : f.id);
                           }}
                         >
-                          {open ? 'Contraer' : 'Vista previa'}
+                          {open ? 'Contraer' : pdf ? 'Ver PDF' : 'Vista previa'}
                         </button>
                         {canEditFiles ? (
                           <label className="btn ghost btn-sm module-upload">
-                            Actualizar
+                            Reemplazar
                             <input
                               type="file"
                               hidden
@@ -260,9 +277,11 @@ export function EventFinancePanel({
                             />
                           </label>
                         ) : null}
-                        <a className="btn ghost btn-sm" href={f.url} target="_blank" rel="noreferrer">
-                          Descargar
-                        </a>
+                        {pdf ? (
+                          <a className="btn ghost btn-sm" href={f.url} target="_blank" rel="noreferrer">
+                            Abrir PDF
+                          </a>
+                        ) : null}
                         {canEditFiles ? (
                           <button
                             className="btn ghost btn-sm btn-danger"

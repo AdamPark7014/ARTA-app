@@ -653,15 +653,23 @@ export function EventChecklistsPanel({
                 <div className="check-section__head">
                   <h3>Archivos de este checklist · {checklistFiles.length}</h3>
                 </div>
+                <p className="muted kpi-sub" style={{ margin: '0 0 0.75rem' }}>
+                  Adjuntos ligados a este formato: evidencias, Excel de apoyo o una copia anotada
+                  del PDF. También aparecen en Documentos bajo Checklists.
+                </p>
                 {!closed ? (
                   <SectionFileCreate
                     staysIn={`el checklist «${activeChecklist.title}»`}
+                    compact={checklistFiles.length > 0}
+                    hideHint
                     actions={[
                       {
                         id: 'upload',
                         title: 'Subir archivo',
-                        description: 'PDF, Excel o imagen. Queda ligado a este formato.',
+                        description: 'PDF, Excel o imagen de apoyo para este formato.',
+                        after: 'Queda ligado a este checklist y listado abajo.',
                         tone: 'upload',
+                        emphasis: 'primary',
                         accept: '.pdf,.xlsx,.xls,.csv,image/*',
                         onFile: (f) => void onUpload(f),
                       },
@@ -669,7 +677,11 @@ export function EventChecklistsPanel({
                         id: 'annotate',
                         title: 'Copia anotada del PDF',
                         description: 'Escribe encima del PDF del formato y guárdala aquí.',
+                        after: activeChecklist.pdfUrl
+                          ? 'Abre el editor de anotaciones sobre el PDF.'
+                          : 'Primero genera el PDF del formato.',
                         tone: 'pdf',
+                        emphasis: 'secondary',
                         disabled: !activeChecklist.pdfUrl,
                         onClick: () => {
                           setAnnotating(true);
@@ -681,36 +693,52 @@ export function EventChecklistsPanel({
                 ) : null}
                 {!checklistFiles.length ? (
                   <EmptyState
-                    title="Sin adjuntos en este formato"
-                    description="Todo lo que subas o anotes aquí se ve en este checklist — no se pierde en Documentos."
+                    title="Todavía sin adjuntos"
+                    description={
+                      closed
+                        ? 'Este formato no tiene archivos ligados.'
+                        : 'Sube una evidencia o anota el PDF del formato. Queda aquí — no se pierde en Documentos.'
+                    }
                   />
                 ) : (
                   <div className="file-card-list file-card-list--always" style={{ marginTop: '0.75rem' }}>
-                    {checklistFiles.map((f) => (
-                      <div
-                        key={f.id}
-                        className={`file-card ${previewAttach?.id === f.id ? 'file-card--active' : ''}`}
-                      >
-                        <div className="file-card__meta">
-                          <strong>{f.fileName}</strong>
-                          <StatusBadge value={fileKindLabel(f.kind, f.fileName)} kind="raw" />
+                    {checklistFiles.map((f) => {
+                      const pdf = f.kind === 'pdf' || /\.pdf$/i.test(f.fileName);
+                      return (
+                        <div
+                          key={f.id}
+                          className={`file-card ${previewAttach?.id === f.id ? 'file-card--active' : ''}`}
+                        >
+                          <div className="file-card__meta">
+                            <strong>{f.fileName}</strong>
+                            <StatusBadge value={fileKindLabel(f.kind, f.fileName)} kind="raw" />
+                          </div>
+                          <div className="panel-head-actions">
+                            <button
+                              className={previewAttach?.id === f.id ? 'btn btn-sm' : 'btn ghost btn-sm'}
+                              type="button"
+                              onClick={() =>
+                                setPreviewAttach(previewAttach?.id === f.id ? null : f)
+                              }
+                            >
+                              {previewAttach?.id === f.id
+                                ? 'Ocultar'
+                                : pdf
+                                  ? 'Ver PDF'
+                                  : 'Ver aquí'}
+                            </button>
+                            <a
+                              className="btn ghost btn-sm"
+                              href={f.url}
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              {pdf ? 'Abrir PDF' : 'Abrir'}
+                            </a>
+                          </div>
                         </div>
-                        <div className="panel-head-actions">
-                          <button
-                            className={previewAttach?.id === f.id ? 'btn btn-sm' : 'btn ghost btn-sm'}
-                            type="button"
-                            onClick={() =>
-                              setPreviewAttach(previewAttach?.id === f.id ? null : f)
-                            }
-                          >
-                            {previewAttach?.id === f.id ? 'Ocultar' : 'Ver aquí'}
-                          </button>
-                          <a className="btn ghost btn-sm" href={f.url} target="_blank" rel="noreferrer">
-                            Abrir
-                          </a>
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
                 {previewAttach ? (

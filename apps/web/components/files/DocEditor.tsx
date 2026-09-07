@@ -38,7 +38,29 @@ const TYPE_LABEL: Record<DocBlockType, string> = {
   divider: 'Separador',
 };
 
+const TYPE_HINT: Record<DocBlockType, string> = {
+  h1: 'T',
+  h2: 'S',
+  p: '¶',
+  bullet: '•',
+  divider: '—',
+};
+
 const ADDABLE: DocBlockType[] = ['h1', 'h2', 'p', 'bullet', 'divider'];
+
+function formatWhen(iso: string): string {
+  try {
+    return new Date(iso).toLocaleString('es-MX', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  } catch {
+    return '';
+  }
+}
 
 export function normalizeBlocks(raw: unknown): DocBlock[] {
   if (!Array.isArray(raw)) return [{ type: 'p', text: '' }];
@@ -52,6 +74,12 @@ export function normalizeBlocks(raw: unknown): DocBlock[] {
     })
     .filter((b): b is DocBlock => !!b);
   return out.length ? out : [{ type: 'p', text: '' }];
+}
+
+function fitTextarea(el: HTMLTextAreaElement | null) {
+  if (!el) return;
+  el.style.height = 'auto';
+  el.style.height = `${el.scrollHeight}px`;
 }
 
 /**
@@ -85,6 +113,8 @@ export function DocEditor({ doc, canEdit, onSaved, onDeleted, onClose }: Props) 
     setPdfUrl(doc.pdfUrl || '');
     setPdfStale(!!doc.pdfUrl && doc.pdfVersion !== doc.version);
     setDirty(false);
+    setMsg('');
+    setError('');
   }, [doc.id, doc.version, doc.blocksJson, doc.title, doc.pdfUrl, doc.pdfVersion]);
 
   useEffect(() => {
@@ -94,9 +124,14 @@ export function DocEditor({ doc, canEdit, onSaved, onDeleted, onClose }: Props) 
     focusNext.current = null;
   }, [blocks]);
 
+  useEffect(() => {
+    refs.current.forEach(fitTextarea);
+  }, [blocks, doc.id]);
+
   function touch() {
     setDirty(true);
     setMsg('');
+    setError('');
   }
 
   function setBlock(i: number, patch: Partial<DocBlock>) {
@@ -156,11 +191,11 @@ export function DocEditor({ doc, canEdit, onSaved, onDeleted, onClose }: Props) 
       });
       setDirty(false);
       setPdfStale(!!saved.pdfUrl);
-      setMsg('Documento guardado — edición registrada');
+      setMsg('Guardado. La edición quedó registrada.');
       setRevKey((k) => k + 1);
       onSaved(saved);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'No se pudo guardar');
+      setError(e instanceof Error ? e.message : 'No se pudo guardar el documento');
     } finally {
       setSaving(false);
     }
@@ -176,7 +211,7 @@ export function DocEditor({ doc, canEdit, onSaved, onDeleted, onClose }: Props) 
       });
       setPdfUrl(res.url);
       setPdfStale(false);
-      setMsg('PDF de salida listo — el documento solo se reedita aquí dentro');
+      setMsg('PDF listo. Para seguir editando, vuelve aquí — no al archivo Word.');
       setRevKey((k) => k + 1);
       const refreshed = await api<EventDocumentRow>(`/documents/${doc.id}`);
       onSaved(refreshed);
@@ -201,174 +236,220 @@ export function DocEditor({ doc, canEdit, onSaved, onDeleted, onClose }: Props) 
   useSaveHotkey(canEdit && dirty && !saving, save);
   useDirtyGuard(canEdit && dirty, 'El documento tiene cambios sin guardar. ¿Salir de todas formas?');
 
+  const editedWhen = formatWhen(doc.updatedAt);
+  const editorName = doc.updatedBy?.fullName;
+
   return (
     <ExpandBox title={title || doc.title || 'Documento'} dirty={dirty}>
-    <div className="stack">
-      <div className="sheet-toolbar">
-        <span className="muted kpi-sub">
-          Versión {doc.version}
-          {doc.updatedBy ? ` · ${doc.updatedBy.fullName}` : ''}
-          {canEdit ? ' · Ctrl+S guardar' : ''}
-        </span>
-        <div className="row row--tight">
-          {canEdit ? (
+      <div className="docedit-app">
+        <div className="docedit-bar">
+          <div className="docedit-bar__meta" aria-live="polite">
+            <span className="docedit-pill docedit-pill--version">v{doc.version}</span>
+            <span className="docedit-bar__who">
+              {editorName ? (
+                <>
+                  Última edición · <strong>{editorName}</strong>
+                  {editedWhen ? ` · ${editedWhen}` : ''}
+                </>
+              ) : (
+                <>Sin ediciones registradas{editedWhen ? ` · ${editedWhen}` : ''}</>
+              )}
+            </span>
+            {dirty ? <span className="docedit-pill docedit-pill--dirty">Sin guardar</span> : null}
+            {canEdit ? <span className="docedit-bar__hint">Ctrl+S</span> : null}
+          </div>
+
+          <div className="docedit-bar__actions row row--tight">
+            <button
+              className="btn btn-sm"
+              type="button"
+              disabled={exporting || saving}
+              onClick={() => void exportPdf()}
+              title="Genera el PDF oficial de salida"
+            >
+              {exporting ? 'Generando PDF…' : 'Salir en PDF'}
+            </button>
+            {canEdit ? (
+              <button
+                className="btn ghost btn-sm"
+                type="button"
+                disabled={!dirty || saving}
+                onClick={() => void save()}
+                title="Ctrl+S / ⌘S"
+              >
+                {saving ? 'Guardando…' : dirty ? 'Guardar' : 'Guardado'}
+              </button>
+            ) : (
+              <span className="muted kpi-sub">Solo lectura</span>
+            )}
+            {pdfUrl && !pdfStale ? (
+              <a className="btn ghost btn-sm" href={pdfUrl} target="_blank" rel="noreferrer">
+                Ver PDF
+              </a>
+            ) : null}
             <button
               className="btn ghost btn-sm"
               type="button"
-              disabled={!dirty || saving}
-              onClick={save}
-              title="Ctrl+S / ⌘S"
+              onClick={() => setShowHistory((v) => !v)}
+              aria-expanded={showHistory}
             >
-              {saving ? 'Guardando…' : dirty ? 'Guardar' : 'Sin cambios'}
+              {showHistory ? 'Ocultar historial' : 'Quién editó'}
             </button>
-          ) : null}
-          <button className="btn btn-sm" type="button" disabled={exporting} onClick={exportPdf}>
-            {exporting ? 'Generando…' : 'Salir en PDF'}
-          </button>
-          {pdfUrl && !pdfStale ? (
-            <a className="btn ghost btn-sm" href={pdfUrl} target="_blank" rel="noreferrer">
-              Ver PDF
-            </a>
-          ) : null}
-          <button
-            className="btn ghost btn-sm"
-            type="button"
-            onClick={() => setShowHistory((v) => !v)}
-          >
-            {showHistory ? 'Ocultar historial' : 'Quién editó'}
-          </button>
-          <button className="btn ghost btn-sm" type="button" onClick={onClose}>
-            Cerrar
-          </button>
-          {canEdit ? (
-            <button className="btn ghost btn-sm btn-danger" type="button" onClick={removeDoc}>
-              Eliminar
+            <button className="btn ghost btn-sm" type="button" onClick={onClose}>
+              Cerrar
             </button>
-          ) : null}
-        </div>
-      </div>
-
-      <div className="module-banner" role="note">
-        Documento embebido (tipo Word). Se importa .docx una vez; después solo se reedita aquí y{' '}
-        <strong>sale en PDF</strong>. Cada cambio queda con nombre y fecha.
-      </div>
-
-      {msg ? (
-        <div className="module-banner module-banner--ok" role="status">
-          {msg}
-        </div>
-      ) : null}
-      {error ? (
-        <div className="form-error" role="alert">
-          {error}
-        </div>
-      ) : null}
-      {pdfStale ? (
-        <div className="module-banner module-banner--warn">
-          El documento cambió desde el último PDF. Vuelve a descargarlo para tener la versión al día.
-        </div>
-      ) : null}
-
-      <div className="docedit">
-        <input
-          className="docedit__title"
-          value={title}
-          readOnly={!canEdit}
-          placeholder="Título del documento"
-          onChange={(e) => {
-            setTitle(e.target.value);
-            touch();
-          }}
-        />
-
-        {blocks.map((block, i) => (
-          <div key={i} className={`docedit__block docedit__block--${block.type}`}>
             {canEdit ? (
-              <div className="docedit__gutter">
-                <select
-                  className="docedit__type"
-                  aria-label={`Tipo del bloque ${i + 1}`}
-                  value={block.type}
-                  onChange={(e) => setBlock(i, { type: e.target.value as DocBlockType })}
-                >
+              <button className="btn ghost btn-sm btn-danger" type="button" onClick={() => void removeDoc()}>
+                Eliminar
+              </button>
+            ) : null}
+          </div>
+        </div>
+
+        <p className="docedit-policy" role="note">
+          Entra Word → se edita aquí → <strong>sale en PDF</strong>. Cada cambio queda con nombre y fecha.
+        </p>
+
+        {msg ? (
+          <div className="docedit-status docedit-status--ok" role="status">
+            {msg}
+          </div>
+        ) : null}
+        {error ? (
+          <div className="docedit-status docedit-status--error" role="alert">
+            {error}
+          </div>
+        ) : null}
+        {pdfStale ? (
+          <div className="docedit-status docedit-status--warn" role="status">
+            El documento cambió después del último PDF. Vuelve a salir en PDF para actualizarlo.
+          </div>
+        ) : null}
+
+        <div className="docedit-canvas">
+          <div className="docedit" data-readonly={!canEdit || undefined}>
+            <input
+              className="docedit__title"
+              value={title}
+              readOnly={!canEdit}
+              placeholder="Título del documento"
+              aria-label="Título del documento"
+              onChange={(e) => {
+                setTitle(e.target.value);
+                touch();
+              }}
+            />
+
+            <div className="docedit__body">
+              {blocks.map((block, i) => (
+                <div key={i} className={`docedit__block docedit__block--${block.type}`}>
+                  {canEdit ? (
+                    <div className="docedit__gutter" role="toolbar" aria-label={`Bloque ${i + 1}`}>
+                      <div className="docedit__chips" role="group" aria-label="Tipo de bloque">
+                        {ADDABLE.map((t) => (
+                          <button
+                            key={t}
+                            type="button"
+                            className={`docedit__chip ${block.type === t ? 'is-active' : ''}`}
+                            title={TYPE_LABEL[t]}
+                            aria-pressed={block.type === t}
+                            onClick={() => setBlock(i, { type: t })}
+                          >
+                            <span className="docedit__chip-mark" aria-hidden>
+                              {TYPE_HINT[t]}
+                            </span>
+                            <span className="docedit__chip-label">{TYPE_LABEL[t]}</span>
+                          </button>
+                        ))}
+                      </div>
+                      <div className="docedit__moves">
+                        <button type="button" title="Subir" aria-label="Subir bloque" onClick={() => move(i, -1)}>
+                          ↑
+                        </button>
+                        <button type="button" title="Bajar" aria-label="Bajar bloque" onClick={() => move(i, 1)}>
+                          ↓
+                        </button>
+                        <button
+                          type="button"
+                          title="Quitar bloque"
+                          aria-label="Quitar bloque"
+                          onClick={() => removeAt(i)}
+                        >
+                          ×
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {block.type === 'divider' ? (
+                    <hr className="docedit__divider" />
+                  ) : (
+                    <textarea
+                      ref={(el) => {
+                        refs.current[i] = el;
+                      }}
+                      className="docedit__text"
+                      rows={1}
+                      value={block.text}
+                      readOnly={!canEdit}
+                      placeholder={
+                        block.type === 'h1'
+                          ? 'Título de sección'
+                          : block.type === 'h2'
+                            ? 'Subtítulo'
+                            : block.type === 'bullet'
+                              ? 'Punto de la lista'
+                              : 'Escribe aquí…'
+                      }
+                      onKeyDown={(e) => onKeyDown(e, i)}
+                      onChange={(e) => {
+                        setBlock(i, { text: e.target.value });
+                        fitTextarea(e.currentTarget);
+                      }}
+                    />
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {canEdit ? (
+              <div className="docedit__add">
+                <span className="docedit__add-label">Agregar bloque</span>
+                <div className="docedit__add-chips">
                   {ADDABLE.map((t) => (
-                    <option key={t} value={t}>
+                    <button
+                      key={t}
+                      className="docedit__add-chip"
+                      type="button"
+                      onClick={() => insertAfter(blocks.length - 1, t)}
+                    >
+                      <span aria-hidden>{TYPE_HINT[t]}</span>
                       {TYPE_LABEL[t]}
-                    </option>
+                    </button>
                   ))}
-                </select>
-                <button type="button" title="Subir" onClick={() => move(i, -1)}>
-                  ↑
-                </button>
-                <button type="button" title="Bajar" onClick={() => move(i, 1)}>
-                  ↓
-                </button>
-                <button type="button" title="Quitar bloque" onClick={() => removeAt(i)}>
-                  ×
-                </button>
+                </div>
+                <p className="docedit__add-hint">
+                  Enter = nuevo bloque · Retroceso en vacío = quitar · Shift+Enter = salto de línea
+                </p>
               </div>
             ) : null}
-
-            {block.type === 'divider' ? (
-              <hr className="docedit__divider" />
-            ) : (
-              <textarea
-                ref={(el) => {
-                  refs.current[i] = el;
-                }}
-                className="docedit__text"
-                rows={1}
-                value={block.text}
-                readOnly={!canEdit}
-                placeholder={
-                  block.type === 'h1'
-                    ? 'Título de sección'
-                    : block.type === 'h2'
-                      ? 'Subtítulo'
-                      : block.type === 'bullet'
-                        ? 'Punto de la lista'
-                        : 'Escribe aquí…'
-                }
-                onKeyDown={(e) => onKeyDown(e, i)}
-                onChange={(e) => {
-                  setBlock(i, { text: e.target.value });
-                  const el = e.currentTarget;
-                  el.style.height = 'auto';
-                  el.style.height = `${el.scrollHeight}px`;
-                }}
-              />
-            )}
           </div>
-        ))}
+        </div>
 
-        {canEdit ? (
-          <div className="docedit__add row row--tight">
-            <span className="muted kpi-sub">Agregar:</span>
-            {ADDABLE.map((t) => (
-              <button
-                key={t}
-                className="btn ghost btn-sm"
-                type="button"
-                onClick={() => insertAfter(blocks.length - 1, t)}
-              >
-                {TYPE_LABEL[t]}
-              </button>
-            ))}
+        {showHistory ? (
+          <div className="docedit-history">
+            <div className="docedit-history__head">
+              <h3>Quién editó</h3>
+              <p className="muted kpi-sub">Cada guardado y cada PDF queda con nombre y fecha.</p>
+            </div>
+            <RevisionHistory
+              path={`/documents/${doc.id}/revisions`}
+              reloadKey={revKey}
+              emptyHint="Todavía no hay ediciones. Se registran al guardar o al salir en PDF."
+            />
           </div>
         ) : null}
       </div>
-
-      {showHistory ? (
-        <div className="check-section">
-          <h3>Historial de ediciones</h3>
-          <RevisionHistory
-            path={`/documents/${doc.id}/revisions`}
-            reloadKey={revKey}
-            emptyHint="Cada guardado y cada salida PDF queda con quién lo hizo."
-          />
-        </div>
-      ) : null}
-    </div>
     </ExpandBox>
   );
 }
