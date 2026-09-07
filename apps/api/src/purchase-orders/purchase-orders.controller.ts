@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -11,8 +12,8 @@ import {
   Req,
   UseGuards,
 } from '@nestjs/common';
-import { PoStatus, Prisma } from '@prisma/client';
-import { IsArray, IsNumber, IsOptional, IsString, ValidateNested } from 'class-validator';
+import { PoPaymentMethod, PoStatus, Prisma } from '@prisma/client';
+import { IsArray, IsEnum, IsNumber, IsOptional, IsString, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -39,6 +40,7 @@ class CreatePoDto {
   @IsString() rubro!: string;
   @IsOptional() @IsString() vendorName?: string;
   @IsOptional() @IsString() description?: string;
+  @IsOptional() @IsEnum(PoPaymentMethod) paymentMethod?: PoPaymentMethod;
   @IsOptional() @IsNumber() amount?: number;
   @IsOptional()
   @IsArray()
@@ -246,12 +248,13 @@ export class PurchaseOrdersController {
         rubro: dto.rubro,
         vendorName: dto.vendorName,
         description: dto.description,
+        paymentMethod: dto.paymentMethod || 'TRANSFERENCIA',
         amount,
         status: 'PENDING_AUTH',
         createdById: req.user.id,
         lines: lines ? { create: this.lineCreates(lines) } : undefined,
       },
-      include: { lines: true },
+      include: { lines: true, proofs: true },
     });
   }
 
@@ -264,6 +267,7 @@ export class PurchaseOrdersController {
       rubro?: string;
       vendorName?: string;
       description?: string;
+      paymentMethod?: PoPaymentMethod;
       lines?: PoLineDto[];
     },
   ) {
@@ -287,6 +291,7 @@ export class PurchaseOrdersController {
       rubro: body.rubro,
       vendorName: body.vendorName,
       description: body.description,
+      paymentMethod: body.paymentMethod,
     };
 
     if (body.lines) {
@@ -299,7 +304,7 @@ export class PurchaseOrdersController {
     return this.prisma.purchaseOrder.update({
       where: { id },
       data,
-      include: { lines: true },
+      include: { lines: true, proofs: true },
     });
   }
 
@@ -334,6 +339,11 @@ export class PurchaseOrdersController {
     }
     assertSameTenant(req.user, order.event.organizationId);
     assertEventNotClosed(order.event.status);
+    if (order.paymentMethod === 'EFECTIVO') {
+      throw new BadRequestException(
+        'Esta OC es en efectivo: no se adjuntan comprobantes',
+      );
+    }
     return this.prisma.paymentProof.create({
       data: {
         purchaseOrderId: id,
@@ -359,12 +369,12 @@ export class PurchaseOrdersController {
       };
     },
     @Param('id') id: string,
-    @Body() body: { status: PoStatus },
+    @Body() body: { status: PoStatus; paymentMethod?: PoPaymentMethod },
   ) {
     const role = req.user.roleKey as RoleKey;
     const order = await this.prisma.purchaseOrder.findUnique({
       where: { id },
-      include: { event: true },
+      include: { event: true, proofs: true },
     });
     if (!order) throw new NotFoundException('OC no encontrada');
     if (!canAccessEventOps(req.user.entities as EntityKey[], role, order.event.entity as EntityKey)) {
@@ -389,18 +399,30 @@ export class PurchaseOrdersController {
           status: 'AUTHORIZED',
           authorizedById: req.user.id,
           authorizedAt: new Date(),
+          ...(body.paymentMethod ? { paymentMethod: body.paymentMethod } : {}),
         },
-        include: { lines: true },
+        include: { lines: true, proofs: true },
       });
     }
     if (body.status === 'PAID') {
       if (!hasPermission(role, req.user.permissions, PERMISSIONS.PO_MARK_PAID)) {
         throw new ForbiddenException('No puedes marcar pagado');
       }
+      const method = body.paymentMethod || order.paymentMethod;
+      const needsProof = method !== 'EFECTIVO';
+      if (needsProof && !(order.proofs?.length > 0)) {
+        throw new BadRequestException(
+          'Para transferencias y otros pagos no en efectivo, adjunta el comprobante antes de marcar pagado',
+        );
+      }
       return this.prisma.purchaseOrder.update({
         where: { id },
-        data: { status: 'PAID', paidAt: new Date() },
-        include: { lines: true },
+        data: {
+          status: 'PAID',
+          paidAt: new Date(),
+          paymentMethod: method,
+        },
+        include: { lines: true, proofs: true },
       });
     }
     // Any other transition (REJECTED/CANCELLED/DRAFT/PENDING_AUTH) is still an
@@ -410,8 +432,11 @@ export class PurchaseOrdersController {
     }
     return this.prisma.purchaseOrder.update({
       where: { id },
-      data: { status: body.status },
-      include: { lines: true },
+      data: {
+        status: body.status,
+        ...(body.paymentMethod ? { paymentMethod: body.paymentMethod } : {}),
+      },
+      include: { lines: true, proofs: true },
     });
   }
 

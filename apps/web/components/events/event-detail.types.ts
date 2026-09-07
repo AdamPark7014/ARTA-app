@@ -75,8 +75,10 @@ export type Po = {
   description?: string | null;
   amount: string | number;
   status: string;
+  /** EFECTIVO | TRANSFERENCIA | TARJETA | OTRO — efectivo no pide comprobante. */
+  paymentMethod?: string | null;
   lines?: PoLine[];
-  proofs?: Array<{ id: string; fileUrl: string; label?: string | null }>;
+  proofs?: Array<{ id: string; fileUrl: string; label?: string | null; amount?: number | string | null }>;
   createdBy?: { fullName: string } | null;
   authorizedBy?: { fullName: string } | null;
 };

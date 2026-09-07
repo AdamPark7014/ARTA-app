@@ -16,6 +16,8 @@ type PoProofsBlockProps = {
   poAmount: number;
   proofs?: PoProof[];
   canUpload?: boolean;
+  /** Si true, se enfatiza que falta el archivo para poder marcar pagado. */
+  required?: boolean;
   onChange: () => void | Promise<void>;
 };
 
@@ -25,6 +27,7 @@ export function PoProofsBlock({
   poAmount,
   proofs = [],
   canUpload = true,
+  required = false,
   onChange,
 }: PoProofsBlockProps) {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -58,33 +61,43 @@ export function PoProofsBlock({
   }
 
   return (
-    <div className="po-proofs stack" style={{ marginTop: '0.75rem' }}>
-      <div className="muted kpi-sub" style={{ fontWeight: 600 }}>
-        Comprobantes de pago
+    <div className="po-proofs">
+      <div className="po-proofs__head">
+        <strong>Comprobantes de pago</strong>
+        {required && !proofs.length ? (
+          <span className="muted kpi-sub">Obligatorio antes de marcar pagado</span>
+        ) : null}
       </div>
       {proofs.length ? (
-        <ul className="po-proofs__list" style={{ margin: 0, paddingLeft: '1.1rem' }}>
+        <ul className="po-proofs__list">
           {proofs.map((p) => (
             <li key={p.id}>
               <a href={p.fileUrl} target="_blank" rel="noopener noreferrer">
                 {p.label || 'Comprobante'}
               </a>
               {p.amount != null ? (
-                <span className="muted kpi-sub"> · ${Number(p.amount).toLocaleString('es-MX')}</span>
+                <span className="muted kpi-sub">
+                  {' '}
+                  · ${Number(p.amount).toLocaleString('es-MX')}
+                </span>
               ) : null}
             </li>
           ))}
         </ul>
       ) : (
         <p className="muted kpi-sub" style={{ margin: 0 }}>
-          Sin comprobantes adjuntos
+          {required
+            ? 'Aún no hay comprobante. Súbelo para poder marcar la OC como pagada.'
+            : 'Sin comprobantes adjuntos'}
         </p>
       )}
       {canUpload ? (
-        <div className="row row--tight">
+        <label className="btn ghost btn-sm module-upload po-proofs__upload">
+          {uploading ? 'Subiendo…' : 'Subir comprobante (PDF o imagen)'}
           <input
             ref={inputRef}
             type="file"
+            hidden
             accept=".pdf,image/*"
             disabled={uploading}
             onChange={(e) => {
@@ -92,14 +105,9 @@ export function PoProofsBlock({
               if (f) onPick(f).catch(console.error);
             }}
           />
-          {uploading ? <span className="muted kpi-sub">Subiendo…</span> : null}
-        </div>
+        </label>
       ) : null}
-      {err ? (
-        <p className="muted kpi-sub" style={{ color: 'var(--danger, #c0392b)', margin: 0 }}>
-          {err}
-        </p>
-      ) : null}
+      {err ? <p className="form-error">{err}</p> : null}
     </div>
   );
 }

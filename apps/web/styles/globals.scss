@@ -3460,6 +3460,38 @@ body.site-nav-open {
   margin-top: 0.65rem;
 }
 
+.po-card__meta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.35rem;
+}
+
+.po-proofs {
+  margin-top: 0.85rem;
+  padding-top: 0.85rem;
+  border-top: 1px solid var(--line);
+}
+
+.po-proofs__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.45rem;
+}
+
+.po-proofs__list {
+  margin: 0 0 0.55rem;
+  padding-left: 1.1rem;
+}
+
+.po-proofs__upload {
+  display: inline-flex;
+  margin-top: 0.35rem;
+}
+
 .ticket-card {
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);

@@ -17,6 +17,7 @@ import { PoWindowBanner } from '@/components/purchase-orders/PoWindowBanner';
 import { PoProofsBlock } from '@/components/purchase-orders/PoProofsBlock';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { api } from '@/lib/api';
+import { poNeedsProof, poPaymentLabel } from '@/lib/po-payment';
 import { useUser } from '@/lib/user-context';
 import { userHasPermission } from '@/lib/access-matrix';
 
@@ -50,6 +51,8 @@ type PoAnalytics = {
     eventName: string;
     rubro: string;
     vendorName?: string | null;
+    paymentMethod?: string | null;
+    proofCount?: number;
     status: string;
     amount: number;
     ageDays: number;
@@ -78,7 +81,9 @@ export default function PurchaseOrdersPage() {
   const [proofs, setProofs] = useState<
     Record<string, Array<{ id: string; fileUrl: string; label?: string | null; amount?: number }>>
   >({});
-  const [poDetails, setPoDetails] = useState<Record<string, { amount: number; status: string }>>({});
+  const [poDetails, setPoDetails] = useState<
+    Record<string, { amount: number; status: string; paymentMethod?: string | null }>
+  >({});
   const [statusFilter, setStatusFilter] = useState('all');
   const [q, setQ] = useState('');
 
@@ -97,11 +102,15 @@ export default function PurchaseOrdersPage() {
   }, [entity]);
 
   async function setStatus(id: string, status: string) {
-    await api(`/purchase-orders/${id}/status`, {
-      method: 'PATCH',
-      body: JSON.stringify({ status }),
-    });
-    await load();
+    try {
+      await api(`/purchase-orders/${id}/status`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status }),
+      });
+      await load();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'No se pudo actualizar el estatus');
+    }
   }
 
   async function toggleExpand(id: string, eventId: string) {
@@ -116,6 +125,7 @@ export default function PurchaseOrdersPage() {
           id: string;
           amount: number;
           status: string;
+          paymentMethod?: string | null;
           lines?: PoLine[];
           proofs?: Array<{ id: string; fileUrl: string; label?: string | null; amount?: number }>;
         }>
@@ -124,7 +134,14 @@ export default function PurchaseOrdersPage() {
       setLines((prev) => ({ ...prev, [id]: found?.lines || [] }));
       setProofs((prev) => ({ ...prev, [id]: found?.proofs || [] }));
       if (found) {
-        setPoDetails((prev) => ({ ...prev, [id]: { amount: Number(found.amount), status: found.status } }));
+        setPoDetails((prev) => ({
+          ...prev,
+          [id]: {
+            amount: Number(found.amount),
+            status: found.status,
+            paymentMethod: found.paymentMethod,
+          },
+        }));
       }
     }
   }
@@ -135,13 +152,21 @@ export default function PurchaseOrdersPage() {
         id: string;
         amount: number;
         status: string;
+        paymentMethod?: string | null;
         proofs?: Array<{ id: string; fileUrl: string; label?: string | null; amount?: number }>;
       }>
     >(`/purchase-orders/event/${eventId}`);
     const found = pos.find((p) => p.id === poId);
     if (found) {
       setProofs((prev) => ({ ...prev, [poId]: found.proofs || [] }));
-      setPoDetails((prev) => ({ ...prev, [poId]: { amount: Number(found.amount), status: found.status } }));
+      setPoDetails((prev) => ({
+        ...prev,
+        [poId]: {
+          amount: Number(found.amount),
+          status: found.status,
+          paymentMethod: found.paymentMethod,
+        },
+      }));
     }
     await load();
   }
@@ -335,6 +360,7 @@ export default function PurchaseOrdersPage() {
                         <th>Evento</th>
                         <th>Rubro</th>
                         <th>Vendor</th>
+                        <th>Pago</th>
                         <th className="num">Monto</th>
                         <th>Aging</th>
                         <th>Status</th>
@@ -342,7 +368,18 @@ export default function PurchaseOrdersPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {rows.map((po) => (
+                      {rows.map((po) => {
+                        const method =
+                          poDetails[po.id]?.paymentMethod || po.paymentMethod || 'TRANSFERENCIA';
+                        const needsProof = poNeedsProof(method);
+                        const proofCount =
+                          proofs[po.id]?.length ?? po.proofCount ?? 0;
+                        const canPay =
+                          canMarkPaid &&
+                          po.status === 'AUTHORIZED' &&
+                          (!needsProof || proofCount > 0);
+
+                        return (
                         <Fragment key={po.id}>
                           <tr>
                             <td>
@@ -352,6 +389,12 @@ export default function PurchaseOrdersPage() {
                             </td>
                             <td>{po.rubro}</td>
                             <td>{po.vendorName || '—'}</td>
+                            <td>
+                              <span className="muted kpi-sub">{poPaymentLabel(method)}</span>
+                              {needsProof && po.status === 'AUTHORIZED' && proofCount === 0 ? (
+                                <div className="muted kpi-sub">Sin comprobante</div>
+                              ) : null}
+                            </td>
                             <td className="num">{money(po.amount)}</td>
                             <td>
                               <span
@@ -388,6 +431,12 @@ export default function PurchaseOrdersPage() {
                                   <button
                                     className="btn ghost btn-sm"
                                     type="button"
+                                    disabled={!canPay}
+                                    title={
+                                      canPay
+                                        ? 'Marcar como pagada'
+                                        : 'Sube el comprobante antes de marcar pagado'
+                                    }
                                     onClick={() => setStatus(po.id, 'PAID')}
                                   >
                                     Pagado
@@ -398,7 +447,7 @@ export default function PurchaseOrdersPage() {
                           </tr>
                           {expanded === po.id ? (
                             <tr>
-                              <td colSpan={7}>
+                              <td colSpan={8}>
                                 <div className="table-wrap">
                                   <table className="table">
                                     <thead>
@@ -428,15 +477,23 @@ export default function PurchaseOrdersPage() {
                                     </tbody>
                                   </table>
                                 </div>
-                                {(po.status === 'AUTHORIZED' ||
+                                {!needsProof &&
+                                (po.status === 'AUTHORIZED' || po.status === 'PAID') ? (
+                                  <div className="module-banner module-banner--ok" role="status">
+                                    Pagada en efectivo — no requiere comprobante.
+                                  </div>
+                                ) : null}
+                                {needsProof &&
+                                (po.status === 'AUTHORIZED' ||
                                   po.status === 'PAID' ||
-                                  (proofs[po.id]?.length ?? 0) > 0) ? (
+                                  proofCount > 0) ? (
                                   <PoProofsBlock
                                     poId={po.id}
                                     eventId={po.eventId}
                                     poAmount={poDetails[po.id]?.amount ?? po.amount}
                                     proofs={proofs[po.id]}
                                     canUpload={po.status === 'AUTHORIZED'}
+                                    required={po.status === 'AUTHORIZED'}
                                     onChange={() => reloadPoDetails(po.id, po.eventId)}
                                   />
                                 ) : null}
@@ -444,10 +501,11 @@ export default function PurchaseOrdersPage() {
                             </tr>
                           ) : null}
                         </Fragment>
-                      ))}
+                        );
+                      })}
                       {!rows.length ? (
                         <tr>
-                          <td colSpan={7}>
+                          <td colSpan={8}>
                             <EmptyState
                               title={
                                 view.orders.length === 0

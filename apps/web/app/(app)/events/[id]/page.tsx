@@ -77,6 +77,7 @@ function EventDetailInner() {
     rubro: 'audio',
     vendorName: '',
     description: '',
+    paymentMethod: 'TRANSFERENCIA',
     lines: [{ concept: '', qty: 1, unitPrice: 0 }] as PoLine[],
   });
   const [msg, setMsg] = useState('');
@@ -117,7 +118,11 @@ function EventDetailInner() {
 
   const [editingPoId, setEditingPoId] = useState<string | null>(null);
   const [editPoLines, setEditPoLines] = useState<PoLine[]>([]);
-  const [editPoMeta, setEditPoMeta] = useState({ vendorName: '', description: '' });
+  const [editPoMeta, setEditPoMeta] = useState({
+    vendorName: '',
+    description: '',
+    paymentMethod: 'TRANSFERENCIA',
+  });
   const [eventNotes, setEventNotes] = useState('');
   const [editingMeta, setEditingMeta] = useState(false);
   const [metaForm, setMetaForm] = useState({
@@ -605,6 +610,7 @@ function EventDetailInner() {
           rubro: poForm.rubro,
           vendorName: poForm.vendorName || undefined,
           description: poForm.description || undefined,
+          paymentMethod: poForm.paymentMethod || 'TRANSFERENCIA',
           ...(lines.length
             ? {
                 lines: lines.map((l) => ({
@@ -628,6 +634,7 @@ function EventDetailInner() {
       rubro: 'audio',
       vendorName: '',
       description: '',
+      paymentMethod: 'TRANSFERENCIA',
       lines: [{ concept: '', qty: 1, unitPrice: 0 }],
     });
     flash('OC creada');
@@ -753,7 +760,11 @@ function EventDetailInner() {
 
   function startEditPo(po: Po) {
     setEditingPoId(po.id);
-    setEditPoMeta({ vendorName: po.vendorName || '', description: po.description || '' });
+    setEditPoMeta({
+      vendorName: po.vendorName || '',
+      description: po.description || '',
+      paymentMethod: po.paymentMethod || 'TRANSFERENCIA',
+    });
     setEditPoLines(
       po.lines?.length
         ? po.lines.map((l) => ({
@@ -774,6 +785,7 @@ function EventDetailInner() {
         body: JSON.stringify({
           vendorName: editPoMeta.vendorName || undefined,
           description: editPoMeta.description || undefined,
+          paymentMethod: editPoMeta.paymentMethod || 'TRANSFERENCIA',
           lines: lines.map((l) => ({
             concept: l.concept,
             qty: Number(l.qty),

@@ -37,6 +37,14 @@ enum PoStatus {
   CANCELLED
 }
 
+/// Cómo se paga la OC: en efectivo no se pide comprobante.
+enum PoPaymentMethod {
+  EFECTIVO
+  TRANSFERENCIA
+  TARJETA
+  OTRO
+}
+
 enum TaskStatus {
   OPEN
   IN_PROGRESS
@@ -395,6 +403,8 @@ model PurchaseOrder {
   amount         Decimal   @db.Decimal(14, 2)
   currency       String    @default("MXN")
   status         PoStatus  @default(DRAFT)
+  /// Forma de pago. EFECTIVO no requiere comprobante; el resto sí.
+  paymentMethod  PoPaymentMethod @default(TRANSFERENCIA)
   createdById    String?
   createdBy      User?     @relation("PoCreator", fields: [createdById], references: [id])
   authorizedById String?

@@ -422,6 +422,7 @@ export class AnalyticsService {
         event: { select: { id: true, name: true, status: true, startsAt: true } },
         createdBy: { select: { fullName: true } },
         authorizedBy: { select: { fullName: true } },
+        _count: { select: { proofs: true } },
       },
       orderBy: { updatedAt: 'desc' },
     });
@@ -465,6 +466,8 @@ export class AnalyticsService {
         eventStatus: o.event.status,
         rubro: o.rubro,
         vendorName: o.vendorName,
+        paymentMethod: o.paymentMethod,
+        proofCount: o._count.proofs,
         status: o.status,
         amount,
         ageDays,
