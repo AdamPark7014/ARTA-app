@@ -48,16 +48,22 @@ const MAX_RENDER_WIDTH = 1700;
 /** Tamaño de la letra con la que el generador escribe los ítems (puntos PDF) */
 const PDF_FONT_SIZE = 10;
 
+type ExpandedField = {
+  key: string;
+  sectionId: string;
+  itemId: string;
+  label: string;
+  value: string;
+  isNumber: boolean;
+  isDate: boolean;
+};
+
 /**
  * El PDF del checklist, editable encima del propio documento.
  *
- * El generador registra en qué página y coordenadas escribió cada ítem
- * (`pdfFieldsJson`); aquí se dibuja el PDF real con pdf.js y se coloca un campo
- * de captura justo encima de cada dato. Se escribe sobre la hoja, no en un
- * formulario aparte que la controle.
- *
- * El PDF de abajo sigue mostrando el valor anterior hasta que se guarda y se
- * regenera, por eso cada campo va con fondo opaco: tapa lo impreso.
+ * Las cajas sobre la hoja son pequeñas (caben en la línea impresa). Al hacer
+ * clic se abren en grande para escribir con comodidad; al cerrar el valor
+ * queda en el mapa y al guardar regenera el PDF.
  */
 export function ChecklistPdfEditor({
   url,
@@ -68,13 +74,13 @@ export function ChecklistPdfEditor({
   onUpdateItem,
 }: Props) {
   const pageHostsRef = useRef(new Map<number, HTMLDivElement>());
+  const expandTextRef = useRef<HTMLTextAreaElement | HTMLInputElement | null>(null);
   const [pages, setPages] = useState<Array<{ index: number; width: number; height: number }>>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [expanded, setExpanded] = useState<ExpandedField | null>(null);
   const { ref: boxRef, width: boxWidth } = useElementWidth();
 
-  // El formato se dibuja al ancho disponible: al ampliar se lee y se captura
-  // como en papel, no en una columna estrecha.
   const renderWidth = Math.min(
     MAX_RENDER_WIDTH,
     Math.max(MIN_RENDER_WIDTH, (boxWidth || MIN_RENDER_WIDTH) - 24),
@@ -82,7 +88,6 @@ export function ChecklistPdfEditor({
 
   const src = cacheKey ? `${url}${url.includes('?') ? '&' : '?'}v=${encodeURIComponent(cacheKey)}` : url;
 
-  // 1) Abrir el PDF y medir las páginas.
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
@@ -122,7 +127,6 @@ export function ChecklistPdfEditor({
     };
   }, [src, renderWidth]);
 
-  // 2) Pintar cada página dentro de su contenedor.
   useEffect(() => {
     if (!pages.length) return;
     let cancelled = false;
@@ -137,7 +141,6 @@ export function ChecklistPdfEditor({
         if (cancelled) return;
         const host = pageHostsRef.current.get(info.index);
         if (!host) continue;
-        // Al cambiar el ancho hay que volver a rasterizar, no reutilizar.
         const drawn = host.querySelector('canvas');
         if (drawn && host.dataset.width === String(info.width)) continue;
         drawn?.remove();
@@ -165,9 +168,46 @@ export function ChecklistPdfEditor({
     };
   }, [pages, src, renderWidth]);
 
-  /** Ítem vivo del checklist, que es de donde sale el valor que se muestra. */
+  useEffect(() => {
+    if (!expanded) return;
+    const el = expandTextRef.current;
+    el?.focus();
+    if (el && 'setSelectionRange' in el) {
+      const len = el.value.length;
+      el.setSelectionRange(len, len);
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setExpanded(null);
+      }
+    }
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [expanded?.key]);
+
   function findItem(sectionId: string, itemId: string): Item | undefined {
     return sections.find((s) => s.id === sectionId)?.items.find((i) => i.id === itemId);
+  }
+
+  function openExpand(sectionId: string, itemId: string, item: Item) {
+    if (!canEdit) return;
+    const value = item.value === null || item.value === undefined ? '' : String(item.value);
+    setExpanded({
+      key: `${sectionId}:${itemId}`,
+      sectionId,
+      itemId,
+      label: item.label,
+      value,
+      isNumber: item.type === 'number',
+      isDate: item.type === 'date',
+    });
+  }
+
+  function commitExpand(nextValue: string, field: ExpandedField) {
+    onUpdateItem(field.sectionId, field.itemId, {
+      value: field.isNumber ? (nextValue === '' ? '' : Number(nextValue)) : nextValue,
+    });
   }
 
   const scale = renderWidth / fieldMap.pageWidth;
@@ -183,139 +223,209 @@ export function ChecklistPdfEditor({
 
   return (
     <ExpandBox title="Formato del checklist" defaultExpanded={false}>
-    <div className="stack" ref={boxRef}>
-      {loading ? <p className="muted kpi-sub">Abriendo el formato…</p> : null}
+      <div className="stack" ref={boxRef}>
+        {loading ? <p className="muted kpi-sub">Abriendo el formato…</p> : null}
 
-      {!loading && matchedFields > 0 ? (
-        <p className="pdffield-hint">
-          {matchedFields} campo{matchedFields === 1 ? '' : 's'} editables sobre la hoja — marca las
-          casillas o escribe en las cajas blancas con borde dorado. Luego pulsa Guardar.
-        </p>
-      ) : null}
+        {!loading && matchedFields > 0 ? (
+          <p className="pdffield-hint">
+            {matchedFields} campo{matchedFields === 1 ? '' : 's'} editables sobre la hoja. Haz clic
+            en una caja para <strong>ampliarla</strong> y escribir cómodo; luego Guardar regenera el
+            PDF.
+          </p>
+        ) : null}
 
-      {!loading && fieldMap.fields.length > 0 && matchedFields === 0 ? (
-        <div className="form-error" role="alert">
-          El mapa del PDF no coincide con los ítems de este formato. Pulsa «Regenerar» y vuelve a
-          intentar.
-        </div>
-      ) : null}
+        {!loading && fieldMap.fields.length > 0 && matchedFields === 0 ? (
+          <div className="form-error" role="alert">
+            El mapa del PDF no coincide con los ítems de este formato. Pulsa «Regenerar» y vuelve a
+            intentar.
+          </div>
+        ) : null}
 
-      <div className="pdfedit pdfedit--fields">
-        {pages.map((p) => (
-          <div
-            key={p.index}
-            className="pdfedit__page"
-            style={{ width: p.width, height: p.height }}
-            ref={(el) => {
-              if (el) pageHostsRef.current.set(p.index, el);
-              else pageHostsRef.current.delete(p.index);
-            }}
-          >
-            <div className="pdfedit__overlay pdfedit__overlay--fields">
-              {fieldMap.fields
-                .filter((f) => f.page === p.index)
-                .map((f) => {
-                  const item = findItem(f.sectionId, f.itemId);
-                  if (!item) return null;
-                  /*
-                   * La caja se mide en puntos PDF y se escala entera; si los
-                   * márgenes fueran en píxeles, al ampliar dejarían de cuadrar.
-                   *
-                   * Arranca 2pt a la izquierda del valor porque el ancho que
-                   * reporta `widthOfString` para la etiqueta queda un pelo
-                   * corto respecto a lo que dibuja pdfkit, y por esa rendija
-                   * asomaban los guiones bajos del marcador de posición.
-                   * De alto, 14pt: la línea mide ~13.9pt, así que tapa el valor
-                   * sin comerse la línea de arriba.
-                   */
-                  const left = f.x * scale;
-                  const top = f.y * scale;
-                  /*
-                   * El ancho mínimo hace legible una caja estrecha, pero cerca
-                   * del margen derecho empujaba el campo fuera de la hoja. Se
-                   * recorta contra el borde de la página.
-                   */
-                  const style = {
-                    left,
-                    top,
-                    width: Math.min(
-                      Math.max(f.type === 'check' ? 14 * scale : 40 * scale, f.w * scale),
-                      Math.max(0, p.width - left),
-                    ),
-                    height: Math.min(
-                      Math.max(12 * scale, f.h * scale),
-                      Math.max(0, p.height - top),
-                    ),
-                  };
+        <div className="pdfedit pdfedit--fields">
+          {pages.map((p) => (
+            <div
+              key={p.index}
+              className="pdfedit__page"
+              style={{ width: p.width, height: p.height }}
+              ref={(el) => {
+                if (el) pageHostsRef.current.set(p.index, el);
+                else pageHostsRef.current.delete(p.index);
+              }}
+            >
+              <div className="pdfedit__overlay pdfedit__overlay--fields">
+                {fieldMap.fields
+                  .filter((f) => f.page === p.index)
+                  .map((f) => {
+                    const item = findItem(f.sectionId, f.itemId);
+                    if (!item) return null;
+                    const left = f.x * scale;
+                    const top = f.y * scale;
+                    const style = {
+                      left,
+                      top,
+                      width: Math.min(
+                        Math.max(f.type === 'check' ? 14 * scale : 56 * scale, f.w * scale),
+                        Math.max(0, p.width - left),
+                      ),
+                      height: Math.min(
+                        Math.max(14 * scale, f.h * scale),
+                        Math.max(0, p.height - top),
+                      ),
+                    };
 
-                  if (f.type === 'check') {
-                    return (
-                      <label
-                        key={`${f.sectionId}:${f.itemId}`}
-                        className="pdffield pdffield--check"
-                        style={style}
-                        title={item.label}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={!!item.done}
+                    if (f.type === 'check') {
+                      return (
+                        <label
+                          key={`${f.sectionId}:${f.itemId}`}
+                          className="pdffield pdffield--check"
+                          style={style}
+                          title={item.label}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={!!item.done}
+                            disabled={!canEdit}
+                            aria-label={item.label}
+                            onChange={(e) =>
+                              onUpdateItem(f.sectionId, f.itemId, { done: e.target.checked })
+                            }
+                          />
+                        </label>
+                      );
+                    }
+
+                    const value =
+                      item.value === null || item.value === undefined ? '' : String(item.value);
+                    const fieldKey = `${f.sectionId}:${f.itemId}`;
+
+                    if (item.options?.length) {
+                      return (
+                        <select
+                          key={fieldKey}
+                          className="pdffield pdffield__input"
+                          style={{ ...style, fontSize: PDF_FONT_SIZE * scale }}
+                          value={value}
                           disabled={!canEdit}
                           aria-label={item.label}
                           onChange={(e) =>
-                            onUpdateItem(f.sectionId, f.itemId, { done: e.target.checked })
+                            onUpdateItem(f.sectionId, f.itemId, { value: e.target.value })
                           }
-                        />
-                      </label>
-                    );
-                  }
+                        >
+                          <option value="">—</option>
+                          {item.options.map((o) => (
+                            <option key={o} value={o}>
+                              {o}
+                            </option>
+                          ))}
+                        </select>
+                      );
+                    }
 
-                  const value = item.value === null || item.value === undefined ? '' : String(item.value);
-
-                  if (item.options?.length) {
                     return (
-                      <select
-                        key={`${f.sectionId}:${f.itemId}`}
-                        className="pdffield pdffield__input"
+                      <button
+                        key={fieldKey}
+                        type="button"
+                        className={`pdffield pdffield--expandable ${
+                          expanded?.key === fieldKey ? 'is-active' : ''
+                        }`}
                         style={{ ...style, fontSize: PDF_FONT_SIZE * scale }}
-                        value={value}
                         disabled={!canEdit}
-                        aria-label={item.label}
-                        onChange={(e) =>
-                          onUpdateItem(f.sectionId, f.itemId, { value: e.target.value })
-                        }
+                        aria-label={`${item.label}${value ? `: ${value}` : ''} — ampliar para editar`}
+                        title={`${item.label} — clic para ampliar`}
+                        onClick={() => openExpand(f.sectionId, f.itemId, item)}
                       >
-                        <option value="">—</option>
-                        {item.options.map((o) => (
-                          <option key={o} value={o}>
-                            {o}
-                          </option>
-                        ))}
-                      </select>
+                        <span className="pdffield__preview">{value || '…'}</span>
+                      </button>
                     );
-                  }
+                  })}
+              </div>
+            </div>
+          ))}
+        </div>
 
-                  return (
-                    <input
-                      key={`${f.sectionId}:${f.itemId}`}
-                      className="pdffield pdffield__input"
-                      style={{ ...style, fontSize: PDF_FONT_SIZE * scale }}
-                      value={value}
-                      readOnly={!canEdit}
-                      aria-label={item.label}
-                      onChange={(e) => onUpdateItem(f.sectionId, f.itemId, { value: e.target.value })}
-                    />
-                  );
-                })}
+        {expanded ? (
+          <div
+            className="pdffield-expand"
+            role="dialog"
+            aria-modal="true"
+            aria-label={expanded.label}
+          >
+            <button
+              type="button"
+              className="pdffield-expand__backdrop"
+              aria-label="Cerrar"
+              onClick={() => setExpanded(null)}
+            />
+            <div className="pdffield-expand__card">
+              <div className="pdffield-expand__head">
+                <strong>{expanded.label}</strong>
+                <button
+                  className="btn ghost btn-sm"
+                  type="button"
+                  onClick={() => setExpanded(null)}
+                >
+                  Listo (Esc)
+                </button>
+              </div>
+              {expanded.isDate ? (
+                <input
+                  ref={(el) => {
+                    expandTextRef.current = el;
+                  }}
+                  className="field pdffield-expand__input"
+                  type="date"
+                  value={expanded.value}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    const next = { ...expanded, value: v };
+                    setExpanded(next);
+                    commitExpand(v, next);
+                  }}
+                />
+              ) : expanded.isNumber ? (
+                <input
+                  ref={(el) => {
+                    expandTextRef.current = el;
+                  }}
+                  className="field pdffield-expand__input"
+                  type="number"
+                  value={expanded.value}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    const next = { ...expanded, value: v };
+                    setExpanded(next);
+                    commitExpand(v, next);
+                  }}
+                />
+              ) : (
+                <textarea
+                  ref={(el) => {
+                    expandTextRef.current = el;
+                  }}
+                  className="field pdffield-expand__input"
+                  rows={5}
+                  value={expanded.value}
+                  placeholder="Escribe aquí con espacio de sobra…"
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    const next = { ...expanded, value: v };
+                    setExpanded(next);
+                    commitExpand(v, next);
+                  }}
+                />
+              )}
+              <p className="muted kpi-sub" style={{ margin: 0 }}>
+                Se guarda en el formato al instante. Pulsa Guardar arriba para regenerar el PDF.
+              </p>
             </div>
           </div>
-        ))}
-      </div>
+        ) : null}
 
-      <p className="muted kpi-sub">
-        Escribes directamente sobre el formato. Al guardar, el PDF se vuelve a generar con lo que
-        capturaste y queda listo para firmar y descargar.
-      </p>
-    </div>
+        <p className="muted kpi-sub">
+          Escribes directamente sobre el formato. Al guardar, el PDF se vuelve a generar con lo que
+          capturaste y queda listo para firmar y descargar.
+        </p>
+      </div>
     </ExpandBox>
   );
 }

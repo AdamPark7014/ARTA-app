@@ -478,21 +478,44 @@ export function EventChecklistsPanel({
                                     <div className="check-item__body">
                                       <div className="check-item__label">{item.label}</div>
                                       {item.type === 'text' || item.type === 'number' || item.type === 'date' ? (
-                                        <input
-                                          className="field check-item__field"
-                                          type={item.type === 'text' ? 'text' : item.type}
-                                          disabled={readOnly}
-                                          value={item.value ?? ''}
-                                          placeholder={item.type === 'date' ? 'Fecha' : 'Respuesta…'}
-                                          onChange={(e) =>
-                                            onUpdateItem(section.id, item.id, {
-                                              value:
-                                                item.type === 'number'
-                                                  ? Number(e.target.value)
-                                                  : e.target.value,
-                                            })
-                                          }
-                                        />
+                                        item.type === 'text' ? (
+                                          <textarea
+                                            className="field check-item__field check-item__field--grow"
+                                            disabled={readOnly}
+                                            rows={2}
+                                            value={item.value ?? ''}
+                                            placeholder="Respuesta… (el campo crece al escribir)"
+                                            onChange={(e) => {
+                                              onUpdateItem(section.id, item.id, {
+                                                value: e.target.value,
+                                              });
+                                              const el = e.target;
+                                              el.style.height = 'auto';
+                                              el.style.height = `${Math.min(el.scrollHeight, 220)}px`;
+                                            }}
+                                            onFocus={(e) => {
+                                              const el = e.target;
+                                              el.style.height = 'auto';
+                                              el.style.height = `${Math.min(el.scrollHeight, 220)}px`;
+                                            }}
+                                          />
+                                        ) : (
+                                          <input
+                                            className="field check-item__field"
+                                            type={item.type}
+                                            disabled={readOnly}
+                                            value={item.value ?? ''}
+                                            placeholder={item.type === 'date' ? 'Fecha' : 'Respuesta…'}
+                                            onChange={(e) =>
+                                              onUpdateItem(section.id, item.id, {
+                                                value:
+                                                  item.type === 'number'
+                                                    ? Number(e.target.value)
+                                                    : e.target.value,
+                                              })
+                                            }
+                                          />
+                                        )
                                       ) : null}
                                       {item.type === 'select' ? (
                                         (() => {

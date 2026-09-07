@@ -6,15 +6,13 @@
 
 ## Hecho en este turno
 
-**Convenios / patrocinios a nivel profesional.**
+**Checklist: campos ampliables.**
 
-1. Schema: tier, status, contacto estructurado, benefits, deliverables,
-   paymentTerms, vigencia (`20260907180000_sponsor_convenio_fields`).
-2. Formulario por secciones (marca, aportación, contacto, alcance).
-3. Generadores: Excel convenio (4 hojas), PDF convenio, Excel portafolio del
-   evento — se suben como `module=sponsors`.
-4. Subir convenio firmado (PDF/Excel/Word).
-5. Documentos agrupa «Convenios y patrocinios».
+1. Sobre el PDF: clic en una caja de texto abre un editor grande (textarea /
+   fecha / número) con título del campo; Esc o «Listo» cierra. El valor se
+   guarda al instante; Guardar regenera el PDF.
+2. En formulario: los campos de texto son textarea que crecen al escribir.
+3. Hint actualizado: «Haz clic para ampliarla».
 
 ## A medias
 
@@ -27,8 +25,8 @@
 
 ## Siguiente paso
 
-1. Deploy + migrate `sponsor_convenio_fields`.
-2. Smoke: crear convenio Oro → Excel → PDF → subir firmado.
+Deploy + smoke: Sobre el PDF → clic en «Show / concierto» → escribir largo →
+Listo → Guardar.
 
 ## No tocar
 
