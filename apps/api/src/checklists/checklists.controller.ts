@@ -309,6 +309,17 @@ export class ChecklistsController {
     // Oráculo único: estado del documento + estado del evento, en un solo sitio.
     assertDocWritable(existing, existing.event);
 
+    /*
+     * Sin contenido no hay nada que guardar — y sí mucho que romper: con
+     * `dataJson` ausente, Prisma se salta el campo pero `calcProgress` habría
+     * devuelto 0 y el avance del formato se iba a cero sin que cambiara una
+     * sola casilla. Se cierra aquí porque protege contra cualquier cliente,
+     * no solo contra el panel.
+     */
+    if (!body.dataJson || typeof body.dataJson !== 'object') {
+      throw new BadRequestException('Falta el contenido del formato (dataJson)');
+    }
+
     const progressPct = calcProgress(body.dataJson);
     const draft = body.draft === true;
     const base = body.baseRevision;

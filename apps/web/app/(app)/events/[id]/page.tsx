@@ -460,7 +460,9 @@ function EventDetailInner() {
   }
 
   async function saveChecklist(options?: { overwrite?: boolean }) {
-    if (!activeChecklist || closed) return;
+    // El contenido llega en una segunda petición: guardar antes de que aterrice
+    // mandaría el formato sin datos.
+    if (!activeChecklist?.dataJson || closed) return;
     setSaving(true);
     setMsg('');
     try {
