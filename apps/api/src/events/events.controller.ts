@@ -52,7 +52,8 @@ class UpdateEventDto {
   @IsOptional() @IsString() venue?: string;
   @IsOptional() @IsString() city?: string;
   @IsOptional() @IsString() startsAt?: string;
-  @IsOptional() @IsString() endsAt?: string;
+  /** `null` explícito = quitar la fecha de fin. `@IsOptional()` deja pasar el null. */
+  @IsOptional() @IsString() endsAt?: string | null;
   /** Status solo vía POST close|cancel|reopen — no en PATCH (evita bypass EVENT_CLOSE). */
   @IsOptional() @IsEnum(CampaignType) campaignType?: CampaignType;
   @IsOptional() @IsString() notes?: string;
@@ -401,7 +402,10 @@ export class EventsController {
         campaignType: dto.campaignType,
         notes: dto.notes,
         startsAt: dto.startsAt ? new Date(dto.startsAt) : undefined,
-        endsAt: dto.endsAt ? new Date(dto.endsAt) : undefined,
+        // Distinguir «no lo mandes» de «bórralo»: sin esto, una fecha de fin
+        // puesta por error no se podía quitar nunca.
+        endsAt:
+          dto.endsAt === undefined ? undefined : dto.endsAt ? new Date(dto.endsAt) : null,
       },
     });
 

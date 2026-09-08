@@ -113,11 +113,11 @@ test.describe('Órdenes de compra · crear', () => {
   test('con concepto e importe se habilita, y el botón dice cuánto', async ({ page, baseURL }) => {
     await openOcs(page, baseURL!, []);
 
-    await page.getByPlaceholder('Concepto').first().fill('Consola');
-    // Cantidad y precio unitario de la primera partida.
-    const numeros = page.locator('.panel--narrow input[type="number"]');
-    await numeros.nth(0).fill('2');
-    await numeros.nth(1).fill('7500');
+    // Por nombre accesible y no por `placeholder`: el texto de ayuda ya cambió
+    // una vez y dejó la prueba roja sin que nada se hubiera roto.
+    await page.getByLabel('Concepto de la partida 1').fill('Consola');
+    await page.getByLabel('Cantidad de Consola').fill('2');
+    await page.getByLabel('Precio unitario de Consola').fill('7500');
 
     await expect(page.getByRole('button', { name: /Crear orden de compra por/ })).toBeEnabled();
   });

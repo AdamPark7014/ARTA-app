@@ -114,6 +114,9 @@ test.describe('Checklist sobre el PDF', () => {
   test('se puede volver al formulario clásico', async ({ page, baseURL }) => {
     await openChecklist(page, baseURL!);
 
+    // «Sobre el PDF» arranca a pantalla completa (ExpandBox), que tapa la barra
+    // de modos: hay que salir de ella antes de poder volver al formulario.
+    await page.getByRole('button', { name: /Salir de pantalla completa/ }).click();
     await page.getByRole('button', { name: 'Formulario rápido' }).click();
 
     await expect(page.locator('.pdfedit__canvas')).toHaveCount(0);

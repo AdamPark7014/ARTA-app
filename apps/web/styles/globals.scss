@@ -3171,6 +3171,39 @@ body.site-nav-open {
   flex-wrap: wrap;
 }
 
+/**
+ * Los datos del show, en lectura.
+ *
+ * Un `<dl>` de verdad y no una tabla de `div`s: cada dato es un par
+ * etiqueta/valor, que es exactamente lo que un lector de pantalla necesita
+ * para anunciar «Promotor: Los Ecos» en vez de dos textos sueltos.
+ */
+.event-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.85rem 1.25rem;
+  margin: 0;
+}
+
+.event-facts > div {
+  min-width: 0;
+}
+
+.event-facts dt {
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 0.2rem;
+}
+
+.event-facts dd {
+  margin: 0;
+  font-size: 0.95rem;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
 .value--money {
   font-size: 1.2rem !important;
 }

@@ -23,6 +23,7 @@ type EventTasksPanelProps = {
   onSetTaskStatus: (taskId: string, status: string) => Promise<void>;
   onReassignTask?: (taskId: string, assigneeId: string) => Promise<void>;
   onSetTaskDue?: (taskId: string, dueAt: string) => Promise<void>;
+  onEditTask?: (taskId: string, patch: { title: string; detail: string }) => Promise<void>;
   onTaskUpdated?: (task: Task) => void;
 };
 
@@ -46,6 +47,7 @@ export function EventTasksPanel({
   onSetTaskStatus,
   onReassignTask,
   onSetTaskDue,
+  onEditTask,
   onTaskUpdated,
 }: EventTasksPanelProps) {
   const [advanced, setAdvanced] = useState(false);
@@ -53,6 +55,13 @@ export function EventTasksPanel({
   const [creating, setCreating] = useState(false);
   const [deliveryTask, setDeliveryTask] = useState<Task | null>(null);
   const [historyOpen, setHistoryOpen] = useState<Set<string>>(new Set());
+  /** Tarea abierta para corregir su texto, con el borrador en curso. */
+  const [editingTask, setEditingTask] = useState<{
+    id: string;
+    title: string;
+    detail: string;
+  } | null>(null);
+  const [savingEdit, setSavingEdit] = useState(false);
   const titleRef = useRef<HTMLInputElement>(null);
   const today = todayKey();
 
@@ -95,7 +104,84 @@ export function EventTasksPanel({
     void onSetTaskStatus(t.id, 'DONE');
   }
 
+  /**
+   * La misma fila, en modo corrección. Se edita donde está y no en un diálogo
+   * aparte: la tarea sigue a la vista, con su responsable y su fecha, que es
+   * el contexto que hace falta para saber qué se está corrigiendo.
+   */
+  function renderEditRow(t: Task) {
+    const draft = editingTask!;
+    const clean = draft.title.trim();
+
+    async function save() {
+      if (!clean || !onEditTask) return;
+      setSavingEdit(true);
+      try {
+        await onEditTask(t.id, { title: clean, detail: draft.detail.trim() });
+        setEditingTask(null);
+      } finally {
+        setSavingEdit(false);
+      }
+    }
+
+    return (
+      <li key={t.id} className="task-row-wrap">
+        <div className="task-row task-row--editing">
+          <div className="task-edit form">
+            <label>
+              Qué hay que hacer
+              <input
+                className="field"
+                autoFocus
+                value={draft.title}
+                onChange={(e) => setEditingTask({ ...draft, title: e.target.value })}
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape') setEditingTask(null);
+                  if (e.key === 'Enter') void save();
+                }}
+              />
+            </label>
+            <label>
+              Detalle <span className="muted">(opcional)</span>
+              <textarea
+                className="field"
+                rows={2}
+                value={draft.detail}
+                onChange={(e) => setEditingTask({ ...draft, detail: e.target.value })}
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape') setEditingTask(null);
+                }}
+                placeholder="Contexto, medidas, a quién buscar…"
+              />
+            </label>
+            <div className="row row--tight">
+              <button
+                className="btn btn-sm"
+                type="button"
+                disabled={!clean || savingEdit}
+                onClick={() => void save()}
+              >
+                {savingEdit ? 'Guardando…' : 'Guardar'}
+              </button>
+              <button
+                className="btn ghost btn-sm"
+                type="button"
+                onClick={() => setEditingTask(null)}
+              >
+                Cancelar
+              </button>
+              {!clean ? (
+                <span className="muted kpi-sub">La tarea necesita decir qué hay que hacer.</span>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      </li>
+    );
+  }
+
   function renderRow(t: Task) {
+    if (editingTask?.id === t.id) return renderEditRow(t);
     const isDone = t.status === 'DONE';
     const pendingApproval = t.status === 'PENDING_APPROVAL';
     const key = dueKey(t.dueAt);
@@ -132,7 +218,18 @@ export function EventTasksPanel({
             {isDone || pendingApproval ? '✓' : needsDelivery ? '↑' : ''}
           </button>
           <div className="task-row__main">
-            <div className="task-row__title">{t.title}</div>
+            {onEditTask && !closed ? (
+              <button
+                type="button"
+                className="task-row__title task-row__title--edit"
+                title="Corregir el texto de la tarea"
+                onClick={() => setEditingTask({ id: t.id, title: t.title, detail: t.detail || '' })}
+              >
+                {t.title}
+              </button>
+            ) : (
+              <div className="task-row__title">{t.title}</div>
+            )}
             <div className="task-row__meta muted kpi-sub">
               {t.module ? <span>{t.module}</span> : <span>Sin módulo</span>}
               {t.createdBy ? <span>· pidió {t.createdBy.fullName}</span> : null}

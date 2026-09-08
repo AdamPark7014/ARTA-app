@@ -196,6 +196,8 @@ export type EventDetail = {
   entity: string;
   campaignType: string;
   startsAt?: string | null;
+  /** El API ya lo devolvía y lo aceptaba; el panel nunca lo miró. */
+  endsAt?: string | null;
   notes?: string | null;
   checklists: Checklist[];
   purchaseOrders: Po[];

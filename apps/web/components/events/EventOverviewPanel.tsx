@@ -6,6 +6,7 @@ import { FormGrid } from '@/components/ui/PageChrome';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { ChecklistPicker } from '@/components/events/ChecklistPicker';
 import { asFinance, type Checklist, type EventDetail, type Tab } from '@/components/events/event-detail.types';
+import { formatEventDate } from '@/lib/event-dates';
 
 type MetaForm = {
   name: string;
@@ -13,6 +14,16 @@ type MetaForm = {
   promoter: string;
   venue: string;
   city: string;
+  /** `datetime-local`; se convierte a instante absoluto al guardar. */
+  startsAt: string;
+  endsAt: string;
+  campaignType: string;
+};
+
+const CAMPAIGN_TYPE_LABELS: Record<string, string> = {
+  NONE: 'Sin campaña',
+  INTERNAL: 'Interna (equipo Arta)',
+  EXTERNAL: 'Externa',
 };
 
 type PinForm = { label: string; pin: string; scopes: string[]; expiresAt: string };
@@ -29,6 +40,7 @@ type EventOverviewPanelProps = {
   event: EventDetail;
   closed: boolean;
   editingMeta: boolean;
+  setEditingMeta: (v: boolean) => void;
   metaForm: MetaForm;
   setMetaForm: (form: MetaForm) => void;
   saveEventMeta: () => Promise<void>;
@@ -50,6 +62,7 @@ export function EventOverviewPanel({
   event,
   closed,
   editingMeta,
+  setEditingMeta,
   metaForm,
   setMetaForm,
   saveEventMeta,
@@ -95,18 +108,48 @@ export function EventOverviewPanel({
         </div>
       ) : null}
 
-      {editingMeta && !closed ? (
-        <div className="panel">
-          <div className="panel-head">
-            <h2>Editar datos del evento</h2>
-            <button className="btn btn-sm" type="button" onClick={saveEventMeta}>
-              Guardar
-            </button>
+      {/*
+        Los datos del show se ven siempre, no solo al entrar en «modo edición».
+        Antes vivían medio escondidos: el nombre y la sede salían en la cinta de
+        arriba, y el promotor, el fin y el tipo de campaña no salían en ninguna
+        parte — había que abrir el formulario para enterarse de qué decían.
+      */}
+      <div className="panel">
+        <div className="panel-head">
+          <div>
+            <h2>Datos del show</h2>
+            <p className="muted kpi-sub" style={{ margin: '0.25rem 0 0' }}>
+              Lo que define el evento. Todo se puede corregir mientras esté abierto.
+            </p>
           </div>
-          <div className="panel-body">
-            <div className="form panel--narrow">
+          {!closed ? (
+            <div className="row row--tight">
+              {editingMeta ? (
+                <>
+                  <button className="btn btn-sm" type="button" onClick={saveEventMeta}>
+                    Guardar cambios
+                  </button>
+                  <button
+                    className="btn ghost btn-sm"
+                    type="button"
+                    onClick={() => setEditingMeta(false)}
+                  >
+                    Cancelar
+                  </button>
+                </>
+              ) : (
+                <button className="btn ghost btn-sm" type="button" onClick={() => setEditingMeta(true)}>
+                  Editar datos
+                </button>
+              )}
+            </div>
+          ) : null}
+        </div>
+        <div className="panel-body">
+          {editingMeta && !closed ? (
+            <div className="form">
               <label>
-                Nombre
+                Nombre del show
                 <input
                   value={metaForm.name}
                   onChange={(e) => setMetaForm({ ...metaForm, name: e.target.value })}
@@ -130,7 +173,7 @@ export function EventOverviewPanel({
               </FormGrid>
               <FormGrid>
                 <label>
-                  Venue
+                  Sede
                   <input
                     value={metaForm.venue}
                     onChange={(e) => setMetaForm({ ...metaForm, venue: e.target.value })}
@@ -144,10 +187,76 @@ export function EventOverviewPanel({
                   />
                 </label>
               </FormGrid>
+              <FormGrid>
+                <label>
+                  Empieza
+                  <input
+                    type="datetime-local"
+                    value={metaForm.startsAt}
+                    onChange={(e) => setMetaForm({ ...metaForm, startsAt: e.target.value })}
+                  />
+                </label>
+                <label>
+                  Termina <span className="muted">(opcional)</span>
+                  <input
+                    type="datetime-local"
+                    value={metaForm.endsAt}
+                    min={metaForm.startsAt || undefined}
+                    onChange={(e) => setMetaForm({ ...metaForm, endsAt: e.target.value })}
+                  />
+                </label>
+              </FormGrid>
+              <label>
+                Campaña
+                <select
+                  value={metaForm.campaignType}
+                  onChange={(e) => setMetaForm({ ...metaForm, campaignType: e.target.value })}
+                >
+                  <option value="NONE">Sin campaña</option>
+                  <option value="INTERNAL">Interna (equipo Arta)</option>
+                  <option value="EXTERNAL">Externa</option>
+                </select>
+              </label>
+              <p className="muted kpi-sub" style={{ margin: 0 }}>
+                El tipo de campaña decide qué precio usa la hoja de gastos:{' '}
+                <strong>interna</strong> toma el precio interno de cada concepto,{' '}
+                <strong>externa</strong> el externo.
+              </p>
             </div>
-          </div>
+          ) : (
+            <dl className="event-facts">
+              <div>
+                <dt>Artista</dt>
+                <dd>{event.artist || '—'}</dd>
+              </div>
+              <div>
+                <dt>Promotor</dt>
+                <dd>{event.promoter || '—'}</dd>
+              </div>
+              <div>
+                <dt>Sede</dt>
+                <dd>{event.venue || '—'}</dd>
+              </div>
+              <div>
+                <dt>Ciudad</dt>
+                <dd>{event.city || '—'}</dd>
+              </div>
+              <div>
+                <dt>Empieza</dt>
+                <dd>{formatEventDate(event.startsAt)}</dd>
+              </div>
+              <div>
+                <dt>Termina</dt>
+                <dd>{event.endsAt ? formatEventDate(event.endsAt) : '—'}</dd>
+              </div>
+              <div>
+                <dt>Campaña</dt>
+                <dd>{CAMPAIGN_TYPE_LABELS[event.campaignType] || event.campaignType}</dd>
+              </div>
+            </dl>
+          )}
         </div>
-      ) : null}
+      </div>
 
       <div className="grid-cards kpi-grid-dense">
         <div className="kpi">
@@ -237,9 +346,12 @@ export function EventOverviewPanel({
           ) : null}
         </div>
         <div className="panel-body">
+          {/* El `placeholder` no es un nombre accesible: se va en cuanto se
+              escribe, y un lector de pantalla anunciaba «cuadro de texto» a secas. */}
           <textarea
             rows={4}
             disabled={closed}
+            aria-label="Notas del evento"
             value={eventNotes}
             onChange={(e) => setEventNotes(e.target.value)}
             placeholder="Acuerdos, pendientes, contexto para el equipo…"

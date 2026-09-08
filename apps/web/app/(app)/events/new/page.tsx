@@ -3,6 +3,7 @@
 import { FormEvent, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { AppShell } from '@/components/app-shell/AppShell';
+import { fromLocalInputValue } from '@/lib/event-dates';
 import { FlashMessage, FormGrid, PageHeader } from '@/components/ui/PageChrome';
 import { api } from '@/lib/api';
 import { useUser } from '@/lib/user-context';
@@ -30,7 +31,13 @@ export default function NewEventPage() {
     try {
       const created = await api<{ id: string }>('/events', {
         method: 'POST',
-        body: JSON.stringify({ ...form, entity }),
+        body: JSON.stringify({
+          ...form,
+          entity,
+          // Instante absoluto: el `datetime-local` va sin zona y el servidor lo
+          // interpretaba en la suya. Ver `lib/event-dates.ts`.
+          startsAt: fromLocalInputValue(form.startsAt),
+        }),
       });
       router.push(`/events/${created.id}`);
     } catch (err) {

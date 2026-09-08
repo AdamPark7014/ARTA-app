@@ -17,6 +17,7 @@ import { userHasPermission } from '@/lib/access-matrix';
 import { importFinanceFromFile } from '@/lib/finance-import';
 import { defaultCampaignConceptRows } from '@/lib/campaign-sheet-template';
 import { fetchPoWindow, type PoWindowState } from '@/lib/po-window';
+import { fromLocalInputValue, toLocalInputValue } from '@/lib/event-dates';
 import { joinPoDescription, splitPoDescription } from '@/lib/po-payment';
 import { parsePoRubro, resolvePoRubro } from '@/lib/po-rubro';
 import {
@@ -140,6 +141,12 @@ function EventDetailInner() {
     promoter: '',
     venue: '',
     city: '',
+    // El API ya aceptaba estos tres desde siempre; el panel nunca los mandó,
+    // así que la fecha del show y el tipo de campaña solo se podían fijar al
+    // crear el evento. Un show que se movía de fecha no tenía arreglo.
+    startsAt: '',
+    endsAt: '',
+    campaignType: 'NONE',
   });
   const [vendorPins, setVendorPins] = useState<
     Array<{ id: string; label: string; scopes: string[]; active: boolean; expiresAt?: string | null }>
@@ -242,6 +249,9 @@ function EventDetailInner() {
       promoter: data.promoter || '',
       venue: data.venue || '',
       city: data.city || '',
+      startsAt: toLocalInputValue(data.startsAt),
+      endsAt: toLocalInputValue(data.endsAt),
+      campaignType: data.campaignType || 'NONE',
     });
   }, [id, activeChecklist?.id]);
 
@@ -1023,10 +1033,22 @@ function EventDetailInner() {
 
   async function saveEventMeta() {
     if (closed) return;
+    if (metaForm.startsAt && metaForm.endsAt && metaForm.endsAt < metaForm.startsAt) {
+      flash('El fin del show no puede ser antes del inicio', 'error');
+      return;
+    }
     try {
       await api(`/events/${id}`, {
         method: 'PATCH',
-        body: JSON.stringify(metaForm),
+        body: JSON.stringify({
+          ...metaForm,
+          // Instante absoluto, no una hora suelta que el servidor interprete
+          // en su propia zona. Ver `lib/event-dates.ts`.
+          startsAt: fromLocalInputValue(metaForm.startsAt),
+          // `null` explícito para poder QUITAR la fecha de fin; `undefined` la
+          // dejaría intacta y no habría forma de borrar una puesta por error.
+          endsAt: fromLocalInputValue(metaForm.endsAt) ?? null,
+        }),
       });
       setEditingMeta(false);
       flash('Datos del evento actualizados');
@@ -1229,6 +1251,38 @@ function EventDetailInner() {
     }
   }
 
+  /**
+   * Corregir el texto de una tarea.
+   *
+   * El API acepta `title` y `detail` desde el principio, pero el panel solo
+   * dejaba reasignar y mover la fecha: una tarea mal escrita se quedaba mal
+   * escrita para siempre, o se borraba y se volvía a crear perdiendo su
+   * historial y su evidencia.
+   */
+  async function editTaskText(taskId: string, patch: { title: string; detail: string }) {
+    const snapshot = event?.tasks || [];
+    setEvent((prev) =>
+      prev
+        ? {
+            ...prev,
+            tasks: (prev.tasks || []).map((t) => (t.id === taskId ? { ...t, ...patch } : t)),
+          }
+        : prev,
+    );
+    try {
+      patchTaskInPlace(
+        await api<Task>(`/tasks/${taskId}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ title: patch.title, detail: patch.detail }),
+        }),
+      );
+      flash('Tarea actualizada');
+    } catch (e) {
+      setEvent((prev) => (prev ? { ...prev, tasks: snapshot } : prev));
+      flash(e instanceof Error ? e.message : 'Error al editar la tarea', 'error');
+    }
+  }
+
   /** Poner o mover el vencimiento desde la propia lista. */
   async function setTaskDue(taskId: string, dueAt: string) {
     const snapshot = event?.tasks || [];
@@ -1394,7 +1448,19 @@ function EventDetailInner() {
           actions={
             <>
               {!closed ? (
-                <button className="btn ghost" type="button" onClick={() => setEditingMeta((v) => !v)}>
+                <button
+                  className="btn ghost"
+                  type="button"
+                  onClick={() => {
+                    // El formulario vive en la tarjeta «Datos del show», que
+                    // solo existe en Resumen. Desde otra pestaña el botón
+                    // encendía el modo edición contra algo que no estaba en
+                    // pantalla: se apretaba y no pasaba nada.
+                    const abrir = !editingMeta;
+                    setEditingMeta(abrir);
+                    if (abrir && tab !== 'overview') selectTab('overview');
+                  }}
+                >
                   {editingMeta ? 'Cerrar edición' : 'Editar datos'}
                 </button>
               ) : null}
@@ -1442,6 +1508,7 @@ function EventDetailInner() {
             event={event}
             closed={closed}
             editingMeta={editingMeta}
+            setEditingMeta={setEditingMeta}
             metaForm={metaForm}
             setMetaForm={setMetaForm}
             saveEventMeta={saveEventMeta}
@@ -1590,6 +1657,7 @@ function EventDetailInner() {
             onSetTaskStatus={setTaskStatus}
             onReassignTask={reassignTask}
             onSetTaskDue={setTaskDue}
+            onEditTask={editTaskText}
             onTaskUpdated={patchTaskInPlace}
           />
         )}

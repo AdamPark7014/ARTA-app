@@ -311,7 +311,11 @@ export function EventPurchaseOrdersPanel({
                       </tr>
                     </thead>
                     <tbody>
-                      {poForm.lines.map((line, idx) => (
+                      {poForm.lines.map((line, idx) => {
+                        // Con cinco partidas había cinco «Cantidad» idénticas:
+                        // el nombre tiene que decir de qué fila es.
+                        const fila = line.concept.trim() || `partida ${idx + 1}`;
+                        return (
                         <tr key={idx}>
                           <td>
                             <input
@@ -322,6 +326,7 @@ export function EventPurchaseOrdersPanel({
                                 lines[idx] = { ...line, concept: e.target.value };
                                 setPoForm({ ...poForm, lines });
                               }}
+                              aria-label={`Concepto de la partida ${idx + 1}`}
                               placeholder="Qué se compra o contrata"
                             />
                           </td>
@@ -337,7 +342,7 @@ export function EventPurchaseOrdersPanel({
                                 lines[idx] = { ...line, qty: Number(e.target.value) };
                                 setPoForm({ ...poForm, lines });
                               }}
-                              aria-label="Cantidad"
+                              aria-label={`Cantidad de ${fila}`}
                             />
                           </td>
                           <td>
@@ -352,7 +357,7 @@ export function EventPurchaseOrdersPanel({
                                 lines[idx] = { ...line, unitPrice: Number(e.target.value) };
                                 setPoForm({ ...poForm, lines });
                               }}
-                              aria-label="Precio unitario"
+                              aria-label={`Precio unitario de ${fila}`}
                             />
                           </td>
                           <td className="muted kpi-sub">
@@ -362,7 +367,7 @@ export function EventPurchaseOrdersPanel({
                             <button
                               className="btn ghost btn-sm"
                               type="button"
-                              aria-label="Quitar partida"
+                              aria-label={`Quitar ${fila}`}
                               onClick={() =>
                                 setPoForm({
                                   ...poForm,
@@ -374,7 +379,8 @@ export function EventPurchaseOrdersPanel({
                             </button>
                           </td>
                         </tr>
-                      ))}
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -628,7 +634,9 @@ export function EventPurchaseOrdersPanel({
                             </tr>
                           </thead>
                           <tbody>
-                            {editPoLines.map((line, idx) => (
+                            {editPoLines.map((line, idx) => {
+                              const fila = line.concept.trim() || `partida ${idx + 1}`;
+                              return (
                               <tr key={idx}>
                                 <td>
                                   <input
@@ -639,6 +647,7 @@ export function EventPurchaseOrdersPanel({
                                       lines[idx] = { ...line, concept: e.target.value };
                                       setEditPoLines(lines);
                                     }}
+                                    aria-label={`Concepto de la partida ${idx + 1}`}
                                   />
                                 </td>
                                 <td>
@@ -651,6 +660,7 @@ export function EventPurchaseOrdersPanel({
                                       lines[idx] = { ...line, qty: Number(e.target.value) };
                                       setEditPoLines(lines);
                                     }}
+                                    aria-label={`Cantidad de ${fila}`}
                                   />
                                 </td>
                                 <td>
@@ -663,12 +673,14 @@ export function EventPurchaseOrdersPanel({
                                       lines[idx] = { ...line, unitPrice: Number(e.target.value) };
                                       setEditPoLines(lines);
                                     }}
+                                    aria-label={`Precio unitario de ${fila}`}
                                   />
                                 </td>
                                 <td>
                                   <button
                                     className="btn ghost btn-sm"
                                     type="button"
+                                    aria-label={`Quitar ${fila}`}
                                     onClick={() =>
                                       setEditPoLines(editPoLines.filter((_, i) => i !== idx))
                                     }
@@ -677,7 +689,8 @@ export function EventPurchaseOrdersPanel({
                                   </button>
                                 </td>
                               </tr>
-                            ))}
+                              );
+                            })}
                           </tbody>
                         </table>
                       </div>

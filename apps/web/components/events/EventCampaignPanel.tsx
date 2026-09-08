@@ -361,7 +361,12 @@ export function EventCampaignPanel({
                   </tr>
                 </thead>
                 <tbody>
-                  {campaignForm.concepts.map((row, idx) => (
+                  {campaignForm.concepts.map((row, idx) => {
+                    // Cada celda dice de qué fila y de qué columna es. Sin esto
+                    // un lector de pantalla anuncia siete «cuadro de texto»
+                    // seguidos y no hay forma de saber cuál es cuál.
+                    const fila = row.concept.trim() || `concepto ${idx + 1}`;
+                    return (
                     <tr key={`${idx}-${row.concept.slice(0, 12)}`}>
                       <td>
                         <input
@@ -369,6 +374,7 @@ export function EventCampaignPanel({
                           checked={row.included !== false}
                           disabled={!canEditConcepts}
                           title="Incluir en la hoja de este show"
+                          aria-label={`Incluir ${fila} en la hoja de este show`}
                           onChange={(e) => patchConcept(idx, { included: e.target.checked })}
                         />
                       </td>
@@ -377,6 +383,7 @@ export function EventCampaignPanel({
                           className="field"
                           disabled={!canEditConcepts}
                           value={row.concept}
+                          aria-label={`Concepto de la fila ${idx + 1}`}
                           onChange={(e) => patchConcept(idx, { concept: e.target.value })}
                           placeholder="CONCEPTO"
                         />
@@ -387,6 +394,7 @@ export function EventCampaignPanel({
                           checked={!!row.convenio}
                           disabled={!canEditConcepts}
                           title="Convenio / medio (cortesías en lugar de costo monetario)"
+                          aria-label={`${fila} es convenio (cortesías en vez de dinero)`}
                           onChange={(e) => patchConcept(idx, { convenio: e.target.checked })}
                         />
                       </td>
@@ -396,6 +404,7 @@ export function EventCampaignPanel({
                           type="number"
                           disabled={!canEditConcepts || !!row.convenio}
                           value={row.precioInterno ?? ''}
+                          aria-label={`Precio interno de ${fila}`}
                           onChange={(e) =>
                             patchConcept(idx, {
                               precioInterno: e.target.value === '' ? null : Number(e.target.value),
@@ -410,6 +419,7 @@ export function EventCampaignPanel({
                           type="number"
                           disabled={!canEditConcepts || !!row.convenio}
                           value={row.precioExterno ?? ''}
+                          aria-label={`Precio externo de ${fila}`}
                           onChange={(e) =>
                             patchConcept(idx, {
                               precioExterno: e.target.value === '' ? null : Number(e.target.value),
@@ -423,6 +433,7 @@ export function EventCampaignPanel({
                           className="field"
                           disabled={!canEditConcepts || !row.convenio}
                           value={row.description || ''}
+                          aria-label={`Descripción del convenio de ${fila}`}
                           onChange={(e) => patchConcept(idx, { description: e.target.value })}
                           placeholder={row.convenio ? 'Detalle del acuerdo…' : ''}
                         />
@@ -432,6 +443,7 @@ export function EventCampaignPanel({
                           <button
                             className="btn ghost btn-sm btn-danger"
                             type="button"
+                            aria-label={`Quitar ${fila}`}
                             onClick={() => removeConcept(idx)}
                           >
                             Quitar
@@ -439,7 +451,8 @@ export function EventCampaignPanel({
                         </td>
                       ) : null}
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
