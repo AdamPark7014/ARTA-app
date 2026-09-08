@@ -14,8 +14,7 @@ import { api, isRevisionConflict, type RevisionConflict } from '@/lib/api';
 import { ConflictNotice } from '@/components/ui/ConflictNotice';
 import { useUser } from '@/lib/user-context';
 import { userHasPermission } from '@/lib/access-matrix';
-import { importFinanceFromFile } from '@/lib/finance-import';
-import { defaultCampaignConceptRows } from '@/lib/campaign-sheet-template';
+import { defaultCampaignConceptRows } from '@/lib/campaign-concepts';
 import { fetchPoWindow, type PoWindowState } from '@/lib/po-window';
 import { fromLocalInputValue, toLocalInputValue } from '@/lib/event-dates';
 import { joinPoDescription, splitPoDescription } from '@/lib/po-payment';
@@ -26,14 +25,16 @@ import {
   normalizeTicketZones,
 } from '@/lib/ticket-zones';
 import { EventOverviewPanel } from '@/components/events/EventOverviewPanel';
-import { EventChecklistsPanel } from '@/components/events/EventChecklistsPanel';
-import { EventPurchaseOrdersPanel } from '@/components/events/EventPurchaseOrdersPanel';
-import { EventFinancePanel } from '@/components/events/EventFinancePanel';
-import { EventCampaignPanel } from '@/components/events/EventCampaignPanel';
-import { EventTicketingPanel } from '@/components/events/EventTicketingPanel';
-import { EventTasksPanel } from '@/components/events/EventTasksPanel';
-import { EventSponsorsPanel } from '@/components/events/EventSponsorsPanel';
-import { EventFilesPanel } from '@/components/events/EventFilesPanel';
+import {
+  EventCampaignPanel,
+  EventChecklistsPanel,
+  EventFilesPanel,
+  EventFinancePanel,
+  EventPurchaseOrdersPanel,
+  EventSponsorsPanel,
+  EventTasksPanel,
+  EventTicketingPanel,
+} from '@/components/events/lazy-panels';
 import {
   asFinance,
   CAMPAIGN_FILE_MODULE,
@@ -43,6 +44,7 @@ import {
   SPONSORS_FILE_MODULE,
   emptyFinance,
   type Checklist,
+  type ChecklistItem,
   type DirUser,
   type DocStatus,
   type EventDetail,
@@ -581,11 +583,13 @@ function EventDetailInner() {
     }
   }
 
-  function updateItem(sectionId: string, itemId: string, patch: Partial<Checklist['dataJson']['sections'][0]['items'][0]>) {
+  function updateItem(sectionId: string, itemId: string, patch: Partial<ChecklistItem>) {
     // Actualización funcional: «marcar toda la sección» dispara N cambios en
     // el mismo tick y con la forma anterior solo sobrevivía el último.
+    // Sin `dataJson` todavía (la lista ya no lo trae) no hay nada que tocar:
+    // el contenido llega con `GET /checklists/:id` al abrir el formato.
     setActiveChecklist((prev) =>
-      prev
+      prev?.dataJson
         ? {
             ...prev,
             dataJson: {
@@ -603,7 +607,7 @@ function EventDetailInner() {
   /** Marcar / desmarcar de un golpe todas las casillas de una sección. */
   function updateSection(sectionId: string, done: boolean) {
     setActiveChecklist((prev) =>
-      prev
+      prev?.dataJson
         ? {
             ...prev,
             dataJson: {
@@ -1164,6 +1168,9 @@ function EventDetailInner() {
     setSaving(true);
     setMsg('');
     try {
+      // Igual que la campaña: la librería de Excel se carga al importar, no
+      // al abrir el evento.
+      const { importFinanceFromFile } = await import('@/lib/finance-import');
       const data = await importFinanceFromFile(file);
       setFinanceDraft(data);
       if (financeId) {

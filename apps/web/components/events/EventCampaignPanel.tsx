@@ -1,17 +1,13 @@
 'use client';
 
+import { FileViewer, PdfEditor, SheetEditor } from '@/components/files/lazy';
 import { useEffect, useState } from 'react';
-import { FileViewer } from '@/components/files/FileViewer';
-import { SheetEditor } from '@/components/files/SheetEditor';
-import { PdfEditor } from '@/components/files/PdfEditor';
 import {
-  buildCampaignExpensesWorkbook,
   campaignExpensesFileName,
   catalogFromPageConcepts,
   defaultCampaignConceptRows,
-  workbookToXlsxBlob,
   type CampaignConceptPageRow,
-} from '@/lib/campaign-sheet-template';
+} from '@/lib/campaign-concepts';
 import { patchEventFileCells, replaceEventFile } from '@/lib/file-save';
 import { SectionFileCreate } from '@/components/files/SectionFileCreate';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -118,6 +114,11 @@ export function EventCampaignPanel({
 
   async function createExpensesSheet() {
     await withBusy(async () => {
+      // `xlsx` entra aquí y no arriba: solo hace falta cuando alguien pulsa
+      // «Nueva hoja de gastos», no cada vez que se abre un evento.
+      const { buildCampaignExpensesWorkbook, workbookToXlsxBlob } = await import(
+        '@/lib/campaign-sheet-template'
+      );
       const wb = buildCampaignExpensesWorkbook(
         {
           eventName: event.name,

@@ -1,10 +1,8 @@
 'use client';
 
+import { FileViewer, PdfEditor, SheetEditor } from '@/components/files/lazy';
 import { Fragment, FormEvent, useEffect, useMemo, useState } from 'react';
 import { AppShell } from '@/components/app-shell/AppShell';
-import { FileViewer } from '@/components/files/FileViewer';
-import { SheetEditor } from '@/components/files/SheetEditor';
-import { PdfEditor } from '@/components/files/PdfEditor';
 import { replaceFolderFile } from '@/lib/file-save';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { LoadingBlock } from '@/components/ui/LoadingBlock';

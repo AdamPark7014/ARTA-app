@@ -1,10 +1,8 @@
 'use client';
 
+import { ChecklistPdfEditor, FileViewer, PdfEditor } from '@/components/files/lazy';
 import { useEffect, useMemo, useState } from 'react';
 import { SignaturePad } from '@/components/ui/SignaturePad';
-import { FileViewer } from '@/components/files/FileViewer';
-import { PdfEditor } from '@/components/files/PdfEditor';
-import { ChecklistPdfEditor } from '@/components/files/ChecklistPdfEditor';
 import { createEventFile } from '@/lib/file-save';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { SaveStatus } from '@/components/ui/SaveStatus';
@@ -17,10 +15,17 @@ import { useAutosave } from '@/lib/use-autosave';
 import { useDirtyGuard } from '@/lib/use-dirty-guard';
 import { useSaveHotkey } from '@/lib/use-save-hotkey';
 import { DocStatusBadge, DocStatusControl } from '@/components/ui/DocStatusControl';
-import type { Checklist, DocStatus, EventDetail, EventFile } from '@/components/events/event-detail.types';
+import type {
+  Checklist,
+  ChecklistItem,
+  ChecklistSection,
+  DocStatus,
+  EventDetail,
+  EventFile,
+} from '@/components/events/event-detail.types';
 
-type Section = Checklist['dataJson']['sections'][number];
-type Item = Section['items'][number];
+type Section = ChecklistSection;
+type Item = ChecklistItem;
 
 type EventChecklistsPanelProps = {
   event: EventDetail;

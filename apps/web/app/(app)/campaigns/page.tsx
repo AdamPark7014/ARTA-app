@@ -1,12 +1,10 @@
 'use client';
 
 import Link from 'next/link';
+import { FileViewer, PdfEditor, SheetEditor } from '@/components/files/lazy';
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import { AppShell } from '@/components/app-shell/AppShell';
 import { money } from '@/components/charts/SparkBars';
-import { FileViewer } from '@/components/files/FileViewer';
-import { SheetEditor } from '@/components/files/SheetEditor';
-import { PdfEditor } from '@/components/files/PdfEditor';
 import { patchEventFileCells, replaceEventFile } from '@/lib/file-save';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { LoadingBlock, LoadingKpis } from '@/components/ui/LoadingBlock';

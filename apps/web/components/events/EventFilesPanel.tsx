@@ -1,10 +1,9 @@
 'use client';
 
+import { DocEditor, FileViewer, PdfEditor, SheetEditor } from '@/components/files/lazy';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { FileViewer } from '@/components/files/FileViewer';
-import { SheetEditor } from '@/components/files/SheetEditor';
-import { PdfEditor } from '@/components/files/PdfEditor';
-import { DocEditor, type EventDocumentRow } from '@/components/files/DocEditor';
+// Solo el tipo: no arrastra el modulo al bundle.
+import type { EventDocumentRow } from '@/components/files/DocEditor';
 import { SectionFileCreate } from '@/components/files/SectionFileCreate';
 import { pdfToBlocks } from '@/lib/pdf-to-blocks';
 import { patchEventFileCells, replaceEventFile } from '@/lib/file-save';

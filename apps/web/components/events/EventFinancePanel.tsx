@@ -1,9 +1,7 @@
 'use client';
 
+import { FileViewer, PdfEditor, SheetEditor } from '@/components/files/lazy';
 import { useEffect, useState, type Dispatch, type SetStateAction } from 'react';
-import { FileViewer } from '@/components/files/FileViewer';
-import { SheetEditor } from '@/components/files/SheetEditor';
-import { PdfEditor } from '@/components/files/PdfEditor';
 import {
   buildFinanceCorridaWorkbook,
   financeCorridaFileName,

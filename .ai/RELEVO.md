@@ -6,73 +6,53 @@
 
 ## Hecho en este turno
 
-**El evento por fin se puede editar, y se ve sin tener que abrir un formulario.**
+**Eficiencia, medida antes y después. Y deploy.**
 
-### 1. La fecha del show no se podía cambiar
+### 1. El 72 % del payload del evento era material que nadie mira
 
-El API aceptaba `startsAt`, `endsAt` y `campaignType` **desde siempre**; el panel
-nunca los mandaba. Así que la fecha de un show y el tipo de campaña solo se
-podían fijar **al crear el evento**: si el show se movía de fecha —que es la
-mitad de la operación— no había arreglo salvo borrarlo y rehacerlo, perdiendo
-formatos, órdenes, archivos e historial.
+`GET /events/:id` traía, por cada formato del show: el `dataJson` completo, el
+`schemaJson` **entero** de la plantilla, el mapa de campos del PDF y **las dos
+firmas, que llevan la imagen en base64 dentro**. De todo eso la lista solo pinta
+`template.key`. Cuando se abre un formato, el panel ya pedía
+`GET /checklists/:id` aparte — así que era trabajo tirado.
 
-Ahora se editan desde el evento, con la validación de que el fin no puede ir
-antes del inicio, y `endsAt` acepta `null` explícito para poder **quitar** una
-fecha de fin puesta por error (antes se quedaba para siempre).
+Y el panel **recarga el evento entero después de cada guardado: 27 sitios**. O
+sea que el desperdicio se multiplicaba por cada casilla marcada.
 
-### 2. Bug de zona horaria en las fechas
+Medido sobre la base sembrada (13 formatos vacíos, sin firmas):
+**45.0 KB → 9.9 KB, −78 %.** En un show real con formatos llenos y firmados es
+bastante más, porque una firma es un PNG en base64.
 
-El formulario mandaba lo que escupe un `<input type="datetime-local">`:
-`2026-09-19T20:00`, **sin zona**. El API hacía `new Date(valor)`, que Node
-interpreta en la zona del proceso. En una laptop de Puebla salía bien; en el
-contenedor —que corre en UTC porque nadie fijó `TZ`— ese show de las 20:00 se
-guardaba como 20:00Z, o sea **las 14:00 de Puebla**. Seis horas, y en shows de
-noche **cambiaba el día**: el panel anunciaba el evento un día después del real.
+También: el historial de tareas venía con 80 movimientos por tarea aunque el
+panel lo pinta colapsado. Ahora son los 12 últimos.
 
-Se manda un instante absoluto desde el navegador (`lib/event-dates.ts`), que es
-el único que sabe con certeza en qué zona está la persona. Arreglado también en
-**crear evento**, que es donde se capturan hoy.
+### 2. La librería de Excel viajaba en cada carga del evento
 
-### 3. «Datos del show» se ve siempre
+`FileViewer` y `SheetEditor` importan `xlsx` de forma estática, y los cuatro
+paneles del evento los importaban a su vez. Más `finance-import` y
+`campaign-sheet-template`, que la página importaba directo. Resultado: **quien
+abría un evento se bajaba `xlsx` entero aunque no tocara una hoja**.
 
-Los datos vivían medio escondidos: el nombre y la sede salían en la cinta de
-arriba, y el **promotor**, el **fin** y el **tipo de campaña** no salían en
-ninguna parte — había que abrir el formulario para enterarse de qué decían.
-Ahora hay una tarjeta con todo, y «Editar» la convierte en campos en el sitio.
+Se veía en el build: `/events/[id]` pesaba **317 kB** de First Load contra
+~117 kB de cualquier otra pantalla; `/campaigns` y `/folders`, 270 y 266 kB.
 
-El tipo de campaña además explica **qué hace**: decide si la hoja de gastos toma
-el precio interno o el externo de cada concepto. Era justo lo que no se entendía.
+Tres cambios:
+- `components/files/lazy.tsx` — los cinco editores por `next/dynamic`.
+- `components/events/lazy-panels.tsx` — los ocho paneles que no son Resumen.
+  Solo se pinta una pestaña a la vez; no hacía falta traer las nueve.
+- `lib/campaign-concepts.ts` — el catálogo de conceptos y precios **sin `xlsx`**.
+  Estaba dentro del módulo que genera el libro, así que la tabla de precios
+  arrastraba la librería entera. El generador se carga al pulsar «Nueva hoja de
+  gastos», y `importFinanceFromFile` al importar.
 
-### 4. «Editar datos» desde otra pestaña ya no era un botón muerto
+**`/events/[id]`: 317 kB → 133 kB (−58 %). `/campaigns`: 270 → 122 kB.
+`/folders`: 266 → 118 kB.** La pantalla más usada del panel ya pesa lo mismo
+que las demás.
 
-El formulario vive en Resumen. Desde Tareas o Corrida, el botón del encabezado
-encendía el modo edición contra algo que no estaba en pantalla: se apretaba y no
-pasaba nada. Ahora lleva a Resumen con el formulario abierto.
+### 3. Verde
 
-### 5. El texto de una tarea se corrige donde está
-
-El API acepta `title` y `detail`, pero el panel solo dejaba reasignar y mover la
-fecha: una tarea mal escrita se quedaba mal escrita para siempre, o se borraba y
-se rehacía **perdiendo su historial y su evidencia**. Ahora el título es un
-botón que abre la fila en modo corrección, sin diálogo aparte —la tarea sigue a
-la vista con su responsable y su fecha, que es el contexto que hace falta.
-
-### 6. Accesibilidad de las tablas que se llenan a diario
-
-Los `<input>` dentro de celdas solo tenían `placeholder`. Un lector de pantalla
-anunciaba siete «cuadro de texto» seguidos sin decir de qué fila ni de qué
-columna. Ahora cada celda se nombra sola —«Precio interno de MUPIS», «Cantidad
-de Consola»— en **conceptos de campaña** y en las **partidas de OC** (captura y
-edición). Las notas del evento tenían solo `placeholder`, que desaparece al
-escribir: ahora llevan nombre. Y los datos del show son un `<dl>` de verdad, no
-`div`s: se anuncian como «Promotor: Arta Producciones».
-
-### 7. Pruebas
-
-**Nuevo `e2e/event-edit.spec.ts`** (5): los datos se ven sin entrar en edición,
-la fecha se mueve y viaja como instante absoluto, un fin antes del inicio no se
-guarda, «Editar datos» desde otra pestaña lleva al formulario, y el texto de una
-tarea se corrige en su fila.
+174 unitarias · Playwright **38 de 40** (los 2 rojos son los SSR de siempre, que
+piden el API en `127.0.0.1:4000`) · `tsc --noEmit` limpio en api y web.
 
 ## A medias
 
@@ -80,35 +60,34 @@ tarea se corrige en su fila.
    fallo más serio del editor.
 2. **Precios campaña interno/externo sin llenar** — falta la lista de Arta.
 3. **No se puede pasar un evento de borrador a activo.** Los nuevos nacen
-   `ACTIVE`, así que solo afecta a eventos viejos o sembrados; el `PATCH` no
-   acepta `status` a propósito (evita saltarse `EVENT_CLOSE`), así que haría
-   falta un endpoint propio.
+   `ACTIVE`; el `PATCH` no acepta `status` a propósito (evita saltarse
+   `EVENT_CLOSE`), así que haría falta un endpoint propio.
 4. Estados oráculo solo en checklists; `locked` sigue en `FinanceRun`;
    `EventDocument` sin revisiones.
-5. Auditoría incompleta fuera de OC/checklists (campañas, documentos, carpetas,
-   vendor, boletera, patrocinios, roles, login).
-6. Editor embebido de Excel/PDF de patrocinio (hoy Abrir / Documentos).
+5. Auditoría incompleta fuera de OC/checklists.
+6. **`sponsor-convenio-template` sigue trayendo `xlsx` estático** en
+   `EventSponsorsPanel`. Ya no pesa en la carga inicial porque el panel es
+   diferido, pero cuando alguien abre Convenios se baja la librería entera; el
+   mismo corte que se hizo en campaña le vendría bien.
 
 ## Siguiente paso
 
-1. **Deploy + `prisma migrate deploy`** en Hetzner. Migraciones acumuladas:
-   tareas con evidencia, `doc_revisions_and_status`,
-   `file_revisions_and_panel_editable`, `signature_content_hash` y
-   `po_payment_method`.
-   ⚠️ **Fijar `TZ=America/Mexico_City` en el contenedor del API** de paso: el
-   arreglo de fechas ya no depende de ello, pero todo lo que el servidor
-   formatee por su cuenta (digests, PDFs) sigue saliendo en la zona del proceso.
-2. **Backfill del avance** tras el deploy:
+1. **Backfill del avance** — sigue sin correr:
    ```
    docker exec -w /app/apps/api arta-api npx ts-node --transpile-only \
      scripts/backfill-checklist-progress.ts --dry
    ```
-   ⚠️ Los porcentajes bajan y las alertas de riesgo suben. Avisar el mismo día.
-3. **Revisar las fechas ya guardadas en producción.** Si el contenedor corría en
-   UTC, los shows capturados hasta hoy pueden estar 6 h adelantados. Vale la
-   pena mirar un par contra el cartel real antes de dar por buena la agenda.
-4. Smoke: mover la fecha de un show y ver que la cinta de arriba y el calendario
-   dicen lo mismo.
+   ⚠️ Los porcentajes **bajan** y las alertas de riesgo **suben** el mismo día.
+   Avisar al equipo antes y silenciar digests 24 h. No se corrió en este deploy
+   a propósito: mueve todos los números que ve el equipo y eso se avisa.
+2. **Revisar las fechas ya guardadas.** Si el contenedor venía corriendo en UTC,
+   los shows capturados antes del arreglo de zona horaria pueden estar 6 h
+   adelantados. Mirar un par contra el cartel real.
+3. **Fijar `TZ=America/Mexico_City`** en el contenedor del API: el arreglo de
+   fechas ya no depende de ello, pero los digests y PDFs que formatea el
+   servidor sí.
+4. Smoke con el equipo: mover la fecha de un show, pedir una OC en efectivo (no
+   debe pedir comprobante) y abrir una hoja de campaña.
 
 ## No tocar
 

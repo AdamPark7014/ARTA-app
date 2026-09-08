@@ -51,21 +51,30 @@ export type Checklist = {
   authorizedBy?: { fullName: string } | null;
   authorizedSignature?: SigPayload | null;
   versions?: ChecklistVersion[];
-  dataJson: {
-    sections: Array<{
-      id: string;
-      title: string;
-      items: Array<{
-        id: string;
-        label: string;
-        type?: string;
-        done?: boolean;
-        value?: string | number | null;
-        options?: string[];
-      }>;
-    }>;
-  };
+  /**
+   * Solo viene en `GET /checklists/:id`. La LISTA del evento no lo trae: era
+   * el 72 % del payload y se volvía a bajar en cada guardado.
+   */
+  dataJson?: ChecklistData;
 };
+
+export type ChecklistItem = {
+  id: string;
+  label: string;
+  type?: string;
+  done?: boolean;
+  value?: string | number | null;
+  options?: string[];
+};
+
+export type ChecklistSection = {
+  id: string;
+  title: string;
+  items: ChecklistItem[];
+};
+
+/** El contenido del formato. Llega con el formato abierto, no con la lista. */
+export type ChecklistData = { sections: ChecklistSection[] };
 
 export type PoLine = { id?: string; concept: string; qty: number; unitPrice: number; total?: number };
 export type Po = {

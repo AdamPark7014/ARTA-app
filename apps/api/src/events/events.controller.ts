@@ -139,9 +139,43 @@ export class EventsController {
       where: { id },
       include: {
         createdBy: { select: { id: true, fullName: true } },
+        /**
+         * La LISTA de formatos, no su contenido.
+         *
+         * Esto venía con `include: { template: true }` y todos los campos de
+         * la instancia, así que cada carga del evento se traía, por cada
+         * formato: el `dataJson` completo, el `schemaJson` entero de la
+         * plantilla, el mapa de campos del PDF y **las dos firmas, que llevan
+         * la imagen en base64 dentro**. Nada de eso lo pinta la lista: cuando
+         * se abre un formato, el panel ya pide `GET /checklists/:id` aparte.
+         *
+         * Sobre la base sembrada eran 32 de 45 KB — el 72 % — y el panel
+         * recarga el evento entero después de *cada* guardado (27 sitios),
+         * así que el desperdicio se multiplica por cada casilla que alguien
+         * marca. En un show real con formatos llenos y firmados es peor: una
+         * firma es un PNG en base64.
+         */
         checklists: {
-          include: {
-            template: true,
+          select: {
+            id: true,
+            eventId: true,
+            templateId: true,
+            title: true,
+            progressPct: true,
+            status: true,
+            revision: true,
+            pdfUrl: true,
+            pdfGeneratedAt: true,
+            lastEditedAt: true,
+            submittedAt: true,
+            approvedAt: true,
+            sealedAt: true,
+            deliveredAt: true,
+            authorizedAt: true,
+            reopenReason: true,
+            createdAt: true,
+            updatedAt: true,
+            template: { select: { key: true, name: true } },
             lastEditedBy: { select: { id: true, fullName: true } },
             deliveredBy: { select: { id: true, fullName: true } },
             authorizedBy: { select: { id: true, fullName: true } },
@@ -165,10 +199,16 @@ export class EventsController {
               include: { uploadedBy: { select: { id: true, fullName: true } } },
               orderBy: { createdAt: 'asc' },
             },
+            /**
+             * El historial arranca colapsado en el panel («Ver historial · N
+             * movimientos»), así que traer 80 movimientos por tarea era pagar
+             * por algo que nadie mira. Se traen los últimos 12 —suficiente
+             * para el resumen y para el caso normal— y se ordenan al pintar.
+             */
             activities: {
               include: { actor: { select: { id: true, fullName: true } } },
-              orderBy: { createdAt: 'asc' },
-              take: 80,
+              orderBy: { createdAt: 'desc' },
+              take: 12,
             },
           },
         },
@@ -180,7 +220,12 @@ export class EventsController {
     if (!event) throw new BadRequestException('Evento no encontrado');
     assertSameTenant(req.user, event.organizationId);
     this.assertEntity(req.user, event.entity);
-    return event;
+    // Se pidieron los ÚLTIMOS 12 movimientos (`desc`), pero el panel los pinta
+    // en orden de sucesión: se devuelven ascendentes, como el resto del API.
+    return {
+      ...event,
+      tasks: event.tasks.map((t) => ({ ...t, activities: [...t.activities].reverse() })),
+    };
   }
 
   @Post()
