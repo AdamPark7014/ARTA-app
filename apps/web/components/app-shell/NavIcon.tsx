@@ -10,6 +10,7 @@ function Icon({ d, size = 18 }: { d: string; size?: number }) {
 
 const ICONS: Record<string, string> = {
   '/dashboard': 'M3 9.5 12 3l9 6.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1V9.5Z',
+  '/chat': 'M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2Z M8 9h8M8 13h5',
   '/events': 'M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z',
   '/events/new': 'M12 5v14M5 12h14',
   '/calendar': 'M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01',

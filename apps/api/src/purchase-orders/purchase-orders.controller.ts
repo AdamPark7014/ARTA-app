@@ -29,6 +29,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { hasPermission, canAccessEventOps, PERMISSIONS, type EntityKey, type RoleKey } from '../common/rbac/roles';
 import { assertSameTenant, tenantIdOf } from '../common/tenant';
 import { assertEventNotClosed } from '../common/event-guards';
+import { NotificationsService } from '../notifications/notifications.service';
 import {
   DEFAULT_PO_WINDOW,
   describeSchedule,
@@ -81,7 +82,48 @@ type WindowUser = {
 @Controller('purchase-orders')
 @UseGuards(JwtAuthGuard)
 export class PurchaseOrdersController {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private notifications: NotificationsService,
+  ) {}
+
+  /**
+   * Una OC nueva le llega a quien la puede autorizar en esa entidad. Antes se
+   * quedaba «Por autorizar» hasta que dirección entrara a la torre de OC.
+   */
+  private async notifyAuthorizers(
+    user: { id: string; fullName?: string },
+    event: { id: string; name: string; entity: string; organizationId: string | null },
+    order: { vendorName: string | null; amount: Prisma.Decimal | number },
+  ) {
+    const organizationId = event.organizationId ?? null;
+    const people = await this.prisma.user.findMany({
+      where: { active: true, ...(organizationId ? { organizationId } : {}) },
+      select: { id: true, roleKey: true, entities: true, permissions: true },
+    });
+    const entity = event.entity as EntityKey;
+    const recipients = people.filter((p) => {
+      const role = p.roleKey as RoleKey;
+      if (!hasPermission(role, p.permissions, PERMISSIONS.PO_AUTHORIZE)) return false;
+      if (!canAccessEventOps(p.entities as EntityKey[], role, entity)) return false;
+      if (role === 'gerente_arta' && entity !== 'ARTA') return false;
+      if (role === 'dir_auditorio' && entity !== 'EXPLANADA') return false;
+      return true;
+    });
+    const amount = Number(order.amount).toLocaleString('es-MX', { style: 'currency', currency: 'MXN' });
+    await this.notifications.notifyMany(
+      recipients.map((p) => ({
+        userId: p.id,
+        organizationId,
+        actorId: user.id,
+        type: 'po.requested',
+        title: `${user.fullName || 'Alguien del equipo'} pidió una orden de compra`,
+        body: `${order.vendorName || 'Sin proveedor'} · ${amount} · ${event.name}`,
+        linkUrl: `/events/${event.id}?tab=ocs`,
+        entity: event.entity as EntityKey,
+      })),
+    );
+  }
 
   /** Días de cobro del tenant (con los defaults de Arta: lunes, miércoles y viernes). */
   private async loadWindow(user: WindowUser): Promise<PoWindowConfig> {
@@ -292,6 +334,7 @@ export class PurchaseOrdersController {
         roleKey: string;
         permissions?: string[];
         organizationId?: string | null;
+        fullName?: string;
       };
     },
     @Body() dto: CreatePoDto,
@@ -346,6 +389,8 @@ export class PurchaseOrdersController {
       payeeType,
       paymentMethod: created.paymentMethod,
     });
+    // Un aviso que falla no deshace la orden.
+    await this.notifyAuthorizers(req.user, event, created).catch(() => undefined);
     return created;
   }
 

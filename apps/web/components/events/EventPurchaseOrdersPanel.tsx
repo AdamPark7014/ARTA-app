@@ -2,6 +2,7 @@
 
 import {
   Fragment,
+  useEffect,
   useId,
   useMemo,
   useState,
@@ -10,6 +11,7 @@ import {
   type ReactNode,
 } from 'react';
 import { api } from '@/lib/api';
+import { clearDraft, poHandoffKey, readDraft } from '@/lib/draft-store';
 import { EmptyLite, Pill, SectionHead, Seg } from '@/components/ui/Lite';
 import { PayDaysNote } from '@/components/purchase-orders/PoWindowBanner';
 import { PoProofsBlock } from '@/components/purchase-orders/PoProofsBlock';
@@ -637,7 +639,14 @@ export function EventPurchaseOrdersPanel({
   const editable = canCreate && !closed;
 
   const [section, setSection] = useState<PoSection>(() => (stats.auth.count > 0 ? 'auth' : 'all'));
-  const [creating, setCreating] = useState(false);
+  // Desde Campaña: «Crear OC» deja las partidas listas y abre el formulario.
+  const [handoff] = useState<Partial<PoDraft> | null>(() =>
+    editable ? readDraft<Partial<PoDraft>>(poHandoffKey(event.id)) : null,
+  );
+  const [creating, setCreating] = useState(() => !!handoff);
+  useEffect(() => {
+    clearDraft(poHandoffKey(event.id));
+  }, [event.id]);
   const [openId, setOpenId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   /** 'create' · id de la orden · `pdf-<id>` */
@@ -834,7 +843,17 @@ export function EventPurchaseOrdersPanel({
           <div className="surface__body">
             <PoForm
               mode="create"
-              initial={emptyDraft()}
+              initial={
+                handoff
+                  ? {
+                      ...emptyDraft(),
+                      ...handoff,
+                      lines: handoff.lines?.length
+                        ? handoff.lines.map((l) => newLine({ concept: l.concept, qty: l.qty, unitPrice: l.unitPrice }))
+                        : [newLine()],
+                    }
+                  : emptyDraft()
+              }
               facts={[
                 ['Fecha de solicitud', dateLong(new Date().toISOString())],
                 ['Solicitante', currentUserName],

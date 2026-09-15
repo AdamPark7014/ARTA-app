@@ -93,8 +93,11 @@ describe('PurchaseOrdersController · comprobante, días de cobro y auditoría',
       },
       event: { findUnique: async () => order.event },
       organization: { findUnique: async () => ({ settingsJson }) },
+      user: { findMany: async () => [] },
     };
-    controller = new PurchaseOrdersController(prisma as never);
+    // Los avisos no son lo que se prueba aquí: se aceptan y no hacen nada.
+    const notifications = { notify: async () => null, notifyMany: async () => [] };
+    controller = new PurchaseOrdersController(prisma as never, notifications as never);
   });
 
   afterEach(() => {

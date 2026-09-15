@@ -680,6 +680,7 @@ function EventDetailInner() {
             canEdit={canCampaign}
             canApprove={canApproveCampaign}
             canMarkPaid={canMarkPaid}
+            onCreatePo={canPo && canChecklistEdit ? () => selectModule('ocs') : undefined}
           />
         )}
 

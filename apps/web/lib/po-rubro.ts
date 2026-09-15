@@ -8,6 +8,7 @@ export const PO_RUBRO_KEYS = [
   'transporte',
   'catering',
   'artes',
+  'publicidad',
   'otro',
 ] as const;
 
@@ -21,6 +22,7 @@ export const PO_RUBRO_LABELS: Record<PoRubroKey, string> = {
   transporte: 'Transporte',
   catering: 'Catering',
   artes: 'Artes',
+  publicidad: 'Publicidad / campaña',
   otro: 'Otro (especificar)',
 };
 

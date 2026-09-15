@@ -11,6 +11,7 @@ import {
   type NavItem,
 } from '@/lib/access-matrix';
 import { NavIcon } from './NavIcon';
+import { useChatUnread } from './useChatUnread';
 
 type Props = {
   /** Items ya filtrados por rol / permisos / entidad */
@@ -35,6 +36,7 @@ export function SidebarNav({ items, query }: Props) {
   const searchParams = useSearchParams();
   const searching = !!query.trim();
   const [showMore, setShowMore] = useState(false);
+  const chatUnread = useChatUnread(items.some((item) => item.href === '/chat') && pathname !== '/chat');
 
   const hiddenItems = useMemo(() => items.filter((item) => item.hidden), [items]);
 
@@ -72,14 +74,17 @@ export function SidebarNav({ items, query }: Props) {
           <div className="nav-group-label">{group}</div>
           {groupItems.map((item) => {
             const key = navKey(item);
+            const badge = item.href === '/chat' && chatUnread > 0 ? chatUnread : 0;
             return (
               <Link
                 key={key}
                 href={navHref(item)}
                 className={key === activeKey ? 'active' : ''}
+                aria-label={badge ? `${item.label}, ${badge} sin leer` : undefined}
               >
                 <NavIcon href={item.href} />
                 <span>{item.label}</span>
+                {badge ? <span className="nav-badge">{badge > 99 ? '99+' : badge}</span> : null}
               </Link>
             );
           })}
@@ -97,7 +102,6 @@ export function SidebarNav({ items, query }: Props) {
           {showMore ? 'Ocultar vistas de portafolio' : `Más herramientas (${hiddenItems.length})`}
         </button>
       ) : null}
-
     </nav>
   );
 }

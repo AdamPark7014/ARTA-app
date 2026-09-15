@@ -10,11 +10,12 @@ import {
   Req,
   UseGuards,
 } from '@nestjs/common';
-import { CampaignType, Prisma } from '@prisma/client';
+import { Campaign, CampaignType, Event, Prisma } from '@prisma/client';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { assertSameTenant, tenantIdOf } from '../common/tenant';
 import { assertEventNotClosed } from '../common/event-guards';
+import { NotificationsService } from '../notifications/notifications.service';
 import {
   canAccessEventOps,
   eventOpsEntities,
@@ -32,6 +33,7 @@ type AuthUser = {
   roleKey: string;
   entities: string[];
   permissions: string[];
+  fullName?: string;
   organizationId?: string | null;
 };
 
@@ -61,7 +63,10 @@ function asStatus(value: unknown): ReviewStatus | null {
 @Controller('campaigns')
 @UseGuards(JwtAuthGuard)
 export class CampaignsController {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private notifications: NotificationsService,
+  ) {}
 
   /**
    * Junta 2026-08-28: la campaña debe poder expandirse para ver el Excel y/o
@@ -91,6 +96,70 @@ export class CampaignsController {
     }
     assertSameTenant(user, event.organizationId);
     return event;
+  }
+
+  /**
+   * Avisos del recorrido: al enviar a revisión le llega a quien autoriza; al
+   * autorizar, regresar o pagar, a quien la mandó a revisión. Sin esto la
+   * campaña se quedaba «En revisión» hasta que alguien entrara a mirar.
+   */
+  private async notifyMove(
+    user: AuthUser,
+    event: Event,
+    campaign: Campaign,
+    scope: Scope,
+    to: ReviewStatus,
+  ) {
+    const tab = scope === 'convenios' ? 'sponsors' : 'campaign';
+    const what = scope === 'convenios' ? 'la campaña de convenios' : 'la campaña';
+    const linkUrl = `/events/${event.id}?tab=${tab}`;
+    const who = user.fullName || 'Alguien del equipo';
+    const organizationId = event.organizationId ?? tenantIdOf(user);
+
+    if (to === 'REVIEW') {
+      const approvers = await this.prisma.user.findMany({
+        where: { active: true, organizationId, roleKey: { in: ['dir_general', 'gerente_arta'] } },
+        select: { id: true, roleKey: true, entities: true },
+      });
+      await this.notifications.notifyMany(
+        approvers
+          .filter((a) => a.roleKey === 'dir_general' || a.entities.includes(event.entity))
+          .map((a) => ({
+            userId: a.id,
+            organizationId,
+            actorId: user.id,
+            type: `${scope}.review`,
+            title: `${who} envió a revisión ${what}`,
+            body: event.name,
+            linkUrl,
+            entity: event.entity,
+          })),
+      );
+      return;
+    }
+
+    const sent = await this.prisma.auditLog.findFirst({
+      where: {
+        resource: 'Campaign',
+        resourceId: campaign.id,
+        action: `${scope}.status`,
+        metaJson: { path: ['to'], equals: 'REVIEW' },
+      },
+      orderBy: { createdAt: 'desc' },
+      select: { userId: true },
+    });
+    if (!sent?.userId) return;
+    const verb = to === 'AUTHORIZED' ? 'autorizó' : to === 'PAID' ? 'marcó como pagada' : 'regresó a borrador';
+    await this.notifications.notify({
+      userId: sent.userId,
+      organizationId,
+      actorId: user.id,
+      type: `${scope}.${to.toLowerCase()}`,
+      title: `${who} ${verb} ${what}`,
+      body: event.name,
+      linkUrl,
+      entity: event.entity,
+    });
   }
 
   @Get()
@@ -184,19 +253,32 @@ export class CampaignsController {
     const existing = await this.prisma.campaign.findUnique({ where: { eventId } });
 
     /*
+     * Lo que ya está en revisión o autorizado no se mueve por debajo: sin este
+     * candado, cualquiera con la tabla abierta cambiaba precios de una campaña
+     * que dirección ya había aprobado.
+     */
+    const incoming = body.dataJson && typeof body.dataJson === 'object' ? body.dataJson : null;
+    if (incoming && existing) {
+      const locked = (key: 'concepts' | 'convenios', status: string) =>
+        key in incoming && asStatus(status) !== null && asStatus(status) !== 'DRAFT';
+      if (locked('concepts', existing.status) || locked('convenios', existing.convenioStatus)) {
+        throw new BadRequestException('Está en revisión o autorizada: regrésala a borrador para editarla');
+      }
+    }
+
+    /*
      * `dataJson` se FUSIONA por llave.
      *
      * Ahora dos pestañas escriben en la misma campaña —los conceptos desde
      * Campaña y los convenios desde Convenios—; reemplazar el JSON entero hacía
      * que guardar una borrara la otra.
      */
-    const mergedData =
-      body.dataJson && typeof body.dataJson === 'object'
-        ? ({
-            ...((existing?.dataJson as Record<string, unknown> | null) || {}),
-            ...body.dataJson,
-          } as Prisma.InputJsonValue)
-        : undefined;
+    const mergedData = incoming
+      ? ({
+          ...((existing?.dataJson as Record<string, unknown> | null) || {}),
+          ...incoming,
+        } as Prisma.InputJsonValue)
+      : undefined;
 
     // El atajo legado `authorized` sigue funcionando y mueve también el estado.
     const statusFromAuth =
@@ -314,12 +396,14 @@ export class CampaignsController {
       data: {
         userId: req.user.id,
         organizationId: event.organizationId ?? req.user.organizationId ?? null,
-        action: scope === 'convenios' ? 'convenios.status' : 'campaign.status',
+        action: `${scope}.status`,
         resource: 'Campaign',
         resourceId: campaign.id,
         metaJson: { eventId, from: current, to: next },
       },
     });
+    // Un aviso que falla no deshace el cambio de estado.
+    await this.notifyMove(req.user, event, campaign, scope, next).catch(() => undefined);
     return updated;
   }
 }

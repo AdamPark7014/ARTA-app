@@ -250,6 +250,10 @@ export class TasksController {
 
   @Post()
   async create(@Req() req: { user: AuthUser }, @Body() dto: CreateTaskDto) {
+    // Junta 11-09-2026: «solo carpetas generales» consulta, no asigna trabajo.
+    if (req.user.roleKey === 'solo_carpetas') {
+      throw new ForbiddenException('Tu acceso es solo a carpetas generales');
+    }
     const event = dto.eventId ? await this.assertEventOpen(req.user, dto.eventId) : null;
     const assignee = await this.assertAssigneeInOrg(req.user, dto.assigneeId);
 

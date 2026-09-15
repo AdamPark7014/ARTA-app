@@ -86,6 +86,25 @@ Mandato de Adam: simple, elegante y visualmente atractivo; nada de texto de más
   `williams@arta.mx` / `jp@arta.mx` se sigue editando. No se tocaron. Revisar si existen en
   producción y desactivarlas desde Usuarios.
 
+### Segunda vuelta: más intuitivo (revisión propia, 15-09)
+- **Campaña → Orden de compra:** con la campaña autorizada o pagada, «Crear OC» abre
+  Órdenes de compra con las partidas a precio interno, rubro «Publicidad / campaña».
+  Traspaso por `sessionStorage` (`poHandoffKey` en `lib/draft-store.ts`).
+- **Excel → tabla:** «Actualizar tabla desde Excel» en el archivo de campaña
+  (`parseCampaignWorkbook`): lo editado en Excel vuelve a la tabla, PDFs y calendario.
+- **Borradores que no se pierden:** Campaña y Convenios guardan lo tecleado sin guardar
+  en `sessionStorage` al cambiar de pestaña o recargar.
+- **Candado en API:** conceptos (o convenios) en revisión/autorizados no se editan por
+  `POST /campaigns/event/:id` hasta regresarlos a borrador.
+- **Avisos:** enviar a revisión → dirección + gerencia de esa entidad; autorizar /
+  regresar / pagar → a quien la envió; OC nueva → quien la puede autorizar.
+- **Chat:** contador de no leídos en el menú (`useChatUnread`, 30 s + evento
+  `arta:chat-read`) e icono propio.
+- **Permisos:** `solo_carpetas` ya no ve «Tareas» ni puede crear tareas.
+- `docker-compose.yml`: `TZ=America/Mexico_City` en api y web.
+- Pruebas nuevas: `campaigns.controller.spec.ts` (candado, fusión de convenios, avisos,
+  quién autoriza).
+
 ### Migración
 - `20260915090000_junta_0911` (enum CHEQUE, columnas nuevas, chat, backfill de campañas
   autorizadas). Aplicada en Docker local.

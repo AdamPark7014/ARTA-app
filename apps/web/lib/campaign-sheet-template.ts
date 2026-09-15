@@ -319,3 +319,75 @@ export function buildConveniosWorkbook(meta: CampaignWorkbookMeta, rows: Conveni
   XLSX.utils.book_append_sheet(wb, ws, 'Convenios');
   return wb;
 }
+
+/* ── De vuelta del Excel a la tabla ────────────────────────────────────── */
+
+function cellText(v: unknown): string {
+  return v == null ? '' : String(v).trim();
+}
+
+function cellNumber(v: unknown): number | null {
+  if (typeof v === 'number' && Number.isFinite(v)) return v;
+  const t = cellText(v).replace(/[$,\s]/g, '');
+  if (!t) return null;
+  const n = Number(t);
+  return Number.isFinite(n) ? n : null;
+}
+
+/** Fecha de celda → YYYY-MM-DD (texto ISO o número de serie de Excel). */
+function cellDay(v: unknown): string | null {
+  if (typeof v === 'number' && Number.isFinite(v) && v > 20000) {
+    const d = XLSX.SSF.parse_date_code(v);
+    if (d) return `${d.y}-${String(d.m).padStart(2, '0')}-${String(d.d).padStart(2, '0')}`;
+  }
+  const t = cellText(v);
+  const m = t.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+  const dmy = t.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (dmy) return `${dmy[3]}-${dmy[2].padStart(2, '0')}-${dmy[1].padStart(2, '0')}`;
+  return null;
+}
+
+type SheetConcept = { concept: string; qty: number | null; price: number | null; from: string | null; to: string | null };
+
+/** Filas entre el encabezado CONCEPTO y el TOTAL de una hoja de campaña. */
+function readConceptSheet(ws: XLSX.WorkSheet | undefined): SheetConcept[] {
+  if (!ws) return [];
+  const rows = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, raw: true, defval: '' });
+  const start = rows.findIndex((r) => cellText(r[0]).toUpperCase() === 'CONCEPTO');
+  if (start < 0) return [];
+  const out: SheetConcept[] = [];
+  for (const r of rows.slice(start + 1)) {
+    const concept = cellText(r[0]);
+    if (/^TOTAL\b/i.test(concept)) break;
+    if (!concept) continue;
+    const qty = cellNumber(r[1]);
+    const price = cellNumber(r[2]);
+    // Filas de convenio del formato viejo: la «cantidad» es texto y no hay costo.
+    if (qty === null && price === null && cellText(r[1])) continue;
+    out.push({ concept, qty, price, from: cellDay(r[4]), to: cellDay(r[5]) });
+  }
+  return out;
+}
+
+/**
+ * Lee el archivo de campaña (hojas «Interna» y «Externa»; o la hoja única del
+ * formato anterior) y devuelve los conceptos para la tabla del evento.
+ */
+export function parseCampaignWorkbook(data: ArrayBuffer): CampaignConceptRow[] {
+  const wb = XLSX.read(data, { type: 'array' });
+  const internal = readConceptSheet(wb.Sheets.Interna ?? wb.Sheets[wb.SheetNames[0]]);
+  const external = readConceptSheet(wb.Sheets.Externa);
+  const externalByName = new Map(external.map((e) => [e.concept.toUpperCase(), e]));
+  return internal.map((row, i) => {
+    const ext = externalByName.get(row.concept.toUpperCase()) ?? external[i];
+    return {
+      concept: row.concept,
+      qty: row.qty ?? ext?.qty ?? 1,
+      from: row.from ?? ext?.from ?? null,
+      to: row.to ?? ext?.to ?? null,
+      precioInterno: row.price,
+      precioExterno: ext ? ext.price : null,
+    };
+  });
+}

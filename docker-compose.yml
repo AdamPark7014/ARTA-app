@@ -29,6 +29,8 @@ services:
       JWT_SECRET: arta-docker-dev-secret
       JWT_EXPIRES_IN: 7d
       API_PORT: "4000"
+      # Digests y PDFs del servidor en hora de Puebla, no en UTC.
+      TZ: America/Mexico_City
       UPLOAD_DIR: /app/uploads
       SEED_PASSWORD: ArtaDevLocal-1
       SEED_PASS_ARTURO: CambiaEsto-Arturo
@@ -61,6 +63,7 @@ services:
       NEXT_PUBLIC_ARTA_HOST: arta.artaproducciones.com
       NEXT_PUBLIC_AUDITORIO_HOST: auditorio.artaproducciones.com
       PORT: "3000"
+      TZ: America/Mexico_City
       HOSTNAME: 0.0.0.0
     ports:
       - "3000:3000"

@@ -11,6 +11,7 @@ import {
   conveniosFileName,
   conveniosTotal,
 } from '@/lib/campaign-concepts';
+import { clearDraft, readDraft, writeDraft } from '@/lib/draft-store';
 import { downloadBlob } from '@/lib/pdf-kit';
 import { mxn, normalizeConcept, numOrNull } from '@/lib/price-list';
 import { reviewEditable, reviewStep, type ReviewStep } from '@/lib/review-flow';
@@ -93,9 +94,16 @@ export function EventSponsorsPanel({
       })),
     [event.campaign?.dataJson],
   );
-  const [rows, setRows] = useState<ConvenioRow[]>(saved);
-  const [dirty, setDirty] = useState(false);
+  const draftKey = `arta.draft.convenios.${event.id}`;
+  const [rows, setRows] = useState<ConvenioRow[]>(() => readDraft<ConvenioRow[]>(draftKey) ?? saved);
+  const [dirty, setDirty] = useState(() => readDraft(draftKey) !== null);
   const [busy, setBusy] = useState(false);
+
+  // Lo tecleado sin guardar sobrevive a cambiar de pestaña.
+  useEffect(() => {
+    if (dirty) writeDraft(draftKey, rows);
+    else clearDraft(draftKey);
+  }, [draftKey, dirty, rows]);
 
   useEffect(() => {
     if (!dirty) setRows(saved);

@@ -11,6 +11,7 @@ import {
   cleanCampaignRows,
   conceptLineTotal,
 } from '@/lib/campaign-concepts';
+import { clearDraft, poHandoffKey, readDraft, writeDraft } from '@/lib/draft-store';
 import { patchEventFileCells, replaceEventFile } from '@/lib/file-save';
 import { downloadBlob } from '@/lib/pdf-kit';
 import { PRICE_LIST, findPrice, mxn, numOrNull } from '@/lib/price-list';
@@ -33,7 +34,13 @@ import {
  * que es donde Arta la trabaja) y dos PDFs independientes: interna y externa.
  */
 
-type Props = EventPanelProps & { canEdit: boolean; canApprove: boolean; canMarkPaid: boolean };
+type Props = EventPanelProps & {
+  canEdit: boolean;
+  canApprove: boolean;
+  canMarkPaid: boolean;
+  /** Lleva a Órdenes de compra con las partidas de la campaña ya puestas. */
+  onCreatePo?: () => void;
+};
 
 const STEP_OK: Record<ReviewStep, string> = {
   DRAFT: 'Campaña de vuelta en borrador',
@@ -54,10 +61,26 @@ function blankRow(): CampaignConceptRow {
   return { concept: '', qty: 1, from: null, to: null, precioInterno: null, precioExterno: null };
 }
 
-export function EventCampaignPanel({ event, closed, canEdit, canApprove, canMarkPaid, onChanged, flash }: Props) {
+export function EventCampaignPanel({
+  event,
+  closed,
+  canEdit,
+  canApprove,
+  canMarkPaid,
+  onCreatePo,
+  onChanged,
+  flash,
+}: Props) {
   const saved = useMemo(() => campaignRowsFrom(event.campaign?.dataJson?.concepts), [event.campaign?.dataJson]);
-  const [rows, setRows] = useState<CampaignConceptRow[]>(saved);
-  const [dirty, setDirty] = useState(false);
+  const draftKey = `arta.draft.campaign.${event.id}`;
+  const [rows, setRows] = useState<CampaignConceptRow[]>(() => readDraft<CampaignConceptRow[]>(draftKey) ?? saved);
+  const [dirty, setDirty] = useState(() => readDraft(draftKey) !== null);
+
+  // Lo tecleado sin guardar sobrevive a cambiar de pestaña.
+  useEffect(() => {
+    if (dirty) writeDraft(draftKey, rows);
+    else clearDraft(draftKey);
+  }, [draftKey, dirty, rows]);
   const [view, setView] = useState<'conceptos' | 'calendario'>('conceptos');
   const [busy, setBusy] = useState(false);
   const [picker, setPicker] = useState(false);
@@ -193,6 +216,53 @@ export function EventCampaignPanel({ event, closed, canEdit, canApprove, canMark
     }
   }
 
+  /** Orden de compra con los conceptos a precio interno (lo que Arta paga). */
+  function createPo() {
+    const lines = filled
+      .filter((r) => r.precioInterno != null && r.precioInterno > 0)
+      .map((r) => ({ concept: r.concept, qty: r.qty ?? 1, unitPrice: r.precioInterno ?? null }));
+    if (!lines.length) {
+      flash('Ningún concepto tiene precio interno', 'warn');
+      return;
+    }
+    writeDraft(poHandoffKey(event.id), {
+      rubro: 'publicidad',
+      description: `Campaña publicitaria · ${event.name}`,
+      lines,
+    });
+    onCreatePo?.();
+  }
+
+  /**
+   * Las campañas se trabajan en Excel: esto trae a la tabla lo que cambió en
+   * el archivo, para que los PDFs y el calendario no se queden atrás.
+   */
+  async function importFromSheet() {
+    if (!sheet) return;
+    if (filled.length && !confirm('Los conceptos de la tabla se reemplazan con los del Excel. Revisa y guarda.')) return;
+    setBusy(true);
+    try {
+      const { parseCampaignWorkbook } = await import('@/lib/campaign-sheet-template');
+      const buffer = await fetch(sheet.url, { credentials: 'include', cache: 'no-store' }).then((r) => {
+        if (!r.ok) throw new Error('No se pudo leer el Excel');
+        return r.arrayBuffer();
+      });
+      const parsed = parseCampaignWorkbook(buffer);
+      if (!parsed.length) {
+        flash('El Excel no tiene conceptos con el formato de campaña', 'warn');
+        return;
+      }
+      setRows(parsed);
+      setDirty(true);
+      setView('conceptos');
+      flash(`${parsed.length} conceptos traídos del Excel · revisa y guarda`, 'info');
+    } catch (e) {
+      flash(e instanceof Error ? e.message : 'No se pudo leer el Excel', 'error');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function pdf(kind: 'interna' | 'externa') {
     try {
       const { buildCampaignPdf, campaignPdfName } = await import('@/lib/campaign-pdf');
@@ -250,6 +320,11 @@ export function EventCampaignPanel({ event, closed, canEdit, canApprove, canMark
           ]}
         />
         <div className="sx-actions">
+          {onCreatePo && !closed && (step === 'AUTHORIZED' || step === 'PAID') ? (
+            <button className="btn ghost btn-sm" type="button" disabled={!filled.length} onClick={createPo}>
+              Crear OC
+            </button>
+          ) : null}
           <button className="btn ghost btn-sm" type="button" disabled={!filled.length} onClick={() => pdf('interna')}>
             PDF interna
           </button>
@@ -508,6 +583,11 @@ export function EventCampaignPanel({ event, closed, canEdit, canApprove, canMark
             <a className="btn-quiet" href={sheet.url} download={sheet.fileName}>
               Descargar
             </a>
+            {editable ? (
+              <button className="btn-quiet btn-quiet--accent" type="button" disabled={busy} onClick={importFromSheet}>
+                Actualizar tabla desde Excel
+              </button>
+            ) : null}
           </FileRow>
           {sheetMode ? (
             <div className="surface finance-viewer">

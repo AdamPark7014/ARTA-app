@@ -108,6 +108,8 @@ export const NAV_ITEMS: NavItem[] = [
     href: '/tasks',
     label: 'Tareas',
     group: 'Eventos',
+    // Junta 11-09-2026: «solo carpetas generales» no ve tareas.
+    roles: ['super_admin', 'dir_general', 'gerente_arta', 'dir_auditorio', 'logistica', 'convenios', 'enlace_gobierno'],
     keywords: 'pendientes apoyo asignar workload',
   },
 
