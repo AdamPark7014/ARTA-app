@@ -29,7 +29,7 @@ export function EventTabBar({ tab, modules, onSelect }: Props) {
           <option value="overview">{TAB_LABELS.overview}</option>
           {modules.map((m) => (
             <option key={m.key} value={m.key}>
-              {m.label} ({m.count})
+              {m.label}{m.count ? ` (${m.count})` : ''}
             </option>
           ))}
         </select>
@@ -51,7 +51,7 @@ export function EventTabBar({ tab, modules, onSelect }: Props) {
             onClick={() => onSelect(m.key)}
           >
             {m.label}
-            <span className="tab-bar__count">{m.count}</span>
+            {m.count ? <span className="tab-bar__count">{m.count}</span> : null}
           </button>
         ))}
       </nav>

@@ -467,6 +467,8 @@ export class AnalyticsService {
         rubro: o.rubro,
         vendorName: o.vendorName,
         paymentMethod: o.paymentMethod,
+        payeeType: o.payeeType,
+        withIva: o.withIva,
         proofCount: o._count.proofs,
         status: o.status,
         amount,

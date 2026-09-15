@@ -1,0 +1,539 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   Junta 11-09-2026 · Órdenes de compra.
+
+   Solo lo propio de OC: la base (tabla, formulario, píldoras, mosaicos) vive
+   en `_refine.scss`. Prefijo `oc-` para no chocar con los `.po-*` viejos.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Días de cobro ──────────────────────────────────────────────────────── */
+
+.oc-sub {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem 1.1rem;
+}
+
+.oc-dot {
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--line-strong);
+}
+
+.oc-dot.is-on {
+  background: var(--ok);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 22%, transparent);
+}
+
+/* ── Tabla de órdenes ───────────────────────────────────────────────────── */
+
+.oc-table .oc-row {
+  cursor: pointer;
+}
+
+.oc-vendor {
+  display: grid;
+  gap: 0.12rem;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.oc-vendor__name {
+  font-weight: 600;
+  transition: color 0.12s ease;
+}
+
+.oc-vendor:hover .oc-vendor__name,
+.oc-event:hover {
+  color: var(--accent);
+}
+
+.oc-vendor:focus-visible,
+.oc-event:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+.oc-vendor__sub {
+  color: var(--muted);
+  font-size: 0.74rem;
+}
+
+.oc-event {
+  font-weight: 600;
+  transition: color 0.12s ease;
+}
+
+.oc-amount {
+  font-weight: 600;
+}
+
+.oc-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.3rem;
+}
+
+.oc-actions .btn-sm {
+  padding: 0.4rem 0.78rem;
+  font-size: 0.78rem;
+}
+
+.oc-actions .btn-quiet:disabled,
+.oc-detail__foot .btn-quiet:disabled {
+  opacity: 0.45;
+  cursor: progress;
+}
+
+.oc-wait {
+  padding: 0 0.35rem;
+  color: var(--muted);
+  font-size: 0.76rem;
+  white-space: nowrap;
+}
+
+.oc-age {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.oc-age.is-late {
+  color: var(--warn);
+  font-weight: 600;
+}
+
+.dtable td.oc-empty-row {
+  padding: 1.6rem 0.75rem;
+  color: var(--muted);
+  font-size: 0.85rem;
+  text-align: center;
+}
+
+@media (max-width: 760px) {
+  .oc-hide-sm {
+    display: none;
+  }
+}
+
+/* ── Detalle ────────────────────────────────────────────────────────────── */
+
+.oc-detail {
+  display: grid;
+  gap: 0.8rem;
+  padding-top: 0.55rem;
+}
+
+.oc-mini {
+  width: 100%;
+  max-width: 46rem;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+}
+
+.oc-mini th {
+  padding: 0.35rem 0.5rem;
+  border-bottom: 1px solid var(--line);
+  background: none;
+  color: var(--muted);
+  font-size: 0.63rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-align: left;
+  text-transform: uppercase;
+}
+
+.oc-mini td {
+  padding: 0.4rem 0.5rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.oc-mini .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.oc-mini tbody tr:hover td {
+  background: none;
+}
+
+.oc-mini tbody tr:last-child td {
+  border-bottom: 1px solid var(--line-strong);
+}
+
+.oc-mini tfoot td {
+  padding: 0.28rem 0.5rem;
+  border-top: 0;
+  border-bottom: 0;
+  color: var(--muted);
+  font-weight: 400;
+  text-align: right;
+}
+
+.oc-mini tfoot tr.is-total td {
+  padding-top: 0.4rem;
+  color: var(--text);
+  font-weight: 650;
+}
+
+.oc-notes {
+  max-width: 46rem;
+  margin: 0;
+  color: color-mix(in srgb, var(--text) 88%, var(--muted));
+  font-size: 0.86rem;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+.oc-notes > span {
+  display: block;
+  margin-bottom: 0.15rem;
+  color: var(--muted);
+  font-size: 0.63rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.oc-trail {
+  display: flex;
+  flex-wrap: wrap;
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.76rem;
+}
+
+.oc-trail > span + span::before {
+  content: '·';
+  margin: 0 0.5rem;
+  opacity: 0.6;
+}
+
+.oc-detail__foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+  margin-left: -0.55rem;
+}
+
+.oc-reject:hover {
+  color: var(--danger);
+}
+
+/* ── Comprobantes ───────────────────────────────────────────────────────── */
+
+.oc-proofs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.5rem;
+  font-size: 0.8rem;
+}
+
+.oc-proofs__label {
+  margin-right: 0.2rem;
+  color: var(--muted);
+  font-size: 0.63rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.oc-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  max-width: 18rem;
+  overflow: hidden;
+  padding: 0.24rem 0.65rem;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  color: var(--text);
+  font-size: 0.76rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: border-color 0.12s ease, color 0.12s ease;
+}
+
+.oc-chip:hover {
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--line-strong));
+  color: var(--accent);
+}
+
+.oc-chip__meta {
+  color: var(--muted);
+}
+
+.oc-proofs__empty {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.oc-proofs.is-missing .oc-proofs__empty {
+  color: var(--warn);
+}
+
+.oc-proofs__upload {
+  cursor: pointer;
+}
+
+.oc-proofs__upload.is-busy {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.oc-proofs__err {
+  color: var(--danger);
+  font-size: 0.76rem;
+}
+
+/* ── Formulario (machote) ───────────────────────────────────────────────── */
+
+.oc-create .surface__head {
+  padding-block: 0.7rem;
+}
+
+.oc-form {
+  gap: 1.2rem;
+}
+
+.dtable__detail .oc-form {
+  padding-top: 0.75rem;
+}
+
+.oc-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 2.25rem;
+  margin: 0;
+}
+
+.oc-facts dt {
+  color: var(--muted);
+  font-size: 0.63rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.oc-facts dd {
+  margin: 0.15rem 0 0;
+  font-size: 0.9rem;
+}
+
+.fx-grid.oc-form__head {
+  grid-template-columns: minmax(0, 1.5fr) auto minmax(0, 1fr);
+  align-items: end;
+}
+
+@media (max-width: 860px) {
+  .fx-grid.oc-form__head {
+    grid-template-columns: 1fr;
+  }
+}
+
+.oc-rubro {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.oc-rubro > * {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.oc-lines {
+  display: grid;
+  justify-items: start;
+  gap: 0.35rem;
+}
+
+.oc-lines .dtable-wrap {
+  width: 100%;
+}
+
+.oc-lines .dtable td {
+  padding: 0.3rem 0.45rem;
+}
+
+.oc-lines .oc-col-qty {
+  width: 6.5rem;
+}
+
+.oc-lines .oc-col-price {
+  width: 9rem;
+}
+
+.oc-lines .oc-col-total {
+  width: 8.5rem;
+}
+
+.oc-form__pay {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 0.9rem 1.5rem;
+}
+
+.oc-form textarea {
+  min-height: 3.2rem;
+  resize: vertical;
+}
+
+.oc-form__foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem 1.5rem;
+  padding-top: 0.95rem;
+  border-top: 1px solid var(--line);
+}
+
+.totals.oc-totals {
+  justify-content: flex-start;
+  gap: 0.5rem 2rem;
+  padding: 0;
+}
+
+.oc-totals .totals__item {
+  text-align: left;
+}
+
+.oc-totals .totals__value {
+  font-size: 1.15rem;
+}
+
+.oc-reason {
+  margin-right: 0.35rem;
+  color: var(--warn);
+  font-size: 0.78rem;
+}
+
+/* Interruptor (IVA, días de cobro activos). */
+.oc-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.35rem 0;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font-size: 0.84rem;
+  font-weight: 560;
+  cursor: pointer;
+}
+
+.oc-switch:hover,
+.oc-switch.is-on {
+  color: var(--text);
+}
+
+.oc-switch__track {
+  position: relative;
+  flex: 0 0 auto;
+  width: 2.1rem;
+  height: 1.2rem;
+  border-radius: 999px;
+  background: var(--bg-soft);
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+  transition: background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.oc-switch__knob {
+  position: absolute;
+  top: 0.15rem;
+  left: 0.15rem;
+  width: 0.9rem;
+  height: 0.9rem;
+  border-radius: 50%;
+  background: var(--muted);
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+
+.oc-switch.is-on .oc-switch__track {
+  background: color-mix(in srgb, var(--accent) 28%, var(--bg-soft));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 60%, transparent);
+}
+
+.oc-switch.is-on .oc-switch__knob {
+  transform: translateX(0.9rem);
+  background: var(--accent);
+}
+
+.oc-switch:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+.oc-switch:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* ── Torre de OC ────────────────────────────────────────────────────────── */
+
+.oc-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.shell .oc-toolbar .oc-search {
+  width: min(100%, 20rem);
+  padding: 0.5rem 0.9rem;
+  border-radius: 999px;
+  font-size: 0.84rem;
+}
+
+.oc-flash {
+  margin: 0;
+  font-size: 0.82rem;
+}
+
+.oc-flash.is-ok {
+  color: var(--ok);
+}
+
+.oc-flash.is-error {
+  color: var(--danger);
+}
+
+.oc-loading {
+  margin: 0.6rem 0 0.2rem;
+}
+
+/* ── Configuración: días de cobro ───────────────────────────────────────── */
+
+.oc-settings .surface {
+  max-width: 42rem;
+}
+
+.oc-set-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem 1.5rem;
+}
+
+.oc-days .choice__opt {
+  min-width: 3.2rem;
+  text-align: center;
+}
+
+.oc-days .choice__opt:disabled {
+  opacity: 0.45;
+  cursor: default;
+}

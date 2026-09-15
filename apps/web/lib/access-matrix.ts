@@ -20,7 +20,8 @@ export type RoleKey =
   | 'dir_auditorio'
   | 'logistica'
   | 'convenios'
-  | 'enlace_gobierno';
+  | 'enlace_gobierno'
+  | 'solo_carpetas';
 
 export type NavItem = {
   href: string;
@@ -66,6 +67,8 @@ export const HIDDEN_NAV_GROUP = 'Vistas de portafolio';
  */
 export const NAV_ITEMS: NavItem[] = [
   { href: '/dashboard', label: 'Inicio', group: 'Inicio', exact: true },
+  // Junta 11-09-2026: «crear un chat interno entre todos y personal».
+  { href: '/chat', label: 'Chat', group: 'Inicio', keywords: 'mensajes equipo conversacion personal' },
 
   // ── Eventos: las cuatro entradas que pidió la junta ────────────────────────
   {
@@ -220,19 +223,19 @@ export const NAV_ITEMS: NavItem[] = [
     href: '/campaigns',
     label: 'Campañas',
     permissions: ['campaign.view', 'campaign.edit', 'everything'],
-    group: HIDDEN_NAV_GROUP,
+    // Junta 11-09-2026: campaña con calendario propio — vuelve al menú.
+    group: 'Control',
     requiresEventOps: true,
-    hidden: true,
-    keywords: 'publicidad medios pauta',
+    keywords: 'publicidad medios pauta calendario',
   },
   {
     href: '/ticketing',
     label: 'Boletera',
     permissions: ['ticketing.edit', 'everything'],
-    group: HIDDEN_NAV_GROUP,
+    // Junta 11-09-2026: «crear una sección para Boletera».
+    group: 'Control',
     requiresEventOps: true,
-    hidden: true,
-    keywords: 'taquilla zonas aforo',
+    keywords: 'taquilla zonas aforo creacion boletera',
   },
   {
     href: '/advances',
@@ -370,7 +373,7 @@ export function activeNavKey(
  * Roles cuya herramienta principal son las carpetas generales, no los eventos.
  * Su `ROLE_SCOPE` empieza justamente por «Carpetas».
  */
-const FOLDER_CENTRIC_ROLES: RoleKey[] = ['convenios', 'enlace_gobierno'];
+const FOLDER_CENTRIC_ROLES: RoleKey[] = ['convenios', 'enlace_gobierno', 'solo_carpetas'];
 
 /**
  * Items que le tocan a este usuario en esta entidad.
@@ -451,6 +454,7 @@ export const ROLE_SCOPE: Record<string, string> = {
   logistica: 'Eventos ambos · campaña · boletera · checklists · carpetas',
   convenios: 'Carpetas · patrocinios · checklists',
   enlace_gobierno: 'Carpetas · pagos · marcar OC pagado',
+  solo_carpetas: 'Solo carpetas generales · Arta y Auditorio',
 };
 
 /** Expuesto para pantallas de gobierno */

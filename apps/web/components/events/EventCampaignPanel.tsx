@@ -1,667 +1,552 @@
 'use client';
 
-import { FileViewer, PdfEditor, SheetEditor } from '@/components/files/lazy';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { FileViewer, SheetEditor } from '@/components/files/lazy';
+import { EmptyLite, FileRow, ReviewFlow, SectionHead, Seg } from '@/components/ui/Lite';
+import { api } from '@/lib/api';
 import {
   campaignExpensesFileName,
-  catalogFromPageConcepts,
-  defaultCampaignConceptRows,
-  type CampaignConceptPageRow,
+  campaignRowsFrom,
+  campaignTotals,
+  cleanCampaignRows,
+  conceptLineTotal,
 } from '@/lib/campaign-concepts';
 import { patchEventFileCells, replaceEventFile } from '@/lib/file-save';
-import { SectionFileCreate } from '@/components/files/SectionFileCreate';
-import { EmptyState } from '@/components/ui/EmptyState';
-import { FlowSteps } from '@/components/ui/FlowSteps';
-import { FormGrid } from '@/components/ui/PageChrome';
-import { StatusBadge } from '@/components/ui/StatusBadge';
-import type { EventDetail, EventFile } from '@/components/events/event-detail.types';
-import { fileKindLabel, fileRoleLabel, isSalidaPdf } from '@/lib/file-modules';
+import { downloadBlob } from '@/lib/pdf-kit';
+import { PRICE_LIST, findPrice, mxn, numOrNull } from '@/lib/price-list';
+import { reviewEditable, reviewStep, type ReviewStep } from '@/lib/review-flow';
+import { CampaignTimeline } from './CampaignTimeline';
+import { ReviewActions } from './ReviewActions';
+import {
+  CAMPAIGN_FILE_MODULE,
+  type CampaignConceptRow,
+  type EventFile,
+  type EventPanelProps,
+} from './event-detail.types';
 
-type CampaignForm = {
-  type: string;
-  notes: string;
-  channels: string;
-  budget: string;
-  mediaPlan: string;
-  creatives: string;
-  timeline: string;
-  concepts: CampaignConceptPageRow[];
+/**
+ * Campaña publicitaria (junta 11-09-2026).
+ *
+ * Se arma con conceptos de la lista de precios —cantidad, fechas, precio
+ * interno y externo—, se ve en tabla o en calendario, se envía a revisión, se
+ * autoriza y se marca pagada. De la tabla salen el archivo de campaña (Excel,
+ * que es donde Arta la trabaja) y dos PDFs independientes: interna y externa.
+ */
+
+type Props = EventPanelProps & { canEdit: boolean; canApprove: boolean; canMarkPaid: boolean };
+
+const STEP_OK: Record<ReviewStep, string> = {
+  DRAFT: 'Campaña de vuelta en borrador',
+  REVIEW: 'Campaña enviada a revisión',
+  AUTHORIZED: 'Campaña autorizada',
+  PAID: 'Campaña marcada como pagada',
 };
 
-type EventCampaignPanelProps = {
-  event: EventDetail;
-  closed: boolean;
-  saving: boolean;
-  canCampaign: boolean;
-  campaignForm: CampaignForm;
-  setCampaignForm: (form: CampaignForm) => void;
-  onSaveCampaign: () => Promise<void>;
-  onToggleCampaignAuth: (authorized: boolean) => Promise<void>;
-  /** Excel / PDF de la campaña, embebidos aquí mismo */
-  files: EventFile[];
-  onUploadFile: (file: File) => Promise<void>;
-  onReplaceFile: (fileId: string, file: File) => Promise<void>;
-  onDeleteFile: (fileId: string) => Promise<void>;
-  /** Recarga el evento cuando se guarda un archivo editado en el sitio */
-  onFilesChanged: () => void | Promise<void>;
-};
-
-const CAMPAIGN_FLOW = ['Borrador', 'Guardada', 'Autorizada'];
-
-function kindLabel(kind?: string | null, fileName?: string) {
-  return fileKindLabel(kind, fileName);
+function isSheet(f: EventFile) {
+  return f.kind === 'excel' || /\.(xlsx?|csv)$/i.test(f.fileName);
 }
 
-function isSheet(name: string, kind?: string | null) {
-  return kind === 'excel' || /\.(xlsx?|csv)$/i.test(name);
+function stamp(f: EventFile) {
+  return new Date(f.updatedAt || f.createdAt || 0).getTime();
 }
 
-function isPdf(name: string, kind?: string | null) {
-  return kind === 'pdf' || /\.pdf$/i.test(name);
+function blankRow(): CampaignConceptRow {
+  return { concept: '', qty: 1, from: null, to: null, precioInterno: null, precioExterno: null };
 }
 
-export function EventCampaignPanel({
-  event,
-  closed,
-  saving,
-  canCampaign,
-  campaignForm,
-  setCampaignForm,
-  onSaveCampaign,
-  onToggleCampaignAuth,
-  files,
-  onUploadFile,
-  onReplaceFile,
-  onDeleteFile,
-  onFilesChanged,
-}: EventCampaignPanelProps) {
-  const hasSaved = !!event.campaign;
-  const flowIndex = event.campaign?.authorized ? 2 : hasSaved ? 1 : 0;
-  // Junta 2026-08-28: la campaña se expande para ver el Excel/PDF sin descargar,
-  // y desde ahí mismo se puede editar el archivo.
-  const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [editingId, setEditingId] = useState<string | null>(null);
+export function EventCampaignPanel({ event, closed, canEdit, canApprove, canMarkPaid, onChanged, flash }: Props) {
+  const saved = useMemo(() => campaignRowsFrom(event.campaign?.dataJson?.concepts), [event.campaign?.dataJson]);
+  const [rows, setRows] = useState<CampaignConceptRow[]>(saved);
+  const [dirty, setDirty] = useState(false);
+  const [view, setView] = useState<'conceptos' | 'calendario'>('conceptos');
   const [busy, setBusy] = useState(false);
-  /** Tras «Nueva hoja de gastos», abrir el Excel recién creado */
-  const [openNewestSheet, setOpenNewestSheet] = useState(false);
+  const [picker, setPicker] = useState(false);
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [sheetMode, setSheetMode] = useState<'view' | 'edit' | null>(null);
 
   useEffect(() => {
-    if (!openNewestSheet || !files.length) return;
-    const sheets = files
-      .filter((f) => isSheet(f.fileName, f.kind))
-      .slice()
-      .sort((a, b) => {
-        const ta = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-        const tb = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-        return tb - ta;
-      });
-    const newest = sheets[0];
-    if (newest) {
-      setExpandedId(null);
-      setEditingId(newest.id);
-    }
-    setOpenNewestSheet(false);
-  }, [files, openNewestSheet]);
+    if (!dirty) setRows(saved);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [saved]);
 
-  async function withBusy(fn: () => Promise<void>) {
+  const step = reviewStep(event.campaign?.status, event.campaign?.authorized);
+  const editable = canEdit && !closed && reviewEditable(step);
+  const filled = rows.filter((r) => r.concept.trim());
+  const totals = campaignTotals(filled);
+
+  const campaignFiles = useMemo(
+    () => event.files.filter((f) => f.module === CAMPAIGN_FILE_MODULE).sort((a, b) => stamp(b) - stamp(a)),
+    [event.files],
+  );
+  const sheet = campaignFiles.find(isSheet) || null;
+  const others = campaignFiles.filter((f) => f.id !== sheet?.id);
+
+  function patch(i: number, next: Partial<CampaignConceptRow>) {
+    setRows((prev) => prev.map((r, idx) => (idx === i ? { ...r, ...next } : r)));
+    setDirty(true);
+  }
+
+  function setConcept(i: number, value: string) {
+    const row = rows[i];
+    const price = findPrice(value);
+    patch(i, {
+      concept: value,
+      ...(price && row.precioInterno == null && row.precioExterno == null
+        ? { precioInterno: price.interno, precioExterno: price.externo }
+        : {}),
+    });
+  }
+
+  function addRows(list: CampaignConceptRow[]) {
+    setRows((prev) => [...prev.filter((r) => r.concept.trim()), ...list]);
+    setDirty(true);
+  }
+
+  function addFromList() {
+    const add = PRICE_LIST.filter((p) => picked.has(p.concept)).map((p) => ({
+      ...blankRow(),
+      concept: p.concept,
+      precioInterno: p.interno,
+      precioExterno: p.externo,
+    }));
+    if (add.length) addRows(add);
+    setPicked(new Set());
+    setPicker(false);
+  }
+
+  async function save(quiet = false): Promise<boolean> {
     setBusy(true);
     try {
-      await fn();
+      await api(`/campaigns/event/${event.id}`, {
+        method: 'POST',
+        body: JSON.stringify({ dataJson: { concepts: cleanCampaignRows(rows) } }),
+      });
+      setDirty(false);
+      if (!quiet) flash('Campaña guardada');
+      await onChanged();
+      return true;
+    } catch (e) {
+      flash(e instanceof Error ? e.message : 'No se pudo guardar la campaña', 'error');
+      return false;
     } finally {
       setBusy(false);
     }
   }
 
-  async function createExpensesSheet() {
-    await withBusy(async () => {
-      // `xlsx` entra aquí y no arriba: solo hace falta cuando alguien pulsa
-      // «Nueva hoja de gastos», no cada vez que se abre un evento.
-      const { buildCampaignExpensesWorkbook, workbookToXlsxBlob } = await import(
-        '@/lib/campaign-sheet-template'
-      );
-      const wb = buildCampaignExpensesWorkbook(
+  async function move(next: ReviewStep) {
+    if (dirty && !(await save(true))) return;
+    setBusy(true);
+    try {
+      await api(`/campaigns/event/${event.id}/status`, {
+        method: 'POST',
+        body: JSON.stringify({ status: next, scope: 'campaign' }),
+      });
+      flash(STEP_OK[next]);
+      await onChanged();
+    } catch (e) {
+      flash(e instanceof Error ? e.message : 'No se pudo cambiar el estado', 'error');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function generate() {
+    if (!filled.length) {
+      flash('Agrega al menos un concepto', 'warn');
+      return;
+    }
+    if (sheet && !confirm('El archivo de campaña se actualiza con la tabla. La versión anterior queda en el historial.')) return;
+    if (dirty && !(await save(true))) return;
+    setBusy(true);
+    try {
+      const { buildCampaignWorkbook, workbookToXlsxBlob } = await import('@/lib/campaign-sheet-template');
+      const wb = buildCampaignWorkbook(
         {
           eventName: event.name,
           venue: event.venue,
           city: event.city,
           startsAt: event.startsAt,
+          endsAt: event.endsAt,
+          schedule: event.schedule,
           promoter: event.promoter || 'ARTA PRODUCCIONES',
         },
-        {
-          campaignType: campaignForm.type || event.campaign?.type,
-          catalog: catalogFromPageConcepts(campaignForm.concepts),
-        },
+        cleanCampaignRows(rows),
       );
       const blob = workbookToXlsxBlob(wb);
       const name = campaignExpensesFileName(event.name);
-      const file = new File([blob], name, {
-        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      });
-      await onUploadFile(file);
-      setOpenNewestSheet(true);
-    });
+      const fd = new FormData();
+      fd.append('file', blob, name);
+      if (sheet) {
+        await api(`/uploads/${sheet.id}/content`, { method: 'PUT', body: fd });
+      } else {
+        fd.append('eventId', event.id);
+        fd.append('module', CAMPAIGN_FILE_MODULE);
+        await api('/uploads', { method: 'POST', body: fd });
+      }
+      flash(sheet ? 'Archivo de campaña actualizado' : 'Archivo de campaña generado');
+      setSheetMode('view');
+      await onChanged();
+    } catch (e) {
+      flash(e instanceof Error ? e.message : 'No se pudo generar el archivo', 'error');
+    } finally {
+      setBusy(false);
+    }
   }
 
-  function patchConcept(idx: number, patch: Partial<CampaignConceptPageRow>) {
-    const concepts = campaignForm.concepts.map((row, i) =>
-      i === idx ? { ...row, ...patch } : row,
+  async function pdf(kind: 'interna' | 'externa') {
+    try {
+      const { buildCampaignPdf, campaignPdfName } = await import('@/lib/campaign-pdf');
+      const blob = await buildCampaignPdf({ event, rows, kind });
+      downloadBlob(blob, campaignPdfName(event.name, kind));
+    } catch (e) {
+      flash(e instanceof Error ? e.message : 'No se pudo generar el PDF', 'error');
+    }
+  }
+
+  const priceCell = (i: number, field: 'precioInterno' | 'precioExterno') => {
+    const value = rows[i][field];
+    return editable ? (
+      <input
+        className="cell num"
+        type="number"
+        min={0}
+        step="any"
+        inputMode="decimal"
+        value={value ?? ''}
+        placeholder="—"
+        aria-label={field === 'precioInterno' ? 'Precio interno' : 'Precio externo'}
+        onChange={(e) => patch(i, { [field]: numOrNull(e.target.value) })}
+      />
+    ) : value == null ? (
+      <span className="is-muted">—</span>
+    ) : (
+      mxn(value)
     );
-    setCampaignForm({ ...campaignForm, concepts });
-  }
-
-  function addConcept() {
-    setCampaignForm({
-      ...campaignForm,
-      concepts: [
-        ...campaignForm.concepts,
-        {
-          concept: '',
-          included: true,
-          convenio: false,
-          precioInterno: null,
-          precioExterno: null,
-        },
-      ],
-    });
-  }
-
-  function removeConcept(idx: number) {
-    setCampaignForm({
-      ...campaignForm,
-      concepts: campaignForm.concepts.filter((_, i) => i !== idx),
-    });
-  }
-
-  function resetConceptsFromCatalog() {
-    setCampaignForm({
-      ...campaignForm,
-      concepts: defaultCampaignConceptRows(),
-    });
-  }
-
-  const canEditFiles = canCampaign && !closed;
-  const canEditConcepts = canEditFiles;
+  };
 
   return (
-    <div className="stack">
-      <FlowSteps steps={CAMPAIGN_FLOW} activeIndex={flowIndex} />
+    <div className="sx-stack campaign">
+      <SectionHead title="Campaña" sub={<ReviewFlow step={step} />}>
+        <ReviewActions
+          step={step}
+          closed={closed}
+          canEdit={canEdit}
+          canApprove={canApprove}
+          canMarkPaid={canMarkPaid}
+          canSubmit={filled.length > 0}
+          busy={busy}
+          onMove={move}
+        />
+      </SectionHead>
 
-      {!canCampaign ? (
-        <div className="module-banner">
-          Solo el equipo de campaña (gerencia de Arta y logística) puede editar y autorizar.
+      <div className="toolbar-row">
+        <Seg
+          label="Vista de la campaña"
+          value={view}
+          onChange={setView}
+          options={[
+            { key: 'conceptos', label: 'Conceptos', count: filled.length },
+            { key: 'calendario', label: 'Calendario' },
+          ]}
+        />
+        <div className="sx-actions">
+          <button className="btn ghost btn-sm" type="button" disabled={!filled.length} onClick={() => pdf('interna')}>
+            PDF interna
+          </button>
+          <button className="btn ghost btn-sm" type="button" disabled={!filled.length} onClick={() => pdf('externa')}>
+            PDF externa
+          </button>
+          {canEdit && !closed ? (
+            <button className="btn btn-sm" type="button" disabled={busy || !filled.length} onClick={generate}>
+              Generar campaña
+            </button>
+          ) : null}
+        </div>
+      </div>
+
+      {picker && editable ? (
+        <div className="surface price-picker">
+          <div className="surface__head">
+            <h3 className="surface__title">Lista de precios</h3>
+            <div className="sx-actions">
+              <button className="btn ghost btn-sm" type="button" onClick={() => setPicker(false)}>
+                Cerrar
+              </button>
+              <button className="btn btn-sm" type="button" disabled={!picked.size} onClick={addFromList}>
+                Agregar{picked.size ? ` (${picked.size})` : ''}
+              </button>
+            </div>
+          </div>
+          <div className="price-picker__grid">
+            {PRICE_LIST.map((p) => {
+              const on = picked.has(p.concept);
+              return (
+                <button
+                  key={p.concept}
+                  type="button"
+                  className={`price-picker__item ${on ? 'is-on' : ''}`}
+                  aria-pressed={on}
+                  onClick={() =>
+                    setPicked((prev) => {
+                      const next = new Set(prev);
+                      if (next.has(p.concept)) next.delete(p.concept);
+                      else next.add(p.concept);
+                      return next;
+                    })
+                  }
+                >
+                  <span className="price-picker__name">{p.concept}</span>
+                  <span className="price-picker__prices">
+                    {p.interno == null ? '—' : mxn(p.interno)} · {p.externo == null ? '—' : mxn(p.externo)}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
         </div>
       ) : null}
 
-      <div className="panel">
-        <div className="panel-head">
-          <div>
-            <h2>Campaña publicitaria</h2>
-            <p className="muted kpi-sub" style={{ margin: '0.25rem 0 0' }}>
-              Encabezado y formato fijos (como el PDF). Los conceptos cambian por show — aquí van
-              con precio interno y externo para armar la hoja automáticamente.
-            </p>
-          </div>
-          <div className="panel-head-actions">
-            {event.campaign?.authorized ? (
-              <StatusBadge value="Autorizada" kind="raw" className="ok" />
-            ) : (
-              <StatusBadge value="Sin autorizar" kind="raw" className="warn" />
-            )}
-            {canCampaign && !closed ? (
+      {view === 'calendario' ? (
+        <CampaignTimeline
+          rows={filled.map((r, i) => ({
+            key: `${i}-${r.concept}`,
+            label: r.concept,
+            sub: r.qty && r.qty > 1 ? `${r.qty} piezas` : undefined,
+            from: r.from,
+            to: r.to,
+          }))}
+          showDate={event.startsAt}
+        />
+      ) : !rows.length ? (
+        <div className="surface">
+          <EmptyLite
+            icon="✦"
+            title="Arma la campaña"
+            text={editable ? 'Elige conceptos de la lista de precios o agrégalos a mano.' : 'Aún no hay conceptos.'}
+          >
+            {editable ? (
               <>
-                <button className="btn btn-sm" type="button" disabled={saving} onClick={onSaveCampaign}>
-                  {saving ? 'Guardando…' : 'Guardar campaña'}
+                <button className="btn btn-sm" type="button" onClick={() => setPicker(true)}>
+                  Desde lista de precios
                 </button>
-                {!event.campaign?.authorized ? (
-                  <button className="btn ghost btn-sm" type="button" onClick={() => onToggleCampaignAuth(true)}>
-                    Autorizar
-                  </button>
-                ) : (
-                  <button className="btn ghost btn-sm" type="button" onClick={() => onToggleCampaignAuth(false)}>
-                    Revocar autorización
-                  </button>
-                )}
+                <button className="btn ghost btn-sm" type="button" onClick={() => addRows([blankRow()])}>
+                  Concepto a mano
+                </button>
               </>
             ) : null}
-          </div>
+          </EmptyLite>
         </div>
-        <div className="panel-body">
-          <div className="form panel--narrow">
-            <FormGrid>
-              <label>
-                Tipo de campaña
-                <select
-                  className="field"
-                  disabled={!canCampaign || closed}
-                  value={campaignForm.type}
-                  onChange={(e) => setCampaignForm({ ...campaignForm, type: e.target.value })}
-                >
-                  <option value="INTERNAL">Interna (equipo Arta)</option>
-                  <option value="EXTERNAL">Externa</option>
-                  <option value="NONE">Sin campaña</option>
-                </select>
-              </label>
-              <label>
-                Presupuesto (MXN)
-                <input
-                  className="field"
-                  type="number"
-                  disabled={!canCampaign || closed}
-                  value={campaignForm.budget}
-                  onChange={(e) => setCampaignForm({ ...campaignForm, budget: e.target.value })}
-                  placeholder="0"
-                />
-              </label>
-            </FormGrid>
-            <label>
-              Canales
-              <input
-                className="field"
-                disabled={!canCampaign || closed}
-                value={campaignForm.channels}
-                onChange={(e) => setCampaignForm({ ...campaignForm, channels: e.target.value })}
-                placeholder="Meta, Google, radio, OOH, influencers…"
-              />
-            </label>
-            <label>
-              Plan de medios
-              <textarea
-                className="field"
-                rows={3}
-                disabled={!canCampaign || closed}
-                value={campaignForm.mediaPlan}
-                onChange={(e) => setCampaignForm({ ...campaignForm, mediaPlan: e.target.value })}
-                placeholder="Fases, piezas, fechas clave…"
-              />
-            </label>
-            <label>
-              Creatividades / artes
-              <textarea
-                className="field"
-                rows={2}
-                disabled={!canCampaign || closed}
-                value={campaignForm.creatives}
-                onChange={(e) => setCampaignForm({ ...campaignForm, creatives: e.target.value })}
-                placeholder="KV, stories, pendones, pauta…"
-              />
-            </label>
-            <label>
-              Timeline
-              <input
-                className="field"
-                disabled={!canCampaign || closed}
-                value={campaignForm.timeline}
-                onChange={(e) => setCampaignForm({ ...campaignForm, timeline: e.target.value })}
-                placeholder="Teaser → preventa → semana del show"
-              />
-            </label>
-            <label>
-              Notas internas
-              <textarea
-                className="field"
-                rows={2}
-                disabled={!canCampaign || closed}
-                value={campaignForm.notes}
-                onChange={(e) => setCampaignForm({ ...campaignForm, notes: e.target.value })}
-                placeholder="Acuerdos, restricciones, contactos…"
-              />
-            </label>
-          </div>
-        </div>
-      </div>
-
-      <div className="panel">
-        <div className="panel-head">
-          <div>
-            <h2>Conceptos · precio interno / externo</h2>
-            <p className="muted kpi-sub" style={{ margin: '0.25rem 0 0' }}>
-              Lista en página: cada concepto con su precio. Al crear la hoja, el COSTO se toma del
-              precio interno (campaña Interna) o externo (Externa). Marca cuáles van en este show.
-            </p>
-          </div>
-          {canEditConcepts ? (
-            <div className="panel-head-actions">
-              <button className="btn ghost btn-sm" type="button" onClick={addConcept}>
-                + Concepto
-              </button>
-              <button className="btn ghost btn-sm" type="button" onClick={resetConceptsFromCatalog}>
-                Restaurar catálogo base
-              </button>
-            </div>
-          ) : null}
-        </div>
-        <div className="panel-body">
-          {!campaignForm.concepts.length ? (
-            <EmptyState
-              title="Sin conceptos"
-              description="Carga el catálogo base del PDF o agrega conceptos a mano. Después podrás pegar precios interno/externo."
-            >
-              {canEditConcepts ? (
-                <button
-                  className="btn btn-sm"
-                  type="button"
-                  style={{ marginTop: '0.75rem' }}
-                  onClick={resetConceptsFromCatalog}
-                >
-                  Cargar catálogo base
-                </button>
-              ) : null}
-            </EmptyState>
-          ) : (
-            <div className="table-wrap">
-              <table className="table">
-                <thead>
-                  <tr>
-                    <th style={{ width: '2.5rem' }}>Show</th>
-                    <th>Concepto</th>
-                    <th style={{ width: '5.5rem' }}>Convenio</th>
-                    <th style={{ width: '8rem' }}>Precio interno</th>
-                    <th style={{ width: '8rem' }}>Precio externo</th>
-                    <th>Descripción (convenios)</th>
-                    {canEditConcepts ? <th style={{ width: '4rem' }} /> : null}
-                  </tr>
-                </thead>
-                <tbody>
-                  {campaignForm.concepts.map((row, idx) => {
-                    // Cada celda dice de qué fila y de qué columna es. Sin esto
-                    // un lector de pantalla anuncia siete «cuadro de texto»
-                    // seguidos y no hay forma de saber cuál es cuál.
-                    const fila = row.concept.trim() || `concepto ${idx + 1}`;
-                    return (
-                    <tr key={`${idx}-${row.concept.slice(0, 12)}`}>
-                      <td>
-                        <input
-                          type="checkbox"
-                          checked={row.included !== false}
-                          disabled={!canEditConcepts}
-                          title="Incluir en la hoja de este show"
-                          aria-label={`Incluir ${fila} en la hoja de este show`}
-                          onChange={(e) => patchConcept(idx, { included: e.target.checked })}
-                        />
-                      </td>
-                      <td>
-                        <input
-                          className="field"
-                          disabled={!canEditConcepts}
-                          value={row.concept}
-                          aria-label={`Concepto de la fila ${idx + 1}`}
-                          onChange={(e) => patchConcept(idx, { concept: e.target.value })}
-                          placeholder="CONCEPTO"
-                        />
-                      </td>
-                      <td>
-                        <input
-                          type="checkbox"
-                          checked={!!row.convenio}
-                          disabled={!canEditConcepts}
-                          title="Convenio / medio (cortesías en lugar de costo monetario)"
-                          aria-label={`${fila} es convenio (cortesías en vez de dinero)`}
-                          onChange={(e) => patchConcept(idx, { convenio: e.target.checked })}
-                        />
-                      </td>
-                      <td>
-                        <input
-                          className="field"
-                          type="number"
-                          disabled={!canEditConcepts || !!row.convenio}
-                          value={row.precioInterno ?? ''}
-                          aria-label={`Precio interno de ${fila}`}
-                          onChange={(e) =>
-                            patchConcept(idx, {
-                              precioInterno: e.target.value === '' ? null : Number(e.target.value),
-                            })
-                          }
-                          placeholder="—"
-                        />
-                      </td>
-                      <td>
-                        <input
-                          className="field"
-                          type="number"
-                          disabled={!canEditConcepts || !!row.convenio}
-                          value={row.precioExterno ?? ''}
-                          aria-label={`Precio externo de ${fila}`}
-                          onChange={(e) =>
-                            patchConcept(idx, {
-                              precioExterno: e.target.value === '' ? null : Number(e.target.value),
-                            })
-                          }
-                          placeholder="—"
-                        />
-                      </td>
-                      <td>
-                        <input
-                          className="field"
-                          disabled={!canEditConcepts || !row.convenio}
-                          value={row.description || ''}
-                          aria-label={`Descripción del convenio de ${fila}`}
-                          onChange={(e) => patchConcept(idx, { description: e.target.value })}
-                          placeholder={row.convenio ? 'Detalle del acuerdo…' : ''}
-                        />
-                      </td>
-                      {canEditConcepts ? (
-                        <td>
-                          <button
-                            className="btn ghost btn-sm btn-danger"
-                            type="button"
-                            aria-label={`Quitar ${fila}`}
-                            onClick={() => removeConcept(idx)}
-                          >
-                            Quitar
-                          </button>
-                        </td>
-                      ) : null}
-                    </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-          <p className="muted kpi-sub" style={{ marginTop: '0.75rem' }}>
-            Guarda la campaña para persistir precios. «Nueva hoja de gastos» usa esta lista (solo
-            filas marcadas) y el tipo Interna/Externa para el COSTO.
-          </p>
-        </div>
-      </div>
-
-      <div className="panel">
-        <div className="panel-head">
-          <div>
-            <h2>Campaña · Excel de gastos · {files.length}</h2>
-            <p className="muted kpi-sub" style={{ margin: '0.25rem 0 0' }}>
-              Formato «GASTOS DE PUBLICIDAD Y CONVENIOS». La hoja (.xlsx) es la copia de trabajo;
-              el PDF oficial se genera desde el editor. Todo queda en esta pestaña.
-            </p>
-          </div>
-        </div>
-        <div className="panel-body">
-          {canEditFiles ? (
-            <SectionFileCreate
-              staysIn="Campaña"
-              busy={busy}
-              compact={files.length > 0}
-              hideHint={files.length > 0}
-              actions={[
-                {
-                  id: 'new-sheet',
-                  title: 'Nueva hoja de gastos',
-                  description: 'Plantilla con conceptos, costos y cortesías del show.',
-                  after: 'Se abre aquí para editar. Luego puedes sacar el PDF oficial.',
-                  tone: 'excel',
-                  emphasis: 'primary',
-                  onClick: () => void createExpensesSheet(),
-                },
-                {
-                  id: 'upload',
-                  title: 'Subir mi Excel o PDF',
-                  description: 'Si ya tienen el archivo del show, súbelo aquí.',
-                  after: 'Queda listado abajo, en Campaña.',
-                  tone: 'upload',
-                  emphasis: 'secondary',
-                  accept: '.pdf,.xlsx,.xls,.csv,image/*',
-                  onFile: (f) => void withBusy(() => onUploadFile(f)),
-                },
-              ]}
-            />
-          ) : null}
-          {!files.length ? (
-            <EmptyState
-              title="Sin Excel de campaña"
-              description={
-                canEditFiles
-                  ? 'Crea la hoja con los conceptos o sube el Excel/PDF del show. Todo queda en esta pestaña.'
-                  : 'Cuando el equipo de campaña suba el plan, se verá aquí embebido.'
-              }
-            />
-          ) : (
-            <div className="campaign-files">
-              {files.map((f) => {
-                const open = expandedId === f.id;
-                const editing = editingId === f.id;
-                const sheet = isSheet(f.fileName, f.kind);
-                const pdf = isPdf(f.fileName, f.kind);
-                const editable = sheet || pdf;
-                const role = fileRoleLabel(f.kind, f.fileName);
-                const official = isSalidaPdf(f.fileName);
+      ) : (
+        <div className="dtable-wrap">
+          <datalist id="campaign-price-list">
+            {PRICE_LIST.map((p) => (
+              <option key={p.concept} value={p.concept} />
+            ))}
+          </datalist>
+          <table className="dtable campaign-table">
+            <thead>
+              <tr>
+                <th>Concepto</th>
+                <th className="num">Cant.</th>
+                <th>Desde</th>
+                <th>Hasta</th>
+                <th className="num">P. interno</th>
+                <th className="num">P. externo</th>
+                <th className="num">Total interno</th>
+                <th className="num">Total externo</th>
+                {editable ? <th className="col-act" /> : null}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r, i) => {
+                const ti = conceptLineTotal(r, 'interno');
+                const te = conceptLineTotal(r, 'externo');
                 return (
-                  <div
-                    key={f.id}
-                    className={`campaign-file ${open || editing ? 'campaign-file--open' : ''}`}
-                  >
-                    <div className="campaign-file__head">
-                      <div className="campaign-file__meta">
-                        <strong>{f.fileName}</strong>
-                        <StatusBadge value={kindLabel(f.kind, f.fileName)} kind="raw" />
-                        {role ? (
-                          <StatusBadge
-                            value={role}
-                            kind="raw"
-                            className={official ? 'ok' : sheet ? 'warn' : undefined}
-                          />
-                        ) : null}
-                        <StatusBadge value="Campaña" kind="raw" className="ok" />
-                        {f.createdAt ? (
-                          <span className="muted kpi-sub">
-                            {new Date(f.createdAt).toLocaleDateString('es-MX')}
-                          </span>
-                        ) : null}
-                      </div>
-                      <div className="panel-head-actions">
-                        {editable ? (
-                          <button
-                            className="btn btn-sm"
-                            type="button"
-                            onClick={() => {
-                              setExpandedId(null);
-                              setEditingId(editing ? null : f.id);
-                            }}
-                          >
-                            {editing
-                              ? 'Cerrar editor'
-                              : sheet
-                                ? 'Editar aquí'
-                                : 'Anotar PDF'}
-                          </button>
-                        ) : null}
+                  <tr key={i}>
+                    <td className="c-concept">
+                      {editable ? (
+                        <input
+                          className="cell"
+                          list="campaign-price-list"
+                          value={r.concept}
+                          placeholder="Concepto"
+                          aria-label={`Concepto ${i + 1}`}
+                          onChange={(e) => setConcept(i, e.target.value)}
+                        />
+                      ) : (
+                        <strong>{r.concept}</strong>
+                      )}
+                    </td>
+                    <td className="num c-qty">
+                      {editable ? (
+                        <input
+                          className="cell num"
+                          type="number"
+                          min={0}
+                          step="any"
+                          value={r.qty ?? ''}
+                          aria-label="Cantidad"
+                          onChange={(e) => patch(i, { qty: numOrNull(e.target.value) })}
+                        />
+                      ) : (
+                        r.qty ?? 1
+                      )}
+                    </td>
+                    <td className="c-date">
+                      {editable ? (
+                        <input
+                          className="cell"
+                          type="date"
+                          value={r.from || ''}
+                          aria-label="Desde"
+                          onChange={(e) => patch(i, { from: e.target.value || null })}
+                        />
+                      ) : (
+                        r.from || <span className="is-muted">—</span>
+                      )}
+                    </td>
+                    <td className="c-date">
+                      {editable ? (
+                        <input
+                          className="cell"
+                          type="date"
+                          min={r.from || undefined}
+                          value={r.to || ''}
+                          aria-label="Hasta"
+                          onChange={(e) => patch(i, { to: e.target.value || null })}
+                        />
+                      ) : (
+                        r.to || <span className="is-muted">—</span>
+                      )}
+                    </td>
+                    <td className="num c-price">{priceCell(i, 'precioInterno')}</td>
+                    <td className="num c-price">{priceCell(i, 'precioExterno')}</td>
+                    <td className="num">{ti == null ? <span className="is-muted">—</span> : mxn(ti)}</td>
+                    <td className="num">{te == null ? <span className="is-muted">—</span> : mxn(te)}</td>
+                    {editable ? (
+                      <td className="col-act">
                         <button
-                          className={open ? 'btn btn-sm' : 'btn ghost btn-sm'}
+                          className="icon-btn icon-btn--danger"
                           type="button"
-                          aria-expanded={open}
+                          aria-label={`Quitar ${r.concept || 'concepto'}`}
                           onClick={() => {
-                            setEditingId(null);
-                            setExpandedId(open ? null : f.id);
+                            setRows((prev) => prev.filter((_, idx) => idx !== i));
+                            setDirty(true);
                           }}
                         >
-                          {open ? 'Contraer' : pdf ? 'Ver PDF' : 'Vista previa'}
+                          ×
                         </button>
-                        {canEditFiles ? (
-                          <label className="btn ghost btn-sm module-upload">
-                            Reemplazar
-                            <input
-                              type="file"
-                              hidden
-                              disabled={busy}
-                              accept=".pdf,.xlsx,.xls,.csv,image/*"
-                              onChange={(e) => {
-                                const next = e.target.files?.[0];
-                                e.target.value = '';
-                                if (next) withBusy(() => onReplaceFile(f.id, next));
-                              }}
-                            />
-                          </label>
-                        ) : null}
-                        {pdf ? (
-                          <a className="btn ghost btn-sm" href={f.url} target="_blank" rel="noreferrer">
-                            Abrir PDF
-                          </a>
-                        ) : null}
-                        {canEditFiles ? (
-                          <button
-                            className="btn ghost btn-sm btn-danger"
-                            type="button"
-                            disabled={busy}
-                            onClick={() => withBusy(() => onDeleteFile(f.id))}
-                          >
-                            Eliminar
-                          </button>
-                        ) : null}
-                      </div>
-                    </div>
-                    {open ? (
-                      <div className="campaign-file__body">
-                        <FileViewer
-                          url={f.url}
-                          fileName={f.fileName}
-                          kind={f.kind}
-                          cacheKey={f.createdAt}
-                        />
-                      </div>
+                      </td>
                     ) : null}
-
-                    {editing ? (
-                      <div className="campaign-file__body">
-                        {isSheet(f.fileName, f.kind) ? (
-                          <SheetEditor
-                            key={f.id}
-                            url={f.url}
-                            fileName={f.fileName}
-                            fileId={f.id}
-                            canEdit={canEditFiles}
-                            variant="campaign"
-                            onSave={replaceEventFile(f.id)}
-                            onSaveCells={patchEventFileCells(f.id)}
-                            panelEditable={f.panelEditable !== false}
-                            blockReason={f.panelBlockReason}
-                            onSaved={onFilesChanged}
-                          />
-                        ) : (
-                          <div className="stack">
-                            <div className="module-banner">
-                              Un PDF de campaña (como el de gastos) no se reescribe celda a celda.
-                              Usa <strong>Nueva hoja de gastos</strong> o <strong>Editar aquí</strong>{' '}
-                              en el Excel para agregar/quitar conceptos y totales. Aquí solo puedes
-                              anotar texto encima del PDF.
-                            </div>
-                            <PdfEditor
-                              key={f.id}
-                              url={f.url}
-                              fileName={f.fileName}
-                              canEdit={canEditFiles}
-                              onSave={replaceEventFile(f.id)}
-                              onSaved={onFilesChanged}
-                            />
-                          </div>
-                        )}
-                      </div>
-                    ) : null}
-                  </div>
+                  </tr>
                 );
               })}
-            </div>
-          )}
+            </tbody>
+            <tfoot>
+              <tr>
+                <td colSpan={6}>
+                  {editable ? (
+                    <div className="sx-actions">
+                      <button className="btn-quiet btn-quiet--accent" type="button" onClick={() => addRows([blankRow()])}>
+                        + Concepto
+                      </button>
+                      <button className="btn-quiet" type="button" onClick={() => setPicker(true)}>
+                        Desde lista de precios
+                      </button>
+                    </div>
+                  ) : (
+                    <span className="is-muted t-small">Total</span>
+                  )}
+                </td>
+                <td className="num t-money">{mxn(totals.interno)}</td>
+                <td className="num t-money">{mxn(totals.externo)}</td>
+                {editable ? <td /> : null}
+              </tr>
+            </tfoot>
+          </table>
         </div>
-      </div>
+      )}
+
+      {dirty ? (
+        <div className="savebar" role="status">
+          <span className="savebar__text">Cambios sin guardar</span>
+          <div className="sx-actions">
+            <button
+              className="btn-quiet"
+              type="button"
+              onClick={() => {
+                setRows(saved);
+                setDirty(false);
+              }}
+            >
+              Descartar
+            </button>
+            <button className="btn btn-sm" type="button" disabled={busy} onClick={() => save()}>
+              {busy ? 'Guardando…' : 'Guardar'}
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {sheet ? (
+        <div className="sx-stack">
+          <FileRow
+            kind="xlsx"
+            name={sheet.fileName}
+            meta={`Archivo de campaña · ${new Date(sheet.updatedAt || sheet.createdAt || Date.now()).toLocaleDateString('es-MX', {
+              day: 'numeric',
+              month: 'short',
+            })}`}
+          >
+            <button
+              className="btn-quiet"
+              type="button"
+              onClick={() => setSheetMode(sheetMode ? null : canEdit && !closed ? 'edit' : 'view')}
+            >
+              {sheetMode ? 'Cerrar' : canEdit && !closed ? 'Ver / Editar' : 'Ver'}
+            </button>
+            <a className="btn-quiet" href={sheet.url} download={sheet.fileName}>
+              Descargar
+            </a>
+          </FileRow>
+          {sheetMode ? (
+            <div className="surface finance-viewer">
+              {sheetMode === 'edit' ? (
+                <SheetEditor
+                  key={sheet.id}
+                  url={sheet.url}
+                  fileName={sheet.fileName}
+                  fileId={sheet.id}
+                  canEdit
+                  variant="campaign"
+                  onSave={replaceEventFile(sheet.id)}
+                  onSaveCells={patchEventFileCells(sheet.id)}
+                  panelEditable={sheet.panelEditable !== false}
+                  blockReason={sheet.panelBlockReason}
+                  onSaved={onChanged}
+                />
+              ) : (
+                <FileViewer url={sheet.url} fileName={sheet.fileName} kind={sheet.kind} cacheKey={sheet.updatedAt || sheet.createdAt} />
+              )}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
+      {others.length ? (
+        <details className="disclose">
+          <summary>Otros archivos de campaña ({others.length})</summary>
+          <div className="sx-stack">
+            {others.map((f) => (
+              <FileRow key={f.id} kind={isSheet(f) ? 'xlsx' : /\.pdf$/i.test(f.fileName) ? 'pdf' : 'file'} name={f.fileName}>
+                <a className="btn-quiet" href={f.url} target="_blank" rel="noreferrer">
+                  Abrir
+                </a>
+              </FileRow>
+            ))}
+          </div>
+        </details>
+      ) : null}
     </div>
   );
 }

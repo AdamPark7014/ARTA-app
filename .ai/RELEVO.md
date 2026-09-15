@@ -1,93 +1,119 @@
 # RELEVO
 
 - **Último turno:** claude-code
-- **Fecha:** 2026-09-08
+- **Fecha:** 2026-09-15
 - **Rama:** main
 
 ## Hecho en este turno
 
-**Eficiencia, medida antes y después. Y deploy.**
+**Correcciones de la junta del 11-09-2026** (PDF «Correciones Dashboard ARTA 11 de SEP 2026»).
+Mandato de Adam: simple, elegante y visualmente atractivo; nada de texto de más.
 
-### 1. El 72 % del payload del evento era material que nadie mira
+### Lenguaje visual nuevo (compartido)
+- `styles/_refine.scss` + `components/ui/Lite.tsx`: SectionHead, Seg (secciones con
+  contador), Pill/ReviewPill/ReviewFlow, EmptyLite, Tile, FileRow; tablas `.dtable` con
+  celdas editables sin borde, `.fx` para formularios, `.savebar`, Gantt `.timeline` y
+  calendario mensual `.mcal`. Estilos por módulo: `_campaign`, `_po`, `_ticketing`, `_chat`.
+- `lib/pdf-kit.ts`: helpers pdf-lib (logo repintado en tinta — el PNG es blanco).
+- `lib/price-list.ts`: la lista de precios interno/externo del PDF (págs. 4-5).
 
-`GET /events/:id` traía, por cada formato del show: el `dataJson` completo, el
-`schemaJson` **entero** de la plantilla, el mapa de campos del PDF y **las dos
-firmas, que llevan la imagen en base64 dentro**. De todo eso la lista solo pinta
-`template.key`. Cuando se abre un formato, el panel ya pedía
-`GET /checklists/:id` aparte — así que era trabajo tirado.
+### 1. Evento
+- Alta y edición con el mismo formulario (`components/events/EventFields.tsx`): «Evento»
+  fusiona artista + nombre, «Fecha del evento», horario (abre/cierra), funciones, último
+  día si son varias, venue, ciudad, promotor, descripción. Sin campaña.
+- Prisma `Event`: `description`, `schedule`, `functions`.
+- Cabecera nueva (`EventHero`): fecha, horario, lugar, cuenta regresiva; cerrar/cancelar/
+  eliminar en «Más». Resumen con 4 mosaicos que llevan a su pestaña.
+- La página del evento ya no cablea estado de OC/campaña/boletera/corrida/convenios:
+  cada panel es autónomo (`EventPanelProps`: event, closed, onChanged, flash).
 
-Y el panel **recarga el evento entero después de cada guardado: 27 sitios**. O
-sea que el desperdicio se multiplicaba por cada casilla marcada.
+### 2. Corrida
+- Sin «Nueva hoja de corrida» ni edición en página: un solo Excel, se ve embebido, se
+  descarga y se reemplaza con versión (`PUT /uploads/:id/content`).
 
-Medido sobre la base sembrada (13 formatos vacíos, sin firmas):
-**45.0 KB → 9.9 KB, −78 %.** En un show real con formatos llenos y firmados es
-bastante más, porque una firma es un PNG en base64.
+### 3. Órdenes de compra (agente)
+- Se crean cualquier día. La config `poWindow` ahora son **días de cobro** (default
+  L-M-V, marcador `kind: 'payDays'`; la config vieja se ignora). Marcar pagada fuera de
+  día de cobro → 403, salvo dirección.
+- Secciones Por autorizar · Por pagar · Pagadas · Todas (evento y portafolio).
+- Partidas Cantidad | Descripción | Precio | Total; precio vacío (sin «0»); autocompleta
+  precio interno desde la lista. Proveedor/Otro (`payeeType`), IVA 16 % (`withIva`),
+  forma de pago Efectivo/Transferencia/Cheque (enum `CHEQUE`), observaciones.
+- PDF con el machote del cliente (`lib/po-pdf.ts`).
 
-También: el historial de tareas venía con 80 movimientos por tarea aunque el
-panel lo pinta colapsado. Ahora son los 12 últimos.
+### 4. Campaña
+- Conceptos con cantidad, fechas, precio interno y externo; «Desde lista de precios».
+- Vista Calendario (Gantt con hoy y día del show). Portafolio `/campaigns` con lista y
+  calendario mensual; vuelve al menú.
+- Estados Borrador → En revisión → Autorizada → Pagada (`Campaign.status`, `submittedAt`,
+  `paidAt`; `authorized` se deriva). `POST /campaigns/event/:id/status {status, scope}`.
+- «Generar campaña» = archivo de campaña (Excel con hojas Interna y Externa, versionado).
+- Dos PDFs independientes: interna y externa (`lib/campaign-pdf.ts`).
+- `POST /campaigns/event/:id` ahora FUSIONA `dataJson` por llave (conceptos y convenios
+  escriben en la misma campaña).
 
-### 2. La librería de Excel viajaba en cada carga del evento
+### 5. Convenios
+- Tabla Convenio | Descripción | Zona | Cantidad | Precio | Total (zona sugiere las de la
+  boletera y trae su precio). Revisión propia (`Campaign.convenioStatus`). «Generar
+  campaña de convenios» (Excel `CONVENIOS-*.xlsx`) + PDF. Patrocinadores plegados abajo.
 
-`FileViewer` y `SheetEditor` importan `xlsx` de forma estática, y los cuatro
-paneles del evento los importaban a su vez. Más `finance-import` y
-`campaign-sheet-template`, que la página importaba directo. Resultado: **quien
-abría un evento se bajaba `xlsx` entero aunque no tocara una hoja**.
+### 6. Boletera (agente)
+- «Creación de boletera»: artes (link), fecha, funciones, horario, venue, descripción,
+  zonas (zona/aforo/precio), hold artista/promotor/venue. «Crear boletera y PDF» genera el
+  PDF como el ejemplo del cliente. Sin sync, logo ni vendidos. `/ticketing` vuelve al menú.
 
-Se veía en el build: `/events/[id]` pesaba **317 kB** de First Load contra
-~117 kB de cualquier otra pantalla; `/campaigns` y `/folders`, 270 y 266 kB.
+### 7. Edición (quién edita)
+- Rol nuevo `solo_carpetas` (sin operación de eventos, sin permisos).
+- Leida y Sol (Marisol) → `gerente_arta` solo ARTA; Williams y Juan Pablo → `solo_carpetas`.
+- Base viva: `scripts/apply-access-junta-0911.ts` (`--dry` primero). El seed ya lo trae
+  para instalaciones nuevas. Aplicado en la base local de Docker.
 
-Tres cambios:
-- `components/files/lazy.tsx` — los cinco editores por `next/dynamic`.
-- `components/events/lazy-panels.tsx` — los ocho paneles que no son Resumen.
-  Solo se pinta una pestaña a la vez; no hacía falta traer las nueve.
-- `lib/campaign-concepts.ts` — el catálogo de conceptos y precios **sin `xlsx`**.
-  Estaba dentro del módulo que genera el libro, así que la tabla de precios
-  arrastraba la librería entera. El generador se carga al pulsar «Nueva hoja de
-  gastos», y `importFinanceFromFile` al importar.
+### 8. Chat interno (agente)
+- `/chat`: canal General + mensajes personales, no leídos, polling 4 s/10 s.
+  Prisma `ChatMessage`, `ChatReadMarker`. API `/chat/*`.
 
-**`/events/[id]`: 317 kB → 133 kB (−58 %). `/campaigns`: 270 → 122 kB.
-`/folders`: 266 → 118 kB.** La pantalla más usada del panel ya pesa lo mismo
-que las demás.
+### Seeder de credenciales (pedido de Adam, 15-09)
+- `apps/api/scripts/seed-credentials.ts`: contraseña aleatoria por persona del equipo
+  oficial (`@artaproducciones.com` + Rodrigo; `--all` para todos, `--only=` para algunos),
+  guarda solo el hash, deja auditoría y escribe el Excel (Nombre, Correo, Contraseña, Rol,
+  Entidades, Puede editar, Acceso). No imprime contraseñas. Pide `--yes`; si la base no es
+  local exige `--confirm-produccion`. `--revoke` cierra sesiones.
+- `.gitignore`: `credenciales/` y `*credenciales*.xlsx` nunca entran al repo.
+- Corrido SOLO en Docker local (9 personas); el Excel se entregó a Adam por el chat, no
+  vive en el repo.
+- ⚠️ La base local trae cuentas duplicadas de un seed viejo con dominio `@arta.mx`
+  (Arturo, José Luis, Leida, Juan Pablo, Williams, Melissa) y roles antiguos: con
+  `williams@arta.mx` / `jp@arta.mx` se sigue editando. No se tocaron. Revisar si existen en
+  producción y desactivarlas desde Usuarios.
 
-### 3. Verde
+### Migración
+- `20260915090000_junta_0911` (enum CHEQUE, columnas nuevas, chat, backfill de campañas
+  autorizadas). Aplicada en Docker local.
 
-174 unitarias · Playwright **38 de 40** (los 2 rojos son los SSR de siempre, que
-piden el API en `127.0.0.1:4000`) · `tsc --noEmit` limpio en api y web.
+### Verde
+- `tsc --noEmit` web y api limpios · jest API **190/190** (antes 174).
+- Docker local: db 5439, api 4100, web 3100 (3000/4000/5432 los usa NEXARA; 5433 un
+  Postgres nativo). Override en el scratchpad de la sesión, no en el repo.
 
 ## A medias
 
-1. **Fórmulas al insertar/borrar filas en Excel embebido.** Sigue siendo el
-   fallo más serio del editor.
-2. **Precios campaña interno/externo sin llenar** — falta la lista de Arta.
-3. **No se puede pasar un evento de borrador a activo.** Los nuevos nacen
-   `ACTIVE`; el `PATCH` no acepta `status` a propósito (evita saltarse
-   `EVENT_CLOSE`), así que haría falta un endpoint propio.
-4. Estados oráculo solo en checklists; `locked` sigue en `FinanceRun`;
-   `EventDocument` sin revisiones.
-5. Auditoría incompleta fuera de OC/checklists.
-6. **`sponsor-convenio-template` sigue trayendo `xlsx` estático** en
-   `EventSponsorsPanel`. Ya no pesa en la carga inicial porque el panel es
-   diferido, pero cuando alguien abre Convenios se baja la librería entera; el
-   mismo corte que se hizo en campaña le vendría bien.
+1. **Sin revisión visual con sesión real**: el agente no teclea contraseñas; Adam entra en
+   http://localhost:3100 y revisa. Los PDFs se probaron renderizando en Node (logo solo
+   se ve en navegador).
+2. Monse y Kika siguen en `logistica` (la lista del cliente no los menciona).
+3. Reglas CSS viejas sin uso en `globals.scss`: `.po-card*`, `.po-next*`,
+   `.po-form-section*`, `.po-proofs*`, `.ticket-card*`, `.ticket-form-section*`,
+   `.ticket-zones*`, `.event-hint`, `.event-quick-actions`.
+4. Pendientes previos que siguen: fórmulas al insertar filas en Excel embebido; backfill
+   de avance de checklists; `TZ=America/Mexico_City` en el contenedor del API.
 
 ## Siguiente paso
 
-1. **Backfill del avance** — sigue sin correr:
-   ```
-   docker exec -w /app/apps/api arta-api npx ts-node --transpile-only \
-     scripts/backfill-checklist-progress.ts --dry
-   ```
-   ⚠️ Los porcentajes **bajan** y las alertas de riesgo **suben** el mismo día.
-   Avisar al equipo antes y silenciar digests 24 h. No se corrió en este deploy
-   a propósito: mueve todos los números que ve el equipo y eso se avisa.
-2. **Revisar las fechas ya guardadas.** Si el contenedor venía corriendo en UTC,
-   los shows capturados antes del arreglo de zona horaria pueden estar 6 h
-   adelantados. Mirar un par contra el cartel real.
-3. **Fijar `TZ=America/Mexico_City`** en el contenedor del API: el arreglo de
-   fechas ya no depende de ello, pero los digests y PDFs que formatea el
-   servidor sí.
-4. Smoke con el equipo: mover la fecha de un show, pedir una OC en efectivo (no
-   debe pedir comprobante) y abrir una hoja de campaña.
+1. Adam revisa en local y da visto bueno.
+2. Producción: `prisma migrate deploy` y luego
+   `npx ts-node --transpile-only scripts/apply-access-junta-0911.ts --dry` → sin `--dry`.
+   Avisar a Williams y Juan Pablo que su acceso queda en carpetas.
+3. Si en producción había ventana de OC guardada, revisar «Días de cobro» en Configuración.
 
 ## No tocar
 

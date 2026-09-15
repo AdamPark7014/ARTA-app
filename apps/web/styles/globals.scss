@@ -6264,3 +6264,10 @@ textarea.pdffield__input--text {
 
 /* Eficiencia operativa: alta rapida, filtros de un clic, acciones en lote. */
 @import "./efficiency";
+
+/* Junta 11-09-2026: lenguaje visual simple y piezas por módulo. */
+@import "./refine";
+@import "./campaign";
+@import "./po";
+@import "./ticketing";
+@import "./chat";

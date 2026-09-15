@@ -21,8 +21,10 @@ import {
   CAMPAIGN_CONCEPT_CATALOG,
   type CampaignConceptPrice,
   type CampaignSheetMeta,
+  convenioZones,
   resolveConceptUnitCost,
 } from './campaign-concepts';
+import type { CampaignConceptRow, ConvenioRow } from '@/components/events/event-detail.types';
 
 
 const HEADERS = ['CONCEPTO', 'CANTIDAD', 'COSTO', 'COSTO TOTAL'] as const;
@@ -219,4 +221,101 @@ export function workbookToXlsxBlob(wb: XLSX.WorkBook): Blob {
   return new Blob([out], {
     type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   });
+}
+
+/* ── Junta 11-09-2026: el archivo de la campaña sale de la tabla del evento ─ */
+
+export type CampaignWorkbookMeta = CampaignSheetMeta & {
+  endsAt?: string | null;
+  schedule?: string | null;
+};
+
+function dateRange(startsAt?: string | null, endsAt?: string | null) {
+  const start = formatShowDate(startsAt);
+  if (!endsAt) return start;
+  const a = new Date(startsAt || '');
+  const b = new Date(endsAt);
+  if (Number.isNaN(b.getTime()) || a.toDateString() === b.toDateString()) return start;
+  return `${start} AL ${formatShowDate(endsAt)}`;
+}
+
+function sheetHeader(title: string, meta: CampaignWorkbookMeta): (string | number)[][] {
+  return [
+    [title],
+    [],
+    ['PROMOTOR', meta.promoter || 'ARTA PRODUCCIONES', 'EVENTO', meta.eventName],
+    ['FECHA', dateRange(meta.startsAt, meta.endsAt), 'VENUE', meta.venue || ''],
+    ['HORARIO', meta.schedule || formatShowTime(meta.startsAt), 'CIUDAD', meta.city || ''],
+    [],
+  ];
+}
+
+/** Una hoja con el formato de siempre, con el precio interno o el externo. */
+function conceptSheet(
+  title: string,
+  meta: CampaignWorkbookMeta,
+  rows: CampaignConceptRow[],
+  kind: 'interno' | 'externo',
+): XLSX.WorkSheet {
+  const aoa = sheetHeader(title, meta);
+  aoa.push([...HEADERS, 'DESDE', 'HASTA']);
+  const firstData = aoa.length + 1;
+  for (const r of rows) {
+    const price = kind === 'interno' ? r.precioInterno : r.precioExterno;
+    aoa.push([r.concept, Number(r.qty ?? 1), price ?? '', '', r.from || '', r.to || '']);
+  }
+  const lastData = firstData + rows.length - 1;
+  aoa.push([]);
+  aoa.push(['TOTAL', '', '', '']);
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  rows.forEach((_, i) => {
+    const excelRow = firstData + i;
+    ws[XLSX.utils.encode_cell({ r: excelRow - 1, c: 3 })] = { t: 'n', f: `B${excelRow}*C${excelRow}` };
+  });
+  ws[XLSX.utils.encode_cell({ r: aoa.length - 1, c: 3 })] = rows.length
+    ? { t: 'n', f: `SUM(D${firstData}:D${lastData})` }
+    : { t: 'n', v: 0 };
+  ws['!cols'] = [{ wch: 46 }, { wch: 12 }, { wch: 14 }, { wch: 16 }, { wch: 12 }, { wch: 12 }];
+  return ws;
+}
+
+/** Archivo de campaña: hoja interna y hoja externa, independientes. */
+export function buildCampaignWorkbook(meta: CampaignWorkbookMeta, concepts: CampaignConceptRow[]): XLSX.WorkBook {
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, conceptSheet('GASTOS DE PUBLICIDAD · CAMPAÑA INTERNA', meta, concepts, 'interno'), 'Interna');
+  XLSX.utils.book_append_sheet(wb, conceptSheet('GASTOS DE PUBLICIDAD · CAMPAÑA EXTERNA', meta, concepts, 'externo'), 'Externa');
+  return wb;
+}
+
+/** Campaña de convenios: zona, cantidad, precio y total — sin interno/externo. */
+export function buildConveniosWorkbook(meta: CampaignWorkbookMeta, rows: ConvenioRow[]): XLSX.WorkBook {
+  const wb = XLSX.utils.book_new();
+  const aoa = sheetHeader('CAMPAÑA DE CONVENIOS', meta);
+  aoa.push(['CONVENIO', 'DESCRIPCIÓN', 'ZONA', 'CANTIDAD', 'PRECIO', 'TOTAL']);
+  const firstData = aoa.length + 1;
+  for (const r of rows) {
+    aoa.push([r.concept, r.description || '', r.zona || '', r.qty ?? '', r.price ?? '', '']);
+  }
+  const lastData = firstData + rows.length - 1;
+  aoa.push([]);
+  aoa.push(['TOTAL', '', '', '', '', '']);
+  const totalIdx = aoa.length - 1;
+  const zones = convenioZones(rows);
+  if (zones.length) {
+    aoa.push([]);
+    aoa.push(['CORTESÍAS POR ZONA']);
+    aoa.push(['ZONA', 'CANTIDAD', 'VALOR']);
+    for (const z of zones) aoa.push([z.zona.toUpperCase(), z.qty, z.total]);
+  }
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  rows.forEach((_, i) => {
+    const excelRow = firstData + i;
+    ws[XLSX.utils.encode_cell({ r: excelRow - 1, c: 5 })] = { t: 'n', f: `D${excelRow}*E${excelRow}` };
+  });
+  ws[XLSX.utils.encode_cell({ r: totalIdx, c: 5 })] = rows.length
+    ? { t: 'n', f: `SUM(F${firstData}:F${lastData})` }
+    : { t: 'n', v: 0 };
+  ws['!cols'] = [{ wch: 30 }, { wch: 60 }, { wch: 14 }, { wch: 11 }, { wch: 12 }, { wch: 14 }];
+  XLSX.utils.book_append_sheet(wb, ws, 'Convenios');
+  return wb;
 }

@@ -1,52 +1,32 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { fetchPoWindow, type PoWindowState } from '@/lib/po-window';
+import { usePoWindow, type PoWindowState } from '@/lib/po-window';
 
 /**
- * Aviso de la ventana de solicitud de OC.
- *
- * Junta 2026-08-28: el periodo para solicitar órdenes de compra es
- * configurable (hoy lunes y jueves de 10:00 a 14:00). El equipo tiene que
- * verlo antes de capturar, no al recibir el error del servidor.
+ * «Días de cobro: lunes, miércoles y viernes» en una línea, con un punto verde
+ * cuando hoy es uno de ellos. Sin banner: la regla se ve, no estorba.
+ * Solo usa `<span>`, así que cabe dentro del `sub` de `SectionHead`.
  */
-export function PoWindowBanner({ state }: { state?: PoWindowState | null }) {
-  const [local, setLocal] = useState<PoWindowState | null>(state ?? null);
-
-  useEffect(() => {
-    if (state !== undefined) {
-      setLocal(state);
-      return;
-    }
-    let cancelled = false;
-    fetchPoWindow()
-      .then((s) => {
-        if (!cancelled) setLocal(s);
-      })
-      .catch(() => undefined);
-    return () => {
-      cancelled = true;
-    };
-  }, [state]);
-
-  if (!local || !local.config.enabled) return null;
-
-  if (local.open) {
-    return (
-      <div className="module-banner module-banner--ok" role="status">
-        <strong>Ventana de OC abierta.</strong> Se solicitan {local.scheduleLabel}. Captura ahora;
-        fuera de ese periodo el sistema no acepta nuevas órdenes.
-      </div>
-    );
-  }
-
+export function PayDaysNote({ state }: { state: PoWindowState | null | undefined }) {
+  if (!state || !state.config.enabled) return null;
+  const hint = state.open
+    ? 'Hoy es día de cobro'
+    : state.nextOpenLabel
+      ? `Próximo cobro: ${state.nextOpenLabel}`
+      : 'Hoy no es día de cobro';
   return (
-    <div className="module-banner module-banner--warn" role="status">
-      <strong>Ventana de OC cerrada.</strong> Las órdenes de compra se solicitan{' '}
-      {local.scheduleLabel}
-      {local.nextOpenLabel ? ` · vuelve a abrir ${local.nextOpenLabel}` : ''}.
-      {local.bypass ? ' Como dirección, tú sí puedes capturar fuera de horario.' : ''}
-      {local.config.note ? ` ${local.config.note}` : ''}
-    </div>
+    <span className="inline-note oc-paydays" title={hint}>
+      <span className={`oc-dot ${state.open ? 'is-on' : ''}`} aria-hidden />
+      <span>
+        Días de cobro: <strong>{state.scheduleLabel}</strong>
+      </span>
+      <span className="sr-only">. {hint}.</span>
+    </span>
   );
+}
+
+/** Compatibilidad: si no le pasan el estado, lo pide solo. */
+export function PoWindowBanner({ state }: { state?: PoWindowState | null }) {
+  const fetched = usePoWindow();
+  return <PayDaysNote state={state === undefined ? fetched : state} />;
 }

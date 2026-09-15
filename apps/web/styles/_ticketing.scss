@@ -1,0 +1,249 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   Junta 11-09-2026 — Creación de boletera.
+
+   Solo lo propio de boletera. Superficies, tabla, formulario, «choice» y
+   píldoras vienen de `_refine.scss`.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Formulario ─────────────────────────────────────────────────────────── */
+
+.bol-provider__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem 0.75rem;
+}
+
+.bol-provider input.bol-provider__custom {
+  flex: 1 1 14rem;
+  width: auto;
+  max-width: 20rem;
+}
+
+.bol-url {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.bol-url input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.bol-url .btn {
+  flex: none;
+}
+
+.bol-block {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.bol-zones {
+  display: grid;
+  justify-items: start;
+  gap: 0.35rem;
+}
+
+.bol-zones .dtable-wrap {
+  width: 100%;
+}
+
+.bol-zones .dtable th.num,
+.bol-zones .dtable td.num {
+  width: 10rem;
+}
+
+.bol-zones .dtable tfoot td {
+  border-bottom: 0;
+}
+
+/* Alinea el total con el texto de las celdas editables (padding del input). */
+.bol-zones .dtable tfoot td.num {
+  padding-right: calc(0.75rem + 0.5rem + 1px);
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.bol-zones__total-label,
+.bol-sheet__zones tfoot td:first-child {
+  color: var(--muted);
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.bol-hold-fields {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 11rem));
+  gap: 0.9rem 1rem;
+}
+
+@media (max-width: 560px) {
+  .bol-hold-fields {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+/* ── Resumen (espejo del PDF) ───────────────────────────────────────────── */
+
+.bol-sheet {
+  overflow: hidden;
+}
+
+.bol-sheet__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem 1.5rem;
+  padding: 1.35rem 1.4rem 1.2rem;
+  border-bottom: 1px solid var(--line);
+  background: radial-gradient(
+    ellipse 70% 140% at 100% 0%,
+    color-mix(in srgb, var(--accent) 9%, transparent),
+    transparent 62%
+  );
+}
+
+.bol-sheet__eyebrow {
+  display: block;
+  margin-bottom: 0.3rem;
+  color: var(--accent);
+  font-size: 0.68rem;
+  font-weight: 650;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.bol-sheet__name {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.65rem;
+  font-weight: 560;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+
+.bol-sheet__event {
+  margin: 0.3rem 0 0;
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.bol-sheet__body {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+  gap: 1.5rem;
+  padding: 1.3rem 1.4rem 1.4rem;
+}
+
+@media (max-width: 900px) {
+  .bol-sheet__body {
+    grid-template-columns: 1fr;
+  }
+}
+
+.bol-sheet__col {
+  display: grid;
+  align-content: start;
+  gap: 1.25rem;
+  min-width: 0;
+}
+
+.bol-sheet__facts {
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+}
+
+.bol-sheet__label {
+  margin: 0 0 0.5rem;
+  color: var(--muted);
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.bol-sheet__capacity {
+  color: var(--accent);
+  font-family: var(--font-display);
+  font-size: 1.1rem;
+}
+
+.bol-sheet__hold {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.5rem;
+  margin: 0;
+}
+
+.bol-sheet__hold > div {
+  padding: 0.7rem 0.85rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg-soft);
+}
+
+.bol-sheet__hold dt {
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.bol-sheet__hold dd {
+  margin: 0.15rem 0 0;
+  font-family: var(--font-display);
+  font-size: 1.35rem;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+
+.bol-sheet__link {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.2rem 0.5rem;
+  color: var(--accent);
+  font-size: 0.92rem;
+  font-weight: 600;
+}
+
+.bol-sheet__link:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.bol-sheet__host {
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 400;
+}
+
+.bol-sheet__desc {
+  font-size: 0.9rem;
+}
+
+/* ── Portafolio ─────────────────────────────────────────────────────────── */
+
+.bol-list td:first-child {
+  min-width: 14rem;
+}
+
+.bol-list__event {
+  font-weight: 600;
+}
+
+.bol-list__event:hover {
+  color: var(--accent);
+}
+
+.bol-list__actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.35rem;
+}
+
+.bol-error {
+  color: var(--danger);
+}

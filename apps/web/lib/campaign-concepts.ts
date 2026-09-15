@@ -198,3 +198,104 @@ export function campaignExpensesFileName(eventName: string) {
     .slice(0, 40);
   return `CAMPAÑA-${slug || 'gastos'}.xlsx`;
 }
+
+/* ── Junta 11-09-2026: conceptos con cantidad, fechas y los dos precios ──── */
+
+type ConceptRow = import('@/components/events/event-detail.types').CampaignConceptRow;
+type ConvenioRowT = import('@/components/events/event-detail.types').ConvenioRow;
+
+/**
+ * Filas guardadas → filas de la tabla de campaña.
+ *
+ * - Las de convenio ahora viven en la pestaña Convenios.
+ * - Las marcadas fuera del show (`included: false`) ya no existen.
+ * - El catálogo base que se guardaba entero, sin precio ni cantidad, era
+ *   relleno: se omite para que la tabla muestre solo lo que es de este show.
+ */
+export function campaignRowsFrom(concepts?: ConceptRow[] | null): ConceptRow[] {
+  return (concepts || [])
+    .filter((c) => !c.convenio && c.included !== false)
+    .filter((c) => c.qty !== undefined || c.precioInterno != null || c.precioExterno != null)
+    .map((c) => ({
+      concept: c.concept || '',
+      qty: c.qty ?? 1,
+      from: c.from || null,
+      to: c.to || null,
+      precioInterno: c.precioInterno ?? null,
+      precioExterno: c.precioExterno ?? null,
+    }));
+}
+
+export function cleanCampaignRows(rows: ConceptRow[]): ConceptRow[] {
+  return rows
+    .filter((r) => r.concept.trim())
+    .map((r) => ({
+      concept: r.concept.trim(),
+      qty: r.qty ?? 1,
+      from: r.from || null,
+      to: r.to || null,
+      precioInterno: r.precioInterno ?? null,
+      precioExterno: r.precioExterno ?? null,
+    }));
+}
+
+export function conceptLineTotal(row: ConceptRow, kind: 'interno' | 'externo'): number | null {
+  const price = kind === 'interno' ? row.precioInterno : row.precioExterno;
+  if (price == null) return null;
+  return Number(row.qty ?? 1) * Number(price);
+}
+
+export function campaignTotals(rows: ConceptRow[]) {
+  return rows.reduce(
+    (acc, r) => ({
+      interno: acc.interno + (conceptLineTotal(r, 'interno') || 0),
+      externo: acc.externo + (conceptLineTotal(r, 'externo') || 0),
+    }),
+    { interno: 0, externo: 0 },
+  );
+}
+
+/** Convenios del catálogo base con la descripción de lo que entrega cada medio. */
+export const CONVENIO_CATALOG: Array<{ concept: string; description: string }> = CAMPAIGN_CONCEPT_CATALOG.filter(
+  (c) => c.convenio,
+).map((c) => ({ concept: c.concept, description: c.description || '' }));
+
+export function cleanConvenioRows(rows: ConvenioRowT[]): ConvenioRowT[] {
+  return rows
+    .filter((r) => r.concept.trim())
+    .map((r) => ({
+      concept: r.concept.trim(),
+      description: (r.description || '').trim(),
+      zona: (r.zona || '').trim(),
+      qty: r.qty ?? null,
+      price: r.price ?? null,
+    }));
+}
+
+export function convenioLineTotal(row: ConvenioRowT): number | null {
+  if (row.qty == null || row.price == null) return null;
+  return Number(row.qty) * Number(row.price);
+}
+
+export function conveniosTotal(rows: ConvenioRowT[]) {
+  return rows.reduce((s, r) => s + (convenioLineTotal(r) || 0), 0);
+}
+
+/** Cortesías agrupadas por zona: «Oro · 12 boletos · $9,600». */
+export function convenioZones(rows: ConvenioRowT[]) {
+  const map = new Map<string, { zona: string; qty: number; total: number }>();
+  for (const r of rows) {
+    const zona = (r.zona || '').trim();
+    if (!zona || r.qty == null) continue;
+    const key = zona.toUpperCase();
+    const prev = map.get(key) || { zona, qty: 0, total: 0 };
+    prev.qty += Number(r.qty);
+    prev.total += convenioLineTotal(r) || 0;
+    map.set(key, prev);
+  }
+  return Array.from(map.values());
+}
+
+export function conveniosFileName(eventName: string) {
+  return campaignExpensesFileName(eventName).replace(/^CAMPAÑA-/, 'CONVENIOS-');
+}

@@ -1,16 +1,16 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   ForbiddenException,
   Get,
   NotFoundException,
   Param,
-  Patch,
   Post,
   Req,
   UseGuards,
 } from '@nestjs/common';
-import { CampaignType } from '@prisma/client';
+import { CampaignType, Prisma } from '@prisma/client';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { assertSameTenant, tenantIdOf } from '../common/tenant';
@@ -34,6 +34,29 @@ type AuthUser = {
   permissions: string[];
   organizationId?: string | null;
 };
+
+/**
+ * Junta 11-09-2026: la campaña se «envía a revisión», se autoriza y se marca
+ * «Pagada». Lo mismo, por separado, la campaña de convenios.
+ */
+export const REVIEW_STATUSES = ['DRAFT', 'REVIEW', 'AUTHORIZED', 'PAID'] as const;
+export type ReviewStatus = (typeof REVIEW_STATUSES)[number];
+type Scope = 'campaign' | 'convenios';
+
+/** Quién autoriza: gerencia de Arta y dirección (misma regla que antes). */
+function isApprover(user: AuthUser) {
+  return (
+    user.roleKey === 'gerente_arta' ||
+    user.roleKey === 'dir_general' ||
+    user.roleKey === 'super_admin'
+  );
+}
+
+function asStatus(value: unknown): ReviewStatus | null {
+  return typeof value === 'string' && (REVIEW_STATUSES as readonly string[]).includes(value)
+    ? (value as ReviewStatus)
+    : null;
+}
 
 @Controller('campaigns')
 @UseGuards(JwtAuthGuard)
@@ -60,6 +83,16 @@ export class CampaignsController {
     }
   }
 
+  private async eventFor(user: AuthUser, eventId: string) {
+    const event = await this.prisma.event.findUnique({ where: { id: eventId } });
+    if (!event) throw new NotFoundException();
+    if (!canAccessEventOps(user.entities as EntityKey[], user.roleKey as RoleKey, event.entity as EntityKey)) {
+      throw new ForbiddenException();
+    }
+    assertSameTenant(user, event.organizationId);
+    return event;
+  }
+
   @Get()
   async list(@Req() req: { user: AuthUser }) {
     this.assertCampaignView(req.user);
@@ -78,7 +111,18 @@ export class CampaignsController {
       this.prisma.campaign.findMany({
         where: { eventId: { in: eventIds } },
         include: {
-          event: { select: { id: true, name: true, entity: true, artist: true, status: true } },
+          event: {
+            select: {
+              id: true,
+              name: true,
+              entity: true,
+              artist: true,
+              status: true,
+              startsAt: true,
+              endsAt: true,
+              venue: true,
+            },
+          },
         },
         orderBy: { updatedAt: 'desc' },
       }),
@@ -97,12 +141,7 @@ export class CampaignsController {
   @Get('event/:eventId')
   async byEvent(@Req() req: { user: AuthUser }, @Param('eventId') eventId: string) {
     this.assertCampaignView(req.user);
-    const event = await this.prisma.event.findUnique({ where: { id: eventId } });
-    if (!event) throw new NotFoundException();
-    if (!canAccessEventOps(req.user.entities as EntityKey[], req.user.roleKey as RoleKey, event.entity as EntityKey)) {
-      throw new ForbiddenException();
-    }
-    assertSameTenant(req.user, event.organizationId);
+    await this.eventFor(req.user, eventId);
     const [campaign, files] = await Promise.all([
       this.prisma.campaign.findUnique({ where: { eventId } }),
       this.campaignFiles([eventId]),
@@ -114,12 +153,7 @@ export class CampaignsController {
   @Get('event/:eventId/files')
   async files(@Req() req: { user: AuthUser }, @Param('eventId') eventId: string) {
     this.assertCampaignView(req.user);
-    const event = await this.prisma.event.findUnique({ where: { id: eventId } });
-    if (!event) throw new NotFoundException();
-    if (!canAccessEventOps(req.user.entities as EntityKey[], req.user.roleKey as RoleKey, event.entity as EntityKey)) {
-      throw new ForbiddenException();
-    }
-    assertSameTenant(req.user, event.organizationId);
+    await this.eventFor(req.user, eventId);
     return this.campaignFiles([eventId]);
   }
 
@@ -132,48 +166,160 @@ export class CampaignsController {
       type?: CampaignType;
       authorized?: boolean;
       notes?: string;
-      dataJson?: object;
+      dataJson?: Record<string, unknown>;
     },
   ) {
     if (!hasPermission(req.user.roleKey as RoleKey, req.user.permissions, PERMISSIONS.CAMPAIGN_EDIT)) {
       throw new ForbiddenException('Solo el equipo de campaña edita la campaña');
     }
-    const event = await this.prisma.event.findUnique({ where: { id: eventId } });
-    if (!event) throw new NotFoundException();
-    if (!canAccessEventOps(req.user.entities as EntityKey[], req.user.roleKey as RoleKey, event.entity as EntityKey)) {
-      throw new ForbiddenException();
-    }
-    assertSameTenant(req.user, event.organizationId);
+    const event = await this.eventFor(req.user, eventId);
     assertEventNotClosed(event.status);
 
     const authorized = body.authorized;
     // Autorizar campaña: gerencia de Arta + dirección
-    if (authorized === true) {
-      const canAuth =
-        req.user.roleKey === 'gerente_arta' ||
-        req.user.roleKey === 'dir_general' ||
-        req.user.roleKey === 'super_admin';
-      if (!canAuth) throw new ForbiddenException('Solo gerencia de Arta o dirección autoriza campaña');
+    if (authorized === true && !isApprover(req.user)) {
+      throw new ForbiddenException('Solo gerencia de Arta o dirección autoriza campaña');
     }
+
+    const existing = await this.prisma.campaign.findUnique({ where: { eventId } });
+
+    /*
+     * `dataJson` se FUSIONA por llave.
+     *
+     * Ahora dos pestañas escriben en la misma campaña —los conceptos desde
+     * Campaña y los convenios desde Convenios—; reemplazar el JSON entero hacía
+     * que guardar una borrara la otra.
+     */
+    const mergedData =
+      body.dataJson && typeof body.dataJson === 'object'
+        ? ({
+            ...((existing?.dataJson as Record<string, unknown> | null) || {}),
+            ...body.dataJson,
+          } as Prisma.InputJsonValue)
+        : undefined;
+
+    // El atajo legado `authorized` sigue funcionando y mueve también el estado.
+    const statusFromAuth =
+      authorized === true ? 'AUTHORIZED' : authorized === false ? 'DRAFT' : undefined;
 
     return this.prisma.campaign.upsert({
       where: { eventId },
       create: {
         eventId,
-        type: body.type ?? event.campaignType ?? 'INTERNAL',
+        type: body.type ?? (event.campaignType !== 'NONE' ? event.campaignType : 'INTERNAL'),
         authorized: authorized ?? false,
         authorizedAt: authorized ? new Date() : undefined,
+        status: statusFromAuth ?? 'DRAFT',
         notes: body.notes,
-        dataJson: body.dataJson,
+        dataJson: mergedData,
       },
       update: {
         type: body.type,
         notes: body.notes,
-        dataJson: body.dataJson,
+        dataJson: mergedData,
         ...(authorized !== undefined
-          ? { authorized, authorizedAt: authorized ? new Date() : null }
+          ? {
+              authorized,
+              authorizedAt: authorized ? new Date() : null,
+              status: statusFromAuth,
+            }
           : {}),
       },
     });
+  }
+
+  /**
+   * Mueve la campaña (o la campaña de convenios) por su recorrido:
+   *
+   *   Borrador → En revisión → Autorizada → Pagada
+   *
+   * - Enviar a revisión (y regresarla a borrador): quien edita campañas.
+   * - Autorizar, reabrir o deshacer el pago: gerencia de Arta y dirección.
+   * - Marcar pagada: quien marca OC pagadas, o quien autoriza.
+   */
+  @Post('event/:eventId/status')
+  async setStatus(
+    @Req() req: { user: AuthUser },
+    @Param('eventId') eventId: string,
+    @Body() body: { status?: string; scope?: string },
+  ) {
+    const next = asStatus(body.status);
+    if (!next) throw new BadRequestException('Estado inválido');
+    const scope: Scope = body.scope === 'convenios' ? 'convenios' : 'campaign';
+
+    const role = req.user.roleKey as RoleKey;
+    const canEdit = hasPermission(role, req.user.permissions, PERMISSIONS.CAMPAIGN_EDIT);
+    if (!canEdit && !isApprover(req.user)) {
+      throw new ForbiddenException('Sin permiso para mover la campaña');
+    }
+    const event = await this.eventFor(req.user, eventId);
+    assertEventNotClosed(event.status);
+
+    const campaign =
+      (await this.prisma.campaign.findUnique({ where: { eventId } })) ||
+      (await this.prisma.campaign.create({
+        data: {
+          eventId,
+          type: event.campaignType !== 'NONE' ? event.campaignType : 'INTERNAL',
+        },
+      }));
+
+    const current = (asStatus(scope === 'convenios' ? campaign.convenioStatus : campaign.status) ||
+      (campaign.authorized ? 'AUTHORIZED' : 'DRAFT')) as ReviewStatus;
+    if (current === next) return campaign;
+
+    const allowed: Record<ReviewStatus, ReviewStatus[]> = {
+      DRAFT: ['REVIEW'],
+      REVIEW: ['DRAFT', 'AUTHORIZED'],
+      AUTHORIZED: ['PAID', 'REVIEW', 'DRAFT'],
+      PAID: ['AUTHORIZED'],
+    };
+    if (!allowed[current].includes(next)) {
+      throw new BadRequestException('Ese cambio de estado no está permitido');
+    }
+
+    const approverMove =
+      next === 'AUTHORIZED' || (current === 'AUTHORIZED' && next !== 'PAID') || current === 'PAID';
+    if (approverMove && !isApprover(req.user)) {
+      throw new ForbiddenException('Solo gerencia de Arta o dirección autoriza o reabre');
+    }
+    if (next === 'PAID') {
+      const canPay =
+        isApprover(req.user) || hasPermission(role, req.user.permissions, PERMISSIONS.PO_MARK_PAID);
+      if (!canPay) throw new ForbiddenException('Sin permiso para marcar pagada');
+    }
+    if ((next === 'REVIEW' || (current === 'REVIEW' && next === 'DRAFT')) && !canEdit && !isApprover(req.user)) {
+      throw new ForbiddenException('Sin permiso para enviar a revisión');
+    }
+
+    const now = new Date();
+    const data: Prisma.CampaignUpdateInput =
+      scope === 'convenios'
+        ? {
+            convenioStatus: next,
+            ...(next === 'REVIEW' ? { convenioSubmittedAt: now } : {}),
+          }
+        : {
+            status: next,
+            authorized: next === 'AUTHORIZED' || next === 'PAID',
+            ...(next === 'REVIEW' ? { submittedAt: now } : {}),
+            ...(next === 'AUTHORIZED' && current !== 'PAID' ? { authorizedAt: now } : {}),
+            ...(next === 'DRAFT' || next === 'REVIEW' ? { authorizedAt: null } : {}),
+            ...(next === 'PAID' ? { paidAt: now } : {}),
+            ...(current === 'PAID' ? { paidAt: null } : {}),
+          };
+
+    const updated = await this.prisma.campaign.update({ where: { eventId }, data });
+    await this.prisma.auditLog.create({
+      data: {
+        userId: req.user.id,
+        organizationId: event.organizationId ?? req.user.organizationId ?? null,
+        action: scope === 'convenios' ? 'convenios.status' : 'campaign.status',
+        resource: 'Campaign',
+        resourceId: campaign.id,
+        metaJson: { eventId, from: current, to: next },
+      },
+    });
+    return updated;
   }
 }

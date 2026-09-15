@@ -1,787 +1,1010 @@
 'use client';
 
-import { useMemo } from 'react';
-import { PoWindowBanner } from '@/components/purchase-orders/PoWindowBanner';
-import { PoProofsBlock } from '@/components/purchase-orders/PoProofsBlock';
-import { EmptyState } from '@/components/ui/EmptyState';
-import { FlowSteps } from '@/components/ui/FlowSteps';
-import { FormGrid } from '@/components/ui/PageChrome';
-import { StatusBadge } from '@/components/ui/StatusBadge';
-import type { Po, PoLine } from '@/components/events/event-detail.types';
-import type { PoWindowState } from '@/lib/po-window';
 import {
-  PO_PAYMENT_METHODS,
+  Fragment,
+  useId,
+  useMemo,
+  useState,
+  type FormEvent,
+  type KeyboardEvent,
+  type ReactNode,
+} from 'react';
+import { api } from '@/lib/api';
+import { EmptyLite, Pill, SectionHead, Seg } from '@/components/ui/Lite';
+import { PayDaysNote } from '@/components/purchase-orders/PoWindowBanner';
+import { PoProofsBlock } from '@/components/purchase-orders/PoProofsBlock';
+import type { EventPanelProps, Po } from '@/components/events/event-detail.types';
+import { findPrice, mxn, numOrNull, PRICE_LIST } from '@/lib/price-list';
+import { payBlockedLabel, payDaysLabel, usePoWindow } from '@/lib/po-window';
+import {
+  PO_PAYEE_LABELS,
+  PO_PAYEE_TYPES,
+  PO_PAYMENT_CHOICES,
   PO_PAYMENT_LABELS,
+  isPoPaymentMethod,
+  joinPoDescription,
+  poDateShort,
+  poInSection,
+  poIsPending,
+  poLineTotal,
   poNeedsProof,
-  poNextStep,
   poPaymentLabel,
+  poQtyLabel,
+  poSavedTotals,
+  poSectionOptions,
+  poSectionStats,
+  poStatusPill,
+  poTotals,
   splitPoDescription,
-  type PoPaymentMethod,
+  type PoPayeeType,
+  type PoSection,
 } from '@/lib/po-payment';
 import {
   PO_RUBRO_KEYS,
   PO_RUBRO_LABELS,
+  parsePoRubro,
   poRubroLabel,
   resolvePoRubro,
 } from '@/lib/po-rubro';
 
-const PO_FLOW = ['Pendiente', 'Autorizada', 'Pagada'];
+/**
+ * Órdenes de compra del evento (revisión 11-09-2026).
+ *
+ * Una lista por secciones —por autorizar, por pagar, pagadas, todas— y el
+ * machote del cliente como formulario. El panel es autónomo: guarda por su
+ * cuenta, avisa con `flash` y pide recargar con `onChanged`.
+ */
 
-type PoForm = {
+/* ── Borrador del formulario ─────────────────────────────────────────────── */
+
+type DraftLine = { key: string; concept: string; qty: number | null; unitPrice: number | null };
+
+type PoDraft = {
+  vendorName: string;
+  payeeType: PoPayeeType;
   /** Clave del catálogo; si es «otro», el nombre real va en rubroOther. */
   rubro: string;
   rubroOther: string;
-  vendorName: string;
-  description: string;
   paymentMethod: string;
-  /** Cuando la forma de pago es OTRO: cheque, depósito, etc. */
+  /** Legado: nota de «Forma de pago: …» de órdenes en OTRO. */
   paymentOther: string;
-  lines: PoLine[];
-};
-
-type EditPoMeta = {
-  rubro: string;
-  rubroOther: string;
-  vendorName: string;
+  withIva: boolean;
+  /** Observaciones. */
   description: string;
-  paymentMethod: string;
-  paymentOther: string;
+  lines: DraftLine[];
 };
 
-type EventPurchaseOrdersPanelProps = {
-  closed: boolean;
-  canAuthorize?: boolean;
-  canMarkPaid?: boolean;
-  poForm: PoForm;
-  setPoForm: (form: PoForm) => void;
-  poLinesTotal: number;
-  onCreatePo: () => Promise<void>;
-  purchaseOrders: Po[];
-  editingPoId: string | null;
-  setEditingPoId: (id: string | null) => void;
-  editPoMeta: EditPoMeta;
-  setEditPoMeta: (meta: EditPoMeta) => void;
-  editPoLines: PoLine[];
-  setEditPoLines: (lines: PoLine[]) => void;
-  onStartEditPo: (po: Po) => void;
-  onSaveEditPo: () => Promise<void>;
-  onSetPoStatus: (poId: string, status: string) => Promise<void>;
-  onDeletePo: (poId: string) => Promise<void>;
-  onProofsChange: () => void | Promise<void>;
-  eventId: string;
-  poWindow?: PoWindowState | null;
+let lineSeq = 0;
+
+function newLine(over: Partial<Omit<DraftLine, 'key'>> = {}): DraftLine {
+  lineSeq += 1;
+  // El precio nace vacío: el «0» pintado fue una de las correcciones pedidas.
+  return { key: `ln-${lineSeq}`, concept: '', qty: 1, unitPrice: null, ...over };
+}
+
+function emptyDraft(): PoDraft {
+  return {
+    vendorName: '',
+    payeeType: 'PROVEEDOR',
+    rubro: 'audio',
+    rubroOther: '',
+    paymentMethod: 'TRANSFERENCIA',
+    paymentOther: '',
+    withIva: false,
+    description: '',
+    lines: [newLine()],
+  };
+}
+
+function draftFromPo(po: Po): PoDraft {
+  const rubro = parsePoRubro(po.rubro);
+  const desc = splitPoDescription(po.description);
+  return {
+    vendorName: po.vendorName || '',
+    payeeType: po.payeeType === 'OTRO' ? 'OTRO' : 'PROVEEDOR',
+    rubro: rubro.key,
+    rubroOther: rubro.other,
+    paymentMethod: po.paymentMethod || 'TRANSFERENCIA',
+    paymentOther: desc.paymentOther,
+    withIva: !!po.withIva,
+    description: desc.description,
+    lines: po.lines?.length
+      ? po.lines.map((l) => {
+          const qty = l.qty === null || l.qty === undefined ? null : Number(l.qty);
+          const price = Number(l.unitPrice);
+          return newLine({
+            concept: l.concept,
+            qty: qty !== null && Number.isFinite(qty) ? qty : null,
+            unitPrice: Number.isFinite(price) && price > 0 ? price : null,
+          });
+        })
+      : [newLine()],
+  };
+}
+
+function draftPayload(d: PoDraft) {
+  return {
+    rubro: resolvePoRubro(d.rubro, d.rubroOther) || d.rubro,
+    vendorName: d.vendorName.trim(),
+    payeeType: d.payeeType,
+    withIva: d.withIva,
+    paymentMethod: d.paymentMethod,
+    description: joinPoDescription(d.paymentMethod, d.paymentOther, d.description) ?? '',
+    // Las partidas sin descripción no se guardan.
+    lines: d.lines
+      .filter((l) => l.concept.trim())
+      .map((l) => ({ concept: l.concept.trim(), qty: l.qty ?? 0, unitPrice: l.unitPrice ?? 0 })),
+  };
+}
+
+function dateLong(iso?: string | null): string {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '—';
+  return d.toLocaleDateString('es-MX', { day: 'numeric', month: 'long', year: 'numeric' });
+}
+
+/** Montos del formulario: «—» en lugar de «$0». */
+const moneyOrDash = (n: number) => (n > 0 ? mxn(n) : '—');
+
+function IconEdit() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 16 16" aria-hidden>
+      <path
+        d="M11.2 2.3l2.5 2.5-8 8H3.2v-2.5z"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.3"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function IconTrash() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 16 16" aria-hidden>
+      <path
+        d="M2.8 4.2h10.4M6.2 4.2V2.8h3.6v1.4M4.2 4.2l.7 9h6.2l.7-9"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.3"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+/* ── Formulario (crear y editar) ─────────────────────────────────────────── */
+
+type PoFormProps = {
+  mode: 'create' | 'edit';
+  initial: PoDraft;
+  /** Datos automáticos del machote: fecha, solicitante, evento. */
+  facts: Array<[string, string]>;
+  busy: boolean;
+  onCancel: () => void;
+  onSubmit: (draft: PoDraft) => void | Promise<void>;
 };
 
-function poStatusValue(status: string) {
-  return status === 'PENDING_AUTH' ? 'PENDING' : status;
-}
+function PoForm({ mode, initial, facts, busy, onCancel, onSubmit }: PoFormProps) {
+  const [d, setD] = useState<PoDraft>(initial);
+  const uid = useId();
+  const listId = `${uid}-conceptos`;
 
-function poFlowIndex(status: string) {
-  if (status === 'PAID') return 2;
-  if (status === 'AUTHORIZED') return 1;
-  return 0;
-}
+  // Tarjeta u «otro» de órdenes viejas se siguen viendo y conservando.
+  const methods = useMemo(() => {
+    const base: string[] = [...PO_PAYMENT_CHOICES];
+    if (initial.paymentMethod && !base.includes(initial.paymentMethod)) base.push(initial.paymentMethod);
+    return base;
+  }, [initial.paymentMethod]);
 
-function money(n: number) {
-  return n.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' });
-}
+  function patch(p: Partial<PoDraft>) {
+    setD((prev) => ({ ...prev, ...p }));
+  }
 
-export function EventPurchaseOrdersPanel({
-  closed,
-  canAuthorize = false,
-  canMarkPaid = false,
-  poForm,
-  setPoForm,
-  poLinesTotal,
-  onCreatePo,
-  purchaseOrders,
-  editingPoId,
-  setEditingPoId,
-  editPoMeta,
-  setEditPoMeta,
-  editPoLines,
-  setEditPoLines,
-  onStartEditPo,
-  onSaveEditPo,
-  onSetPoStatus,
-  onDeletePo,
-  onProofsChange,
-  eventId,
-  poWindow,
-}: EventPurchaseOrdersPanelProps) {
-  const stats = useMemo(() => {
-    const pending = purchaseOrders.filter((p) => p.status === 'PENDING_AUTH').length;
-    const authorized = purchaseOrders.filter((p) => p.status === 'AUTHORIZED').length;
-    const paid = purchaseOrders.filter((p) => p.status === 'PAID').length;
-    const total = purchaseOrders.reduce((s, p) => s + Number(p.amount || 0), 0);
-    return { pending, authorized, paid, total };
-  }, [purchaseOrders]);
+  function patchLine(key: string, p: Partial<DraftLine>) {
+    setD((prev) => ({
+      ...prev,
+      lines: prev.lines.map((l) => (l.key === key ? { ...l, ...p } : l)),
+    }));
+  }
 
-  const createNeedsProof = poNeedsProof(poForm.paymentMethod);
-  const resolvedRubro = resolvePoRubro(poForm.rubro, poForm.rubroOther);
-  const missingRubro = !resolvedRubro;
-  const missingPaymentOther =
-    poForm.paymentMethod === 'OTRO' && !poForm.paymentOther.trim();
-  /**
-   * Sin esto, «Crear orden de compra» sobre el formulario vacío creaba una OC
-   * de $0 sin concepto, contestaba «OC creada» y dejaba a alguien con una fila
-   * fantasma que autorizar. Se pide lo mínimo para que la orden signifique
-   * algo: un concepto y un importe.
-   */
-  const missingConcept = !poForm.lines.some((l) => l.concept.trim());
-  const canCreate =
-    !missingConcept && !missingRubro && !missingPaymentOther && poLinesTotal > 0;
+  function setConcept(line: DraftLine, value: string) {
+    const p: Partial<DraftLine> = { concept: value };
+    if (line.unitPrice === null) {
+      const hit = findPrice(value);
+      if (hit?.interno) p.unitPrice = hit.interno;
+    }
+    patchLine(line.key, p);
+  }
 
-  let createBlockReason = '';
-  if (missingRubro) {
-    createBlockReason =
-      'Elige un rubro del catálogo o, si es «Otro», escribe el nombre del área.';
-  } else if (missingPaymentOther) {
-    createBlockReason = 'Si la forma de pago es «Otro», especifica cómo se paga (cheque, depósito…).';
-  } else if (missingConcept) {
-    createBlockReason = 'Escribe al menos un concepto en las partidas — qué se está comprando.';
-  } else if (poLinesTotal <= 0) {
-    createBlockReason = 'Pon cantidad y precio para que la orden tenga importe.';
+  function removeLine(key: string) {
+    setD((prev) => {
+      const rest = prev.lines.filter((l) => l.key !== key);
+      return { ...prev, lines: rest.length ? rest : [newLine()] };
+    });
+  }
+
+  const filled = d.lines.filter((l) => l.concept.trim());
+  const totals = poTotals(filled, d.withIva);
+  const rubro = resolvePoRubro(d.rubro, d.rubroOther);
+  const reason = !filled.length
+    ? 'Agrega una partida'
+    : totals.subtotal <= 0
+      ? 'Falta cantidad o precio'
+      : !rubro
+        ? 'Escribe el rubro'
+        : '';
+
+  function submit(e: FormEvent) {
+    e.preventDefault();
+    if (reason || busy) return;
+    void onSubmit(d);
+  }
+
+  /** Enter en una celda no debe crear la orden a medias. */
+  function blockEnter(e: KeyboardEvent<HTMLFormElement>) {
+    if (e.key === 'Enter' && e.target instanceof HTMLInputElement) e.preventDefault();
   }
 
   return (
-    <div className="stack">
-      <div className="grid-cards kpi-grid-dense">
-        <div className="kpi">
-          <div className="label">Pendientes</div>
-          <div className="value">{stats.pending}</div>
+    <form className="fx oc-form" onSubmit={submit} onKeyDown={blockEnter}>
+      <dl className="oc-facts">
+        {facts.map(([k, v]) => (
+          <div key={k}>
+            <dt>{k}</dt>
+            <dd>{v || '—'}</dd>
+          </div>
+        ))}
+      </dl>
+
+      <div className="fx-grid oc-form__head">
+        <label>
+          Nombre de proveedor
+          <input
+            value={d.vendorName}
+            onChange={(e) => patch({ vendorName: e.target.value })}
+            placeholder="Razón social o nombre"
+            autoComplete="organization"
+          />
+        </label>
+        <div className="fx-field">
+          <span>Se paga a</span>
+          <div className="choice" role="radiogroup" aria-label="Se paga a">
+            {PO_PAYEE_TYPES.map((t) => (
+              <button
+                key={t}
+                type="button"
+                role="radio"
+                aria-checked={d.payeeType === t}
+                className={`choice__opt ${d.payeeType === t ? 'is-on' : ''}`}
+                onClick={() => patch({ payeeType: t })}
+              >
+                {PO_PAYEE_LABELS[t]}
+              </button>
+            ))}
+          </div>
         </div>
-        <div className="kpi">
-          <div className="label">Autorizadas</div>
-          <div className="value">{stats.authorized}</div>
-        </div>
-        <div className="kpi">
-          <div className="label">Pagadas</div>
-          <div className="value">{stats.paid}</div>
-        </div>
-        <div className="kpi">
-          <div className="label">Monto total</div>
-          <div className="value value--money">{money(stats.total)}</div>
-        </div>
+        <label>
+          Rubro
+          <span className="oc-rubro">
+            <select
+              value={d.rubro}
+              onChange={(e) =>
+                patch({ rubro: e.target.value, rubroOther: e.target.value === 'otro' ? d.rubroOther : '' })
+              }
+            >
+              {PO_RUBRO_KEYS.map((r) => (
+                <option key={r} value={r}>
+                  {r === 'otro' ? 'Otro…' : PO_RUBRO_LABELS[r]}
+                </option>
+              ))}
+            </select>
+            {d.rubro === 'otro' ? (
+              <input
+                value={d.rubroOther}
+                onChange={(e) => patch({ rubroOther: e.target.value })}
+                placeholder="¿Cuál?"
+                aria-label="Nombre del rubro"
+                autoComplete="off"
+              />
+            ) : null}
+          </span>
+        </label>
       </div>
 
-      <FlowSteps steps={PO_FLOW} activeIndex={stats.paid > 0 ? 2 : stats.authorized > 0 ? 1 : 0} />
-
-      {!closed ? <PoWindowBanner state={poWindow} /> : null}
-
-      {!closed ? (
-        <div className="panel">
-          <div className="panel-head">
-            <div>
-              <h2>Nueva orden de compra</h2>
-              <p className="muted kpi-sub" style={{ margin: '0.25rem 0 0' }}>
-                Completa el área, la forma de pago y las partidas. Total estimado:{' '}
-                <strong>{money(poLinesTotal)}</strong>
-              </p>
-            </div>
-          </div>
-          <div className="panel-body">
-            <div className="form po-create-form">
-              <section className="po-form-section">
-                <h3 className="po-form-section__title">Datos de la orden</h3>
-                <FormGrid>
-                  <label>
-                    Rubro / área
-                    <select
-                      className="field"
-                      value={poForm.rubro}
-                      onChange={(e) =>
-                        setPoForm({
-                          ...poForm,
-                          rubro: e.target.value,
-                          rubroOther: e.target.value === 'otro' ? poForm.rubroOther : '',
-                        })
-                      }
-                    >
-                      {PO_RUBRO_KEYS.map((r) => (
-                        <option key={r} value={r}>
-                          {PO_RUBRO_LABELS[r]}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  {poForm.rubro === 'otro' ? (
-                    <label>
-                      Especificar rubro
+      <div className="oc-lines">
+        <div className="dtable-wrap">
+          <table className="dtable">
+            <thead>
+              <tr>
+                <th className="num oc-col-qty">Cantidad</th>
+                <th>Descripción</th>
+                <th className="num oc-col-price">Precio</th>
+                <th className="num oc-col-total">Total</th>
+                <th className="col-act">
+                  <span className="sr-only">Quitar</span>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {d.lines.map((line, i) => {
+                const total = poLineTotal(line);
+                const n = i + 1;
+                return (
+                  <tr key={line.key}>
+                    <td>
                       <input
-                        className="field"
-                        value={poForm.rubroOther}
-                        onChange={(e) => setPoForm({ ...poForm, rubroOther: e.target.value })}
-                        placeholder="Ej. Escenografía, seguridad, renta de equipo…"
+                        className="cell num"
+                        type="number"
+                        inputMode="decimal"
+                        min={0}
+                        step="any"
+                        value={line.qty ?? ''}
+                        onChange={(e) => patchLine(line.key, { qty: numOrNull(e.target.value) })}
+                        aria-label={`Cantidad, partida ${n}`}
+                      />
+                    </td>
+                    <td>
+                      <input
+                        className="cell"
+                        list={listId}
+                        value={line.concept}
+                        onChange={(e) => setConcept(line, e.target.value)}
+                        placeholder="Qué se compra"
+                        aria-label={`Descripción, partida ${n}`}
                         autoComplete="off"
                       />
-                    </label>
-                  ) : null}
-                  <label>
-                    Forma de pago
-                    <select
-                      className="field"
-                      value={poForm.paymentMethod}
-                      onChange={(e) =>
-                        setPoForm({
-                          ...poForm,
-                          paymentMethod: e.target.value,
-                          paymentOther:
-                            e.target.value === 'OTRO' ? poForm.paymentOther : '',
-                        })
-                      }
-                    >
-                      {PO_PAYMENT_METHODS.map((m) => (
-                        <option key={m} value={m}>
-                          {m === 'OTRO' ? 'Otro (especificar)' : PO_PAYMENT_LABELS[m]}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  {poForm.paymentMethod === 'OTRO' ? (
-                    <label>
-                      Especificar forma de pago
+                    </td>
+                    <td>
                       <input
-                        className="field"
-                        value={poForm.paymentOther}
-                        onChange={(e) => setPoForm({ ...poForm, paymentOther: e.target.value })}
-                        placeholder="Ej. Cheque, depósito en ventanilla…"
-                        autoComplete="off"
+                        className="cell num"
+                        type="number"
+                        inputMode="decimal"
+                        min={0}
+                        step="any"
+                        value={line.unitPrice ?? ''}
+                        onChange={(e) => patchLine(line.key, { unitPrice: numOrNull(e.target.value) })}
+                        placeholder="$"
+                        aria-label={`Precio, partida ${n}`}
                       />
-                    </label>
-                  ) : null}
-                  <label>
-                    Proveedor
-                    <input
-                      className="field"
-                      value={poForm.vendorName}
-                      onChange={(e) => setPoForm({ ...poForm, vendorName: e.target.value })}
-                      placeholder="Razón social o nombre comercial"
-                      autoComplete="organization"
-                    />
-                  </label>
-                </FormGrid>
+                    </td>
+                    <td className="num t-money">
+                      {total !== null && total > 0 ? mxn(total) : <span className="t-muted">—</span>}
+                    </td>
+                    <td className="col-act">
+                      <button
+                        type="button"
+                        className="icon-btn icon-btn--danger"
+                        onClick={() => removeLine(line.key)}
+                        aria-label={`Quitar partida ${n}`}
+                      >
+                        ×
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+        <datalist id={listId}>
+          {PRICE_LIST.map((p) => (
+            <option key={p.concept} value={p.concept} />
+          ))}
+        </datalist>
+        <button
+          type="button"
+          className="btn-quiet btn-quiet--accent"
+          onClick={() => patch({ lines: [...d.lines, newLine()] })}
+        >
+          + Agregar partida
+        </button>
+      </div>
 
-                <div
-                  className={`module-banner ${createNeedsProof ? '' : 'module-banner--ok'}`}
-                  role="note"
-                >
-                  {createNeedsProof ? (
-                    <>
-                      Pago por{' '}
-                      <strong>
-                        {poForm.paymentMethod === 'OTRO' && poForm.paymentOther.trim()
-                          ? poForm.paymentOther.trim()
-                          : poPaymentLabel(poForm.paymentMethod)}
-                      </strong>
-                      : al liquidar se pedirá <strong>comprobante</strong>.
-                    </>
-                  ) : (
-                    <>
-                      Pago en <strong>efectivo</strong>: no se pide comprobante.
-                    </>
-                  )}
-                </div>
-
-                <label>
-                  Descripción
-                  <input
-                    className="field"
-                    value={poForm.description}
-                    onChange={(e) => setPoForm({ ...poForm, description: e.target.value })}
-                    placeholder="Detalle de lo que cubre esta orden (opcional)"
-                  />
-                </label>
-              </section>
-
-              <section className="po-form-section">
-                <div className="po-form-section__head">
-                  <h3 className="po-form-section__title">Partidas</h3>
-                  <span className="muted kpi-sub">Concepto, cantidad y precio unitario</span>
-                </div>
-                <div className="table-wrap">
-                  <table className="table po-lines-table">
-                    <thead>
-                      <tr>
-                        <th>Concepto</th>
-                        <th>Cantidad</th>
-                        <th>Precio unitario</th>
-                        <th>Total</th>
-                        <th />
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {poForm.lines.map((line, idx) => {
-                        // Con cinco partidas había cinco «Cantidad» idénticas:
-                        // el nombre tiene que decir de qué fila es.
-                        const fila = line.concept.trim() || `partida ${idx + 1}`;
-                        return (
-                        <tr key={idx}>
-                          <td>
-                            <input
-                              className="field"
-                              value={line.concept}
-                              onChange={(e) => {
-                                const lines = [...poForm.lines];
-                                lines[idx] = { ...line, concept: e.target.value };
-                                setPoForm({ ...poForm, lines });
-                              }}
-                              aria-label={`Concepto de la partida ${idx + 1}`}
-                              placeholder="Qué se compra o contrata"
-                            />
-                          </td>
-                          <td>
-                            <input
-                              className="field"
-                              type="number"
-                              min={0}
-                              step="any"
-                              value={line.qty}
-                              onChange={(e) => {
-                                const lines = [...poForm.lines];
-                                lines[idx] = { ...line, qty: Number(e.target.value) };
-                                setPoForm({ ...poForm, lines });
-                              }}
-                              aria-label={`Cantidad de ${fila}`}
-                            />
-                          </td>
-                          <td>
-                            <input
-                              className="field"
-                              type="number"
-                              min={0}
-                              step="any"
-                              value={line.unitPrice}
-                              onChange={(e) => {
-                                const lines = [...poForm.lines];
-                                lines[idx] = { ...line, unitPrice: Number(e.target.value) };
-                                setPoForm({ ...poForm, lines });
-                              }}
-                              aria-label={`Precio unitario de ${fila}`}
-                            />
-                          </td>
-                          <td className="muted kpi-sub">
-                            {money(Number(line.qty || 0) * Number(line.unitPrice || 0))}
-                          </td>
-                          <td>
-                            <button
-                              className="btn ghost btn-sm"
-                              type="button"
-                              aria-label={`Quitar ${fila}`}
-                              onClick={() =>
-                                setPoForm({
-                                  ...poForm,
-                                  lines: poForm.lines.filter((_, i) => i !== idx),
-                                })
-                              }
-                            >
-                              ×
-                            </button>
-                          </td>
-                        </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
+      <div className="oc-form__pay">
+        <div className="fx-field">
+          <span>Forma de pago</span>
+          <div className="choice" role="radiogroup" aria-label="Forma de pago">
+            {methods.map((m) => {
+              const on = d.paymentMethod === m;
+              return (
                 <button
-                  className="btn ghost btn-sm"
+                  key={m}
                   type="button"
-                  onClick={() =>
-                    setPoForm({
-                      ...poForm,
-                      lines: [...poForm.lines, { concept: '', qty: 1, unitPrice: 0 }],
-                    })
-                  }
+                  role="radio"
+                  aria-checked={on}
+                  className={`choice__opt ${on ? 'is-on' : ''}`}
+                  onClick={() => patch({ paymentMethod: m })}
                 >
-                  + Agregar partida
+                  {m === 'OTRO'
+                    ? poPaymentLabel('OTRO', d.paymentOther)
+                    : isPoPaymentMethod(m)
+                      ? PO_PAYMENT_LABELS[m]
+                      : m}
                 </button>
-              </section>
-
-              {!canCreate && createBlockReason ? (
-                <p className="po-next-hint" role="note">
-                  {createBlockReason}
-                </p>
-              ) : null}
-              <button className="btn" type="button" disabled={!canCreate} onClick={onCreatePo}>
-                {canCreate
-                  ? `Crear orden de compra por ${money(poLinesTotal)}`
-                  : 'Crear orden de compra'}
-              </button>
-            </div>
+              );
+            })}
           </div>
         </div>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={d.withIva}
+          className={`oc-switch ${d.withIva ? 'is-on' : ''}`}
+          onClick={() => patch({ withIva: !d.withIva })}
+        >
+          <span className="oc-switch__track" aria-hidden>
+            <span className="oc-switch__knob" />
+          </span>
+          Agregar IVA 16 %
+        </button>
+      </div>
+
+      <label>
+        Observaciones
+        <textarea
+          rows={2}
+          value={d.description}
+          onChange={(e) => patch({ description: e.target.value })}
+          placeholder="Opcional"
+        />
+      </label>
+
+      <div className="oc-form__foot">
+        <div className="totals oc-totals" aria-live="polite">
+          <div className="totals__item">
+            <span className="totals__label">Subtotal</span>
+            <span className="totals__value">{moneyOrDash(totals.subtotal)}</span>
+          </div>
+          <div className="totals__item">
+            <span className="totals__label">IVA</span>
+            <span className="totals__value">{d.withIva ? moneyOrDash(totals.iva) : '—'}</span>
+          </div>
+          <div className="totals__item">
+            <span className="totals__label">Total</span>
+            <span className="totals__value totals__value--accent">{moneyOrDash(totals.total)}</span>
+          </div>
+        </div>
+        <div className="fx-actions">
+          {reason ? <span className="oc-reason">{reason}</span> : null}
+          <button type="button" className="btn ghost btn-sm" onClick={onCancel} disabled={busy}>
+            Cancelar
+          </button>
+          <button type="submit" className="btn btn-sm" disabled={!!reason || busy}>
+            {busy
+              ? 'Guardando…'
+              : `${mode === 'create' ? 'Crear orden' : 'Guardar'}${totals.total > 0 ? ` · ${mxn(totals.total)}` : ''}`}
+          </button>
+        </div>
+      </div>
+    </form>
+  );
+}
+
+/* ── Detalle de una orden (lo comparte la torre de OC) ──────────────────── */
+
+export function PoDetail({
+  po,
+  eventId,
+  closed,
+  onProofsChange,
+  children,
+}: {
+  po: Po;
+  eventId: string;
+  closed: boolean;
+  onProofsChange: () => void | Promise<void>;
+  /** Acciones secundarias al pie (Rechazar, PDF…). */
+  children?: ReactNode;
+}) {
+  const { description, paymentOther } = splitPoDescription(po.description);
+  const method = po.paymentMethod || 'TRANSFERENCIA';
+  const needsProof = poNeedsProof(method);
+  const hasProof = !!po.proofs?.length;
+  const lines = po.lines ?? [];
+  const t = poSavedTotals(po);
+  const payee = po.payeeType === 'OTRO' ? 'OTRO' : 'PROVEEDOR';
+
+  const trail = [
+    po.createdBy?.fullName
+      ? `Solicitó ${po.createdBy.fullName}${po.createdAt ? ` · ${poDateShort(po.createdAt)}` : ''}`
+      : po.createdAt
+        ? `Solicitada ${poDateShort(po.createdAt)}`
+        : '',
+    po.authorizedBy?.fullName
+      ? `Autorizó ${po.authorizedBy.fullName}${po.authorizedAt ? ` · ${poDateShort(po.authorizedAt)}` : ''}`
+      : '',
+    po.paidAt ? `Pagada ${poDateShort(po.paidAt)}` : '',
+    `${PO_PAYEE_LABELS[payee]} · ${poPaymentLabel(method, paymentOther)}${needsProof ? '' : ' (sin comprobante)'}`,
+  ].filter(Boolean);
+
+  const showProofs = needsProof && (po.status === 'AUTHORIZED' || po.status === 'PAID' || hasProof);
+
+  return (
+    <div className="oc-detail">
+      {lines.length ? (
+        <table className="oc-mini">
+          <thead>
+            <tr>
+              <th className="num">Cant.</th>
+              <th>Descripción</th>
+              <th className="num">Precio</th>
+              <th className="num">Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            {lines.map((l, i) => {
+              const price = Number(l.unitPrice);
+              const lt = poLineTotal(l);
+              return (
+                <tr key={l.id || i}>
+                  <td className="num">{poQtyLabel(l.qty) || '—'}</td>
+                  <td>{l.concept}</td>
+                  <td className="num">{Number.isFinite(price) && price > 0 ? mxn(price) : '—'}</td>
+                  <td className="num">{lt !== null && lt > 0 ? mxn(lt) : '—'}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+          <tfoot>
+            {po.withIva ? (
+              <>
+                <tr>
+                  <td colSpan={3}>Subtotal</td>
+                  <td className="num">{mxn(t.subtotal)}</td>
+                </tr>
+                <tr>
+                  <td colSpan={3}>IVA 16 %</td>
+                  <td className="num">{mxn(t.iva)}</td>
+                </tr>
+              </>
+            ) : null}
+            <tr className="is-total">
+              <td colSpan={3}>Total</td>
+              <td className="num">{mxn(t.total)}</td>
+            </tr>
+          </tfoot>
+        </table>
       ) : null}
 
-      <div className="panel">
-        <div className="panel-head">
-          <div>
-            <h2>Órdenes del evento · {purchaseOrders.length}</h2>
-            <p className="muted kpi-sub" style={{ margin: '0.25rem 0 0' }}>
-              Efectivo no pide comprobante. Transferencia, tarjeta u otro sí — antes de marcar
-              pagado.
-            </p>
+      {description ? (
+        <p className="oc-notes">
+          <span>Observaciones</span>
+          {description}
+        </p>
+      ) : null}
+
+      <p className="oc-trail">
+        {trail.map((f, i) => (
+          <span key={i}>{f}</span>
+        ))}
+      </p>
+
+      {showProofs ? (
+        <PoProofsBlock
+          poId={po.id}
+          eventId={eventId}
+          poAmount={Number(po.amount)}
+          proofs={po.proofs}
+          canUpload={!closed && po.status === 'AUTHORIZED'}
+          required={po.status === 'AUTHORIZED'}
+          onChange={onProofsChange}
+        />
+      ) : null}
+
+      {children ? <div className="oc-detail__foot">{children}</div> : null}
+    </div>
+  );
+}
+
+/* ── Panel ───────────────────────────────────────────────────────────────── */
+
+const EMPTY_SECTION: Record<PoSection, string> = {
+  auth: 'Nada por autorizar.',
+  pay: 'Nada por pagar.',
+  paid: 'Aún no hay órdenes pagadas.',
+  all: 'Sin órdenes.',
+};
+
+export function EventPurchaseOrdersPanel({
+  event,
+  closed,
+  canCreate,
+  canAuthorize,
+  canMarkPaid,
+  currentUserName,
+  onChanged,
+  flash,
+}: EventPanelProps & {
+  canCreate: boolean;
+  canAuthorize: boolean;
+  canMarkPaid: boolean;
+  currentUserName: string;
+}) {
+  const orders = useMemo(
+    () =>
+      [...(event.purchaseOrders ?? [])].sort((a, b) =>
+        (b.createdAt ?? '').localeCompare(a.createdAt ?? ''),
+      ),
+    [event.purchaseOrders],
+  );
+  const stats = useMemo(() => poSectionStats(orders), [orders]);
+  const win = usePoWindow();
+  const blocked = payBlockedLabel(win);
+  const editable = canCreate && !closed;
+
+  const [section, setSection] = useState<PoSection>(() => (stats.auth.count > 0 ? 'auth' : 'all'));
+  const [creating, setCreating] = useState(false);
+  const [openId, setOpenId] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  /** 'create' · id de la orden · `pdf-<id>` */
+  const [busy, setBusy] = useState<string | null>(null);
+
+  const visible = orders.filter((po) => poInSection(po.status, section));
+
+  const summary = (() => {
+    const parts: string[] = [];
+    if (stats.auth.count) parts.push(`${stats.auth.count} por autorizar`);
+    if (stats.pay.amount > 0) parts.push(`${mxn(stats.pay.amount)} por pagar`);
+    if (parts.length) return parts.join(' · ');
+    if (!orders.length) return 'Sin órdenes todavía';
+    if (stats.paid.count === orders.length) return 'Todo pagado';
+    return `${orders.length} ${orders.length === 1 ? 'orden' : 'órdenes'}`;
+  })();
+
+  async function run(key: string, work: () => Promise<unknown>, ok: string, fail: string) {
+    setBusy(key);
+    try {
+      await work();
+    } catch (e) {
+      flash(e instanceof Error && e.message ? e.message : fail, 'error');
+      setBusy(null);
+      return false;
+    }
+    flash(ok, 'success');
+    try {
+      await onChanged();
+    } finally {
+      setBusy(null);
+    }
+    return true;
+  }
+
+  function openCreate() {
+    setCreating(true);
+    setEditingId(null);
+  }
+
+  function toggle(id: string) {
+    setEditingId(null);
+    setOpenId((cur) => (cur === id ? null : id));
+  }
+
+  function startEdit(po: Po) {
+    setCreating(false);
+    setOpenId(po.id);
+    setEditingId(po.id);
+  }
+
+  async function createPo(d: PoDraft) {
+    const p = draftPayload(d);
+    const ok = await run(
+      'create',
+      () =>
+        api('/purchase-orders', {
+          method: 'POST',
+          body: JSON.stringify({
+            eventId: event.id,
+            ...p,
+            vendorName: p.vendorName || undefined,
+            description: p.description || undefined,
+          }),
+        }),
+      'Orden creada',
+      'No se pudo crear la orden',
+    );
+    if (ok) {
+      setCreating(false);
+      setSection('auth');
+    }
+  }
+
+  async function saveEdit(po: Po, d: PoDraft) {
+    const ok = await run(
+      po.id,
+      () => api(`/purchase-orders/${po.id}`, { method: 'PATCH', body: JSON.stringify(draftPayload(d)) }),
+      'Orden actualizada',
+      'No se pudo guardar la orden',
+    );
+    if (ok) setEditingId(null);
+  }
+
+  function setStatus(po: Po, status: 'AUTHORIZED' | 'PAID' | 'REJECTED') {
+    const ok = { AUTHORIZED: 'Orden autorizada', PAID: 'Orden pagada', REJECTED: 'Orden rechazada' }[status];
+    return run(
+      po.id,
+      () => api(`/purchase-orders/${po.id}/status`, { method: 'PATCH', body: JSON.stringify({ status }) }),
+      ok,
+      'No se pudo cambiar el estado',
+    );
+  }
+
+  async function rejectPo(po: Po) {
+    if (!window.confirm(`¿Rechazar la orden de ${po.vendorName || 'este proveedor'}?`)) return;
+    await setStatus(po, 'REJECTED');
+  }
+
+  async function removePo(po: Po) {
+    if (!window.confirm(`¿Eliminar la orden de ${po.vendorName || 'este proveedor'}? No se puede deshacer.`)) {
+      return;
+    }
+    const ok = await run(
+      po.id,
+      () => api(`/purchase-orders/${po.id}`, { method: 'DELETE' }),
+      'Orden eliminada',
+      'No se pudo eliminar la orden',
+    );
+    if (ok && openId === po.id) setOpenId(null);
+  }
+
+  async function downloadPdf(po: Po) {
+    setBusy(`pdf-${po.id}`);
+    try {
+      const { downloadPurchaseOrderPdf } = await import('@/lib/po-pdf');
+      await downloadPurchaseOrderPdf({ po, event: { name: event.name }, payDaysLabel: payDaysLabel(win) });
+    } catch (e) {
+      console.error(e);
+      flash('No se pudo generar el PDF', 'error');
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  /** Un solo botón fuerte por fila: lo que le toca a esta orden. */
+  function primaryAction(po: Po): ReactNode {
+    if (closed) return null;
+    const rowBusy = busy === po.id;
+    if (poIsPending(po.status) && canAuthorize) {
+      return (
+        <button type="button" className="btn btn-sm" disabled={rowBusy} onClick={() => setStatus(po, 'AUTHORIZED')}>
+          Autorizar
+        </button>
+      );
+    }
+    if (po.status === 'AUTHORIZED' && canMarkPaid) {
+      if (poNeedsProof(po.paymentMethod || 'TRANSFERENCIA') && !po.proofs?.length) {
+        return (
+          <button
+            type="button"
+            className="btn btn-sm"
+            onClick={() => {
+              setEditingId(null);
+              setOpenId(po.id);
+            }}
+          >
+            Comprobante
+          </button>
+        );
+      }
+      if (blocked) {
+        return (
+          <span className="oc-wait" title="Los pagos se registran solo en días de cobro">
+            {blocked}
+          </span>
+        );
+      }
+      return (
+        <button type="button" className="btn btn-sm" disabled={rowBusy} onClick={() => setStatus(po, 'PAID')}>
+          Marcar pagada
+        </button>
+      );
+    }
+    return null;
+  }
+
+  return (
+    <div className="sx-stack oc-panel">
+      <SectionHead
+        title="Órdenes de compra"
+        sub={
+          <span className="oc-sub">
+            <span>{summary}</span>
+            <PayDaysNote state={win} />
+          </span>
+        }
+      >
+        {editable && !creating && orders.length > 0 ? (
+          <button type="button" className="btn btn-sm" onClick={openCreate}>
+            + Nueva orden
+          </button>
+        ) : null}
+      </SectionHead>
+
+      {creating && editable ? (
+        <section className="surface oc-create" aria-label="Nueva orden de compra">
+          <div className="surface__head">
+            <h3 className="surface__title">Nueva orden</h3>
+            <button type="button" className="icon-btn" aria-label="Cerrar" onClick={() => setCreating(false)}>
+              ×
+            </button>
           </div>
-        </div>
-        <div className="panel-body stack">
-          {!purchaseOrders.length ? (
-            <EmptyState
-              title="Sin órdenes de compra"
-              description="Crea la primera OC con rubro, forma de pago y partidas. Luego autoriza y marca pagado."
-              steps={[
-                'Crear OC (elige efectivo o transferencia)',
-                'Autorizar con dirección',
-                'Si no es efectivo: subir comprobante → marcar pagado',
+          <div className="surface__body">
+            <PoForm
+              mode="create"
+              initial={emptyDraft()}
+              facts={[
+                ['Fecha de solicitud', dateLong(new Date().toISOString())],
+                ['Solicitante', currentUserName],
+                ['Evento', event.name],
               ]}
+              busy={busy === 'create'}
+              onCancel={() => setCreating(false)}
+              onSubmit={createPo}
             />
-          ) : (
-            purchaseOrders.map((po) => {
-              const method = (po.paymentMethod || 'TRANSFERENCIA') as PoPaymentMethod;
-              const needsProof = poNeedsProof(method);
-              const hasProof = (po.proofs?.length ?? 0) > 0;
-              const canPay =
-                !closed &&
-                canMarkPaid &&
-                po.status === 'AUTHORIZED' &&
-                (!needsProof || hasProof);
-              const next = poNextStep({
-                status: po.status,
-                paymentMethod: method,
-                proofCount: po.proofs?.length ?? 0,
-              });
-              const descParts = splitPoDescription(po.description);
+          </div>
+        </section>
+      ) : null}
 
-              return (
-                <article key={po.id} className="po-card">
-                  <div className="po-card__head">
-                    <div>
-                      <strong>{poRubroLabel(po.rubro)}</strong>
-                      <span className="muted kpi-sub"> · {po.vendorName || 'Sin proveedor'}</span>
-                      <div className="po-card__meta-row">
-                        <StatusBadge
-                          value={poPaymentLabel(method, descParts.paymentOther)}
-                          kind="raw"
-                          className="ok"
-                        />
-                        {/*
-                          En efectivo no «falta» el comprobante: no aplica. Y
-                          cuando sí falta, ya lo dice la píldora de «qué sigue»
-                          arriba, así que aquí basta con el hecho.
-                        */}
-                        {!needsProof ? (
-                          <StatusBadge value="No lleva comprobante" kind="raw" />
-                        ) : hasProof ? (
-                          <StatusBadge value="Con comprobante" kind="raw" className="ok" />
-                        ) : null}
-                      </div>
-                      <div className="po-card__amount">{money(Number(po.amount))}</div>
-                      {descParts.description ? (
-                        <p className="muted kpi-sub">{descParts.description}</p>
-                      ) : null}
-                      <FlowSteps steps={PO_FLOW} activeIndex={poFlowIndex(po.status)} />
-                    </div>
-                    <div className="panel-head-actions">
-                      <div className={`po-next po-next--${next.tone}`}>{next.label}</div>
-                      <StatusBadge value={poStatusValue(po.status)} kind="po" />
-                      {!closed && po.status === 'PENDING_AUTH' ? (
-                        <>
+      {!orders.length && !creating ? (
+        <EmptyLite
+          icon="$"
+          title="Sin órdenes de compra"
+          text={editable ? 'Crea la primera orden de este evento.' : undefined}
+        >
+          {editable ? (
+            <button type="button" className="btn btn-sm" onClick={openCreate}>
+              + Nueva orden
+            </button>
+          ) : null}
+        </EmptyLite>
+      ) : null}
+
+      {orders.length ? (
+        <>
+          <Seg
+            label="Secciones de órdenes de compra"
+            value={section}
+            options={poSectionOptions(stats)}
+            onChange={setSection}
+          />
+          <div className="dtable-wrap">
+            <table className="dtable oc-table">
+              <thead>
+                <tr>
+                  <th>Proveedor</th>
+                  <th className="oc-hide-sm">Solicitud</th>
+                  <th className="oc-hide-sm">Pago</th>
+                  <th className="num">Total</th>
+                  <th>Estado</th>
+                  <th className="col-act">
+                    <span className="sr-only">Acciones</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {visible.map((po) => {
+                  const open = openId === po.id;
+                  const pending = poIsPending(po.status);
+                  const editing = editingId === po.id && editable && pending;
+                  const pill = poStatusPill(po.status);
+                  const method = po.paymentMethod || 'TRANSFERENCIA';
+                  const { paymentOther } = splitPoDescription(po.description);
+                  const rowBusy = busy === po.id;
+                  const who = po.vendorName || 'este proveedor';
+                  return (
+                    <Fragment key={po.id}>
+                      <tr className={`oc-row ${open ? 'is-open' : ''}`} onClick={() => toggle(po.id)}>
+                        <td>
                           <button
-                            className="btn ghost btn-sm"
                             type="button"
-                            onClick={() => onStartEditPo(po)}
+                            className="oc-vendor"
+                            aria-expanded={open}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggle(po.id);
+                            }}
                           >
-                            Editar
+                            <span className="oc-vendor__name">{po.vendorName || 'Sin proveedor'}</span>
+                            <span className="oc-vendor__sub">{poRubroLabel(po.rubro)}</span>
                           </button>
-                          {canAuthorize ? (
+                        </td>
+                        <td className="oc-hide-sm t-muted t-small">{poDateShort(po.createdAt)}</td>
+                        <td className="oc-hide-sm t-small">{poPaymentLabel(method, paymentOther)}</td>
+                        <td className="num t-money oc-amount">{mxn(Number(po.amount))}</td>
+                        <td>
+                          <Pill tone={pill.tone}>{pill.label}</Pill>
+                        </td>
+                        <td className="col-act" onClick={(e) => e.stopPropagation()}>
+                          <div className="oc-actions">
+                            {primaryAction(po)}
                             <button
-                              className="btn btn-sm"
                               type="button"
-                              onClick={() => onSetPoStatus(po.id, 'AUTHORIZED')}
+                              className="btn-quiet"
+                              onClick={() => downloadPdf(po)}
+                              disabled={busy === `pdf-${po.id}`}
+                              aria-label={`PDF de la orden de ${who}`}
                             >
-                              Autorizar
+                              PDF
                             </button>
-                          ) : null}
-                          <button
-                            className="btn ghost btn-sm btn-danger"
-                            type="button"
-                            onClick={() => onDeletePo(po.id)}
-                          >
-                            Eliminar
-                          </button>
-                        </>
-                      ) : null}
-                      {/*
-                        El botón solo aparece cuando de verdad se puede apretar.
-                        Antes se enseñaba apagado con el motivo en un `title`, que
-                        en un botón deshabilitado el navegador ni siquiera muestra:
-                        quedaba un botón muerto sin explicación. Si falta algo, lo
-                        dice `.po-next-hint` con todas sus letras.
-                      */}
-                      {canPay ? (
-                        <button
-                          className="btn btn-sm"
-                          type="button"
-                          onClick={() => onSetPoStatus(po.id, 'PAID')}
-                        >
-                          Marcar pagada
-                        </button>
-                      ) : null}
-                    </div>
-                  </div>
-
-                  {editingPoId === po.id ? (
-                    <div className="po-card__edit form">
-                      <FormGrid>
-                        <label>
-                          Rubro / área
-                          <select
-                            className="field"
-                            value={editPoMeta.rubro}
-                            onChange={(e) =>
-                              setEditPoMeta({
-                                ...editPoMeta,
-                                rubro: e.target.value,
-                                rubroOther:
-                                  e.target.value === 'otro' ? editPoMeta.rubroOther : '',
-                              })
-                            }
-                          >
-                            {PO_RUBRO_KEYS.map((r) => (
-                              <option key={r} value={r}>
-                                {PO_RUBRO_LABELS[r]}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                        {editPoMeta.rubro === 'otro' ? (
-                          <label>
-                            Especificar rubro
-                            <input
-                              className="field"
-                              value={editPoMeta.rubroOther}
-                              onChange={(e) =>
-                                setEditPoMeta({ ...editPoMeta, rubroOther: e.target.value })
-                              }
-                              placeholder="Ej. Escenografía, seguridad…"
-                            />
-                          </label>
-                        ) : null}
-                        <label>
-                          Proveedor
-                          <input
-                            className="field"
-                            value={editPoMeta.vendorName}
-                            onChange={(e) =>
-                              setEditPoMeta({ ...editPoMeta, vendorName: e.target.value })
-                            }
-                            placeholder="Razón social o nombre comercial"
-                          />
-                        </label>
-                        <label>
-                          Forma de pago
-                          <select
-                            className="field"
-                            value={editPoMeta.paymentMethod}
-                            onChange={(e) =>
-                              setEditPoMeta({
-                                ...editPoMeta,
-                                paymentMethod: e.target.value,
-                                paymentOther:
-                                  e.target.value === 'OTRO' ? editPoMeta.paymentOther : '',
-                              })
-                            }
-                          >
-                            {PO_PAYMENT_METHODS.map((m) => (
-                              <option key={m} value={m}>
-                                {m === 'OTRO' ? 'Otro (especificar)' : PO_PAYMENT_LABELS[m]}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                        {editPoMeta.paymentMethod === 'OTRO' ? (
-                          <label>
-                            Especificar forma de pago
-                            <input
-                              className="field"
-                              value={editPoMeta.paymentOther}
-                              onChange={(e) =>
-                                setEditPoMeta({ ...editPoMeta, paymentOther: e.target.value })
-                              }
-                              placeholder="Ej. Cheque, depósito…"
-                            />
-                          </label>
-                        ) : null}
-                        <label>
-                          Descripción
-                          <input
-                            className="field"
-                            value={editPoMeta.description}
-                            onChange={(e) =>
-                              setEditPoMeta({ ...editPoMeta, description: e.target.value })
-                            }
-                            placeholder="Detalle de lo que cubre (opcional)"
-                          />
-                        </label>
-                      </FormGrid>
-                      <div className="table-wrap">
-                        <table className="table">
-                          <thead>
-                            <tr>
-                              <th>Concepto</th>
-                              <th>Cant.</th>
-                              <th>P. unit.</th>
-                              <th />
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {editPoLines.map((line, idx) => {
-                              const fila = line.concept.trim() || `partida ${idx + 1}`;
-                              return (
-                              <tr key={idx}>
-                                <td>
-                                  <input
-                                    className="field"
-                                    value={line.concept}
-                                    onChange={(e) => {
-                                      const lines = [...editPoLines];
-                                      lines[idx] = { ...line, concept: e.target.value };
-                                      setEditPoLines(lines);
-                                    }}
-                                    aria-label={`Concepto de la partida ${idx + 1}`}
-                                  />
-                                </td>
-                                <td>
-                                  <input
-                                    className="field"
-                                    type="number"
-                                    value={line.qty}
-                                    onChange={(e) => {
-                                      const lines = [...editPoLines];
-                                      lines[idx] = { ...line, qty: Number(e.target.value) };
-                                      setEditPoLines(lines);
-                                    }}
-                                    aria-label={`Cantidad de ${fila}`}
-                                  />
-                                </td>
-                                <td>
-                                  <input
-                                    className="field"
-                                    type="number"
-                                    value={line.unitPrice}
-                                    onChange={(e) => {
-                                      const lines = [...editPoLines];
-                                      lines[idx] = { ...line, unitPrice: Number(e.target.value) };
-                                      setEditPoLines(lines);
-                                    }}
-                                    aria-label={`Precio unitario de ${fila}`}
-                                  />
-                                </td>
-                                <td>
+                            {editable && pending ? (
+                              <>
+                                <button
+                                  type="button"
+                                  className="icon-btn"
+                                  title="Editar"
+                                  aria-label={`Editar la orden de ${who}`}
+                                  disabled={rowBusy}
+                                  onClick={() => startEdit(po)}
+                                >
+                                  <IconEdit />
+                                </button>
+                                <button
+                                  type="button"
+                                  className="icon-btn icon-btn--danger"
+                                  title="Eliminar"
+                                  aria-label={`Eliminar la orden de ${who}`}
+                                  disabled={rowBusy}
+                                  onClick={() => removePo(po)}
+                                >
+                                  <IconTrash />
+                                </button>
+                              </>
+                            ) : null}
+                          </div>
+                        </td>
+                      </tr>
+                      {open ? (
+                        <tr className="oc-detail-row">
+                          <td className="dtable__detail" colSpan={6}>
+                            {editing ? (
+                              <PoForm
+                                key={`edit-${po.id}`}
+                                mode="edit"
+                                initial={draftFromPo(po)}
+                                facts={[
+                                  ['Fecha de solicitud', dateLong(po.createdAt)],
+                                  ['Solicitante', po.createdBy?.fullName || '—'],
+                                  ['Evento', event.name],
+                                ]}
+                                busy={rowBusy}
+                                onCancel={() => setEditingId(null)}
+                                onSubmit={(d) => saveEdit(po, d)}
+                              />
+                            ) : (
+                              <PoDetail po={po} eventId={event.id} closed={closed} onProofsChange={onChanged}>
+                                {!closed && canAuthorize && pending ? (
                                   <button
-                                    className="btn ghost btn-sm"
                                     type="button"
-                                    aria-label={`Quitar ${fila}`}
-                                    onClick={() =>
-                                      setEditPoLines(editPoLines.filter((_, i) => i !== idx))
-                                    }
+                                    className="btn-quiet oc-reject"
+                                    disabled={rowBusy}
+                                    onClick={() => rejectPo(po)}
                                   >
-                                    ×
+                                    Rechazar
                                   </button>
-                                </td>
-                              </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
-                      <div className="row row--tight">
-                        <button
-                          className="btn ghost btn-sm"
-                          type="button"
-                          onClick={() =>
-                            setEditPoLines([...editPoLines, { concept: '', qty: 1, unitPrice: 0 }])
-                          }
-                        >
-                          + Partida
-                        </button>
-                        <button className="btn btn-sm" type="button" onClick={onSaveEditPo}>
-                          Guardar cambios
-                        </button>
-                        <button
-                          className="btn ghost btn-sm"
-                          type="button"
-                          onClick={() => setEditingPoId(null)}
-                        >
-                          Cancelar
-                        </button>
-                      </div>
-                    </div>
-                  ) : po.lines?.length ? (
-                    <div className="table-wrap po-card__lines">
-                      <table className="table">
-                        <thead>
-                          <tr>
-                            <th>Concepto</th>
-                            <th>Cant.</th>
-                            <th>P. unit.</th>
-                            <th>Total</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {po.lines.map((l) => (
-                            <tr key={l.id || `${l.concept}-${l.qty}`}>
-                              <td>{l.concept}</td>
-                              <td>{Number(l.qty)}</td>
-                              <td>{money(Number(l.unitPrice))}</td>
-                              <td>
-                                {money(
-                                  Number(l.total ?? Number(l.qty) * Number(l.unitPrice)),
-                                )}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  ) : null}
-
-                  {po.status !== 'PAID' ? (
-                    <p
-                      className={`po-next-hint ${
-                        next.tone === 'todo' ? 'po-next-hint--todo' : ''
-                      }`}
-                      role="note"
-                    >
-                      {next.hint}
-                    </p>
-                  ) : null}
-
-                  {!needsProof && po.status === 'PAID' ? (
-                    <div className="module-banner module-banner--ok" role="status">
-                      Pagada en efectivo — no requiere comprobante.
-                    </div>
-                  ) : null}
-
-                  {needsProof &&
-                  (po.status === 'AUTHORIZED' ||
-                    po.status === 'PAID' ||
-                    hasProof) ? (
-                    <PoProofsBlock
-                      poId={po.id}
-                      eventId={eventId}
-                      poAmount={Number(po.amount)}
-                      proofs={po.proofs}
-                      canUpload={!closed && po.status === 'AUTHORIZED'}
-                      required={po.status === 'AUTHORIZED'}
-                      onChange={onProofsChange}
-                    />
-                  ) : null}
-                </article>
-              );
-            })
-          )}
-        </div>
-      </div>
+                                ) : null}
+                              </PoDetail>
+                            )}
+                          </td>
+                        </tr>
+                      ) : null}
+                    </Fragment>
+                  );
+                })}
+                {!visible.length ? (
+                  <tr>
+                    <td colSpan={6} className="oc-empty-row">
+                      {EMPTY_SECTION[section]}
+                    </td>
+                  </tr>
+                ) : null}
+              </tbody>
+            </table>
+          </div>
+        </>
+      ) : null}
     </div>
   );
 }

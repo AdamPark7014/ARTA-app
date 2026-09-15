@@ -25,7 +25,7 @@ export function fileModuleLabel(module?: string | null, checklistTitle?: string 
     return checklistTitle ? `Checklist · ${checklistTitle}` : 'Checklists';
   }
   if (module === OC_PROOF_FILE_MODULE || module === 'proof') return 'Órdenes de compra';
-  if (module === SPONSORS_FILE_MODULE) return 'Convenios y patrocinios';
+  if (module === SPONSORS_FILE_MODULE) return 'Convenios';
   if (module === GENERAL_FILE_MODULE) return 'Documentos generales';
   if (!module) return 'Sin sección';
   return module;

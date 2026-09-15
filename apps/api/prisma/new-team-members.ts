@@ -39,9 +39,10 @@ export const NEW_TEAM_MEMBERS: TeamMember[] = [
     email: 'marisol@artaproducciones.com',
     fullName: 'Marisol Pérez Vásquez',
     title: 'Convenios y patrocinios',
-    roleKey: ROLES.CONVENIOS,
-    entities: ['ARTA', 'EXPLANADA'],
-    permissions: [...ROLE_PERMISSIONS[ROLES.CONVENIOS]],
+    // Junta 11-09-2026: «Leida y Sol / Acceso a TODO de arta».
+    roleKey: ROLES.GERENTE_ARTA,
+    entities: ['ARTA'],
+    permissions: [...ROLE_PERMISSIONS[ROLES.GERENTE_ARTA]],
     passAlias: 'MARISOL',
   },
   {

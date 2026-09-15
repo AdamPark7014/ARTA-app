@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { AppShell } from '@/components/app-shell/AppShell';
 import { LoadingBlock } from '@/components/ui/LoadingBlock';
-import { FormGrid, PageHeader } from '@/components/ui/PageChrome';
+import { SectionHead } from '@/components/ui/Lite';
 import { useUser } from '@/lib/user-context';
 import { userHasPermission } from '@/lib/access-matrix';
 import {
@@ -14,21 +14,14 @@ import {
   type PoWindowState,
 } from '@/lib/po-window';
 
-const TIME_ZONES = [
-  'America/Mexico_City',
-  'America/Cancun',
-  'America/Tijuana',
-  'America/Monterrey',
-  'UTC',
-];
+/** Lunes primero, como se lee la semana en la oficina. */
+const WEEK = [1, 2, 3, 4, 5, 6, 0];
 
 /**
- * Configuración operativa de la organización.
+ * Configuración de la organización: días de cobro de órdenes de compra.
  *
- * Hoy vive aquí la ventana de solicitud de órdenes de compra, que la junta del
- * 2026-08-28 pidió volver configurable: «se propone que el sistema permita
- * configurar los días y horarios disponibles para solicitar órdenes de compra.
- * Actualmente el periodo disponible es de lunes y jueves de 10:00 a 14:00».
+ * Revisión 11-09-2026 — «La orden de compra se puede crear el día que sea.
+ * SOLO SE DEJARÁ LOS DÍAS DE COBRO». Ya no hay horario ni zona que elegir.
  */
 export default function SettingsPage() {
   const { user } = useUser();
@@ -36,8 +29,7 @@ export default function SettingsPage() {
   const [form, setForm] = useState<PoWindowConfig | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [msg, setMsg] = useState('');
-  const [error, setError] = useState('');
+  const [msg, setMsg] = useState<{ text: string; tone: 'ok' | 'error' } | null>(null);
 
   const canEdit = user
     ? userHasPermission(user.roleKey, user.permissions, ['users.manage', 'everything'])
@@ -49,165 +41,144 @@ export default function SettingsPage() {
         setState(s);
         setForm(s.config);
       })
-      .catch((e) => setError(e instanceof Error ? e.message : 'No se pudo cargar la configuración'))
+      .catch((e) =>
+        setMsg({ text: e instanceof Error ? e.message : 'No se pudo cargar la configuración', tone: 'error' }),
+      )
       .finally(() => setLoading(false));
   }, []);
 
+  function edit(next: PoWindowConfig) {
+    setForm(next);
+    setMsg(null);
+  }
+
   function toggleDay(day: number) {
     if (!form) return;
-    const days = form.days.includes(day)
-      ? form.days.filter((d) => d !== day)
-      : [...form.days, day].sort((a, b) => a - b);
-    setForm({ ...form, days });
+    const on = form.days.includes(day);
+    // Siempre queda al menos un día de cobro.
+    if (on && form.days.length === 1) return;
+    const days = on ? form.days.filter((d) => d !== day) : [...form.days, day].sort((a, b) => a - b);
+    edit({ ...form, days });
   }
 
   async function save() {
     if (!form) return;
     setSaving(true);
-    setMsg('');
-    setError('');
+    setMsg(null);
     try {
       const next = await savePoWindow(form);
       setState(next);
       setForm(next.config);
-      setMsg('Ventana de órdenes de compra actualizada');
+      setMsg({ text: 'Días de cobro guardados', tone: 'ok' });
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'No se pudo guardar');
+      setMsg({ text: e instanceof Error ? e.message : 'No se pudo guardar', tone: 'error' });
     } finally {
       setSaving(false);
     }
   }
 
+  const dirty =
+    !!form &&
+    !!state &&
+    (form.enabled !== state.config.enabled ||
+      form.days.join() !== state.config.days.join() ||
+      (form.note || '') !== (state.config.note || ''));
+
+  const status = !state?.config.enabled
+    ? 'Sin restricción: los pagos se registran cualquier día'
+    : state.open
+      ? 'Hoy es día de cobro'
+      : `Hoy no es día de cobro${state.nextOpenLabel ? ` · próximo ${state.nextOpenLabel}` : ''}`;
+
   return (
     <AppShell title="Configuración">
-      <div className="stack page-workspace">
-        <PageHeader
-          description="Reglas de operación de la organización. Aplican a todo el equipo."
-          hint="La ventana de OC concentra las solicitudes de compra en días y horas fijas. Dirección puede capturar fuera de horario."
+      <div className="sx-stack page-workspace oc-settings">
+        <SectionHead
+          title="Días de cobro"
+          sub="Las órdenes de compra se crean cualquier día; los pagos se registran solo en estos."
         />
 
-        {msg ? (
-          <div className="module-banner module-banner--ok" role="status">
-            {msg}
-          </div>
-        ) : null}
-        {error ? (
-          <div className="form-error" role="alert">
-            {error}
-          </div>
+        {loading ? <LoadingBlock rows={3} label="Cargando configuración…" /> : null}
+
+        {!loading && !form && msg ? (
+          <p className="oc-flash is-error" role="alert">
+            {msg.text}
+          </p>
         ) : null}
 
-        {loading || !form ? (
-          <LoadingBlock rows={4} label="Cargando configuración…" />
-        ) : (
-          <div className="panel">
-            <div className="panel-head">
-              <div>
-                <h2>Ventana para solicitar órdenes de compra</h2>
-                <p className="muted kpi-sub" style={{ margin: '0.25rem 0 0' }}>
-                  {state?.open
-                    ? `Abierta ahora · ${state.scheduleLabel}`
-                    : `Cerrada${state?.nextOpenLabel ? ` · abre ${state.nextOpenLabel}` : ''}`}
-                </p>
-              </div>
-              <span className={`badge ${state?.open ? 'ok' : 'warn'}`}>
-                {state?.open ? 'Abierta' : 'Cerrada'}
-              </span>
-            </div>
-            <div className="panel-body">
-              <div className="form panel--narrow">
-                <label className="checkbox-row">
-                  <input
-                    type="checkbox"
-                    disabled={!canEdit}
-                    checked={form.enabled}
-                    onChange={(e) => setForm({ ...form, enabled: e.target.checked })}
-                  />
-                  <span>
-                    Limitar la captura de OC a días y horarios concretos
-                    {form.enabled ? '' : ' (desactivado: se puede solicitar a cualquier hora)'}
+        {form ? (
+          <section className="surface surface--pad">
+            <div className="fx">
+              <div className="oc-set-row">
+                <span className="inline-note">
+                  <span className={`oc-dot ${state?.config.enabled && state.open ? 'is-on' : ''}`} aria-hidden />
+                  {status}
+                </span>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={form.enabled}
+                  className={`oc-switch ${form.enabled ? 'is-on' : ''}`}
+                  disabled={!canEdit}
+                  onClick={() => edit({ ...form, enabled: !form.enabled })}
+                >
+                  <span className="oc-switch__track" aria-hidden>
+                    <span className="oc-switch__knob" />
                   </span>
-                </label>
+                  Limitar pagos a estos días
+                </button>
+              </div>
 
-                <fieldset className="fieldset" disabled={!canEdit || !form.enabled}>
-                  <legend>Días disponibles</legend>
-                  <div className="day-picker">
-                    {DAY_NAMES.map((name, day) => (
-                      <label key={name} className="day-chip">
-                        <input
-                          type="checkbox"
-                          checked={form.days.includes(day)}
-                          onChange={() => toggleDay(day)}
-                        />
-                        <span>{name.slice(0, 3)}</span>
-                      </label>
-                    ))}
-                  </div>
-                </fieldset>
+              <div className="fx-field">
+                <span>Días</span>
+                <div className="choice oc-days" role="group" aria-label="Días de cobro">
+                  {WEEK.map((day) => {
+                    const on = form.days.includes(day);
+                    return (
+                      <button
+                        key={day}
+                        type="button"
+                        aria-pressed={on}
+                        title={DAY_NAMES[day]}
+                        className={`choice__opt ${on ? 'is-on' : ''}`}
+                        disabled={!canEdit || !form.enabled}
+                        onClick={() => toggleDay(day)}
+                      >
+                        {DAY_NAMES[day].slice(0, 3)}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
 
-                <FormGrid cols={3}>
-                  <label>
-                    Desde
-                    <input
-                      className="field"
-                      type="time"
-                      disabled={!canEdit || !form.enabled}
-                      value={form.start}
-                      onChange={(e) => setForm({ ...form, start: e.target.value })}
-                    />
-                  </label>
-                  <label>
-                    Hasta
-                    <input
-                      className="field"
-                      type="time"
-                      disabled={!canEdit || !form.enabled}
-                      value={form.end}
-                      onChange={(e) => setForm({ ...form, end: e.target.value })}
-                    />
-                  </label>
-                  <label>
-                    Zona horaria
-                    <select
-                      className="field"
-                      disabled={!canEdit || !form.enabled}
-                      value={form.timeZone}
-                      onChange={(e) => setForm({ ...form, timeZone: e.target.value })}
-                    >
-                      {(TIME_ZONES.includes(form.timeZone)
-                        ? TIME_ZONES
-                        : [form.timeZone, ...TIME_ZONES]
-                      ).map((tz) => (
-                        <option key={tz} value={tz}>
-                          {tz}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                </FormGrid>
+              <label>
+                Nota para el equipo
+                <input
+                  value={form.note || ''}
+                  disabled={!canEdit}
+                  maxLength={300}
+                  onChange={(e) => edit({ ...form, note: e.target.value })}
+                  placeholder="Opcional · se añade al aviso cuando hoy no es día de cobro"
+                />
+              </label>
 
-                <label>
-                  Nota para el equipo
-                  <input
-                    className="field"
-                    disabled={!canEdit}
-                    value={form.note || ''}
-                    onChange={(e) => setForm({ ...form, note: e.target.value })}
-                    placeholder="Ej. Urgencias fuera de ventana: avisar a dirección por WhatsApp."
-                  />
-                </label>
-
+              <div className="fx-actions">
+                {msg ? (
+                  <span className={`oc-flash ${msg.tone === 'error' ? 'is-error' : 'is-ok'}`} role="status">
+                    {msg.text}
+                  </span>
+                ) : null}
                 {canEdit ? (
-                  <button className="btn" type="button" disabled={saving} onClick={save}>
-                    {saving ? 'Guardando…' : 'Guardar ventana'}
+                  <button type="button" className="btn btn-sm" disabled={saving || !dirty} onClick={save}>
+                    {saving ? 'Guardando…' : 'Guardar'}
                   </button>
                 ) : (
-                  <p className="muted kpi-sub">Solo dirección puede cambiar esta configuración.</p>
+                  <span className="t-muted t-small">Solo dirección cambia esta configuración.</span>
                 )}
               </div>
             </div>
-          </div>
-        )}
+          </section>
+        ) : null}
       </div>
     </AppShell>
   );

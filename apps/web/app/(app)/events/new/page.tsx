@@ -1,10 +1,16 @@
 'use client';
 
+import Link from 'next/link';
 import { FormEvent, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { AppShell } from '@/components/app-shell/AppShell';
-import { fromLocalInputValue } from '@/lib/event-dates';
-import { FlashMessage, FormGrid, PageHeader } from '@/components/ui/PageChrome';
+import {
+  EventFields,
+  emptyEventForm,
+  eventFormProblem,
+  eventPayload,
+} from '@/components/events/EventFields';
+import { FlashMessage } from '@/components/ui/PageChrome';
 import { api } from '@/lib/api';
 import { useUser } from '@/lib/user-context';
 
@@ -13,134 +19,58 @@ export default function NewEventPage() {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const [form, setForm] = useState({
-    name: '',
-    artist: '',
-    promoter: '',
-    venue: '',
-    city: 'Puebla',
-    startsAt: '',
-    campaignType: 'NONE',
-    notes: '',
-  });
+  const [form, setForm] = useState(emptyEventForm());
+
+  const problem = eventFormProblem(form);
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
+    if (problem) {
+      setError(problem);
+      return;
+    }
     setBusy(true);
     setError('');
     try {
+      const { endsAt, ...payload } = eventPayload(form);
       const created = await api<{ id: string }>('/events', {
         method: 'POST',
         body: JSON.stringify({
-          ...form,
+          ...payload,
+          ...(endsAt ? { endsAt } : {}),
+          functions: payload.functions ?? undefined,
           entity,
-          // Instante absoluto: el `datetime-local` va sin zona y el servidor lo
-          // interpretaba en la suya. Ver `lib/event-dates.ts`.
-          startsAt: fromLocalInputValue(form.startsAt),
         }),
       });
       router.push(`/events/${created.id}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error');
+      setError(err instanceof Error ? err.message : 'No se pudo crear el evento');
       setBusy(false);
     }
   }
 
-  const entityLabel = entity === 'ARTA' ? 'Arta' : 'Auditorio';
-
   return (
     <AppShell title="Nuevo evento">
-      <div className="stack page-workspace">
-        <PageHeader
-          description={`Crear show en ${entityLabel}. Al guardar se instancian automáticamente todas las plantillas de checklist.`}
-          hint="Completa al menos el nombre y la fecha de inicio para empezar la operación."
-        />
-        <div className="panel panel--narrow">
-          <div className="panel-head">
-            <h2>Datos del evento</h2>
+      <div className="page-workspace new-event">
+        <form className="surface new-event__card" onSubmit={onSubmit}>
+          <header className="new-event__head">
+            <p className="new-event__eyebrow">{entity === 'ARTA' ? 'Arta Producciones' : 'Auditorio Arema'}</p>
+            <h2 className="new-event__title">Crear evento</h2>
+          </header>
+
+          <EventFields value={form} onChange={setForm} autoFocus />
+
+          {error ? <FlashMessage variant="error">{error}</FlashMessage> : null}
+
+          <div className="fx-actions">
+            <Link className="btn ghost" href="/events">
+              Cancelar
+            </Link>
+            <button className="btn" type="submit" disabled={busy || !!problem}>
+              {busy ? 'Creando…' : 'Crear evento'}
+            </button>
           </div>
-          <div className="panel-body">
-            <form className="form" onSubmit={onSubmit}>
-            <label>
-              Nombre del evento / concierto
-              <input
-                required
-                value={form.name}
-                onChange={(e) => setForm({ ...form, name: e.target.value })}
-                placeholder="Ej. Concierto en Explanada"
-              />
-            </label>
-            <FormGrid>
-              <label>
-                Artista
-                <input
-                  value={form.artist}
-                  onChange={(e) => setForm({ ...form, artist: e.target.value })}
-                />
-              </label>
-              <label>
-                Promotor
-                <input
-                  value={form.promoter}
-                  onChange={(e) => setForm({ ...form, promoter: e.target.value })}
-                />
-              </label>
-            </FormGrid>
-            <FormGrid>
-              <label>
-                Venue
-                <input
-                  value={form.venue}
-                  onChange={(e) => setForm({ ...form, venue: e.target.value })}
-                />
-              </label>
-              <label>
-                Ciudad
-                <input
-                  value={form.city}
-                  onChange={(e) => setForm({ ...form, city: e.target.value })}
-                />
-              </label>
-            </FormGrid>
-            <FormGrid>
-              <label>
-                Fecha inicio
-                <input
-                  type="datetime-local"
-                  value={form.startsAt}
-                  onChange={(e) => setForm({ ...form, startsAt: e.target.value })}
-                />
-              </label>
-              <label>
-                Campaña
-                <select
-                  value={form.campaignType}
-                  onChange={(e) => setForm({ ...form, campaignType: e.target.value })}
-                >
-                  <option value="NONE">Sin campaña</option>
-                  <option value="INTERNAL">Interna (equipo Arta)</option>
-                  <option value="EXTERNAL">Externa</option>
-                </select>
-              </label>
-            </FormGrid>
-            <label>
-              Notas
-              <textarea
-                rows={3}
-                value={form.notes}
-                onChange={(e) => setForm({ ...form, notes: e.target.value })}
-                placeholder="Contexto, restricciones o acuerdos previos…"
-              />
-            </label>
-            {error ? <FlashMessage variant="error">{error}</FlashMessage> : null}
-            <div className="form-actions">
-              <button className="btn" disabled={busy} type="submit">
-                {busy ? 'Creando…' : 'Crear evento + checklists'}
-              </button>
-            </div>
-          </form>
-          </div>
-        </div>
+        </form>
       </div>
     </AppShell>
   );

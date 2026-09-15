@@ -12,7 +12,7 @@ export const TAB_LABELS: Record<Tab, string> = {
   campaign: 'Campaña',
   ticketing: 'Boletera',
   tasks: 'Tareas',
-  sponsors: 'Convenios y patrocinios',
+  sponsors: 'Convenios',
   files: 'Documentos',
 };
 

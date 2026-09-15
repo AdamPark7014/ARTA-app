@@ -32,6 +32,7 @@ import { DigestsModule } from './digests/digests.module';
 import { JobsModule } from './jobs/jobs.module';
 import { BillingModule } from './billing/billing.module';
 import { HealthModule } from './health/health.module';
+import { ChatModule } from './chat/chat.module';
 
 @Module({
   imports: [
@@ -65,6 +66,7 @@ import { HealthModule } from './health/health.module';
     DigestsModule,
     JobsModule,
     BillingModule,
+    ChatModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })

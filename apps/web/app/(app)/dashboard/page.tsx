@@ -110,8 +110,9 @@ export default function DashboardPage() {
         {!eventOps ? (
           <div className="module-banner">
             <p className="kpi-sub muted">
-              En Arta tu acceso es a carpetas generales. Cambia a Auditorio para conciertos, OC y
-              checklists.
+              {user?.roleKey === 'solo_carpetas'
+                ? 'Tu acceso es a las carpetas generales de Arta y del Auditorio.'
+                : 'En Arta tu acceso es a carpetas generales. Cambia a Auditorio para conciertos, OC y checklists.'}
             </p>
             <div className="row row--tight">
               <Link className="btn btn-sm" href="/folders">

@@ -200,12 +200,6 @@ export function AppShell({
           </button>
         </div>
 
-        <p className="entity-hint">
-          {can('ARTA') && can('EXPLANADA')
-            ? 'Puedes operar ambas entidades'
-            : `Tu acceso: ${user.entities.map((e) => (e === 'ARTA' ? 'Arta' : 'Auditorio')).join(' · ')}`}
-        </p>
-
         <SidebarSearch value={navQuery} onChange={setNavQuery} />
 
         <Suspense fallback={<nav className="nav" aria-hidden />}>

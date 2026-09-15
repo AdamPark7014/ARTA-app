@@ -3,68 +3,66 @@
 import Link from 'next/link';
 import { Fragment, useEffect, useMemo, useState } from 'react';
 import { AppShell } from '@/components/app-shell/AppShell';
-import { DistBar, money } from '@/components/charts/SparkBars';
-import { EmptyState } from '@/components/ui/EmptyState';
-import { LoadingBlock, LoadingKpis } from '@/components/ui/LoadingBlock';
-import {
-  ActionLink,
-  FieldSearch,
-  FieldSelect,
-  FilterBar,
-  PageHeader,
-} from '@/components/ui/PageChrome';
-import { PoWindowBanner } from '@/components/purchase-orders/PoWindowBanner';
-import { PoProofsBlock } from '@/components/purchase-orders/PoProofsBlock';
-import { StatusBadge } from '@/components/ui/StatusBadge';
+import { LoadingBlock } from '@/components/ui/LoadingBlock';
+import { EmptyLite, Pill, SectionHead, Seg, Tile } from '@/components/ui/Lite';
+import { PayDaysNote } from '@/components/purchase-orders/PoWindowBanner';
+import { PoDetail } from '@/components/events/EventPurchaseOrdersPanel';
+import type { Po } from '@/components/events/event-detail.types';
 import { api } from '@/lib/api';
-import { poNeedsProof, poNextStep, poPaymentLabel } from '@/lib/po-payment';
+import { mxn } from '@/lib/price-list';
+import { payBlockedLabel, payDaysLabel, usePoWindow } from '@/lib/po-window';
+import {
+  poInSection,
+  poIsPending,
+  poNeedsProof,
+  poSectionOptions,
+  poSectionStats,
+  poStatusPill,
+  type PoSection,
+} from '@/lib/po-payment';
 import { poRubroLabel } from '@/lib/po-rubro';
 import { useUser } from '@/lib/user-context';
 import { userHasPermission } from '@/lib/access-matrix';
 
-type PoLine = { concept: string; qty: number; unitPrice: number; total: number };
-
-type PoAnalytics = {
-  kpis: {
-    total: number;
-    pipeline: number;
-    paid: number;
-    authRate: number;
-    avgAgingDays: number;
-    agingOver7: number;
-  };
-  byStatus: Record<string, { count: number; amount: number }>;
-  byRubro: Array<{ rubro: string; count: number; amount: number }>;
-  agingBuckets: { d0_3: number; d4_7: number; d8_14: number; d15plus: number };
-  agingQueue: Array<{
-    id: string;
-    eventId: string;
-    eventName: string;
-    rubro: string;
-    vendorName?: string | null;
-    status: string;
-    amount: number;
-    ageDays: number;
-  }>;
-  orders: Array<{
-    id: string;
-    eventId: string;
-    eventName: string;
-    rubro: string;
-    vendorName?: string | null;
-    paymentMethod?: string | null;
-    proofCount?: number;
-    status: string;
-    amount: number;
-    ageDays: number;
-    createdBy?: string;
-  }>;
+/** Fila de `GET /analytics/purchase-orders` → `orders[]`. */
+type PoRow = {
+  id: string;
+  eventId: string;
+  eventName: string;
+  eventStatus?: string;
+  rubro: string;
+  vendorName?: string | null;
+  paymentMethod?: string | null;
+  payeeType?: string | null;
+  withIva?: boolean | null;
+  proofCount?: number;
+  status: string;
+  amount: number;
+  ageDays: number;
+  createdAt?: string;
+  createdBy?: string | null;
 };
 
-function poStatusKind(status: string): 'po' | 'raw' {
-  return status === 'AUTHORIZED' || status === 'PAID' || status === 'REJECTED' ? 'po' : 'raw';
-}
+type PoAnalytics = { orders?: PoRow[] };
 
+const CLOSED_EVENT = new Set(['CLOSED', 'CANCELLED']);
+/** Más de una semana esperando se marca, sin alarmar. */
+const LATE_DAYS = 7;
+
+const EMPTY_SECTION: Record<PoSection, string> = {
+  auth: 'Nada por autorizar.',
+  pay: 'Nada por pagar.',
+  paid: 'Aún no hay órdenes pagadas.',
+  all: 'Sin órdenes.',
+};
+
+const plural = (n: number) => `${n} ${n === 1 ? 'orden' : 'órdenes'}`;
+
+/**
+ * Todas las órdenes de la entidad: qué falta autorizar, qué falta pagar y qué
+ * ya salió. Revisión 11-09-2026 — sin gráficas ni seis KPIs: tres cifras, las
+ * secciones y la tabla.
+ */
 export default function PurchaseOrdersPage() {
   const { entity, user } = useUser();
   const canAuthorize = userHasPermission(user?.roleKey || '', user?.permissions || [], [
@@ -75,476 +73,347 @@ export default function PurchaseOrdersPage() {
     'po.mark_paid',
     'everything',
   ]);
-  const [data, setData] = useState<PoAnalytics | null>(null);
+  const win = usePoWindow();
+  const blocked = payBlockedLabel(win);
+
+  const [rows, setRows] = useState<PoRow[] | null>(null);
   const [loading, setLoading] = useState(true);
-  const [expanded, setExpanded] = useState<string | null>(null);
-  const [lines, setLines] = useState<Record<string, PoLine[]>>({});
-  const [proofs, setProofs] = useState<
-    Record<string, Array<{ id: string; fileUrl: string; label?: string | null; amount?: number }>>
-  >({});
-  const [poDetails, setPoDetails] = useState<
-    Record<string, { amount: number; status: string; paymentMethod?: string | null }>
-  >({});
-  const [statusFilter, setStatusFilter] = useState('all');
+  const [loadError, setLoadError] = useState('');
+  const [section, setSection] = useState<PoSection | null>(null);
   const [q, setQ] = useState('');
+  const [openId, setOpenId] = useState<string | null>(null);
+  const [details, setDetails] = useState<Record<string, Po>>({});
+  const [loadingDetail, setLoadingDetail] = useState<string | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [notice, setNotice] = useState<{ text: string; tone: 'ok' | 'error' } | null>(null);
 
   async function load() {
-    setLoading(true);
     try {
-      const analytics = await api<PoAnalytics>(`/analytics/purchase-orders?entity=${entity}`);
-      setData(analytics);
+      const data = await api<PoAnalytics>(`/analytics/purchase-orders?entity=${entity}`);
+      setRows(data?.orders ?? []);
+      setLoadError('');
+    } catch (e) {
+      setLoadError(e instanceof Error ? e.message : 'No se pudieron cargar las órdenes');
     } finally {
       setLoading(false);
     }
   }
 
   useEffect(() => {
+    setLoading(true);
+    setRows(null);
+    setSection(null);
+    setOpenId(null);
     load().catch(console.error);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [entity]);
 
-  async function setStatus(id: string, status: string) {
+  useEffect(() => {
+    if (!notice) return;
+    const t = setTimeout(() => setNotice(null), 5000);
+    return () => clearTimeout(t);
+  }, [notice]);
+
+  const stats = useMemo(() => poSectionStats(rows ?? []), [rows]);
+  const current: PoSection = section ?? (stats.auth.count > 0 ? 'auth' : 'all');
+
+  const visible = useMemo(() => {
+    const n = q.trim().toLowerCase();
+    return (rows ?? [])
+      .filter((r) => poInSection(r.status, current))
+      .filter(
+        (r) =>
+          !n ||
+          r.eventName.toLowerCase().includes(n) ||
+          (r.vendorName || '').toLowerCase().includes(n) ||
+          poRubroLabel(r.rubro).toLowerCase().includes(n),
+      );
+  }, [rows, current, q]);
+
+  /** Trae las órdenes del evento (con partidas y comprobantes) y las guarda por id. */
+  async function fetchEventOrders(eventId: string) {
+    const list = await api<Po[]>(`/purchase-orders/event/${eventId}`);
+    setDetails((prev) => {
+      const next = { ...prev };
+      for (const po of list) next[po.id] = po;
+      return next;
+    });
+  }
+
+  async function openDetail(row: PoRow) {
+    setOpenId(row.id);
+    if (details[row.id]) return;
+    setLoadingDetail(row.id);
     try {
-      await api(`/purchase-orders/${id}/status`, {
+      await fetchEventOrders(row.eventId);
+    } catch (e) {
+      setNotice({ text: e instanceof Error ? e.message : 'No se pudo abrir el detalle', tone: 'error' });
+    } finally {
+      setLoadingDetail(null);
+    }
+  }
+
+  function toggle(row: PoRow) {
+    if (openId === row.id) setOpenId(null);
+    else openDetail(row).catch(console.error);
+  }
+
+  async function setStatus(row: PoRow, status: 'AUTHORIZED' | 'PAID') {
+    setBusy(row.id);
+    setNotice(null);
+    try {
+      await api(`/purchase-orders/${row.id}/status`, {
         method: 'PATCH',
         body: JSON.stringify({ status }),
       });
-      await load();
+      setNotice({ text: status === 'PAID' ? 'Orden pagada' : 'Orden autorizada', tone: 'ok' });
+      await Promise.all([
+        load(),
+        details[row.id] ? fetchEventOrders(row.eventId).catch(() => undefined) : Promise.resolve(),
+      ]);
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'No se pudo actualizar el estatus');
+      setNotice({ text: e instanceof Error ? e.message : 'No se pudo actualizar la orden', tone: 'error' });
+    } finally {
+      setBusy(null);
     }
   }
 
-  async function toggleExpand(id: string, eventId: string) {
-    if (expanded === id) {
-      setExpanded(null);
-      return;
-    }
-    setExpanded(id);
-    if (!lines[id] || !proofs[id]) {
-      const pos = await api<
-        Array<{
-          id: string;
-          amount: number;
-          status: string;
-          paymentMethod?: string | null;
-          lines?: PoLine[];
-          proofs?: Array<{ id: string; fileUrl: string; label?: string | null; amount?: number }>;
-        }>
-      >(`/purchase-orders/event/${eventId}`);
-      const found = pos.find((p) => p.id === id);
-      setLines((prev) => ({ ...prev, [id]: found?.lines || [] }));
-      setProofs((prev) => ({ ...prev, [id]: found?.proofs || [] }));
-      if (found) {
-        setPoDetails((prev) => ({
-          ...prev,
-          [id]: {
-            amount: Number(found.amount),
-            status: found.status,
-            paymentMethod: found.paymentMethod,
-          },
-        }));
-      }
+  async function refreshRow(row: PoRow) {
+    await Promise.all([fetchEventOrders(row.eventId).catch(() => undefined), load()]);
+  }
+
+  async function downloadPdf(po: Po, row: PoRow) {
+    setBusy(`pdf-${row.id}`);
+    try {
+      const { downloadPurchaseOrderPdf } = await import('@/lib/po-pdf');
+      await downloadPurchaseOrderPdf({ po, event: { name: row.eventName }, payDaysLabel: payDaysLabel(win) });
+    } catch (e) {
+      console.error(e);
+      setNotice({ text: 'No se pudo generar el PDF', tone: 'error' });
+    } finally {
+      setBusy(null);
     }
   }
 
-  async function reloadPoDetails(poId: string, eventId: string) {
-    const pos = await api<
-      Array<{
-        id: string;
-        amount: number;
-        status: string;
-        paymentMethod?: string | null;
-        proofs?: Array<{ id: string; fileUrl: string; label?: string | null; amount?: number }>;
-      }>
-    >(`/purchase-orders/event/${eventId}`);
-    const found = pos.find((p) => p.id === poId);
-    if (found) {
-      setProofs((prev) => ({ ...prev, [poId]: found.proofs || [] }));
-      setPoDetails((prev) => ({
-        ...prev,
-        [poId]: {
-          amount: Number(found.amount),
-          status: found.status,
-          paymentMethod: found.paymentMethod,
-        },
-      }));
-    }
-    await load();
-  }
-
-  const rows = useMemo(() => {
-    let list = data?.orders ?? [];
-    if (statusFilter !== 'all') list = list.filter((r) => r.status === statusFilter);
-    if (q.trim()) {
-      const n = q.toLowerCase();
-      list = list.filter(
-        (r) =>
-          r.eventName.toLowerCase().includes(n) ||
-          r.rubro.toLowerCase().includes(n) ||
-          (r.vendorName || '').toLowerCase().includes(n),
+  function action(row: PoRow) {
+    if (row.eventStatus && CLOSED_EVENT.has(row.eventStatus)) return null;
+    const rowBusy = busy === row.id;
+    if (poIsPending(row.status) && canAuthorize) {
+      return (
+        <button type="button" className="btn btn-sm" disabled={rowBusy} onClick={() => setStatus(row, 'AUTHORIZED')}>
+          Autorizar
+        </button>
       );
     }
-    return list;
-  }, [data, statusFilter, q]);
-
-  /**
-   * El analytics puede llegar incompleto (versión del API distinta, permisos
-   * recortados). Antes eso tumbaba la pantalla entera con «Algo salió mal».
-   */
-  const view = useMemo(
-    () => ({
-      agingBuckets: data?.agingBuckets ?? { d0_3: 0, d4_7: 0, d8_14: 0, d15plus: 0 },
-      agingQueue: data?.agingQueue ?? [],
-      byRubro: data?.byRubro ?? [],
-      orders: data?.orders ?? [],
-    }),
-    [data],
-  );
-
-  const k = data?.kpis;
+    if (row.status === 'AUTHORIZED' && canMarkPaid) {
+      const d = details[row.id];
+      const method = d?.paymentMethod || row.paymentMethod || 'TRANSFERENCIA';
+      const proofs = d?.proofs?.length ?? row.proofCount ?? 0;
+      if (poNeedsProof(method) && proofs === 0) {
+        return (
+          <button type="button" className="btn btn-sm" onClick={() => openDetail(row)}>
+            Comprobante
+          </button>
+        );
+      }
+      if (blocked) {
+        return (
+          <span className="oc-wait" title="Los pagos se registran solo en días de cobro">
+            {blocked}
+          </span>
+        );
+      }
+      return (
+        <button type="button" className="btn btn-sm" disabled={rowBusy} onClick={() => setStatus(row, 'PAID')}>
+          Marcar pagada
+        </button>
+      );
+    }
+    return null;
+  }
 
   return (
     <AppShell title="Órdenes de compra">
-      <div className="stack page-workspace">
-        <PageHeader
-          description="Todas las órdenes de compra de la entidad: cuánto falta por pagar, cuáles llevan más esperando y qué le toca a cada una."
-          hint="El camino es: se pide → dirección la autoriza → se sube el comprobante (salvo en efectivo) → se marca pagada. Atiende primero las que llevan más de 7 días."
+      <div className="sx-stack page-workspace oc-page">
+        <SectionHead
+          title="Pagos y autorizaciones"
+          sub={win?.config.enabled ? <PayDaysNote state={win} /> : undefined}
         >
-          <ActionLink href="/events" variant="ghost">
-            Ir a eventos
-          </ActionLink>
-          <ActionLink href="/settings" variant="ghost">
-            Configurar ventana
-          </ActionLink>
-        </PageHeader>
+          {win?.canEdit ? (
+            <Link className="btn-quiet" href="/settings">
+              Configurar días
+            </Link>
+          ) : null}
+        </SectionHead>
 
-        <PoWindowBanner />
+        {loading && !rows ? <LoadingBlock rows={5} label="Cargando órdenes…" /> : null}
 
-        {loading && !data ? (
+        {loadError ? (
+          <p className="oc-flash is-error" role="alert">
+            {loadError}
+          </p>
+        ) : null}
+
+        {rows && !rows.length ? (
+          <EmptyLite icon="$" title="Sin órdenes de compra" text="Se crean desde la pestaña OC de cada evento.">
+            <Link className="btn ghost btn-sm" href="/events">
+              Ir a eventos
+            </Link>
+          </EmptyLite>
+        ) : null}
+
+        {rows && rows.length ? (
           <>
-            <LoadingKpis count={6} />
-            <LoadingBlock rows={5} label="Cargando órdenes…" />
-          </>
-        ) : null}
+            <div className="tiles">
+              <Tile
+                label="Por autorizar"
+                value={stats.auth.count}
+                sub={stats.auth.amount > 0 ? mxn(stats.auth.amount) : 'Nada pendiente'}
+                onClick={() => setSection('auth')}
+              />
+              <Tile
+                label="Por pagar"
+                value={mxn(stats.pay.amount)}
+                sub={plural(stats.pay.count)}
+                tone="accent"
+                onClick={() => setSection('pay')}
+              />
+              <Tile
+                label="Pagadas"
+                value={mxn(stats.paid.amount)}
+                sub={plural(stats.paid.count)}
+                onClick={() => setSection('paid')}
+              />
+            </div>
 
-        {!loading && k ? (
-          <div className="grid-cards kpi-grid-dense">
-            <div className="kpi">
-              <div className="label">Órdenes</div>
-              <div className="value">{k.total}</div>
-              <div className="kpi-sub muted">En la entidad activa</div>
-            </div>
-            <div className="kpi">
-              <div className="label">Falta por pagar</div>
-              <div className="value value--money">{money(k.pipeline)}</div>
-              <div className="kpi-sub muted">Dinero comprometido sin salir</div>
-            </div>
-            <div className="kpi">
-              <div className="label">Ya pagado</div>
-              <div className="value value--money">{money(k.paid)}</div>
-              <div className="kpi-sub muted">Dinero que ya salió</div>
-            </div>
-            <div className="kpi">
-              <div className="label">Autorizadas</div>
-              <div className="value">{k.authRate}%</div>
-              <div className="kpi-sub muted">De todas las que se pidieron</div>
-            </div>
-            <div className="kpi">
-              <div className="label">Espera promedio</div>
-              <div className="value">{k.avgAgingDays} días</div>
-              <div className="kpi-sub muted">Desde que se pidió</div>
-            </div>
-            <div className={`kpi ${k.agingOver7 ? 'kpi--danger' : ''}`}>
-              <div className="label">Llevan más de 7 días</div>
-              <div className="value">{k.agingOver7}</div>
-              <div className="kpi-sub muted">Atiéndelas primero</div>
-            </div>
-          </div>
-        ) : null}
-
-        {!loading && data ? (
-          <div className="dash-split">
-            <div className="panel">
-              <div className="panel-head">
-                <h2>Las que llevan más esperando</h2>
-              </div>
-              <div className="panel-body stack">
-                <DistBar
-                  segments={[
-                    { label: '0-3d', value: view.agingBuckets.d0_3, tone: 'ok' },
-                    { label: '4-7d', value: view.agingBuckets.d4_7, tone: 'warn' },
-                    { label: '8-14d', value: view.agingBuckets.d8_14, tone: 'danger' },
-                    { label: '15d+', value: view.agingBuckets.d15plus, tone: 'danger' },
-                  ]}
-                />
-                <ul className="compact-list">
-                  {view.agingQueue.slice(0, 6).map((o) => (
-                    <li key={o.id}>
-                      <span>
-                        <strong>{o.eventName}</strong> · {poRubroLabel(o.rubro)}
-                      </span>
-                      <span className="muted kpi-sub">
-                        {o.ageDays}d · {money(o.amount)}
-                      </span>
-                    </li>
-                  ))}
-                  {!view.agingQueue.length ? (
-                    <li className="muted kpi-sub">Ninguna atorada — todo al día</li>
-                  ) : null}
-                </ul>
-              </div>
-            </div>
-            <div className="panel">
-              <div className="panel-head">
-                <h2>Por rubro</h2>
-              </div>
-              <div className="panel-body">
-                <div className="table-wrap">
-                  <table className="table table-sticky">
-                    <thead>
-                      <tr>
-                        <th>Rubro</th>
-                        <th>#</th>
-                        <th className="num">Monto</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {view.byRubro.slice(0, 8).map((r) => (
-                        <tr key={r.rubro}>
-                          <td>{poRubroLabel(r.rubro)}</td>
-                          <td>{r.count}</td>
-                          <td className="num">{money(r.amount)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-          </div>
-        ) : null}
-
-        {!loading && data ? (
-          <>
-            <FilterBar meta={`${rows.length} órdenes`}>
-              <FieldSearch
+            <div className="oc-toolbar">
+              <Seg
+                label="Secciones de órdenes de compra"
+                value={current}
+                options={poSectionOptions(stats)}
+                onChange={(k) => {
+                  setSection(k);
+                  setOpenId(null);
+                }}
+              />
+              <input
+                type="search"
+                className="oc-search"
                 value={q}
-                onChange={setQ}
-                placeholder="Buscar evento, proveedor, rubro…"
-                label="Buscar OC"
-                maxWidth={280}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder="Buscar evento, proveedor o rubro"
+                aria-label="Buscar órdenes"
               />
-              <FieldSelect
-                value={statusFilter}
-                onChange={setStatusFilter}
-                label="Filtrar por estado"
-                options={[
-                  { value: 'all', label: 'Todos los estados' },
-                  { value: 'DRAFT', label: 'Borrador' },
-                  { value: 'PENDING_AUTH', label: 'Pend. autorización' },
-                  { value: 'AUTHORIZED', label: 'Autorizada' },
-                  { value: 'PAID', label: 'Pagada' },
-                  { value: 'REJECTED', label: 'Rechazada' },
-                ]}
-              />
-            </FilterBar>
+            </div>
 
-            <div className="panel">
-              <div className="panel-head">
-                <h2>OC · {entity}</h2>
-              </div>
-              <div className="panel-body">
-                <div className="table-wrap">
-                  <table className="table table-sticky">
-                    <thead>
-                      <tr>
-                        <th>Evento</th>
-                        <th>Rubro</th>
-                        <th>Proveedor</th>
-                        <th>Cómo se paga</th>
-                        <th className="num">Monto</th>
-                        <th>Espera</th>
-                        <th>Estado</th>
-                        <th>Qué sigue</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {rows.map((po) => {
-                        const method =
-                          poDetails[po.id]?.paymentMethod || po.paymentMethod || 'TRANSFERENCIA';
-                        const needsProof = poNeedsProof(method);
-                        const proofCount =
-                          proofs[po.id]?.length ?? po.proofCount ?? 0;
-                        const canPay =
-                          canMarkPaid &&
-                          po.status === 'AUTHORIZED' &&
-                          (!needsProof || proofCount > 0);
-                        const next = poNextStep({ ...po, paymentMethod: method, proofCount });
-                        const needsUpload =
-                          po.status === 'AUTHORIZED' && needsProof && proofCount === 0;
+            {notice ? (
+              <p className={`oc-flash ${notice.tone === 'error' ? 'is-error' : 'is-ok'}`} role="status">
+                {notice.text}
+              </p>
+            ) : null}
 
-                        return (
-                        <Fragment key={po.id}>
-                          <tr>
-                            <td>
-                              <Link href={`/events/${po.eventId}?tab=ocs`}>
-                                <strong>{po.eventName}</strong>
-                              </Link>
-                            </td>
-                            <td>{poRubroLabel(po.rubro)}</td>
-                            <td>{po.vendorName || '—'}</td>
-                            <td>
-                              <span className="muted kpi-sub">{poPaymentLabel(method)}</span>
-                              <div className="muted kpi-sub">
-                                {needsProof
-                                  ? proofCount > 0
-                                    ? `${proofCount} comprobante${proofCount > 1 ? 's' : ''}`
-                                    : 'Pide comprobante'
-                                  : 'No pide comprobante'}
-                              </div>
-                            </td>
-                            <td className="num">{money(po.amount)}</td>
-                            <td>
-                              <span
-                                className={`badge ${
-                                  po.ageDays > 7 ? 'danger' : po.ageDays > 3 ? 'warn' : 'ok'
-                                }`}
-                              >
-                                {po.ageDays}d
+            <div className="dtable-wrap">
+              <table className="dtable oc-table">
+                <thead>
+                  <tr>
+                    <th>Evento</th>
+                    <th>Proveedor</th>
+                    <th className="num">Total</th>
+                    <th className="num oc-hide-sm">Espera</th>
+                    <th>Estado</th>
+                    <th className="col-act">
+                      <span className="sr-only">Acciones</span>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {visible.map((row) => {
+                    const open = openId === row.id;
+                    const pill = poStatusPill(row.status);
+                    const waiting = poIsPending(row.status) || row.status === 'AUTHORIZED';
+                    const detail = details[row.id];
+                    const closedEvent = !!row.eventStatus && CLOSED_EVENT.has(row.eventStatus);
+                    return (
+                      <Fragment key={row.id}>
+                        <tr className={`oc-row ${open ? 'is-open' : ''}`} onClick={() => toggle(row)}>
+                          <td onClick={(e) => e.stopPropagation()}>
+                            <Link className="oc-event" href={`/events/${row.eventId}?tab=ocs`}>
+                              {row.eventName}
+                            </Link>
+                          </td>
+                          <td>
+                            <button
+                              type="button"
+                              className="oc-vendor"
+                              aria-expanded={open}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                toggle(row);
+                              }}
+                            >
+                              <span className="oc-vendor__name">{row.vendorName || 'Sin proveedor'}</span>
+                              <span className="oc-vendor__sub">{poRubroLabel(row.rubro)}</span>
+                            </button>
+                          </td>
+                          <td className="num t-money oc-amount">{mxn(row.amount)}</td>
+                          <td className="num oc-hide-sm">
+                            {waiting ? (
+                              <span className={`oc-age ${row.ageDays > LATE_DAYS ? 'is-late' : ''}`}>
+                                {row.ageDays} d
                               </span>
-                            </td>
-                            <td>
-                              <StatusBadge value={po.status} kind={poStatusKind(po.status)} />
-                            </td>
-                            <td>
-                              <div className={`po-next po-next--${next.tone}`}>{next.label}</div>
-                              <div className="row row--tight">
-                                <button
-                                  className="btn ghost btn-sm"
-                                  type="button"
-                                  onClick={() => toggleExpand(po.id, po.eventId)}
-                                >
-                                  {expanded === po.id ? 'Ocultar detalle' : 'Ver detalle'}
-                                </button>
-                                {canAuthorize &&
-                                (po.status === 'PENDING_AUTH' || po.status === 'DRAFT') ? (
-                                  <button
-                                    className="btn btn-sm"
-                                    type="button"
-                                    onClick={() => setStatus(po.id, 'AUTHORIZED')}
-                                  >
-                                    Autorizar
-                                  </button>
-                                ) : null}
-                                {/*
-                                  Antes aquí vivía un «Pagado» apagado cuyo motivo
-                                  estaba en un `title` que el navegador no enseña en
-                                  botones deshabilitados. Ahora el botón dice lo que
-                                  toca: si falta el comprobante, lleva a subirlo.
-                                */}
-                                {canMarkPaid && needsUpload ? (
-                                  <button
-                                    className="btn btn-sm"
-                                    type="button"
-                                    onClick={() => toggleExpand(po.id, po.eventId)}
-                                  >
-                                    Subir comprobante
-                                  </button>
-                                ) : null}
-                                {canMarkPaid && po.status === 'AUTHORIZED' && canPay ? (
-                                  <button
-                                    className="btn btn-sm"
-                                    type="button"
-                                    onClick={() => setStatus(po.id, 'PAID')}
-                                  >
-                                    Marcar pagada
-                                  </button>
-                                ) : null}
-                              </div>
-                            </td>
-                          </tr>
-                          {expanded === po.id ? (
-                            <tr>
-                              <td colSpan={8}>
-                                <div className="table-wrap">
-                                  <table className="table">
-                                    <thead>
-                                      <tr>
-                                        <th>Concepto</th>
-                                        <th>Qty</th>
-                                        <th className="num">P.unit</th>
-                                        <th className="num">Total</th>
-                                      </tr>
-                                    </thead>
-                                    <tbody>
-                                      {(lines[po.id] || []).map((l, i) => (
-                                        <tr key={`${po.id}-${i}`}>
-                                          <td>{l.concept}</td>
-                                          <td>{l.qty}</td>
-                                          <td className="num">{money(Number(l.unitPrice))}</td>
-                                          <td className="num">{money(Number(l.total))}</td>
-                                        </tr>
-                                      ))}
-                                      {!lines[po.id]?.length ? (
-                                        <tr>
-                                          <td colSpan={4} className="muted kpi-sub">
-                                            Sin partidas cargadas
-                                          </td>
-                                        </tr>
-                                      ) : null}
-                                    </tbody>
-                                  </table>
-                                </div>
-                                {!needsProof &&
-                                (po.status === 'AUTHORIZED' || po.status === 'PAID') ? (
-                                  <div className="module-banner module-banner--ok" role="status">
-                                    Pagada en efectivo — no requiere comprobante.
-                                  </div>
-                                ) : null}
-                                {needsProof &&
-                                (po.status === 'AUTHORIZED' ||
-                                  po.status === 'PAID' ||
-                                  proofCount > 0) ? (
-                                  <PoProofsBlock
-                                    poId={po.id}
-                                    eventId={po.eventId}
-                                    poAmount={poDetails[po.id]?.amount ?? po.amount}
-                                    proofs={proofs[po.id]}
-                                    canUpload={po.status === 'AUTHORIZED'}
-                                    required={po.status === 'AUTHORIZED'}
-                                    onChange={() => reloadPoDetails(po.id, po.eventId)}
-                                  />
-                                ) : null}
-                              </td>
-                            </tr>
-                          ) : null}
-                        </Fragment>
-                        );
-                      })}
-                      {!rows.length ? (
-                        <tr>
-                          <td colSpan={8}>
-                            <EmptyState
-                              title={
-                                view.orders.length === 0
-                                  ? 'Sin órdenes de compra'
-                                  : 'Sin OC en este filtro'
-                              }
-                              description={
-                                view.orders.length === 0
-                                  ? 'Crea la primera desde el detalle de un evento, en la pestaña OC.'
-                                  : 'Cambia el estado o limpia la búsqueda para ver más resultados.'
-                              }
-                              actionHref="/events"
-                              actionLabel="Ir a eventos"
-                            />
+                            ) : (
+                              <span className="t-muted">—</span>
+                            )}
+                          </td>
+                          <td>
+                            <Pill tone={pill.tone}>{pill.label}</Pill>
+                          </td>
+                          <td className="col-act" onClick={(e) => e.stopPropagation()}>
+                            <div className="oc-actions">{action(row)}</div>
                           </td>
                         </tr>
-                      ) : null}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
+                        {open ? (
+                          <tr className="oc-detail-row">
+                            <td className="dtable__detail" colSpan={6}>
+                              {detail ? (
+                                <PoDetail
+                                  po={detail}
+                                  eventId={row.eventId}
+                                  closed={closedEvent}
+                                  onProofsChange={() => refreshRow(row)}
+                                >
+                                  <button
+                                    type="button"
+                                    className="btn-quiet"
+                                    disabled={busy === `pdf-${row.id}`}
+                                    onClick={() => downloadPdf(detail, row)}
+                                  >
+                                    PDF
+                                  </button>
+                                  <Link className="btn-quiet" href={`/events/${row.eventId}?tab=ocs`}>
+                                    Abrir evento
+                                  </Link>
+                                </PoDetail>
+                              ) : (
+                                <p className="t-muted t-small oc-loading">
+                                  {loadingDetail === row.id ? 'Cargando…' : 'No se pudo cargar el detalle.'}
+                                </p>
+                              )}
+                            </td>
+                          </tr>
+                        ) : null}
+                      </Fragment>
+                    );
+                  })}
+                  {!visible.length ? (
+                    <tr>
+                      <td colSpan={6} className="oc-empty-row">
+                        {q.trim() ? 'Nada coincide con la búsqueda.' : EMPTY_SECTION[current]}
+                      </td>
+                    </tr>
+                  ) : null}
+                </tbody>
+              </table>
             </div>
           </>
         ) : null}

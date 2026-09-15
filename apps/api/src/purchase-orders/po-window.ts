@@ -1,31 +1,44 @@
 /**
- * Ventana de solicitud de órdenes de compra.
+ * Días de cobro de las órdenes de compra.
  *
- * Junta 2026-08-28: «se propone que el sistema permita configurar los días y
- * horarios disponibles para solicitar órdenes de compra. Actualmente el periodo
- * disponible es de lunes y jueves de 10:00 a 14:00 horas».
+ * Junta 2026-08-28 pidió una ventana configurable para *solicitar* OC (lunes y
+ * jueves de 10:00 a 14:00). La revisión del 11-09-2026 la cambió de raíz: «La
+ * orden de compra se puede crear el día que sea. SOLO SE DEJARÁ LOS DÍAS DE
+ * COBRO», y el machote del cliente dice «LOS PAGOS DE CAMPAÑAS ÚNICAMENTE SE
+ * REALIZARÁN LUNES, MIÉRCOLES Y VIERNES».
  *
- * La configuración vive en `Organization.settingsJson.poWindow` — sin tabla
- * nueva y por tenant. Los defaults reproducen la política que Arta ya opera.
+ * Así que la configuración ya no restringe la captura, solo el registro del
+ * pago, y se evalúa por día (en la zona de la organización). `start`, `end` y
+ * `timeZone` se siguen leyendo para no romper lo guardado; las horas ya no
+ * limitan nada.
+ *
+ * Vive en `Organization.settingsJson.poWindow` — sin tabla nueva y por tenant.
  */
 
+/** Marca de la configuración con semántica de «días de cobro». */
+export const PAY_DAYS_KIND = 'payDays';
+
 export type PoWindowConfig = {
+  /** Lo guardado sin esta marca era la ventana de captura, no de cobro. */
+  kind?: typeof PAY_DAYS_KIND;
   enabled: boolean;
   /** 0 = domingo … 6 = sábado */
   days: number[];
-  /** "HH:MM" en la zona horaria de la organización */
+  /** Legado: ya no restringen. Se conservan para no perder lo guardado. */
   start: string;
   end: string;
+  /** Zona en la que se decide qué día es hoy. */
   timeZone: string;
-  /** Nota que se muestra al equipo cuando la ventana está cerrada */
+  /** Nota para el equipo */
   note?: string;
 };
 
 export const DEFAULT_PO_WINDOW: PoWindowConfig = {
+  kind: PAY_DAYS_KIND,
   enabled: true,
-  days: [1, 4], // lunes y jueves
-  start: '10:00',
-  end: '14:00',
+  days: [1, 3, 5], // lunes, miércoles y viernes
+  start: '00:00',
+  end: '24:00',
   timeZone: 'America/Mexico_City',
   note: '',
 };
@@ -61,11 +74,12 @@ export function formatHhMm(minutes: number): string {
   return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
 }
 
-/** Lee y sanea lo que haya en settingsJson; nunca lanza. */
-export function readPoWindow(settingsJson: unknown): PoWindowConfig {
-  const raw = (settingsJson as { poWindow?: Partial<PoWindowConfig> } | null)?.poWindow;
-  if (!raw || typeof raw !== 'object') return { ...DEFAULT_PO_WINDOW };
+function cleanTimeZone(raw: unknown): string {
+  return typeof raw === 'string' && raw.trim() ? raw.trim() : DEFAULT_PO_WINDOW.timeZone;
+}
 
+/** Sanea una configuración de días de cobro; nunca lanza. */
+function normalize(raw: Partial<PoWindowConfig>): PoWindowConfig {
   const days = Array.isArray(raw.days)
     ? Array.from(
         new Set(
@@ -76,55 +90,60 @@ export function readPoWindow(settingsJson: unknown): PoWindowConfig {
       ).sort((a, b) => a - b)
     : [...DEFAULT_PO_WINDOW.days];
 
-  const start = formatHhMm(parseHhMm(raw.start, parseHhMm(DEFAULT_PO_WINDOW.start, 600)));
-  const endRaw = parseHhMm(raw.end, parseHhMm(DEFAULT_PO_WINDOW.end, 840));
-  // Una ventana que cierra antes de abrir no bloquea a nadie por accidente.
-  const end = formatHhMm(Math.max(endRaw, parseHhMm(start, 600)));
+  const start = formatHhMm(parseHhMm(raw.start, 0));
+  const end = formatHhMm(Math.max(parseHhMm(raw.end, 24 * 60), parseHhMm(start, 0)));
 
   return {
+    kind: PAY_DAYS_KIND,
     enabled: raw.enabled !== false,
+    // Sin días válidos se vuelve al default en vez de bloquear todos los pagos.
     days: days.length ? days : [...DEFAULT_PO_WINDOW.days],
     start,
     end,
-    timeZone:
-      typeof raw.timeZone === 'string' && raw.timeZone.trim()
-        ? raw.timeZone.trim()
-        : DEFAULT_PO_WINDOW.timeZone,
+    timeZone: cleanTimeZone(raw.timeZone),
     note: typeof raw.note === 'string' ? raw.note.slice(0, 300) : '',
   };
 }
 
-/** Valida lo que manda el panel antes de guardarlo. */
+/**
+ * Lee lo que haya en settingsJson.
+ *
+ * Una configuración guardada sin `kind` es la ventana de *captura* de la junta
+ * del 28-08 (lunes y jueves): otra política. Se descarta — conservando solo la
+ * zona horaria — para que no se convierta callada en días de cobro.
+ */
+export function readPoWindow(settingsJson: unknown): PoWindowConfig {
+  const raw = (settingsJson as { poWindow?: Partial<PoWindowConfig> } | null)?.poWindow;
+  if (!raw || typeof raw !== 'object') return { ...DEFAULT_PO_WINDOW, days: [...DEFAULT_PO_WINDOW.days] };
+  if (raw.kind !== PAY_DAYS_KIND) {
+    return { ...DEFAULT_PO_WINDOW, days: [...DEFAULT_PO_WINDOW.days], timeZone: cleanTimeZone(raw.timeZone) };
+  }
+  return normalize(raw);
+}
+
+/** Valida lo que manda la pantalla de configuración antes de guardarlo. */
 export function sanitizePoWindow(input: Partial<PoWindowConfig>): PoWindowConfig {
-  return readPoWindow({ poWindow: input });
+  return normalize(input || {});
 }
 
 type LocalParts = { weekday: number; minutes: number; dayLabel: string };
 
 /** Día de la semana y minutos del día *en la zona de la organización*. */
 export function localParts(now: Date, timeZone: string): LocalParts {
+  const opts: Intl.DateTimeFormatOptions = {
+    weekday: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+    day: '2-digit',
+    month: '2-digit',
+    hour12: false,
+  };
   let parts: Intl.DateTimeFormatPart[];
   try {
-    parts = new Intl.DateTimeFormat('en-US', {
-      timeZone,
-      weekday: 'short',
-      hour: '2-digit',
-      minute: '2-digit',
-      day: '2-digit',
-      month: '2-digit',
-      hour12: false,
-    }).formatToParts(now);
+    parts = new Intl.DateTimeFormat('en-US', { ...opts, timeZone }).formatToParts(now);
   } catch {
     // Zona inválida guardada a mano: cae a UTC en vez de tumbar la petición.
-    parts = new Intl.DateTimeFormat('en-US', {
-      timeZone: 'UTC',
-      weekday: 'short',
-      hour: '2-digit',
-      minute: '2-digit',
-      day: '2-digit',
-      month: '2-digit',
-      hour12: false,
-    }).formatToParts(now);
+    parts = new Intl.DateTimeFormat('en-US', { ...opts, timeZone: 'UTC' }).formatToParts(now);
   }
   const get = (t: string) => parts.find((p) => p.type === t)?.value || '';
   const weekdayMap: Record<string, number> = {
@@ -149,52 +168,41 @@ export function localParts(now: Date, timeZone: string): LocalParts {
 
 export type PoWindowState = {
   config: PoWindowConfig;
+  /** Hoy es día de cobro (o la regla está apagada). */
   open: boolean;
-  /** Texto humano: "lunes y jueves de 10:00 a 14:00" */
+  /** "lunes, miércoles y viernes" */
   scheduleLabel: string;
-  /** Cuándo vuelve a abrir, en palabras: "el jueves a las 10:00" */
+  /** Próximo día de cobro: "mañana (miércoles)" · "el lunes" */
   nextOpenLabel: string | null;
   /** Minuto local actual — útil para depurar husos */
   nowMinutes: number;
 };
 
+/** Los días en palabras: "lunes, miércoles y viernes". */
 export function describeSchedule(config: PoWindowConfig): string {
-  if (!config.enabled) return 'sin restricción de horario';
-  if (!config.days.length) return 'sin días habilitados';
+  if (!config.enabled) return 'cualquier día';
+  if (!config.days.length) return 'sin días de cobro';
   const names = config.days.map((d) => DAY_NAMES[d]);
-  const list =
-    names.length === 1
-      ? names[0]
-      : `${names.slice(0, -1).join(', ')} y ${names[names.length - 1]}`;
-  return `${list} de ${config.start} a ${config.end}`;
+  return names.length === 1
+    ? names[0]
+    : `${names.slice(0, -1).join(', ')} y ${names[names.length - 1]}`;
 }
 
 export function evaluatePoWindow(config: PoWindowConfig, now: Date = new Date()): PoWindowState {
   const scheduleLabel = describeSchedule(config);
+  const { weekday, minutes } = localParts(now, config.timeZone);
   if (!config.enabled) {
-    return { config, open: true, scheduleLabel, nextOpenLabel: null, nowMinutes: 0 };
+    return { config, open: true, scheduleLabel, nextOpenLabel: null, nowMinutes: minutes };
   }
 
-  const { weekday, minutes } = localParts(now, config.timeZone);
-  const start = parseHhMm(config.start, 600);
-  const end = parseHhMm(config.end, 840);
-  const openToday = config.days.includes(weekday);
-  const open = openToday && minutes >= start && minutes < end;
-
+  const open = config.days.includes(weekday);
   let nextOpenLabel: string | null = null;
-  if (!open && config.days.length) {
-    if (openToday && minutes < start) {
-      nextOpenLabel = `hoy a las ${config.start}`;
-    } else {
-      for (let delta = 1; delta <= 7; delta += 1) {
-        const day = (weekday + delta) % 7;
-        if (config.days.includes(day)) {
-          nextOpenLabel =
-            delta === 1
-              ? `mañana (${DAY_NAMES[day]}) a las ${config.start}`
-              : `el ${DAY_NAMES[day]} a las ${config.start}`;
-          break;
-        }
+  if (!open) {
+    for (let delta = 1; delta <= 7; delta += 1) {
+      const day = (weekday + delta) % 7;
+      if (config.days.includes(day)) {
+        nextOpenLabel = delta === 1 ? `mañana (${DAY_NAMES[day]})` : `el ${DAY_NAMES[day]}`;
+        break;
       }
     }
   }

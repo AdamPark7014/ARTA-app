@@ -1,0 +1,107 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   Junta 11-09-2026 · Campaña y convenios.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.campaign-table .c-concept {
+  min-width: 15rem;
+}
+
+.campaign-table .c-qty,
+.convenios-table .c-qty {
+  width: 5rem;
+}
+
+.campaign-table .c-date {
+  width: 9.5rem;
+}
+
+.campaign-table .c-price,
+.convenios-table .c-price {
+  width: 7.5rem;
+}
+
+.dtable input.cell[type='date'] {
+  color-scheme: dark;
+}
+
+.convenios-table .c-name {
+  min-width: 10rem;
+}
+
+.convenios-table .c-desc {
+  min-width: 16rem;
+}
+
+.convenios-table .c-zone {
+  width: 8.5rem;
+}
+
+/* ── Lista de precios para armar la campaña ─────────────────────────────── */
+
+.price-picker__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 0.5rem;
+  max-height: 22rem;
+  overflow-y: auto;
+  padding: 1rem 1.25rem 1.25rem;
+}
+
+.price-picker__item {
+  display: grid;
+  gap: 0.2rem;
+  padding: 0.65rem 0.8rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--bg-soft);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.12s ease, background 0.12s ease;
+}
+
+.price-picker__item:hover {
+  border-color: var(--line-strong);
+}
+
+.price-picker__item.is-on {
+  border-color: color-mix(in srgb, var(--accent) 60%, transparent);
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg-soft));
+}
+
+.price-picker__name {
+  font-size: 0.8rem;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.price-picker__prices {
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Cortesías por zona ─────────────────────────────────────────────────── */
+
+.zone-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.zone-chip {
+  padding: 0.3rem 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--bg-soft);
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.zone-chip strong {
+  margin-right: 0.3rem;
+  color: var(--text);
+  font-weight: 600;
+}

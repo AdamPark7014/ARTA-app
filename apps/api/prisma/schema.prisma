@@ -43,6 +43,7 @@ enum PoPaymentMethod {
   TRANSFERENCIA
   TARJETA
   OTRO
+  CHEQUE
 }
 
 enum TaskStatus {
@@ -212,6 +213,9 @@ model User {
   handoffs            AuthHandoff[]
   memberships         OrgMembership[]
   totpChallenges      TotpChallenge[]
+  chatSent            ChatMessage[]              @relation("ChatSent")
+  chatReceived        ChatMessage[]              @relation("ChatReceived")
+  chatReads           ChatReadMarker[]
 
   @@index([organizationId])
 }
@@ -232,6 +236,12 @@ model Event {
   status         EventStatus   @default(DRAFT)
   campaignType   CampaignType  @default(NONE)
   notes          String?
+  /// Junta 11-09-2026: lo que se cuenta del show (boletera, campaña).
+  description    String?
+  /// Horario legible: «14:00 a 23:00».
+  schedule       String?
+  /// Número de funciones del show.
+  functions      Int?
   createdById    String?
   createdBy      User?         @relation("EventCreator", fields: [createdById], references: [id])
   createdAt      DateTime      @default(now())
@@ -409,25 +419,29 @@ model ChecklistVersion {
 
 // ─── Órdenes de compra ───────────────────────────────────────────────────────
 model PurchaseOrder {
-  id             String    @id @default(cuid())
+  id             String          @id @default(cuid())
   eventId        String
-  event          Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  event          Event           @relation(fields: [eventId], references: [id], onDelete: Cascade)
   rubro          String // audio, luces, hospedaje, catering…
   vendorName     String?
   description    String?
-  amount         Decimal   @db.Decimal(14, 2)
-  currency       String    @default("MXN")
-  status         PoStatus  @default(DRAFT)
+  amount         Decimal         @db.Decimal(14, 2)
+  currency       String          @default("MXN")
+  status         PoStatus        @default(DRAFT)
   /// Forma de pago. EFECTIVO no requiere comprobante; el resto sí.
   paymentMethod  PoPaymentMethod @default(TRANSFERENCIA)
+  /// Machote: a quién se paga — PROVEEDOR u OTRO.
+  payeeType      String          @default("PROVEEDOR")
+  /// Si el total lleva IVA (16 %) encima del subtotal de partidas.
+  withIva        Boolean         @default(false)
   createdById    String?
-  createdBy      User?     @relation("PoCreator", fields: [createdById], references: [id])
+  createdBy      User?           @relation("PoCreator", fields: [createdById], references: [id])
   authorizedById String?
-  authorizedBy   User?     @relation("PoAuthorizer", fields: [authorizedById], references: [id])
+  authorizedBy   User?           @relation("PoAuthorizer", fields: [authorizedById], references: [id])
   authorizedAt   DateTime?
   paidAt         DateTime?
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
 
   lines  PurchaseOrderLine[]
   proofs PaymentProof[]
@@ -494,34 +508,50 @@ model FinanceRun {
 
 // ─── Campaña publicitaria ────────────────────────────────────────────────────
 model Campaign {
-  id           String       @id @default(cuid())
-  eventId      String       @unique
-  event        Event        @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  type         CampaignType @default(INTERNAL)
-  authorized   Boolean      @default(false)
-  authorizedAt DateTime?
-  notes        String?
-  dataJson     Json?
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime     @updatedAt
+  id                  String       @id @default(cuid())
+  eventId             String       @unique
+  event               Event        @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  type                CampaignType @default(INTERNAL)
+  authorized          Boolean      @default(false)
+  authorizedAt        DateTime?
+  notes               String?
+  dataJson            Json?
+  /// DRAFT → REVIEW → AUTHORIZED → PAID. `authorized` se deriva de aquí.
+  status              String       @default("DRAFT")
+  submittedAt         DateTime?
+  paidAt              DateTime?
+  /// La campaña de convenios lleva su propia revisión.
+  convenioStatus      String       @default("DRAFT")
+  convenioSubmittedAt DateTime?
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
 }
 
 // ─── Boletera ────────────────────────────────────────────────────────────────
 model TicketingSetup {
-  id        String    @id @default(cuid())
-  eventId   String
-  event     Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  boletera  String // Arema | eTicket | custom display name
-  logoUrl   String? // /uploads/... used in checklist PDFs
-  holdUntil DateTime?
-  artist    String?
-  promoter  String?
-  venue     String?
+  id           String    @id @default(cuid())
+  eventId      String
+  event        Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  boletera     String // Arema | eTicket | custom display name
+  logoUrl      String? // /uploads/... used in checklist PDFs
+  holdUntil    DateTime?
+  artist       String?
+  promoter     String?
+  venue        String?
   /// Zonas: [{zona, aforo, precio}]
-  zonesJson Json
-  notes     String?
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  zonesJson    Json
+  notes        String?
+  /// Junta 11-09-2026 — «Creación de boletera».
+  artsUrl      String?
+  dateLabel    String?
+  functions    Int?
+  schedule     String?
+  description  String?
+  holdArtist   Int?
+  holdPromoter Int?
+  holdVenue    Int?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
   @@index([eventId])
 }
@@ -560,7 +590,7 @@ model TaskAssignment {
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
 
-  evidences TaskEvidence[]
+  evidences  TaskEvidence[]
   activities TaskActivity[]
 
   @@index([assigneeId, status])
@@ -622,39 +652,39 @@ model Notification {
 
 // ─── Archivos / Excel-PDF embebidos ──────────────────────────────────────────
 model EventFile {
-  id          String             @id @default(cuid())
-  eventId     String?
-  event       Event?             @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  checklistId String?
-  checklist   ChecklistInstance? @relation(fields: [checklistId], references: [id], onDelete: SetNull)
-  fileName    String
-  mimeType    String
-  url         String
-  sizeBytes   Int?
-  kind        String? // pdf | excel | image | other
+  id               String             @id @default(cuid())
+  eventId          String?
+  event            Event?             @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  checklistId      String?
+  checklist        ChecklistInstance? @relation(fields: [checklistId], references: [id], onDelete: SetNull)
+  fileName         String
+  mimeType         String
+  url              String
+  sizeBytes        Int?
+  kind             String? // pdf | excel | image | other
   /// Sección del evento a la que pertenece: campaign | finance | general …
-  module      String?
+  module           String?
   /// Sube cada vez que alguien guarda el archivo editado desde el panel
-  version     Int                @default(1)
+  version          Int                @default(1)
   /// Huella del contenido actual. Permite saber si un guardado cambió algo y
   /// direccionar las versiones anteriores sin depender del nombre en disco.
-  sha256      String?
-  createdById String?
-  createdBy   User?              @relation("FileUploader", fields: [createdById], references: [id])
-  updatedById String?
-  updatedBy   User?              @relation("FileEditor", fields: [updatedById], references: [id])
+  sha256           String?
+  createdById      String?
+  createdBy        User?              @relation("FileUploader", fields: [createdById], references: [id])
+  updatedById      String?
+  updatedBy        User?              @relation("FileEditor", fields: [updatedById], references: [id])
   /// Borrado reversible: antes `DELETE` hacía `unlinkSync` y la fila
   /// desaparecía — irreversible, anónimo y sin auditoría.
-  deletedAt   DateTime?
-  deletedById String?
-  deletedBy   User?              @relation("FileDeleter", fields: [deletedById], references: [id])
+  deletedAt        DateTime?
+  deletedById      String?
+  deletedBy        User?              @relation("FileDeleter", fields: [deletedById], references: [id])
   /// `false` cuando el libro trae gráficas, tablas dinámicas o macros: el
   /// round-trip las perdería, así que en el panel se ve pero no se edita.
-  panelEditable Boolean          @default(true)
+  panelEditable    Boolean            @default(true)
   /// Por qué no es editable, para poder explicárselo a la persona.
   panelBlockReason String?
-  createdAt   DateTime           @default(now())
-  updatedAt   DateTime           @default(now()) @updatedAt
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @default(now()) @updatedAt
 
   @@index([eventId, module])
   @@index([eventId, deletedAt])
@@ -662,28 +692,28 @@ model EventFile {
 
 /// Documento editable tipo Word: se escribe en el panel y se descarga en PDF.
 model EventDocument {
-  id           String   @id @default(cuid())
+  id           String    @id @default(cuid())
   eventId      String
-  event        Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  event        Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
   /// Sección del evento: campaign | general …
   module       String?
   title        String
   /// Bloques: [{ type: 'h1'|'h2'|'p'|'bullet'|'divider', text: string }]
   blocksJson   Json
-  version      Int      @default(1)
+  version      Int       @default(1)
   /// Último PDF exportado, para no regenerarlo si nada cambió
   pdfUrl       String?
   pdfVersion   Int?
   /// Cuando el documento nació de un PDF importado
   sourceFileId String?
   createdById  String?
-  createdBy    User?    @relation("DocumentCreator", fields: [createdById], references: [id])
+  createdBy    User?     @relation("DocumentCreator", fields: [createdById], references: [id])
   updatedById  String?
-  updatedBy    User?    @relation("DocumentEditor", fields: [updatedById], references: [id])
+  updatedBy    User?     @relation("DocumentEditor", fields: [updatedById], references: [id])
   status       DocStatus @default(DRAFT)
   revision     Int       @default(0)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
   @@index([eventId, module])
 }
@@ -816,10 +846,10 @@ model AuditLog {
 /// `eventId` SÍ es FK real: sin ella, borrar un evento dejaría cientos de
 /// revisiones huérfanas para siempre. `(docType, docId)` es la clave lógica.
 model DocRevision {
-  id             String       @id @default(cuid())
+  id             String     @id @default(cuid())
   organizationId String
   eventId        String
-  event          Event        @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  event          Event      @relation(fields: [eventId], references: [id], onDelete: Cascade)
   docType        DocType
   docId          String
   /// Consecutivo por documento; sale del contador `revision` del padre.
@@ -837,10 +867,10 @@ model DocRevision {
   toStatus       DocStatus?
   note           String?
   authorId       String?
-  author         User?        @relation("RevisionAuthor", fields: [authorId], references: [id])
+  author         User?      @relation("RevisionAuthor", fields: [authorId], references: [id])
   ip             String?
   userAgent      String?
-  createdAt      DateTime     @default(now())
+  createdAt      DateTime   @default(now())
 
   @@unique([docType, docId, revision])
   @@index([organizationId, createdAt])
@@ -967,4 +997,32 @@ model NotificationOutbox {
 
   @@index([status, createdAt])
   @@index([organizationId, createdAt])
+}
+
+// ─── Chat interno ────────────────────────────────────────────────────────────
+model ChatMessage {
+  id             String   @id @default(cuid())
+  organizationId String?
+  senderId       String
+  sender         User     @relation("ChatSent", fields: [senderId], references: [id], onDelete: Cascade)
+  /// null = canal general del equipo; si no, mensaje personal.
+  recipientId    String?
+  recipient      User?    @relation("ChatReceived", fields: [recipientId], references: [id], onDelete: Cascade)
+  body           String
+  createdAt      DateTime @default(now())
+
+  @@index([organizationId, recipientId, createdAt])
+  @@index([senderId, recipientId, createdAt])
+  @@index([recipientId, senderId, createdAt])
+}
+
+/// Hasta dónde leyó cada persona cada conversación ("general" o "dm:<userId>").
+model ChatReadMarker {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  threadKey  String
+  lastReadAt DateTime @default(now())
+
+  @@unique([userId, threadKey])
 }

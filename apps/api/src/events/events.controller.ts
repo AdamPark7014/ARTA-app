@@ -12,7 +12,7 @@ import {
   Req,
   UseGuards,
 } from '@nestjs/common';
-import { IsEnum, IsOptional, IsString } from 'class-validator';
+import { IsEnum, IsInt, IsOptional, IsString, Min } from 'class-validator';
 import { CampaignType, EntityKey, EventStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -43,6 +43,10 @@ class CreateEventDto {
   @IsOptional() @IsString() endsAt?: string;
   @IsOptional() @IsEnum(CampaignType) campaignType?: CampaignType;
   @IsOptional() @IsString() notes?: string;
+  /** Junta 11-09-2026: descripción, horario y funciones al crear el evento. */
+  @IsOptional() @IsString() description?: string;
+  @IsOptional() @IsString() schedule?: string;
+  @IsOptional() @IsInt() @Min(1) functions?: number;
 }
 
 class UpdateEventDto {
@@ -57,6 +61,10 @@ class UpdateEventDto {
   /** Status solo vía POST close|cancel|reopen — no en PATCH (evita bypass EVENT_CLOSE). */
   @IsOptional() @IsEnum(CampaignType) campaignType?: CampaignType;
   @IsOptional() @IsString() notes?: string;
+  @IsOptional() @IsString() description?: string;
+  @IsOptional() @IsString() schedule?: string;
+  /** `null` explícito = quitar el número de funciones. */
+  @IsOptional() @IsInt() @Min(1) functions?: number | null;
 }
 
 type AuthUser = {
@@ -184,7 +192,13 @@ export class EventsController {
         },
         purchaseOrders: {
           orderBy: { updatedAt: 'desc' },
-          include: { lines: true, proofs: true },
+          // El machote de la OC lleva solicitante y quién autorizó.
+          include: {
+            lines: true,
+            proofs: true,
+            createdBy: { select: { fullName: true } },
+            authorizedBy: { select: { fullName: true } },
+          },
         },
         financeRuns: true,
         campaign: true,
@@ -249,6 +263,9 @@ export class EventsController {
         endsAt: dto.endsAt ? new Date(dto.endsAt) : undefined,
         campaignType: dto.campaignType ?? 'NONE',
         notes: dto.notes,
+        description: dto.description?.trim() || undefined,
+        schedule: dto.schedule?.trim() || undefined,
+        functions: dto.functions ?? undefined,
         status: 'ACTIVE',
         createdById: req.user.id,
       },
@@ -446,6 +463,9 @@ export class EventsController {
         city: dto.city,
         campaignType: dto.campaignType,
         notes: dto.notes,
+        description: dto.description,
+        schedule: dto.schedule,
+        functions: dto.functions === undefined ? undefined : dto.functions,
         startsAt: dto.startsAt ? new Date(dto.startsAt) : undefined,
         // Distinguir «no lo mandes» de «bórralo»: sin esto, una fecha de fin
         // puesta por error no se podía quitar nunca.

@@ -88,6 +88,23 @@ describe('rbac/roles', () => {
     });
   });
 
+  describe('solo_carpetas (junta 11-09-2026)', () => {
+    it('never gets event operations in any entity', () => {
+      expect(canAccessEventOps(['ARTA', 'EXPLANADA'], 'solo_carpetas', 'ARTA')).toBe(false);
+      expect(canAccessEventOps(['ARTA', 'EXPLANADA'], 'solo_carpetas', 'EXPLANADA')).toBe(false);
+      expect(eventOpsEntities(['ARTA', 'EXPLANADA'], 'solo_carpetas')).toEqual([]);
+    });
+
+    it('keeps entity access so general folders stay reachable', () => {
+      expect(canAccessEntity(['ARTA', 'EXPLANADA'], 'solo_carpetas', 'EXPLANADA')).toBe(true);
+    });
+
+    it('cannot edit anything from its role table', () => {
+      expect(hasPermission('solo_carpetas', [], PERMISSIONS.FOLDERS_EDIT)).toBe(false);
+      expect(hasPermission('solo_carpetas', [], PERMISSIONS.CHECKLIST_EDIT)).toBe(false);
+    });
+  });
+
   it('every declared role resolves to a stable, known key (catalog integrity)', () => {
     const known = new Set(Object.values(ROLES));
     const roleKey: RoleKey = 'super_admin';

@@ -10,6 +10,7 @@ export const ROLES = {
   LOGISTICA: 'logistica',
   CONVENIOS: 'convenios',
   ENLACE_GOBIERNO: 'enlace_gobierno',
+  SOLO_CARPETAS: 'solo_carpetas',
 } as const;
 
 export type RoleKey = (typeof ROLES)[keyof typeof ROLES];
@@ -25,17 +26,19 @@ export const ROLE_LABELS: Record<RoleKey, string> = {
   logistica: 'Logística y Producción',
   convenios: 'Convenios y Patrocinios',
   enlace_gobierno: 'Enlace Gobierno y Pagos',
+  solo_carpetas: 'Solo carpetas generales',
 };
 
 /** Texto corto para que dirección elija rol sin adivinar. */
 export const ROLE_HINTS: Record<RoleKey, string> = {
   super_admin: 'Plataforma completa (solo Nexara).',
   dir_general: 'Arturo / José Luis — todo el panel, altas de equipo.',
-  gerente_arta: 'Operación y finanzas Arta (Karla).',
+  gerente_arta: 'Todo Arta: operación, finanzas y campaña (Karla, Leida, Sol).',
   dir_auditorio: 'Operación del Auditorio / Explanada.',
   logistica: 'Producción, checklists, campaña, boletera.',
   convenios: 'Patrocinios y convenios; ve tareas de todos.',
   enlace_gobierno: 'Pagos gobierno, marcar OC pagadas.',
+  solo_carpetas: 'Williams / Juan Pablo — ven carpetas generales de Arta y Auditorio; no editan.',
 };
 
 export const PERMISSION_LABELS: Record<string, string> = {
@@ -64,6 +67,7 @@ export const ROLE_DEFAULT_ENTITIES: Record<RoleKey, EntityKey[]> = {
   logistica: ['ARTA', 'EXPLANADA'],
   convenios: ['ARTA', 'EXPLANADA'],
   enlace_gobierno: ['ARTA', 'EXPLANADA'],
+  solo_carpetas: ['ARTA', 'EXPLANADA'],
 };
 
 export const PERMISSIONS = {
@@ -169,6 +173,11 @@ export const ROLE_PERMISSIONS: Record<RoleKey, Permission[]> = {
     PERMISSIONS.EVENT_CREATE,
     PERMISSIONS.FOLDERS_EDIT,
   ],
+  /**
+   * Junta 11-09-2026 · «Definir quién puede editar»: Williams y Juan Pablo
+   * entran únicamente a las carpetas generales de Arta y Auditorio, a ver.
+   */
+  solo_carpetas: [],
 };
 
 export function hasPermission(
@@ -198,6 +207,7 @@ export function canAccessEventOps(
   entity: EntityKey,
 ): boolean {
   if (!canAccessEntity(userEntities, roleKey, entity)) return false;
+  if (roleKey === ROLES.SOLO_CARPETAS) return false;
   if (roleKey === ROLES.DIR_AUDITORIO && entity === 'ARTA') return false;
   return true;
 }

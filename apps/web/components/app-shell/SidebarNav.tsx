@@ -98,12 +98,6 @@ export function SidebarNav({ items, query }: Props) {
         </button>
       ) : null}
 
-      {!searching && !showMore ? (
-        <p className="nav-hint muted">
-          Las herramientas de cada show (checklists, campaña, boletera, corrida,
-          hospitality, prensa, convenios…) viven dentro del evento.
-        </p>
-      ) : null}
     </nav>
   );
 }

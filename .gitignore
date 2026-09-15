@@ -19,5 +19,9 @@ apps/web/e2e/.output
 blob-report
 .playwright
 
+# Credenciales generadas por scripts/seed-credentials.ts: nunca al repo
+credenciales/
+*credenciales*.xlsx
+
 # Worker de pdf.js: se copia en cada build desde node_modules
 apps/web/public/pdf.worker.min.mjs

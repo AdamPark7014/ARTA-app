@@ -76,7 +76,18 @@ export type ChecklistSection = {
 /** El contenido del formato. Llega con el formato abierto, no con la lista. */
 export type ChecklistData = { sections: ChecklistSection[] };
 
-export type PoLine = { id?: string; concept: string; qty: number; unitPrice: number; total?: number };
+/**
+ * Partida de OC. `unitPrice` puede venir vacío mientras se captura: el «0»
+ * pintado en el campo era una de las correcciones de la junta 11-09-2026.
+ */
+export type PoLine = {
+  id?: string;
+  concept: string;
+  qty: number | null;
+  unitPrice: number | null;
+  total?: number;
+};
+
 export type Po = {
   id: string;
   rubro: string;
@@ -84,13 +95,23 @@ export type Po = {
   description?: string | null;
   amount: string | number;
   status: string;
-  /** EFECTIVO | TRANSFERENCIA | TARJETA | OTRO — efectivo no pide comprobante. */
+  /** EFECTIVO | TRANSFERENCIA | CHEQUE | TARJETA | OTRO — efectivo no pide comprobante. */
   paymentMethod?: string | null;
+  /** Machote: PROVEEDOR u OTRO. */
+  payeeType?: string | null;
+  /** El total lleva IVA encima del subtotal de partidas. */
+  withIva?: boolean | null;
   lines?: PoLine[];
   proofs?: Array<{ id: string; fileUrl: string; label?: string | null; amount?: number | string | null }>;
+  createdAt?: string;
+  authorizedAt?: string | null;
+  paidAt?: string | null;
   createdBy?: { fullName: string } | null;
   authorizedBy?: { fullName: string } | null;
 };
+
+/** DRAFT → REVIEW → AUTHORIZED → PAID (campaña y campaña de convenios). */
+export type ReviewStatus = 'DRAFT' | 'REVIEW' | 'AUTHORIZED' | 'PAID';
 
 export type CampaignData = {
   channels?: string;
@@ -98,24 +119,39 @@ export type CampaignData = {
   mediaPlan?: string;
   creatives?: string;
   timeline?: string;
-  /**
-   * Catálogo del show: cada concepto con precio interno / externo.
-   * El encabezado del PDF es fijo; aquí cambian los conceptos por concierto
-   * (pedido Arta / Dashboard WhatsApp 2026-09-07).
-   */
+  /** Conceptos de la campaña: cantidad, fechas y precio interno / externo. */
   concepts?: CampaignConceptRow[];
+  /** Campaña de convenios: zona, cantidad, precio y total. */
+  convenios?: ConvenioRow[];
 };
 
-/** Fila editable en la página de campaña (antes de generar el Excel). */
+/** Fila de la campaña publicitaria. */
 export type CampaignConceptRow = {
   concept: string;
-  convenio?: boolean;
-  description?: string;
+  /** Cantidad de piezas / periodos. Default 1. */
+  qty?: number | null;
+  /** Cuándo corre el concepto (YYYY-MM-DD) — alimenta el calendario. */
+  from?: string | null;
+  to?: string | null;
   precioInterno?: number | null;
   precioExterno?: number | null;
-  /** Si false, no entra a la hoja de este show. Default true. */
+  /** Legado: filas de convenio que vivían en la misma tabla. */
+  convenio?: boolean;
+  description?: string;
+  /** Legado: si false, no entraba a la hoja. */
   included?: boolean;
 };
+
+/** Fila de la campaña de convenios: se paga en especie, sin precio interno/externo. */
+export type ConvenioRow = {
+  concept: string;
+  description?: string;
+  zona?: string;
+  qty?: number | null;
+  price?: number | null;
+};
+
+export type TicketZoneRow = { zona: string; aforo: number; precio: number; sold?: number };
 
 export type TicketingSetup = {
   id: string;
@@ -126,7 +162,18 @@ export type TicketingSetup = {
   promoter?: string | null;
   venue?: string | null;
   notes?: string | null;
-  zonesJson: Array<{ zona: string; aforo: number; precio: number; sold?: number }>;
+  zonesJson: TicketZoneRow[];
+  /** Junta 11-09-2026 — «Creación de boletera». */
+  artsUrl?: string | null;
+  dateLabel?: string | null;
+  functions?: number | null;
+  schedule?: string | null;
+  description?: string | null;
+  holdArtist?: number | null;
+  holdPromoter?: number | null;
+  holdVenue?: number | null;
+  createdAt?: string;
+  updatedAt?: string;
 };
 
 export type FinanceRow = { concept: string; type: 'income' | 'expense'; amount: number };
@@ -194,6 +241,21 @@ export type Sponsor = {
 
 export type DirUser = { id: string; fullName: string; email: string };
 
+export type EventCampaign = {
+  id?: string;
+  authorized: boolean;
+  type: string;
+  notes?: string | null;
+  dataJson?: CampaignData | null;
+  status?: ReviewStatus | string;
+  submittedAt?: string | null;
+  authorizedAt?: string | null;
+  paidAt?: string | null;
+  convenioStatus?: ReviewStatus | string;
+  convenioSubmittedAt?: string | null;
+  updatedAt?: string;
+};
+
 export type EventDetail = {
   id: string;
   name: string;
@@ -208,16 +270,15 @@ export type EventDetail = {
   /** El API ya lo devolvía y lo aceptaba; el panel nunca lo miró. */
   endsAt?: string | null;
   notes?: string | null;
+  /** Junta 11-09-2026: descripción, horario y funciones del show. */
+  description?: string | null;
+  schedule?: string | null;
+  functions?: number | null;
+  createdBy?: { id: string; fullName: string } | null;
   checklists: Checklist[];
   purchaseOrders: Po[];
   financeRuns: Array<{ id: string; title: string; locked: boolean; dataJson: FinanceData | unknown }>;
-  campaign?: {
-    id?: string;
-    authorized: boolean;
-    type: string;
-    notes?: string | null;
-    dataJson?: CampaignData | null;
-  } | null;
+  campaign?: EventCampaign | null;
   ticketingSetups?: TicketingSetup[];
   files: Array<{
     id: string;
@@ -232,6 +293,8 @@ export type EventDetail = {
     panelEditable?: boolean;
     panelBlockReason?: string | null;
     createdAt?: string;
+    updatedAt?: string;
+    version?: number;
   }>;
   tasks?: Task[];
   sponsors?: Sponsor[];
@@ -247,6 +310,20 @@ export type Tab =
   | 'tasks'
   | 'sponsors'
   | 'files';
+
+/**
+ * Lo que todo panel autónomo del evento recibe.
+ *
+ * Cada panel guarda por su cuenta y avisa con `onChanged` para que la página
+ * recargue el evento; los mensajes van por `flash` a la barra común.
+ */
+export type EventPanelProps = {
+  event: EventDetail;
+  /** Evento cerrado o cancelado: todo en solo lectura. */
+  closed: boolean;
+  onChanged: () => Promise<void> | void;
+  flash: (text: string, variant?: 'success' | 'error' | 'info' | 'warn') => void;
+};
 
 export const emptyFinance = (): FinanceData => ({
   rows: [

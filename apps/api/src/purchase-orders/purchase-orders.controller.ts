@@ -13,7 +13,16 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { PoPaymentMethod, PoStatus, Prisma } from '@prisma/client';
-import { IsArray, IsEnum, IsNumber, IsOptional, IsString, ValidateNested } from 'class-validator';
+import {
+  IsArray,
+  IsBoolean,
+  IsEnum,
+  IsIn,
+  IsNumber,
+  IsOptional,
+  IsString,
+  ValidateNested,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -29,6 +38,17 @@ import {
   type PoWindowConfig,
 } from './po-window';
 
+/** Machote: a quién se le paga. */
+export const PO_PAYEE_TYPES = ['PROVEEDOR', 'OTRO'] as const;
+export type PoPayeeType = (typeof PO_PAYEE_TYPES)[number];
+
+/** IVA que se suma al subtotal cuando la orden lo lleva. */
+export const PO_IVA_RATE = 0.16;
+
+function round2(n: number) {
+  return Math.round((n + Number.EPSILON) * 100) / 100;
+}
+
 class PoLineDto {
   @IsString() concept!: string;
   @IsNumber() qty!: number;
@@ -41,6 +61,8 @@ class CreatePoDto {
   @IsOptional() @IsString() vendorName?: string;
   @IsOptional() @IsString() description?: string;
   @IsOptional() @IsEnum(PoPaymentMethod) paymentMethod?: PoPaymentMethod;
+  @IsOptional() @IsIn(PO_PAYEE_TYPES as unknown as string[]) payeeType?: PoPayeeType;
+  @IsOptional() @IsBoolean() withIva?: boolean;
   @IsOptional() @IsNumber() amount?: number;
   @IsOptional()
   @IsArray()
@@ -61,29 +83,30 @@ type WindowUser = {
 export class PurchaseOrdersController {
   constructor(private prisma: PrismaService) {}
 
-  /** Config de la ventana de OC del tenant (con defaults de Arta). */
+  /** Días de cobro del tenant (con los defaults de Arta: lunes, miércoles y viernes). */
   private async loadWindow(user: WindowUser): Promise<PoWindowConfig> {
     const org = await this.prisma.organization.findUnique({
       where: { id: tenantIdOf(user) },
       select: { settingsJson: true },
     });
-    if (!org) return { ...DEFAULT_PO_WINDOW };
+    if (!org) return { ...DEFAULT_PO_WINDOW, days: [...DEFAULT_PO_WINDOW.days] };
     return readPoWindow(org.settingsJson);
   }
 
-  /** Dirección configura la ventana, así que no puede quedar encerrada por ella. */
+  /** Dirección configura los días de cobro, así que no puede quedar encerrada por ellos. */
   private bypassesWindow(user: WindowUser) {
     return user.roleKey === 'super_admin' || user.roleKey === 'dir_general';
   }
 
   /**
-   * Estado de la ventana: si se puede solicitar OC ahora mismo y cuándo vuelve
-   * a abrir. El panel lo consulta para avisar antes de que el usuario capture.
+   * Días de cobro: si hoy se pueden registrar pagos y cuál es el siguiente día.
+   * Crear órdenes ya no depende de esto (`canRequestNow` siempre es true).
    */
   @Get('window')
   async window(@Req() req: { user: WindowUser }) {
     const config = await this.loadWindow(req.user);
     const state = evaluatePoWindow(config);
+    const bypass = this.bypassesWindow(req.user);
     const canEdit = hasPermission(
       req.user.roleKey as RoleKey,
       req.user.permissions || [],
@@ -91,8 +114,9 @@ export class PurchaseOrdersController {
     );
     return {
       ...state,
-      canRequestNow: state.open || this.bypassesWindow(req.user),
-      bypass: this.bypassesWindow(req.user),
+      canRequestNow: true,
+      canPayNow: state.open || bypass,
+      bypass,
       canEdit,
     };
   }
@@ -106,7 +130,7 @@ export class PurchaseOrdersController {
         PERMISSIONS.USERS_MANAGE,
       )
     ) {
-      throw new ForbiddenException('Solo dirección configura la ventana de órdenes de compra');
+      throw new ForbiddenException('Solo dirección configura los días de cobro');
     }
     const orgId = tenantIdOf(req.user);
     const org = await this.prisma.organization.findUnique({
@@ -125,19 +149,23 @@ export class PurchaseOrdersController {
         },
       },
     });
-    return { ...evaluatePoWindow(poWindow), canRequestNow: true, canEdit: true };
+    const state = evaluatePoWindow(poWindow);
+    const bypass = this.bypassesWindow(req.user);
+    return { ...state, canRequestNow: true, canPayNow: state.open || bypass, bypass, canEdit: true };
   }
 
-  /** Bloquea la captura de OC fuera de los días/horas configurados. */
-  private async assertWindowOpen(user: WindowUser) {
+  /**
+   * Revisión 11-09-2026: «La orden de compra se puede crear el día que sea.
+   * SOLO SE DEJARÁ LOS DÍAS DE COBRO». El pago se registra solo en esos días.
+   */
+  private async assertPaymentDay(user: WindowUser) {
     if (this.bypassesWindow(user)) return;
     const config = await this.loadWindow(user);
     const state = evaluatePoWindow(config);
     if (state.open) return;
-    const next = state.nextOpenLabel ? ` Vuelve a abrir ${state.nextOpenLabel}.` : '';
     const note = config.note ? ` ${config.note}` : '';
     throw new ForbiddenException(
-      `Fuera de la ventana para solicitar órdenes de compra (${describeSchedule(config)}).${next}${note}`,
+      `Los pagos se registran solo los ${describeSchedule(config)}. Hoy no es día de cobro.${note}`,
     );
   }
 
@@ -190,8 +218,20 @@ export class PurchaseOrdersController {
     });
   }
 
-  private sumLines(lines: PoLineDto[]) {
-    return lines.reduce((s, l) => s + Number(l.qty || 0) * Number(l.unitPrice || 0), 0);
+  private sumLines(lines: Array<{ qty: unknown; unitPrice: unknown }>) {
+    return round2(lines.reduce((s, l) => s + Number(l.qty || 0) * Number(l.unitPrice || 0), 0));
+  }
+
+  /** Total de la orden: subtotal de partidas, más 16 % si lleva IVA. */
+  private amountFor(subtotal: number, withIva: boolean) {
+    return round2(subtotal * (withIva ? 1 + PO_IVA_RATE : 1));
+  }
+
+  /** PROVEEDOR por defecto; cualquier otra cosa que no esté en el machote se rechaza. */
+  private payeeTypeOf(value: unknown, fallback: PoPayeeType = 'PROVEEDOR'): PoPayeeType {
+    if (value === undefined || value === null || value === '') return fallback;
+    if ((PO_PAYEE_TYPES as readonly unknown[]).includes(value)) return value as PoPayeeType;
+    throw new BadRequestException('Tipo de beneficiario inválido: usa PROVEEDOR u OTRO');
   }
 
   private lineCreates(lines: PoLineDto[]) {
@@ -202,7 +242,7 @@ export class PurchaseOrdersController {
         concept: l.concept,
         qty,
         unitPrice,
-        total: qty * unitPrice,
+        total: round2(qty * unitPrice),
       };
     });
   }
@@ -266,9 +306,12 @@ export class PurchaseOrdersController {
       throw new ForbiddenException('Sin permiso para crear órdenes de compra');
     }
     const event = await this.assertEventOpsOpen(req.user, dto.eventId);
-    await this.assertWindowOpen(req.user);
+    // Sin ventana de captura: la orden se crea el día que sea (revisión 11-09-2026).
+    const payeeType = this.payeeTypeOf(dto.payeeType);
+    const withIva = dto.withIva === true;
     const lines = dto.lines?.length ? dto.lines : undefined;
-    const amount = lines ? this.sumLines(lines) : Number(dto.amount || 0);
+    const subtotal = lines ? this.sumLines(lines) : round2(Number(dto.amount || 0));
+    const amount = this.amountFor(subtotal, withIva);
     // Una OC de cero pesos no es una orden de compra: es una fila vacía que
     // alguien tiene que autorizar. Se colaban al pulsar «Crear» sin capturar
     // nada, y el panel respondía «OC creada» tan contento.
@@ -284,6 +327,8 @@ export class PurchaseOrdersController {
         vendorName: dto.vendorName,
         description: dto.description,
         paymentMethod: dto.paymentMethod || 'TRANSFERENCIA',
+        payeeType,
+        withIva,
         amount,
         status: 'PENDING_AUTH',
         createdById: req.user.id,
@@ -296,6 +341,9 @@ export class PurchaseOrdersController {
       rubro: dto.rubro,
       vendorName: dto.vendorName ?? null,
       amount,
+      subtotal,
+      withIva,
+      payeeType,
       paymentMethod: created.paymentMethod,
     });
     return created;
@@ -311,6 +359,8 @@ export class PurchaseOrdersController {
       vendorName?: string;
       description?: string;
       paymentMethod?: PoPaymentMethod;
+      payeeType?: PoPayeeType;
+      withIva?: boolean;
       lines?: PoLineDto[];
     },
   ) {
@@ -323,25 +373,49 @@ export class PurchaseOrdersController {
     ) {
       throw new ForbiddenException('Sin permiso para editar órdenes de compra');
     }
-    const order = await this.prisma.purchaseOrder.findUnique({ where: { id } });
+    const order = await this.prisma.purchaseOrder.findUnique({
+      where: { id },
+      include: { lines: true },
+    });
     if (!order) throw new NotFoundException('OC no encontrada');
     const event = await this.assertEventOpsOpen(req.user, order.eventId);
     if (order.status === 'PAID' || order.status === 'AUTHORIZED') {
       throw new ForbiddenException('OC autorizada/pagada no se edita');
     }
 
+    const wasWithIva = !!order.withIva;
+    const withIva = typeof body.withIva === 'boolean' ? body.withIva : wasWithIva;
+    const withIvaChanged = withIva !== wasWithIva;
+    const payeeType =
+      body.payeeType !== undefined ? this.payeeTypeOf(body.payeeType) : undefined;
+
     const data: Prisma.PurchaseOrderUpdateInput = {
       rubro: body.rubro,
       vendorName: body.vendorName,
       description: body.description,
       paymentMethod: body.paymentMethod,
+      ...(payeeType ? { payeeType } : {}),
+      ...(typeof body.withIva === 'boolean' ? { withIva } : {}),
     };
 
     if (body.lines) {
-      const amount = this.sumLines(body.lines);
+      const amount = this.amountFor(this.sumLines(body.lines), withIva);
+      if (!(amount > 0)) {
+        throw new BadRequestException(
+          'La orden necesita un monto: captura al menos una partida con cantidad y precio',
+        );
+      }
       await this.prisma.purchaseOrderLine.deleteMany({ where: { orderId: id } });
       data.amount = amount;
       data.lines = { create: this.lineCreates(body.lines) };
+    } else if (withIvaChanged) {
+      // Solo cambió el IVA: el subtotal sale de las partidas guardadas o, en
+      // órdenes viejas sin partidas, del monto sin el IVA que ya traía.
+      const saved = order.lines ?? [];
+      const subtotal = saved.length
+        ? this.sumLines(saved)
+        : round2(Number(order.amount || 0) / (wasWithIva ? 1 + PO_IVA_RATE : 1));
+      data.amount = this.amountFor(subtotal, withIva);
     }
 
     const updated = await this.prisma.purchaseOrder.update({
@@ -354,6 +428,10 @@ export class PurchaseOrdersController {
       amountAfter: Number(updated.amount),
       ...(body.paymentMethod && body.paymentMethod !== order.paymentMethod
         ? { paymentMethodFrom: order.paymentMethod, paymentMethodTo: body.paymentMethod }
+        : {}),
+      ...(withIvaChanged ? { withIvaFrom: wasWithIva, withIvaTo: withIva } : {}),
+      ...(payeeType && payeeType !== (order.payeeType ?? 'PROVEEDOR')
+        ? { payeeTypeFrom: order.payeeType ?? 'PROVEEDOR', payeeTypeTo: payeeType }
         : {}),
       linesReplaced: !!body.lines,
     });
@@ -479,9 +557,11 @@ export class PurchaseOrdersController {
       const proofCount = order.proofs?.length ?? 0;
       if (needsProof && proofCount === 0) {
         throw new BadRequestException(
-          'Para transferencias y otros pagos no en efectivo, adjunta el comprobante antes de marcar pagado',
+          'Para transferencias, cheques y otros pagos no en efectivo, adjunta el comprobante antes de marcar pagado',
         );
       }
+      // El comprobante se puede subir cualquier día; el pago, solo en día de cobro.
+      await this.assertPaymentDay(req.user);
 
       /**
        * Cambiar la forma de pago EN LA MISMA petición que marca pagado es la
@@ -525,6 +605,7 @@ export class PurchaseOrdersController {
         rubro: order.rubro,
         vendorName: order.vendorName ?? null,
         amount: Number(order.amount),
+        withIva: !!order.withIva,
         paymentMethod: method,
         proofCount,
       });
@@ -590,6 +671,7 @@ export class PurchaseOrdersController {
       rubro: order.rubro,
       vendorName: order.vendorName ?? null,
       amount: Number(order.amount),
+      withIva: !!order.withIva,
       status: order.status,
     });
     return { ok: true };

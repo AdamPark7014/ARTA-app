@@ -190,8 +190,8 @@ const USER_VIEWS: Record<
   'williams@artaproducciones.com': {
     entities: ['ARTA', 'EXPLANADA'],
     homeEntity: 'ARTA',
-    modules: ['dashboard', 'events', 'checklists', 'campaigns', 'ticketing', 'site'],
-    notes: 'Generales ambos · edita campaña con gerencia · boletera',
+    modules: ['folders'],
+    notes: 'Junta 11-09-2026 · solo carpetas generales de Arta y Auditorio',
   },
   'monse@artaproducciones.com': {
     entities: ['ARTA', 'EXPLANADA'],
@@ -208,20 +208,20 @@ const USER_VIEWS: Record<
   'marisol@artaproducciones.com': {
     entities: ['ARTA', 'EXPLANADA'],
     homeEntity: 'ARTA',
-    modules: ['dashboard', 'events', 'checklists', 'folders', 'site'],
-    notes: 'Alta junta 2026-08-28 · convenios / patrocinios (perfil de Leida)',
+    modules: ['dashboard', 'events', 'checklists', 'purchase-orders', 'campaigns', 'ticketing', 'folders', 'site'],
+    notes: 'Junta 11-09-2026 · TODO de Arta (mismo perfil que Leida)',
   },
   'leida@artaproducciones.com': {
     entities: ['ARTA', 'EXPLANADA'],
     homeEntity: 'ARTA',
-    modules: ['dashboard', 'events', 'checklists', 'folders', 'site'],
-    notes: 'Generales · convenios / patrocinios',
+    modules: ['dashboard', 'events', 'checklists', 'purchase-orders', 'campaigns', 'ticketing', 'folders', 'site'],
+    notes: 'Junta 11-09-2026 · TODO de Arta',
   },
   'jp@artaproducciones.com': {
     entities: ['ARTA', 'EXPLANADA'],
     homeEntity: 'ARTA',
-    modules: ['dashboard', 'events', 'checklists', 'purchase-orders', 'site'],
-    notes: 'Generales · marcar OC pagado · enlace gobierno',
+    modules: ['folders'],
+    notes: 'Junta 11-09-2026 · solo carpetas generales de Arta y Auditorio',
   },
 };
 
@@ -639,27 +639,30 @@ const USERS: SeedUser[] = [
     email: 'williams@artaproducciones.com',
     fullName: 'Williams Taja',
     title: 'Logística y producción',
-    roleKey: ROLES.LOGISTICA,
+    // Junta 11-09-2026: solo carpetas generales de Arta y Auditorio.
+    roleKey: ROLES.SOLO_CARPETAS,
     entities: ['ARTA', 'EXPLANADA'],
-    permissions: [...ROLE_PERMISSIONS[ROLES.LOGISTICA]],
+    permissions: [...ROLE_PERMISSIONS[ROLES.SOLO_CARPETAS]],
     passAlias: 'WILLIAMS',
   },
   {
     email: 'leida@artaproducciones.com',
     fullName: 'Leida Osorio',
     title: 'Convenios y patrocinios',
-    roleKey: ROLES.CONVENIOS,
-    entities: ['ARTA', 'EXPLANADA'],
-    permissions: [...ROLE_PERMISSIONS[ROLES.CONVENIOS]],
+    // Junta 11-09-2026: acceso a TODO de Arta.
+    roleKey: ROLES.GERENTE_ARTA,
+    entities: ['ARTA'],
+    permissions: [...ROLE_PERMISSIONS[ROLES.GERENTE_ARTA]],
     passAlias: 'LEIDA',
   },
   {
     email: 'jp@artaproducciones.com',
     fullName: 'Juan Pablo Ramírez',
     title: 'Enlace gobierno y pagos',
-    roleKey: ROLES.ENLACE_GOBIERNO,
+    // Junta 11-09-2026: solo carpetas generales de Arta y Auditorio.
+    roleKey: ROLES.SOLO_CARPETAS,
     entities: ['ARTA', 'EXPLANADA'],
-    permissions: [...ROLE_PERMISSIONS[ROLES.ENLACE_GOBIERNO]],
+    permissions: [...ROLE_PERMISSIONS[ROLES.SOLO_CARPETAS]],
     passAlias: 'JP',
   },
   // Altas de la junta 2026-08-28 (Monse, Sol, Kika) — ver new-team-members.ts
