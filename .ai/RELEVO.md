@@ -155,6 +155,31 @@ Adam: «aún siento mucha fricción visual en algunos módulos, medio sucios o p
 4. Pendientes previos que siguen: fórmulas al insertar filas en Excel embebido; backfill
    de avance de checklists; `TZ=America/Mexico_City` en el contenedor del API.
 
+### Desplegado a producción (16-09-2026, 22:00 UTC)
+- `arta.artaproducciones.com`, `auditorio.artaproducciones.com` y el sitio público
+  responden 200. Migración `20260915090000_junta_0911` **aplicada** (26 en total),
+  `ChatController` y `CampaignsController` registrados, sin errores en el arranque.
+- ⚠️ **El servidor no tiene credenciales de GitHub para este repo**: `deploy/update.sh`
+  falla en `git pull` («could not read Username»). Se desplegó llevando el código por
+  `git bundle` vía SSH y corriendo `bash deploy/update.sh --no-pull`:
+  ```
+  git bundle create arta-main.bundle main   # local
+  scp -P 2222 arta-main.bundle root@5.78.215.109:/root/
+  # en el server, en /var/www/arta-app:
+  git fetch /root/arta-main.bundle main && git merge --ff-only FETCH_HEAD
+  bash deploy/update.sh --no-pull
+  ```
+  Arreglo de fondo: dar de alta una deploy key de ARTA en GitHub (el server ya tiene
+  llaves para nexara, acrobat, family y zynoratek) y cambiar el remoto a SSH.
+- Respaldo previo automático: `/root/arta-backups/20260916-2159.sql.gz`.
+  Rollback: `bash deploy/rollback.sh` (imágenes `arta-web:prev` / `arta-api:prev`).
+- Se apartó `apps/web/app/p/arta/noticias/[slug]/NewsDetailClient.tsx` (huérfano, sin
+  imports, sin versionar) a `/root/arta-stale-NewsDetailClient.tsx.bak`; entraba al build.
+- Se liberó caché de build de Docker (`docker builder prune`): el disco estaba al 86 %,
+  quedó en 79 %. No se tocaron imágenes ni volúmenes.
+- **NO se corrió** `scripts/apply-access-junta-0911.ts` en producción: cambia accesos de
+  personas reales (Williams y Juan Pablo pierden eventos). Pendiente de visto bueno de Adam.
+
 ## Siguiente paso
 
 1. Adam revisa en local y da visto bueno.
