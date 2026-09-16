@@ -1,20 +1,25 @@
 /**
  * La auditoría, dicha en castellano.
  *
- * La pantalla enseñaba el identificador crudo de la acción —`po.authorize`,
- * `checklist.status.sealed`, `finance.unlock`— dentro de un `<code>`. Para
- * quien tiene que supervisar quién tocó qué, eso no es información: es una
- * clave de base de datos. Aquí se traduce a lo que hizo la persona.
- *
- * El identificador no se tira: se sigue enseñando en pequeño, porque cuando
- * algo se discute en serio hace falta el dato exacto.
+ * La base guarda claves como `po.authorize` o `user.password.seeded`. Para quien
+ * supervisa quién tocó qué, eso es ruido: aquí se traduce a lo que hizo la
+ * persona. Adam (16-09-2026) pidió que la clave cruda no se vea en ningún lado,
+ * así que una acción nueva sin traducir cae en «Movimiento en …», nunca en la
+ * clave con puntos.
  */
 
 const ACTION_LABELS: Record<string, string> = {
-  // Sesión y seguridad
+  // Personas, sesión y seguridad
   'auth.2fa.enable': 'Activó su segundo factor',
   'auth.2fa.disable': 'Desactivó su segundo factor',
   'user.deactivate': 'Dio de baja a una persona',
+  'user.password.seeded': 'Recibió su contraseña inicial',
+  'user.access.changed': 'Se cambió su acceso',
+  'user.access.junta_0911': 'Se cambió su acceso',
+  'user.sessions.revoked_access_change': 'Se cerraron sus sesiones por cambio de acceso',
+  'user.duplicate.merged': 'Se quitó una cuenta duplicada',
+  'user.removed': 'Se quitó una cuenta',
+  'org.invite': 'Invitó a alguien',
   'org.invite.create': 'Invitó a alguien',
   'org.invite.accept': 'Aceptó una invitación',
 
@@ -26,7 +31,7 @@ const ACTION_LABELS: Record<string, string> = {
   'event.reopen': 'Reabrió un evento',
   'event.delete': 'Eliminó un evento',
 
-  // Formatos (checklists)
+  // Formatos
   'checklist.update': 'Editó un formato',
   'checklist.restore': 'Restauró una versión del formato',
   'checklist.reopen': 'Reabrió un formato',
@@ -37,7 +42,7 @@ const ACTION_LABELS: Record<string, string> = {
   'template.schema.update': 'Cambió una plantilla de formato',
   'template.restore': 'Restauró una versión de la plantilla',
 
-  // Corrida financiera
+  // Corrida
   'finance.update': 'Editó la corrida',
   'finance.unlock': 'Quitó el sello de la corrida',
 
@@ -46,10 +51,26 @@ const ACTION_LABELS: Record<string, string> = {
   'po.update': 'Editó una orden de compra',
   'po.authorize': 'Autorizó una orden de compra',
   'po.pay': 'Marcó pagada una orden de compra',
-  'po.status': 'Cambió el estatus de una orden',
+  'po.status': 'Cambió el estado de una orden de compra',
   'po.delete': 'Eliminó una orden de compra',
   'po.proof.add': 'Subió un comprobante',
   'po.payment_method.cash_at_payment': 'Pagó en efectivo sin comprobante',
+
+  // Campaña y convenios
+  'campaign.status': 'Cambió el estado de la campaña',
+  'convenios.status': 'Cambió el estado de los convenios',
+
+  // Tareas
+  'task.created': 'Pidió una tarea',
+  'task.assigned': 'Asignó una tarea',
+  'task.reassigned': 'Reasignó una tarea',
+  'task.status_changed': 'Cambió el estado de una tarea',
+  'task.submitted': 'Entregó una tarea',
+  'task.completed': 'Completó una tarea',
+  'task.approved': 'Aprobó una tarea',
+  'task.rejected': 'Pidió corregir una tarea',
+  'task.evidence_added': 'Subió evidencia a una tarea',
+  'task.deleted': 'Eliminó una tarea',
 
   // Archivos
   'file.delete': 'Borró un archivo',
@@ -58,7 +79,29 @@ const ACTION_LABELS: Record<string, string> = {
 
   // Sistema
   'studio.upsert': 'Editó el sitio público',
-  'automation.scan': 'Revisión automática del sistema',
+  'ticketing.sync': 'Sincronizó la boletera',
+  'digest.daily': 'Envió el resumen diario',
+  'automation.scan': 'Revisión automática',
+};
+
+/** Para el «Movimiento en …» de una acción que todavía no tiene traducción. */
+const AREA_LABELS: Record<string, string> = {
+  auth: 'la cuenta',
+  user: 'personas',
+  org: 'la organización',
+  event: 'un evento',
+  checklist: 'un formato',
+  template: 'una plantilla',
+  finance: 'la corrida',
+  po: 'órdenes de compra',
+  campaign: 'la campaña',
+  convenios: 'convenios',
+  task: 'tareas',
+  file: 'archivos',
+  studio: 'el sitio público',
+  ticketing: 'la boletera',
+  chat: 'el chat',
+  folder: 'carpetas',
 };
 
 const RESOURCE_LABELS: Record<string, string> = {
@@ -70,8 +113,13 @@ const RESOURCE_LABELS: Record<string, string> = {
   EventFile: 'Archivo',
   EventDocument: 'Documento',
   PaymentProof: 'Comprobante',
+  Campaign: 'Campaña',
+  TaskAssignment: 'Tarea',
+  TicketingSetup: 'Boletera',
+  SharedFolder: 'Carpeta',
   User: 'Persona',
   Organization: 'Organización',
+  OrgInvite: 'Invitación',
   PageContent: 'Sitio público',
   System: 'Sistema',
 };
@@ -89,30 +137,31 @@ const NOTABLE = new Set([
   'event.delete',
   'event.reopen',
   'file.delete',
+  'task.deleted',
   'user.deactivate',
+  'user.removed',
   'auth.2fa.disable',
 ]);
 
-/** Firmas: `checklist.sign.<tipo>`, con el tipo abierto. */
+/** Firmas: `checklist.sign.<tipo>`, con el tipo abierto (en inglés o en español). */
 function signLabel(action: string): string | null {
   if (!action.startsWith('checklist.sign.')) return null;
   const kind = action.slice('checklist.sign.'.length);
-  if (kind === 'authorize' || kind === 'authorized') return 'Autorizó y firmó un formato';
-  if (kind === 'deliver' || kind === 'delivered') return 'Firmó la entrega de un formato';
+  if (kind.startsWith('authoriz') || kind.startsWith('autoriz')) return 'Autorizó y firmó un formato';
+  if (kind.startsWith('deliver') || kind.startsWith('entreg')) return 'Firmó la entrega de un formato';
+  if (kind.startsWith('receiv') || kind.startsWith('recib')) return 'Firmó de recibido un formato';
   return 'Firmó un formato';
 }
 
 export function auditActionLabel(action: string): string {
-  return ACTION_LABELS[action] || signLabel(action) || action;
-}
-
-/** `true` cuando hay traducción; si no, la pantalla no repite el crudo dos veces. */
-export function hasAuditActionLabel(action: string): boolean {
-  return !!(ACTION_LABELS[action] || signLabel(action));
+  const known = ACTION_LABELS[action] || signLabel(action);
+  if (known) return known;
+  const area = AREA_LABELS[action.split('.')[0] || ''];
+  return area ? `Movimiento en ${area}` : 'Movimiento del sistema';
 }
 
 export function auditResourceLabel(resource: string): string {
-  return RESOURCE_LABELS[resource] || resource;
+  return RESOURCE_LABELS[resource] || 'Otro';
 }
 
 export function isNotableAction(action: string): boolean {

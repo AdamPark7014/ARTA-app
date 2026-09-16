@@ -19,7 +19,13 @@ import { api } from '@/lib/api';
 import { useUser } from '@/lib/user-context';
 import { userHasPermission } from '@/lib/access-matrix';
 import { panelLoginUrl } from '@/lib/domains';
-import { ROLE_DEFAULT_ENTITIES, ROLE_HINTS, type RoleKey } from '@arta/rbac';
+import {
+  ROLE_DEFAULT_ENTITIES,
+  ROLE_HINTS,
+  ROLE_PERMISSIONS,
+  roleLabel,
+  type RoleKey,
+} from '@arta/rbac';
 
 type UserRow = {
   id: string;
@@ -135,6 +141,17 @@ function entityLabel(e: string) {
   return e === 'ARTA' ? 'Arta' : e === 'EXPLANADA' ? 'Auditorio' : e;
 }
 
+/**
+ * Permisos que la persona tiene además de los de su rol. Al asignar rol se
+ * guardan también los del rol, así que contarlos todos («13 permisos extra»)
+ * no decía nada.
+ */
+function extraPermissions(u: { roleKey: string; permissions: string[] }) {
+  const fromRole: string[] = ROLE_PERMISSIONS[u.roleKey as RoleKey] ?? [];
+  if (fromRole.includes('everything')) return 0;
+  return u.permissions.filter((p) => !fromRole.includes(p)).length;
+}
+
 export default function UsersPage() {
   const { user: me } = useUser();
   const canManage = userHasPermission(me?.roleKey || '', me?.permissions || [], ['users.manage']);
@@ -213,8 +230,7 @@ export default function UsersPage() {
         (u) =>
           u.fullName.toLowerCase().includes(n) ||
           u.email.toLowerCase().includes(n) ||
-          u.roleKey.toLowerCase().includes(n) ||
-          (u.roleLabel || '').toLowerCase().includes(n),
+          roleLabel(u.roleKey).toLowerCase().includes(n),
       );
     }
     return list;
@@ -312,11 +328,11 @@ export default function UsersPage() {
           entities: form.entities,
           password: genPassword(),
         });
-        setMsg('Invitación lista — copia el link y envíaselo (válido 7 días)');
+        setMsg('Invitación lista: copia el enlace y envíaselo (dura 7 días)');
         await load();
       } else {
         if (!form.fullName.trim()) throw new Error('Nombre requerido');
-        if (form.password.trim().length < 6) throw new Error('Password mínimo 6 caracteres');
+        if (form.password.trim().length < 6) throw new Error('La contraseña lleva mínimo 6 caracteres');
         const created = await api<{
           email: string;
           fullName: string;
@@ -348,7 +364,7 @@ export default function UsersPage() {
         setMsg(
           created.reactivated
             ? 'Usuario reactivado con datos nuevos'
-            : 'Usuario creado — entrega email y clave al equipo',
+            : 'Usuario creado: entrégale su correo y contraseña',
         );
         await load();
       }
@@ -438,7 +454,7 @@ export default function UsersPage() {
         method: 'PATCH',
         body: JSON.stringify({ unlock: true }),
       });
-      setMsg(`Login desbloqueado para ${u.fullName}`);
+      setMsg(`Acceso desbloqueado para ${u.fullName}`);
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error al desbloquear');
@@ -481,7 +497,7 @@ export default function UsersPage() {
           msg.includes('eliminado') ||
           msg.includes('reactivado') ||
           msg.includes('desbloqueado') ||
-          msg.includes('Copiado') ||
+          msg.includes('copiad') ||
           msg.includes('revocada')
         ? 'success'
         : 'error';
@@ -506,7 +522,7 @@ export default function UsersPage() {
       <div className="page-workspace stack">
         <PageHeader
           description="Alta, roles, entidades, permisos y bajas. Solo Directores Generales (Arturo y José Luis)."
-          hint="Alta inmediata = les das email + clave ya. Invitar = ellos eligen password con un link de 7 días."
+          hint="Alta inmediata: les das correo y contraseña. Invitar: eligen su contraseña con un enlace que dura 7 días."
         />
 
         {error ? (
@@ -538,11 +554,11 @@ export default function UsersPage() {
               <div className="value">{k.active}</div>
             </div>
             <div className="kpi">
-              <div className="label">Login 7d</div>
+              <div className="label">Entraron esta semana</div>
               <div className="value">{k.loggedIn7d}</div>
             </div>
             <div className={`kpi ${k.inactive30d ? 'kpi--danger' : ''}`}>
-              <div className="label">Inactivos 30d</div>
+              <div className="label">Sin entrar en 30 días</div>
               <div className="value">{k.inactive30d}</div>
             </div>
             <div className={`kpi ${k.lockedNow ? 'kpi--danger' : ''}`}>
@@ -572,8 +588,8 @@ export default function UsersPage() {
                 Distribución por rol
               </div>
               <DistBar
-                segments={Object.entries(gov.byRole ?? {}).map(([label, value], i) => ({
-                  label,
+                segments={Object.entries(gov.byRole ?? {}).map(([key, value], i) => ({
+                  label: roleLabel(key),
                   value,
                   tone: (['ok', 'warn', 'muted', 'danger'] as const)[i % 4],
                 }))}
@@ -608,7 +624,7 @@ export default function UsersPage() {
                     setCreds(null);
                   }}
                 >
-                  Invitar por email
+                  Invitar por correo
                 </button>
               </div>
 
@@ -636,12 +652,12 @@ export default function UsersPage() {
                   </FormGrid>
                 ) : (
                   <p className="muted kpi-sub" style={{ marginTop: 0 }}>
-                    Solo necesitas email + rol. La persona pone su nombre y password al abrir el link.
+                    Solo necesitas correo y rol. La persona pone su nombre y contraseña al abrir el enlace.
                   </p>
                 )}
 
                 <label>
-                  Email
+                  Correo
                   <input
                     required
                     type="email"
@@ -681,7 +697,7 @@ export default function UsersPage() {
 
                 {!inviteMode ? (
                   <label>
-                    Password temporal
+                    Contraseña temporal
                     <div className="row row--tight" style={{ alignItems: 'center', marginTop: 4 }}>
                       <input
                         required
@@ -709,7 +725,7 @@ export default function UsersPage() {
                       <button
                         className="btn ghost btn-sm"
                         type="button"
-                        onClick={() => void copyText(form.password, 'Password copiado')}
+                        onClick={() => void copyText(form.password, 'Contraseña copiada')}
                       >
                         Copiar
                       </button>
@@ -739,16 +755,16 @@ export default function UsersPage() {
 
                 {inviteUrl ? (
                   <div className="panel" style={{ margin: '0.5rem 0', padding: '0.75rem' }}>
-                    <div className="muted kpi-sub">Link de invitación</div>
+                    <div className="muted kpi-sub">Enlace de invitación</div>
                     <p style={{ fontSize: 12, wordBreak: 'break-all', margin: '0.35rem 0' }}>
                       <a href={inviteUrl}>{inviteUrl}</a>
                     </p>
                     <button
                       className="btn btn-sm"
                       type="button"
-                      onClick={() => void copyText(inviteUrl, 'Link copiado')}
+                      onClick={() => void copyText(inviteUrl, 'Enlace copiado')}
                     >
-                      Copiar link
+                      Copiar enlace
                     </button>
                   </div>
                 ) : null}
@@ -771,15 +787,15 @@ export default function UsersPage() {
                         borderRadius: 8,
                       }}
                     >{`Panel: ${loginUrl}
-Email: ${creds.email}
-Password: ${creds.password}`}</pre>
+Correo: ${creds.email}
+Contraseña: ${creds.password}`}</pre>
                     <div className="row row--tight">
                       <button
                         className="btn btn-sm"
                         type="button"
                         onClick={() =>
                           void copyText(
-                            `Panel: ${loginUrl}\nEmail: ${creds.email}\nPassword: ${creds.password}`,
+                            `Panel: ${loginUrl}\nCorreo: ${creds.email}\nContraseña: ${creds.password}`,
                             'Credenciales copiadas',
                           )
                         }
@@ -813,7 +829,7 @@ Password: ${creds.password}`}</pre>
                 <FieldSearch
                   value={q}
                   onChange={setQ}
-                  placeholder="Nombre, email o rol…"
+                  placeholder="Nombre, correo o rol…"
                   label="Buscar"
                   maxWidth={220}
                 />
@@ -831,7 +847,7 @@ Password: ${creds.password}`}</pre>
                   onChange={(v) => setRiskFilter(v as typeof riskFilter)}
                   label="Riesgo"
                   options={[
-                    { value: 'all', label: 'Todo riesgo' },
+                    { value: 'all', label: 'Cualquier riesgo' },
                     { value: 'high', label: 'Alto' },
                     { value: 'medium', label: 'Medio' },
                     { value: 'low', label: 'Bajo' },
@@ -876,9 +892,11 @@ Password: ${creds.password}`}</pre>
                             </div>
                           </td>
                           <td>
-                            <div>{u.roleLabel || u.roleKey}</div>
-                            {u.permissions.length ? (
-                              <div className="muted kpi-sub">{u.permissions.length} permisos extra</div>
+                            <div>{roleLabel(u.roleKey)}</div>
+                            {extraPermissions(u) ? (
+                              <div className="muted kpi-sub">
+                                {extraPermissions(u) === 1 ? '+1 permiso' : `+${extraPermissions(u)} permisos`}
+                              </div>
                             ) : null}
                           </td>
                           <td className="muted kpi-sub">
@@ -887,7 +905,7 @@ Password: ${creds.password}`}</pre>
                           <td>
                             <StatusBadge value={u.active ? 'Activo' : 'Inactivo'} kind="raw" />
                             {u.locked ? (
-                              <div className="muted kpi-sub">login bloqueado</div>
+                              <div className="muted kpi-sub">acceso bloqueado</div>
                             ) : null}
                           </td>
                           <td className="muted kpi-sub">
@@ -956,7 +974,7 @@ Password: ${creds.password}`}</pre>
                 <table className="table table-sticky">
                   <thead>
                     <tr>
-                      <th>Email</th>
+                      <th>Correo</th>
                       <th>Rol</th>
                       <th>Entidades</th>
                       <th>Expira</th>
@@ -968,7 +986,7 @@ Password: ${creds.password}`}</pre>
                       <tr key={inv.id}>
                         <td>{inv.email}</td>
                         <td className="muted">
-                          {roles.find((r) => r.key === inv.roleKey)?.label || inv.roleKey}
+                          {roleLabel(inv.roleKey)}
                         </td>
                         <td className="muted kpi-sub">
                           {(inv.entities || []).map(entityLabel).join(' · ')}
@@ -1015,7 +1033,7 @@ Password: ${creds.password}`}</pre>
                     />
                   </label>
                   <label>
-                    Email
+                    Correo
                     <input
                       required
                       type="email"

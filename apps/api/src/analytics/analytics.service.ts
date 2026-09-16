@@ -797,6 +797,9 @@ export class AnalyticsService {
     const logs = await this.prisma.auditLog.findMany({
       where: {
         createdAt: { gte: day30 },
+        // La revisión automática corre cada hora: en producción eran >1,000 filas
+        // que tapaban lo que hizo el equipo. No es un movimiento de nadie.
+        action: { not: 'automation.scan' },
         // Solo logs de usuarios del tenant — no mezclar system logs (userId null) cross-tenant
         ...(organizationId ? { user: { organizationId } } : {}),
       },
@@ -828,7 +831,8 @@ export class AnalyticsService {
       (l) =>
         l.action.includes('delete') ||
         l.action.includes('cancel') ||
-        l.action === 'automation.scan',
+        l.action === 'user.removed' ||
+        l.action === 'finance.unlock',
     );
 
     return {

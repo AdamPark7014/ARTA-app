@@ -3653,14 +3653,6 @@ body.site-nav-open {
   font-weight: 600;
 }
 
-/* El identificador crudo, para cuando hace falta el dato exacto. */
-.audit-raw {
-  font-family: ui-monospace, "SFMono-Regular", "Consolas", monospace;
-  font-size: 0.68rem;
-  opacity: 0.7;
-  margin-top: 0.1rem;
-}
-
 /* La frase larga, debajo de la píldora, en la tarjeta del evento. */
 .po-next-hint {
   display: flex;

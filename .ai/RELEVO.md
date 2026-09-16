@@ -169,6 +169,28 @@ pública».
   `docker-compose.yml` (variable muerta, el seed no la lee; es una contraseña y cae en el
   veto de credenciales). No se tocaron.
 
+### Quinta vuelta: textos limpios en admin (16-09, noche)
+Adam, con captura de Usuarios: «que los roles no digan cosa_cosa… lo mismo con webhooks y
+con la auditoría como user.seeder, algo limpio».
+- **Roles:** `ROLE_LABELS` en español llano y neutro (Dirección general, Dirección adjunta,
+  Gerencia Arta, Dirección Auditorio, Logística y producción, Convenios y patrocinios,
+  Enlace gobierno y pagos, Solo carpetas). `roleLabel()` en `roles.ts` nunca devuelve la
+  clave con guion bajo. Usuarios (tabla, gráfica por rol, invitaciones, búsqueda) y
+  Organizaciones ya no pintan `roleKey`.
+- **«13 permisos extra»** era mentira: al asignar rol se guardan también los del rol.
+  Ahora solo sale «+N permisos» si tiene algo además de su rol.
+- **Auditoría:** `lib/audit-labels.ts` traduce todas las acciones vistas en local y
+  producción (contraseña inicial, cambio de acceso, duplicados, tareas, campaña…); lo
+  desconocido cae en «Movimiento en …», nunca en la clave. Fuera la clave cruda bajo la
+  acción y la columna «Referencia» (IDs). `analytics.auditIntel` ya no cuenta
+  `automation.scan`: en producción eran 1,271 filas de la revisión horaria.
+- **Webhooks y Resúmenes:** sin jerga (endpoint, dispatch, HMAC, outbox, job runs,
+  SMTP_HOST). Avisos con nombre («Órdenes de compra atrasadas», «Firmas pendientes»…) y
+  estados con color propio en vez de reutilizar insignias de OC («Pagada» para un correo).
+- Usuarios: Correo/Contraseña/enlace en vez de Email/Password/link.
+- Verificado en Docker local con la sesión de Adam (Usuarios, Auditoría, Webhooks,
+  Resúmenes): ningún texto con puntos o guiones bajos. **No desplegado a producción.**
+
 ### Migración
 - `20260915090000_junta_0911` (enum CHEQUE, columnas nuevas, chat, backfill de campañas
   autorizadas). Aplicada en Docker local.
@@ -240,11 +262,13 @@ pública».
 
 ## Siguiente paso
 
-1. Avisar a Leida y Marisol que vuelven a iniciar sesión y ya ven todo menos Usuarios
+1. Desplegar la «Quinta vuelta» (textos limpios) cuando Adam dé el visto bueno: bundle +
+   `update.sh --no-pull`, sin migraciones ni scripts.
+2. Avisar a Leida y Marisol que vuelven a iniciar sesión y ya ven todo menos Usuarios
    y Organizaciones.
-2. Arreglo de fondo del despliegue: deploy key de ARTA en GitHub (sigue por bundle).
-3. Demo `[SEED_DEMO]` en producción: sigue esperando visto bueno de Adam.
-4. Si en producción había ventana de OC guardada, revisar «Días de cobro» en Configuración.
+3. Arreglo de fondo del despliegue: deploy key de ARTA en GitHub (sigue por bundle).
+4. Demo `[SEED_DEMO]` en producción: sigue esperando visto bueno de Adam.
+5. Si en producción había ventana de OC guardada, revisar «Días de cobro» en Configuración.
 
 ## No tocar
 

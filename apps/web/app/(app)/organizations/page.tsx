@@ -13,6 +13,7 @@ import {
   PageHeader,
 } from '@/components/ui/PageChrome';
 import { StatusBadge } from '@/components/ui/StatusBadge';
+import { roleLabel } from '@arta/rbac';
 import { api } from '@/lib/api';
 import { useUser } from '@/lib/user-context';
 
@@ -561,7 +562,7 @@ export default function OrganizationsPage() {
                               return (
                                 <tr key={inv.id}>
                                   <td>{inv.email}</td>
-                                  <td className="muted">{inv.roleKey}</td>
+                                  <td className="muted">{roleLabel(inv.roleKey)}</td>
                                   <td>
                                     <StatusBadge value={status} kind="raw" />
                                   </td>
@@ -620,8 +621,10 @@ export default function OrganizationsPage() {
                                     {!u.active ? ' · inactivo' : ''}
                                   </div>
                                 </td>
-                                <td className="muted">{u.roleKey}</td>
-                                <td className="muted">{u.entities.join(', ')}</td>
+                                <td className="muted">{roleLabel(u.roleKey)}</td>
+                                <td className="muted">
+                                  {u.entities.map((e) => (e === 'EXPLANADA' ? 'Auditorio' : 'Arta')).join(' · ')}
+                                </td>
                                 <td className="muted">
                                   {u.lastLoginAt
                                     ? new Date(u.lastLoginAt).toLocaleDateString('es-MX')

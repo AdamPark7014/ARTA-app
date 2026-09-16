@@ -13,12 +13,7 @@ import {
   PageHeader,
 } from '@/components/ui/PageChrome';
 import { api } from '@/lib/api';
-import {
-  auditActionLabel,
-  auditResourceLabel,
-  hasAuditActionLabel,
-  isNotableAction,
-} from '@/lib/audit-labels';
+import { auditActionLabel, auditResourceLabel, isNotableAction } from '@/lib/audit-labels';
 
 type AuditIntel = {
   kpis: {
@@ -72,10 +67,8 @@ export default function AuditPage() {
       const n = q.toLowerCase();
       list = list.filter(
         (r) =>
-          r.action.toLowerCase().includes(n) ||
           auditActionLabel(r.action).toLowerCase().includes(n) ||
           (r.user?.fullName || '').toLowerCase().includes(n) ||
-          r.resource.toLowerCase().includes(n) ||
           auditResourceLabel(r.resource).toLowerCase().includes(n),
       );
     }
@@ -103,19 +96,19 @@ export default function AuditPage() {
             {k ? (
               <div className="grid-cards kpi-grid-dense">
                 <div className="kpi">
-                  <div className="label">Eventos 30d</div>
+                  <div className="label">Movimientos en 30 días</div>
                   <div className="value">{k.events30d}</div>
                 </div>
                 <div className="kpi">
-                  <div className="label">Actores</div>
+                  <div className="label">Personas</div>
                   <div className="value">{k.uniqueActors}</div>
                 </div>
                 <div className="kpi">
-                  <div className="label">Acciones distintas</div>
+                  <div className="label">Tipos de movimiento</div>
                   <div className="value">{k.uniqueActions}</div>
                 </div>
                 <div className={`kpi ${k.destructive ? 'kpi--danger' : ''}`}>
-                  <div className="label">Destructivas</div>
+                  <div className="label">Borrados y cancelaciones</div>
                   <div className="value">{k.destructive}</div>
                 </div>
               </div>
@@ -175,28 +168,28 @@ export default function AuditPage() {
               </div>
             ) : null}
 
-            <FilterBar meta={`${rows.length} de ${data?.logs?.length ?? 0} eventos`}>
+            <FilterBar meta={`${rows.length} de ${data?.logs?.length ?? 0} movimientos`}>
               <FieldSearch
                 value={q}
                 onChange={setQ}
                 placeholder="Buscar persona, acción o documento…"
-                label="Buscar acción o usuario"
+                label="Buscar acción o persona"
                 maxWidth={260}
               />
               <FieldSelect
                 value={resource}
                 onChange={setResource}
-                label="Filtrar por recurso"
+                label="Filtrar por área"
                 options={[
                   { value: '', label: 'Todo' },
                   { value: 'Event', label: 'Eventos' },
                   { value: 'ChecklistInstance', label: 'Formatos' },
                   { value: 'PurchaseOrder', label: 'Órdenes de compra' },
+                  { value: 'TaskAssignment', label: 'Tareas' },
                   { value: 'FinanceRun', label: 'Corridas' },
                   { value: 'EventFile', label: 'Archivos' },
                   { value: 'User', label: 'Personas' },
                   { value: 'PageContent', label: 'Sitio público' },
-                  { value: 'System', label: 'Sistema' },
                 ]}
               />
               <button className="btn ghost" type="button" disabled={loading} onClick={() => load()}>
@@ -217,13 +210,13 @@ export default function AuditPage() {
                   <EmptyState
                     title={
                       (data?.logs?.length ?? 0) === 0
-                        ? 'Sin eventos de auditoría'
+                        ? 'Sin movimientos todavía'
                         : 'Sin coincidencias en el filtro'
                     }
                     description={
                       (data?.logs?.length ?? 0) === 0
                         ? 'Cada movimiento del equipo se irá anotando aquí conforme trabajen.'
-                        : 'Cambia recurso o limpia la búsqueda.'
+                        : 'Cambia el área o limpia la búsqueda.'
                     }
                   >
                     {filterActive && (data?.logs?.length ?? 0) > 0 ? (
@@ -248,7 +241,6 @@ export default function AuditPage() {
                           <th>Quién</th>
                           <th>Qué hizo</th>
                           <th>Dónde</th>
-                          <th>Referencia</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -267,19 +259,8 @@ export default function AuditPage() {
                               <span className={isNotableAction(r.action) ? 'audit-notable' : ''}>
                                 {auditActionLabel(r.action)}
                               </span>
-                              {/*
-                                El identificador crudo se queda a la vista, en
-                                pequeño: cuando algo se discute en serio hace
-                                falta el dato exacto, no la traducción.
-                              */}
-                              {hasAuditActionLabel(r.action) ? (
-                                <div className="muted audit-raw">{r.action}</div>
-                              ) : null}
                             </td>
                             <td>{auditResourceLabel(r.resource)}</td>
-                            <td className="muted" style={{ fontSize: 11 }}>
-                              {r.resourceId || '—'}
-                            </td>
                           </tr>
                         ))}
                       </tbody>

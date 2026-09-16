@@ -11,7 +11,6 @@ import {
   FlashMessage,
   PageHeader,
 } from '@/components/ui/PageChrome';
-import { StatusBadge } from '@/components/ui/StatusBadge';
 import { api } from '@/lib/api';
 
 type JobRun = {
@@ -39,39 +38,32 @@ type OutboxRow = {
 };
 
 const KIND_LABEL: Record<string, string> = {
-  'digest.daily': 'Digest diario',
-  'ticketing.sync': 'Sync boletera',
-  'webhook.retry': 'Reintento webhook',
-  'automation.scan': 'Scan automatizaciones',
+  'digest.daily': 'Resumen diario',
+  'ticketing.sync': 'Sincronizar boletera',
+  'webhook.retry': 'Reintento de aviso',
+  'automation.scan': 'Revisión automática',
 };
 
-const STATUS_LABEL: Record<string, string> = {
-  done: 'Listo',
-  failed: 'Falló',
-  running: 'Corriendo',
-  pending: 'Pendiente',
-  sent: 'Enviado',
+/** Estado → texto y color. Mismo vocabulario para tareas y correos. */
+const STATUS: Record<string, { label: string; tone: string }> = {
+  done: { label: 'Listo', tone: 'ok' },
+  sent: { label: 'Enviado', tone: 'ok' },
+  running: { label: 'En curso', tone: 'warn' },
+  pending: { label: 'Pendiente', tone: 'warn' },
+  failed: { label: 'Falló', tone: 'danger' },
 };
 
-function jobStatusBadge(status: string) {
-  if (status === 'done') return <StatusBadge value="ACTIVE" kind="event" />;
-  if (status === 'failed') return <StatusBadge value="REJECTED" kind="po" />;
-  if (status === 'pending') return <StatusBadge value="PENDING" kind="po" />;
-  if (status === 'running') return <span className="badge warn">{STATUS_LABEL.running}</span>;
-  return <span className="badge">{STATUS_LABEL[status] || status}</span>;
+function statusBadge(status: string) {
+  const s = STATUS[status];
+  return <span className={`badge ${s?.tone || ''}`}>{s?.label || 'Sin estado'}</span>;
 }
 
-function outboxStatusBadge(status: string) {
-  if (status === 'sent') return <StatusBadge value="PAID" kind="po" />;
-  if (status === 'failed') return <StatusBadge value="REJECTED" kind="po" />;
-  if (status === 'pending') return <StatusBadge value="PENDING" kind="po" />;
-  return <span className="badge">{STATUS_LABEL[status] || status}</span>;
-}
+type Flash = { text: string; tone: 'success' | 'error' };
 
 export default function DigestsPage() {
   const [jobs, setJobs] = useState<JobRun[]>([]);
   const [outbox, setOutbox] = useState<OutboxRow[]>([]);
-  const [msg, setMsg] = useState('');
+  const [msg, setMsg] = useState<Flash | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [jobFilter, setJobFilter] = useState('all');
@@ -90,35 +82,36 @@ export default function DigestsPage() {
   useEffect(() => {
     setLoading(true);
     load()
-      .catch((e) => setMsg(e.message))
+      .catch((e) => setMsg({ text: e.message, tone: 'error' }))
       .finally(() => setLoading(false));
   }, []);
 
   async function runDaily() {
-    setMsg('');
+    setMsg(null);
     setBusy(true);
     try {
       await api('/digests/run-daily', { method: 'POST' });
-      setMsg('Digest diario ejecutado');
+      setMsg({ text: 'Resumen diario generado', tone: 'success' });
       await load();
     } catch (e) {
-      setMsg(e instanceof Error ? e.message : 'Error');
+      setMsg({ text: e instanceof Error ? e.message : 'No se pudo generar', tone: 'error' });
     } finally {
       setBusy(false);
     }
   }
 
   async function flush() {
-    setMsg('');
+    setMsg(null);
     setBusy(true);
     try {
-      const res = await api<{ sent: number; mode?: string }>('/digests/flush-outbox', {
-        method: 'POST',
+      const res = await api<{ sent: number }>('/digests/flush-outbox', { method: 'POST' });
+      setMsg({
+        text: res.sent === 1 ? '1 correo enviado' : `${res.sent} correos enviados`,
+        tone: 'success',
       });
-      setMsg(`Outbox flush · ${res.sent} enviados${res.mode ? ` (${res.mode})` : ''}`);
       await load();
     } catch (e) {
-      setMsg(e instanceof Error ? e.message : 'Error');
+      setMsg({ text: e instanceof Error ? e.message : 'No se pudieron enviar', tone: 'error' });
     } finally {
       setBusy(false);
     }
@@ -144,48 +137,43 @@ export default function DigestsPage() {
     return list;
   }, [outbox, outboxFilter, outboxQ]);
 
-  const msgVariant =
-    msg === 'Digest diario ejecutado' || msg.startsWith('Outbox flush') ? 'success' : 'error';
-
   return (
     <AppShell title="Resúmenes">
       <div className="stack page-workspace">
-        <PageHeader
-          description="Digest operativo diario por organización (riesgo, aging OC, firmas). Outbox de email con SMTP si hay SMTP_HOST; si no, modo log-only."
-        >
+        <PageHeader description="Cada mañana a las 8:00 se manda a dirección y gerencias un resumen de lo que necesita atención: eventos en riesgo, órdenes de compra atrasadas y firmas pendientes.">
           <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
             <button className="btn" type="button" disabled={busy} onClick={() => runDaily()}>
-              {busy ? 'Ejecutando…' : 'Ejecutar digest ahora'}
+              {busy ? 'Generando…' : 'Generar resumen ahora'}
             </button>
             <button className="btn ghost" type="button" disabled={busy} onClick={() => flush()}>
-              Flush outbox
+              Enviar correos pendientes
             </button>
           </div>
         </PageHeader>
         {msg ? (
-          <FlashMessage variant={msgVariant} onDismiss={() => setMsg('')}>
-            {msg}
+          <FlashMessage variant={msg.tone} onDismiss={() => setMsg(null)}>
+            {msg.text}
           </FlashMessage>
         ) : null}
 
         {loading ? (
           <>
             <LoadingKpis count={3} />
-            <LoadingBlock rows={4} label="Cargando jobs…" />
+            <LoadingBlock rows={4} label="Cargando resúmenes…" />
           </>
         ) : (
           <>
             <div className="grid-cards kpi-grid-dense">
               <div className="kpi">
-                <div className="label">Jobs recientes</div>
+                <div className="label">Ejecuciones recientes</div>
                 <div className="value">{jobs.length}</div>
               </div>
               <div className={`kpi ${failedJobs ? 'kpi--danger' : ''}`}>
-                <div className="label">Jobs fallidos</div>
+                <div className="label">Con error</div>
                 <div className="value">{failedJobs}</div>
               </div>
               <div className={`kpi ${pendingOut ? 'kpi--danger' : ''}`}>
-                <div className="label">Outbox pendiente/fallo</div>
+                <div className="label">Correos sin enviar</div>
                 <div className="value">{pendingOut}</div>
               </div>
             </div>
@@ -193,52 +181,49 @@ export default function DigestsPage() {
             <div className="dash-split">
               <div className="panel">
                 <div className="panel-head">
-                  <h2>Job runs · {jobs.length}</h2>
+                  <h2>Ejecuciones · {jobs.length}</h2>
                 </div>
                 <div className="panel-body">
                   {!jobs.length ? (
                     <EmptyState
-                      title="Sin jobs aún"
-                      description="Ejecuta el digest diario o espera el cron de las 8:00."
+                      title="Nada ejecutado todavía"
+                      description="Genera el resumen ahora o espera al de las 8:00."
                     />
                   ) : (
                     <>
-                      <FilterBar meta={`${filteredJobs.length} de ${jobs.length} jobs`}>
+                      <FilterBar meta={`${filteredJobs.length} de ${jobs.length}`}>
                         <FieldSelect
                           value={jobFilter}
                           onChange={setJobFilter}
-                          label="Filtrar jobs por estado"
+                          label="Filtrar por estado"
                           options={[
-                            { value: 'all', label: 'Todos' },
-                            { value: 'done', label: 'Listos' },
-                            { value: 'failed', label: 'Fallidos' },
-                            { value: 'running', label: 'Corriendo' },
+                            { value: 'all', label: 'Todas' },
+                            { value: 'done', label: 'Listas' },
+                            { value: 'failed', label: 'Con error' },
+                            { value: 'running', label: 'En curso' },
                             { value: 'pending', label: 'Pendientes' },
                           ]}
                         />
                       </FilterBar>
                       {!filteredJobs.length ? (
-                        <EmptyState
-                          title="Sin coincidencias"
-                          description="Cambia el filtro de estado."
-                        />
+                        <EmptyState title="Sin coincidencias" description="Cambia el filtro de estado." />
                       ) : (
                         <div className="table-wrap">
                           <table className="table table-sticky">
                             <thead>
                               <tr>
-                                <th>Tipo</th>
+                                <th>Qué</th>
                                 <th>Estado</th>
                                 <th className="num">Intentos</th>
-                                <th>Creado</th>
+                                <th>Cuándo</th>
                                 <th>Error</th>
                               </tr>
                             </thead>
                             <tbody>
                               {filteredJobs.map((j) => (
                                 <tr key={j.id}>
-                                  <td>{KIND_LABEL[j.kind] || j.kind}</td>
-                                  <td>{jobStatusBadge(j.status)}</td>
+                                  <td>{KIND_LABEL[j.kind] || 'Tarea del sistema'}</td>
+                                  <td>{statusBadge(j.status)}</td>
                                   <td className="num">{j.attempts}</td>
                                   <td className="muted">{new Date(j.createdAt).toLocaleString('es-MX')}</td>
                                   <td className="muted">{j.error || '—'}</td>
@@ -255,41 +240,38 @@ export default function DigestsPage() {
 
               <div className="panel">
                 <div className="panel-head">
-                  <h2>Outbox · {outbox.length}</h2>
+                  <h2>Correos · {outbox.length}</h2>
                 </div>
                 <div className="panel-body">
                   {!outbox.length ? (
                     <EmptyState
-                      title="Outbox vacío"
-                      description="Los digests generan filas de email aquí."
+                      title="Sin correos"
+                      description="Cada resumen deja aquí los correos que manda."
                     />
                   ) : (
                     <>
-                      <FilterBar meta={`${filteredOutbox.length} de ${outbox.length} mensajes`}>
+                      <FilterBar meta={`${filteredOutbox.length} de ${outbox.length}`}>
                         <FieldSearch
                           value={outboxQ}
                           onChange={setOutboxQ}
-                          placeholder="Email o asunto…"
-                          label="Buscar en outbox"
+                          placeholder="Correo o asunto…"
+                          label="Buscar correo"
                           maxWidth={240}
                         />
                         <FieldSelect
                           value={outboxFilter}
                           onChange={setOutboxFilter}
-                          label="Filtrar outbox por estado"
+                          label="Filtrar por estado"
                           options={[
                             { value: 'all', label: 'Todos' },
                             { value: 'pending', label: 'Pendientes' },
                             { value: 'sent', label: 'Enviados' },
-                            { value: 'failed', label: 'Fallidos' },
+                            { value: 'failed', label: 'Con error' },
                           ]}
                         />
                       </FilterBar>
                       {!filteredOutbox.length ? (
-                        <EmptyState
-                          title="Sin coincidencias"
-                          description="Ajusta búsqueda o filtro de estado."
-                        />
+                        <EmptyState title="Sin coincidencias" description="Ajusta la búsqueda o el filtro." />
                       ) : (
                         <div className="table-wrap">
                           <table className="table table-sticky">
@@ -306,7 +288,7 @@ export default function DigestsPage() {
                                 <tr key={o.id}>
                                   <td>{o.toAddr}</td>
                                   <td>{o.subject}</td>
-                                  <td>{outboxStatusBadge(o.status)}</td>
+                                  <td>{statusBadge(o.status)}</td>
                                   <td className="muted">
                                     {o.sentAt ? new Date(o.sentAt).toLocaleString('es-MX') : '—'}
                                   </td>

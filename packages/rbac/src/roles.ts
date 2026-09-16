@@ -20,16 +20,25 @@ export const ALL_ROLES = Object.values(ROLES);
 export type EntityKey = 'ARTA' | 'EXPLANADA';
 
 export const ROLE_LABELS: Record<RoleKey, string> = {
-  super_admin: 'Super Admin',
-  dir_general: 'Director General',
+  super_admin: 'Administración de plataforma',
+  dir_general: 'Dirección general',
   dir_adjunta: 'Dirección adjunta',
-  gerente_arta: 'Gerente General Arta',
-  dir_auditorio: 'Director Auditorio',
-  logistica: 'Logística y Producción',
-  convenios: 'Convenios y Patrocinios',
-  enlace_gobierno: 'Enlace Gobierno y Pagos',
-  solo_carpetas: 'Solo carpetas generales',
+  gerente_arta: 'Gerencia Arta',
+  dir_auditorio: 'Dirección Auditorio',
+  logistica: 'Logística y producción',
+  convenios: 'Convenios y patrocinios',
+  enlace_gobierno: 'Enlace gobierno y pagos',
+  solo_carpetas: 'Solo carpetas',
 };
+
+/** Nombre del rol para pantalla: una clave desconocida se lee como texto, nunca como `cosa_cosa`. */
+export function roleLabel(roleKey: string | null | undefined): string {
+  if (!roleKey) return '—';
+  const known = ROLE_LABELS[roleKey as RoleKey];
+  if (known) return known;
+  const plain = roleKey.replace(/[._-]+/g, ' ').trim();
+  return plain.charAt(0).toUpperCase() + plain.slice(1);
+}
 
 /** Texto corto para que dirección elija rol sin adivinar. */
 export const ROLE_HINTS: Record<RoleKey, string> = {

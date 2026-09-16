@@ -13,7 +13,6 @@ import {
   FormGrid,
   PageHeader,
 } from '@/components/ui/PageChrome';
-import { StatusBadge } from '@/components/ui/StatusBadge';
 import { api } from '@/lib/api';
 
 type Endpoint = {
@@ -36,19 +35,25 @@ type Delivery = {
   endpoint: { name: string; url: string };
 };
 
-const EVENT_OPTS = [
-  'automation.alert',
-  'event.risk',
-  'po.aging',
-  'checklist.signature_backlog',
-  'system.scan',
-];
+/** Avisos que el sistema sabe mandar, con el nombre que se ve en pantalla. */
+const EVENT_LABELS: Record<string, string> = {
+  'automation.alert': 'Alertas automáticas',
+  'event.risk': 'Eventos en riesgo',
+  'po.aging': 'Órdenes de compra atrasadas',
+  'checklist.signature_backlog': 'Firmas pendientes',
+  'system.scan': 'Revisión del sistema',
+};
+const EVENT_OPTS = Object.keys(EVENT_LABELS);
+
+const eventLabel = (ev: string) => EVENT_LABELS[ev] || 'Aviso del sistema';
+
+type Flash = { text: string; tone: 'success' | 'warn' | 'error' };
 
 export default function WebhooksPage() {
   const [endpoints, setEndpoints] = useState<Endpoint[]>([]);
   const [deliveries, setDeliveries] = useState<Delivery[]>([]);
   const [loading, setLoading] = useState(true);
-  const [msg, setMsg] = useState('');
+  const [msg, setMsg] = useState<Flash | null>(null);
   const [q, setQ] = useState('');
   const [deliveryQ, setDeliveryQ] = useState('');
   const [deliveryResult, setDeliveryResult] = useState<'all' | 'ok' | 'fail'>('all');
@@ -74,14 +79,14 @@ export default function WebhooksPage() {
 
   useEffect(() => {
     load().catch((e) => {
-      setMsg(e.message);
+      setMsg({ text: e.message, tone: 'error' });
       setLoading(false);
     });
   }, []);
 
   async function onCreate(e: FormEvent) {
     e.preventDefault();
-    setMsg('');
+    setMsg(null);
     try {
       const created = await api<Endpoint>('/webhooks', {
         method: 'POST',
@@ -89,28 +94,32 @@ export default function WebhooksPage() {
       });
       setMsg(
         created.secret
-          ? `Webhook creado. Guarda el secret: ${created.secret}`
-          : 'Webhook creado',
+          ? {
+              text: `Conexión creada. Guarda esta clave, no se vuelve a mostrar: ${created.secret}`,
+              tone: 'warn',
+            }
+          : { text: 'Conexión creada', tone: 'success' },
       );
       setForm({ name: '', url: '', events: ['automation.alert'] });
       await load();
     } catch (err) {
-      setMsg(err instanceof Error ? err.message : 'Error');
+      setMsg({ text: err instanceof Error ? err.message : 'No se pudo crear', tone: 'error' });
     }
   }
 
   async function testDispatch() {
-    const res = await api<{ delivered: number }>('/webhooks/test', { method: 'POST' });
-    setMsg(`Test dispatch · entregados: ${res.delivered}`);
-    await load();
+    try {
+      const res = await api<{ delivered: number }>('/webhooks/test', { method: 'POST' });
+      setMsg({
+        text:
+          res.delivered === 1 ? 'Prueba enviada a 1 conexión' : `Prueba enviada a ${res.delivered} conexiones`,
+        tone: 'success',
+      });
+      await load();
+    } catch (err) {
+      setMsg({ text: err instanceof Error ? err.message : 'No se pudo enviar la prueba', tone: 'error' });
+    }
   }
-
-  const msgVariant =
-    msg.startsWith('Webhook creado') || msg.startsWith('Test dispatch')
-      ? msg.includes('secret')
-        ? 'warn'
-        : 'success'
-      : 'error';
 
   const filteredEndpoints = useMemo(() => {
     if (!q.trim()) return endpoints;
@@ -119,7 +128,7 @@ export default function WebhooksPage() {
       (ep) =>
         ep.name.toLowerCase().includes(n) ||
         ep.url.toLowerCase().includes(n) ||
-        ep.events.some((ev) => ev.toLowerCase().includes(n)),
+        ep.events.some((ev) => eventLabel(ev).toLowerCase().includes(n)),
     );
   }, [endpoints, q]);
 
@@ -131,7 +140,7 @@ export default function WebhooksPage() {
       const n = deliveryQ.toLowerCase();
       list = list.filter(
         (d) =>
-          d.event.toLowerCase().includes(n) ||
+          eventLabel(d.event).toLowerCase().includes(n) ||
           d.endpoint.name.toLowerCase().includes(n) ||
           (d.error || '').toLowerCase().includes(n),
       );
@@ -142,30 +151,28 @@ export default function WebhooksPage() {
   return (
     <AppShell title="Webhooks">
       <div className="stack page-workspace">
-        <PageHeader
-          description="Endpoints firmados (HMAC SHA-256) para alertas de riesgo, aging de OC y backlog de firmas. El cron horario dispara eventos cuando hay señales."
-        >
+        <PageHeader description="Avisa a otros sistemas cuando algo necesita atención: eventos en riesgo, órdenes de compra atrasadas o firmas pendientes. Se revisa cada hora y cada aviso va firmado.">
           <button className="btn ghost" type="button" onClick={() => testDispatch()}>
-            Probar dispatch
+            Enviar prueba
           </button>
         </PageHeader>
         {msg ? (
-          <FlashMessage variant={msgVariant} onDismiss={() => setMsg('')}>
-            {msg}
+          <FlashMessage variant={msg.tone} onDismiss={() => setMsg(null)}>
+            {msg.text}
           </FlashMessage>
         ) : null}
 
         {loading && !endpoints.length && !deliveries.length ? (
           <>
             <LoadingKpis count={2} />
-            <LoadingBlock rows={4} label="Cargando webhooks…" />
+            <LoadingBlock rows={4} label="Cargando conexiones…" />
           </>
         ) : (
           <>
             <div className="dash-split">
               <div className="panel">
                 <div className="panel-head">
-                  <h2>Nuevo endpoint</h2>
+                  <h2>Nueva conexión</h2>
                 </div>
                 <div className="panel-body">
                   <form className="form" onSubmit={onCreate}>
@@ -179,7 +186,7 @@ export default function WebhooksPage() {
                         />
                       </label>
                       <label>
-                        URL
+                        Dirección
                         <input
                           required
                           type="url"
@@ -191,7 +198,7 @@ export default function WebhooksPage() {
                     </FormGrid>
                     <div>
                       <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>
-                        Eventos
+                        Avisos
                       </div>
                       <div className="row" style={{ flexWrap: 'wrap', gap: 8 }}>
                         {EVENT_OPTS.map((ev) => (
@@ -206,7 +213,7 @@ export default function WebhooksPage() {
                                   : f.events.filter((x) => x !== ev),
                               }))
                             }
-                            label={ev}
+                            label={eventLabel(ev)}
                           />
                         ))}
                       </div>
@@ -220,56 +227,52 @@ export default function WebhooksPage() {
 
               <div className="panel">
                 <div className="panel-head">
-                  <h2>Endpoints · {endpoints.length}</h2>
+                  <h2>Conexiones · {endpoints.length}</h2>
                 </div>
                 <div className="panel-body">
                   {!endpoints.length ? (
                     <EmptyState
-                      title="Sin webhooks"
-                      description="Crea un endpoint HMAC para recibir alertas de riesgo, aging OC y firmas."
+                      title="Sin conexiones"
+                      description="Crea una para recibir los avisos en otro sistema."
                     />
                   ) : (
                     <>
-                      <FilterBar meta={`${filteredEndpoints.length} de ${endpoints.length} endpoints`}>
+                      <FilterBar meta={`${filteredEndpoints.length} de ${endpoints.length}`}>
                         <FieldSearch
                           value={q}
                           onChange={setQ}
-                          placeholder="Nombre, URL o evento…"
-                          label="Buscar endpoint"
+                          placeholder="Nombre, dirección o aviso…"
+                          label="Buscar conexión"
                           maxWidth={240}
                         />
                       </FilterBar>
                       {!filteredEndpoints.length ? (
-                        <EmptyState
-                          title="Sin coincidencias"
-                          description="Prueba otro término de búsqueda."
-                        />
+                        <EmptyState title="Sin coincidencias" description="Prueba con otra palabra." />
                       ) : (
                         <div className="table-wrap">
                           <table className="table table-sticky">
                             <thead>
                               <tr>
                                 <th>Nombre</th>
-                                <th>URL</th>
-                                <th>Eventos</th>
-                                <th className="num">Entregas</th>
+                                <th>Dirección</th>
+                                <th>Avisos</th>
+                                <th className="num">Envíos</th>
                               </tr>
                             </thead>
                             <tbody>
                               {filteredEndpoints.map((ep) => (
                                 <tr key={ep.id}>
                                   <td>
-                                    <strong>{ep.name}</strong>
-                                    <StatusBadge
-                                      value={ep.active ? 'ACTIVE' : 'CANCELLED'}
-                                      kind="event"
-                                    />
+                                    <strong>{ep.name}</strong>{' '}
+                                    <span className={`badge ${ep.active ? 'ok' : ''}`}>
+                                      {ep.active ? 'Activa' : 'Pausada'}
+                                    </span>
                                   </td>
                                   <td className="muted" style={{ fontSize: 12 }}>
                                     {ep.url}
                                   </td>
-                                  <td className="muted" style={{ fontSize: 11 }}>
-                                    {ep.events.join(', ')}
+                                  <td className="muted" style={{ fontSize: 12 }}>
+                                    {ep.events.map(eventLabel).join(' · ')}
                                   </td>
                                   <td className="num">{ep._count?.deliveries ?? 0}</td>
                                 </tr>
@@ -286,22 +289,22 @@ export default function WebhooksPage() {
 
             <div className="panel">
               <div className="panel-head">
-                <h2>Entregas recientes · {filteredDeliveries.length}</h2>
+                <h2>Envíos recientes · {filteredDeliveries.length}</h2>
               </div>
               <div className="panel-body">
                 {!deliveries.length ? (
                   <EmptyState
-                    title="Sin entregas aún"
-                    description="Usa “Probar dispatch” o espera el cron horario cuando haya señales."
+                    title="Sin envíos todavía"
+                    description="Usa «Enviar prueba» o espera la revisión de cada hora."
                   />
                 ) : (
                   <>
-                    <FilterBar meta={`${filteredDeliveries.length} de ${deliveries.length} entregas`}>
+                    <FilterBar meta={`${filteredDeliveries.length} de ${deliveries.length}`}>
                       <FieldSearch
                         value={deliveryQ}
                         onChange={setDeliveryQ}
-                        placeholder="Evento, endpoint o error…"
-                        label="Buscar entrega"
+                        placeholder="Aviso, conexión o error…"
+                        label="Buscar envío"
                         maxWidth={240}
                       />
                       <FieldSelect
@@ -310,27 +313,24 @@ export default function WebhooksPage() {
                         label="Filtrar por resultado"
                         options={[
                           { value: 'all', label: 'Todos' },
-                          { value: 'ok', label: 'Exitosas' },
-                          { value: 'fail', label: 'Fallidas' },
+                          { value: 'ok', label: 'Entregados' },
+                          { value: 'fail', label: 'Fallidos' },
                         ]}
                       />
                       <button className="btn ghost" type="button" disabled={loading} onClick={() => load()}>
-                        {loading ? 'Refrescando…' : 'Refrescar'}
+                        {loading ? 'Actualizando…' : 'Actualizar'}
                       </button>
                     </FilterBar>
                     {!filteredDeliveries.length ? (
-                      <EmptyState
-                        title="Sin coincidencias"
-                        description="Ajusta búsqueda o filtro de resultado."
-                      />
+                      <EmptyState title="Sin coincidencias" description="Ajusta la búsqueda o el filtro." />
                     ) : (
                       <div className="table-wrap">
                         <table className="table table-sticky">
                           <thead>
                             <tr>
                               <th>Cuándo</th>
-                              <th>Endpoint</th>
-                              <th>Evento</th>
+                              <th>Conexión</th>
+                              <th>Aviso</th>
                               <th>Resultado</th>
                             </tr>
                           </thead>
@@ -341,18 +341,20 @@ export default function WebhooksPage() {
                                   {new Date(d.createdAt).toLocaleString('es-MX')}
                                 </td>
                                 <td>{d.endpoint.name}</td>
-                                <td>
-                                  <code>{d.event}</code>
-                                </td>
+                                <td>{eventLabel(d.event)}</td>
                                 <td>
                                   {d.success ? (
-                                    <span className="badge ok">OK {d.statusCode || ''}</span>
+                                    <span className="badge ok">Entregado</span>
                                   ) : (
-                                    <StatusBadge value="REJECTED" kind="po" />
+                                    <>
+                                      <span className="badge danger">No llegó</span>
+                                      {d.error ? (
+                                        <div className="muted" style={{ fontSize: 11 }}>
+                                          {d.error}
+                                        </div>
+                                      ) : null}
+                                    </>
                                   )}
-                                  {!d.success && d.error ? (
-                                    <div className="muted" style={{ fontSize: 11 }}>{d.error}</div>
-                                  ) : null}
                                 </td>
                               </tr>
                             ))}
