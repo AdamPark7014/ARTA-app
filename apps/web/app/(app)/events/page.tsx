@@ -2,56 +2,42 @@
 
 import { Suspense, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { AppShell } from '@/components/app-shell/AppShell';
-import { EmptyState } from '@/components/ui/EmptyState';
+import { EmptyLite, Pill, SectionHead, Seg } from '@/components/ui/Lite';
 import { LoadingBlock } from '@/components/ui/LoadingBlock';
-import {
-  FieldCheck,
-  FieldSearch,
-  FieldSelect,
-  FilterBar,
-  PageHeader,
-} from '@/components/ui/PageChrome';
-import { StatusBadge, pipelineStatusLabel } from '@/components/ui/StatusBadge';
+import { FieldSearch } from '@/components/ui/PageChrome';
 import { api } from '@/lib/api';
+import { canAccessEventOps, userHasPermission } from '@/lib/access-matrix';
 import { useUser } from '@/lib/user-context';
-import { userHasPermission } from '@/lib/access-matrix';
 
 type EventRow = {
   id: string;
   name: string;
   artist?: string | null;
   venue?: string | null;
+  city?: string | null;
   status: string;
-  campaignType: string;
   startsAt?: string | null;
+  endsAt?: string | null;
+  schedule?: string | null;
   updatedAt: string;
-  _count?: { checklists: number; purchaseOrders: number; tasks?: number };
 };
 
-type HealthItem = {
-  id: string;
-  name: string;
-  artist?: string | null;
-  status: string;
-  startsAt?: string | null;
-  avgProgress: number;
-  risk: 'critical' | 'watch' | 'healthy';
-  daysToShow: number | null;
-};
-
-type Overview = {
-  eventHealth: HealthItem[];
-  kpis: { eventsAtRisk: number; avgOpsProgress: number };
-};
+type HealthItem = { id: string; avgProgress: number; risk: 'critical' | 'watch' | 'healthy' };
 
 type Scope = 'active' | 'past' | 'all';
 
 const SCOPE_TITLE: Record<Scope, string> = {
   active: 'Eventos actuales',
   past: 'Eventos pasados',
-  all: 'Pipeline de eventos',
+  all: 'Todos los eventos',
+};
+
+const STATUS: Record<string, { label: string; tone: string }> = {
+  DRAFT: { label: 'Borrador', tone: 'draft' },
+  CLOSED: { label: 'Cerrado', tone: 'review' },
+  CANCELLED: { label: 'Cancelado', tone: 'danger' },
 };
 
 function startOfToday() {
@@ -67,7 +53,18 @@ function startOfToday() {
 function isPastEvent(e: EventRow, today: number) {
   if (e.status === 'CLOSED' || e.status === 'CANCELLED') return true;
   if (!e.startsAt) return false;
-  return new Date(e.startsAt).getTime() < today;
+  return new Date(e.endsAt || e.startsAt).getTime() < today;
+}
+
+function whenLabel(e: EventRow) {
+  if (!e.startsAt) return '';
+  const start = new Date(e.startsAt);
+  start.setHours(0, 0, 0, 0);
+  const days = Math.round((start.getTime() - startOfToday()) / 86400000);
+  if (days === 0) return 'Hoy';
+  if (days === 1) return 'Mañana';
+  if (days > 1 && days <= 60) return `En ${days} días`;
+  return start.toLocaleDateString('es-MX', { year: 'numeric', month: 'long' });
 }
 
 export default function EventsPage() {
@@ -76,7 +73,7 @@ export default function EventsPage() {
       fallback={
         <AppShell title="Eventos">
           <div className="stack page-workspace">
-            <LoadingBlock rows={5} label="Cargando pipeline…" />
+            <LoadingBlock rows={5} label="Cargando eventos…" />
           </div>
         </AppShell>
       }
@@ -86,295 +83,148 @@ export default function EventsPage() {
   );
 }
 
+/**
+ * Lista de eventos: una tarjeta por show con su fecha, lugar y avance.
+ *
+ * Antes la misma lista salía tres veces —tablero por estado, tarjetas y tabla—
+ * con filtros encima; para encontrar un show bastaba con verlo una vez.
+ */
 function EventsPageInner() {
   const { entity, user } = useUser();
+  const router = useRouter();
   const searchParams = useSearchParams();
   const scopeParam = searchParams.get('scope');
-  const scope: Scope =
-    scopeParam === 'past' || scopeParam === 'all' || scopeParam === 'active'
-      ? scopeParam
-      : 'active';
+  const scope: Scope = scopeParam === 'past' || scopeParam === 'all' ? scopeParam : 'active';
   const [events, setEvents] = useState<EventRow[]>([]);
-  const [health, setHealth] = useState<HealthItem[]>([]);
+  const [health, setHealth] = useState<Map<string, HealthItem>>(new Map());
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState('');
-  const [status, setStatus] = useState('all');
-  const [riskOnly, setRiskOnly] = useState(false);
 
-  const canCreate = user
-    ? userHasPermission(user.roleKey, user.permissions, ['event.create', 'everything'])
-    : false;
+  const canCreate =
+    !!user &&
+    canAccessEventOps(user.roleKey, entity) &&
+    userHasPermission(user.roleKey, user.permissions, ['event.create', 'everything']);
 
   useEffect(() => {
     setLoading(true);
     Promise.all([
       api<EventRow[]>(`/events?entity=${entity}&scope=${scope}`),
-      api<Overview>(`/analytics/overview?entity=${entity}`).catch(() => null),
+      api<{ eventHealth: HealthItem[] }>(`/analytics/overview?entity=${entity}`).catch(() => null),
     ])
       .then(([ev, o]) => {
         setEvents(ev);
-        setHealth(o?.eventHealth || []);
+        setHealth(new Map((o?.eventHealth || []).map((h) => [h.id, h])));
       })
       .catch(console.error)
       .finally(() => setLoading(false));
   }, [entity, scope]);
 
-  const healthMap = useMemo(() => new Map(health.map((h) => [h.id, h])), [health]);
-
-  /** Universo de la vista: actuales, pasados o todo. */
-  const scoped = useMemo(() => {
-    if (scope === 'all') return events;
+  const list = useMemo(() => {
     const today = startOfToday();
-    return events.filter((e) => isPastEvent(e, today) === (scope === 'past'));
-  }, [events, scope]);
-
-  const filtered = useMemo(() => {
-    let list = scoped;
-    if (status !== 'all') list = list.filter((e) => e.status === status);
-    if (riskOnly) {
-      list = list.filter((e) => {
-        const h = healthMap.get(e.id);
-        return h && h.risk !== 'healthy';
-      });
-    }
-    if (q.trim()) {
-      const n = q.toLowerCase();
-      list = list.filter(
+    const n = q.trim().toLowerCase();
+    return events
+      .filter((e) => scope === 'all' || isPastEvent(e, today) === (scope === 'past'))
+      .filter(
         (e) =>
+          !n ||
           e.name.toLowerCase().includes(n) ||
           (e.artist || '').toLowerCase().includes(n) ||
           (e.venue || '').toLowerCase().includes(n),
-      );
-    }
-    return list;
-  }, [scoped, status, riskOnly, q, healthMap]);
-
-  const pipeline = useMemo(() => {
-    const groups: Record<string, EventRow[]> = {
-      DRAFT: [],
-      ACTIVE: [],
-      CLOSED: [],
-      CANCELLED: [],
-    };
-    for (const e of scoped) {
-      if (groups[e.status]) groups[e.status].push(e);
-    }
-    return groups;
-  }, [scoped]);
-
-  const scopedIds = useMemo(() => new Set(scoped.map((e) => e.id)), [scoped]);
-  const atRiskCount = health.filter((h) => h.risk !== 'healthy' && scopedIds.has(h.id)).length;
-
-  const description =
-    scope === 'past'
-      ? `Histórico: shows cerrados, cancelados o con fecha ya pasada. ${scoped.length} en el archivo.`
-      : scope === 'all'
-        ? `Portafolio completo: pipeline, salud de checklists y hub del show. ${atRiskCount} en riesgo.`
-        : `Shows en curso y por venir. Pipeline, salud de checklists y hub del show. ${atRiskCount} en riesgo.`;
+      )
+      .sort((a, b) => {
+        const ta = a.startsAt ? new Date(a.startsAt).getTime() : Number.MAX_SAFE_INTEGER;
+        const tb = b.startsAt ? new Date(b.startsAt).getTime() : Number.MAX_SAFE_INTEGER;
+        return scope === 'past' ? tb - ta : ta - tb;
+      });
+  }, [events, scope, q]);
 
   return (
     <AppShell title={SCOPE_TITLE[scope]}>
-      <div className="stack page-workspace">
-        <PageHeader description={description}>
-          <div className="row row--tight">
-            {(['active', 'past', 'all'] as const).map((s) => (
-              <Link
-                key={s}
-                href={s === 'active' ? '/events' : `/events?scope=${s}`}
-                className={`btn btn-sm ${scope === s ? '' : 'ghost'}`}
-              >
-                {s === 'active' ? 'Actuales' : s === 'past' ? 'Pasados' : 'Todos'}
-              </Link>
-            ))}
-          </div>
-        </PageHeader>
+      <div className="sx-stack page-workspace">
+        <SectionHead
+          title={SCOPE_TITLE[scope]}
+          sub={loading ? undefined : `${list.length} ${list.length === 1 ? 'evento' : 'eventos'} · ${entity === 'ARTA' ? 'Arta' : 'Auditorio'}`}
+        >
+          <FieldSearch value={q} onChange={setQ} placeholder="Buscar evento o venue…" label="Buscar evento" maxWidth={240} />
+          {canCreate ? (
+            <Link className="btn btn-sm" href="/events/new">
+              + Crear evento
+            </Link>
+          ) : null}
+        </SectionHead>
+
+        <Seg
+          label="Qué eventos ver"
+          value={scope}
+          onChange={(next) => router.push(next === 'active' ? '/events' : `/events?scope=${next}`)}
+          options={[
+            { key: 'active', label: 'Actuales' },
+            { key: 'past', label: 'Pasados' },
+            { key: 'all', label: 'Todos' },
+          ]}
+        />
 
         {loading ? (
-          <LoadingBlock rows={5} label="Cargando pipeline…" />
+          <LoadingBlock rows={4} label="Cargando eventos…" />
+        ) : !list.length ? (
+          <div className="surface">
+            <EmptyLite
+              icon="◷"
+              title={q ? 'Nada con esa búsqueda' : scope === 'past' ? 'Sin eventos pasados' : 'Sin eventos por ahora'}
+            >
+              {canCreate && scope !== 'past' && !q ? (
+                <Link className="btn btn-sm" href="/events/new">
+                  Crear evento
+                </Link>
+              ) : null}
+            </EmptyLite>
+          </div>
         ) : (
-          <>
-            <div className="events-pipeline">
-              {(['DRAFT', 'ACTIVE', 'CLOSED', 'CANCELLED'] as const).map((st) => (
-                <div key={st} className="events-pipeline__col">
-                  <h3>
-                    {pipelineStatusLabel(st)} · {pipeline[st].length}
-                  </h3>
-                  {pipeline[st].slice(0, 4).map((e) => {
-                    const h = healthMap.get(e.id);
-                    return (
-                      <Link key={e.id} className="events-pipeline__item" href={`/events/${e.id}`}>
-                        <strong>{e.name}</strong>
-                        <div className="muted kpi-sub">
-                          {e.artist || '—'}
-                          {h ? ` · ${h.avgProgress}%` : ''}
-                        </div>
-                        {h && h.risk !== 'healthy' ? (
-                          <StatusBadge value={h.risk} kind="risk" />
-                        ) : null}
-                      </Link>
-                    );
-                  })}
-                  {!pipeline[st].length ? (
-                    <p className="pipeline-empty muted">Sin eventos</p>
-                  ) : null}
-                  {pipeline[st].length > 4 ? (
-                    <button
-                      type="button"
-                      className="btn ghost btn-sm pipeline-more"
-                      onClick={() => setStatus(st)}
-                    >
-                      Ver todos ({pipeline[st].length})
-                    </button>
-                  ) : null}
-                </div>
-              ))}
-            </div>
-
-            <FilterBar>
-              <FieldSearch
-                value={q}
-                onChange={setQ}
-                placeholder="Buscar nombre, artista, venue…"
-                label="Buscar nombre, artista o venue"
-                maxWidth={300}
-              />
-              <FieldSelect
-                value={status}
-                onChange={setStatus}
-                label="Filtrar por estado"
-                options={[
-                  { value: 'all', label: 'Todos los estados' },
-                  { value: 'DRAFT', label: 'Borrador' },
-                  { value: 'ACTIVE', label: 'Activo' },
-                  { value: 'CLOSED', label: 'Cerrado' },
-                  { value: 'CANCELLED', label: 'Cancelado' },
-                ]}
-              />
-              <FieldCheck checked={riskOnly} onChange={setRiskOnly} label="Solo en riesgo" />
-            </FilterBar>
-
-            <div className="panel">
-              <div className="panel-head">
-                <h2>
-                  Listado · {entity === 'ARTA' ? 'Arta Producciones' : 'Auditorio Arema Explanada'} ·{' '}
-                  {filtered.length}
-                </h2>
-              </div>
-              <div className="panel-body">
-                <div className="events-card-list">
-                  {filtered.map((e) => {
-                    const h = healthMap.get(e.id);
-                    return (
-                      <Link key={e.id} className="events-card" href={`/events/${e.id}`}>
-                        <div className="events-card__head">
-                          <strong>{e.name}</strong>
-                          <StatusBadge value={e.status} kind="event" />
-                        </div>
-                        <p className="muted kpi-sub">
-                          {e.artist || '—'}
-                          {e.venue ? ` · ${e.venue}` : ''}
-                        </p>
-                        <div className="events-card__meta">
-                          <span>
-                            {e.startsAt
-                              ? new Date(e.startsAt).toLocaleDateString('es-MX')
-                              : 'Sin fecha'}
-                          </span>
-                          {h ? (
-                            <>
-                              <span>{h.avgProgress}% ops</span>
-                              <StatusBadge value={h.risk} kind="risk" />
-                            </>
-                          ) : null}
-                        </div>
-                      </Link>
-                    );
-                  })}
-                  {!filtered.length ? (
-                    <EmptyState
-                      title="Sin eventos para este filtro"
-                      description="Ajusta búsqueda o crea un show nuevo."
-                      actionHref={canCreate ? '/events/new' : undefined}
-                      actionLabel={canCreate ? 'Nuevo evento' : undefined}
-                    />
-                  ) : null}
-                </div>
-                <div className="table-wrap events-table-desktop">
-                  <table className="table table-sticky">
-                    <thead>
-                      <tr>
-                        <th>Nombre</th>
-                        <th>Artista</th>
-                        <th>Venue</th>
-                        <th>Show</th>
-                        <th>Salud ops</th>
-                        <th>Riesgo</th>
-                        <th>Status</th>
-                        <th>Carga</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filtered.map((e) => {
-                        const h = healthMap.get(e.id);
-                        return (
-                          <tr key={e.id}>
-                            <td>
-                              <Link href={`/events/${e.id}`}>
-                                <strong>{e.name}</strong>
-                              </Link>
-                            </td>
-                            <td>{e.artist || '—'}</td>
-                            <td>{e.venue || '—'}</td>
-                            <td className="muted">
-                              {e.startsAt ? new Date(e.startsAt).toLocaleDateString('es-MX') : '—'}
-                              {h?.daysToShow != null
-                                ? ` · ${h.daysToShow < 0 ? 'pasado' : `${h.daysToShow}d`}`
-                                : ''}
-                            </td>
-                            <td>
-                              {h ? (
-                                <div className="progress-cell">
-                                  <div className="progress">
-                                    <span style={{ width: `${h.avgProgress}%` }} />
-                                  </div>
-                                  <span className="muted kpi-sub">{h.avgProgress}%</span>
-                                </div>
-                              ) : (
-                                '—'
-                              )}
-                            </td>
-                            <td>{h ? <StatusBadge value={h.risk} kind="risk" /> : '—'}</td>
-                            <td>
-                              <StatusBadge value={e.status} kind="event" />
-                            </td>
-                            <td className="muted kpi-sub">
-                              {e._count
-                                ? `${e._count.checklists} chk · ${e._count.purchaseOrders} OC${
-                                    e._count.tasks != null ? ` · ${e._count.tasks} tasks` : ''
-                                  }`
-                                : '—'}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                      {!filtered.length ? (
-                        <tr>
-                          <td colSpan={8}>
-                            <EmptyState
-                              title="Sin eventos para este filtro"
-                              description="Ajusta búsqueda o crea un show nuevo."
-                              actionHref={canCreate ? '/events/new' : undefined}
-                              actionLabel={canCreate ? 'Nuevo evento' : undefined}
-                            />
-                          </td>
-                        </tr>
-                      ) : null}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-          </>
+          <div className="ev-grid">
+            {list.map((e) => {
+              const h = health.get(e.id);
+              const d = e.startsAt ? new Date(e.startsAt) : null;
+              const status = STATUS[e.status];
+              const place = [e.venue, e.city].filter(Boolean).join(', ');
+              return (
+                <Link key={e.id} className="ev-card" href={`/events/${e.id}`}>
+                  <span className="date-chip" aria-hidden>
+                    {d ? (
+                      <>
+                        <span className="date-chip__day">{d.getDate()}</span>
+                        <span className="date-chip__month">
+                          {d.toLocaleDateString('es-MX', { month: 'short' }).replace('.', '')}
+                        </span>
+                      </>
+                    ) : (
+                      <span className="date-chip__month">—</span>
+                    )}
+                  </span>
+                  <span className="ev-card__body">
+                    <span className="ev-card__name">{e.name}</span>
+                    <span className="ev-card__meta">{[whenLabel(e), place].filter(Boolean).join(' · ') || 'Sin fecha'}</span>
+                    {h && scope !== 'past' ? (
+                      <span className="ev-card__progress">
+                        <span className="meter">
+                          <span style={{ width: `${h.avgProgress}%` }} />
+                        </span>
+                        <span className="t-small t-muted">{h.avgProgress}%</span>
+                      </span>
+                    ) : null}
+                  </span>
+                  <span className="ev-card__flag">
+                    {status ? (
+                      <Pill tone={status.tone}>{status.label}</Pill>
+                    ) : h?.risk === 'critical' ? (
+                      <Pill tone="danger">Urgente</Pill>
+                    ) : h?.risk === 'watch' ? (
+                      <Pill tone="review">Revisar</Pill>
+                    ) : null}
+                  </span>
+                </Link>
+              );
+            })}
+          </div>
         )}
       </div>
     </AppShell>

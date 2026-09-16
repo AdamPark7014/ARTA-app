@@ -1,7 +1,7 @@
 # RELEVO
 
 - **Último turno:** claude-code
-- **Fecha:** 2026-09-15
+- **Fecha:** 2026-09-16
 - **Rama:** main
 
 ## Hecho en este turno
@@ -104,6 +104,35 @@ Mandato de Adam: simple, elegante y visualmente atractivo; nada de texto de más
 - `docker-compose.yml`: `TZ=America/Mexico_City` en api y web.
 - Pruebas nuevas: `campaigns.controller.spec.ts` (candado, fusión de convenios, avisos,
   quién autoriza).
+
+### Tercera vuelta: menos fricción visual (15-09, tarde)
+Adam: «aún siento mucha fricción visual en algunos módulos, medio sucios o poco intuitivos».
+- **Inicio** (`dashboard/page.tsx`): saludo + 4 mosaicos clicables (próximos 14 días,
+  por pagar, tareas, formatos por autorizar) + «Próximos shows» y «Requiere atención».
+  Fuera: portfolio neto, gráficas, márgenes, cuellos de botella y bitácora (siguen en sus
+  módulos).
+- **Eventos** (`events/page.tsx`): una tarjeta por show (fecha apilada, lugar, avance,
+  píldora solo si hay algo que atender) + Seg Actuales/Pasados/Todos + buscar + Crear.
+  Fuera el tablero por estado y la tabla duplicada.
+- **Carpetas** (`folders/page.tsx`): tarjetas de carpeta; al abrir, archivos como
+  FileRow con Ver/Editar/Abrir. El alta de carpeta ya no está siempre desplegada.
+- **Calendario** (`calendar/page.tsx`): el mismo `MonthCalendar` de Campañas.
+- **Marco** (`AppShell`): pie del menú = persona + iconos (esconder menú, salir); fuera el
+  texto de alcance del rol, el badge de entidad de la barra y la pista del auto-ocultar.
+- **Formatos** (`EventChecklistsPanel`): lista con filtro (Todos / Por completar / En
+  revisión / Listos) y, al abrir, cabecera compacta + secciones plegables con casillas
+  grandes. Firmas, PDF, adjuntos e historial ya no son cuatro bloques siempre abiertos:
+  salen de «Más» como cajón. Estilos en `styles/_hub.scss` (los dejó un agente que se
+  colgó antes de escribir el panel; el selector `ChecklistPicker` también es suyo).
+- **Documentos** (`EventFilesPanel`): una lista con filtro por sección; el editor o la
+  vista previa se abren bajo el archivo, no en paneles apilados arriba. Fuera las cuatro
+  tarjetas de creación con microcopy: subir, importar Word y «+ Documento» en la cabecera.
+- **Tareas** (`EventTasksPanel` + `styles/_tasks.scss`): una línea para pedir algo,
+  secciones Abiertas / Por aprobar / Hechas, y la fila se abre para responsable, fecha,
+  entrega, aprobación e historial.
+- `styles/_home.scss`: estilos de lo anterior + capa de limpieza para pantallas viejas
+  (oculta pistas largas, pasos numerados y «Qué pasa después»; badges sin mayúsculas;
+  paneles con el aire de `.surface`).
 
 ### Migración
 - `20260915090000_junta_0911` (enum CHEQUE, columnas nuevas, chat, backfill de campañas

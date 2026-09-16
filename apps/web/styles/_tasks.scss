@@ -1,0 +1,200 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   Tareas: una línea para pedir algo y filas que se abren.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.task-add {
+  padding: 0.7rem 0.8rem;
+}
+
+.task-add__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.shell .task-add input.task-add__title {
+  flex: 1 1 16rem;
+  min-width: 12rem;
+  border-color: transparent;
+  background: transparent !important;
+  font-size: 0.98rem;
+}
+
+.shell .task-add input.task-add__title:focus {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--line-strong));
+  background: var(--bg-soft) !important;
+}
+
+.shell .task-add select.task-add__who {
+  flex: 0 1 11rem;
+  width: auto;
+  min-width: 9rem;
+  font-size: 0.85rem;
+}
+
+.shell .task-add input.task-add__due {
+  flex: 0 0 auto;
+  width: 9.5rem;
+  font-size: 0.85rem;
+  color-scheme: dark;
+}
+
+.task-add__more {
+  margin-top: 0.7rem;
+  padding-top: 0.7rem;
+  border-top: 1px solid var(--line);
+}
+
+/* ── Lista ──────────────────────────────────────────────────────────────── */
+
+.task-list2 {
+  display: grid;
+  gap: 0.4rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.task2 {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--bg-elev);
+  transition: border-color 0.15s ease;
+}
+
+.task2.is-open {
+  border-color: color-mix(in srgb, var(--accent) 38%, var(--line));
+}
+
+.task2__row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.7rem 0.9rem;
+}
+
+.task2__check {
+  flex: 0 0 auto;
+  width: 1.2rem;
+  height: 1.2rem;
+  padding: 0;
+  border: 1.5px solid var(--line-strong);
+  border-radius: 50%;
+  background: transparent;
+  cursor: pointer;
+  transition: border-color 0.12s ease, background 0.12s ease;
+}
+
+.task2__check:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+.task2__check.is-done {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+.task2__check:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.task2__main {
+  display: grid;
+  flex: 1;
+  gap: 0.15rem;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.task2__title {
+  overflow: hidden;
+  font-size: 0.92rem;
+  font-weight: 550;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.task2.is-done .task2__title {
+  color: var(--muted);
+  text-decoration: line-through;
+}
+
+.task2__meta {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.task2__due {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.task2__due.is-late {
+  color: var(--danger);
+  font-weight: 650;
+}
+
+.task2__detail {
+  display: grid;
+  gap: 0.75rem;
+  padding: 0.25rem 0.9rem 0.9rem 3rem;
+  border-top: 1px solid var(--line);
+}
+
+.task2__text {
+  margin: 0;
+  color: color-mix(in srgb, var(--text) 85%, var(--muted));
+  font-size: 0.88rem;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+.task2__text--warn {
+  color: var(--danger);
+}
+
+.task2__controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1rem;
+}
+
+.task2__control {
+  display: grid;
+  gap: 0.3rem;
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-weight: 560;
+}
+
+.shell .task2__control select,
+.shell .task2__control input {
+  width: auto;
+  min-width: 10rem;
+  padding: 0.45rem 0.6rem;
+  font-size: 0.84rem;
+  color-scheme: dark;
+}
+
+@media (max-width: 720px) {
+  .task2__detail {
+    padding-left: 0.9rem;
+  }
+
+  .shell .task-add select.task-add__who,
+  .shell .task-add input.task-add__due {
+    flex: 1 1 auto;
+    width: auto;
+  }
+}

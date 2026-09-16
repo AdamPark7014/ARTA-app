@@ -1,0 +1,588 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   Hub del evento · Formatos y Documentos.
+
+   Mismo lenguaje que `_refine.scss`: filas limpias, un solo acento y nada de
+   texto de relleno. Clases usadas por `EventChecklistsPanel`,
+   `ChecklistPicker` y `EventFilesPanel`.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Barra de avance fina ───────────────────────────────────────────────── */
+
+.hub-bar {
+  display: block;
+  flex: 1 1 auto;
+  height: 4px;
+  min-width: 3rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.hub-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  transition: width 0.25s ease;
+}
+
+.hub-bar.is-done > span {
+  background: var(--ok);
+}
+
+.hub-count {
+  min-width: 1.3rem;
+  padding: 0 0.35rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--text);
+  font-size: 0.7rem;
+  font-weight: 650;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Buscador compacto ──────────────────────────────────────────────────── */
+
+.shell input.hub-search,
+input.hub-search {
+  width: 100%;
+  max-width: 280px;
+  padding: 0.5rem 0.8rem;
+  border-color: var(--line);
+  border-radius: 999px;
+  font-size: 0.85rem;
+}
+
+/* ── Lista de formatos ──────────────────────────────────────────────────── */
+
+.fmt-picker {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.fmt-list {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.fmt-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(7rem, 10rem) auto;
+  align-items: center;
+  gap: 0.6rem 1.25rem;
+  width: 100%;
+  padding: 0.85rem 1.05rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--bg-elev);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.fmt-row:hover {
+  border-color: color-mix(in srgb, var(--accent) 38%, var(--line));
+  background: color-mix(in srgb, var(--bg-elev) 94%, var(--accent));
+}
+
+.fmt-row:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.fmt-row.is-active {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
+}
+
+.fmt-row__main {
+  display: grid;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.fmt-row__name {
+  overflow: hidden;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fmt-row__meta {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.76rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fmt-row__progress {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.fmt-row__pct {
+  min-width: 2.4rem;
+  color: var(--muted);
+  font-size: 0.78rem;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.fmt-picker--compact .fmt-list {
+  gap: 0.4rem;
+}
+
+.fmt-picker--compact .fmt-row {
+  grid-template-columns: minmax(0, 1fr) minmax(5rem, 7rem) auto;
+  gap: 0.5rem 0.9rem;
+  padding: 0.65rem 0.8rem;
+  border-radius: var(--radius);
+  background: transparent;
+}
+
+/* ── Formato abierto: cabecera ──────────────────────────────────────────── */
+
+.hub-doc {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.hub-doc__top,
+.hub-doc__row,
+.hub-doc__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem 1rem;
+}
+
+.hub-back {
+  margin-left: -0.55rem;
+}
+
+.hub-doc__title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  min-width: 0;
+}
+
+.hub-doc__title .sx-head__title {
+  overflow-wrap: anywhere;
+}
+
+.hub-doc__meta {
+  justify-content: flex-start;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.hub-doc__progress {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.hub-doc__progress .hub-bar {
+  width: 8rem;
+  flex: 0 0 auto;
+}
+
+.hub-doc__status {
+  margin-left: auto;
+}
+
+.hub-doc__status .status-reopen {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.btn-quiet[aria-pressed='true'] {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+}
+
+.btn-quiet:focus-visible,
+.icon-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.btn-quiet:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* Menú «Más»: se abre hacia la izquierda porque vive a la derecha. */
+.hub-more > summary {
+  cursor: pointer;
+}
+
+.hub-more > summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.hub-more .ev-more__menu {
+  right: 0;
+  left: auto;
+  min-width: 13.5rem;
+}
+
+.hub-more .ev-more__menu label {
+  padding: 0.55rem 0.7rem;
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.hub-more .ev-more__menu label:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.hub-more .ev-more__menu button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* ── Panel desplegable (PDF, firmas, adjuntos, historial) ───────────────── */
+
+.hub-drawer {
+  overflow: hidden;
+}
+
+.hub-drawer > .surface__head {
+  padding: 0.7rem 0.9rem 0.7rem 1.2rem;
+}
+
+.hub-drawer .sig-grid {
+  gap: 1.1rem;
+}
+
+/* ── Barra de herramientas del formulario ───────────────────────────────── */
+
+.hub-toolbar__group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.shell select.hub-jump,
+select.hub-jump {
+  width: auto;
+  max-width: 220px;
+  padding: 0.45rem 0.7rem;
+  border-radius: 999px;
+  font-size: 0.82rem;
+}
+
+/* ── Secciones del formato ──────────────────────────────────────────────── */
+
+.hub-sections {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.hub-sec {
+  scroll-margin-top: 5rem;
+}
+
+.hub-sec__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.55rem 0.8rem 0.55rem 1.1rem;
+}
+
+.hub-sec__head:has(+ .hub-sec__body) {
+  border-bottom: 1px solid var(--line);
+}
+
+.hub-sec__toggle {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 0.6rem;
+  min-width: 0;
+  padding: 0.3rem 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.hub-sec__toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+.hub-sec__chev {
+  display: inline-block;
+  width: 0.8rem;
+  color: var(--muted);
+  font-size: 1.1rem;
+  line-height: 1;
+  transition: transform 0.15s ease;
+}
+
+.hub-sec__toggle[aria-expanded='true'] .hub-sec__chev {
+  transform: rotate(90deg);
+}
+
+.hub-sec__title {
+  overflow: hidden;
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hub-sec__count {
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.hub-sec__count.is-complete {
+  color: var(--ok);
+}
+
+.hub-sec__body {
+  display: grid;
+  padding: 0.3rem 1.1rem 0.6rem;
+}
+
+.hub-sec__body > * + * {
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+/* Casilla: toda la fila es clicable. */
+.hub-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.85rem;
+  padding: 0.7rem 0;
+  font-size: 0.9rem;
+  line-height: 1.45;
+  cursor: pointer;
+}
+
+.hub-check__text {
+  transition: color 0.15s ease;
+}
+
+.hub-check.is-done .hub-check__text {
+  color: var(--muted);
+}
+
+.shell .hub-check input[type='checkbox'],
+.hub-check input[type='checkbox'] {
+  appearance: none;
+  -webkit-appearance: none;
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 1.15rem;
+  height: 1.15rem;
+  margin: 0.12rem 0 0;
+  padding: 0;
+  border: 1.5px solid var(--line-strong);
+  border-radius: 5px;
+  background: transparent !important;
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+
+.shell .hub-check input[type='checkbox']::after,
+.hub-check input[type='checkbox']::after {
+  content: '';
+  width: 0.3rem;
+  height: 0.58rem;
+  margin-top: -0.12rem;
+  border: solid #0a0a0a;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg) scale(0);
+  transition: transform 0.12s ease;
+}
+
+.shell .hub-check input[type='checkbox']:checked,
+.hub-check input[type='checkbox']:checked {
+  border-color: var(--accent);
+  background: var(--accent) !important;
+}
+
+.shell .hub-check input[type='checkbox']:checked::after,
+.hub-check input[type='checkbox']:checked::after {
+  transform: rotate(45deg) scale(1);
+}
+
+.hub-check input[type='checkbox']:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.hub-check input[type='checkbox']:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.hub-check:has(input:disabled) {
+  cursor: default;
+}
+
+.hub-check:hover input[type='checkbox']:not(:disabled):not(:checked) {
+  border-color: color-mix(in srgb, var(--accent) 60%, var(--line-strong));
+}
+
+/* Campo con respuesta: etiqueta arriba, control abajo. */
+.hub-field {
+  display: grid;
+  gap: 0.45rem;
+  padding: 0.75rem 0;
+}
+
+.hub-field__label {
+  font-size: 0.88rem;
+  line-height: 1.4;
+}
+
+.hub-field__control {
+  display: grid;
+  gap: 0.45rem;
+  max-width: 34rem;
+}
+
+.shell .hub-field input,
+.shell .hub-field select,
+.shell .hub-field textarea {
+  font-size: 0.88rem;
+}
+
+.hub-field textarea {
+  min-height: 2.6rem;
+  resize: vertical;
+  line-height: 1.5;
+}
+
+/* ── Documentos ─────────────────────────────────────────────────────────── */
+
+.hub-list {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.hub-item {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.hub-item.is-open > .file-row {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+}
+
+.hub-pane {
+  overflow: hidden;
+}
+
+.hub-pane__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  padding: 0.5rem 0.6rem 0.5rem 1.1rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.hub-pane__title {
+  overflow: hidden;
+  min-width: 0;
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 560;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hub-pane__body {
+  padding: 0.6rem;
+}
+
+.hub-upload {
+  cursor: pointer;
+}
+
+.hub-upload[aria-disabled='true'] {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.hub-error {
+  padding: 0.65rem 0.9rem;
+  border: 1px solid color-mix(in srgb, var(--danger) 35%, var(--line));
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--danger) 8%, transparent);
+  color: color-mix(in srgb, var(--danger) 75%, var(--text));
+  font-size: 0.85rem;
+}
+
+/* ── Móvil ──────────────────────────────────────────────────────────────── */
+
+@media (max-width: 760px) {
+  .fmt-row,
+  .fmt-picker--compact .fmt-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .fmt-row__progress {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+
+  .shell input.hub-search,
+  input.hub-search {
+    max-width: none;
+  }
+
+  .hub-doc__row > .sx-actions {
+    width: 100%;
+  }
+
+  .hub-doc__status {
+    margin-left: 0;
+  }
+
+  .hub-drawer .sig-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .hub-sec__body {
+    padding-inline: 0.9rem;
+  }
+
+  .hub-more .ev-more__menu {
+    right: auto;
+    left: 0;
+  }
+
+  .hub-toolbar__group {
+    width: 100%;
+  }
+}

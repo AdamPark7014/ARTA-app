@@ -6,7 +6,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useUser } from '@/lib/user-context';
 import { EntityKey } from '@/lib/api';
-import { canAccessEventOps, ROLE_SCOPE, userHasPermission, visibleNavItems } from '@/lib/access-matrix';
+import { canAccessEventOps, userHasPermission, visibleNavItems } from '@/lib/access-matrix';
 import { createSecureHandoffUrl } from '@/lib/cross-entity-handoff';
 import { NotificationBell } from './NotificationBell';
 import { SidebarNav } from './SidebarNav';
@@ -206,25 +206,35 @@ export function AppShell({
           <SidebarNav items={nav} query={navQuery} />
         </Suspense>
 
-        <div className="sidebar-foot">
-          <button
-            type="button"
-            className="nav-autohide"
-            aria-pressed={autoHide}
-            onClick={toggleAutoHide}
-            title={
-              autoHide
-                ? 'El menú se esconde solo; vuelve al acercar el cursor al borde izquierdo'
-                : 'Esconder el menú y mostrarlo al acercar el cursor al borde izquierdo'
-            }
-          >
-            {autoHide ? '⇤ Menú automático activo' : '⇥ Esconder menú (automático)'}
-          </button>
-          <UserChip name={user.fullName} subtitle={user.title || user.roleKey} />
-          <div className="scope-hint">{ROLE_SCOPE[user.roleKey] || ''}</div>
-          <button type="button" className="btn ghost btn-sm" style={{ marginTop: 12, width: '100%' }} onClick={logout}>
-            Salir
-          </button>
+        {/* Junta 11-09-2026: el pie del menú era un bloque de texto; ahora es la persona y dos iconos. */}
+        <div className="sidebar-foot sidebar-foot--lite">
+          <UserChip name={user.fullName} subtitle={user.title || undefined} />
+          <div className="sidebar-foot__actions">
+            <button
+              type="button"
+              className="icon-btn"
+              aria-pressed={autoHide}
+              onClick={toggleAutoHide}
+              title={autoHide ? 'Fijar el menú' : 'Esconder el menú (vuelve al acercar el cursor al borde)'}
+              aria-label={autoHide ? 'Fijar el menú' : 'Esconder el menú'}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
+                <rect x="3" y="4" width="18" height="16" rx="2" stroke="currentColor" strokeWidth="1.7" />
+                <path d="M9 4v16" stroke="currentColor" strokeWidth="1.7" />
+              </svg>
+            </button>
+            <button type="button" className="icon-btn" onClick={logout} title="Salir" aria-label="Salir">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
+                <path
+                  d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 17l-5-5 5-5M5 12h11"
+                  stroke="currentColor"
+                  strokeWidth="1.7"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </button>
+          </div>
         </div>
       </aside>
 
@@ -257,9 +267,6 @@ export function AppShell({
               <h1>{title || 'Panel'}</h1>
               <div className="topbar-sub">
                 {entity === 'ARTA' ? 'Arta Producciones' : 'Auditorio Arema · Explanada'}
-                {autoHideReady && autoHide ? (
-                  <span className="topbar-autohide-hint"> · Acerca el cursor al borde izquierdo para el menú</span>
-                ) : null}
               </div>
             </div>
           </div>
@@ -270,9 +277,6 @@ export function AppShell({
                 Nuevo evento
               </Link>
             ) : null}
-            <span className={`badge ${entity === 'ARTA' ? 'arta' : 'explanada'}`}>
-              {entity === 'ARTA' ? 'ARTA' : 'AUDITORIO'}
-            </span>
           </div>
         </header>
         <div className="content">{children}</div>

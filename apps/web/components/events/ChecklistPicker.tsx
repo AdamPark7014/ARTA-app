@@ -1,16 +1,35 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { EmptyState } from '@/components/ui/EmptyState';
-import { FieldSearch } from '@/components/ui/PageChrome';
-import { StatusBadge } from '@/components/ui/StatusBadge';
+import { EmptyLite, Pill } from '@/components/ui/Lite';
 import type { Checklist } from './event-detail.types';
 
-function signatureStatus(c: Checklist) {
-  if (c.authorizedAt) return { label: 'Autorizado', tone: 'ok' as const };
-  if (c.deliveredAt) return { label: 'Entregado', tone: 'warn' as const };
-  if (c.progressPct >= 100) return { label: 'Completo', tone: 'ok' as const };
-  return { label: 'En progreso', tone: 'raw' as const };
+/** Grupo del formato para filtrar la lista: falta trabajo, en revisión o listo. */
+export type ChecklistBucket = 'todo' | 'review' | 'ready';
+
+export function checklistBucket(c: Checklist): ChecklistBucket {
+  if (c.status === 'SEALED' || c.status === 'APPROVED' || c.authorizedAt) return 'ready';
+  if (c.status === 'REVIEW' || c.deliveredAt) return 'review';
+  return 'todo';
+}
+
+/** Una sola píldora por formato: el estado que importa ahora mismo. */
+export function checklistState(c: Checklist): { label: string; tone: string } {
+  if (c.status === 'SEALED') return { label: 'Sellado', tone: 'paid' };
+  if (c.status === 'APPROVED') return { label: 'Aprobado', tone: 'ok' };
+  if (c.authorizedAt) return { label: 'Autorizado', tone: 'ok' };
+  if (c.status === 'REVIEW') return { label: 'En revisión', tone: 'review' };
+  if (c.deliveredAt) return { label: 'Por autorizar', tone: 'review' };
+  if (c.progressPct >= 100) return { label: 'Completo', tone: 'info' };
+  if (c.progressPct > 0) return { label: 'En progreso', tone: 'draft' };
+  return { label: 'Sin empezar', tone: 'draft' };
+}
+
+function shortDate(iso?: string | null) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toLocaleDateString('es-MX', { day: 'numeric', month: 'short' });
 }
 
 type Props = {
@@ -40,64 +59,58 @@ export function ChecklistPicker({ checklists, activeId, onSelect, compact }: Pro
   }, [sorted, q]);
 
   if (!checklists.length) {
-    return (
-      <EmptyState
-        title="Sin formatos en este evento"
-        description="Las plantillas se crean al dar de alta el show. Si falta alguna, revisa plantillas en el panel."
-      />
-    );
+    return <EmptyLite icon="✓" title="Sin formatos" text={compact ? undefined : 'Se crean al dar de alta el show.'} />;
   }
 
   return (
-    <div className={`checklist-picker ${compact ? 'checklist-picker--compact' : ''}`}>
-      {!compact ? (
-        <p className="muted checklist-picker__hint">
-          Elige un formato para completar ítems, generar PDF y firmar.
-        </p>
-      ) : null}
-      {checklists.length > 5 ? (
-        <FieldSearch
-          value={q}
-          onChange={setQ}
+    <div className={`fmt-picker ${compact ? 'fmt-picker--compact' : ''}`}>
+      {!compact && checklists.length > 8 ? (
+        <input
+          className="hub-search"
+          type="search"
           placeholder="Buscar formato…"
-          label="Buscar checklist"
-          maxWidth={9999}
+          aria-label="Buscar formato"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
         />
       ) : null}
-      <div className="checklist-picker__list" role="list">
+
+      <div className="fmt-list">
         {filtered.map((c) => {
-          const sig = signatureStatus(c);
+          const state = checklistState(c);
           const active = activeId === c.id;
+          const pct = Math.max(0, Math.min(100, Math.round(c.progressPct || 0)));
+          const editor = c.lastEditedBy?.fullName.split(' ')[0];
+          const edited = editor
+            ? `Editado por ${editor}${c.lastEditedAt ? ` · ${shortDate(c.lastEditedAt)}` : ''}`
+            : '';
           return (
             <button
               key={c.id}
               type="button"
-              role="listitem"
-              className={`format-card ${active ? 'format-card--active' : ''}`}
+              className={`fmt-row ${active ? 'is-active' : ''}`}
+              aria-current={active ? 'true' : undefined}
               onClick={() => onSelect(c)}
             >
-              <div className="format-card__head">
-                <span className="format-card__key">{c.template?.key || 'FMT'}</span>
-                <StatusBadge value={sig.label} kind="raw" className={sig.tone} />
-              </div>
-              <strong className="format-card__title">{c.title}</strong>
-              <div className="format-card__progress">
-                <div className="progress">
-                  <span style={{ width: `${c.progressPct}%` }} />
-                </div>
-                <span className="muted kpi-sub">{c.progressPct}%</span>
-              </div>
-              <div className="format-card__meta muted kpi-sub">
-                {c.pdfUrl ? 'PDF listo' : 'Sin PDF'}
-                {c.lastEditedBy ? ` · ${c.lastEditedBy.fullName.split(' ')[0]}` : ''}
-              </div>
+              <span className="fmt-row__main">
+                <span className="fmt-row__name">{c.title}</span>
+                {!compact && edited ? <span className="fmt-row__meta">{edited}</span> : null}
+              </span>
+              <span className="fmt-row__progress" aria-label={`${pct}% completo`}>
+                <span className={`hub-bar ${pct >= 100 ? 'is-done' : ''}`} aria-hidden>
+                  <span style={{ width: `${pct}%` }} />
+                </span>
+                <span className="fmt-row__pct" aria-hidden>
+                  {pct}%
+                </span>
+              </span>
+              <Pill tone={state.tone}>{state.label}</Pill>
             </button>
           );
         })}
-        {!filtered.length ? (
-          <p className="muted checklist-picker__empty">Sin resultados para “{q}”</p>
-        ) : null}
       </div>
+
+      {!filtered.length ? <p className="t-muted t-small">Sin resultados para «{q}»</p> : null}
     </div>
   );
 }

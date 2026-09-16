@@ -4,13 +4,11 @@ import { ChecklistPdfEditor, FileViewer, PdfEditor } from '@/components/files/la
 import { useEffect, useMemo, useState } from 'react';
 import { SignaturePad } from '@/components/ui/SignaturePad';
 import { createEventFile } from '@/lib/file-save';
-import { EmptyState } from '@/components/ui/EmptyState';
+import { EmptyLite, FileRow, SectionHead, Seg } from '@/components/ui/Lite';
 import { SaveStatus } from '@/components/ui/SaveStatus';
 import { RevisionHistory } from '@/components/ui/RevisionHistory';
-import { ChecklistPicker } from '@/components/events/ChecklistPicker';
-import { SectionFileCreate } from '@/components/files/SectionFileCreate';
-import { StatusBadge } from '@/components/ui/StatusBadge';
-import { fileKindLabel, CHECKLIST_FILE_MODULE } from '@/lib/file-modules';
+import { ChecklistPicker, checklistBucket, type ChecklistBucket } from '@/components/events/ChecklistPicker';
+import { CHECKLIST_FILE_MODULE } from '@/lib/file-modules';
 import { useAutosave } from '@/lib/use-autosave';
 import { useDirtyGuard } from '@/lib/use-dirty-guard';
 import { useSaveHotkey } from '@/lib/use-save-hotkey';
@@ -58,6 +56,9 @@ type EventChecklistsPanelProps = {
   onFilesChanged: () => void | Promise<void>;
 };
 
+/** Cajón abierto bajo el formato: firmas, PDF, adjuntos o historial. */
+type Drawer = 'firmas' | 'pdf' | 'archivos' | 'historial' | null;
+
 function isCheckItem(it: Item) {
   return it.type === 'check' || !it.type;
 }
@@ -67,6 +68,14 @@ function isItemDone(it: Item) {
   return it.value !== null && it.value !== undefined && String(it.value).trim() !== '';
 }
 
+/**
+ * Formatos del evento.
+ *
+ * Dos pantallas y nada más: la lista de formatos con su avance, y el formato
+ * abierto con sus secciones. Lo demás —firmas, PDF, adjuntos e historial—
+ * vive en «Más» y se abre como un cajón bajo el formato, para que capturar no
+ * compita con cuatro bloques siempre desplegados.
+ */
 export function EventChecklistsPanel({
   event,
   activeChecklist,
@@ -88,27 +97,19 @@ export function EventChecklistsPanel({
   onRestoreVersion,
   onFilesChanged,
 }: EventChecklistsPanelProps) {
+  const [bucket, setBucket] = useState<ChecklistBucket | 'all'>('all');
+  const [drawer, setDrawer] = useState<Drawer>(null);
   const [annotating, setAnnotating] = useState(false);
-  /** Vista previa PDF solo a demanda — evita capas blancas encima del formulario. */
-  const [showPdfPreview, setShowPdfPreview] = useState(false);
-  /**
-   * Cómo se captura el formato: escribiendo sobre el PDF (por defecto, si el
-   * generador ya dejó el mapa de campos) o en el formulario clásico.
-   */
+  /** Captura sobre el PDF (si el generador ya dejó el mapa de campos). */
   const [mode, setMode] = useState<'pdf' | 'form'>('form');
   const [q, setQ] = useState('');
   const [onlyPending, setOnlyPending] = useState(false);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
-  const [showHistory, setShowHistory] = useState(false);
   const [previewAttach, setPreviewAttach] = useState<EventFile | null>(null);
 
   const checklistFiles = useMemo(() => {
     if (!activeChecklist) return [] as EventFile[];
-    return (event.files || []).filter(
-      (f) =>
-        f.checklistId === activeChecklist.id ||
-        (f.module === CHECKLIST_FILE_MODULE && f.checklistId === activeChecklist.id),
-    );
+    return (event.files || []).filter((f) => f.checklistId === activeChecklist.id);
   }, [event.files, activeChecklist]);
 
   const fieldMap = activeChecklist?.pdfFieldsJson;
@@ -122,23 +123,21 @@ export function EventChecklistsPanel({
   const lockedByStatus = status === 'APPROVED' || status === 'SEALED';
   const readOnly = closed || lockedByStatus;
 
-  // Al cambiar de formato se vuelve al modo que corresponda.
+  // Al cambiar de formato se vuelve al principio.
   useEffect(() => {
     setAnnotating(false);
-    setShowPdfPreview(false);
     setQ('');
     setOnlyPending(false);
     setCollapsed(new Set());
-    setShowHistory(false);
-    // Formulario primero: más claro y profesional. PDF overlay es opcional.
+    setDrawer(null);
+    setPreviewAttach(null);
     setMode('form');
-    // Solo al cambiar de formato: el detalle completo llega en una segunda
-    // petición y, si `canWriteOnPdf` disparara este efecto, sacaría al usuario
-    // del modo «Sobre el PDF» que acaba de elegir.
+    // Solo al cambiar de formato: el detalle llega en una segunda petición y
+    // `canWriteOnPdf` sacaría a la persona del modo que acaba de elegir.
   }, [activeChecklist?.id]);
 
   const sections = useMemo(
-    () => (activeChecklist?.dataJson?.sections || []).filter((s) => s.id !== 'firmas'),
+    () => (activeChecklist?.dataJson?.sections || []).filter((s: Section) => s.id !== 'firmas'),
     [activeChecklist],
   );
 
@@ -165,9 +164,7 @@ export function EventChecklistsPanel({
         items: s.items.filter(
           (it) =>
             (!onlyPending || !isItemDone(it)) &&
-            (!needle ||
-              it.label.toLowerCase().includes(needle) ||
-              s.title.toLowerCase().includes(needle)),
+            (!needle || it.label.toLowerCase().includes(needle) || s.title.toLowerCase().includes(needle)),
         ),
       }))
       .filter((s) => s.items.length);
@@ -202,7 +199,17 @@ export function EventChecklistsPanel({
     autosave.reset(activeChecklist?.dataJson ?? null);
   }
 
+  function toggleSection(sectionId: string) {
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(sectionId)) next.delete(sectionId);
+      else next.add(sectionId);
+      return next;
+    });
+  }
+
   function jumpTo(sectionId: string) {
+    if (!sectionId) return;
     setCollapsed((prev) => {
       const next = new Set(prev);
       next.delete(sectionId);
@@ -213,653 +220,567 @@ export function EventChecklistsPanel({
     });
   }
 
-  function toggleSection(sectionId: string) {
-    setCollapsed((prev) => {
-      const next = new Set(prev);
-      if (next.has(sectionId)) next.delete(sectionId);
-      else next.add(sectionId);
-      return next;
-    });
+  function openDrawer(next: Drawer) {
+    setDrawer((cur) => (cur === next ? null : next));
   }
 
-  function collapseCompleted() {
-    setCollapsed(new Set(stats.perSection.filter((s) => s.total && s.done === s.total).map((s) => s.id)));
+  /* ── Lista de formatos ──────────────────────────────────────────────── */
+
+  if (!activeChecklist) {
+    const all = event.checklists || [];
+    const counts = {
+      all: all.length,
+      todo: all.filter((c) => checklistBucket(c) === 'todo').length,
+      review: all.filter((c) => checklistBucket(c) === 'review').length,
+      ready: all.filter((c) => checklistBucket(c) === 'ready').length,
+    };
+    const list = bucket === 'all' ? all : all.filter((c) => checklistBucket(c) === bucket);
+
+    return (
+      <div className="sx-stack">
+        <SectionHead
+          title="Formatos"
+          sub={
+            all.length
+              ? `${counts.ready} de ${all.length} listos${counts.review ? ` · ${counts.review} por autorizar` : ''}`
+              : undefined
+          }
+        />
+        {all.length ? (
+          <Seg
+            label="Filtrar formatos"
+            value={bucket}
+            onChange={setBucket}
+            options={[
+              { key: 'all', label: 'Todos', count: counts.all },
+              { key: 'todo', label: 'Por completar', count: counts.todo },
+              { key: 'review', label: 'En revisión', count: counts.review },
+              { key: 'ready', label: 'Listos', count: counts.ready },
+            ]}
+          />
+        ) : null}
+        <div className="surface surface--pad">
+          <ChecklistPicker
+            checklists={list}
+            onSelect={(c) => {
+              onOpenChecklist(c).catch(console.error);
+            }}
+          />
+        </div>
+      </div>
+    );
   }
 
-  const progressPct = stats.total ? Math.round((stats.done / stats.total) * 100) : activeChecklist?.progressPct || 0;
+  /* ── Formato abierto ────────────────────────────────────────────────── */
+
+  const progressPct = stats.total
+    ? Math.round((stats.done / stats.total) * 100)
+    : activeChecklist.progressPct || 0;
 
   return (
-    <div className={`checklist-workspace ${activeChecklist ? 'checklist-workspace--open' : ''}`}>
-      <aside className={`checklist-workspace__nav ${activeChecklist ? 'checklist-workspace__nav--collapsed' : ''}`}>
-        <div className="panel">
-          <div className="panel-head">
-            <h2>Formatos · {event.checklists.length}</h2>
-          </div>
-          <div className="panel-body">
-            <ChecklistPicker
-              checklists={event.checklists}
-              activeId={activeChecklist?.id}
-              onSelect={(c) => {
-                if (c.id !== activeChecklist?.id && !confirmLeave()) return;
-                onOpenChecklist(c).catch(console.error);
-              }}
-            />
-          </div>
-        </div>
-      </aside>
+    <div className="sx-stack">
+      <header className="hub-doc">
+        <button
+          type="button"
+          className="btn-quiet hub-back"
+          onClick={() => {
+            if (confirmLeave()) onClearChecklist();
+          }}
+        >
+          ← Formatos
+        </button>
 
-      <div className="checklist-workspace__main">
-        {activeChecklist ? (
-          <div className="panel">
-            <div className="panel-head checklist-panel-head">
-              <div>
-                <button
-                  type="button"
-                  className="checklist-back btn ghost btn-sm"
-                  onClick={() => {
-                    if (confirmLeave()) onClearChecklist();
-                  }}
-                >
-                  ← Formatos
+        <div className="hub-doc__row">
+          <div className="hub-doc__title">
+            <h2 className="sx-head__title">{activeChecklist.title}</h2>
+            <DocStatusBadge status={status} />
+          </div>
+          <div className="sx-actions">
+            {!readOnly ? (
+              <SaveStatus status={autosave.status} savedAt={autosave.savedAt} error={autosave.error} />
+            ) : null}
+            <button
+              className="btn btn-sm"
+              type="button"
+              disabled={saving || readOnly}
+              onClick={saveNow}
+              title="Ctrl+S · guarda y regenera el PDF"
+            >
+              {saving ? 'Guardando…' : 'Guardar y generar PDF'}
+            </button>
+            <details className="ev-more hub-more">
+              <summary className="btn ghost btn-sm">Más</summary>
+              <div className="ev-more__menu" role="menu">
+                <button type="button" onClick={() => openDrawer('firmas')}>
+                  Firmas
                 </button>
-                <h2>
-                  {activeChecklist.title} <DocStatusBadge status={status} />
-                </h2>
-                {onChangeStatus && !closed ? (
-                  <div className="checklist-status-row">
-                    <DocStatusControl
-                      status={status}
-                      roleKey={roleKey}
-                      busy={saving}
-                      onChange={onChangeStatus}
-                    />
-                    {activeChecklist.sealedAt ? (
-                      <span className="muted kpi-sub">
-                        Sellado el{' '}
-                        {new Date(activeChecklist.sealedAt).toLocaleDateString('es-MX', {
-                          dateStyle: 'medium',
-                        })}
-                        {activeChecklist.sealedBy ? ` por ${activeChecklist.sealedBy.fullName}` : ''}
-                      </span>
-                    ) : null}
-                  </div>
-                ) : null}
-                <div className="checklist-progress">
-                  <div className="progress">
-                    <span style={{ width: `${progressPct}%` }} />
-                  </div>
-                  <span className="muted kpi-sub">
-                    {progressPct}% · {stats.done}/{stats.total} campos
-                    {activeChecklist.lastEditedBy ? ` · última edición ${activeChecklist.lastEditedBy.fullName}` : ''}
-                  </span>
-                </div>
-              </div>
-              <div className="panel-head-actions">
-                {!readOnly ? (
-                  <SaveStatus status={autosave.status} savedAt={autosave.savedAt} error={autosave.error} />
-                ) : null}
-                <button
-                  className="btn btn-sm"
-                  type="button"
-                  disabled={saving || readOnly}
-                  onClick={saveNow}
-                  title="Ctrl+S / ⌘S — guarda y regenera el PDF"
-                >
-                  {saving ? 'Guardando…' : 'Guardar y generar PDF'}
+                <button type="button" onClick={() => openDrawer('pdf')}>
+                  {activeChecklist.pdfUrl ? 'Ver el PDF' : 'Generar el PDF'}
+                </button>
+                <button type="button" onClick={() => openDrawer('archivos')}>
+                  Adjuntos ({checklistFiles.length})
+                </button>
+                <button type="button" onClick={() => openDrawer('historial')}>
+                  Historial de versiones
                 </button>
                 {activeChecklist.pdfUrl ? (
-                  <a className="btn ghost btn-sm" href={activeChecklist.pdfUrl} target="_blank" rel="noreferrer">
-                    Ver PDF
+                  <a href={activeChecklist.pdfUrl} target="_blank" rel="noreferrer" role="menuitem">
+                    <button type="button">Abrir PDF en otra pestaña</button>
                   </a>
-                ) : (
-                  <button className="btn ghost btn-sm" type="button" onClick={onRegeneratePdf}>
-                    Generar PDF
-                  </button>
-                )}
-              </div>
-            </div>
-
-            {lockedByStatus ? (
-              <div className="module-banner module-banner--warn" role="status">
-                {status === 'SEALED'
-                  ? 'Formato sellado: queda como evidencia y no se edita. Solo dirección puede reabrirlo, dejando el motivo.'
-                  : 'Formato aprobado: para editarlo hay que devolverlo a borrador.'}
-              </div>
-            ) : null}
-
-            {!readOnly ? (
-              <div className="checklist-save-hint muted kpi-sub">
-                Se guarda solo mientras escribes. «Guardar y generar PDF» deja el formato firmado en
-                el expediente y crea una versión en el historial.
-              </div>
-            ) : null}
-
-            <div className="panel-body">
-              <div className="checklist-toolbar">
-                <input
-                  className="field field--search"
-                  placeholder="Buscar campo dentro del formato…"
-                  aria-label="Buscar campo"
-                  value={q}
-                  onChange={(e) => setQ(e.target.value)}
-                />
-                <button
-                  className={`chip ${onlyPending ? 'is-on' : ''}`}
-                  type="button"
-                  aria-pressed={onlyPending}
-                  onClick={() => setOnlyPending((v) => !v)}
-                >
-                  Solo pendientes
-                </button>
-                <button className="chip" type="button" onClick={collapseCompleted}>
-                  Contraer completadas
-                </button>
-                <button className="chip" type="button" onClick={() => setCollapsed(new Set())}>
-                  Abrir todas
-                </button>
-                <div className="checklist-toolbar__spacer" />
-                <div className="checklist-mode">
-                  <button
-                    className={mode === 'form' ? 'btn btn-sm' : 'btn ghost btn-sm'}
-                    type="button"
-                    onClick={() => setMode('form')}
-                  >
-                    Formulario rápido
-                  </button>
-                  <button
-                    className={mode === 'pdf' ? 'btn btn-sm' : 'btn ghost btn-sm'}
-                    type="button"
-                    disabled={!canWriteOnPdf}
-                    title={
-                      canWriteOnPdf
-                        ? 'Escribe sobre la hoja (pantalla completa, Tab al siguiente)'
-                        : 'Pulsa «Generar PDF» para habilitar esta vista'
-                    }
-                    onClick={() => setMode('pdf')}
-                  >
-                    Sobre el PDF
-                  </button>
-                </div>
-              </div>
-
-              {mode === 'pdf' && canWriteOnPdf ? (
-                <ChecklistPdfEditor
-                  key={activeChecklist.id}
-                  url={activeChecklist.pdfUrl!}
-                  cacheKey={activeChecklist.pdfGeneratedAt || undefined}
-                  fieldMap={fieldMap!}
-                  sections={sections}
-                  canEdit={!readOnly}
-                  onUpdateItem={onUpdateItem}
-                />
-              ) : null}
-
-              {mode === 'form' ? (
-                <div className="checklist-form-layout">
-                  {stats.perSection.length > 1 ? (
-                    <nav className="checklist-index" aria-label="Secciones del formato">
-                      <span className="checklist-index__title muted kpi-sub">Secciones</span>
-                      {stats.perSection.map((s) => {
-                        const complete = s.total > 0 && s.done === s.total;
-                        return (
-                          <button
-                            key={s.id}
-                            type="button"
-                            className={`checklist-index__item ${complete ? 'is-complete' : ''}`}
-                            onClick={() => jumpTo(s.id)}
-                          >
-                            <span className="checklist-index__label">{s.title}</span>
-                            <span className={`checklist-index__count ${complete ? 'ok' : ''}`}>
-                              {s.done}/{s.total}
-                            </span>
-                          </button>
-                        );
-                      })}
-                    </nav>
-                  ) : null}
-
-                  <div className="checklist-sections">
-                    {!visibleSections.length ? (
-                      <EmptyState
-                        title={onlyPending ? 'No queda nada pendiente' : 'Sin coincidencias'}
-                        description={
-                          onlyPending
-                            ? 'Todos los campos de este formato están completos. Guarda para regenerar el PDF y firmar.'
-                            : 'Prueba otro término de búsqueda o quita el filtro de pendientes.'
-                        }
-                      />
-                    ) : (
-                      visibleSections.map((section) => {
-                        const stat = stats.perSection.find((s) => s.id === section.id);
-                        const isCollapsed = collapsed.has(section.id);
-                        const checkItems = section.items.filter(isCheckItem);
-                        const allChecked = checkItems.length > 0 && checkItems.every((it) => it.done);
-                        return (
-                          <div className="check-section" key={section.id} id={`chk-sec-${section.id}`}>
-                            <div className="check-section__head">
-                              <button
-                                type="button"
-                                className="check-section__toggle"
-                                aria-expanded={!isCollapsed}
-                                onClick={() => toggleSection(section.id)}
-                              >
-                                <span aria-hidden>{isCollapsed ? '▸' : '▾'}</span>
-                                <h3>{section.title}</h3>
-                                {stat ? (
-                                  <span
-                                    className={`badge ${stat.total && stat.done === stat.total ? 'ok' : 'muted-tone'}`}
-                                  >
-                                    {stat.done}/{stat.total}
-                                  </span>
-                                ) : null}
-                              </button>
-                              {checkItems.length > 1 && !closed ? (
-                                <button
-                                  className="btn ghost btn-sm"
-                                  type="button"
-                                  onClick={() => onUpdateSection(section.id, !allChecked)}
-                                >
-                                  {allChecked ? 'Desmarcar todo' : 'Marcar todo'}
-                                </button>
-                              ) : null}
-                            </div>
-
-                            {!isCollapsed
-                              ? section.items.map((item) => (
-                                  <div className="check-item" key={item.id}>
-                                    {isCheckItem(item) ? (
-                                      <input
-                                        type="checkbox"
-                                        disabled={readOnly}
-                                        checked={!!item.done}
-                                        aria-label={item.label}
-                                        onChange={(e) =>
-                                          onUpdateItem(section.id, item.id, { done: e.target.checked })
-                                        }
-                                      />
-                                    ) : (
-                                      <span className="check-item__bullet" aria-hidden />
-                                    )}
-                                    <div className="check-item__body">
-                                      <div className="check-item__label">{item.label}</div>
-                                      {item.type === 'text' || item.type === 'number' || item.type === 'date' ? (
-                                        item.type === 'text' ? (
-                                          <textarea
-                                            className="field check-item__field check-item__field--grow"
-                                            disabled={readOnly}
-                                            rows={2}
-                                            value={item.value ?? ''}
-                                            placeholder="Respuesta… (el campo crece al escribir)"
-                                            onChange={(e) => {
-                                              onUpdateItem(section.id, item.id, {
-                                                value: e.target.value,
-                                              });
-                                              const el = e.target;
-                                              el.style.height = 'auto';
-                                              el.style.height = `${Math.min(el.scrollHeight, 220)}px`;
-                                            }}
-                                            onFocus={(e) => {
-                                              const el = e.target;
-                                              el.style.height = 'auto';
-                                              el.style.height = `${Math.min(el.scrollHeight, 220)}px`;
-                                            }}
-                                          />
-                                        ) : (
-                                          <input
-                                            className="field check-item__field"
-                                            type={item.type}
-                                            disabled={readOnly}
-                                            value={item.value ?? ''}
-                                            placeholder={item.type === 'date' ? 'Fecha' : 'Respuesta…'}
-                                            onChange={(e) =>
-                                              onUpdateItem(section.id, item.id, {
-                                                value:
-                                                  item.type === 'number'
-                                                    ? Number(e.target.value)
-                                                    : e.target.value,
-                                              })
-                                            }
-                                          />
-                                        )
-                                      ) : null}
-                                      {item.type === 'select' ? (
-                                        (() => {
-                                          const opts = item.options || [];
-                                          const otra = opts.find((o) => /^otra$/i.test(o));
-                                          const raw = String(item.value ?? '');
-                                          const known = opts.filter((o) => !/^otra$/i.test(o));
-                                          const choice = known.includes(raw)
-                                            ? raw
-                                            : otra && (raw === otra || (raw && !known.includes(raw)))
-                                              ? otra
-                                              : raw || '';
-                                          const custom = otra && choice === otra && raw !== otra ? raw : '';
-                                          return (
-                                            <div className="check-item__field-stack">
-                                              <select
-                                                className="field"
-                                                disabled={readOnly}
-                                                value={choice}
-                                                onChange={(e) => {
-                                                  const next = e.target.value;
-                                                  if (otra && next === otra) {
-                                                    onUpdateItem(section.id, item.id, {
-                                                      value: custom || otra,
-                                                    });
-                                                  } else {
-                                                    onUpdateItem(section.id, item.id, { value: next });
-                                                  }
-                                                }}
-                                              >
-                                                <option value="">Selecciona…</option>
-                                                {opts.map((o) => (
-                                                  <option key={o} value={o}>
-                                                    {o}
-                                                  </option>
-                                                ))}
-                                              </select>
-                                              {otra && choice === otra ? (
-                                                <input
-                                                  className="field"
-                                                  disabled={readOnly}
-                                                  placeholder="Especifica (ej. Ticketmaster)"
-                                                  value={custom}
-                                                  onChange={(e) =>
-                                                    onUpdateItem(section.id, item.id, {
-                                                      value: e.target.value.trim() || otra,
-                                                    })
-                                                  }
-                                                />
-                                              ) : null}
-                                            </div>
-                                          );
-                                        })()
-                                      ) : null}
-                                    </div>
-                                  </div>
-                                ))
-                              : null}
-                          </div>
-                        );
-                      })
-                    )}
-                  </div>
-                </div>
-              ) : null}
-
-              <div className="check-section check-section--highlight">
-                <h3>Firmas digitales</h3>
-                <p className="check-section__intro muted kpi-sub">
-                  Primero firma quien entrega; después quien autoriza. Quedan en el PDF del formato.
-                </p>
-                <div className="sig-grid">
-                  <SignaturePad
-                    label="Entregado"
-                    signerName={userFullName}
-                    existing={activeChecklist.deliveredSignature}
-                    onSign={(p) => onSignChecklist('ENTREGADO', p)}
-                  />
-                  <SignaturePad
-                    label="Autorizado"
-                    signerName={userFullName}
-                    existing={activeChecklist.authorizedSignature}
-                    onSign={(p) => onSignChecklist('AUTORIZADO', p)}
-                  />
-                </div>
-              </div>
-
-              <div className={`check-section ${mode === 'pdf' ? 'is-hidden' : ''}`}>
-                <div className="check-section__head">
-                  <h3>{annotating ? 'Escribiendo sobre el PDF' : 'Vista previa PDF'}</h3>
-                  {activeChecklist.pdfUrl && !closed ? (
-                    <div className="row row--tight">
-                      {!annotating ? (
-                        <button
-                          className={showPdfPreview ? 'btn btn-sm' : 'btn ghost btn-sm'}
-                          type="button"
-                          onClick={() => setShowPdfPreview((v) => !v)}
-                        >
-                          {showPdfPreview ? 'Ocultar PDF' : 'Ver PDF'}
-                        </button>
-                      ) : null}
-                      <button
-                        className={annotating ? 'btn btn-sm' : 'btn ghost btn-sm'}
-                        type="button"
-                        onClick={() => {
-                          setAnnotating((v) => !v);
-                          if (!annotating) setShowPdfPreview(false);
-                        }}
-                      >
-                        {annotating ? 'Volver a la vista' : 'Escribir encima'}
-                      </button>
-                    </div>
-                  ) : null}
-                </div>
-
-                {!activeChecklist.pdfUrl ? (
-                  <EmptyState
-                    title="Aún no hay PDF"
-                    description="Completa el formato y pulsa «Guardar y generar PDF» — aparecerá aquí automáticamente."
-                  />
-                ) : annotating ? (
-                  <PdfEditor
-                    key={activeChecklist.id}
-                    url={activeChecklist.pdfUrl}
-                    fileName={`${activeChecklist.title} — anotado.pdf`}
-                    canEdit={!readOnly}
-                    saveLabel="Guardar copia anotada"
-                    note={
-                      'La copia anotada se guarda en este checklist (y también aparece en Documentos ' +
-                      'bajo «Checklists»). Así no se borra cuando regeneras el PDF del formato.'
-                    }
-                    onSave={createEventFile({
-                      eventId: event.id,
-                      checklistId: activeChecklist.id,
-                      module: 'checklist',
-                    })}
-                    onSaved={async () => {
-                      await onFilesChanged();
-                      setAnnotating(false);
-                    }}
-                  />
-                ) : showPdfPreview ? (
-                  <FileViewer
-                    url={activeChecklist.pdfUrl}
-                    fileName={`${activeChecklist.title}.pdf`}
-                    kind="pdf"
-                    cacheKey={activeChecklist.pdfGeneratedAt || undefined}
-                  />
-                ) : (
-                  <p className="muted kpi-sub">
-                    Pulsa «Ver PDF» si quieres la vista previa. El formato se edita arriba sin tapar
-                    las opciones.
-                  </p>
-                )}
-              </div>
-
-              <div className="check-section">
-                <div className="check-section__head">
-                  <h3>Archivos de este checklist · {checklistFiles.length}</h3>
-                </div>
-                <p className="muted kpi-sub" style={{ margin: '0 0 0.75rem' }}>
-                  Adjuntos ligados a este formato: evidencias, Excel de apoyo o una copia anotada
-                  del PDF. También aparecen en Documentos bajo Checklists.
-                </p>
-                {!closed ? (
-                  <SectionFileCreate
-                    staysIn={`el checklist «${activeChecklist.title}»`}
-                    compact={checklistFiles.length > 0}
-                    hideHint
-                    actions={[
-                      {
-                        id: 'upload',
-                        title: 'Subir archivo',
-                        description: 'PDF, Excel o imagen de apoyo para este formato.',
-                        after: 'Queda ligado a este checklist y listado abajo.',
-                        tone: 'upload',
-                        emphasis: 'primary',
-                        accept: '.pdf,.xlsx,.xls,.csv,image/*',
-                        onFile: (f) => void onUpload(f),
-                      },
-                      {
-                        id: 'annotate',
-                        title: 'Copia anotada del PDF',
-                        description: 'Escribe encima del PDF del formato y guárdala aquí.',
-                        after: activeChecklist.pdfUrl
-                          ? 'Abre el editor de anotaciones sobre el PDF.'
-                          : 'Primero genera el PDF del formato.',
-                        tone: 'pdf',
-                        emphasis: 'secondary',
-                        disabled: !activeChecklist.pdfUrl,
-                        onClick: () => {
-                          setAnnotating(true);
-                          setShowPdfPreview(false);
-                        },
-                      },
-                    ]}
-                  />
-                ) : null}
-                {!checklistFiles.length ? (
-                  <EmptyState
-                    title="Todavía sin adjuntos"
-                    description={
-                      closed
-                        ? 'Este formato no tiene archivos ligados.'
-                        : 'Sube una evidencia o anota el PDF del formato. Queda aquí — no se pierde en Documentos.'
-                    }
-                  />
-                ) : (
-                  <div className="file-card-list file-card-list--always" style={{ marginTop: '0.75rem' }}>
-                    {checklistFiles.map((f) => {
-                      const pdf = f.kind === 'pdf' || /\.pdf$/i.test(f.fileName);
-                      return (
-                        <div
-                          key={f.id}
-                          className={`file-card ${previewAttach?.id === f.id ? 'file-card--active' : ''}`}
-                        >
-                          <div className="file-card__meta">
-                            <strong>{f.fileName}</strong>
-                            <StatusBadge value={fileKindLabel(f.kind, f.fileName)} kind="raw" />
-                          </div>
-                          <div className="panel-head-actions">
-                            <button
-                              className={previewAttach?.id === f.id ? 'btn btn-sm' : 'btn ghost btn-sm'}
-                              type="button"
-                              onClick={() =>
-                                setPreviewAttach(previewAttach?.id === f.id ? null : f)
-                              }
-                            >
-                              {previewAttach?.id === f.id
-                                ? 'Ocultar'
-                                : pdf
-                                  ? 'Ver PDF'
-                                  : 'Ver aquí'}
-                            </button>
-                            <a
-                              className="btn ghost btn-sm"
-                              href={f.url}
-                              target="_blank"
-                              rel="noreferrer"
-                            >
-                              {pdf ? 'Abrir PDF' : 'Abrir'}
-                            </a>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-                {previewAttach ? (
-                  <div className="campaign-file__body" style={{ marginTop: '0.75rem' }}>
-                    <FileViewer
-                      url={previewAttach.url}
-                      fileName={previewAttach.fileName}
-                      kind={previewAttach.kind}
-                      cacheKey={previewAttach.createdAt}
-                    />
-                  </div>
                 ) : null}
               </div>
-
-              <div className="check-section">
-                <div className="check-section__head">
-                  <h3>Historial de versiones</h3>
-                  <button
-                    className="btn ghost btn-sm"
-                    type="button"
-                    aria-expanded={showHistory}
-                    onClick={() => setShowHistory((v) => !v)}
-                  >
-                    {showHistory ? 'Ocultar' : 'Ver quién cambió qué'}
-                  </button>
-                </div>
-                {showHistory ? (
-                  <div className="stack">
-                    {/* Quién cambió qué campo, no solo quién tocó el formato. */}
-                    <RevisionHistory
-                      path={`/checklists/${activeChecklist.id}/revisions`}
-                      reloadKey={revision}
-                      emptyHint="Las revisiones se crean con «Guardar y generar PDF», no con el autoguardado."
-                    />
-                    {(activeChecklist.versions || []).length && !closed ? (
-                      <details className="revision-restore">
-                        <summary className="muted kpi-sub">Restaurar una versión anterior</summary>
-                        <div className="table-wrap">
-                          <table className="table">
-                            <thead>
-                              <tr>
-                                <th>Fecha</th>
-                                <th>Editor</th>
-                                <th>Nota</th>
-                                <th />
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {(activeChecklist.versions || []).map((v) => (
-                                <tr key={v.id}>
-                                  <td className="muted kpi-sub">
-                                    {new Date(v.createdAt).toLocaleString('es-MX')}
-                                  </td>
-                                  <td>{v.editedBy?.fullName || '—'}</td>
-                                  <td className="muted">{v.note || '—'}</td>
-                                  <td>
-                                    <button
-                                      className="btn ghost btn-sm"
-                                      type="button"
-                                      disabled={saving}
-                                      onClick={() => onRestoreVersion(v.id)}
-                                    >
-                                      Restaurar
-                                    </button>
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      </details>
-                    ) : null}
-                  </div>
-                ) : null}
-              </div>
-            </div>
+            </details>
           </div>
-        ) : (
-          <div className="panel checklist-workspace__empty">
-            <div className="panel-body">
-              <EmptyState
-                title="Selecciona un formato"
-                description="A la izquierda están todos los checklists del evento. Empieza por los que tienen menor avance."
-                steps={[
-                  'Abre un formato de la lista',
-                  'Marca ítems y completa campos — se guarda solo',
-                  'Guarda y genera el PDF, luego firma entregado / autorizado',
-                ]}
+        </div>
+
+        <div className="hub-doc__meta">
+          <span className="hub-doc__progress">
+            <span className={`hub-bar ${progressPct >= 100 ? 'is-done' : ''}`} aria-hidden>
+              <span style={{ width: `${progressPct}%` }} />
+            </span>
+            {progressPct}% · {stats.done}/{stats.total} campos
+          </span>
+          {activeChecklist.lastEditedBy ? <span>Última edición: {activeChecklist.lastEditedBy.fullName}</span> : null}
+          {activeChecklist.sealedAt ? (
+            <span>
+              Sellado el{' '}
+              {new Date(activeChecklist.sealedAt).toLocaleDateString('es-MX', { dateStyle: 'medium' })}
+              {activeChecklist.sealedBy ? ` por ${activeChecklist.sealedBy.fullName}` : ''}
+            </span>
+          ) : null}
+          {onChangeStatus && !closed ? (
+            <span className="hub-doc__status">
+              <DocStatusControl status={status} roleKey={roleKey} busy={saving} onChange={onChangeStatus} />
+            </span>
+          ) : null}
+        </div>
+      </header>
+
+      {lockedByStatus ? (
+        <p className="inline-note">
+          {status === 'SEALED'
+            ? 'Sellado: queda como evidencia. Solo dirección lo reabre, con motivo.'
+            : 'Aprobado: para editarlo, regrésalo a borrador.'}
+        </p>
+      ) : null}
+
+      {/* ── Cajones ── */}
+
+      {drawer === 'firmas' ? (
+        <section className="surface hub-drawer">
+          <div className="surface__head">
+            <h3 className="surface__title">Firmas</h3>
+            <button className="icon-btn" type="button" aria-label="Cerrar" onClick={() => setDrawer(null)}>
+              ×
+            </button>
+          </div>
+          <div className="surface__body">
+            <div className="sig-grid">
+              <SignaturePad
+                label="Entregado"
+                signerName={userFullName}
+                existing={activeChecklist.deliveredSignature}
+                onSign={(p) => onSignChecklist('ENTREGADO', p)}
+              />
+              <SignaturePad
+                label="Autorizado"
+                signerName={userFullName}
+                existing={activeChecklist.authorizedSignature}
+                onSign={(p) => onSignChecklist('AUTORIZADO', p)}
               />
             </div>
           </div>
-        )}
+        </section>
+      ) : null}
+
+      {drawer === 'pdf' ? (
+        <section className="surface hub-drawer">
+          <div className="surface__head">
+            <h3 className="surface__title">{annotating ? 'Escribiendo sobre el PDF' : 'PDF del formato'}</h3>
+            <div className="sx-actions">
+              {activeChecklist.pdfUrl && !closed ? (
+                <button
+                  className="btn-quiet"
+                  type="button"
+                  aria-pressed={annotating}
+                  onClick={() => setAnnotating((v) => !v)}
+                >
+                  {annotating ? 'Solo ver' : 'Escribir encima'}
+                </button>
+              ) : null}
+              {!activeChecklist.pdfUrl ? (
+                <button className="btn btn-sm" type="button" onClick={onRegeneratePdf}>
+                  Generar PDF
+                </button>
+              ) : null}
+              <button className="icon-btn" type="button" aria-label="Cerrar" onClick={() => setDrawer(null)}>
+                ×
+              </button>
+            </div>
+          </div>
+          <div className="surface__body">
+            {!activeChecklist.pdfUrl ? (
+              <EmptyLite icon="▤" title="Aún no hay PDF" text="Se genera al guardar el formato." />
+            ) : annotating ? (
+              <PdfEditor
+                key={activeChecklist.id}
+                url={activeChecklist.pdfUrl}
+                fileName={`${activeChecklist.title} — anotado.pdf`}
+                canEdit={!readOnly}
+                saveLabel="Guardar copia anotada"
+                note="La copia anotada se guarda como adjunto de este formato; el PDF original se regenera aparte."
+                onSave={createEventFile({
+                  eventId: event.id,
+                  checklistId: activeChecklist.id,
+                  module: CHECKLIST_FILE_MODULE,
+                })}
+                onSaved={async () => {
+                  await onFilesChanged();
+                  setAnnotating(false);
+                }}
+              />
+            ) : (
+              <FileViewer
+                url={activeChecklist.pdfUrl}
+                fileName={`${activeChecklist.title}.pdf`}
+                kind="pdf"
+                cacheKey={activeChecklist.pdfGeneratedAt || undefined}
+              />
+            )}
+          </div>
+        </section>
+      ) : null}
+
+      {drawer === 'archivos' ? (
+        <section className="surface hub-drawer">
+          <div className="surface__head">
+            <h3 className="surface__title">Adjuntos del formato</h3>
+            <div className="sx-actions">
+              {!closed ? (
+                <label className="btn-quiet hub-upload">
+                  Subir archivo
+                  <input
+                    type="file"
+                    hidden
+                    accept=".pdf,.xlsx,.xls,.csv,image/*"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      e.target.value = '';
+                      if (f) void onUpload(f);
+                    }}
+                  />
+                </label>
+              ) : null}
+              <button className="icon-btn" type="button" aria-label="Cerrar" onClick={() => setDrawer(null)}>
+                ×
+              </button>
+            </div>
+          </div>
+          <div className="surface__body">
+            {!checklistFiles.length ? (
+              <EmptyLite icon="+" title="Sin adjuntos" text={closed ? undefined : 'Sube evidencias o una copia anotada.'} />
+            ) : (
+              <div className="hub-list">
+                {checklistFiles.map((f) => (
+                  <div key={f.id} className={`hub-item ${previewAttach?.id === f.id ? 'is-open' : ''}`}>
+                    <FileRow
+                      kind={/\.pdf$/i.test(f.fileName) ? 'pdf' : /\.xlsx?$/i.test(f.fileName) ? 'xlsx' : 'file'}
+                      name={f.fileName}
+                      meta={f.createdAt ? new Date(f.createdAt).toLocaleDateString('es-MX') : undefined}
+                    >
+                      <button
+                        className="btn-quiet"
+                        type="button"
+                        onClick={() => setPreviewAttach(previewAttach?.id === f.id ? null : f)}
+                      >
+                        {previewAttach?.id === f.id ? 'Ocultar' : 'Ver'}
+                      </button>
+                      <a className="btn-quiet" href={f.url} target="_blank" rel="noreferrer">
+                        Abrir
+                      </a>
+                    </FileRow>
+                    {previewAttach?.id === f.id ? (
+                      <div className="surface hub-pane">
+                        <div className="hub-pane__body">
+                          <FileViewer
+                            url={f.url}
+                            fileName={f.fileName}
+                            kind={f.kind}
+                            cacheKey={f.createdAt}
+                          />
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </section>
+      ) : null}
+
+      {drawer === 'historial' ? (
+        <section className="surface hub-drawer">
+          <div className="surface__head">
+            <h3 className="surface__title">Historial de versiones</h3>
+            <button className="icon-btn" type="button" aria-label="Cerrar" onClick={() => setDrawer(null)}>
+              ×
+            </button>
+          </div>
+          <div className="surface__body sx-stack">
+            <RevisionHistory
+              path={`/checklists/${activeChecklist.id}/revisions`}
+              reloadKey={revision}
+              emptyHint="Las revisiones se crean al guardar, no con el autoguardado."
+            />
+            {(activeChecklist.versions || []).length && !closed ? (
+              <details className="disclose">
+                <summary>Restaurar una versión anterior</summary>
+                <div className="dtable-wrap">
+                  <table className="dtable">
+                    <tbody>
+                      {(activeChecklist.versions || []).map((v) => (
+                        <tr key={v.id}>
+                          <td className="is-muted t-small">{new Date(v.createdAt).toLocaleString('es-MX')}</td>
+                          <td>{v.editedBy?.fullName || '—'}</td>
+                          <td className="is-muted">{v.note || '—'}</td>
+                          <td className="col-act">
+                            <button
+                              className="btn-quiet"
+                              type="button"
+                              disabled={saving}
+                              onClick={() => onRestoreVersion(v.id)}
+                            >
+                              Restaurar
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </details>
+            ) : null}
+          </div>
+        </section>
+      ) : null}
+
+      {/* ── Captura ── */}
+
+      <div className="toolbar-row">
+        <div className="hub-toolbar__group">
+          <input
+            className="hub-search"
+            type="search"
+            placeholder="Buscar campo…"
+            aria-label="Buscar campo dentro del formato"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+          />
+          <button
+            className="btn-quiet"
+            type="button"
+            aria-pressed={onlyPending}
+            onClick={() => setOnlyPending((v) => !v)}
+          >
+            Solo pendientes
+          </button>
+          {stats.perSection.length > 1 ? (
+            <select
+              className="hub-jump"
+              aria-label="Ir a una sección"
+              value=""
+              onChange={(e) => jumpTo(e.target.value)}
+            >
+              <option value="">Ir a sección…</option>
+              {stats.perSection.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.title} ({s.done}/{s.total})
+                </option>
+              ))}
+            </select>
+          ) : null}
+        </div>
+        {canWriteOnPdf ? (
+          <Seg
+            label="Cómo capturar"
+            value={mode}
+            onChange={setMode}
+            options={[
+              { key: 'form', label: 'Formulario' },
+              { key: 'pdf', label: 'Sobre el PDF' },
+            ]}
+          />
+        ) : null}
       </div>
+
+      {mode === 'pdf' && canWriteOnPdf ? (
+        <ChecklistPdfEditor
+          key={activeChecklist.id}
+          url={activeChecklist.pdfUrl!}
+          cacheKey={activeChecklist.pdfGeneratedAt || undefined}
+          fieldMap={fieldMap!}
+          sections={sections}
+          canEdit={!readOnly}
+          onUpdateItem={onUpdateItem}
+        />
+      ) : (
+        <div className="hub-sections">
+          {!visibleSections.length ? (
+            <div className="surface">
+              <EmptyLite
+                icon="✓"
+                title={onlyPending ? 'No queda nada pendiente' : 'Sin coincidencias'}
+                text={onlyPending ? 'Guarda para regenerar el PDF y firmar.' : undefined}
+              />
+            </div>
+          ) : (
+            visibleSections.map((section) => {
+              const stat = stats.perSection.find((s) => s.id === section.id);
+              const isCollapsed = collapsed.has(section.id);
+              const checkItems = section.items.filter(isCheckItem);
+              const allChecked = checkItems.length > 0 && checkItems.every((it) => it.done);
+              const complete = !!stat && stat.total > 0 && stat.done === stat.total;
+              return (
+                <section className="surface hub-sec" key={section.id} id={`chk-sec-${section.id}`}>
+                  <div className="hub-sec__head">
+                    <button
+                      type="button"
+                      className="hub-sec__toggle"
+                      aria-expanded={!isCollapsed}
+                      onClick={() => toggleSection(section.id)}
+                    >
+                      <span className="hub-sec__chev" aria-hidden>
+                        ›
+                      </span>
+                      <h3 className="hub-sec__title">{section.title}</h3>
+                      {stat ? (
+                        <span className={`hub-sec__count ${complete ? 'is-complete' : ''}`}>
+                          {stat.done}/{stat.total}
+                        </span>
+                      ) : null}
+                    </button>
+                    {checkItems.length > 1 && !readOnly && !isCollapsed ? (
+                      <button
+                        className="btn-quiet"
+                        type="button"
+                        onClick={() => onUpdateSection(section.id, !allChecked)}
+                      >
+                        {allChecked ? 'Desmarcar todo' : 'Marcar todo'}
+                      </button>
+                    ) : null}
+                  </div>
+
+                  {!isCollapsed ? (
+                    <div className="hub-sec__body">
+                      {section.items.map((item) =>
+                        isCheckItem(item) ? (
+                          <label key={item.id} className={`hub-check ${item.done ? 'is-done' : ''}`}>
+                            <input
+                              type="checkbox"
+                              disabled={readOnly}
+                              checked={!!item.done}
+                              onChange={(e) => onUpdateItem(section.id, item.id, { done: e.target.checked })}
+                            />
+                            <span className="hub-check__text">{item.label}</span>
+                          </label>
+                        ) : (
+                          <div key={item.id} className="hub-field">
+                            <span className="hub-field__label">{item.label}</span>
+                            <div className="hub-field__control">
+                              {item.type === 'text' ? (
+                                <textarea
+                                  rows={2}
+                                  disabled={readOnly}
+                                  value={item.value ?? ''}
+                                  placeholder="Respuesta…"
+                                  onChange={(e) => {
+                                    onUpdateItem(section.id, item.id, { value: e.target.value });
+                                    const el = e.target;
+                                    el.style.height = 'auto';
+                                    el.style.height = `${Math.min(el.scrollHeight, 220)}px`;
+                                  }}
+                                  onFocus={(e) => {
+                                    const el = e.target;
+                                    el.style.height = 'auto';
+                                    el.style.height = `${Math.min(el.scrollHeight, 220)}px`;
+                                  }}
+                                />
+                              ) : null}
+                              {item.type === 'number' || item.type === 'date' ? (
+                                <input
+                                  type={item.type}
+                                  disabled={readOnly}
+                                  value={item.value ?? ''}
+                                  placeholder={item.type === 'date' ? 'Fecha' : 'Respuesta…'}
+                                  onChange={(e) =>
+                                    onUpdateItem(section.id, item.id, {
+                                      value: item.type === 'number' ? Number(e.target.value) : e.target.value,
+                                    })
+                                  }
+                                />
+                              ) : null}
+                              {item.type === 'select'
+                                ? (() => {
+                                    const opts = item.options || [];
+                                    const otra = opts.find((o) => /^otra$/i.test(o));
+                                    const raw = String(item.value ?? '');
+                                    const known = opts.filter((o) => !/^otra$/i.test(o));
+                                    const choice = known.includes(raw)
+                                      ? raw
+                                      : otra && (raw === otra || (raw && !known.includes(raw)))
+                                        ? otra
+                                        : raw || '';
+                                    const custom = otra && choice === otra && raw !== otra ? raw : '';
+                                    return (
+                                      <>
+                                        <select
+                                          disabled={readOnly}
+                                          value={choice}
+                                          onChange={(e) => {
+                                            const next = e.target.value;
+                                            if (otra && next === otra) {
+                                              onUpdateItem(section.id, item.id, { value: custom || otra });
+                                            } else {
+                                              onUpdateItem(section.id, item.id, { value: next });
+                                            }
+                                          }}
+                                        >
+                                          <option value="">Selecciona…</option>
+                                          {opts.map((o) => (
+                                            <option key={o} value={o}>
+                                              {o}
+                                            </option>
+                                          ))}
+                                        </select>
+                                        {otra && choice === otra ? (
+                                          <input
+                                            disabled={readOnly}
+                                            placeholder="Especifica…"
+                                            value={custom}
+                                            onChange={(e) =>
+                                              onUpdateItem(section.id, item.id, {
+                                                value: e.target.value.trim() || otra,
+                                              })
+                                            }
+                                          />
+                                        ) : null}
+                                      </>
+                                    );
+                                  })()
+                                : null}
+                            </div>
+                          </div>
+                        ),
+                      )}
+                    </div>
+                  ) : null}
+                </section>
+              );
+            })
+          )}
+        </div>
+      )}
     </div>
   );
 }
