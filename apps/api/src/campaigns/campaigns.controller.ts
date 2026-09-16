@@ -20,6 +20,7 @@ import {
   canAccessEventOps,
   eventOpsEntities,
   hasPermission,
+  isDirectionRole,
   PERMISSIONS,
   type EntityKey,
   type RoleKey,
@@ -47,11 +48,7 @@ type Scope = 'campaign' | 'convenios';
 
 /** Quién autoriza: gerencia de Arta y dirección (misma regla que antes). */
 function isApprover(user: AuthUser) {
-  return (
-    user.roleKey === 'gerente_arta' ||
-    user.roleKey === 'dir_general' ||
-    user.roleKey === 'super_admin'
-  );
+  return user.roleKey === 'gerente_arta' || isDirectionRole(user.roleKey);
 }
 
 function asStatus(value: unknown): ReviewStatus | null {
@@ -118,7 +115,7 @@ export class CampaignsController {
 
     if (to === 'REVIEW') {
       const approvers = await this.prisma.user.findMany({
-        where: { active: true, organizationId, roleKey: { in: ['dir_general', 'gerente_arta'] } },
+        where: { active: true, organizationId, roleKey: { in: ['dir_general', 'dir_adjunta', 'gerente_arta'] } },
         select: { id: true, roleKey: true, entities: true },
       });
       await this.notifications.notifyMany(

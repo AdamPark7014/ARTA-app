@@ -14,7 +14,7 @@ import {
 import { DocType, Prisma } from '@prisma/client';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { hasPermission, canAccessEventOps, PERMISSIONS, type EntityKey, type RoleKey } from '../common/rbac/roles';
+import { hasPermission, canAccessEventOps, isDirectionRole, PERMISSIONS, type EntityKey, type RoleKey } from '../common/rbac/roles';
 import { assertSameTenant } from '../common/tenant';
 import { assertEventNotClosed } from '../common/event-guards';
 import { calcProgress } from '../common/checklist-progress';
@@ -201,7 +201,7 @@ export class FinanceController {
           'Corrida sellada — quita el sello primero (solo dirección) y vuelve a intentarlo',
         );
       }
-      if (wantsUnlock && role !== 'dir_general' && role !== 'super_admin') {
+      if (wantsUnlock && !isDirectionRole(role)) {
         throw new ForbiddenException('Solo dirección general puede quitar el sello de una corrida');
       }
     }
@@ -275,7 +275,7 @@ export class FinanceController {
     @Body() body: { reason?: string },
   ) {
     const role = req.user.roleKey as RoleKey;
-    if (role !== 'dir_general' && role !== 'super_admin') {
+    if (!isDirectionRole(role)) {
       throw new ForbiddenException('Solo dirección general puede quitar el sello de una corrida');
     }
     const reason = (body.reason || '').trim();

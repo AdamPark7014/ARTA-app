@@ -47,7 +47,7 @@ export class DigestsService {
         where: {
           active: true,
           organizationId,
-          roleKey: { in: ['dir_general', 'super_admin', 'gerente_arta', 'dir_auditorio'] },
+          roleKey: { in: ['dir_general', 'dir_adjunta', 'super_admin', 'gerente_arta', 'dir_auditorio'] },
         },
         select: { id: true, email: true, fullName: true },
       });

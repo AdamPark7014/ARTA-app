@@ -1,6 +1,7 @@
 import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../common/prisma/prisma.service';
+import { isDirectionRole } from '../common/rbac/roles';
 
 type TaskRow = {
   id: string;
@@ -20,7 +21,7 @@ export function canApproveTask(
   task: Pick<TaskRow, 'createdById'>,
 ) {
   if (task.createdById === userId) return true;
-  return roleKey === 'super_admin' || roleKey === 'dir_general';
+  return isDirectionRole(roleKey);
 }
 
 export async function logTaskActivity(

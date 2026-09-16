@@ -34,4 +34,4 @@ export function reviewEditable(step: ReviewStep): boolean {
 }
 
 /** Quién autoriza campaña (regla del API): gerencia de Arta y dirección. */
-export const REVIEW_APPROVER_ROLES = new Set(['gerente_arta', 'dir_general', 'super_admin']);
+export const REVIEW_APPROVER_ROLES = new Set(['gerente_arta', 'dir_general', 'dir_adjunta', 'super_admin']);

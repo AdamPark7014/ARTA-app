@@ -26,7 +26,7 @@ import {
 import { Type } from 'class-transformer';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { hasPermission, canAccessEventOps, PERMISSIONS, type EntityKey, type RoleKey } from '../common/rbac/roles';
+import { hasPermission, canAccessEventOps, isDirectionRole, PERMISSIONS, type EntityKey, type RoleKey } from '../common/rbac/roles';
 import { assertSameTenant, tenantIdOf } from '../common/tenant';
 import { assertEventNotClosed } from '../common/event-guards';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -137,7 +137,7 @@ export class PurchaseOrdersController {
 
   /** Dirección configura los días de cobro, así que no puede quedar encerrada por ellos. */
   private bypassesWindow(user: WindowUser) {
-    return user.roleKey === 'super_admin' || user.roleKey === 'dir_general';
+    return isDirectionRole(user.roleKey);
   }
 
   /**
@@ -152,7 +152,7 @@ export class PurchaseOrdersController {
     const canEdit = hasPermission(
       req.user.roleKey as RoleKey,
       req.user.permissions || [],
-      PERMISSIONS.USERS_MANAGE,
+      PERMISSIONS.EVERYTHING,
     );
     return {
       ...state,
@@ -169,7 +169,7 @@ export class PurchaseOrdersController {
       !hasPermission(
         req.user.roleKey as RoleKey,
         req.user.permissions || [],
-        PERMISSIONS.USERS_MANAGE,
+        PERMISSIONS.EVERYTHING,
       )
     ) {
       throw new ForbiddenException('Solo dirección configura los días de cobro');

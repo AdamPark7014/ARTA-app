@@ -208,14 +208,34 @@ const USER_VIEWS: Record<
   'marisol@artaproducciones.com': {
     entities: ['ARTA', 'EXPLANADA'],
     homeEntity: 'ARTA',
-    modules: ['dashboard', 'events', 'checklists', 'purchase-orders', 'campaigns', 'ticketing', 'folders', 'site'],
-    notes: 'Junta 11-09-2026 · TODO de Arta (mismo perfil que Leida)',
+    modules: [
+      'dashboard',
+      'events',
+      'checklists',
+      'finance',
+      'purchase-orders',
+      'campaigns',
+      'ticketing',
+      'studio',
+      'site',
+    ],
+    notes: 'Dirección adjunta (16-09-2026) · lo mismo que Arturo, sin usuarios',
   },
   'leida@artaproducciones.com': {
     entities: ['ARTA', 'EXPLANADA'],
     homeEntity: 'ARTA',
-    modules: ['dashboard', 'events', 'checklists', 'purchase-orders', 'campaigns', 'ticketing', 'folders', 'site'],
-    notes: 'Junta 11-09-2026 · TODO de Arta',
+    modules: [
+      'dashboard',
+      'events',
+      'checklists',
+      'finance',
+      'purchase-orders',
+      'campaigns',
+      'ticketing',
+      'studio',
+      'site',
+    ],
+    notes: 'Dirección adjunta (16-09-2026) · lo mismo que Arturo, sin usuarios',
   },
   'jp@artaproducciones.com': {
     entities: ['ARTA', 'EXPLANADA'],
@@ -649,10 +669,10 @@ const USERS: SeedUser[] = [
     email: 'leida@artaproducciones.com',
     fullName: 'Leida Osorio',
     title: 'Convenios y patrocinios',
-    // Junta 11-09-2026: acceso a TODO de Arta.
-    roleKey: ROLES.GERENTE_ARTA,
-    entities: ['ARTA'],
-    permissions: [...ROLE_PERMISSIONS[ROLES.GERENTE_ARTA]],
+    // 16-09-2026: los mismos permisos que Arturo y José Luis, sin gestionar usuarios.
+    roleKey: ROLES.DIR_ADJUNTA,
+    entities: ['ARTA', 'EXPLANADA'],
+    permissions: [...ROLE_PERMISSIONS[ROLES.DIR_ADJUNTA]],
     passAlias: 'LEIDA',
   },
   {

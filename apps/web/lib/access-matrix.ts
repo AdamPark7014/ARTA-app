@@ -16,6 +16,7 @@ export type EntityKey = 'ARTA' | 'EXPLANADA';
 export type RoleKey =
   | 'super_admin'
   | 'dir_general'
+  | 'dir_adjunta'
   | 'gerente_arta'
   | 'dir_auditorio'
   | 'logistica'
@@ -109,7 +110,7 @@ export const NAV_ITEMS: NavItem[] = [
     label: 'Tareas',
     group: 'Eventos',
     // Junta 11-09-2026: «solo carpetas generales» no ve tareas.
-    roles: ['super_admin', 'dir_general', 'gerente_arta', 'dir_auditorio', 'logistica', 'convenios', 'enlace_gobierno'],
+    roles: ['super_admin', 'dir_general', 'dir_adjunta', 'gerente_arta', 'dir_auditorio', 'logistica', 'convenios', 'enlace_gobierno'],
     keywords: 'pendientes apoyo asignar workload',
   },
 
@@ -153,7 +154,7 @@ export const NAV_ITEMS: NavItem[] = [
     href: '/settings',
     label: 'Configuración',
     permissions: ['users.manage', 'everything'],
-    roles: ['dir_general', 'super_admin'],
+    roles: ['dir_general', 'dir_adjunta', 'super_admin'],
     group: 'Admin',
     keywords: 'ventana ordenes de compra horario dias oc',
   },
@@ -173,7 +174,7 @@ export const NAV_ITEMS: NavItem[] = [
     href: '/audit',
     label: 'Auditoría',
     permissions: ['users.manage', 'everything'],
-    roles: ['dir_general', 'super_admin'],
+    roles: ['dir_general', 'dir_adjunta', 'super_admin'],
     group: 'Admin',
     keywords: 'audit log cumplimiento',
   },
@@ -181,14 +182,14 @@ export const NAV_ITEMS: NavItem[] = [
     href: '/webhooks',
     label: 'Webhooks',
     permissions: ['users.manage', 'everything'],
-    roles: ['dir_general', 'super_admin'],
+    roles: ['dir_general', 'dir_adjunta', 'super_admin'],
     group: 'Admin',
   },
   {
     href: '/digests',
     label: 'Resúmenes',
     permissions: ['users.manage', 'everything'],
-    roles: ['dir_general', 'super_admin'],
+    roles: ['dir_general', 'dir_adjunta', 'super_admin'],
     group: 'Admin',
     keywords: 'digests jobs outbox',
   },
@@ -451,6 +452,7 @@ export function canSeeNavItem(
 export const ROLE_SCOPE: Record<string, string> = {
   super_admin: 'Acceso total de sistemas',
   dir_general: 'Acceso total Arta + Auditorio · usuarios · cierre · corrida',
+  dir_adjunta: 'Acceso total Arta + Auditorio · cierre · corrida · sin usuarios',
   gerente_arta: 'Todo Arta · campaña · corrida · autoriza OC Arta · Studio',
   dir_auditorio: 'Todo Auditorio · en Arta solo carpetas generales · autoriza OC Auditorio',
   logistica: 'Eventos ambos · campaña · boletera · checklists · carpetas',

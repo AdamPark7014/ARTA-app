@@ -30,12 +30,13 @@ export type WriteBlock =
 /** Quién puede aprobar y quién puede sellar o reabrir. */
 const APPROVER_ROLES = new Set<string>([
   'dir_general',
+  'dir_adjunta',
   'super_admin',
   'gerente_arta',
   'dir_auditorio',
 ]);
 
-const UNSEAL_ROLES = new Set<string>(['dir_general', 'super_admin']);
+const UNSEAL_ROLES = new Set<string>(['dir_general', 'dir_adjunta', 'super_admin']);
 
 /**
  * ¿Por qué no se puede escribir? `null` = sí se puede.

@@ -95,7 +95,7 @@ function EventDetailInner() {
   const canChecklistEdit = has(['checklist.edit']);
   const canPo = has(['checklist.edit', 'po.authorize', 'po.mark_paid']);
   const canApproveCampaign = REVIEW_APPROVER_ROLES.has(role);
-  const canReopen = role === 'dir_general' || role === 'super_admin';
+  const canReopen = role === 'dir_general' || role === 'dir_adjunta' || role === 'super_admin';
   const canDeleteEvent = canReopen;
 
   const load = useCallback(async () => {

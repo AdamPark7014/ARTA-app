@@ -20,6 +20,7 @@ import {
   canAccessEventOps,
   eventOpsEntities,
   hasPermission,
+  isDirectionRole,
   PERMISSIONS,
   type EntityKey as EK,
   type RoleKey,
@@ -392,7 +393,7 @@ export class EventsController {
     if (!existing) throw new BadRequestException('Evento no encontrado');
     assertSameTenant(req.user, existing.organizationId);
     this.assertEntity(req.user, existing.entity);
-    if (req.user.roleKey !== 'dir_general' && req.user.roleKey !== 'super_admin') {
+    if (!isDirectionRole(req.user.roleKey)) {
       throw new ForbiddenException('Solo dirección puede reabrir');
     }
     const event = await this.prisma.event.update({ where: { id }, data: { status: 'ACTIVE' } });
@@ -431,7 +432,7 @@ export class EventsController {
     if (!existing) throw new BadRequestException('Evento no encontrado');
     assertSameTenant(req.user, existing.organizationId);
     this.assertEntity(req.user, existing.entity);
-    if (req.user.roleKey !== 'dir_general' && req.user.roleKey !== 'super_admin') {
+    if (!isDirectionRole(req.user.roleKey)) {
       throw new ForbiddenException('Solo dirección puede eliminar eventos');
     }
     await this.prisma.event.delete({ where: { id } });

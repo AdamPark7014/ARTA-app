@@ -5,6 +5,7 @@
 export const ROLES = {
   SUPER_ADMIN: 'super_admin',
   DIR_GENERAL: 'dir_general',
+  DIR_ADJUNTA: 'dir_adjunta',
   GERENTE_ARTA: 'gerente_arta',
   DIR_AUDITORIO: 'dir_auditorio',
   LOGISTICA: 'logistica',
@@ -21,6 +22,7 @@ export type EntityKey = 'ARTA' | 'EXPLANADA';
 export const ROLE_LABELS: Record<RoleKey, string> = {
   super_admin: 'Super Admin',
   dir_general: 'Director General',
+  dir_adjunta: 'Dirección adjunta',
   gerente_arta: 'Gerente General Arta',
   dir_auditorio: 'Director Auditorio',
   logistica: 'Logística y Producción',
@@ -33,7 +35,8 @@ export const ROLE_LABELS: Record<RoleKey, string> = {
 export const ROLE_HINTS: Record<RoleKey, string> = {
   super_admin: 'Plataforma completa (solo Nexara).',
   dir_general: 'Arturo / José Luis — todo el panel, altas de equipo.',
-  gerente_arta: 'Todo Arta: operación, finanzas y campaña (Karla, Leida, Sol).',
+  dir_adjunta: 'Leida / Sol — lo mismo que dirección general, sin gestionar usuarios.',
+  gerente_arta: 'Todo Arta: operación, finanzas y campaña.',
   dir_auditorio: 'Operación del Auditorio / Explanada.',
   logistica: 'Producción, checklists, campaña, boletera.',
   convenios: 'Patrocinios y convenios; ve tareas de todos.',
@@ -62,6 +65,7 @@ export const PERMISSION_LABELS: Record<string, string> = {
 export const ROLE_DEFAULT_ENTITIES: Record<RoleKey, EntityKey[]> = {
   super_admin: ['ARTA', 'EXPLANADA'],
   dir_general: ['ARTA', 'EXPLANADA'],
+  dir_adjunta: ['ARTA', 'EXPLANADA'],
   gerente_arta: ['ARTA'],
   dir_auditorio: ['EXPLANADA', 'ARTA'],
   logistica: ['ARTA', 'EXPLANADA'],
@@ -123,6 +127,12 @@ export const ROLE_PERMISSIONS: Record<RoleKey, Permission[]> = {
     PERMISSIONS.FOLDERS_EDIT,
     PERMISSIONS.VENDOR_PIN,
   ],
+  /**
+   * 16-09-2026 · Leida y Sol: «los mismos permisos de Arturo y José Luis
+   * excepto gestión de usuarios». La tabla no lleva `EVERYTHING` porque eso
+   * incluye `users.manage`; `hasPermission` le concede todo lo demás.
+   */
+  dir_adjunta: [...ASSIGNABLE_PERMISSIONS],
   gerente_arta: [
     PERMISSIONS.FINANCE_EDIT,
     PERMISSIONS.FINANCE_VIEW,
@@ -186,10 +196,21 @@ export function hasPermission(
   needed: Permission,
 ): boolean {
   if (roleKey === ROLES.SUPER_ADMIN || roleKey === ROLES.DIR_GENERAL) return true;
+  if (roleKey === ROLES.DIR_ADJUNTA && needed !== PERMISSIONS.USERS_MANAGE) return true;
   const fromRole = ROLE_PERMISSIONS[roleKey] ?? [];
   if (fromRole.includes(PERMISSIONS.EVERYTHING)) return true;
   if (fromRole.includes(needed)) return true;
   return extra.includes(needed);
+}
+
+/**
+ * Dirección: aprueba, sella, reabre y no la encierran los días de cobro.
+ * `dir_adjunta` entra aquí; lo único que no tiene es `users.manage`.
+ */
+export function isDirectionRole(roleKey: string | null | undefined): boolean {
+  return (
+    roleKey === ROLES.SUPER_ADMIN || roleKey === ROLES.DIR_GENERAL || roleKey === ROLES.DIR_ADJUNTA
+  );
 }
 
 export function canAccessEntity(

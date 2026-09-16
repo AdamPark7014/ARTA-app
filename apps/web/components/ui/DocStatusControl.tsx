@@ -24,8 +24,8 @@ export function DocStatusBadge({ status }: { status?: DocStatus | null }) {
 }
 
 /** Roles que pueden aprobar y sellar — misma regla que el API. */
-const APPROVERS = new Set(['dir_general', 'super_admin', 'gerente_arta', 'dir_auditorio']);
-const UNSEALERS = new Set(['dir_general', 'super_admin']);
+const APPROVERS = new Set(['dir_general', 'dir_adjunta', 'super_admin', 'gerente_arta', 'dir_auditorio']);
+const UNSEALERS = new Set(['dir_general', 'dir_adjunta', 'super_admin']);
 
 type Props = {
   status: DocStatus;

@@ -42,10 +42,8 @@ export class OrganizationsController {
   constructor(private prisma: PrismaService) {}
 
   private assertAdmin(user: { roleKey: string; permissions: string[] }) {
-    if (
-      !hasPermission(user.roleKey as RoleKey, user.permissions, PERMISSIONS.USERS_MANAGE) &&
-      !hasPermission(user.roleKey as RoleKey, user.permissions, PERMISSIONS.EVERYTHING)
-    ) {
+    // Altas de gente: users.manage a secas (dir_adjunta tiene todo lo demás, esto no).
+    if (!hasPermission(user.roleKey as RoleKey, user.permissions, PERMISSIONS.USERS_MANAGE)) {
       throw new ForbiddenException('Solo dirección gestiona organizaciones');
     }
   }

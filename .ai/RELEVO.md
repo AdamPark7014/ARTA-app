@@ -64,7 +64,8 @@ Mandato de Adam: simple, elegante y visualmente atractivo; nada de texto de más
 
 ### 7. Edición (quién edita)
 - Rol nuevo `solo_carpetas` (sin operación de eventos, sin permisos).
-- Leida y Sol (Marisol) → `gerente_arta` solo ARTA; Williams y Juan Pablo → `solo_carpetas`.
+- Williams y Juan Pablo → `solo_carpetas`. Leida y Sol (Marisol) empezaron en
+  `gerente_arta` solo ARTA y el 16-09 subieron a `dir_adjunta` (ver «Cuarta vuelta»).
 - Base viva: `scripts/apply-access-junta-0911.ts` (`--dry` primero). El seed ya lo trae
   para instalaciones nuevas. Aplicado en la base local de Docker.
 
@@ -81,10 +82,8 @@ Mandato de Adam: simple, elegante y visualmente atractivo; nada de texto de más
 - `.gitignore`: `credenciales/` y `*credenciales*.xlsx` nunca entran al repo.
 - Corrido SOLO en Docker local (9 personas); el Excel se entregó a Adam por el chat, no
   vive en el repo.
-- ⚠️ La base local trae cuentas duplicadas de un seed viejo con dominio `@arta.mx`
-  (Arturo, José Luis, Leida, Juan Pablo, Williams, Melissa) y roles antiguos: con
-  `williams@arta.mx` / `jp@arta.mx` se sigue editando. No se tocaron. Revisar si existen en
-  producción y desactivarlas desde Usuarios.
+- Las cuentas duplicadas `@arta.mx` de la base local y Melissa ya se quitaron (16-09,
+  ver «Cuarta vuelta»).
 
 ### Segunda vuelta: más intuitivo (revisión propia, 15-09)
 - **Campaña → Orden de compra:** con la campaña autorizada o pagada, «Crear OC» abre
@@ -134,12 +133,48 @@ Adam: «aún siento mucha fricción visual en algunos módulos, medio sucios o p
   (oculta pistas largas, pasos numerados y «Qué pasa después»; badges sin mayúsculas;
   paneles con el aire de `.surface`).
 
+### Cuarta vuelta: dirección adjunta y limpieza de usuarios (16-09, noche)
+Adam: «dale los mismos permisos a Leida y Marisol de Arturo y José Luis excepto gestión
+de usuarios, quita a Melissa y elimina usuarios duplicados tanto de db local como de
+pública».
+- **Rol nuevo `dir_adjunta` («Dirección adjunta»)**, Arta + Auditorio. `hasPermission` le
+  da todo salvo `users.manage` (incluido `everything`); su tabla guarda los 13 permisos
+  asignables, **nunca** `everything` ni `users.manage` (hay prueba que lo cuida).
+- **`isDirectionRole(roleKey)`** en `roles.ts` (super_admin, dir_general, dir_adjunta)
+  sustituye las comparaciones literales con `'dir_general'` en el API: reabrir/eliminar
+  evento, quitar sello de corrida, firmar «Autorizado», ver todas las carpetas, días de
+  cobro, aprobar tareas, autorizar campaña. Listas de roles: doc-guards (aprobar/sellar),
+  resúmenes, avisos de campaña y vista de tareas del equipo.
+- **Gestión de usuarios** se queda en dir_general: `/users` ya exigía `users.manage`;
+  `organizations` e `org-invites` pasaron de «`users.manage` o `everything`» a
+  `users.manage` a secas (no cambia a nadie existente). Días de cobro
+  (`PATCH /purchase-orders/window`) pasó de `users.manage` a `everything`.
+- Web: `dir_adjunta` en Tareas, Configuración, Auditoría, Webhooks y Resúmenes; no ve
+  Usuarios ni Organizaciones. La página Usuarios ya no se abre con `everything`, y
+  «Ir a Usuarios» en Seguridad solo sale a quien tiene `users.manage`.
+- **Ojo al agregar controles nuevos:** si algo es «solo dirección», usa
+  `isDirectionRole`; si es altas/bajas de gente, `users.manage` a secas. Con
+  «`users.manage` o `everything`» la dirección adjunta entra.
+- `scripts/apply-access-junta-0911.ts`: Leida y Marisol → `dir_adjunta` [ARTA+EXPLANADA];
+  ahora también **cierra las sesiones** de quien cambia (antes era un paso aparte).
+- **`scripts/remove-duplicate-users.ts`** (`--dry`; fuera de local exige
+  `--confirm-produccion`): una cuenta `@arta.mx` con gemela oficial del mismo nombre
+  hereda todo lo que tenga colgado (columnas FK hacia `User` leídas de
+  `information_schema`, más el chat) y se borra; Melissa se borra sin heredero. Una
+  `@arta.mx` sin gemela no se toca; nombres repetidos entre cuentas oficiales solo se avisan.
+- **Local aplicado:** Leida y Marisol en `dir_adjunta`; borradas arturo, chacho, jp,
+  leida, williams y melissa `@arta.mx` (solo tenían su membresía de organización). Quedan
+  los mismos 9 usuarios que en producción.
+- Melissa sigue nombrada en `docs/ACCESS.md` (No tocar) y en `SEED_PASS_MELISSA` de
+  `docker-compose.yml` (variable muerta, el seed no la lee; es una contraseña y cae en el
+  veto de credenciales). No se tocaron.
+
 ### Migración
 - `20260915090000_junta_0911` (enum CHEQUE, columnas nuevas, chat, backfill de campañas
   autorizadas). Aplicada en Docker local.
 
 ### Verde
-- `tsc --noEmit` web y api limpios · jest API **190/190** (antes 174).
+- `tsc --noEmit` web y api limpios · jest API **198/198** (antes 174; +4 de `dir_adjunta`).
 - Docker local: db 5439, api 4100, web 3100 (3000/4000/5432 los usa NEXARA; 5433 un
   Postgres nativo). Override en el scratchpad de la sesión, no en el repo.
 
@@ -198,11 +233,12 @@ Adam: «aún siento mucha fricción visual en algunos módulos, medio sucios o p
 
 ## Siguiente paso
 
-1. Adam revisa en local y da visto bueno.
-2. Producción: `prisma migrate deploy` y luego
-   `npx ts-node --transpile-only scripts/apply-access-junta-0911.ts --dry` → sin `--dry`.
-   Avisar a Williams y Juan Pablo que su acceso queda en carpetas.
-3. Si en producción había ventana de OC guardada, revisar «Días de cobro» en Configuración.
+1. **Producción (en curso en este turno):** desplegar `dir_adjunta` por bundle, luego
+   `apply-access-junta-0911.ts --dry` → real (cierra sesiones de Leida y Marisol) y
+   `remove-duplicate-users.ts --dry` (se espera «Sin duplicados»).
+2. Avisar a Leida y Marisol que vuelven a iniciar sesión y ya ven todo menos Usuarios.
+3. Demo `[SEED_DEMO]` en producción: sigue esperando visto bueno de Adam.
+4. Si en producción había ventana de OC guardada, revisar «Días de cobro» en Configuración.
 
 ## No tocar
 

@@ -137,10 +137,7 @@ function entityLabel(e: string) {
 
 export default function UsersPage() {
   const { user: me } = useUser();
-  const canManage = userHasPermission(me?.roleKey || '', me?.permissions || [], [
-    'users.manage',
-    'everything',
-  ]);
+  const canManage = userHasPermission(me?.roleKey || '', me?.permissions || [], ['users.manage']);
 
   const [gov, setGov] = useState<UsersGov | null>(null);
   const [roles, setRoles] = useState<RoleOpt[]>([]);

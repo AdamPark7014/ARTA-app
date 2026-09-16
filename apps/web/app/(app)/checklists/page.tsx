@@ -75,6 +75,7 @@ export default function ChecklistsTemplatesPage() {
   const canManage =
     !!user &&
     (user.roleKey === 'dir_general' ||
+      user.roleKey === 'dir_adjunta' ||
       user.roleKey === 'super_admin' ||
       user.roleKey === 'gerente_arta' ||
       user.roleKey === 'dir_auditorio' ||

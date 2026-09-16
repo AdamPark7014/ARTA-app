@@ -25,6 +25,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import {
   canAccessEntity,
   hasPermission,
+  isDirectionRole,
   PERMISSIONS,
   type EntityKey as EK,
   type RoleKey,
@@ -70,7 +71,7 @@ export class FoldersController {
 
   private canSeeFolder(user: AuthUser, allowedRoles: string[]) {
     if (!allowedRoles.length) return true;
-    if (user.roleKey === 'dir_general' || user.roleKey === 'super_admin') return true;
+    if (isDirectionRole(user.roleKey)) return true;
     return allowedRoles.includes(user.roleKey);
   }
 

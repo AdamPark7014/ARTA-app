@@ -74,6 +74,7 @@ const emptyForm = { title: '', detail: '', module: '', assigneeId: '', eventId: 
 const TEAM_ROLES = new Set([
   'super_admin',
   'dir_general',
+  'dir_adjunta',
   'gerente_arta',
   'dir_auditorio',
   'convenios',
@@ -775,7 +776,9 @@ export default function TasksPage() {
                             taskNeedsApproval(t) && t.assigneeId === user?.id && view === 'mine';
                           const canReview =
                             pending &&
-                            (t.createdById === user?.id || user?.roleKey === 'dir_general') &&
+                            (t.createdById === user?.id ||
+                              user?.roleKey === 'dir_general' ||
+                              user?.roleKey === 'dir_adjunta') &&
                             (view === 'requested' || view === 'team');
                           return (
                             <li key={t.id} className="task-row-wrap">

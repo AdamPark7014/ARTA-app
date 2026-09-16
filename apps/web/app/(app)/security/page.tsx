@@ -5,6 +5,7 @@ import { AppShell } from '@/components/app-shell/AppShell';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { LoadingBlock } from '@/components/ui/LoadingBlock';
 import { FlashMessage, PageHeader, ActionLink } from '@/components/ui/PageChrome';
+import { userHasPermission } from '@/lib/access-matrix';
 import { api } from '@/lib/api';
 import { useUser } from '@/lib/user-context';
 
@@ -97,9 +98,11 @@ export default function SecurityPage() {
               : '2FA inactivo — actívalo con tu app autenticadora. El panel lo pide en el primer acceso.'
           }
         >
-          <ActionLink href="/users" variant="ghost">
-            Ir a Usuarios
-          </ActionLink>
+          {user && userHasPermission(user.roleKey, user.permissions, ['users.manage']) ? (
+            <ActionLink href="/users" variant="ghost">
+              Ir a Usuarios
+            </ActionLink>
+          ) : null}
         </PageHeader>
         {msg ? (
           <FlashMessage variant={msgVariant} onDismiss={() => setMsg('')}>

@@ -23,7 +23,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { NotificationsService } from '../notifications/notifications.service';
 import { assertSameTenant, tenantIdOf } from '../common/tenant';
 import { assertEventNotClosed } from '../common/event-guards';
-import { canAccessEventOps, eventOpsEntities, type EntityKey, type RoleKey } from '../common/rbac/roles';
+import { canAccessEventOps, eventOpsEntities, isDirectionRole, type EntityKey, type RoleKey } from '../common/rbac/roles';
 import { MULTER_OPTIONS, contentMatchesExtension, discardUpload } from '../uploads/upload-storage';
 import {
   assertCanReview,
@@ -207,6 +207,7 @@ export class TasksController {
     const managers = [
       'super_admin',
       'dir_general',
+      'dir_adjunta',
       'gerente_arta',
       'dir_auditorio',
       'convenios',
@@ -313,7 +314,7 @@ export class TasksController {
     if (task.event) assertEventNotClosed(task.event.status);
     const isAssignee = task.assigneeId === req.user.id;
     const isRequester = task.createdById === req.user.id;
-    if (!isAssignee && !isRequester && req.user.roleKey !== 'dir_general' && req.user.roleKey !== 'super_admin') {
+    if (!isAssignee && !isRequester && !isDirectionRole(req.user.roleKey)) {
       throw new ForbiddenException();
     }
 

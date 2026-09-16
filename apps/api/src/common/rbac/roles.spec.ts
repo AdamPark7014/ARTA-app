@@ -3,7 +3,9 @@ import {
   canAccessEntity,
   canAccessEventOps,
   eventOpsEntities,
+  isDirectionRole,
   PERMISSIONS,
+  ROLE_PERMISSIONS,
   ROLES,
   type EntityKey,
   type RoleKey,
@@ -102,6 +104,30 @@ describe('rbac/roles', () => {
     it('cannot edit anything from its role table', () => {
       expect(hasPermission('solo_carpetas', [], PERMISSIONS.FOLDERS_EDIT)).toBe(false);
       expect(hasPermission('solo_carpetas', [], PERMISSIONS.CHECKLIST_EDIT)).toBe(false);
+    });
+  });
+
+  describe('dir_adjunta (Leida y Sol, 16-09-2026)', () => {
+    it('gets everything dirección general gets, except managing users', () => {
+      for (const p of Object.values(PERMISSIONS)) {
+        expect(hasPermission('dir_adjunta', [], p)).toBe(p !== PERMISSIONS.USERS_MANAGE);
+      }
+    });
+
+    it('its stored permissions never smuggle in users.manage or everything', () => {
+      expect(ROLE_PERMISSIONS.dir_adjunta).not.toContain(PERMISSIONS.USERS_MANAGE);
+      expect(ROLE_PERMISSIONS.dir_adjunta).not.toContain(PERMISSIONS.EVERYTHING);
+    });
+
+    it('operates events in both entities', () => {
+      expect(eventOpsEntities(['ARTA', 'EXPLANADA'], 'dir_adjunta')).toEqual(['ARTA', 'EXPLANADA']);
+    });
+
+    it('counts as dirección for approvals and reopening', () => {
+      expect(isDirectionRole('dir_adjunta')).toBe(true);
+      expect(isDirectionRole('dir_general')).toBe(true);
+      expect(isDirectionRole('gerente_arta')).toBe(false);
+      expect(isDirectionRole(undefined)).toBe(false);
     });
   });
 

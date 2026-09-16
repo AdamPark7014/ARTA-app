@@ -34,6 +34,7 @@ import {
 import {
   canAccessEventOps,
   hasPermission,
+  isDirectionRole,
   PERMISSIONS,
   type EntityKey,
   type RoleKey,
@@ -437,8 +438,7 @@ export class ChecklistsController {
       const role = req.user.roleKey;
       const entity = existing.event.entity;
       const allowed =
-        role === 'dir_general' ||
-        role === 'super_admin' ||
+        isDirectionRole(role) ||
         (role === 'gerente_arta' && entity === 'ARTA') ||
         (role === 'dir_auditorio' && entity === 'EXPLANADA');
       if (!allowed) {
