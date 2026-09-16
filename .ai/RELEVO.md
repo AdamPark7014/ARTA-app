@@ -177,8 +177,24 @@ Adam: «aún siento mucha fricción visual en algunos módulos, medio sucios o p
   imports, sin versionar) a `/root/arta-stale-NewsDetailClient.tsx.bak`; entraba al build.
 - Se liberó caché de build de Docker (`docker builder prune`): el disco estaba al 86 %,
   quedó en 79 %. No se tocaron imágenes ni volúmenes.
-- **NO se corrió** `scripts/apply-access-junta-0911.ts` en producción: cambia accesos de
-  personas reales (Williams y Juan Pablo pierden eventos). Pendiente de visto bueno de Adam.
+- **Accesos de la junta aplicados en producción (16-09, con visto bueno de Adam):**
+  `scripts/apply-access-junta-0911.ts` (simulación y luego real). Leida y Marisol →
+  `gerente_arta` [ARTA]; Williams y Juan Pablo → `solo_carpetas` [ARTA+EXPLANADA], sin
+  permisos extra. Verificado con una auditoría de solo lectura.
+- **Sesiones cerradas** de Leida (2) y Marisol (5), con auditoría
+  `user.sessions.revoked_access_change`: el JWT guarda rol, entidades y permisos, y sin
+  cerrarlas el cambio no aplicaba hasta que expirara el token (7 días). Tendrán que volver
+  a iniciar sesión. Williams y Juan Pablo no tenían sesiones.
+- **Cuentas `@arta.mx` duplicadas: NO existen en producción** (solo 9 usuarios oficiales).
+  Eran restos del seed viejo en la base local de Docker. No se desactivó nada.
+- Williams tenía 3 tareas abiertas: **son de eventos de demostración**, no trabajo real.
+- ⚠️ **5 de los 7 eventos en producción son demo del seed** (`notes` con `[SEED_DEMO]`:
+  Cierre Temporada · CDMX, Noche Estelar · Puebla, Renta Boletera · Arena Night, Show
+  Familiar · Domingo, Tour Centro · León), con 9 OC de ejemplo que inflan «Por autorizar» y
+  «Por pagar». `seedDemoPortfolio()` los **vuelve a crear en cada arranque** si no
+  encuentra ninguno: para quitarlos hay que (1) apagar el demo en producción en el seed
+  (bandera o `NODE_ENV`), desplegar, y (2) borrar esos eventos. No se hizo nada: pendiente
+  de visto bueno de Adam (borrar datos de producción no se deshace).
 
 ## Siguiente paso
 
