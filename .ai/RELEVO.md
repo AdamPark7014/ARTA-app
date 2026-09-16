@@ -223,6 +223,13 @@ pública».
 - **Cuentas `@arta.mx` duplicadas: NO existen en producción** (solo 9 usuarios oficiales).
   Eran restos del seed viejo en la base local de Docker. No se desactivó nada.
 - Williams tenía 3 tareas abiertas: **son de eventos de demostración**, no trabajo real.
+- **Dirección adjunta en producción (16-09, 22:28 UTC):** desplegado `9b40d6b` por bundle
+  (respaldo `/root/arta-backups/20260916-2228.sql.gz`; antes `docker builder prune`, disco
+  83 % → 74 %). Los tres sitios responden 200, seed OK, API sin errores.
+  `apply-access-junta-0911.ts` simulación y luego real: Leida y Marisol → `dir_adjunta`
+  [ARTA+EXPLANADA], 13 permisos (sin `users.manage` ni `everything`), sesiones cerradas.
+  `remove-duplicate-users.ts --dry` → «Sin duplicados ni cuentas a quitar (9 usuarios)»:
+  en producción nunca hubo `@arta.mx` ni Melissa, no se borró nada.
 - ⚠️ **5 de los 7 eventos en producción son demo del seed** (`notes` con `[SEED_DEMO]`:
   Cierre Temporada · CDMX, Noche Estelar · Puebla, Renta Boletera · Arena Night, Show
   Familiar · Domingo, Tour Centro · León), con 9 OC de ejemplo que inflan «Por autorizar» y
@@ -233,10 +240,9 @@ pública».
 
 ## Siguiente paso
 
-1. **Producción (en curso en este turno):** desplegar `dir_adjunta` por bundle, luego
-   `apply-access-junta-0911.ts --dry` → real (cierra sesiones de Leida y Marisol) y
-   `remove-duplicate-users.ts --dry` (se espera «Sin duplicados»).
-2. Avisar a Leida y Marisol que vuelven a iniciar sesión y ya ven todo menos Usuarios.
+1. Avisar a Leida y Marisol que vuelven a iniciar sesión y ya ven todo menos Usuarios
+   y Organizaciones.
+2. Arreglo de fondo del despliegue: deploy key de ARTA en GitHub (sigue por bundle).
 3. Demo `[SEED_DEMO]` en producción: sigue esperando visto bueno de Adam.
 4. Si en producción había ventana de OC guardada, revisar «Días de cobro» en Configuración.
 
