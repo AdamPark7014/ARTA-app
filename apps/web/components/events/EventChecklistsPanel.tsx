@@ -1,6 +1,8 @@
 'use client';
 
-import { ChecklistPdfEditor, FileViewer, PdfEditor } from '@/components/files/lazy';
+import { FileViewer, PdfEditor } from '@/components/files/lazy';
+import { ExpandBox } from '@/components/ui/ExpandBox';
+import { FormatSheet } from '@/components/events/FormatSheet';
 import { useEffect, useMemo, useState } from 'react';
 import { SignaturePad } from '@/components/ui/SignaturePad';
 import { createEventFile } from '@/lib/file-save';
@@ -246,8 +248,11 @@ export function EventChecklistsPanel({
   const [bucket, setBucket] = useState<ChecklistBucket | 'all'>('all');
   const [drawer, setDrawer] = useState<Drawer>(null);
   const [annotating, setAnnotating] = useState(false);
-  /** Captura sobre el PDF (si el generador ya dejó el mapa de campos). */
-  const [mode, setMode] = useState<'pdf' | 'form'>('form');
+  /**
+   * «Documento»: la hoja con la marca, editable en sitio (lo acordado: el
+   * formato es un Word hasta que sale en PDF). «Lista»: captura compacta.
+   */
+  const [mode, setMode] = useState<'sheet' | 'form'>('sheet');
   const [q, setQ] = useState('');
   const [onlyPending, setOnlyPending] = useState(false);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
@@ -258,8 +263,6 @@ export function EventChecklistsPanel({
     return (event.files || []).filter((f) => f.checklistId === activeChecklist.id);
   }, [event.files, activeChecklist]);
 
-  const fieldMap = activeChecklist?.pdfFieldsJson;
-  const canWriteOnPdf = !!activeChecklist?.pdfUrl && !!fieldMap?.fields?.length;
   /*
    * Un formato aprobado o sellado no se edita. `REVIEW` sí: es una bandera
    * para pedir revisión, no un candado — si bloqueara, nadie cerraría su
@@ -277,9 +280,7 @@ export function EventChecklistsPanel({
     setCollapsed(new Set());
     setDrawer(null);
     setPreviewAttach(null);
-    setMode('form');
-    // Solo al cambiar de formato: el detalle llega en una segunda petición y
-    // `canWriteOnPdf` sacaría a la persona del modo que acaba de elegir.
+    setMode('sheet');
   }, [activeChecklist?.id]);
 
   const sections = useMemo(
@@ -749,29 +750,36 @@ export function EventChecklistsPanel({
             </select>
           ) : null}
         </div>
-        {canWriteOnPdf ? (
-          <Seg
-            label="Cómo capturar"
-            value={mode}
-            onChange={setMode}
-            options={[
-              { key: 'form', label: 'Formulario' },
-              { key: 'pdf', label: 'Sobre el PDF' },
-            ]}
-          />
-        ) : null}
+        <Seg
+          label="Cómo capturar"
+          value={mode}
+          onChange={setMode}
+          options={[
+            { key: 'sheet', label: 'Documento' },
+            { key: 'form', label: 'Lista' },
+          ]}
+        />
       </div>
 
-      {mode === 'pdf' && canWriteOnPdf ? (
-        <ChecklistPdfEditor
-          key={activeChecklist.id}
-          url={activeChecklist.pdfUrl!}
-          cacheKey={activeChecklist.pdfGeneratedAt || undefined}
-          fieldMap={fieldMap!}
-          sections={sections}
-          canEdit={!readOnly}
-          onUpdateItem={onUpdateItem}
-        />
+      {mode === 'sheet' ? (
+        <ExpandBox title={activeChecklist.title} dirty={autosave.dirty}>
+          <FormatSheet
+            key={activeChecklist.id}
+            event={event}
+            checklist={activeChecklist}
+            sections={visibleSections}
+            readOnly={readOnly}
+            files={checklistFiles}
+            onUpdateItem={onUpdateItem}
+            onUpload={readOnly ? undefined : onUpload}
+            onOpenSignatures={() => {
+              openDrawer('firmas');
+              requestAnimationFrame(() => {
+                document.querySelector('.hub-drawer')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              });
+            }}
+          />
+        </ExpandBox>
       ) : (
         <div className="hub-sections">
           {!visibleSections.length ? (

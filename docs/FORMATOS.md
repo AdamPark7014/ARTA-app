@@ -47,8 +47,13 @@ con su nombre o como link clicable.
 - **Encabezado desde el evento**: al crear un evento (`events.controller`) o un
   formato desde plantilla (`checklists.controller`), `bindFormatToEvent` llena
   show, fecha, hora, ciudad y venue. Lo que la persona escriba después manda.
-- **Web**: `components/events/EventChecklistsPanel.tsx` (captura) +
-  `ChecklistFieldControls.tsx` (SÍ/NO, adjunto, tabla) + `styles/_formats.scss`.
+- **Web**: el formato abre como **documento** (`components/events/FormatSheet.tsx`
+  + `styles/_sheet.scss`): la hoja blanca con la marca, la misma estructura que
+  el PDF, y cada dato se escribe en su sitio. Es lo acordado con Adam: lo que era
+  Word se ve y se llena como Word hasta que sale en PDF. «Lista» es el segundo
+  modo (captura compacta, `EventChecklistsPanel.tsx`). Controles compartidos en
+  `ChecklistFieldControls.tsx` (SÍ/NO, adjunto, tabla). Ya no existe «escribir
+  sobre el PDF»: el PDF impreso no es superficie de captura (se veía doble).
   El editor de plantillas (`TemplateSchemaEditor`) conoce los tipos nuevos;
   para una tabla se escriben las columnas separadas por coma y `*` al final de
   la que se suma.

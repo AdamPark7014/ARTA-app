@@ -45,8 +45,3 @@ export const DocEditor = dynamic(() => import('./DocEditor').then((m) => m.DocEd
   ssr: false,
   loading: () => <Cargando que="el documento" />,
 });
-
-export const ChecklistPdfEditor = dynamic(
-  () => import('./ChecklistPdfEditor').then((m) => m.ChecklistPdfEditor),
-  { ssr: false, loading: () => <Cargando que="el formato" /> },
-);

@@ -78,39 +78,25 @@ avisa.
 
 Modelo nuevo `EventDocument` (`blocksJson`, `version`, `pdfUrl`, `pdfVersion`).
 
-## 3-bis. El checklist se captura SOBRE su PDF
+## 3-bis. El checklist se captura como documento
 
-`components/files/ChecklistPdfEditor.tsx` + `checklist-pdf.service.ts`
+`components/events/FormatSheet.tsx` + `checklist-pdf.service.ts` (23-09-2026)
 
-Antes el formulario mandaba y el PDF era su salida en solo lectura. Ahora es al
-revés: **se escribe sobre la hoja**.
+El formato abre como **la hoja misma**: fondo blanco, logo y pie del cliente,
+encabezado del show, secciones, casillas, líneas, SÍ/NO, tablas y firmas — la
+misma estructura que imprime el PDF — y cada dato se escribe en su sitio. Es lo
+acordado: los formatos que eran Word se ven y se llenan como Word hasta que
+salen en PDF. «Lista» queda como segundo modo para capturar rápido.
 
-Funciona porque el PDF lo genera este mismo sistema, así que el generador sabe
-dónde escribió cada dato. Ahora lo registra —página y coordenadas por ítem— en
-`ChecklistInstance.pdfFieldsJson`, y el panel dibuja el PDF real con pdf.js y
-coloca un campo de captura justo encima de cada valor: texto, select o casilla.
-Al guardar, el PDF se regenera con lo capturado y sigue el flujo de firmas de
-siempre.
-
-Los campos van con fondo opaco porque el PDF de abajo sigue mostrando el valor
-anterior hasta la regeneración.
-
-El **formulario clásico sigue disponible** con el botón *Formulario*, y es el
-modo por defecto mientras un formato no tenga mapa (se llena en su siguiente
-regeneración). Para los que ya existían:
-
-```bash
-docker exec -w /app/apps/api arta-api npx ts-node --transpile-only scripts/backfill-checklist-pdf-fields.ts
-```
-
-Ese script **deja fuera los formatos ya autorizados** a propósito: reescribir en
-bloque un documento firmado no debe pasar sin que alguien lo pida. Para
-incluirlos, `--include-signed`.
+Hubo una versión intermedia que dibujaba cajas de captura **encima del PDF
+impreso** (`ChecklistPdfEditor`, `pdfFieldsJson`): el valor viejo del PDF y el
+nuevo de la caja se veían uno sobre otro, y contradecía lo acordado. Se quitó.
+El generador sigue dejando `pdfFieldsJson` (coordenadas por ítem) por si un día
+hace falta; la web no lo usa. Guía completa en `docs/FORMATOS.md`.
 
 > Detalle que cuesta caro: en columnas `Json?` de Prisma, `{ equals: null }`
 > significa «JSON null», no NULL de la base. Hay que usar `Prisma.DbNull` o la
-> consulta no devuelve nada — la primera corrida del backfill no encontró
-> ninguna de las 59 filas por eso.
+> consulta no devuelve nada.
 
 ## 4. PDF → documento editable
 

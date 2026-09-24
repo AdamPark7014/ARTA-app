@@ -1,0 +1,490 @@
+/* ── El formato como documento (hoja con la marca, editable en sitio) ────── */
+
+.fsheet-wrap {
+  display: flex;
+  justify-content: center;
+  padding: 0.25rem 0 1rem;
+}
+
+.fsheet {
+  /* Es papel: tema claro propio, gane lo que gane el panel oscuro alrededor. */
+  --text: #111114;
+  --muted: #6b6b72;
+  --line: #d3d3da;
+  --line-strong: #b9b9c2;
+  --bg-soft: #f1f1f4;
+  --accent: #8b6914;
+  --paper-ink: #111114;
+  --paper-rule: #cfcfd6;
+
+  width: 100%;
+  max-width: 816px;
+  padding: clamp(22px, 5.5%, 60px) clamp(20px, 6%, 64px) clamp(20px, 4%, 40px);
+  border-radius: 4px;
+  background: #fff;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
+  color: var(--paper-ink);
+  font-family: "Helvetica Neue", Helvetica, Arial, "Inter", sans-serif;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.fsheet--explanada {
+  --accent: #1f5c50;
+}
+
+/* Campos: sin caja, solo la línea, como en la hoja impresa. */
+.shell .fsheet input:not([type='checkbox']),
+.shell .fsheet select,
+.shell .fsheet textarea,
+.panel .fsheet input:not([type='checkbox']),
+.panel .fsheet select,
+.panel .fsheet textarea {
+  width: 100%;
+  min-width: 0;
+  padding: 2px 4px;
+  border: 0;
+  border-bottom: 1px solid var(--paper-rule);
+  border-radius: 0;
+  background: transparent !important;
+  color: var(--paper-ink) !important;
+  caret-color: var(--paper-ink);
+  color-scheme: light;
+  font: inherit;
+  font-size: 13.5px;
+  line-height: 1.3;
+  box-shadow: none;
+}
+
+.shell .fsheet input:not([type='checkbox']):focus,
+.shell .fsheet select:focus,
+.shell .fsheet textarea:focus {
+  outline: none;
+  border-bottom-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 7%, #fff) !important;
+}
+
+.shell .fsheet input::placeholder,
+.shell .fsheet textarea::placeholder {
+  color: #b4b4bc;
+  font-style: italic;
+}
+
+.shell .fsheet input:disabled,
+.shell .fsheet select:disabled,
+.shell .fsheet textarea:disabled {
+  opacity: 1;
+  cursor: default;
+}
+
+/* Encabezado de marca */
+.fsheet__brand {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 18px;
+}
+
+.fsheet__logo {
+  width: auto;
+  height: 42px;
+}
+
+.fsheet__meta {
+  display: grid;
+  justify-items: end;
+  gap: 2px;
+  color: var(--muted);
+  font-size: 9.5px;
+  text-align: right;
+}
+
+.fsheet__entity {
+  color: var(--accent);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.fsheet__title {
+  margin: 0;
+  font-family: inherit;
+  font-size: 21px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  text-transform: uppercase;
+}
+
+.fsheet__sub {
+  margin: 3px 0 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.fsheet__rule {
+  height: 2px;
+  margin-bottom: 16px;
+  background: linear-gradient(to right, var(--paper-ink) 0 44px, var(--accent) 44px 100%);
+}
+
+/* Datos del show en rejilla */
+.fsheet__grid {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 8px 14px;
+  margin-bottom: 10px;
+}
+
+.fsheet__cell {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+.fsheet__lbl {
+  color: var(--muted);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+/* Secciones */
+.fsheet__sec {
+  margin-top: 14px;
+}
+
+.fsheet__sec-title {
+  margin: 0 0 8px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--paper-rule);
+  color: var(--accent);
+  font-family: inherit;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.fsheet__sec-title--ink {
+  color: var(--paper-ink);
+  border-bottom: 0;
+  border-top: 1.5px solid var(--accent);
+  padding-top: 10px;
+}
+
+/* Línea «etiqueta: valor»: la etiqueta ocupa lo que necesita, hasta la mitad. */
+.fsheet__line {
+  display: grid;
+  grid-template-columns: minmax(auto, 50%) minmax(0, 1fr);
+  align-items: baseline;
+  gap: 0 10px;
+  margin: 0 0 7px;
+}
+
+.fsheet__line > .fsheet__lbl {
+  white-space: normal;
+}
+
+.fsheet__line--attach {
+  align-items: start;
+}
+
+.fsheet__line--attach .hub-attach {
+  gap: 0.3rem;
+}
+
+.fsheet__line--attach .hub-attach__current {
+  padding: 3px 8px;
+  border-color: var(--paper-rule);
+  background: var(--bg-soft);
+}
+
+.fsheet .btn-quiet {
+  color: var(--accent);
+  font-size: 12px;
+}
+
+.fsheet .btn-quiet:hover {
+  color: var(--paper-ink);
+}
+
+.shell .fsheet select.hub-attach__pick {
+  max-width: 16rem;
+  font-size: 12px;
+}
+
+/* Casillas */
+.fsheet__checks--cols {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 24px;
+}
+
+.fsheet__check-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 2px 0;
+}
+
+.fsheet__check {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.fsheet__check > span {
+  white-space: normal;
+}
+
+.fsheet__check--inline {
+  margin-right: 14px;
+  font-weight: 600;
+}
+
+.shell .fsheet input[type='checkbox'] {
+  flex: 0 0 auto;
+  width: 13px;
+  height: 13px;
+  margin: 0;
+  padding: 0;
+  border: 1.2px solid var(--paper-ink);
+  border-radius: 2px;
+  background: #fff !important;
+  appearance: none;
+  cursor: pointer;
+  position: relative;
+}
+
+.shell .fsheet input[type='checkbox']:checked::after {
+  content: '';
+  position: absolute;
+  left: 3.5px;
+  top: 0.5px;
+  width: 4px;
+  height: 8px;
+  border: solid var(--paper-ink);
+  border-width: 0 1.8px 1.8px 0;
+  transform: rotate(45deg);
+}
+
+.shell .fsheet input[type='checkbox']:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.shell .fsheet input[type='checkbox']:disabled {
+  cursor: default;
+}
+
+.shell .fsheet input.fsheet__note {
+  flex: 1 1 60px;
+  min-width: 40px;
+  max-width: 220px;
+  border-bottom-color: transparent;
+  color: var(--muted) !important;
+  font-size: 11.5px;
+  font-style: italic;
+}
+
+.shell .fsheet input.fsheet__note:hover,
+.shell .fsheet input.fsheet__note:focus {
+  border-bottom-color: var(--paper-rule);
+}
+
+.fsheet-wrap.is-readonly .fsheet__note:placeholder-shown {
+  display: none;
+}
+
+/* Texto largo: recuadro rayado */
+.fsheet__block {
+  display: grid;
+  gap: 3px;
+  margin: 4px 0 10px;
+}
+
+.shell .fsheet textarea.fsheet__area {
+  min-height: 62px;
+  padding: 6px 8px;
+  border: 1px solid var(--paper-rule);
+  background: repeating-linear-gradient(to bottom, transparent 0 17px, #e9e9ee 17px 18px) !important;
+  background-attachment: local !important;
+  line-height: 18px;
+  resize: vertical;
+}
+
+/* Tablas (reutilizan .dtable con las variables del papel) */
+.fsheet__block--table .dtable-wrap {
+  border: 1px solid var(--paper-ink);
+  border-radius: 2px;
+  background: #fff;
+}
+
+.fsheet .dtable {
+  font-size: 12px;
+  background: #fff;
+}
+
+.fsheet .dtable tbody tr,
+.fsheet .dtable tbody td,
+.fsheet .dtable tbody tr:hover td {
+  background: #fff !important;
+}
+
+.fsheet .dtable th {
+  padding: 5px 7px;
+  border-bottom: 1px solid var(--paper-ink);
+  background: var(--bg-soft);
+  color: var(--paper-ink);
+  font-size: 9.5px;
+}
+
+.fsheet .dtable td {
+  padding: 1px 3px;
+  border-bottom: 1px solid var(--paper-rule);
+}
+
+.fsheet .dtable td + td,
+.fsheet .dtable th + th {
+  border-left: 1px solid var(--paper-rule);
+}
+
+.fsheet .dtable tbody tr:hover td {
+  background: transparent;
+}
+
+.shell .fsheet .dtable input.cell {
+  padding: 4px 5px;
+  border: 0;
+  color: var(--paper-ink) !important;
+  font-size: 12px;
+}
+
+.shell .fsheet .dtable input.cell:focus {
+  background: color-mix(in srgb, var(--accent) 8%, #fff) !important;
+}
+
+.fsheet .dtable tfoot td {
+  padding: 5px 7px;
+  border-top: 1px solid var(--paper-ink);
+  background: var(--bg-soft);
+  font-size: 12px;
+}
+
+.fsheet .dtable .icon-btn {
+  color: var(--muted);
+}
+
+/* SÍ / NO */
+.fsheet__yesno {
+  display: inline-flex;
+  align-items: center;
+}
+
+/* Firmas */
+.fsheet__sign {
+  margin-top: 22px;
+}
+
+.fsheet__sign-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px;
+}
+
+.fsheet__sig {
+  display: grid;
+  gap: 4px;
+}
+
+.fsheet__sig-img,
+.fsheet__sig-empty {
+  width: 100%;
+  height: 74px;
+  object-fit: contain;
+  border: 1px dashed var(--paper-rule);
+  background: #fff;
+}
+
+.fsheet__sig-img {
+  border-style: solid;
+}
+
+.fsheet__sig-empty {
+  color: var(--muted);
+  font: inherit;
+  font-size: 11px;
+  font-style: italic;
+  cursor: pointer;
+}
+
+.fsheet__sig-empty:disabled {
+  cursor: default;
+}
+
+.fsheet__sig-name {
+  padding-top: 4px;
+  border-top: 1px solid var(--paper-ink);
+  font-size: 12px;
+}
+
+.fsheet__sig-date {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+/* Pie */
+.fsheet__foot {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 26px;
+  padding-top: 8px;
+  border-top: 1px solid var(--paper-rule);
+}
+
+.fsheet__band {
+  width: auto;
+  height: 52px;
+}
+
+.fsheet__foot-note {
+  color: var(--muted);
+  font-size: 9.5px;
+}
+
+@media (max-width: 720px) {
+  .fsheet {
+    font-size: 13px;
+  }
+
+  .fsheet__grid > .fsheet__cell,
+  .fsheet__grid > .fsheet__cell[style] {
+    grid-column: 1 / -1 !important;
+  }
+
+  .fsheet__checks--cols,
+  .fsheet__sign-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .fsheet__line {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+
+  .fsheet__line > .fsheet__lbl {
+    max-width: none;
+  }
+
+  .fsheet__band {
+    height: 36px;
+  }
+}
