@@ -6,6 +6,42 @@
   padding: 0.25rem 0 1rem;
 }
 
+.fsheet-outline {
+  position: sticky;
+  top: 8px;
+  align-self: flex-start;
+  margin-right: 14px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg-elev);
+  min-width: 180px;
+  max-height: 80vh;
+  overflow: auto;
+}
+
+.fsheet-outline__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+  font-size: 0.88rem;
+}
+
+.fsheet-outline__pct {
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.fsheet-outline__list {
+  margin: 0;
+  padding-left: 16px;
+  display: grid;
+  gap: 4px;
+  font-size: 0.86rem;
+}
+
 .fsheet {
   /* Es papel: tema claro propio, gane lo que gane el panel oscuro alrededor. */
   --text: #111114;

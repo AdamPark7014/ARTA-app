@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import * as XLSX from 'xlsx';
+import { renderAsync } from 'docx-preview';
 import { SheetEditor } from './SheetEditor';
 import { ExpandBox } from '@/components/ui/ExpandBox';
 import { fixMojibake } from '@/lib/text';
@@ -27,6 +28,7 @@ export function FileViewer({ url, fileName, kind, cacheKey, fileId }: Props) {
   const isPdf = kind === 'pdf' || /\.pdf$/i.test(fileName) || url.toLowerCase().includes('.pdf');
   const isExcel =
     kind === 'excel' || /\.(xlsx?|csv)$/i.test(fileName) || kind === 'sheet';
+  const isDocx = kind === 'doc' || /\.docx$/i.test(fileName) || kind === 'word';
   const isImage = kind === 'image' || /\.(png|jpe?g|gif|webp)$/i.test(fileName);
 
   const fetchUrl = cacheKey
@@ -106,6 +108,40 @@ export function FileViewer({ url, fileName, kind, cacheKey, fileId }: Props) {
     };
   }, [inlineUrl, isExcel]);
 
+  // DOCX render (in-app)
+  const [docxHtmlId] = useState(() => `docx-${Math.random().toString(36).slice(2)}`);
+  useEffect(() => {
+    if (!isDocx) return;
+    let cancelled = false;
+    setLoading(true);
+    setError('');
+    (async () => {
+      try {
+        const r = await fetch(inlineUrl, { credentials: 'same-origin', cache: 'no-store' });
+        if (!r.ok) throw new Error(`No se pudo cargar (${r.status})`);
+        const blob = await r.blob();
+        if (cancelled) return;
+        const container = document.getElementById(docxHtmlId);
+        if (!container) return;
+        container.innerHTML = '';
+        await renderAsync(blob, container, undefined, {
+          inWrapper: true,
+          ignoreWidth: false,
+          ignoreHeight: false,
+          className: 'docx-view',
+          ignoreFonts: false,
+        });
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : 'Error al leer .docx');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [inlineUrl, isDocx, docxHtmlId]);
+
   if (isPdf) {
     return (
       <ExpandBox title={displayName}>
@@ -138,6 +174,27 @@ export function FileViewer({ url, fileName, kind, cacheKey, fileId }: Props) {
           </a>
         </div>
       </div>
+      </ExpandBox>
+    );
+  }
+
+  if (isDocx) {
+    return (
+      <ExpandBox title={displayName}>
+        <div className="stack">
+          {loading ? <p className="muted">Cargando documento…</p> : null}
+          {error ? (
+            <div className="form-error" role="alert">
+              {error}
+            </div>
+          ) : null}
+          <div className="docview panel-body">
+            <div id={docxHtmlId} />
+          </div>
+          <a className="btn ghost btn-sm" href={url} target="_blank" rel="noreferrer">
+            Descargar {displayName}
+          </a>
+        </div>
       </ExpandBox>
     );
   }

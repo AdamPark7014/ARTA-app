@@ -107,6 +107,9 @@ export function DocEditor({ doc, canEdit, onSaved, onDeleted, onClose }: Props) 
   const [showCoach, setShowCoach] = useState(false);
   const refs = useRef<Array<HTMLTextAreaElement | null>>([]);
   const focusNext = useRef<number | null>(null);
+  const [zoom, setZoom] = useState(1);
+  const [saveStatus, setSaveStatus] = useState('');
+  const lastSavedAtRef = useRef<number | null>(null);
 
   useEffect(() => {
     try {
@@ -198,6 +201,13 @@ export function DocEditor({ doc, canEdit, onSaved, onDeleted, onClose }: Props) 
   }
 
   function onKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>, i: number) {
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      const dir = e.shiftKey ? -1 : 1;
+      const j = Math.min(Math.max(0, i + dir), refs.current.length - 1);
+      refs.current[j]?.focus();
+      return;
+    }
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       // Una viñeta encadena viñetas; lo demás abre párrafo.
@@ -224,6 +234,8 @@ export function DocEditor({ doc, canEdit, onSaved, onDeleted, onClose }: Props) 
       setMsg('Guardado. La edición quedó registrada.');
       setRevKey((k) => k + 1);
       onSaved(saved);
+      lastSavedAtRef.current = Date.now();
+      setSaveStatus('Guardado ahora');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'No se pudo guardar el documento');
     } finally {
@@ -288,7 +300,7 @@ export function DocEditor({ doc, canEdit, onSaved, onDeleted, onClose }: Props) 
           </div>
         ) : null}
 
-        <div className="docedit-bar">
+        <div className="docedit-bar" style={{ position: 'sticky', top: 0, zIndex: 5 }}>
           <div className="docedit-bar__meta" aria-live="polite">
             <span className="docedit-pill docedit-pill--version">v{doc.version}</span>
             <span className="docedit-bar__who">
@@ -301,11 +313,22 @@ export function DocEditor({ doc, canEdit, onSaved, onDeleted, onClose }: Props) 
                 <>Sin ediciones registradas{editedWhen ? ` · ${editedWhen}` : ''}</>
               )}
             </span>
-            {dirty ? <span className="docedit-pill docedit-pill--dirty">Sin guardar</span> : null}
+            {dirty ? <span className="docedit-pill docedit-pill--dirty">Sin guardar</span> : saveStatus ? <span className="docedit-pill">{saveStatus}</span> : null}
             {canEdit ? <span className="docedit-bar__hint">Ctrl+S</span> : null}
           </div>
 
           <div className="docedit-bar__actions row row--tight">
+            <div className="sheet-toolbar__sheets" aria-label="Zoom" role="group">
+              <button className="btn ghost btn-sm" type="button" onClick={() => setZoom((z) => Math.max(0.8, Math.round((z - 0.1) * 10) / 10))} title="Alejar">
+                −
+              </button>
+              <span className="muted kpi-sub" aria-live="polite" style={{ minWidth: 44, display: 'inline-block', textAlign: 'center' }}>
+                {Math.round(zoom * 100)}%
+              </span>
+              <button className="btn ghost btn-sm" type="button" onClick={() => setZoom((z) => Math.min(2, Math.round((z + 0.1) * 10) / 10))} title="Acercar">
+                +
+              </button>
+            </div>
             <button
               className="btn btn-sm"
               type="button"
@@ -373,7 +396,7 @@ export function DocEditor({ doc, canEdit, onSaved, onDeleted, onClose }: Props) 
         ) : null}
 
         <div className="docedit-canvas">
-          <div className="docedit" data-readonly={!canEdit || undefined}>
+          <div className="docedit" data-readonly={!canEdit || undefined} style={{ zoom }}>
             <input
               className="docedit__title"
               value={title}
