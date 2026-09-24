@@ -6,6 +6,18 @@
 
 ## Hecho en este turno
 
+### Deploy bf03c56 + cleanup EventFiles + borrar escrito CAMPAÑA (2026-09-24 11:44 CT)
+- Local/GitHub ya en `bf03c5697eb4ebae7f4a06c628ef56f3425e51c0` (PR #1 squash-merge). Working tree limpio; sin `salvar`.
+- Servidor ya tenía el mismo tip (no hizo falta bundle). `bash deploy/update.sh --no-pull`.
+- Respaldo: `/root/arta-backups/20260924-1741.sql.gz`. Contenedores recreados sanos.
+- Salud: arta/auditorio `/` → 307 `/dashboard`; API Nest arrancó sin crash; `/ready` 200.
+- Cleanup `cleanup-event-files.ts`: dry 39 candidatos (todos `createdById` null, PDFs checklist bajo `/uploads/checklists/`); confirm soft-delete 39.
+  - ANDRES PARRA (cmt7m9eml0022t7t9ja185d0l): 13
+  - Pasaje Siniestro (cmthgq6ix000l13xaiaoux19k): 13
+  - YAHIR PUEBLA (cmues7mzc006yxr7rfl47j1h5): 13
+  - Ningún archivo con autor ni Excel de finanzas tocado.
+- Escrito (EventDocument, sin `deletedAt`) en ANDRES PARRA: hard-delete tras confirmar 1 match.
+  - id `cmteypa5c0003uoby29qhkupn`, título mojibake `CAMPAÃ‘A ANDRES PARRA.xlsx - CAMPAÃ‘A`, v1, editado por Arturo Taja 2026-08-29. 0 DocRevision asociadas. Quedan 0 escritos en ese evento.
 ### Documentos/campaña — limpieza y candados (24-09 tarde)
 - Documentos del evento ahora solo listan archivos subidos por una persona o salidas PDF
   oficiales: `events.controller` filtra `files` por `deletedAt: null AND (createdById IS NOT NULL OR kind='pdf')`.
