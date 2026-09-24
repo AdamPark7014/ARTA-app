@@ -1,6 +1,7 @@
 'use client';
 
 import type { ReactNode } from 'react';
+import { fixMojibake } from '@/lib/text';
 import { REVIEW_LABELS, REVIEW_STEPS, REVIEW_TONES, type ReviewStep } from '@/lib/review-flow';
 
 /**
@@ -158,14 +159,15 @@ export function FileRow({
   meta?: ReactNode;
   children?: ReactNode;
 }) {
+  const display = fixMojibake(name);
   return (
     <div className="file-row">
       <span className={`file-row__icon file-row__icon--${kind}`} aria-hidden>
         {kind === 'xlsx' ? 'XLS' : kind === 'pdf' ? 'PDF' : 'DOC'}
       </span>
       <div className="file-row__main">
-        <div className="file-row__name" title={name}>
-          {name}
+        <div className="file-row__name" title={display}>
+          {display}
         </div>
         {meta ? <div className="file-row__meta">{meta}</div> : null}
       </div>

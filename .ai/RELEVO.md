@@ -6,6 +6,35 @@
 
 ## Hecho en este turno
 
+### Documentos/campaña — limpieza y candados (24-09 tarde)
+- Documentos del evento ahora solo listan archivos subidos por una persona o salidas PDF
+  oficiales: `events.controller` filtra `files` por `deletedAt: null AND (createdById IS NOT NULL OR kind='pdf')`.
+- Candados post-subida en `uploads.controller`:
+  - Editar (`PUT /uploads/:id/content`, `PATCH /uploads/:id/cells`) y borrar (`DELETE /uploads/:id`)
+    un archivo que tenga `createdById` queda reservado a dirección (`isDirectionRole`).
+  - El borrado sigue siendo reversible (`deletedAt`, `deletedById`), nunca hard-delete.
+- PDF → editable (leer texto del PDF a Documento) ahora es solo para dirección:
+  `documents.controller.create()` exige dirección cuando llega `sourceFileId`.
+- Mojibake arreglado al mostrar nombres de archivo: `lib/text.ts::fixMojibake()` y aplicado
+  en `FileRow` y `FileViewer` (CAMPAÃ‘A → CAMPAÑA en todas las listas y vistas).
+- El Excel de campaña ya abría como hoja (SheetEditor); no se tocó su flujo.
+- Pruebas API nuevas:
+  - `uploads.controller.spec.ts`: no-dirección no puede borrar un archivo subido; dirección sí.
+  - `documents.controller.spec.ts`: PDF→editable bloqueado para no-dirección.
+- Script de limpieza seguro (SOFT-DELETE) de archivos basura/placeholder:
+  `apps/api/scripts/cleanup-event-files.ts`.
+  - Dry-run:
+    ```
+    ts-node --transpile-only apps/api/scripts/cleanup-event-files.ts --dry
+    ```
+  - Producir (marca `deletedAt`):
+    ```
+    ts-node --transpile-only apps/api/scripts/cleanup-event-files.ts --confirm-produccion
+    ```
+  - Criterios: `deletedAt IS NULL AND ((createdById IS NULL AND kind != 'pdf') OR fileName LIKE '%CAMPAÃ%')`.
+
+Estado: tsc api/web verdes. Jest API 233/233. E2E web no se corrieron aquí (requieren `npx playwright install`).
+
 **Formatos estándar desde la carpeta «FORMATOS ARTA» de Drive** (pedido de Adam, 23-09).
 Guía completa en `docs/FORMATOS.md`; plan y reparto en `.ai/EXEC-PACKET.md`.
 

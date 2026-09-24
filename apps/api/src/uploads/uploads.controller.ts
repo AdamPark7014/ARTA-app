@@ -22,7 +22,7 @@ import { createHash, randomUUID } from 'crypto';
 import { DocType } from '@prisma/client';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { canAccessEventOps, hasPermission, PERMISSIONS, type EntityKey, type RoleKey } from '../common/rbac/roles';
+import { canAccessEventOps, hasPermission, isDirectionRole, PERMISSIONS, type EntityKey, type RoleKey } from '../common/rbac/roles';
 import { MULTER_OPTIONS, contentMatchesExtension, discardUpload, uploadRoot } from './upload-storage';
 import { assertSameTenant } from '../common/tenant';
 import { assertEventNotClosed } from '../common/event-guards';
@@ -307,6 +307,11 @@ export class UploadsController {
         throw new ForbiddenException('Evento cerrado — los archivos quedan en solo lectura');
       }
       this.assertFileEditPermission(req.user, current.module);
+      // Candado post-subida: tras quedar registrado como EventFile subido por una persona,
+      // solo Dirección puede seguir modificándolo.
+      if (current.createdById && !isDirectionRole(req.user.roleKey)) {
+        throw new ForbiddenException('Solo dirección puede editar archivos ya subidos');
+      }
     } else {
       this.assertOrphanFileEdit(req.user);
     }
@@ -389,6 +394,9 @@ export class UploadsController {
       assertSameTenant(req.user, current.event.organizationId);
       assertEventNotClosed(current.event.status);
       this.assertFileEditPermission(req.user, current.module);
+      if (current.createdById && !isDirectionRole(req.user.roleKey)) {
+        throw new ForbiddenException('Solo dirección puede editar archivos ya subidos');
+      }
     } else {
       this.assertOrphanFileEdit(req.user);
     }
@@ -646,6 +654,10 @@ export class UploadsController {
       assertSameTenant(req.user, file.event.organizationId);
       assertEventNotClosed(file.event.status);
       this.assertFileEditPermission(req.user, file.module);
+      // Borrado solo por Dirección cuando el archivo fue subido por una persona.
+      if (file.createdById && !isDirectionRole(req.user.roleKey)) {
+        throw new ForbiddenException('Solo dirección puede eliminar archivos ya subidos');
+      }
     } else {
       this.assertOrphanFileEdit(req.user);
     }

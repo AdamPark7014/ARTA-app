@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import * as XLSX from 'xlsx';
 import { ExpandBox } from '@/components/ui/ExpandBox';
+import { fixMojibake } from '@/lib/text';
 
 type Props = {
   url: string;
@@ -13,6 +14,7 @@ type Props = {
 };
 
 export function FileViewer({ url, fileName, kind, cacheKey }: Props) {
+  const displayName = fixMojibake(fileName);
   const [sheetHtml, setSheetHtml] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -102,7 +104,7 @@ export function FileViewer({ url, fileName, kind, cacheKey }: Props) {
 
   if (isPdf) {
     return (
-      <ExpandBox title={fileName}>
+      <ExpandBox title={displayName}>
       <div className="stack">
         {loading ? <p className="muted">Cargando PDF…</p> : null}
         {error ? (
@@ -113,7 +115,7 @@ export function FileViewer({ url, fileName, kind, cacheKey }: Props) {
         {!pdfFailed && pdfSrc ? (
           <div className="docview">
             <iframe
-              title={fileName}
+              title={displayName}
               src={`${pdfSrc}#toolbar=1&navpanes=0`}
               className="docview__frame"
               onError={() => setPdfFailed(true)}
@@ -127,7 +129,7 @@ export function FileViewer({ url, fileName, kind, cacheKey }: Props) {
           <a className="btn ghost btn-sm" href={url} target="_blank" rel="noreferrer">
             Abrir PDF
           </a>
-          <a className="btn ghost btn-sm" href={url} download={fileName}>
+          <a className="btn ghost btn-sm" href={url} download={displayName}>
             Descargar
           </a>
         </div>
@@ -138,10 +140,10 @@ export function FileViewer({ url, fileName, kind, cacheKey }: Props) {
 
   if (isImage) {
     return (
-      <ExpandBox title={fileName}>
+      <ExpandBox title={displayName}>
         <div className="docview docview--image panel-body">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={url} alt={fileName} />
+          <img src={url} alt={displayName} />
         </div>
       </ExpandBox>
     );
@@ -149,7 +151,7 @@ export function FileViewer({ url, fileName, kind, cacheKey }: Props) {
 
   if (isExcel) {
     return (
-      <ExpandBox title={fileName}>
+      <ExpandBox title={displayName}>
       <div className="stack">
         {loading ? <p className="muted">Cargando hoja…</p> : null}
         {error ? (
@@ -164,7 +166,7 @@ export function FileViewer({ url, fileName, kind, cacheKey }: Props) {
           />
         ) : null}
         <a className="btn ghost btn-sm" href={url} target="_blank" rel="noreferrer">
-          Descargar {fileName}
+          Descargar {displayName}
         </a>
       </div>
       </ExpandBox>
@@ -173,7 +175,7 @@ export function FileViewer({ url, fileName, kind, cacheKey }: Props) {
 
   return (
     <a className="btn ghost btn-sm" href={url} target="_blank" rel="noreferrer">
-      Abrir {fileName}
+      Abrir {displayName}
     </a>
   );
 }

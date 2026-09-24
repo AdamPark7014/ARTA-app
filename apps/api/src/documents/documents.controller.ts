@@ -27,6 +27,7 @@ import { assertEventNotClosed } from '../common/event-guards';
 import {
   canAccessEventOps,
   hasPermission,
+  isDirectionRole,
   PERMISSIONS,
   type EntityKey,
   type RoleKey,
@@ -186,6 +187,10 @@ export class DocumentsController {
     this.assertDocEdit(req.user);
     const event = await this.assertEvent(req.user, dto.eventId);
     this.assertOpen(event.status);
+    // Reabrir edición desde un PDF existente (pdf→documento) solo lo hace Dirección.
+    if (dto.sourceFileId && !isDirectionRole(req.user.roleKey)) {
+      throw new ForbiddenException('Solo dirección puede volver un PDF a editable');
+    }
     const blocks = normalizeBlocks(dto.blocks);
     const created = await this.prisma.eventDocument.create({
       data: {

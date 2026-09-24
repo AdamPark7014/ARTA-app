@@ -234,7 +234,20 @@ export class EventsController {
         },
         sponsors: { orderBy: { createdAt: 'desc' } },
         // Los borrados quedan en la base para poder deshacerlos, pero no se listan.
-        files: { where: { deletedAt: null }, orderBy: { createdAt: 'desc' } },
+        files: {
+          where: {
+            deletedAt: null,
+            OR: [
+              // Subidos por una persona (cualquier tipo).
+              { createdById: { not: null } },
+              // PDFs de salida del sistema (Excel/doc), pero NO los PDFs base de checklists al crear el evento.
+              {
+                AND: [{ kind: 'pdf' }, { NOT: { url: { startsWith: '/uploads/checklists/' } } }],
+              },
+            ],
+          },
+          orderBy: { createdAt: 'desc' },
+        },
       },
     });
     if (!event) throw new BadRequestException('Evento no encontrado');
