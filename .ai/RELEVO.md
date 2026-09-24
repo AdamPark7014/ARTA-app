@@ -47,15 +47,21 @@ Guía completa en `docs/FORMATOS.md`; plan y reparto en `.ai/EXEC-PACKET.md`.
 ### Verde
 - `tsc --noEmit` api y web limpios; seed y scripts tipados aparte (limpios).
 - jest API **227/227** (antes 198).
+- e2e `checklist-pdf.spec.ts` **3/3** con build real de Next y los fixtures nuevos (el spec
+  buscaba «Sobre el PDF» como botón y es pestaña desde el rediseño del 15-09; corregido).
+  La captura del fallo confirmó que el panel pinta un formato viejo (texto/número/fecha)
+  sin romperse.
 - PDFs de muestra revisados a ojo (render en Node): logo, pie, tablas, SÍ/NO, firmas.
 
 ## A medias
 
-1. **Sin revisión visual en Docker con sesión real** (Docker no corría al empezar). Falta:
-   levantar el stack local, correr `upgrade-format-templates.ts --dry` y luego real,
-   abrir un evento y revisar los 7 formatos y sus PDFs con la sesión de Adam.
-2. e2e `checklist-pdf.spec.ts` no se corrió tras regenerar fixtures (Playwright).
-3. Producción: desplegar (bundle + `update.sh --no-pull`) y correr el script de upgrade
+1. **Sin revisión en Docker con la base real.** Docker Desktop no levantó el motor en
+   toda la sesión (WSL `docker-desktop` quedó `Stopped` incluso tras matar procesos y
+   relanzar, la receta de siempre). Quedó abierto por si arranca solo. Falta: levantar el
+   stack local (override de puertos 5439/4100/3100 en el scratchpad, no en el repo),
+   correr `upgrade-format-templates.ts --dry` y luego real, abrir un evento y revisar los
+   7 formatos y sus PDFs con la sesión de Adam (el agente no teclea contraseñas).
+2. Producción: desplegar (bundle + `update.sh --no-pull`) y correr el script de upgrade
    en el contenedor con `--confirm-produccion`.
 
 ## Siguiente paso

@@ -3,7 +3,7 @@
 - **Escrito por:** Claude (cabeza)
 - **Fecha:** 2026-09-23
 - **Rama:** main
-- **Estado:** EN EJECUCION (Claude implementa el núcleo; Cursor toma el «Resto para Cursor»)
+- **Estado:** LISTO PARA CURSOR (núcleo hecho y committeado por Claude en `a6e987d` + `4216a4f`; Cursor toma el «Resto para Cursor»)
 <!-- Estados: BORRADOR → LISTO PARA CURSOR → EN EJECUCION → CERRADO -->
 
 ## Objetivo
@@ -34,8 +34,8 @@ módulos propios con su PDF (se retiran sus plantillas-checklist duplicadas, nad
 - [x] Al crear evento o formato, el encabezado se rellena solo desde el evento.
 - [x] `scripts/upgrade-format-templates.ts`: sube plantillas a v2 (con snapshot), migra formatos en borrador conservando respuestas, retira duplicados, regenera PDFs. `--dry` / `--confirm-produccion`.
 - [x] Web: captura de todos los tipos (tabla con filas/totales, SÍ/NO, hora, adjunto desde el propio formato), editor de plantillas con los tipos nuevos.
-- [ ] tests: `npm -w apps/api test` verde (nuevos: format-schema, format-catalog, checklist-pdf.service).
-- [ ] verificación manual: Docker local → evento nuevo → 7 formatos → PDF de cada uno.
+- [x] tests: jest API 227/227 (nuevos: format-schema, format-catalog, checklist-pdf.service) · e2e `checklist-pdf.spec.ts` 3/3.
+- [ ] verificación manual: Docker local → `upgrade-format-templates.ts --dry` y real → evento nuevo → 7 formatos → PDF de cada uno. **Docker Desktop no arrancó en la sesión de Claude (23-09); queda para Cursor/Adam.**
 
 ## Contexto mínimo a cargar (≤7 archivos)
 - `apps/api/src/common/format-schema.ts`
