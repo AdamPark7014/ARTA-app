@@ -4,13 +4,14 @@ import { PrismaService } from '../common/prisma/prisma.service';
 import { canAccessEventOps, isDirectionRole, type EntityKey, type RoleKey } from '../common/rbac/roles';
 import { assertSameTenant } from '../common/tenant';
 import { extname } from 'path';
+import { DirectionService } from '../common/rbac/direction.service';
 
 type AuthUser = { id: string; roleKey: string; permissions: string[]; entities: string[]; organizationId?: string | null };
 
 @Controller('slots')
 @UseGuards(JwtAuthGuard)
 export class SlotsController {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService, private dirService: DirectionService) {}
 
   private async assertEvent(user: AuthUser, eventId: string) {
     const event = await this.prisma.event.findUnique({ where: { id: eventId } });
@@ -102,8 +103,9 @@ export class SlotsController {
     @Param('eventId') eventId: string,
     @Body() body: { kind: 'CHECKLIST' | 'CAMPAIGN' | 'CORRIDA' | 'PENDONES' | 'OC' | 'BOLETERA'; checklistTemplateId?: string | null },
   ) {
-    if (!isDirectionRole(req.user.roleKey as RoleKey)) throw new ForbiddenException('Solo dirección restaura internos');
     const event = await this.assertEvent(req.user, eventId);
+    const ok = await this.dirService.isDirection(req.user, event.organizationId ?? req.user.organizationId ?? null);
+    if (!ok) throw new ForbiddenException('Solo dirección restaura internos');
     const slot = await this.prisma.eventDocumentSlot.upsert({
       where: {
         eventId_kind_checklistTemplateId: {

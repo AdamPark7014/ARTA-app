@@ -35,6 +35,7 @@ import { HealthModule } from './health/health.module';
 import { ChatModule } from './chat/chat.module';
 import { SlotsController } from './slots/slots.controller';
 import { OriginalDownloadController } from './files/original-download.controller';
+import { DirectionService } from './common/rbac/direction.service';
 
 @Module({
   imports: [
@@ -71,7 +72,7 @@ import { OriginalDownloadController } from './files/original-download.controller
     ChatModule,
   ],
   controllers: [SlotsController, OriginalDownloadController],
-  providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
+  providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }, DirectionService],
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
