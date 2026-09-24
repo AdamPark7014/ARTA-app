@@ -123,6 +123,57 @@ describe('Static /uploads guard order + in-app inline (no DB)', () => {
       .expect(200);
   });
 
+  it('eventless EventFile inline denies non-direction', async () => {
+    // Rewire prisma mock to return an eventless file
+    const prisma = app.get(PrismaService) as any;
+    prisma.eventFile.findUnique = jest.fn().mockResolvedValue({
+      id: 'f2',
+      fileName: testFileName,
+      url: `/uploads/${testFileName}`,
+      mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      kind: 'excel',
+      eventId: null,
+      event: null,
+    });
+    const token = await jwt.signAsync({
+      sub: 'u4',
+      email: 'u@b.com',
+      roleKey: 'logistica',
+      entities: ['ARTA'],
+      permissions: [],
+      organizationId: 'org1',
+    } as any);
+    await request(app.getHttpServer())
+      .get('/files/f2/inline')
+      .set('Cookie', [`arta_access=${token}`, 'arta_session=1', 'arta_csrf=abc'])
+      .expect(403);
+  });
+
+  it('eventless EventFile inline allows direction', async () => {
+    const prisma = app.get(PrismaService) as any;
+    prisma.eventFile.findUnique = jest.fn().mockResolvedValue({
+      id: 'f3',
+      fileName: testFileName,
+      url: `/uploads/${testFileName}`,
+      mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      kind: 'excel',
+      eventId: null,
+      event: null,
+    });
+    const token = await jwt.signAsync({
+      sub: 'u5',
+      email: 'd@b.com',
+      roleKey: 'dir_general',
+      entities: ['ARTA', 'EXPLANADA'],
+      permissions: [],
+      organizationId: 'org1',
+    } as any);
+    await request(app.getHttpServer())
+      .get('/files/f3/inline')
+      .set('Cookie', [`arta_access=${token}`, 'arta_session=1', 'arta_csrf=abc'])
+      .expect(200);
+  });
+
   it('no cookie gets 403 on static .xlsx', async () => {
     await request(app.getHttpServer()).get(`/uploads/${testFileName}`).expect(403);
   });

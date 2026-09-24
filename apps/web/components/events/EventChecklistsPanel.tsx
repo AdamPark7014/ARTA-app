@@ -270,6 +270,21 @@ export function EventChecklistsPanel({
     return (event.files || []).filter((f) => f.checklistId === activeChecklist.id);
   }, [event.files, activeChecklist]);
 
+  // Abrir visor inline desde AttachmentField (botón nombre)
+  useEffect(() => {
+    function onOpenAttach(e: any) {
+      const id = e?.detail?.fileId as string | undefined;
+      if (!id) return;
+      const f = checklistFiles.find((x) => x.id === id);
+      if (f) {
+        setDrawer('archivos');
+        setPreviewAttach(f);
+      }
+    }
+    window.addEventListener('arta-open-attach', onOpenAttach as EventListener);
+    return () => window.removeEventListener('arta-open-attach', onOpenAttach as EventListener);
+  }, [checklistFiles]);
+
   /** Sección e ítem para Campos adicionales (tabla Etiqueta/Valor). */
   const hasExtras = useMemo(() => {
     if (!activeChecklist?.dataJson?.sections) return false;
@@ -827,19 +842,20 @@ export function EventChecklistsPanel({
                       >
                         {previewAttach?.id === f.id ? 'Ocultar' : 'Ver'}
                       </button>
-                      <a className="btn-quiet" href={f.url} target="_blank" rel="noreferrer">
-                        Abrir
-                      </a>
+                      {/\.(xlsx?)$/i.test(f.fileName) ? (
+                        <button className="btn-quiet" type="button" onClick={() => setPreviewAttach(previewAttach?.id === f.id ? null : f)}>
+                          Abrir
+                        </button>
+                      ) : (
+                        <a className="btn-quiet" href={`/api/files/${f.id}/inline`} target="_blank" rel="noreferrer">
+                          Abrir
+                        </a>
+                      )}
                     </FileRow>
                     {previewAttach?.id === f.id ? (
                       <div className="surface hub-pane">
                         <div className="hub-pane__body">
-                          <FileViewer
-                            url={f.url}
-                            fileName={f.fileName}
-                            kind={f.kind}
-                            cacheKey={f.createdAt}
-                          />
+                          <FileViewer url={`/api/files/${f.id}/inline`} fileName={f.fileName} kind={f.kind} cacheKey={f.createdAt} fileId={f.id} />
                         </div>
                       </div>
                     ) : null}

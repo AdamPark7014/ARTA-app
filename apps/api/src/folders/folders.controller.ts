@@ -32,6 +32,10 @@ import {
 } from '../common/rbac/roles';
 import { assertSameTenant, orgWhere, tenantIdOf } from '../common/tenant';
 import { MULTER_OPTIONS } from '../uploads/upload-storage';
+import type { Response } from 'express';
+import { join } from 'path';
+import { existsSync, readFileSync } from 'fs';
+import { uploadRoot } from '../uploads/upload-storage';
 
 type AuthUser = {
   id: string;
@@ -63,6 +67,33 @@ export class FoldersController {
     if (!canAccessEntity(user.entities as EK[], user.roleKey as RoleKey, entity as EK)) {
       throw new ForbiddenException();
     }
+  }
+
+  /**
+   * Inline bytes (restringido por carpeta): Excel/Doc/Imagen para ver/editar en app.
+   * Protege originales tras /api en lugar de /uploads públicos.
+   */
+  @Get('files/:fileId/inline')
+  async inline(
+    @Req() req: { user: AuthUser },
+    @Res() res: Response,
+    @Param('fileId') fileId: string,
+  ) {
+    const file = await this.prisma.sharedFile.findUnique({
+      where: { id: fileId },
+      include: { folder: true },
+    });
+    if (!file) throw new NotFoundException('Archivo no encontrado');
+    assertSameTenant(req.user, file.folder.organizationId);
+    this.assertEntity(req.user, file.folder.entity);
+    if (!this.canSeeFolder(req.user, file.folder.allowedRoles)) throw new ForbiddenException();
+    const rel = String(file.url || '').replace(/^\/uploads\//, '');
+    const abs = join(uploadRoot, rel);
+    if (!abs.startsWith(uploadRoot) || !existsSync(abs)) throw new NotFoundException('Archivo no está en disco');
+    res.setHeader('Content-Type', file.mimeType || 'application/octet-stream');
+    res.setHeader('Content-Disposition', `inline; filename*=UTF-8''${encodeURIComponent(file.fileName || 'archivo')}`);
+    res.setHeader('Cache-Control', 'no-store');
+    res.send(readFileSync(abs));
   }
 
   private canEdit(user: AuthUser) {

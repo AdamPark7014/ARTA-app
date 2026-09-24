@@ -245,9 +245,16 @@ export default function FoldersPage() {
                           {editing ? 'Cerrar' : 'Editar'}
                         </button>
                       ) : null}
-                      <a className="btn-quiet" href={file.url} target="_blank" rel="noreferrer">
+                      <button
+                        className="btn-quiet"
+                        type="button"
+                        onClick={() => {
+                          setEditFileId(null);
+                          setOpenFileId(file.id);
+                        }}
+                      >
                         Abrir
-                      </a>
+                      </button>
                       {canEdit ? (
                         <button
                           className="icon-btn icon-btn--danger"
@@ -261,7 +268,7 @@ export default function FoldersPage() {
                     </FileRow>
                     {viewing ? (
                       <div className="surface finance-viewer">
-                        <FileViewer url={file.url} fileName={file.fileName} />
+                        <FileViewer url={`/api/folders/files/${file.id}/inline`} fileName={file.fileName} />
                       </div>
                     ) : null}
                     {editing ? (
@@ -269,7 +276,7 @@ export default function FoldersPage() {
                         {isSheet(file.fileName) ? (
                           <SheetEditor
                             key={file.id}
-                            url={file.url}
+                            url={`/api/folders/files/${file.id}/inline`}
                             fileName={file.fileName}
                             canEdit={canEdit}
                             onSave={replaceFolderFile(file.id)}
@@ -278,7 +285,7 @@ export default function FoldersPage() {
                         ) : (
                           <PdfEditor
                             key={file.id}
-                            url={file.url}
+                            url={`/api/folders/files/${file.id}/inline`}
                             fileName={file.fileName}
                             canEdit={canEdit}
                             onSave={replaceFolderFile(file.id)}
