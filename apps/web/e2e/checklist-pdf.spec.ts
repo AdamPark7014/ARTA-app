@@ -65,9 +65,9 @@ async function openChecklist(page: import('@playwright/test').Page, baseURL: str
   await page.setViewportSize({ width: 1500, height: 1100 });
   await page.goto('/events/evt-e2e-1?tab=checklists&checklist=chk-demo');
   // El formato abre en formulario (decisión de la junta: sin overlays encima
-  // de las opciones). La captura sobre la hoja es un modo que se pide.
-  // `exact` porque la tarjeta «Copia anotada del PDF» también contiene «PDF».
-  await page.getByRole('button', { name: 'Sobre el PDF', exact: true }).click();
+  // de las opciones). La captura sobre la hoja es un modo que se pide desde el
+  // control segmentado «Cómo capturar» (pestañas, no botones).
+  await page.getByRole('tab', { name: 'Sobre el PDF', exact: true }).click();
   await page.locator('.pdfedit__canvas').first().waitFor({ timeout: 25000 });
 }
 
@@ -117,7 +117,7 @@ test.describe('Checklist sobre el PDF', () => {
     // «Sobre el PDF» arranca a pantalla completa (ExpandBox), que tapa la barra
     // de modos: hay que salir de ella antes de poder volver al formulario.
     await page.getByRole('button', { name: /Salir de pantalla completa/ }).click();
-    await page.getByRole('button', { name: 'Formulario rápido' }).click();
+    await page.getByRole('tab', { name: 'Formulario', exact: true }).click();
 
     await expect(page.locator('.pdfedit__canvas')).toHaveCount(0);
     // El índice lateral repite el nombre de la sección: se ancla al encabezado.
