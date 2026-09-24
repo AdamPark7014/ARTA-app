@@ -27,6 +27,7 @@ type Template = {
   entities: string[];
   active: boolean;
   version: number;
+  excelTemplateUrl?: string | null;
   versions?: TemplateVersion[];
   schemaJson?: {
     sections?: Array<{
@@ -77,6 +78,8 @@ export default function ChecklistsTemplatesPage() {
   const [q, setQ] = useState('');
   const [scope, setScope] = useStickyState<'all' | 'active' | 'inactive'>('templates.scope', 'all');
   const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState('');
+  const [error, setError] = useState('');
 
   const canManage =
     !!user &&
@@ -118,6 +121,82 @@ export default function ChecklistsTemplatesPage() {
         (t.description || '').toLowerCase().includes(n),
     );
   }, [templates, q, scope]);
+
+  async function createBlank() {
+    if (!canManage) return;
+    setBusy('new');
+    setMsg('');
+    setError('');
+    try {
+      const created = await api<Template>('/checklists/templates', {
+        method: 'POST',
+        body: JSON.stringify({ name: 'Formato sin título', schemaJson: { sections: [] } }),
+      });
+      await load();
+      await openPreview(created, true);
+      setMsg('Formato creado — edítalo y actívalo');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se pudo crear el formato');
+    } finally {
+      setBusy('');
+    }
+  }
+
+  async function importDocx(file: File) {
+    if (!canManage) return;
+    setBusy('docx');
+    setMsg('');
+    setError('');
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const created = await api<Template>('/checklists/templates/import-docx', { method: 'POST', body: fd });
+      await load();
+      await openPreview(created, true);
+      setMsg('Plantilla importada desde Word — revisa y ajusta lo necesario');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se pudo importar el Word');
+    } finally {
+      setBusy('');
+    }
+  }
+
+  async function importXlsx(file: File) {
+    if (!canManage) return;
+    setBusy('xlsx');
+    setMsg('');
+    setError('');
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const created = await api<Template>('/checklists/templates/import-xlsx', { method: 'POST', body: fd });
+      await load();
+      await openPreview(created, false);
+      setMsg('Plantilla Excel importada — se copiará a cada evento nuevo');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se pudo importar el Excel');
+    } finally {
+      setBusy('');
+    }
+  }
+
+  async function replaceExcel(file: File) {
+    if (!canManage || !preview) return;
+    setBusy('xlsx');
+    setMsg('');
+    setError('');
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const updated = await api<Template>(`/checklists/templates/${preview.id}/excel`, { method: 'POST', body: fd });
+      setPreview(updated);
+      setMsg('Plantilla Excel reemplazada');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se pudo reemplazar el Excel');
+    } finally {
+      setBusy('');
+    }
+  }
 
   async function toggleActive(t: Template) {
     if (!canManage) return;
@@ -178,11 +257,49 @@ export default function ChecklistsTemplatesPage() {
             {msg}
           </FlashMessage>
         ) : null}
+        {error ? (
+          <FlashMessage variant="error" onDismiss={() => setError('')}>
+            {error}
+          </FlashMessage>
+        ) : null}
 
         {loading ? (
           <LoadingBlock rows={4} label="Cargando plantillas…" />
         ) : (
           <>
+            {canManage ? (
+              <div className="row" role="group" aria-label="Nuevo formato">
+                <button className="btn" type="button" disabled={busy === 'new'} onClick={createBlank}>
+                  {busy === 'new' ? 'Creando…' : 'Nuevo formato'}
+                </button>
+                <label className="btn-quiet hub-upload">
+                  Importar Word
+                  <input
+                    type="file"
+                    hidden
+                    accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      e.target.value = '';
+                      if (f) void importDocx(f);
+                    }}
+                  />
+                </label>
+                <label className="btn-quiet hub-upload">
+                  Importar Excel
+                  <input
+                    type="file"
+                    hidden
+                    accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      e.target.value = '';
+                      if (f) void importXlsx(f);
+                    }}
+                  />
+                </label>
+              </div>
+            ) : null}
             <FilterBar meta={`${filtered.length} de ${templates.length} plantillas · ${entity}`}>
               <FieldSearch
                 value={q}
@@ -280,7 +397,7 @@ export default function ChecklistsTemplatesPage() {
                   </div>
                 </div>
                 <div className="row">
-                  {canManage && !editing ? (
+                    {canManage && !editing && !preview.excelTemplateUrl ? (
                     <button className="btn" type="button" onClick={() => setEditing(true)}>
                       Editar
                     </button>
@@ -297,8 +414,34 @@ export default function ChecklistsTemplatesPage() {
                   </button>
                 </div>
               </div>
-              <div className="panel-body stack">
-                {editing && canManage ? (
+                <div className="panel-body stack">
+                {preview.excelTemplateUrl ? (
+                  <div className="stack">
+                    <p className="muted">
+                      Formato Excel. Se copia a cada evento como hoja editable en el panel (Salir en PDF). No tiene editor de campos.
+                    </p>
+                    <div className="row">
+                      <a className="btn-quiet" href={preview.excelTemplateUrl} target="_blank" rel="noreferrer">
+                        Descargar plantilla
+                      </a>
+                      {canManage ? (
+                        <label className="btn">
+                          Reemplazar .xlsx
+                          <input
+                            type="file"
+                            hidden
+                            accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                            onChange={(e) => {
+                              const f = e.target.files?.[0];
+                              e.target.value = '';
+                              if (f) void replaceExcel(f);
+                            }}
+                          />
+                        </label>
+                      ) : null}
+                    </div>
+                  </div>
+                ) : editing && canManage ? (
                   <TemplateSchemaEditor
                     templateId={preview.id}
                     initial={{

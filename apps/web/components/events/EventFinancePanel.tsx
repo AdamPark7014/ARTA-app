@@ -111,9 +111,31 @@ export function EventFinancePanel({
           <EmptyLite
             icon="≡"
             title="Sin corrida"
-            text={editable ? 'Sube el Excel de la corrida del show.' : 'Cuando finanzas la suba, aparecerá aquí.'}
+            text={
+              editable
+                ? 'Genera una corrida desde el machote estándar o sube el Excel existente.'
+                : 'Cuando finanzas la suba, aparecerá aquí.'
+            }
           >
-            {editable ? uploadButton('Subir corrida', true) : null}
+            {editable ? (
+              <>
+                <button
+                  className="btn btn-sm"
+                  type="button"
+                  disabled={busy}
+                  onClick={() =>
+                    run(
+                      () => api(`/finance/event/${event.id}/generate`, { method: 'POST', body: '{}' }).then(() => undefined),
+                      'Corrida generada',
+                    )
+                  }
+                >
+                  Generar corrida
+                </button>
+                <span className="sx-gap" />
+                {uploadButton('Subir corrida', false)}
+              </>
+            ) : null}
           </EmptyLite>
         </div>
       ) : (

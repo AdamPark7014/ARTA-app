@@ -5,6 +5,40 @@
 - **Rama:** main
 
 ## Hecho en este turno
+### Campaña y Corrida — machotes estándar + generación y pruebas (24-09 noche)
+- Registrar machotes desde repo: `register-format-sources.ts` ahora copia también
+  `CAMPANA_BASE.xlsx` → `/uploads/format-campaign.xlsx` y `CORRIDA_BASE.xlsx` →
+  `/uploads/format-corrida.xlsx`. Si los assets no están en el repo, genera un
+  fallback con encabezado, merges y fórmulas estándar (sirve para CI).
+- API:
+  - Endpoint `POST /finance/event/:id/generate` movido a `FinanceExcelController` y
+    registrado en `FinanceModule`.
+  - `CampaignsController.exportExcel` usa `CampaignExcelService` (machote estándar).
+- Scripts:
+  - `scripts/generate-missing-campaign-and-corrida.ts` — (dry/confirm) genera campaña
+    y/o corrida solo cuando el evento no tiene archivo aún. PDF oficial vía `ExcelPdfService`.
+- Web:
+  - `EventFinancePanel`: botón «Generar corrida» cuando falta y hay permiso.
+  - Importar campaña: `parseCampaignWorkbook` ahora entiende el encabezado estándar
+    (CONCEPTO..POR PAGAR) además del formato viejo de Interna/Externa.
+- Pruebas:
+  - `src/uploads/excel-templates.spec.ts`: genera campaña/corrida desde machote, reabre
+    con ExcelJS y valida merges, encabezados, fórmulas y PDF.
+
+### Nuevo: crear e importar plantillas de formatos + Excel embebido (24-09 tarde)
+- Backend (NestJS):
+  - `POST /checklists/templates`: crea plantilla nueva (key `CUSTOM`) desde cero.
+  - `POST /checklists/templates/import-docx`: importa `.docx` → esquema (encabezados a secciones, `Etiqueta:` a campos, listas a casillas, tablas a tabla). Heurística editable luego.
+  - `POST /checklists/templates/import-xlsx`: importa `.xlsx` como plantilla Excel; se copia por evento como `EventFile` editable que abre en `SheetEditor`.
+  - `POST /checklists/templates/:id/excel`: reemplaza el `.xlsx` base de una plantilla Excel.
+  - `POST /checklists/event/:eventId/from-template`: ahora detecta plantilla Excel y crea el `EventFile` en vez del checklist.
+  - Permisos: dirección (general/adjunta/super_admin) también gestiona plantillas.
+  - Prisma: `ChecklistTemplate.excelTemplateUrl TEXT NULL` (migración `20260924064800_excel_template_url`).
+  - Test API: smoke de creación de plantilla.
+- Web (Next.js):
+  - Plantillas: botón «Nuevo formato» (desde cero) + «Importar Word» + «Importar Excel». Las plantillas Excel muestran «Descargar plantilla» y «Reemplazar .xlsx».
+  - Eventos: en Formatos, «Agregar formato» permite adjuntar una plantilla activa a un evento (crea checklist o Excel según tipo).
+  - SheetEditor: «Vista con formato» (solo lectura) que respeta merges, anchos y estilos básicos vía `sheet_to_html`; mantiene guardado por celdas.
 
 ### Deploy bf03c56 + cleanup EventFiles + borrar escrito CAMPAÑA (2026-09-24 11:44 CT)
 - Local/GitHub ya en `bf03c5697eb4ebae7f4a06c628ef56f3425e51c0` (PR #1 squash-merge). Working tree limpio; sin `salvar`.

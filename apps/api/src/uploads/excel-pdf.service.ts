@@ -85,6 +85,19 @@ export class ExcelPdfService {
       };
 
       let first = true;
+      const cellText = (cell: ExcelJS.Cell): string => {
+        const v = (cell as any).value as any;
+        if (v == null) return '';
+        if (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') return String(v);
+        if (v && v.result != null) return String(v.result);
+        if (v && Array.isArray(v.richText)) return v.richText.map((x: { text: string }) => x.text).join('');
+        try {
+          return String((cell as any).text || '');
+        } catch {
+          return '';
+        }
+      };
+
       for (const ws of wb.worksheets) {
         if (!first) doc.addPage();
         first = false;
@@ -98,10 +111,7 @@ export class ExcelPdfService {
           row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
             if (colNumber > 12) return;
             maxCol = Math.max(maxCol, colNumber);
-            let text = '';
-            if (cell.result != null && cell.result !== '') text = String(cell.result);
-            else if (cell.text) text = String(cell.text);
-            else if (cell.value != null) text = String(cell.value);
+            const text = cellText(cell);
             cells[colNumber - 1] = text.slice(0, 80);
           });
           // normalizar longitud

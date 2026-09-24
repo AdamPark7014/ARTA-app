@@ -149,6 +149,8 @@ export function SheetEditor({
   const [msg, setMsg] = useState('');
   const [sel, setSel] = useState<Sel>(null);
   const [showCoach, setShowCoach] = useState(false);
+  const [showStyled, setShowStyled] = useState(false);
+  const [styledHtml, setStyledHtml] = useState<string>('');
   const campaign = variant === 'campaign';
   const finance = variant === 'finance';
   const richTools = campaign || finance;
@@ -187,6 +189,13 @@ export function SheetEditor({
     setGrid(padGrid(withFormulas as unknown[][], MIN_ROWS, campaign || finance ? MIN_COLS : 8));
     setVisibleRows(ROW_PAGE);
     setSel(null);
+    try {
+      // Vista de solo lectura con estilos básicos (ancho de columnas, merges, negritas)
+      const html = XLSX.utils.sheet_to_html(ws, { id: 'styled-view', editable: false });
+      setStyledHtml(html);
+    } catch {
+      setStyledHtml('');
+    }
   }, [campaign, finance]);
 
   useEffect(() => {
@@ -706,6 +715,14 @@ export function SheetEditor({
                   {panelEditable ? 'Solo lectura' : 'No editable aquí'}
                 </span>
               )}
+              <button
+                className="btn ghost btn-sm"
+                type="button"
+                onClick={() => setShowStyled((v) => !v)}
+                title="Vista con formato (combina celdas, anchos, negritas)"
+              >
+                {showStyled ? 'Vista simple' : 'Vista con formato'}
+              </button>
               {fileId ? (
                 <button
                   className="btn ghost btn-sm sheet-toolbar__tertiary"
@@ -740,7 +757,8 @@ export function SheetEditor({
 
         <p className="sheet-note muted kpi-sub" role="note">
           Copia de trabajo interna. Lo que circula fuera es el <strong>PDF de salida</strong>.
-          {canEdit ? ' Ctrl+S guarda · Esc quita la selección.' : ''}
+          {canEdit ? ' Ctrl+S guarda · Esc quita la selección.' : ''}{' '}
+          {showStyled ? 'Vista con formato: solo lectura.' : ''}
         </p>
 
         {richTools ? (
@@ -949,7 +967,14 @@ export function SheetEditor({
           </div>
         )}
 
-        {grid.length > visibleRows ? (
+        {showStyled && styledHtml ? (
+          <div className="sheet-wrap" aria-label="Vista con formato" role="region" style={{ overflowX: 'auto' }}>
+            {/* eslint-disable-next-line react/no-danger */}
+            <div dangerouslySetInnerHTML={{ __html: styledHtml }} />
+          </div>
+        ) : null}
+
+        {!showStyled && grid.length > visibleRows ? (
           <button
             className="btn ghost btn-sm"
             type="button"

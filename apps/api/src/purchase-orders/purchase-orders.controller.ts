@@ -30,6 +30,12 @@ import { hasPermission, canAccessEventOps, isDirectionRole, PERMISSIONS, type En
 import { assertSameTenant, tenantIdOf } from '../common/tenant';
 import { assertEventNotClosed } from '../common/event-guards';
 import { NotificationsService } from '../notifications/notifications.service';
+import { PurchaseOrderExcelService } from './po-excel.service';
+import { ExcelPdfService } from '../uploads/excel-pdf.service';
+import { uploadRoot } from '../uploads/upload-storage';
+import { createHash } from 'crypto';
+import { join } from 'path';
+import { readFileSync } from 'fs';
 import {
   DEFAULT_PO_WINDOW,
   describeSchedule,
@@ -85,6 +91,8 @@ export class PurchaseOrdersController {
   constructor(
     private prisma: PrismaService,
     private notifications: NotificationsService,
+    private poExcel: PurchaseOrderExcelService = new PurchaseOrderExcelService(),
+    private excelPdf: ExcelPdfService = new ExcelPdfService(),
   ) {}
 
   /**
@@ -720,5 +728,77 @@ export class PurchaseOrdersController {
       status: order.status,
     });
     return { ok: true };
+  }
+
+  /**
+   * Genera salida Excel + PDF de la OC a partir del machote base /uploads/format-oc.xlsx.
+   * Devuelve URL del PDF. La copia Excel queda registrada como EventFile (module 'oc').
+   */
+  @Post(':id/export')
+  async exportExcelPdf(
+    @Req()
+    req: {
+      user: {
+        id: string;
+        roleKey: string;
+        permissions: string[];
+        entities: string[];
+        organizationId?: string | null;
+        fullName?: string | null;
+      };
+    },
+    @Param('id') id: string,
+    @Body() body?: { variant?: 'default' | 'variant2' },
+  ) {
+    const order = await this.prisma.purchaseOrder.findUnique({
+      where: { id },
+      include: {
+        event: true,
+        createdBy: { select: { fullName: true } },
+        authorizedBy: { select: { fullName: true } },
+        lines: true,
+      },
+    });
+    if (!order) throw new NotFoundException('OC no encontrada');
+    await this.assertEventOps(req.user, order.eventId);
+    assertEventNotClosed(order.event.status);
+
+    const src = body?.variant === 'variant2' ? 'format-oc-variant.xlsx' : 'format-oc.xlsx';
+    const srcPath = join(uploadRoot, src);
+    const { excelPath } = await this.poExcel.buildFromTemplate(srcPath, order as never, {
+      name: order.event.name,
+      entity: order.event.entity,
+    });
+
+    // Registrar Excel como archivo del evento (editable)
+    const buf = readFileSync(excelPath);
+    const excelFile = await this.prisma.eventFile.create({
+      data: {
+        eventId: order.eventId,
+        fileName: `OC ${order.id}.xlsx`,
+        mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        url: `/uploads/${excelPath.split('/').pop()}`,
+        kind: 'excel',
+        module: 'oc',
+        updatedById: req.user.id,
+        sha256: createHash('sha256').update(buf).digest('hex'),
+      },
+      include: { event: { select: { organizationId: true } } },
+    });
+
+    // PDF de salida con encabezado estándar (no reescribe celdas)
+    const { url } = await this.excelPdf.generate(excelFile.id, excelFile.version, excelPath, {
+      eventName: order.event.name,
+      entity: order.event.entity,
+      fileName: excelFile.fileName,
+      exportedBy: req.user.fullName || null,
+    });
+
+    await this.audit(req.user, order.event.organizationId, 'po.export', id, {
+      excelFileId: excelFile.id,
+      pdfUrl: url,
+    });
+
+    return { url, fileId: excelFile.id, excelUrl: excelFile.url };
   }
 }

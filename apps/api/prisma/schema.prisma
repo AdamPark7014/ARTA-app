@@ -306,6 +306,8 @@ model ChecklistTemplate {
   entities    EntityKey[]
   /// Árbol de secciones/ítems en JSON (labels, tipos, hijos)
   schemaJson  Json
+  /// Si la plantilla es un formato Excel, aquí vive la URL del libro base (.xlsx) a copiar por evento.
+  excelTemplateUrl String?
   version     Int                  @default(1)
   active      Boolean              @default(true)
   createdAt   DateTime             @default(now())

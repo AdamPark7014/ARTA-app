@@ -13,10 +13,11 @@ import {
 } from '@nestjs/common';
 import { DocStatus, DocType, Prisma } from '@prisma/client';
 import { createHash } from 'crypto';
+import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { calcProgress } from '../common/checklist-progress';
 import { diffChecklistData } from '../common/doc-diff';
-import { bindFormatToEvent, normalizeFormatData } from '../common/format-schema';
+import { bindFormatToEvent, normalizeFormatData, type FormatData, type FormatItem, type FormatSection } from '../common/format-schema';
 import {
   actorFrom,
   RevisionConflictException,
@@ -25,6 +26,10 @@ import {
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { assertSameTenant } from '../common/tenant';
 import { assertEventNotClosed } from '../common/event-guards';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { UploadedFile, UseInterceptors } from '@nestjs/common';
+import * as mammoth from 'mammoth';
+import { MULTER_OPTIONS, contentMatchesExtension, discardUpload, uploadRoot } from '../uploads/upload-storage';
 import {
   assertCanReopen,
   assertCanTransition,
@@ -96,6 +101,7 @@ export class ChecklistsController {
     @Query('all') all?: string,
   ) {
     const canManage =
+      isDirectionRole(req.user.roleKey) ||
       hasPermission(req.user.roleKey as RoleKey, req.user.permissions || [], PERMISSIONS.USERS_MANAGE) ||
       hasPermission(req.user.roleKey as RoleKey, req.user.permissions || [], PERMISSIONS.EVERYTHING) ||
       req.user.roleKey === 'gerente_arta' ||
@@ -109,6 +115,178 @@ export class ChecklistsController {
       where: all === '1' ? undefined : { active: true },
       orderBy: { name: 'asc' },
     });
+  }
+
+  /** Crear plantilla nueva (desde cero, editable con el editor de esquema). */
+  @Post('templates')
+  async createTemplate(
+    @Req() req: { user: AuthUser },
+    @Body()
+    body: {
+      name: string;
+      description?: string;
+      entities?: EntityKey[];
+      schemaJson?: object;
+      active?: boolean;
+    },
+  ) {
+    const canManage =
+      isDirectionRole(req.user.roleKey) ||
+      hasPermission(req.user.roleKey as RoleKey, req.user.permissions || [], PERMISSIONS.USERS_MANAGE) ||
+      hasPermission(req.user.roleKey as RoleKey, req.user.permissions || [], PERMISSIONS.EVERYTHING) ||
+      req.user.roleKey === 'gerente_arta' ||
+      req.user.roleKey === 'dir_auditorio';
+    if (!canManage) throw new ForbiddenException('Sin permiso para crear plantillas');
+    const name = (body?.name || '').trim();
+    if (!name) throw new BadRequestException('Nombre requerido');
+    const created = await this.prisma.checklistTemplate.create({
+      data: {
+        key: 'CUSTOM',
+        name,
+        description: body?.description?.trim() || null,
+        entities: Array.isArray(body?.entities) ? (body!.entities as EntityKey[]) : [],
+        schemaJson: (body?.schemaJson || { sections: [] }) as Prisma.InputJsonValue,
+        active: body?.active !== false,
+      } as any,
+    });
+    await this.prisma.auditLog.create({
+      data: { userId: req.user.id, action: 'template.create', resource: 'ChecklistTemplate', resourceId: created.id, metaJson: { name } },
+    });
+    return created;
+  }
+
+  /** Importar .docx → plantilla checklist (secciones del Word, párrafos «Etiqueta:» a campos, listas a casillas, tablas a tabla). */
+  @Post('templates/import-docx')
+  @UseInterceptors(FileInterceptor('file', MULTER_OPTIONS))
+  async importDocxTemplate(
+    @Req() req: { user: AuthUser },
+    @UploadedFile() file: Express.Multer.File,
+    @Body() body: { name?: string; description?: string; entities?: EntityKey[] },
+  ) {
+    const canManage =
+      isDirectionRole(req.user.roleKey) ||
+      hasPermission(req.user.roleKey as RoleKey, req.user.permissions || [], PERMISSIONS.USERS_MANAGE) ||
+      hasPermission(req.user.roleKey as RoleKey, req.user.permissions || [], PERMISSIONS.EVERYTHING) ||
+      req.user.roleKey === 'gerente_arta' ||
+      req.user.roleKey === 'dir_auditorio';
+    if (!canManage) throw new ForbiddenException('Sin permiso para crear plantillas');
+    if (!file) throw new BadRequestException('Archivo .docx requerido');
+    if (!/\.docx$/i.test(file.originalname) || !contentMatchesExtension(file.path, file.originalname)) {
+      discardUpload(file.path);
+      throw new BadRequestException('Solo se importa Word (.docx)');
+    }
+    let html = '';
+    try {
+      const result = await mammoth.convertToHtml({ buffer: readFileSync(file.path) });
+      html = result.value || '';
+    } catch {
+      discardUpload(file.path);
+      throw new BadRequestException('No se pudo leer el Word');
+    }
+    discardUpload(file.path);
+    const schema = this.docxHtmlToSchema(html);
+    const created = await this.prisma.checklistTemplate.create({
+      data: {
+        key: 'CUSTOM',
+        name: (body?.name || file.originalname.replace(/\.docx$/i, '')).slice(0, 120),
+        description: body?.description?.trim() || null,
+        entities: Array.isArray(body?.entities) ? (body!.entities as EntityKey[]) : [],
+        schemaJson: schema as unknown as Prisma.InputJsonValue,
+        active: true,
+      } as any,
+    });
+    await this.prisma.auditLog.create({
+      data: {
+        userId: req.user.id,
+        action: 'template.import.docx',
+        resource: 'ChecklistTemplate',
+        resourceId: created.id,
+        metaJson: { fileName: file.originalname },
+      },
+    });
+    return created;
+  }
+
+  /** Importar .xlsx como plantilla Excel: se copiará el libro en cada evento. */
+  @Post('templates/import-xlsx')
+  @UseInterceptors(FileInterceptor('file', MULTER_OPTIONS))
+  async importXlsxTemplate(
+    @Req() req: { user: AuthUser },
+    @UploadedFile() file: Express.Multer.File,
+    @Body() body: { name?: string; description?: string; entities?: EntityKey[] },
+  ) {
+    const canManage =
+      isDirectionRole(req.user.roleKey) ||
+      hasPermission(req.user.roleKey as RoleKey, req.user.permissions || [], PERMISSIONS.USERS_MANAGE) ||
+      hasPermission(req.user.roleKey as RoleKey, req.user.permissions || [], PERMISSIONS.EVERYTHING) ||
+      req.user.roleKey === 'gerente_arta' ||
+      req.user.roleKey === 'dir_auditorio';
+    if (!canManage) throw new ForbiddenException('Sin permiso para crear plantillas');
+    if (!file) throw new BadRequestException('Archivo .xlsx requerido');
+    if (!/\.xlsx$/i.test(file.originalname) || !contentMatchesExtension(file.path, file.originalname)) {
+      discardUpload(file.path);
+      throw new BadRequestException('Solo se importa Excel (.xlsx)');
+    }
+    // Guardado ya ocurrió (multer). Se referencia en la plantilla.
+    const url = `/uploads/${file.filename}`;
+    const created = await this.prisma.checklistTemplate.create({
+      data: {
+        key: 'CUSTOM',
+        name: (body?.name || file.originalname.replace(/\.xlsx$/i, '')).slice(0, 120),
+        description: body?.description?.trim() || null,
+        entities: Array.isArray(body?.entities) ? (body!.entities as EntityKey[]) : [],
+        schemaJson: { sections: [] } as Prisma.InputJsonValue,
+        active: true,
+        // prisma types may be stale during development — cast away
+        ...( { excelTemplateUrl: url } as any ),
+      } as any,
+    });
+    await this.prisma.auditLog.create({
+      data: {
+        userId: req.user.id,
+        action: 'template.import.xlsx',
+        resource: 'ChecklistTemplate',
+        resourceId: created.id,
+        metaJson: { fileName: file.originalname, url },
+      },
+    });
+    return created;
+  }
+
+  /** Reemplazar el .xlsx base de una plantilla Excel existente. */
+  @Post('templates/:id/excel')
+  @UseInterceptors(FileInterceptor('file', MULTER_OPTIONS))
+  async replaceTemplateExcel(
+    @Req() req: { user: AuthUser },
+    @Param('id') id: string,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    const canManage =
+      isDirectionRole(req.user.roleKey) ||
+      hasPermission(req.user.roleKey as RoleKey, req.user.permissions || [], PERMISSIONS.USERS_MANAGE) ||
+      hasPermission(req.user.roleKey as RoleKey, req.user.permissions || [], PERMISSIONS.EVERYTHING) ||
+      req.user.roleKey === 'gerente_arta' ||
+      req.user.roleKey === 'dir_auditorio';
+    if (!canManage) throw new ForbiddenException('Sin permiso para editar plantillas');
+    const existing = await this.prisma.checklistTemplate.findUnique({ where: { id } });
+    if (!existing) {
+      if (file) discardUpload(file.path);
+      throw new BadRequestException('Plantilla no encontrada');
+    }
+    if (!file) throw new BadRequestException('Archivo .xlsx requerido');
+    if (!/\.xlsx$/i.test(file.originalname) || !contentMatchesExtension(file.path, file.originalname)) {
+      discardUpload(file.path);
+      throw new BadRequestException('Solo se reemplaza con Excel (.xlsx)');
+    }
+    const url = `/uploads/${file.filename}`;
+    const updated = await this.prisma.checklistTemplate.update({
+      where: { id },
+      data: { ...( { excelTemplateUrl: url } as any) },
+    });
+    await this.prisma.auditLog.create({
+      data: { userId: req.user.id, action: 'template.excel.replace', resource: 'ChecklistTemplate', resourceId: id, metaJson: { fileName: file.originalname, url } },
+    });
+    return updated;
   }
 
   @Get('templates/:id')
@@ -687,6 +865,41 @@ export class ChecklistsController {
       where: { id: body.templateId },
     });
     if (!template) throw new BadRequestException('Plantilla no encontrada');
+    // Si la plantilla es de Excel, se copia el .xlsx al evento como EventFile editable.
+    if ((template as any).excelTemplateUrl) {
+      const srcUrl = (template as any).excelTemplateUrl as string;
+      const rel = srcUrl.replace(/^\/uploads\//, '');
+      const srcPath = `${uploadRoot}/${rel}`;
+      if (!existsSync(srcPath)) throw new BadRequestException('La plantilla Excel ya no está en disco');
+      const stamp = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+      const fileName = `${body.title || template.name}.xlsx`;
+      const destUrl = `/uploads/${stamp}.xlsx`;
+      writeFileSync(`${uploadRoot}/${stamp}.xlsx`, readFileSync(srcPath));
+      const created = await this.prisma.eventFile.create({
+        data: {
+          eventId,
+          fileName,
+          mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          url: destUrl,
+          kind: 'excel',
+          module: 'checklist',
+          // creado por el sistema: editable por quien tenga permiso de checklist
+          createdById: null,
+          updatedById: req.user.id,
+          sha256: createHash('sha256').update(readFileSync(`${uploadRoot}/${stamp}.xlsx`)).digest('hex'),
+        },
+      });
+      await this.prisma.auditLog.create({
+        data: {
+          userId: req.user.id,
+          action: 'template.instantiate.excel',
+          resource: 'EventFile',
+          resourceId: created.id,
+          metaJson: { eventId, templateId: template.id, fileName },
+        },
+      });
+      return created;
+    }
 
     // El encabezado del formato (show, fecha, hora, ciudad, venue) nace lleno
     // desde el evento: nadie debería teclear dos veces lo que ya se capturó.
@@ -706,5 +919,122 @@ export class ChecklistsController {
 
     // Generar PDF base al crear desde plantilla
     return this.regeneratePdf(created.id);
+  }
+
+  /** Heurística simple: HTML de mammoth → secciones/ítems. */
+  private docxHtmlToSchema(html: string): FormatData {
+    const sections: FormatSection[] = [];
+    let current: FormatSection | null = null;
+
+    function ensureSection(title: string) {
+      const id = title
+        .normalize('NFD')
+        .replace(/[̀-ͯ]/g, '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '_')
+        .replace(/^_|_$/g, '');
+      const s: FormatSection = { id: id || `sec_${sections.length + 1}`, title: title || `Sección ${sections.length + 1}`, items: [] };
+      sections.push(s);
+      return s;
+    }
+
+    // 1) Secciones por encabezados H1/H2
+    const headingRe = /<(h1|h2)[^>]*>([\s\S]*?)<\/\1>/gi;
+    let lastIndex = 0;
+    let m: RegExpExecArray | null;
+    const blocks: Array<{ type: 'heading' | 'p' | 'ul' | 'table'; html: string }> = [];
+    while ((m = headingRe.exec(html))) {
+      const before = html.slice(lastIndex, m.index);
+      if (before.trim()) blocks.push({ type: 'p', html: before });
+      blocks.push({ type: 'heading', html: m[0] });
+      lastIndex = headingRe.lastIndex;
+    }
+    const tail = html.slice(lastIndex);
+    if (tail.trim()) blocks.push({ type: 'p', html: tail });
+
+    // Partir listas y tablas dentro de los bloques <p> agregados
+    const splitFurther: Array<{ type: 'p' | 'ul' | 'table'; html: string }> = [];
+    for (const b of blocks) {
+      if (b.type !== 'p') {
+        splitFurther.push(b as any);
+        continue;
+      }
+      const re = /<(ul|ol|table)[^>]*>[\s\S]*?<\/\1>/gi;
+      let idx = 0;
+      let mm: RegExpExecArray | null;
+      while ((mm = re.exec(b.html))) {
+        const before = b.html.slice(idx, mm.index);
+        if (before.trim()) splitFurther.push({ type: 'p', html: before });
+        splitFurther.push({ type: mm[1] as 'ul' | 'table', html: mm[0] });
+        idx = re.lastIndex;
+      }
+      const rest = b.html.slice(idx);
+      if (rest.trim()) splitFurther.push({ type: 'p', html: rest });
+    }
+
+    // Consumir en orden
+    const textFrom = (frag: string) =>
+      frag
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/&nbsp;/g, ' ')
+        .replace(/&amp;/g, '&')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+    for (const b of splitFurther) {
+      if (!current) current = ensureSection('Sección');
+      if (b.type === 'ul') {
+        const items = Array.from(b.html.matchAll(/<li[^>]*>([\s\S]*?)<\/li>/gi)).map((x) => textFrom(x[1] || ''));
+        for (const label of items.filter(Boolean)) {
+          const item: FormatItem = { id: this.slug(label, `item_${current.items.length + 1}`), label, type: 'check', done: false };
+          current.items.push(item);
+        }
+        continue;
+      }
+      if (b.type === 'table') {
+        const rows = Array.from(b.html.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/gi)).map((x) => x[1] || '');
+        const headers = rows[0]
+          ? Array.from(rows[0].matchAll(/<(th|td)[^>]*>([\s\S]*?)<\/\1>/gi)).map((x) => textFrom(x[2] || '')).filter(Boolean)
+          : [];
+        if (headers.length) {
+          const cols = headers.map((h, i) => ({ id: this.slug(h, `col_${i + 1}`), label: h }));
+          const item: FormatItem = {
+            id: `tbl_${current.items.length + 1}`,
+            label: headers.join(' / '),
+            type: 'table',
+            columns: cols,
+            rows: [],
+            minRows: 6,
+          };
+          current.items.push(item);
+        }
+        continue;
+      }
+      // Párrafos: cada «Etiqueta: valor» → campo texto con esa etiqueta
+      const lines = textFrom(b.html)
+        .split(/\n+/)
+        .map((s) => s.trim())
+        .filter(Boolean);
+      for (const line of lines) {
+        const mcol = line.match(/^(.{3,80}?):\s*(.*)$/);
+        const label = mcol ? mcol[1] : line;
+        const item: FormatItem = { id: this.slug(label, `item_${current.items.length + 1}`), label, type: 'text', value: '' };
+        current.items.push(item);
+      }
+    }
+
+    return { sections };
+  }
+
+  private slug(label: string, fallback: string): string {
+    const s = label
+      .normalize('NFD')
+      .replace(/[̀-ͯ]/g, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '_')
+      .replace(/^_|_$/g, '');
+    return s || fallback;
   }
 }

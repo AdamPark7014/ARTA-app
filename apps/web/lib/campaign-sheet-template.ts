@@ -376,7 +376,37 @@ function readConceptSheet(ws: XLSX.WorkSheet | undefined): SheetConcept[] {
  */
 export function parseCampaignWorkbook(data: ArrayBuffer): CampaignConceptRow[] {
   const wb = XLSX.read(data, { type: 'array' });
-  const internal = readConceptSheet(wb.Sheets.Interna ?? wb.Sheets[wb.SheetNames[0]]);
+  // Nuevo estándar (GASTOS DE PUBLICIDAD Y CONVENIOS): hoja única con encabezado
+  // CONCEPTO | CANTIDAD | COSTO | COSTO TOTAL | CANTIDAD ARTA | COSTO ARTA | COSTO TOTAL ARTA | PAGADO | POR PAGAR
+  const first = wb.Sheets[wb.SheetNames[0]];
+  const rows = XLSX.utils.sheet_to_json<unknown[]>(first, { header: 1, raw: true, defval: '' });
+  const headerIdx = rows.findIndex((r) => {
+    const a = (r[0] || '').toString().toUpperCase().trim();
+    const b = (r[1] || '').toString().toUpperCase().trim();
+    const c = (r[2] || '').toString().toUpperCase().trim();
+    const d = (r[3] || '').toString().toUpperCase().trim();
+    return a === 'CONCEPTO' && b === 'CANTIDAD' && c === 'COSTO' && /^COSTO TOTAL/.test(d);
+  });
+  if (headerIdx >= 0) {
+    const out: CampaignConceptRow[] = [];
+    for (const r of rows.slice(headerIdx + 1)) {
+      const concept = cellText(r[0]);
+      if (!concept) continue;
+      if (/^TOTAL\b/i.test(concept)) break;
+      out.push({
+        concept,
+        qty: cellNumber(r[1]) ?? 1,
+        from: null,
+        to: null,
+        // Externo = COSTO, Interno = COSTO ARTA
+        precioExterno: cellNumber(r[2]),
+        precioInterno: cellNumber(r[5]),
+      });
+    }
+    return out;
+  }
+  // Formato anterior (hojas Interna/Externa)
+  const internal = readConceptSheet(wb.Sheets.Interna ?? first);
   const external = readConceptSheet(wb.Sheets.Externa);
   const externalByName = new Map(external.map((e) => [e.concept.toUpperCase(), e]));
   return internal.map((row, i) => {

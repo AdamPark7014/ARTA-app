@@ -185,35 +185,14 @@ export function EventCampaignPanel({
       flash('Agrega al menos un concepto', 'warn');
       return;
     }
-    if (sheet && !confirm('El archivo de campaña se actualiza con la tabla. La versión anterior queda en el historial.')) return;
     if (dirty && !(await save(true))) return;
     setBusy(true);
     try {
-      const { buildCampaignWorkbook, workbookToXlsxBlob } = await import('@/lib/campaign-sheet-template');
-      const wb = buildCampaignWorkbook(
-        {
-          eventName: event.name,
-          venue: event.venue,
-          city: event.city,
-          startsAt: event.startsAt,
-          endsAt: event.endsAt,
-          schedule: event.schedule,
-          promoter: event.promoter || 'ARTA PRODUCCIONES',
-        },
-        cleanCampaignRows(rows),
-      );
-      const blob = workbookToXlsxBlob(wb);
-      const name = campaignExpensesFileName(event.name);
-      const fd = new FormData();
-      fd.append('file', blob, name);
-      if (sheet) {
-        await api(`/uploads/${sheet.id}/content`, { method: 'PUT', body: fd });
-      } else {
-        fd.append('eventId', event.id);
-        fd.append('module', CAMPAIGN_FILE_MODULE);
-        await api('/uploads', { method: 'POST', body: fd });
-      }
-      flash(sheet ? 'Archivo de campaña actualizado' : 'Archivo de campaña generado');
+      await api(`/campaigns/event/${event.id}/export`, {
+        method: 'POST',
+        body: JSON.stringify({ rows: cleanCampaignRows(rows) }),
+      });
+      flash('Archivo de campaña generado');
       setSheetMode('view');
       await onChanged();
     } catch (e) {

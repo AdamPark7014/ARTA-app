@@ -52,6 +52,21 @@ con su nombre o como link clicable.
   columnas, SÍ/NO, tablas con totales, adjuntos con link, firmas ENTREGADO /
   AUTORIZADO, folio «Página n de N». Deja el mapa de campos para capturar sobre
   la hoja (las tablas y adjuntos se capturan en el formulario).
+- **Excel embebido (plantillas)**: una plantilla de checklist puede referir un
+  `.xlsx` fuente (`excelTemplateUrl`). Al crear un evento (o al «Agregar
+  formato» en un evento existente) se copia el libro al evento como `EventFile`
+  editable en `SheetEditor` con salida oficial PDF: respeta merges, anchos,
+  bordes y logos. Scripts:
+  - `scripts/register-format-sources.ts` — copia originales a `/uploads` y crea
+    “Distribución de Pendones (Excel)”. También registra machotes estándar de
+    Campaña (`/uploads/format-campaign.xlsx`) y Corrida (`/uploads/format-corrida.xlsx`)
+    leyendo de `apps/api/assets/format-sources/` cuando existen; si faltan en el repo,
+    genera un fallback con el encabezado y las fórmulas estándar (sirve para pruebas/CI).
+  - `scripts/upgrade-excel-templates.ts` — agrega los Excel a eventos ya
+    existentes (dry-run y confirm).
+  - `scripts/generate-missing-campaign-and-corrida.ts` — genera campaña/corrida
+    para eventos que aún no tienen archivo (NUNCA sobreescribe). Soporta `--dry`
+    y `--confirm-produccion`.
 - **Encabezado desde el evento**: al crear un evento (`events.controller`) o un
   formato desde plantilla (`checklists.controller`), `bindFormatToEvent` llena
   show, fecha, hora, ciudad y venue. Lo que la persona escriba después manda.
@@ -87,6 +102,11 @@ compacto, útil en pantallas chicas.
 # En el contenedor del API (local o producción)
 docker exec -w /app/apps/api arta-api npx ts-node --transpile-only scripts/upgrade-format-templates.ts --dry
 docker exec -w /app/apps/api arta-api npx ts-node --transpile-only scripts/upgrade-format-templates.ts
+# Registrar machotes (OC, Pendones, Campaña, Corrida)
+docker exec -w /app/apps/api arta-api npx ts-node --transpile-only scripts/register-format-sources.ts --confirm-produccion
+# Generar campaña/corrida donde falten
+docker exec -w /app/apps/api arta-api npx ts-node --transpile-only scripts/generate-missing-campaign-and-corrida.ts --dry
+docker exec -w /app/apps/api arta-api npx ts-node --transpile-only scripts/generate-missing-campaign-and-corrida.ts --confirm-produccion
 ```
 
 Qué hace: sube las siete plantillas a la versión del catálogo (snapshot en

@@ -31,6 +31,9 @@ import { calcProgress } from '../common/checklist-progress';
 import { bindFormatToEvent, normalizeFormatData } from '../common/format-schema';
 import { assertSameTenant, tenantIdOf } from '../common/tenant';
 import { assertEventSlotAvailable } from '../common/plan-limits';
+import { uploadRoot } from '../uploads/upload-storage';
+import { readFileSync, writeFileSync, existsSync } from 'fs';
+import { createHash } from 'crypto';
 
 class CreateEventDto {
   @IsEnum(EntityKey)
@@ -298,6 +301,33 @@ export class EventsController {
     });
 
     for (const t of templates) {
+      // Plantilla Excel: copiar el libro base al evento como EventFile editable
+      if ((t as any).excelTemplateUrl) {
+        const srcUrl = (t as any).excelTemplateUrl as string;
+        const rel = srcUrl.replace(/^\/uploads\//, '');
+        const srcPath = `${uploadRoot}/${rel}`;
+        if (existsSync(srcPath)) {
+          const stamp = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+          const fileName = `${t.name}.xlsx`;
+          const destUrl = `/uploads/${stamp}.xlsx`;
+          writeFileSync(`${uploadRoot}/${stamp}.xlsx`, readFileSync(srcPath));
+          await this.prisma.eventFile.create({
+            data: {
+              eventId: event.id,
+              fileName,
+              mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+              url: destUrl,
+              kind: 'excel',
+              module: 'checklist',
+              // creado por el sistema: editable por quien tenga permiso de checklist
+              createdById: null,
+              updatedById: req.user.id,
+              sha256: createHash('sha256').update(readFileSync(`${uploadRoot}/${stamp}.xlsx`)).digest('hex'),
+            },
+          });
+        }
+        continue;
+      }
       // Encabezado del formato lleno desde el evento (show, fecha, hora,
       // ciudad, venue): lo capturado en el alta no se vuelve a teclear.
       const dataJson = bindFormatToEvent(normalizeFormatData(t.schemaJson), event);

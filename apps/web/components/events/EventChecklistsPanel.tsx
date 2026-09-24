@@ -11,6 +11,7 @@ import { SaveStatus } from '@/components/ui/SaveStatus';
 import { RevisionHistory } from '@/components/ui/RevisionHistory';
 import { ChecklistPicker, checklistBucket, type ChecklistBucket } from '@/components/events/ChecklistPicker';
 import { CHECKLIST_FILE_MODULE } from '@/lib/file-modules';
+import { api } from '@/lib/api';
 import { useAutosave } from '@/lib/use-autosave';
 import { useDirtyGuard } from '@/lib/use-dirty-guard';
 import { useSaveHotkey } from '@/lib/use-save-hotkey';
@@ -258,6 +259,11 @@ export function EventChecklistsPanel({
   const [onlyPending, setOnlyPending] = useState(false);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [previewAttach, setPreviewAttach] = useState<EventFile | null>(null);
+  const [adding, setAdding] = useState(false);
+  const [templates, setTemplates] = useState<Array<{ id: string; name: string }>>([]);
+  const [selectedTemplate, setSelectedTemplate] = useState<string>('');
+  const [addMsg, setAddMsg] = useState('');
+  const [addBusy, setAddBusy] = useState(false);
 
   const checklistFiles = useMemo(() => {
     if (!activeChecklist) return [] as EventFile[];
@@ -396,6 +402,73 @@ export function EventChecklistsPanel({
               : undefined
           }
         />
+        {!closed ? (
+          <div className="row">
+            <button
+              className="btn"
+              type="button"
+              aria-pressed={adding}
+              onClick={async () => {
+                setAdding((v) => !v);
+                setAddMsg('');
+                if (!templates.length) {
+                  try {
+                    const tpls = await api<Array<{ id: string; name: string }>>('/checklists/templates');
+                    setTemplates(tpls.map((t) => ({ id: t.id, name: t.name })));
+                  } catch {
+                    setTemplates([]);
+                  }
+                }
+              }}
+            >
+              {adding ? 'Cerrar' : 'Agregar formato'}
+            </button>
+          </div>
+        ) : null}
+        {adding ? (
+          <div className="surface surface--pad">
+            <div className="row">
+              <select
+                aria-label="Plantilla"
+                value={selectedTemplate}
+                onChange={(e) => setSelectedTemplate(e.target.value)}
+              >
+                <option value="">Selecciona plantilla…</option>
+                {templates.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
+                ))}
+              </select>
+              <button
+                className="btn"
+                type="button"
+                disabled={!selectedTemplate || addBusy}
+                onClick={async () => {
+                  setAddBusy(true);
+                  setAddMsg('');
+                  try {
+                    await api(`/checklists/event/${event.id}/from-template`, {
+                      method: 'POST',
+                      body: JSON.stringify({ templateId: selectedTemplate }),
+                    });
+                    setAddMsg('Formato agregado al evento');
+                    setSelectedTemplate('');
+                    setAdding(false);
+                    await onFilesChanged();
+                  } catch (e) {
+                    setAddMsg(e instanceof Error ? e.message : 'No se pudo agregar');
+                  } finally {
+                    setAddBusy(false);
+                  }
+                }}
+              >
+                {addBusy ? 'Agregando…' : 'Agregar'}
+              </button>
+            </div>
+            {addMsg ? <p className="muted kpi-sub">{addMsg}</p> : null}
+          </div>
+        ) : null}
         {all.length ? (
           <Seg
             label="Filtrar formatos"

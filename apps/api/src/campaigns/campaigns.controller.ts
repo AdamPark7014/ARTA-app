@@ -25,6 +25,12 @@ import {
   type EntityKey,
   type RoleKey,
 } from '../common/rbac/roles';
+import { CampaignExcelService, type CampaignRow } from './campaign-excel.service';
+import { ExcelPdfService } from '../uploads/excel-pdf.service';
+import { uploadRoot } from '../uploads/upload-storage';
+import { createHash } from 'crypto';
+import { join } from 'path';
+import { readFileSync } from 'fs';
 
 /** Etiqueta de `EventFile.module` para los adjuntos de campaña. */
 export const CAMPAIGN_MODULE = 'campaign';
@@ -63,6 +69,8 @@ export class CampaignsController {
   constructor(
     private prisma: PrismaService,
     private notifications: NotificationsService,
+    private campaignExcel?: CampaignExcelService,
+    private excelPdf?: ExcelPdfService,
   ) {}
 
   /**
@@ -74,6 +82,57 @@ export class CampaignsController {
       where: { eventId: { in: eventIds }, module: CAMPAIGN_MODULE, deletedAt: null },
       orderBy: { createdAt: 'desc' },
     });
+  }
+
+  /** Genera el Excel de campaña desde el machote estándar y lo registra como EventFile (module 'campaign'). */
+  @Post('event/:eventId/export')
+  async exportExcel(
+    @Req() req: { user: AuthUser },
+    @Param('eventId') eventId: string,
+    @Body() body: { rows: CampaignRow[] },
+  ) {
+    if (!hasPermission(req.user.roleKey as RoleKey, req.user.permissions, PERMISSIONS.CAMPAIGN_EDIT)) {
+      throw new ForbiddenException('Solo el equipo de campaña edita la campaña');
+    }
+    const event = await this.eventFor(req.user, eventId);
+    assertEventNotClosed(event.status);
+    const srcPath = join(uploadRoot, 'format-campaign.xlsx');
+    const wb = this.campaignExcel || new CampaignExcelService();
+    const { excelPath } = await wb.buildFromTemplate(
+      srcPath,
+      {
+        eventName: event.name,
+        venue: event.venue || '',
+        city: event.city || '',
+        date: event.startsAt ? new Date(event.startsAt).toLocaleDateString('es-MX') : '',
+        schedule: event.schedule || '',
+        promoter: event.promoter || '',
+      },
+      Array.isArray(body.rows) ? body.rows : [],
+    );
+    const buf = readFileSync(excelPath);
+    const name = `CAMPANA ${event.name}.xlsx`;
+    const file = await this.prisma.eventFile.create({
+      data: {
+        eventId: event.id,
+        fileName: name,
+        mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        url: `/uploads/${excelPath.split('/').pop()}`,
+        kind: 'excel',
+        module: CAMPAIGN_MODULE,
+        updatedById: req.user.id,
+        sha256: createHash('sha256').update(buf).digest('hex'),
+      },
+    });
+    // PDF salida
+    const pdfSvc = this.excelPdf || new ExcelPdfService();
+    const { url } = await pdfSvc.generate(file.id, file.version, excelPath, {
+      eventName: event.name,
+      entity: event.entity,
+      fileName: name,
+      exportedBy: req.user.fullName || null,
+    });
+    return { url, fileId: file.id, excelUrl: file.url };
   }
 
   private assertCampaignView(user: AuthUser) {
