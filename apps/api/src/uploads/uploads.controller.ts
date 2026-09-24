@@ -690,6 +690,28 @@ export class UploadsController {
     return { ok: true, restorable: true };
   }
 
+  /** Papelera: archivos borrados (soft-delete) de un evento. */
+  @Get('event/:eventId/deleted')
+  async listDeleted(@Req() req: { user: AuthUser }, @Param('eventId') eventId: string) {
+    const event = await this.assertEventOps(req.user, eventId);
+    assertSameTenant(req.user, event.organizationId);
+    return this.prisma.eventFile.findMany({
+      where: { eventId, deletedAt: { not: null } },
+      orderBy: { deletedAt: 'desc' },
+      select: {
+        id: true,
+        fileName: true,
+        url: true,
+        kind: true,
+        module: true,
+        version: true,
+        deletedAt: true,
+        updatedAt: true,
+        createdAt: true,
+      },
+    });
+  }
+
   /** Deshacer el borrado. Existe porque ahora el binario no se destruye. */
   @Post(':id/restore')
   async restore(@Req() req: { user: AuthUser; ip?: string; headers?: Record<string, string> }, @Param('id') id: string) {

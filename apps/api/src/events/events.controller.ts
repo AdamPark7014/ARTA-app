@@ -236,6 +236,7 @@ export class EventsController {
           },
         },
         sponsors: { orderBy: { createdAt: 'desc' } },
+        slots: true,
         // Los borrados quedan en la base para poder deshacerlos, pero no se listan.
         files: {
           where: {
@@ -358,6 +359,7 @@ export class EventsController {
         editedBy: req.user.fullName || null,
         editedAt: new Date(),
         statusLabel: 'Borrador',
+        folio: `ARTA-${event.id.replace(/-/g, '').slice(0, 6).toUpperCase()}-${String(t.key || t.name).toUpperCase()}-V1`,
       });
       await this.prisma.checklistInstance.update({
         where: { id: instance.id },

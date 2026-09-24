@@ -26,7 +26,8 @@ export type Checklist = {
   submittedAt?: string | null;
   lastEditedAt?: string | null;
   lastEditedBy?: { fullName: string } | null;
-  template?: { key: string };
+  /** En `GET /checklists/:id` llega el template completo; en la lista del evento viene solo { key }. */
+  template?: { id?: string; key: string };
   pdfUrl?: string | null;
   pdfGeneratedAt?: string | null;
   /** Dónde quedó cada dato dentro del PDF, para escribir encima del documento */
@@ -56,6 +57,7 @@ export type Checklist = {
    * el 72 % del payload y se volvía a bajar en cada guardado.
    */
   dataJson?: ChecklistData;
+  
 };
 
 /**
@@ -321,6 +323,16 @@ export type EventCampaign = {
   updatedAt?: string;
 };
 
+export type EventSlot = {
+  id: string;
+  kind: 'CHECKLIST' | 'CAMPAIGN' | 'CORRIDA' | 'PENDONES' | 'OC' | 'BOLETERA';
+  checklistTemplateId?: string | null;
+  status: 'INTERNAL' | 'REPLACED';
+  replacedByFileId?: string | null;
+  replacedAt?: string | null;
+  note?: string | null;
+};
+
 export type EventDetail = {
   id: string;
   name: string;
@@ -345,6 +357,7 @@ export type EventDetail = {
   financeRuns: Array<{ id: string; title: string; locked: boolean; dataJson: FinanceData | unknown }>;
   campaign?: EventCampaign | null;
   ticketingSetups?: TicketingSetup[];
+  slots?: EventSlot[];
   files: Array<{
     id: string;
     fileName: string;

@@ -40,12 +40,14 @@ async function main() {
       console.log('Falta --actor <email> (quién ejecuta). Aborta para no crear archivos sin autor.');
       process.exit(2);
     }
-    const actor = await prisma.user.findFirst({ where: { email: actorArg }, select: { id: true } });
+    const actor = await prisma.user.findFirst({ where: { email: actorArg }, select: { id: true, fullName: true } });
     if (!actor) {
       console.log(`Usuario no encontrado: ${actorArg}`);
       process.exit(2);
     }
     actorId = actor.id;
+    // Stash for PDF author metadata
+    (global as any).__ARTA_ACTOR_FULLNAME__ = actor.fullName || null;
   }
 
   const campaignSrc = join(uploadRoot, 'format-campaign.xlsx');
@@ -105,6 +107,17 @@ async function main() {
         );
         const buf = readFileSync(excelPath);
         const name = `CAMPANA ${event.name}.xlsx`;
+        // choose an author: first direction user in org (fallback: any active)
+        const author =
+          (await prisma.user.findFirst({
+            where: {
+              active: true,
+              organizationId: event.organizationId ?? undefined,
+              roleKey: { in: ['dir_general', 'dir_adjunta', 'super_admin'] },
+            },
+            select: { id: true, fullName: true },
+          })) ||
+          (await prisma.user.findFirst({ where: { active: true }, select: { id: true, fullName: true } }));
         const file = await prisma.eventFile.create({
           data: {
             eventId: event.id,
@@ -122,7 +135,7 @@ async function main() {
           eventName: event.name,
           entity: event.entity,
           fileName: name,
-          exportedBy: null,
+          exportedBy: ((global as any).__ARTA_ACTOR_FULLNAME__ as string) || author?.fullName || null,
         });
       }
       madeCampaign += 1;
@@ -135,6 +148,16 @@ async function main() {
         const { excelPath } = await corridaSvc.buildFromTemplate(corridaSrc, event.name);
         const buf = readFileSync(excelPath);
         const name = `CORRIDA ${event.name}.xlsx`;
+        const author =
+          (await prisma.user.findFirst({
+            where: {
+              active: true,
+              organizationId: event.organizationId ?? undefined,
+              roleKey: { in: ['dir_general', 'dir_adjunta', 'super_admin'] },
+            },
+            select: { id: true, fullName: true },
+          })) ||
+          (await prisma.user.findFirst({ where: { active: true }, select: { id: true, fullName: true } }));
         const excelFile = await prisma.eventFile.create({
           data: {
             eventId: event.id,
@@ -152,7 +175,7 @@ async function main() {
           eventName: event.name,
           entity: event.entity,
           fileName: name,
-          exportedBy: null,
+          exportedBy: ((global as any).__ARTA_ACTOR_FULLNAME__ as string) || author?.fullName || null,
         });
       }
       madeCorrida += 1;

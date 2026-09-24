@@ -27,6 +27,7 @@ import {
 } from '../common/rbac/roles';
 import { TicketingSyncService } from './ticketing-sync.service';
 import { ChecklistPdfService } from '../checklists/checklist-pdf.service';
+import { TicketingPdfService } from './ticketing-pdf.service';
 
 type AuthUser = {
   id: string;
@@ -120,6 +121,7 @@ export class TicketingController {
     private prisma: PrismaService,
     private sync: TicketingSyncService,
     private checklistPdfs: ChecklistPdfService,
+    private ticketingPdf: TicketingPdfService,
   ) {}
 
   private assertEdit(user: AuthUser) {
@@ -311,5 +313,28 @@ export class TicketingController {
     assertEventNotClosed(existing.event.status);
     await this.prisma.ticketingSetup.delete({ where: { id } });
     return { ok: true };
+  }
+
+  /** Genera el PDF de la boletera (servidor, con branding unificado). */
+  @Post(':id/pdf')
+  async pdf(@Req() req: { user: AuthUser }, @Param('id') id: string) {
+    this.assertEdit(req.user);
+    const setup = await this.prisma.ticketingSetup.findUnique({
+      where: { id },
+      include: { event: true },
+    });
+    if (!setup) throw new NotFoundException();
+    assertSameTenant(req.user, setup.event.organizationId);
+    if (
+      !canAccessEventOps(
+        req.user.entities as EntityKey[],
+        req.user.roleKey as RoleKey,
+        setup.event.entity as EntityKey,
+      )
+    ) {
+      throw new ForbiddenException();
+    }
+    const { url } = await this.ticketingPdf.generate(id, req.user.id);
+    return { url };
   }
 }

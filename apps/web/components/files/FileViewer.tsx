@@ -11,9 +11,11 @@ type Props = {
   kind?: string | null;
   /** Bust browser/CDN cache when the same URL is overwritten (e.g. pdfGeneratedAt). */
   cacheKey?: string | null;
+  /** Prefer in-app inline endpoint for originals (.xlsx/.docx) */
+  fileId?: string;
 };
 
-export function FileViewer({ url, fileName, kind, cacheKey }: Props) {
+export function FileViewer({ url, fileName, kind, cacheKey, fileId }: Props) {
   const displayName = fixMojibake(fileName);
   const [sheetHtml, setSheetHtml] = useState('');
   const [error, setError] = useState('');
@@ -29,6 +31,7 @@ export function FileViewer({ url, fileName, kind, cacheKey }: Props) {
   const fetchUrl = cacheKey
     ? `${url}${url.includes('?') ? '&' : '?'}v=${encodeURIComponent(cacheKey)}`
     : url;
+  const inlineUrl = fileId ? `/api/files/${fileId}/inline` : url;
 
   useEffect(() => {
     if (!isPdf) {
@@ -78,7 +81,7 @@ export function FileViewer({ url, fileName, kind, cacheKey }: Props) {
     setLoading(true);
     setError('');
     setSheetHtml('');
-    fetch(url, { credentials: 'same-origin' })
+    fetch(inlineUrl, { credentials: 'same-origin' })
       .then((r) => {
         if (!r.ok) throw new Error(`No se pudo cargar (${r.status})`);
         return r.arrayBuffer();
@@ -100,7 +103,7 @@ export function FileViewer({ url, fileName, kind, cacheKey }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [url, isExcel]);
+  }, [inlineUrl, isExcel]);
 
   if (isPdf) {
     return (

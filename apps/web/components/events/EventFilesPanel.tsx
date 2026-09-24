@@ -409,7 +409,7 @@ export function EventFilesPanel({
                   {previewing && !isEditing ? (
                     <div className="surface hub-pane">
                       <div className="hub-pane__body">
-                        <FileViewer url={f.url} fileName={f.fileName} kind={f.kind} cacheKey={f.createdAt} />
+                        <FileViewer url={f.url} fileName={f.fileName} kind={f.kind} cacheKey={f.createdAt} fileId={f.id} />
                       </div>
                     </div>
                   ) : null}
@@ -418,8 +418,65 @@ export function EventFilesPanel({
             })}
             {!visible.length ? <p className="t-muted t-small">Sin archivos en esta sección.</p> : null}
           </div>
+          <TrashBlock eventId={eventId} onFilesChanged={onFilesChanged} />
         </>
       ) : null}
     </div>
+  );
+}
+
+function TrashBlock({ eventId, onFilesChanged }: { eventId: string; onFilesChanged: () => void | Promise<void> }) {
+  const [rows, setRows] = useState<Array<{ id: string; fileName: string; deletedAt?: string | null }>>([]);
+  const [busy, setBusy] = useState<string>('');
+  useEffect(() => {
+    let alive = true;
+    api(`/uploads/event/${eventId}/deleted`)
+      .then((r) => {
+        if (alive) setRows(Array.isArray(r) ? r : []);
+      })
+      .catch(() => setRows([]));
+    return () => {
+      alive = false;
+    };
+  }, [eventId]);
+  if (!rows.length) return null;
+  return (
+    <details className="disclose">
+      <summary>Papelera ({rows.length})</summary>
+      <div className="sx-stack">
+        <div className="dtable-wrap">
+          <table className="dtable">
+            <tbody>
+              {rows.map((f) => (
+                <tr key={f.id}>
+                  <td>{f.fileName}</td>
+                  <td className="is-muted t-small">{f.deletedAt ? new Date(f.deletedAt).toLocaleString('es-MX') : ''}</td>
+                  <td className="col-act">
+                    <button
+                      className="btn-quiet"
+                      type="button"
+                      disabled={busy === f.id}
+                      onClick={async () => {
+                        setBusy(f.id);
+                        try {
+                          await api(`/uploads/${f.id}/restore`, { method: 'POST' });
+                          const next = await api(`/uploads/event/${eventId}/deleted`);
+                          setRows(Array.isArray(next) ? next : []);
+                          await onFilesChanged();
+                        } finally {
+                          setBusy('');
+                        }
+                      }}
+                    >
+                      {busy === f.id ? 'Restaurando…' : 'Restaurar'}
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </details>
   );
 }

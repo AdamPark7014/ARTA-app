@@ -4,6 +4,7 @@ import PDFDocument = require('pdfkit');
 import { createWriteStream, existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
 import { uploadRoot } from './upload-storage';
+import { PdfBrandingService, type BrandingMeta } from './pdf-branding.service';
 
 type SheetPdfInput = {
   eventName: string;
@@ -21,6 +22,7 @@ type SheetPdfInput = {
  */
 @Injectable()
 export class ExcelPdfService {
+  constructor(private branding: PdfBrandingService = new PdfBrandingService()) {}
   private dir() {
     const dir = join(uploadRoot, 'sheet-pdfs');
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
@@ -31,7 +33,7 @@ export class ExcelPdfService {
     sourceFileId: string,
     version: number,
     sourcePath: string,
-    input: SheetPdfInput,
+    input: SheetPdfInput & { draftWatermark?: boolean; branding?: Partial<BrandingMeta> },
   ): Promise<{ url: string; filePath: string; fileName: string }> {
     const wb = new ExcelJS.Workbook();
     try {
@@ -41,8 +43,12 @@ export class ExcelPdfService {
     }
 
     const dir = this.dir();
-    const fileName = `${sourceFileId}-v${version}.pdf`;
-    const filePath = join(dir, fileName);
+    // Visible name for download prompts: <EVENTO>_<AAAAMMDD>_<FORMATO>_v<N>.pdf
+    const safe = (s: string) => s.normalize('NFKD').replace(/[^\w\s-]/g, '').replace(/\s+/g, '_').slice(0, 80);
+    const dateLabel = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    const visibleBase = `${safe(input.eventName)}_${dateLabel}_${safe(input.fileName.replace(/\.(xlsx?|csv)$/i, ''))}_v${version}`.toUpperCase();
+    const storageName = `${sourceFileId}-v${version}.pdf`;
+    const filePath = join(dir, storageName);
 
     await new Promise<void>((resolve, reject) => {
       // Landscape: las hojas de campaña/corrida son anchas.
@@ -53,35 +59,21 @@ export class ExcelPdfService {
       stream.on('error', reject);
       doc.on('error', reject);
 
-      const accent = input.entity === 'EXPLANADA' ? '#1f5c50' : '#8b6914';
       const left = 36;
       const pageWidth = 792 - 72; // landscape letter usable width
 
       const writeHeader = (sheetName: string) => {
-        doc
-          .fillColor(accent)
-          .fontSize(10)
-          .text(
-            input.entity === 'EXPLANADA' ? 'AUDITORIO AREMA · EXPLANADA' : 'ARTA PRODUCCIONES',
-            left,
-            28,
-          );
-        doc
-          .fillColor('#111')
-          .fontSize(14)
-          .text(input.eventName || 'Evento', left, 44, { width: pageWidth });
-        doc
-          .fillColor('#555')
-          .fontSize(9)
-          .text(
-            `Salida PDF · ${input.fileName} · hoja «${sheetName}»` +
-              (input.exportedBy ? ` · ${input.exportedBy}` : '') +
-              ` · v${version}`,
-            left,
-            64,
-            { width: pageWidth },
-          );
-        doc.moveTo(left, 78).lineTo(left + pageWidth, 78).strokeColor('#ccc').stroke();
+        const meta: BrandingMeta = {
+          entity: input.entity,
+          eventName: input.eventName,
+          fileName: `${input.fileName} · hoja «${sheetName}»`,
+          version,
+          generatedBy: input.exportedBy || null,
+          generatedAt: new Date(),
+          ...(input.branding || {}),
+        };
+        this.branding.drawHeaderFooter(doc, meta, pageWidth);
+        if (input.draftWatermark) this.branding.draftWatermark(doc);
       };
 
       let first = true;
@@ -172,9 +164,9 @@ export class ExcelPdfService {
     });
 
     return {
-      url: `/uploads/sheet-pdfs/${fileName}`,
+      url: `/uploads/sheet-pdfs/${storageName}`,
       filePath,
-      fileName,
+      fileName: `${visibleBase}.pdf`,
     };
   }
 }

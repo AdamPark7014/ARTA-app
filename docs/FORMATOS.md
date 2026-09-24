@@ -81,6 +81,24 @@ con su nombre o como link clicable.
   para una tabla se escriben las columnas separadas por coma y `*` al final de
   la que se suma.
 
+## Profesionalización de formatos (slots, reemplazo, branding, auditoría)
+
+- Cada evento tiene “slots” de documento (6 checklists, Pendones, Campaña, Corrida, Boletera; OC es por orden; además Adicionales).
+- Un slot tiene UNA fuente activa: INTERNO (generado) o EXTERNO (subido). Estados: Pendiente, Borrador, En revisión, Autorizado (sellado), Reemplazado, Cancelado, Eliminado (UI).
+- Reemplazo: subir externo pide confirmación + motivo; el interno queda archivado (no destruido) y el slot muestra “Reemplazado por documento externo (quién/cuándo/motivo)”. Botones de generación se deshabilitan. Tipos: checklists .docx (PDF final aceptado), campaña/corrida .xlsx, adicionales cualquier permitido. Si estaba Autorizado, solo dirección puede reemplazar. Revertir a interno: solo dirección y con motivo; todo auditado.
+- Edición: internos editables por staff en Borrador/En revisión; tras Autorizado solo dirección puede reabrir (nueva versión). Externos: bloqueados tras subir (regla existente; edición/eliminación solo dirección). Editar Excel embebido crea nueva versión; el original se preserva.
+- Versionado: cada guardado = vN con autor/fecha. PDF con folio `ARTA-<evento>-<FORMATO>-vN`, versión, generado por, fecha. Marca de agua BORRADOR hasta Autorizado. Nombre de archivo `<EVENTO>_<AAAAMMDD>_<FORMATO>_v<N>.pdf`.
+- Salida: solo PDF para usuarios regulares. Originales (.xlsx/.docx) solo dirección (y se audita cada descarga).
+- Branding: servicio único de branding PDF (encabezado/folio/pie). Aplica a todos los PDFs (internos y externos convertidos).
+- Parámetros y formatos personalizados: campos a nivel plantilla (versionados, afectan futuros eventos) y campos extra por evento. Formatos custom con bloques y bindings a datos del evento (nombre, fecha, venue, ciudad, artista, promotor, zonas/precios, totales de OC y campaña).
+- Borrado/recuperación: borrado suave con motivo; “Papelera” por evento para restaurar. Super_admin puede purgar con script.
+- Auditoría: apéndice inmutable (sin update/delete). Se registra actor, rol, fecha, evento, slot, doc, versión, acción (create, generate, upload, replace, revert, edit con diffs, submit, authorize, reopen, pdf_generate, download_original, delete, restore, recreate, template_change), motivo, resumen antes/después, IP/UA. Vistas de Historial por documento y por evento, exportables en PDF.
+
+Scripts:
+- `backfill-document-slots.ts --dry|--confirm-produccion`: crea slots por evento sin tocar documentos.
+
+Nota: los «formatos personalizados con data bindings» quedan diferidos a una fase posterior; esta PR deja el andamiaje (campos extra a nivel plantilla/evento) y la documentación.
+
 ## Qué se ve en pantalla
 
 Al abrir un formato aparece la **hoja** (fondo blanco, marca, mismo orden que el

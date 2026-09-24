@@ -208,7 +208,8 @@ export function SheetEditor({
     setMsg('');
     // Archivo nuevo: el delta anterior ya no aplica.
     pendingCellsRef.current = new Map();
-    fetch(url, { credentials: 'same-origin', cache: 'no-store' })
+    const inlineUrl = fileId ? `/api/files/${fileId}/inline` : url;
+    fetch(inlineUrl, { credentials: 'same-origin', cache: 'no-store' })
       .then((r) => {
         if (!r.ok) throw new Error(`No se pudo abrir el archivo (${r.status})`);
         return r.arrayBuffer();
@@ -231,7 +232,7 @@ export function SheetEditor({
     return () => {
       cancelled = true;
     };
-  }, [url, loadSheet]);
+  }, [url, fileId, loadSheet]);
 
   const cols = grid[0]?.length || MIN_COLS;
 

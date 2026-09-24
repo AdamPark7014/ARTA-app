@@ -16,7 +16,7 @@ import {
   normalizeArtsUrl,
   resolveBoleteraName,
 } from '@/lib/boletera';
-import { boleteraSheet, downloadBoleteraPdf } from '@/lib/boletera-pdf';
+import { boleteraSheet } from '@/lib/boletera-pdf';
 import {
   DEFAULT_TICKET_ZONES,
   cloneTicketZones,
@@ -323,7 +323,8 @@ export function EventTicketingPanel({ event, closed, canEdit, onChanged, flash }
     setEditingId(null);
     const done = wasEditing ? 'Boletera actualizada' : 'Boletera creada';
     try {
-      await downloadBoleteraPdf({ setup: saved, event });
+      const res = await api<{ url: string }>(`/ticketing/${saved.id}/pdf`, { method: 'POST', body: '{}' });
+      window.open(res.url, '_blank', 'noopener');
       flash(`${done} · PDF descargado`, 'success');
     } catch {
       flash(`${done}, pero el PDF no se generó. Usa «Descargar PDF».`, 'warn');
@@ -355,7 +356,8 @@ export function EventTicketingPanel({ event, closed, canEdit, onChanged, flash }
   async function download(setup: TicketingSetup) {
     setPdfId(setup.id);
     try {
-      await downloadBoleteraPdf({ setup, event });
+      const res = await api<{ url: string }>(`/ticketing/${setup.id}/pdf`, { method: 'POST', body: '{}' });
+      window.open(res.url, '_blank', 'noopener');
     } catch {
       flash('No se pudo generar el PDF', 'error');
     } finally {

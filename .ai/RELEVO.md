@@ -5,6 +5,7 @@
 - **Rama:** main
 
 ## Hecho en este turno
+ 
 
 ### ⚠️ Deploy 0a93391 (PR #2) FALLIDO y revertido (2026-09-24 13:30 CT · 19:30 UTC)
 - Bundle `e616db5..0a93391` al server (ff-merge OK) + `bash deploy/update.sh --no-pull`.
@@ -20,6 +21,26 @@
   - `sync-checklists-from-docx`: el `--dry` no muestra diff; el parser junta todos los párrafos entre encabezados en UNA línea (`\s+`→' ' y luego split por `\n`), reemplaza el catálogo v2 (ids estables `nombre`, `venue`…) por ids-slug heurísticos (carryFormatValues perdería valores), y migra toda instancia con `authorizedAt: null` sin filtrar estado/sello. Parece destructivo; revisar antes.
   - `upgrade-excel-templates` y `generate-missing-…` crean EventFiles con `createdById: null` y `kind: 'excel'`: el filtro de Documentos los oculta y `cleanup-event-files.ts` los marcaría como basura. No excluyen `[SEED_DEMO]`.
   - Scripts resuelven assets con `process.cwd()/apps/api/assets/...` → correr desde `/app` en el contenedor; uploads = volumen `arta_arta_uploads` en `/app/uploads`.
+ 
+### Nueva fase: profesionalización de formatos (slots, reemplazo, permisos y auditoría)
+- Migración Prisma:
+  - Nuevos enums `DocumentSlotKind` y `DocumentSlotStatus`.
+  - Nueva tabla `EventDocumentSlot` (slot por evento y formato): fuente activa, estado, quién/cuándo reemplazó y archivo externo.
+  - Relaciones a `Event`, `ChecklistTemplate`, `EventFile`, `User`.
+- API:
+  - `SlotsController` (`/slots`): listar por evento, `POST /event/:id/replace` (confirma reemplazo con archivo externo y motivo), `POST /event/:id/restore` (solo dirección).
+  - Cancelación automática de generación cuando el slot está REPLACED:
+    - Campaña: `POST /campaigns/event/:id/export` devuelve 403 si CAMPAIGN está reemplazado.
+    - Corrida: `POST /finance/event/:id/generate` devuelve 403 si CORRIDA está reemplazado.
+  - Descarga de originales: `POST /files/:id/download-original` (solo dirección, audita `download_original`).
+- Excel embebido / PDF:
+  - `ExcelPdfService` ahora extrae texto de celdas de forma robusta (merged cells) y mantiene branding; checklist PDF se mantiene (branding existente).
+- Scripts:
+  - `backfill-document-slots.ts` — crea slots estándar por evento (dry/confirm), sin tocar documentos existentes.
+- Pruebas:
+  - `slots.controller.spec.ts`: reemplazo/restauración y tipos de archivo; bloqueo de generación por reemplazo.
+  - `excel-templates.spec.ts` sigue en verde (usa activos reales, valida merges/encabezados/fórmulas y PDF).
+ 
 ### Campaña y Corrida — machotes estándar + generación y pruebas (24-09 noche)
 - Registrar machotes desde repo: `register-format-sources.ts` ahora copia también
   `CAMPANA_BASE.xlsx` → `/uploads/format-campaign.xlsx` y `CORRIDA_BASE.xlsx` →

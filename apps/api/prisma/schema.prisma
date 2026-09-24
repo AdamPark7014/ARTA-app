@@ -207,6 +207,7 @@ model User {
   financeRunsCreated  FinanceRun[]               @relation("FinanceCreator")
   financeRunsEdited   FinanceRun[]               @relation("FinanceEditor")
   docRevisions        DocRevision[]              @relation("RevisionAuthor")
+  slotsReplaced       EventDocumentSlot[]
   tasksApproved       TaskAssignment[]           @relation("TaskApprover")
   tasksRejected       TaskAssignment[]           @relation("TaskRejecter")
   sessions            UserSession[]
@@ -258,6 +259,7 @@ model Event {
   vendorPins      VendorPin[]
   documents       EventDocument[]
   docRevisions    DocRevision[]
+  slots           EventDocumentSlot[]
 
   @@index([organizationId, entity])
   @@index([organizationId, status, startsAt])
@@ -315,6 +317,7 @@ model ChecklistTemplate {
 
   instances ChecklistInstance[]
   versions  ChecklistTemplateVersion[]
+  slots     EventDocumentSlot[]
 }
 
 model ChecklistTemplateVersion {
@@ -687,6 +690,7 @@ model EventFile {
   panelBlockReason String?
   createdAt        DateTime           @default(now())
   updatedAt        DateTime           @default(now()) @updatedAt
+  slots            EventDocumentSlot[]
 
   @@index([eventId, module])
   @@index([eventId, deletedAt])
@@ -898,6 +902,42 @@ model UserSession {
 
   @@index([userId, revokedAt])
   @@index([tokenHash])
+}
+
+// ─── Reemplazo/restauración de slots de documentos estándar ─────────────────
+enum DocumentSlotKind {
+  CHECKLIST
+  CAMPAIGN
+  CORRIDA
+  PENDONES
+  OC
+  BOLETERA
+}
+
+enum DocumentSlotStatus {
+  INTERNAL
+  REPLACED
+}
+
+model EventDocumentSlot {
+  id                  String             @id @default(cuid())
+  eventId             String
+  event               Event              @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  kind                DocumentSlotKind
+  checklistTemplateId String?
+  checklistTemplate   ChecklistTemplate? @relation(fields: [checklistTemplateId], references: [id], onDelete: SetNull)
+  status              DocumentSlotStatus @default(INTERNAL)
+  replacedByFileId    String?
+  replacedByFile      EventFile?         @relation(fields: [replacedByFileId], references: [id], onDelete: SetNull)
+  replacedById        String?
+  replacedBy          User?              @relation(fields: [replacedById], references: [id], onDelete: SetNull)
+  replacedAt          DateTime?
+  note                String?
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+
+  @@index([eventId, kind])
+  @@unique([eventId, kind, checklistTemplateId])
 }
 
 /// One-time cross-host SSO (reemplaza JWT en query string)

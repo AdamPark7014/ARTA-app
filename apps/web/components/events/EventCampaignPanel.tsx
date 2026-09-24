@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { FileViewer, SheetEditor } from '@/components/files/lazy';
-import { EmptyLite, FileRow, ReviewFlow, SectionHead, Seg } from '@/components/ui/Lite';
+import { EmptyLite, FileRow, Pill, ReviewFlow, SectionHead, Seg } from '@/components/ui/Lite';
 import { api } from '@/lib/api';
 import {
   campaignExpensesFileName,
@@ -24,6 +24,7 @@ import {
   type EventFile,
   type EventPanelProps,
 } from './event-detail.types';
+import { userHasPermission } from '@/lib/access-matrix';
 
 /**
  * Campaña publicitaria (junta 11-09-2026).
@@ -71,6 +72,8 @@ export function EventCampaignPanel({
   onChanged,
   flash,
 }: Props) {
+  const slot = useMemo(() => (event.slots || []).find((s) => s.kind === 'CAMPAIGN') || null, [event.slots]);
+  const replaced = slot?.status === 'REPLACED';
   const saved = useMemo(() => campaignRowsFrom(event.campaign?.dataJson?.concepts), [event.campaign?.dataJson]);
   const draftKey = `arta.draft.campaign.${event.id}`;
   const [rows, setRows] = useState<CampaignConceptRow[]>(() => readDraft<CampaignConceptRow[]>(draftKey) ?? saved);
@@ -181,6 +184,10 @@ export function EventCampaignPanel({
   }
 
   async function generate() {
+    if (replaced) {
+      flash('La campaña fue reemplazada por un documento externo', 'error');
+      return;
+    }
     if (!filled.length) {
       flash('Agrega al menos un concepto', 'warn');
       return;
@@ -199,6 +206,38 @@ export function EventCampaignPanel({
       flash(e instanceof Error ? e.message : 'No se pudo generar el archivo', 'error');
     } finally {
       setBusy(false);
+    }
+  }
+  async function replaceExternal(file: File) {
+    // Subir archivo y marcar el slot como REPLACED
+    const note = window.prompt('Motivo del reemplazo por documento externo') || '';
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      fd.append('eventId', event.id);
+      fd.append('module', CAMPAIGN_FILE_MODULE);
+      const uploaded = await api<EventFile>('/uploads', { method: 'POST', body: fd });
+      await api(`/slots/event/${event.id}/replace`, {
+        method: 'POST',
+        body: JSON.stringify({ kind: 'CAMPAIGN', fileId: uploaded.id, note }),
+      });
+      flash('Campaña reemplazada por documento externo', 'success');
+      await onChanged();
+    } catch (e) {
+      flash(e instanceof Error ? e.message : 'No se pudo reemplazar', 'error');
+    }
+  }
+  async function restoreInternal() {
+    const note = window.prompt('Motivo para reactivar la campaña interna (dirección)') || '';
+    try {
+      await api(`/slots/event/${event.id}/restore`, {
+        method: 'POST',
+        body: JSON.stringify({ kind: 'CAMPAIGN', note }),
+      });
+      flash('Campaña interna reactivada', 'success');
+      await onChanged();
+    } catch (e) {
+      flash(e instanceof Error ? e.message : 'No se pudo reactivar', 'error');
     }
   }
 
@@ -282,7 +321,15 @@ export function EventCampaignPanel({
 
   return (
     <div className="sx-stack campaign">
-      <SectionHead title="Campaña" sub={<ReviewFlow step={step} />}>
+      <SectionHead
+        title="Campaña"
+        sub={
+          <>
+            <ReviewFlow step={step} />{' '}
+            {slot ? <Pill tone={replaced ? 'warn' : 'ok'}>{replaced ? 'Reemplazado por externo' : 'Interno'}</Pill> : null}
+          </>
+        }
+      >
         <ReviewActions
           step={step}
           closed={closed}
@@ -293,6 +340,28 @@ export function EventCampaignPanel({
           busy={busy}
           onMove={move}
         />
+        <div className="sx-actions">
+          {!closed && !replaced ? (
+            <label className="btn ghost btn-sm hub-upload">
+              Reemplazar por externo
+              <input
+                type="file"
+                hidden
+                accept=".xlsx,.xls"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  e.target.value = '';
+                  if (f) void replaceExternal(f);
+                }}
+              />
+            </label>
+          ) : null}
+          {!closed && replaced ? (
+            <button className="btn ghost btn-sm" type="button" onClick={restoreInternal}>
+              Revertir a interno
+            </button>
+          ) : null}
+        </div>
       </SectionHead>
 
       <div className="toolbar-row">
@@ -317,7 +386,7 @@ export function EventCampaignPanel({
           <button className="btn ghost btn-sm" type="button" disabled={!filled.length} onClick={() => pdf('externa')}>
             PDF externa
           </button>
-          {canEdit && !closed ? (
+          {canEdit && !closed && !replaced ? (
             <button className="btn btn-sm" type="button" disabled={busy || !filled.length} onClick={generate}>
               Generar campaña
             </button>
@@ -592,7 +661,13 @@ export function EventCampaignPanel({
                   onSaved={onChanged}
                 />
               ) : (
-                <FileViewer url={sheet.url} fileName={sheet.fileName} kind={sheet.kind} cacheKey={sheet.updatedAt || sheet.createdAt} />
+                <FileViewer
+                  url={sheet.url}
+                  fileName={sheet.fileName}
+                  kind={sheet.kind}
+                  cacheKey={sheet.updatedAt || sheet.createdAt}
+                  fileId={sheet.id}
+                />
               )}
             </div>
           ) : null}
@@ -603,6 +678,7 @@ export function EventCampaignPanel({
         <details className="disclose">
           <summary>Otros archivos de campaña ({others.length})</summary>
           <div className="sx-stack">
+            <AuditBlock eventId={event.id} />
             {others.map((f) => (
               <FileRow key={f.id} kind={isSheet(f) ? 'xlsx' : /\.pdf$/i.test(f.fileName) ? 'pdf' : 'file'} name={f.fileName}>
                 <a className="btn-quiet" href={f.url} target="_blank" rel="noreferrer">
@@ -613,6 +689,42 @@ export function EventCampaignPanel({
           </div>
         </details>
       ) : null}
+    </div>
+  );
+}
+
+function AuditBlock({ eventId }: { eventId: string }) {
+  const [rows, setRows] = useState<
+    Array<{ id: string; action: string; createdAt: string; user?: { fullName?: string | null } | null; metaJson?: unknown }>
+  >([]);
+  useEffect(() => {
+    let alive = true;
+    api(`/audit?resource=Event&resourceId=${encodeURIComponent(eventId)}&take=50`)
+      .then((r) => {
+        if (alive) setRows(Array.isArray(r) ? r : []);
+      })
+      .catch(() => setRows([]));
+    return () => {
+      alive = false;
+    };
+  }, [eventId]);
+  if (!rows.length) return null;
+  return (
+    <div className="surface">
+      <h4 className="surface__title">Historial</h4>
+      <div className="dtable-wrap">
+        <table className="dtable">
+          <tbody>
+            {rows.map((a) => (
+              <tr key={a.id}>
+                <td className="is-muted t-small">{new Date(a.createdAt).toLocaleString('es-MX')}</td>
+                <td>{a.user?.fullName || '—'}</td>
+                <td className="is-muted">{a.action}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

@@ -270,6 +270,42 @@ export function EventChecklistsPanel({
     return (event.files || []).filter((f) => f.checklistId === activeChecklist.id);
   }, [event.files, activeChecklist]);
 
+  /** Sección e ítem para Campos adicionales (tabla Etiqueta/Valor). */
+  const hasExtras = useMemo(() => {
+    if (!activeChecklist?.dataJson?.sections) return false;
+    return !!activeChecklist.dataJson.sections.find((s) => s.id === 'extras');
+  }, [activeChecklist?.dataJson]);
+
+  async function ensureExtrasSection() {
+    if (!activeChecklist) return;
+    if (hasExtras) return;
+    const base = activeChecklist.dataJson || { sections: [] };
+    const next = {
+      ...base,
+      sections: [
+        ...(base.sections || []),
+        {
+          id: 'extras',
+          title: 'Campos adicionales',
+          items: [
+            {
+              id: 'extras',
+              label: 'Campos adicionales',
+              type: 'table',
+              columns: [
+                { id: 'label', label: 'Etiqueta', width: 2 },
+                { id: 'value', label: 'Valor', width: 4 },
+              ],
+              rows: [],
+              minRows: 3,
+            },
+          ],
+        },
+      ],
+    };
+    await onAutosaveChecklist(next);
+  }
+
   /*
    * Un formato aprobado o sellado no se edita. `REVIEW` sí: es una bandera
    * para pedir revisión, no un candado — si bloqueara, nadie cerraría su
@@ -278,6 +314,11 @@ export function EventChecklistsPanel({
   const status = (activeChecklist?.status || 'DRAFT') as DocStatus;
   const lockedByStatus = status === 'APPROVED' || status === 'SEALED';
   const readOnly = closed || lockedByStatus;
+  const checklistSlot =
+    activeChecklist &&
+    (event.slots || []).find((s) => s.kind === 'CHECKLIST' && s.checklistTemplateId === (activeChecklist.template?.id || null)) ||
+    null;
+  const replacedByExternal = !!checklistSlot && checklistSlot.status === 'REPLACED';
 
   // Al cambiar de formato se vuelve al principio.
   useEffect(() => {
@@ -353,6 +394,35 @@ export function EventChecklistsPanel({
   async function saveNow() {
     await onSaveChecklist();
     autosave.reset(activeChecklist?.dataJson ?? null);
+  }
+  async function replaceWithExternal(file: File) {
+    if (!activeChecklist) return;
+    const note = window.prompt('Motivo del reemplazo por documento externo') || '';
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      fd.append('eventId', event.id);
+      fd.append('checklistId', activeChecklist.id);
+      fd.append('module', CHECKLIST_FILE_MODULE);
+      const f = await api<EventFile>('/uploads', { method: 'POST', body: fd });
+      await api(`/slots/event/${event.id}/replace`, {
+        method: 'POST',
+        body: JSON.stringify({ kind: 'CHECKLIST', checklistTemplateId: activeChecklist.template?.id || null, fileId: f.id, note }),
+      });
+      await onFilesChanged();
+    } catch (e) {
+      // ignore bubble; toast set at caller
+      throw e;
+    }
+  }
+  async function restoreInternalChecklist() {
+    if (!activeChecklist) return;
+    const note = window.prompt('Motivo para reactivar el formato interno (dirección)') || '';
+    await api(`/slots/event/${event.id}/restore`, {
+      method: 'POST',
+      body: JSON.stringify({ kind: 'CHECKLIST', checklistTemplateId: activeChecklist.template?.id || null, note }),
+    });
+    await onFilesChanged();
   }
 
   function toggleSection(sectionId: string) {
@@ -517,6 +587,11 @@ export function EventChecklistsPanel({
           <div className="hub-doc__title">
             <h2 className="sx-head__title">{activeChecklist.title}</h2>
             <DocStatusBadge status={status} />
+            {checklistSlot ? (
+              <span className="pill pill--small" aria-label="Origen del documento">
+                {replacedByExternal ? 'Reemplazado por externo' : 'Interno'}
+              </span>
+            ) : null}
           </div>
           <div className="sx-actions">
             {!readOnly ? (
@@ -546,6 +621,30 @@ export function EventChecklistsPanel({
                 <button type="button" onClick={() => openDrawer('historial')}>
                   Historial de versiones
                 </button>
+                {!closed ? (
+                  replacedByExternal ? (
+                    <button
+                      type="button"
+                      onClick={() => void restoreInternalChecklist()}
+                    >
+                      Revertir a interno
+                    </button>
+                  ) : (
+                    <label className="btn-quiet hub-upload" role="menuitem">
+                      Reemplazar por externo (.docx o PDF)
+                      <input
+                        type="file"
+                        hidden
+                        accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/pdf,.pdf"
+                        onChange={(e) => {
+                          const f = e.target.files?.[0];
+                          e.target.value = '';
+                          if (f) void replaceWithExternal(f);
+                        }}
+                      />
+                    </label>
+                  )
+                ) : null}
                 {activeChecklist.pdfUrl ? (
                   <a href={activeChecklist.pdfUrl} target="_blank" rel="noreferrer" role="menuitem">
                     <button type="button">Abrir PDF en otra pestaña</button>
@@ -575,6 +674,16 @@ export function EventChecklistsPanel({
             <span className="hub-doc__status">
               <DocStatusControl status={status} roleKey={roleKey} busy={saving} onChange={onChangeStatus} />
             </span>
+          ) : null}
+          {!closed && !hasExtras ? (
+            <button
+              className="btn-quiet"
+              type="button"
+              title="Agregar una tabla de Etiqueta/Valor al final del formato"
+              onClick={() => void ensureExtrasSection()}
+            >
+              + Campos adicionales
+            </button>
           ) : null}
         </div>
       </header>
@@ -746,6 +855,16 @@ export function EventChecklistsPanel({
         <section className="surface hub-drawer">
           <div className="surface__head">
             <h3 className="surface__title">Historial de versiones</h3>
+            {activeChecklist ? (
+              <a
+                className="btn-quiet"
+                href={`/api/audit/resource/CHECKLIST/${activeChecklist.id}/pdf`}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Exportar historial PDF
+              </a>
+            ) : null}
             <button className="icon-btn" type="button" aria-label="Cerrar" onClick={() => setDrawer(null)}>
               ×
             </button>

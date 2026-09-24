@@ -91,6 +91,13 @@ export class CampaignsController {
     @Param('eventId') eventId: string,
     @Body() body: { rows: CampaignRow[] },
   ) {
+    // Auto-cancel si está reemplazado por documento externo
+    const replaced = await this.prisma.eventDocumentSlot.findFirst({
+      where: { eventId, kind: 'CAMPAIGN', status: 'REPLACED' },
+    });
+    if (replaced) {
+      throw new ForbiddenException('La campaña fue reemplazada por un documento externo');
+    }
     if (!hasPermission(req.user.roleKey as RoleKey, req.user.permissions, PERMISSIONS.CAMPAIGN_EDIT)) {
       throw new ForbiddenException('Solo el equipo de campaña edita la campaña');
     }
@@ -126,11 +133,14 @@ export class CampaignsController {
     });
     // PDF salida
     const pdfSvc = this.excelPdf || new ExcelPdfService();
+    // BORRADOR watermark until authorized
+    const isDraft = (await this.prisma.campaign.findUnique({ where: { eventId } }))?.status !== 'AUTHORIZED';
     const { url } = await pdfSvc.generate(file.id, file.version, excelPath, {
       eventName: event.name,
       entity: event.entity,
       fileName: name,
       exportedBy: req.user.fullName || null,
+      draftWatermark: !!isDraft,
     });
     return { url, fileId: file.id, excelUrl: file.url };
   }

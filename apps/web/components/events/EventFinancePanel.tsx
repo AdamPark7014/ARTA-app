@@ -1,8 +1,8 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { FileViewer, SheetEditor } from '@/components/files/lazy';
-import { EmptyLite, FileRow, SectionHead } from '@/components/ui/Lite';
+import { EmptyLite, FileRow, Pill, SectionHead } from '@/components/ui/Lite';
 import { api } from '@/lib/api';
 import { patchEventFileCells, replaceEventFile } from '@/lib/file-save';
 import { FINANCE_FILE_MODULE, type EventFile, type EventPanelProps } from './event-detail.types';
@@ -39,6 +39,8 @@ export function EventFinancePanel({
 }: EventPanelProps & { canEdit: boolean }) {
   const [busy, setBusy] = useState(false);
   const [open, setOpen] = useState(true);
+  const slot = (event.slots || []).find((s) => s.kind === 'CORRIDA') || null;
+  const replaced = slot?.status === 'REPLACED';
 
   const files = useMemo(
     () => event.files.filter((f) => f.module === FINANCE_FILE_MODULE).sort((a, b) => stamp(b) - stamp(a)),
@@ -64,6 +66,7 @@ export function EventFinancePanel({
 
   function upload(file: File) {
     return run(async () => {
+      if (replaced) throw new Error('La corrida fue reemplazada por documento externo');
       const fd = new FormData();
       fd.append('file', file);
       if (corrida) {
@@ -103,8 +106,67 @@ export function EventFinancePanel({
     <div className="sx-stack">
       <SectionHead
         title="Corrida"
-        sub={editable ? 'Una sola corrida por evento. Se edita aquí, como Excel, y sale en PDF.' : 'Una sola corrida por evento.'}
-      />
+        sub={
+          <>
+            {editable ? 'Una sola corrida por evento. Se edita aquí, como Excel, y sale en PDF.' : 'Una sola corrida por evento.'}{' '}
+            {slot ? <Pill tone={replaced ? 'warn' : 'ok'}>{replaced ? 'Reemplazada por externo' : 'Interna'}</Pill> : null}
+          </>
+        }
+      >
+        {!closed && !replaced ? (
+          <label className="btn ghost btn-sm module-upload" aria-disabled={busy}>
+            Reemplazar por externo
+            <input
+              type="file"
+              hidden
+              disabled={busy}
+              accept=".xlsx,.xls"
+              onChange={async (e) => {
+                const f = e.target.files?.[0];
+                e.target.value = '';
+                if (!f) return;
+                const note = window.prompt('Motivo del reemplazo por documento externo') || '';
+                try {
+                  const fd = new FormData();
+                  fd.append('file', f);
+                  fd.append('eventId', event.id);
+                  fd.append('module', FINANCE_FILE_MODULE);
+                  const uploaded = await api<EventFile>('/uploads', { method: 'POST', body: fd });
+                  await api(`/slots/event/${event.id}/replace`, {
+                    method: 'POST',
+                    body: JSON.stringify({ kind: 'CORRIDA', fileId: uploaded.id, note }),
+                  });
+                  flash('Corrida reemplazada por documento externo', 'success');
+                  await onChanged();
+                } catch (e) {
+                  flash(e instanceof Error ? e.message : 'No se pudo reemplazar', 'error');
+                }
+              }}
+            />
+          </label>
+        ) : null}
+        {!closed && replaced ? (
+          <button
+            className="btn ghost btn-sm"
+            type="button"
+            onClick={async () => {
+              const note = window.prompt('Motivo para reactivar la corrida interna (dirección)') || '';
+              try {
+                await api(`/slots/event/${event.id}/restore`, {
+                  method: 'POST',
+                  body: JSON.stringify({ kind: 'CORRIDA', note }),
+                });
+                flash('Corrida interna reactivada', 'success');
+                await onChanged();
+              } catch (e) {
+                flash(e instanceof Error ? e.message : 'No se pudo reactivar', 'error');
+              }
+            }}
+          >
+            Revertir a interno
+          </button>
+        ) : null}
+      </SectionHead>
 
       {!corrida ? (
         <div className="surface">
@@ -112,12 +174,12 @@ export function EventFinancePanel({
             icon="≡"
             title="Sin corrida"
             text={
-              editable
+              editable && !replaced
                 ? 'Genera una corrida desde el machote estándar o sube el Excel existente.'
                 : 'Cuando finanzas la suba, aparecerá aquí.'
             }
           >
-            {editable ? (
+            {editable && !replaced ? (
               <>
                 <button
                   className="btn btn-sm"
@@ -153,12 +215,12 @@ export function EventFinancePanel({
             <a className="btn-quiet" href={corrida.url} download={corrida.fileName}>
               Descargar
             </a>
-            {editable ? uploadButton('Reemplazar', false) : null}
+            {editable && !replaced ? uploadButton('Reemplazar', false) : null}
           </FileRow>
 
           {open ? (
             <div className="surface finance-viewer">
-              {editable && isSheet(corrida) ? (
+              {editable && isSheet(corrida) && !replaced ? (
                 <SheetEditor
                   key={`${corrida.id}-${corrida.version ?? 1}`}
                   url={corrida.url}
@@ -178,6 +240,7 @@ export function EventFinancePanel({
                   fileName={corrida.fileName}
                   kind={corrida.kind}
                   cacheKey={corrida.updatedAt || corrida.createdAt}
+                  fileId={corrida.id}
                 />
               )}
             </div>
@@ -189,6 +252,7 @@ export function EventFinancePanel({
         <details className="disclose">
           <summary>Archivos anteriores ({older.length})</summary>
           <div className="sx-stack">
+            <TrashBlock eventId={event.id} />
             {older.map((f) => (
               <FileRow key={f.id} kind={isSheet(f) ? 'xlsx' : 'pdf'} name={f.fileName} meta={when(f.createdAt)}>
                 <a className="btn-quiet" href={f.url} download={f.fileName}>
@@ -204,6 +268,61 @@ export function EventFinancePanel({
           </div>
         </details>
       ) : null}
+    </div>
+  );
+}
+
+function TrashBlock({ eventId }: { eventId: string }) {
+  const [rows, setRows] = useState<Array<{ id: string; fileName: string; deletedAt?: string | null }>>([]);
+  const [busy, setBusy] = useState<string>('');
+  useEffect(() => {
+    let alive = true;
+    api(`/uploads/event/${eventId}/deleted`)
+      .then((r) => {
+        if (alive) setRows(Array.isArray(r) ? r : []);
+      })
+      .catch(() => setRows([]));
+    return () => {
+      alive = false;
+    };
+  }, [eventId]);
+  if (!rows.length) return null;
+  return (
+    <div className="surface">
+      <h4 className="surface__title">Papelera</h4>
+      <div className="dtable-wrap">
+        <table className="dtable">
+          <tbody>
+            {rows.map((f) => (
+              <tr key={f.id}>
+                <td>{f.fileName}</td>
+                <td className="is-muted t-small">
+                  {f.deletedAt ? new Date(f.deletedAt).toLocaleString('es-MX') : ''}
+                </td>
+                <td className="col-act">
+                  <button
+                    className="btn-quiet"
+                    type="button"
+                    disabled={busy === f.id}
+                    onClick={async () => {
+                      setBusy(f.id);
+                      try {
+                        await api(`/uploads/${f.id}/restore`, { method: 'POST' });
+                        const next = await api(`/uploads/event/${eventId}/deleted`);
+                        setRows(Array.isArray(next) ? next : []);
+                      } finally {
+                        setBusy('');
+                      }
+                    }}
+                  >
+                    {busy === f.id ? 'Restaurando…' : 'Restaurar'}
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

@@ -762,17 +762,10 @@ export function EventPurchaseOrdersPanel({
   async function downloadPdf(po: Po) {
     setBusy(`pdf-${po.id}`);
     try {
-      // Server-side export from the Excel template (faithful to original)
       const res = await api<{ url: string }>(`/purchase-orders/${po.id}/export`, { method: 'POST', body: JSON.stringify({}) });
       window.open(res.url, '_blank', 'noopener');
     } catch (e) {
-      // Fallback to client PDF if server export is unavailable
-      try {
-        const { downloadPurchaseOrderPdf } = await import('@/lib/po-pdf');
-        await downloadPurchaseOrderPdf({ po, event: { name: event.name }, payDaysLabel: payDaysLabel(win) });
-      } catch {
-        flash('No se pudo generar el PDF', 'error');
-      }
+      flash('No se pudo generar el PDF', 'error');
     } finally {
       setBusy(null);
     }

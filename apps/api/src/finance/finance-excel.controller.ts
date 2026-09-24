@@ -24,6 +24,12 @@ export class FinanceExcelController {
   /** Genera corrida financiera desde el machote estándar si no existe aún. */
   @Post('event/:eventId/generate')
   async generateCorrida(@Req() req: { user: AuthUser }, @Param('eventId') eventId: string, @Body() _body?: {}) {
+    const replaced = await this.prisma.eventDocumentSlot.findFirst({
+      where: { eventId, kind: 'CORRIDA', status: 'REPLACED' },
+    });
+    if (replaced) {
+      throw new ForbiddenException('La corrida fue reemplazada por un documento externo');
+    }
     const role = req.user.roleKey as RoleKey;
     if (!hasPermission(role, req.user.permissions || [], PERMISSIONS.FINANCE_EDIT)) {
       throw new ForbiddenException('Sin permiso para editar finanzas');
