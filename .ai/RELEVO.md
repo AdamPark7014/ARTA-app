@@ -1,7 +1,7 @@
 # RELEVO
 
 - **Último turno:** claude-code
-- **Fecha:** 2026-09-23
+- **Fecha:** 2026-09-24
 - **Rama:** main
 
 ## Hecho en este turno
@@ -90,7 +90,13 @@ encima del valor ya impreso (se veía doble) y contradecía lo acordado.
   **`checklist-visibility.ts`**: un formato de plantilla inactiva solo se lista si alguien
   lo empezó (avance, estado, firma o adjuntos); aplica al detalle del evento, a la lista
   por evento, al conteo de la lista de eventos, a los promedios de automatizaciones y
-  resúmenes y al overview. No se borra nada.
+  resúmenes y al overview. No se borra nada. Commit `6d723e8`, **desplegado 22:13**;
+  verificado a la mañana siguiente: api y web sanos 10 h, sin errores, ANDRES PARRA pasa
+  de 13 a 9 formatos visibles (7 estándar + Catering + Mantenimiento).
+- Pendones era Excel en Drive; en el documento va como tabla con totales. Si Adam lo
+  quiere como Excel embebido (igual que la campaña), es trabajo aparte: generar el xlsx
+  desde `campaign-sheet-template.ts`-style, abrirlo en `SheetEditor`, PDF por
+  `/uploads/:id/pdf`.
 
 ## A medias
 
