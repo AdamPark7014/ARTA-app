@@ -12,8 +12,8 @@ export default function HospitalityPage() {
       titleMatch={new RegExp('hospedaje|hospitality', 'i')}
       fields={[
         { id: 'nombre', label: 'Hotel' },
-        { id: 'habitaciones', label: 'Habitaciones' },
-        { id: 'contacto', label: 'Contacto' },
+        { id: 'contacto', label: 'Enlace' },
+        { id: 'desayuno', label: 'Desayuno' },
       ]}
     />
   );

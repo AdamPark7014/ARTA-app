@@ -13,14 +13,18 @@ import { useAutosave } from '@/lib/use-autosave';
 import { useDirtyGuard } from '@/lib/use-dirty-guard';
 import { useSaveHotkey } from '@/lib/use-save-hotkey';
 import { DocStatusBadge, DocStatusControl } from '@/components/ui/DocStatusControl';
-import type {
-  Checklist,
-  ChecklistItem,
-  ChecklistSection,
-  DocStatus,
-  EventDetail,
-  EventFile,
+import {
+  isCheckItem,
+  isItemDone,
+  isScoringItem,
+  type Checklist,
+  type ChecklistItem,
+  type ChecklistSection,
+  type DocStatus,
+  type EventDetail,
+  type EventFile,
 } from '@/components/events/event-detail.types';
+import { AttachmentField, TableField, YesNoField } from '@/components/events/ChecklistFieldControls';
 
 type Section = ChecklistSection;
 type Item = ChecklistItem;
@@ -43,7 +47,8 @@ type EventChecklistsPanelProps = {
   /** Guardado silencioso: sin regenerar PDF ni crear versión. */
   onAutosaveChecklist: (dataJson: Checklist['dataJson']) => Promise<void>;
   onRegeneratePdf: () => Promise<void>;
-  onUpload: (file: File) => Promise<void>;
+  /** Sube un adjunto al formato abierto; devuelve el archivo para enlazarlo a un campo. */
+  onUpload: (file: File) => Promise<EventFile | void>;
   onUpdateItem: (sectionId: string, itemId: string, patch: Partial<Item>) => void;
   /** Marcar o desmarcar todas las casillas de una sección. */
   onUpdateSection: (sectionId: string, done: boolean) => void;
@@ -59,13 +64,154 @@ type EventChecklistsPanelProps = {
 /** Cajón abierto bajo el formato: firmas, PDF, adjuntos o historial. */
 type Drawer = 'firmas' | 'pdf' | 'archivos' | 'historial' | null;
 
-function isCheckItem(it: Item) {
-  return it.type === 'check' || !it.type;
+/** Casilla con nota corta opcional (proveedor, quién, cuándo…). */
+function CheckRow({
+  item,
+  readOnly,
+  onPatch,
+}: {
+  item: Item;
+  readOnly: boolean;
+  onPatch: (patch: Partial<Item>) => void;
+}) {
+  const [noting, setNoting] = useState(false);
+  const note = String(item.note ?? '');
+  const showNote = noting || note.trim() !== '';
+  return (
+    <div className={`hub-check-row ${showNote ? 'has-note' : ''}`}>
+      <label className={`hub-check ${item.done ? 'is-done' : ''}`}>
+        <input
+          type="checkbox"
+          disabled={readOnly}
+          checked={!!item.done}
+          onChange={(e) => onPatch({ done: e.target.checked })}
+        />
+        <span className="hub-check__text">{item.label}</span>
+      </label>
+      {showNote ? (
+        <input
+          className="hub-check__note"
+          type="text"
+          autoFocus={noting && !note}
+          disabled={readOnly}
+          placeholder="Nota (proveedor, quién, cuándo…)"
+          aria-label={`Nota de ${item.label}`}
+          value={note}
+          onChange={(e) => onPatch({ note: e.target.value })}
+          onBlur={() => {
+            if (!note.trim()) setNoting(false);
+          }}
+        />
+      ) : !readOnly ? (
+        <button type="button" className="hub-check__add-note" onClick={() => setNoting(true)} aria-label={`Agregar nota a ${item.label}`}>
+          + nota
+        </button>
+      ) : null}
+    </div>
+  );
 }
 
-function isItemDone(it: Item) {
-  if (isCheckItem(it)) return !!it.done;
-  return it.value !== null && it.value !== undefined && String(it.value).trim() !== '';
+/** El control de captura de cada tipo de campo. */
+function FieldControl({
+  item,
+  readOnly,
+  files,
+  onPatch,
+  onUpload,
+}: {
+  item: Item;
+  readOnly: boolean;
+  files: EventFile[];
+  onPatch: (patch: Partial<Item>) => void;
+  onUpload?: (file: File) => Promise<EventFile | void>;
+}) {
+  const value = item.value ?? '';
+  switch (item.type) {
+    case 'longtext':
+      return (
+        <textarea
+          rows={3}
+          disabled={readOnly}
+          value={value}
+          placeholder={item.placeholder || 'Escribe aquí…'}
+          onChange={(e) => {
+            onPatch({ value: e.target.value });
+            const el = e.target;
+            el.style.height = 'auto';
+            el.style.height = `${Math.min(el.scrollHeight, 320)}px`;
+          }}
+        />
+      );
+    case 'number':
+    case 'date':
+    case 'time':
+      return (
+        <input
+          type={item.type}
+          disabled={readOnly}
+          value={value}
+          placeholder={item.placeholder || (item.type === 'date' ? 'Fecha' : item.type === 'time' ? 'Hora' : 'Cantidad')}
+          onChange={(e) =>
+            onPatch({
+              value: item.type === 'number' ? (e.target.value === '' ? null : Number(e.target.value)) : e.target.value,
+            })
+          }
+        />
+      );
+    case 'yesno':
+      return <YesNoField item={item} readOnly={readOnly} onPatch={onPatch} />;
+    case 'table':
+      return <TableField item={item} readOnly={readOnly} onPatch={onPatch} />;
+    case 'attachment':
+      return <AttachmentField item={item} readOnly={readOnly} files={files} onPatch={onPatch} onUpload={onUpload} />;
+    case 'select': {
+      const opts = item.options || [];
+      const otra = opts.find((o) => /^otra$/i.test(o));
+      const raw = String(value);
+      const known = opts.filter((o) => !/^otra$/i.test(o));
+      const choice = known.includes(raw) ? raw : otra && (raw === otra || (raw && !known.includes(raw))) ? otra : raw || '';
+      const custom = otra && choice === otra && raw !== otra ? raw : '';
+      return (
+        <>
+          <select
+            disabled={readOnly}
+            value={choice}
+            onChange={(e) => {
+              const next = e.target.value;
+              if (otra && next === otra) onPatch({ value: custom || otra });
+              else onPatch({ value: next });
+            }}
+          >
+            <option value="">Selecciona…</option>
+            {opts.map((o) => (
+              <option key={o} value={o}>
+                {o}
+              </option>
+            ))}
+          </select>
+          {otra && choice === otra ? (
+            <input
+              disabled={readOnly}
+              placeholder="Especifica…"
+              value={custom}
+              onChange={(e) => onPatch({ value: e.target.value.trim() || otra })}
+            />
+          ) : null}
+        </>
+      );
+    }
+    default:
+      // `text` y cualquier tipo desconocido: una línea.
+      return (
+        <input
+          type="text"
+          disabled={readOnly}
+          value={value}
+          placeholder={item.placeholder || 'Respuesta…'}
+          onChange={(e) => onPatch({ value: e.target.value })}
+        />
+      );
+  }
 }
 
 /**
@@ -143,8 +289,10 @@ export function EventChecklistsPanel({
 
   const stats = useMemo(() => {
     const perSection = sections.map((s) => {
-      const total = s.items.length;
-      const done = s.items.filter(isItemDone).length;
+      // Misma cuenta que el servidor: lo opcional vacío no resta.
+      const scoring = s.items.filter(isScoringItem);
+      const total = scoring.length;
+      const done = scoring.filter(isItemDone).length;
       return { id: s.id, title: s.title, total, done };
     });
     return {
@@ -672,103 +820,41 @@ export function EventChecklistsPanel({
                   </div>
 
                   {!isCollapsed ? (
-                    <div className="hub-sec__body">
+                    <div
+                      className={`hub-sec__body ${
+                        section.layout === 'header' || section.id === 'encabezado'
+                          ? 'hub-sec__body--grid'
+                          : section.layout === 'columns' || (checkItems.length === section.items.length && checkItems.length > 6)
+                            ? 'hub-sec__body--columns'
+                            : ''
+                      }`}
+                    >
                       {section.items.map((item) =>
                         isCheckItem(item) ? (
-                          <label key={item.id} className={`hub-check ${item.done ? 'is-done' : ''}`}>
-                            <input
-                              type="checkbox"
-                              disabled={readOnly}
-                              checked={!!item.done}
-                              onChange={(e) => onUpdateItem(section.id, item.id, { done: e.target.checked })}
-                            />
-                            <span className="hub-check__text">{item.label}</span>
-                          </label>
+                          <CheckRow
+                            key={item.id}
+                            item={item}
+                            readOnly={readOnly}
+                            onPatch={(patch) => onUpdateItem(section.id, item.id, patch)}
+                          />
                         ) : (
-                          <div key={item.id} className="hub-field">
-                            <span className="hub-field__label">{item.label}</span>
+                          <div
+                            key={item.id}
+                            className={`hub-field hub-field--${item.type || 'text'} ${item.optional ? 'is-optional' : ''}`}
+                            style={item.cols ? { gridColumn: `span ${Math.min(12, Math.max(2, item.cols))}` } : undefined}
+                          >
+                            <span className="hub-field__label">
+                              {item.label}
+                              {item.optional ? <span className="hub-field__opt"> · opcional</span> : null}
+                            </span>
                             <div className="hub-field__control">
-                              {item.type === 'text' ? (
-                                <textarea
-                                  rows={2}
-                                  disabled={readOnly}
-                                  value={item.value ?? ''}
-                                  placeholder="Respuesta…"
-                                  onChange={(e) => {
-                                    onUpdateItem(section.id, item.id, { value: e.target.value });
-                                    const el = e.target;
-                                    el.style.height = 'auto';
-                                    el.style.height = `${Math.min(el.scrollHeight, 220)}px`;
-                                  }}
-                                  onFocus={(e) => {
-                                    const el = e.target;
-                                    el.style.height = 'auto';
-                                    el.style.height = `${Math.min(el.scrollHeight, 220)}px`;
-                                  }}
-                                />
-                              ) : null}
-                              {item.type === 'number' || item.type === 'date' ? (
-                                <input
-                                  type={item.type}
-                                  disabled={readOnly}
-                                  value={item.value ?? ''}
-                                  placeholder={item.type === 'date' ? 'Fecha' : 'Respuesta…'}
-                                  onChange={(e) =>
-                                    onUpdateItem(section.id, item.id, {
-                                      value: item.type === 'number' ? Number(e.target.value) : e.target.value,
-                                    })
-                                  }
-                                />
-                              ) : null}
-                              {item.type === 'select'
-                                ? (() => {
-                                    const opts = item.options || [];
-                                    const otra = opts.find((o) => /^otra$/i.test(o));
-                                    const raw = String(item.value ?? '');
-                                    const known = opts.filter((o) => !/^otra$/i.test(o));
-                                    const choice = known.includes(raw)
-                                      ? raw
-                                      : otra && (raw === otra || (raw && !known.includes(raw)))
-                                        ? otra
-                                        : raw || '';
-                                    const custom = otra && choice === otra && raw !== otra ? raw : '';
-                                    return (
-                                      <>
-                                        <select
-                                          disabled={readOnly}
-                                          value={choice}
-                                          onChange={(e) => {
-                                            const next = e.target.value;
-                                            if (otra && next === otra) {
-                                              onUpdateItem(section.id, item.id, { value: custom || otra });
-                                            } else {
-                                              onUpdateItem(section.id, item.id, { value: next });
-                                            }
-                                          }}
-                                        >
-                                          <option value="">Selecciona…</option>
-                                          {opts.map((o) => (
-                                            <option key={o} value={o}>
-                                              {o}
-                                            </option>
-                                          ))}
-                                        </select>
-                                        {otra && choice === otra ? (
-                                          <input
-                                            disabled={readOnly}
-                                            placeholder="Especifica…"
-                                            value={custom}
-                                            onChange={(e) =>
-                                              onUpdateItem(section.id, item.id, {
-                                                value: e.target.value.trim() || otra,
-                                              })
-                                            }
-                                          />
-                                        ) : null}
-                                      </>
-                                    );
-                                  })()
-                                : null}
+                              <FieldControl
+                                item={item}
+                                readOnly={readOnly}
+                                files={checklistFiles}
+                                onPatch={(patch) => onUpdateItem(section.id, item.id, patch)}
+                                onUpload={readOnly ? undefined : onUpload}
+                              />
                             </div>
                           </div>
                         ),

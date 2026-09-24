@@ -16,6 +16,7 @@ import { createHash } from 'crypto';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { calcProgress } from '../common/checklist-progress';
 import { diffChecklistData } from '../common/doc-diff';
+import { bindFormatToEvent, normalizeFormatData } from '../common/format-schema';
 import {
   actorFrom,
   RevisionConflictException,
@@ -686,13 +687,17 @@ export class ChecklistsController {
     });
     if (!template) throw new BadRequestException('Plantilla no encontrada');
 
+    // El encabezado del formato (show, fecha, hora, ciudad, venue) nace lleno
+    // desde el evento: nadie debería teclear dos veces lo que ya se capturó.
+    const dataJson = bindFormatToEvent(normalizeFormatData(template.schemaJson), event);
+
     const created = await this.prisma.checklistInstance.create({
       data: {
         eventId,
         templateId: template.id,
         title: body.title || template.name,
-        dataJson: template.schemaJson as Prisma.InputJsonValue,
-        progressPct: 0,
+        dataJson: dataJson as unknown as Prisma.InputJsonValue,
+        progressPct: calcProgress(dataJson),
         lastEditedById: req.user.id,
         lastEditedAt: new Date(),
       },

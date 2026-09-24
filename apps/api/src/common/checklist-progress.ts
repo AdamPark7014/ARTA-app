@@ -11,12 +11,20 @@
  * firmas se registran en `DigitalSignature`, no como progreso.
  */
 
+import { isFormatItemComplete, type FormatItem } from './format-schema';
+
 export type ChecklistItem = {
   id?: string;
   label?: string;
   type?: string;
   done?: boolean;
   value?: unknown;
+  /** Tabla: renglones capturados. */
+  rows?: unknown;
+  /** Adjunto del formato. */
+  fileId?: string | null;
+  /** No cuenta para el avance si está vacío. */
+  optional?: boolean;
 };
 
 export type ChecklistSection = {
@@ -34,18 +42,23 @@ export const NON_SCORING_SECTIONS = new Set(['firmas']);
 const NON_SCORING_TYPES = new Set(['signature']);
 
 export function isItemComplete(item: ChecklistItem): boolean {
-  if (item.type === 'check' || !item.type) return !!item.done;
-  return item.value !== null && item.value !== undefined && String(item.value).trim() !== '';
+  return isFormatItemComplete(item as FormatItem);
 }
 
-/** Los ítems que sí puntúan, ya sin secciones ni tipos excluidos. */
+/**
+ * Los ítems que sí puntúan, ya sin secciones ni tipos excluidos.
+ *
+ * Un ítem `optional` (observaciones, tabla de traslados…) solo cuenta cuando
+ * ya tiene algo: vacío no resta avance.
+ */
 export function scoringItems(data: unknown): ChecklistItem[] {
   if (!data || typeof data !== 'object') return [];
   const root = data as ChecklistData;
   return (root.sections ?? [])
     .filter((s) => !NON_SCORING_SECTIONS.has(String(s?.id ?? '')))
     .flatMap((s) => s?.items ?? [])
-    .filter((i) => !!i && !NON_SCORING_TYPES.has(String(i.type ?? '')));
+    .filter((i) => !!i && !NON_SCORING_TYPES.has(String(i.type ?? '')))
+    .filter((i) => !i.optional || isItemComplete(i));
 }
 
 export function calcProgress(data: unknown): number {

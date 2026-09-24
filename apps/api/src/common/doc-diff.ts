@@ -15,6 +15,8 @@
  *   poder moverse a `packages/` de un `git mv` cuando la UI lo necesite.
  */
 
+import { formatItemDisplay, type FormatItem } from './format-schema';
+
 export type ChangeKind = 'added' | 'removed' | 'changed';
 
 export type FieldChange = {
@@ -79,16 +81,19 @@ type ChecklistItem = {
   label?: string;
   type?: string;
   done?: boolean;
+  note?: string | null;
   value?: unknown;
+  rows?: unknown;
+  fileId?: string | null;
 };
 
 type ChecklistSection = { id?: string; title?: string; items?: ChecklistItem[] };
 type ChecklistData = { sections?: ChecklistSection[] };
 
 function itemDisplay(item: ChecklistItem): string | null {
-  // Una casilla siempre tiene valor legible: marcada o sin marcar.
-  if (item.type === 'check' || !item.type) return item.done ? 'Sí' : 'No';
-  return displayValue(item.value);
+  // Una casilla siempre tiene valor legible: marcada o sin marcar. Tablas,
+  // SÍ/NO y adjuntos se leen con la misma regla que el resto del sistema.
+  return formatItemDisplay(item as FormatItem);
 }
 
 type FlatItem = { sectionTitle: string; label: string; display: string | null };

@@ -26,6 +26,8 @@ import {
   type RoleKey,
 } from '../common/rbac/roles';
 import { ChecklistPdfService } from '../checklists/checklist-pdf.service';
+import { calcProgress } from '../common/checklist-progress';
+import { bindFormatToEvent, normalizeFormatData } from '../common/format-schema';
 import { assertSameTenant, tenantIdOf } from '../common/tenant';
 import { assertEventSlotAvailable } from '../common/plan-limits';
 
@@ -280,13 +282,16 @@ export class EventsController {
     });
 
     for (const t of templates) {
+      // Encabezado del formato lleno desde el evento (show, fecha, hora,
+      // ciudad, venue): lo capturado en el alta no se vuelve a teclear.
+      const dataJson = bindFormatToEvent(normalizeFormatData(t.schemaJson), event);
       const instance = await this.prisma.checklistInstance.create({
         data: {
           eventId: event.id,
           templateId: t.id,
           title: t.name,
-          dataJson: t.schemaJson as Prisma.InputJsonValue,
-          progressPct: 0,
+          dataJson: dataJson as unknown as Prisma.InputJsonValue,
+          progressPct: calcProgress(dataJson),
           lastEditedById: req.user.id,
           lastEditedAt: new Date(),
         },
@@ -301,11 +306,12 @@ export class EventsController {
         venue: event.venue,
         city: event.city,
         templateKey: t.key,
-        data: t.schemaJson as never,
+        data: dataJson,
         delivered: null,
         authorized: null,
         editedBy: req.user.fullName || null,
         editedAt: new Date(),
+        statusLabel: 'Borrador',
       });
       await this.prisma.checklistInstance.update({
         where: { id: instance.id },

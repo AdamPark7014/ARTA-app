@@ -91,6 +91,36 @@ describe('checklist-progress', () => {
     expect(calcProgress({ sections: [{ id: 's', title: 'S' }] })).toBe(0);
   });
 
+  it('tablas, SÍ/NO y adjuntos cuentan como cualquier otro campo', () => {
+    const data = {
+      sections: [
+        {
+          id: 's',
+          title: 'S',
+          items: [
+            { id: 't', label: 'Rooming', type: 'table', columns: [{ id: 'n', label: 'N' }], rows: [{ n: 'Ana' }] },
+            { id: 'y', label: 'Desayuno', type: 'yesno', value: 'NO' },
+            { id: 'a', label: 'Rider', type: 'attachment', value: '', fileId: null },
+            { id: 'h', label: 'Hora', type: 'time', value: '' },
+          ],
+        },
+      ],
+    };
+    expect(calcProgress(data)).toBe(50);
+  });
+
+  it('un ítem opcional vacío no resta; lleno sí suma', () => {
+    const items = [
+      { id: 'a', label: 'Audio', type: 'check', done: true },
+      { id: 'o', label: 'Observaciones', type: 'longtext', value: '', optional: true },
+    ];
+    expect(calcProgress({ sections: [{ id: 's', title: 'S', items }] })).toBe(100);
+    items[1].value = 'algo';
+    expect(calcProgress({ sections: [{ id: 's', title: 'S', items }] })).toBe(100);
+    items[0].done = false;
+    expect(calcProgress({ sections: [{ id: 's', title: 'S', items }] })).toBe(50);
+  });
+
   it('redondea al entero más cercano', () => {
     const items = Array.from({ length: 3 }, (_, i) => ({
       id: `i${i}`,

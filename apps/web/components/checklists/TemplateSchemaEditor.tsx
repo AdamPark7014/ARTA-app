@@ -4,6 +4,14 @@ import { useState } from 'react';
 import { FlashMessage, FormGrid } from '@/components/ui/PageChrome';
 import { api } from '@/lib/api';
 
+export type SchemaColumn = {
+  id: string;
+  label: string;
+  type?: 'text' | 'number' | 'money' | 'time' | 'date';
+  width?: number;
+  total?: boolean;
+};
+
 export type SchemaItem = {
   id: string;
   label: string;
@@ -11,6 +19,12 @@ export type SchemaItem = {
   done?: boolean;
   value?: string | number | null;
   options?: string[];
+  /** Tabla: columnas; los renglones nacen vacíos en cada evento. */
+  columns?: SchemaColumn[];
+  rows?: unknown[];
+  minRows?: number;
+  /** No cuenta para el avance si está vacío. */
+  optional?: boolean;
 };
 
 export type SchemaSection = {
@@ -26,15 +40,65 @@ type Props = {
 };
 
 const FIELD_TYPES: Array<{ value: string; label: string; hint: string }> = [
-  { value: 'check', label: 'Casilla', hint: 'En el PDF: [ ] / [X]' },
+  { value: 'check', label: 'Casilla', hint: 'En el PDF: casilla con nota opcional' },
   { value: 'text', label: 'Texto', hint: 'En el PDF: etiqueta + línea' },
+  { value: 'longtext', label: 'Texto largo', hint: 'En el PDF: recuadro de varias líneas (observaciones)' },
   { value: 'number', label: 'Número', hint: 'En el PDF: cantidad' },
   { value: 'date', label: 'Fecha', hint: 'En el PDF: fecha' },
+  { value: 'time', label: 'Hora', hint: 'En el PDF: hora (horario de montaje, ingreso…)' },
+  { value: 'yesno', label: 'Sí / No', hint: 'En el PDF: SÍ [ ] NO [ ]' },
   { value: 'select', label: 'Opciones', hint: 'Si incluye “Otra”, el checklist pide el nombre' },
+  { value: 'table', label: 'Tabla', hint: 'Renglones que se capturan en el evento (rooming, minuto a minuto…); termina una columna con * para sumarla' },
+  { value: 'attachment', label: 'Adjunto', hint: 'Archivo o link que vive en el propio formato (rider, layout, artes…)' },
 ];
+
+export const TYPE_LABELS: Record<string, string> = Object.fromEntries(FIELD_TYPES.map((t) => [t.value, t.label]));
 
 function uid(prefix: string) {
   return `${prefix}_${Math.random().toString(36).slice(2, 9)}`;
+}
+
+function slug(label: string, fallback: string): string {
+  const s = label
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_|_$/g, '');
+  return s || fallback;
+}
+
+/** «Nombre, Habitación, Cantidad*» → columnas tipadas; `*` = se suma en el pie. */
+export function parseColumns(text: string, previous: SchemaColumn[] = []): SchemaColumn[] {
+  const used = new Set<string>();
+  return text
+    .split(',')
+    .map((raw) => raw.trim())
+    .filter(Boolean)
+    .map((raw, i) => {
+      const total = raw.endsWith('*');
+      const label = total ? raw.slice(0, -1).trim() : raw;
+      let id = slug(label, `col_${i + 1}`);
+      while (used.has(id)) id = `${id}_${i + 1}`;
+      used.add(id);
+      const prev = previous.find((c) => c.id === id || c.label === label);
+      const type: SchemaColumn['type'] = prev?.type
+        ? prev.type
+        : /precio|costo|importe|\$/i.test(label)
+          ? 'money'
+          : total || /cantidad|n[uú]m|no\.|#|parte/i.test(label)
+            ? 'number'
+            : /^hora/i.test(label)
+              ? 'time'
+              : /^fecha|check-?in|check-?out/i.test(label)
+                ? 'date'
+                : 'text';
+      return { id, label, type, total: total || (prev?.total && type === 'number') || undefined, width: prev?.width };
+    });
+}
+
+export function columnsText(columns: SchemaColumn[] = []): string {
+  return columns.map((c) => `${c.label}${c.total ? '*' : ''}`).join(', ');
 }
 
 function moveItem<T>(arr: T[], from: number, to: number): T[] {
@@ -193,6 +257,17 @@ export function TemplateSchemaEditor({ templateId, initial, onSaved }: Props) {
                                           ? item.options
                                           : ['Opción A', 'Opción B']
                                         : undefined,
+                                    columns:
+                                      t.value === 'table'
+                                        ? item.columns?.length
+                                          ? item.columns
+                                          : [
+                                              { id: 'concepto', label: 'Concepto', type: 'text' },
+                                              { id: 'detalle', label: 'Detalle', type: 'text' },
+                                            ]
+                                        : undefined,
+                                    rows: t.value === 'table' ? [] : undefined,
+                                    minRows: t.value === 'table' ? item.minRows ?? 6 : undefined,
                                   })
                                 }
                               >
@@ -219,6 +294,33 @@ export function TemplateSchemaEditor({ templateId, initial, onSaved }: Props) {
                                 />
                               </label>
                             </FormGrid>
+                          ) : null}
+                          {item.type === 'table' ? (
+                            <FormGrid cols={1}>
+                              <label>
+                                <span className="muted kpi-sub">Columnas (separadas por coma; * al final = se suma)</span>
+                                <input
+                                  defaultValue={columnsText(item.columns)}
+                                  onBlur={(e) =>
+                                    patchItem(sIdx, iIdx, { columns: parseColumns(e.target.value, item.columns) })
+                                  }
+                                  placeholder="Avenida, Primera parte*, Segunda parte*, Tercera parte*"
+                                />
+                              </label>
+                              <span className="muted kpi-sub">
+                                {(item.columns || []).map((c) => `${c.label} (${c.type || 'texto'}${c.total ? ', suma' : ''})`).join(' · ') || 'Sin columnas'}
+                              </span>
+                            </FormGrid>
+                          ) : null}
+                          {item.type !== 'check' ? (
+                            <label className="row" style={{ gap: '0.4rem', alignItems: 'center' }}>
+                              <input
+                                type="checkbox"
+                                checked={!!item.optional}
+                                onChange={(e) => patchItem(sIdx, iIdx, { optional: e.target.checked || undefined })}
+                              />
+                              <span className="muted kpi-sub">Opcional (vacío no resta avance)</span>
+                            </label>
                           ) : null}
                         </div>
                         <div className="stack tpl-question__actions">
@@ -323,12 +425,29 @@ export function TemplateSchemaEditor({ templateId, initial, onSaved }: Props) {
                             </div>
                           );
                         }
+                        if (t === 'table') {
+                          return (
+                            <div className="pdf-line" key={it.id}>
+                              {it.label || 'Tabla'}:
+                              <span className="pdf-meta"> [{(it.columns || []).map((c) => c.label).join(' | ') || 'columnas'}]</span>
+                            </div>
+                          );
+                        }
+                        if (t === 'yesno') {
+                          return (
+                            <div className="pdf-line" key={it.id}>
+                              {it.label || 'Campo'}: [ ] SÍ&nbsp;&nbsp;[ ] NO
+                            </div>
+                          );
+                        }
                         return (
                           <div className="pdf-line" key={it.id}>
                             {it.label || 'Campo'}: <span className="pdf-blank" />
                             {t === 'select' && it.options?.length ? (
                               <span className="pdf-meta"> ({it.options.join(' / ')})</span>
                             ) : null}
+                            {t === 'attachment' ? <span className="pdf-meta"> (archivo o link)</span> : null}
+                            {t === 'longtext' ? <span className="pdf-meta"> (recuadro)</span> : null}
                           </div>
                         );
                       })}

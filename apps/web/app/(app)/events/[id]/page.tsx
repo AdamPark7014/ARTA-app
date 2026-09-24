@@ -34,6 +34,7 @@ import {
   type DirUser,
   type DocStatus,
   type EventDetail,
+  type EventFile,
   type Tab,
   type Task,
 } from '@/components/events/event-detail.types';
@@ -431,7 +432,8 @@ function EventDetailInner() {
     );
   }
 
-  async function onUpload(file: File) {
+  /** Sube un adjunto; devuelve el archivo creado para que un campo del formato lo enlace. */
+  async function onUpload(file: File): Promise<EventFile | void> {
     if (closed) return;
     try {
       const fd = new FormData();
@@ -443,13 +445,14 @@ function EventDetailInner() {
       } else {
         fd.append('module', GENERAL_FILE_MODULE);
       }
-      await api('/uploads', { method: 'POST', body: fd });
+      const created = await api<EventFile>('/uploads', { method: 'POST', body: fd });
       await load();
       flash(
         activeChecklist
           ? `${file.name} quedó en el checklist «${activeChecklist.title}»`
           : `${file.name} quedó en Documentos generales`,
       );
+      return created;
     } catch (e) {
       flash(e instanceof Error ? e.message : 'Error al subir archivo', 'error');
     }
@@ -731,7 +734,9 @@ function EventDetailInner() {
             checklists={event.checklists.map((c) => ({ id: c.id, title: c.title }))}
             previewFile={previewFile}
             setPreviewFile={setPreviewFile}
-            onUpload={onUpload}
+            onUpload={async (f) => {
+              await onUpload(f);
+            }}
             onDeleteFile={deleteFile}
             onFilesChanged={load}
           />

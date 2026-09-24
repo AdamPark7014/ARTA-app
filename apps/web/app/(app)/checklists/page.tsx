@@ -40,9 +40,15 @@ type Template = {
 const TYPE_LABEL: Record<string, string> = {
   check: 'Casilla',
   text: 'Texto',
+  longtext: 'Texto largo',
   number: 'Número',
   date: 'Fecha',
+  time: 'Hora',
+  yesno: 'Sí / No',
   select: 'Opciones',
+  table: 'Tabla',
+  attachment: 'Adjunto',
+  signature: 'Firma',
 };
 
 function entityLabel(entities: string[]) {

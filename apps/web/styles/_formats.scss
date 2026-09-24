@@ -1,0 +1,206 @@
+/* ── Formatos estándar (23-09-2026): tipos de campo nuevos ─────────────── */
+
+/* Encabezado del show: rejilla de 12 columnas, como en el PDF. */
+.hub-sec__body--grid {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 0.35rem 1rem;
+}
+
+.hub-sec__body--grid .hub-field {
+  grid-column: span 6;
+  padding: 0.45rem 0;
+}
+
+.hub-sec__body--grid .hub-field__control {
+  max-width: none;
+}
+
+/* Casillas a dos columnas (Evento general). */
+.hub-sec__body--columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 1.5rem;
+}
+
+.hub-check-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.6rem;
+  min-width: 0;
+}
+
+.hub-check-row > .hub-check {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.hub-check__add-note {
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.74rem;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.hub-check-row:hover .hub-check__add-note,
+.hub-check__add-note:focus-visible {
+  opacity: 1;
+}
+
+.shell .hub-check-row input.hub-check__note {
+  flex: 1 1 100%;
+  margin: 0 0 0.35rem 2.1rem;
+  padding: 0.3rem 0.5rem;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  font-size: 0.8rem;
+  font-style: italic;
+}
+
+.shell .hub-check-row input.hub-check__note:hover,
+.shell .hub-check-row input.hub-check__note:focus {
+  border-color: var(--line);
+  background: var(--bg-soft);
+  font-style: normal;
+}
+
+.hub-field__opt {
+  color: var(--muted);
+  font-size: 0.74rem;
+}
+
+/* SÍ / NO */
+.hub-yesno {
+  display: inline-flex;
+  gap: 0.35rem;
+}
+
+.hub-yesno__btn {
+  min-width: 3.4rem;
+  padding: 0.38rem 0.8rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.84rem;
+  cursor: pointer;
+  transition:
+    border-color 0.12s ease,
+    background 0.12s ease,
+    color 0.12s ease;
+}
+
+.hub-yesno__btn:hover:not(:disabled) {
+  border-color: var(--line-strong);
+  color: var(--text);
+}
+
+.hub-yesno__btn.is-on {
+  border-color: color-mix(in srgb, var(--ok, #2f9e6f) 60%, var(--line));
+  background: color-mix(in srgb, var(--ok, #2f9e6f) 16%, transparent);
+  color: var(--text);
+  font-weight: 600;
+}
+
+.hub-yesno__btn.is-on.is-no {
+  border-color: color-mix(in srgb, var(--danger) 55%, var(--line));
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+}
+
+.hub-yesno__btn:disabled {
+  cursor: default;
+  opacity: 0.7;
+}
+
+/* Adjunto del formato */
+.hub-attach {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.hub-attach__current {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+  padding: 0.45rem 0.65rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--bg-soft) 60%, transparent);
+}
+
+.hub-attach__icon {
+  color: var(--muted);
+}
+
+.hub-attach__name {
+  overflow: hidden;
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--text);
+  font-size: 0.86rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+a.hub-attach__name:hover {
+  text-decoration: underline;
+}
+
+.hub-attach__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.6rem;
+}
+
+.shell .hub-attach__pick {
+  max-width: 18rem;
+  font-size: 0.82rem;
+}
+
+/* Tabla capturada en el formato */
+.hub-table {
+  max-width: none;
+}
+
+.hub-field--table .hub-field__control {
+  max-width: none;
+}
+
+.hub-table .dtable td {
+  padding: 0.25rem 0.35rem;
+}
+
+.hub-table .dtable th {
+  padding: 0.5rem 0.6rem;
+}
+
+.hub-table .dtable tfoot td {
+  padding: 0.55rem 0.75rem;
+  font-size: 0.84rem;
+}
+
+.hub-table .dtable input.cell[type='date'],
+.hub-table .dtable input.cell[type='time'] {
+  min-width: 7.5rem;
+}
+
+@media (max-width: 720px) {
+  .hub-sec__body--grid .hub-field,
+  .hub-sec__body--grid .hub-field[style] {
+    grid-column: 1 / -1 !important;
+  }
+
+  .hub-sec__body--columns {
+    grid-template-columns: 1fr;
+  }
+}

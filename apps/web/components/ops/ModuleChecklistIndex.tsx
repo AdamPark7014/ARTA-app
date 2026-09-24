@@ -83,7 +83,10 @@ function pickValue(data: ChecklistData | undefined, field: FieldSpec) {
   for (const s of data?.sections || []) {
     if (field.sectionId && s.id !== field.sectionId) continue;
     const it = s.items.find((i) => i.id === field.id);
-    if (it) return it.value ?? (it.done ? 'Sí' : '—');
+    if (!it) continue;
+    const value = it.value === null || it.value === undefined || String(it.value).trim() === '' ? null : it.value;
+    if (value !== null) return value;
+    return it.done ? 'Sí' : '—';
   }
   return '—';
 }

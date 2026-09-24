@@ -219,7 +219,11 @@ export function ChecklistPdfEditor({
                       Math.max(0, p.height - top),
                     );
                     const isLongText =
-                      !item.options?.length && item.type !== 'number' && item.type !== 'date';
+                      !item.options?.length &&
+                      item.type !== 'number' &&
+                      item.type !== 'date' &&
+                      item.type !== 'time' &&
+                      item.type !== 'yesno';
                     // Al enfocar crece en sitio (sin modal): más ancho y alto para teclear.
                     const style = {
                       left,
@@ -260,7 +264,8 @@ export function ChecklistPdfEditor({
                     const value =
                       item.value === null || item.value === undefined ? '' : String(item.value);
 
-                    if (item.options?.length) {
+                    const options = item.type === 'yesno' ? ['SÍ', 'NO'] : item.options;
+                    if (options?.length) {
                       return (
                         <select
                           key={fieldKey}
@@ -272,11 +277,11 @@ export function ChecklistPdfEditor({
                           onFocus={() => setFocusedKey(fieldKey)}
                           onBlur={() => setFocusedKey((k) => (k === fieldKey ? null : k))}
                           onChange={(e) =>
-                            onUpdateItem(f.sectionId, f.itemId, { value: e.target.value })
+                            onUpdateItem(f.sectionId, f.itemId, { value: e.target.value || null })
                           }
                         >
                           <option value="">—</option>
-                          {item.options.map((o) => (
+                          {options.map((o) => (
                             <option key={o} value={o}>
                               {o}
                             </option>
@@ -285,7 +290,7 @@ export function ChecklistPdfEditor({
                       );
                     }
 
-                    if (item.type === 'number' || item.type === 'date') {
+                    if (item.type === 'number' || item.type === 'date' || item.type === 'time') {
                       return (
                         <input
                           key={fieldKey}

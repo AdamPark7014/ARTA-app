@@ -4,6 +4,11 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { ROLES, ROLE_PERMISSIONS, type RoleKey } from '../src/common/rbac/roles';
 import { DEFAULT_ORG_ID } from '../src/common/tenant';
+import {
+  RETIRED_TEMPLATES,
+  STANDARD_FORMATS,
+  storedFormatVersion,
+} from '../src/checklists/format-catalog';
 import { NEW_TEAM_MEMBERS } from './new-team-members';
 
 const prisma = new PrismaClient();
@@ -245,272 +250,23 @@ const USER_VIEWS: Record<
   },
 };
 
-const TEMPLATES: Array<{
+/**
+ * Plantillas que NO vienen de un formato del cliente. Las siete estándar
+ * (Evento general, Producción, Hospedaje, Transportación, Rueda de prensa,
+ * Artes, Pendones) viven en `src/checklists/format-catalog.ts`.
+ *
+ * `active: false` = retirada: duplica un módulo del sistema (OC, boletera,
+ * corrida, campaña, anticipos). Se conserva para que los formatos ya creados
+ * sigan abriendo; los eventos nuevos no la reciben.
+ */
+const LEGACY_TEMPLATES: Array<{
   key: ChecklistTemplateKey;
   name: string;
   description: string;
   entities: EntityKey[];
   schema: Schema;
+  active?: boolean;
 }> = [
-  {
-    key: 'EVENTO_GENERAL',
-    name: 'Checklist Evento General',
-    description: 'Runbook maestro del show',
-    entities: [],
-    schema: {
-      sections: [
-        {
-          id: 'header_fields',
-          title: 'Encabezado',
-          items: [
-            { id: 'show', label: 'Show / concierto', type: 'text', value: '' },
-            { id: 'fecha', label: 'Fecha', type: 'date', value: null },
-            { id: 'hora', label: 'Hora', type: 'text', value: '' },
-            { id: 'ciudad', label: 'Ciudad', type: 'text', value: '' },
-            { id: 'venue', label: 'Venue', type: 'text', value: '' },
-          ],
-        },
-        section('venue', 'Venue y energy', [
-          'Venue confirmado',
-          'Plantas de luz',
-          'Campaña publicitaria vinculada',
-          'Hospitality rider',
-          'Catering',
-          'Camerinos',
-          'Carpas / mobiliario',
-        ]),
-        section('ops', 'Operación', [
-          'Checklist transportación',
-          'Checklist hospedaje',
-          'Per diems',
-          'Pagos staff / papelería',
-          'Layout / planos',
-          'Activaciones',
-          'Vallas / gradas / sillas',
-          'Señalética',
-          'Extintores',
-          'Credenciales',
-          'Radios',
-          'Uniformes',
-        ]),
-        section('seguridad', 'Seguridad y permisos', [
-          'Seguridad / acomodadores / limpieza / ambulancia',
-          'PC estatal / municipal',
-          'Bomberos',
-          'Pirotecnia',
-          'DRO / perito',
-          'Impuestos / bares',
-          'Sanitarios portátiles / VIP',
-        ]),
-        section('escenario', 'Escenario', [
-          'Triplay / portafloor',
-          'Pipas de agua',
-          'Stage hands',
-        ]),
-      ],
-    },
-  },
-  {
-    key: 'PRODUCCION',
-    name: 'Checklist Producción',
-    description: 'Rider, vendors técnicos y tiempos',
-    entities: [],
-    schema: {
-      sections: [
-        {
-          id: 'riders',
-          title: 'Riders',
-          items: [
-            { id: 'rider_orig', label: 'Rider original recibido', type: 'check', done: false },
-            { id: 'rider_acept', label: 'Rider aceptado', type: 'check', done: false },
-          ],
-        },
-        section('vendors', 'Vendors', [
-          'Audio',
-          'Luces',
-          'Planta de luz',
-          'FX / efectos',
-          'Backline',
-          'Stage / ground support',
-          'Stage hands',
-        ]),
-        {
-          id: 'pms',
-          title: 'Project managers',
-          items: [
-            { id: 'pm_artista', label: 'PM artista', type: 'text', value: '' },
-            { id: 'pm_promotor', label: 'PM promotor', type: 'text', value: '' },
-          ],
-        },
-        section('schedule', 'Agenda técnica', [
-          'Acceso venue / load-in',
-          'Minuto a minuto montaje',
-          'Layout aprobado',
-        ]),
-      ],
-    },
-  },
-  {
-    key: 'HOSPEDAJE',
-    name: 'Checklist Hospedaje',
-    description: 'Hotel, habitaciones, partidos A/B',
-    entities: [],
-    schema: {
-      sections: [
-        {
-          id: 'hotel',
-          title: 'Hotel',
-          items: [
-            { id: 'nombre', label: 'Nombre del hotel', type: 'text', value: '' },
-            { id: 'contacto', label: 'Contacto hotel', type: 'text', value: '' },
-            { id: 'habitaciones', label: 'Núm. habitaciones', type: 'number', value: 0 },
-            { id: 'desayuno', label: 'Desayuno incluido', type: 'check', done: false },
-            { id: 'notas', label: 'Notas', type: 'text', value: '' },
-          ],
-        },
-        section('partidos', 'Confirmaciones', [
-          'Party A confirmado',
-          'Party B confirmado',
-          'Confirmaciones enviadas',
-        ]),
-      ],
-    },
-  },
-  {
-    key: 'TRANSPORTACION',
-    name: 'Checklist Transportación',
-    description: 'Vans, vuelos y traslados',
-    entities: [],
-    schema: {
-      sections: [
-        {
-          id: 'provider',
-          title: 'Proveedor',
-          items: [
-            { id: 'prov', label: 'Proveedor', type: 'text', value: '' },
-            { id: 'contacto', label: 'Contacto', type: 'text', value: '' },
-            { id: 'vans', label: 'Núm. vans', type: 'number', value: 0 },
-            { id: 'modelo', label: 'Modelo', type: 'text', value: '' },
-            { id: 'incluye', label: 'Qué incluye', type: 'text', value: '' },
-            {
-              id: 'status',
-              label: 'Estatus',
-              type: 'select',
-              options: ['Pendiente', 'Confirmado', 'En ruta', 'Completado'],
-              value: 'Pendiente',
-            },
-          ],
-        },
-        section('vuelos', 'Vuelos / aéreos', [
-          'Vuelos artista cotizados',
-          'Vuelos confirmados',
-          'Traslados aeropuerto',
-        ]),
-      ],
-    },
-  },
-  {
-    key: 'RUEDA_PRENSA',
-    name: 'Checklist Rueda de Prensa',
-    description: 'Formato RP distinto a producción',
-    entities: [],
-    schema: {
-      sections: [
-        {
-          id: 'rp',
-          title: 'Datos RP',
-          items: [
-            { id: 'fecha', label: 'Fecha RP', type: 'date', value: null },
-            { id: 'hora', label: 'Hora', type: 'text', value: '' },
-            { id: 'ciudad', label: 'Ciudad', type: 'text', value: '' },
-            { id: 'venue', label: 'Venue RP', type: 'text', value: '' },
-            { id: 'contacto_venue', label: 'Contacto venue', type: 'text', value: '' },
-          ],
-        },
-        section('tech', 'Técnica RP', [
-          'Vendor AV / micrófonos',
-          'Coffee break asignado',
-          'Banners / pantallas',
-          'Identificadores de mesa',
-          'Prensa confirmada',
-        ]),
-      ],
-    },
-  },
-  {
-    key: 'ARTES_SHOWS',
-    name: 'Checklist Info Artes Shows',
-    description: 'Entregables creativos y autorización',
-    entities: [],
-    schema: {
-      sections: [
-        {
-          id: 'meta',
-          title: 'Meta',
-          items: [
-            { id: 'promotores', label: 'Promotores', type: 'text', value: '' },
-            { id: 'boletera', label: 'Boletera', type: 'text', value: '' },
-            { id: 'sponsors', label: 'Sponsors', type: 'text', value: '' },
-          ],
-        },
-        section('artes', 'Entregables', [
-          'FB 1350',
-          'IG 1440',
-          'Story 1920',
-          'Precios',
-          'Reel general',
-          'Fecha solicitud',
-          'Fecha cambios',
-          'Firma / autorización',
-        ]),
-      ],
-    },
-  },
-  {
-    key: 'BOLETERA',
-    name: 'Creación Boletera',
-    description: 'Hold, artista, promotor, zonas y precios',
-    entities: [],
-    schema: {
-      sections: [
-        {
-          id: 'setup',
-          title: 'Setup',
-          items: [
-            {
-              id: 'boletera',
-              label: 'Boletera',
-              type: 'select',
-              options: ['Arema', 'eTicket', 'Otra'],
-              value: 'Arema',
-            },
-            { id: 'hold', label: 'Hold hasta', type: 'date', value: null },
-            { id: 'artista', label: 'Artista', type: 'text', value: '' },
-            { id: 'promotor', label: 'Promotor', type: 'text', value: '' },
-            { id: 'venue', label: 'Venue', type: 'text', value: '' },
-            { id: 'descripcion', label: 'Descripción evento', type: 'text', value: '' },
-          ],
-        },
-        section('zonas', 'Zonas', ['Tabla zonas / aforo / precio cargada']),
-      ],
-    },
-  },
-  {
-    key: 'PENDONES',
-    name: 'Distribución de Pendones',
-    description: 'Campañas de vía pública por oleadas',
-    entities: [],
-    schema: {
-      sections: [
-        section('oleadas', 'Oleadas', [
-          'Primera parte colocada',
-          'Segunda parte colocada',
-          'Tercera parte colocada',
-          'Excel de avenidas actualizado',
-        ]),
-      ],
-    },
-  },
   {
     key: 'ORDEN_COMPRA',
     name: 'Orden de Compra (plantilla)',
@@ -824,34 +580,61 @@ async function main() {
     );
   }
 
+  const retired = new Set(RETIRED_TEMPLATES.map((r) => r.key));
+  const TEMPLATES = [
+    ...STANDARD_FORMATS.map((f) => ({ ...f, active: true, schemaJson: f.schema as unknown as Prisma.InputJsonValue })),
+    ...LEGACY_TEMPLATES.map((t) => ({
+      ...t,
+      active: t.active ?? !retired.has(t.key),
+      schemaJson: withSignatures(t.schema) as unknown as Prisma.InputJsonValue,
+    })),
+  ];
+
+  let seededTemplates = 0;
+  let keptTemplates = 0;
   for (const t of TEMPLATES) {
-    const schema = withSignatures(t.schema);
     const existing = await prisma.checklistTemplate.findFirst({ where: { key: t.key } });
-    if (existing) {
-      await prisma.checklistTemplate.update({
-        where: { id: existing.id },
-        data: {
-          name: t.name,
-          description: t.description,
-          entities: t.entities,
-          schemaJson: schema,
-          active: true,
-        },
-      });
-    } else {
+    if (!existing) {
       await prisma.checklistTemplate.create({
         data: {
           key: t.key,
           name: t.name,
           description: t.description,
           entities: t.entities,
-          schemaJson: schema,
-          active: true,
+          schemaJson: t.schemaJson,
+          active: t.active,
         },
       });
+      seededTemplates += 1;
+      continue;
+    }
+    /*
+     * El seed corre en cada arranque del contenedor. Antes reescribía la
+     * plantilla completa cada vez, así que lo editado desde «Plantillas» se
+     * perdía en el siguiente reinicio y una plantilla desactivada volvía a
+     * activarse sola. Ahora una plantilla ya tocada (`version > 1`) se respeta;
+     * subir una estándar a una versión nueva del catálogo es trabajo del script
+     * `scripts/upgrade-format-templates.ts`, que deja snapshot e historial.
+     */
+    const untouched = existing.version <= 1;
+    const outdated = storedFormatVersion(existing.schemaJson) < storedFormatVersion(t.schemaJson);
+    if (untouched && outdated) {
+      await prisma.checklistTemplate.update({
+        where: { id: existing.id },
+        data: {
+          name: t.name,
+          description: t.description,
+          entities: t.entities,
+          schemaJson: t.schemaJson,
+          active: t.active,
+        },
+      });
+      seededTemplates += 1;
+    } else {
+      keptTemplates += 1;
     }
   }
-  console.log(`  ✓ ${TEMPLATES.length} plantillas checklist`);
+  console.log(`  ✓ ${seededTemplates} plantillas checklist sembradas · ${keptTemplates} respetadas`);
 
   await prisma.pageContent.deleteMany({ where: { entity: 'EXPLANADA' } });
   await prisma.heroSlide.deleteMany({ where: { entity: 'EXPLANADA' } });

@@ -58,20 +58,85 @@ export type Checklist = {
   dataJson?: ChecklistData;
 };
 
+/**
+ * Tipos de campo de un formato (espejo de `apps/api/src/common/format-schema.ts`):
+ * check · text · longtext · number · date · time · yesno · select · table ·
+ * attachment · signature.
+ */
+export type ChecklistColumn = {
+  id: string;
+  label: string;
+  type?: 'text' | 'number' | 'money' | 'time' | 'date';
+  width?: number;
+  /** Se suma en el pie de la tabla. */
+  total?: boolean;
+};
+
+export type ChecklistRow = Record<string, string | number | null>;
+
 export type ChecklistItem = {
   id: string;
   label: string;
   type?: string;
   done?: boolean;
+  /** Nota corta junto a una casilla (proveedor, quién, cuándo…). */
+  note?: string | null;
   value?: string | number | null;
   options?: string[];
+  /** Tabla. */
+  columns?: ChecklistColumn[];
+  rows?: ChecklistRow[];
+  minRows?: number;
+  totalLabel?: string;
+  /** Adjunto del formato (EventFile.id); el nombre o link queda en `value`. */
+  fileId?: string | null;
+  /** No cuenta para el avance si está vacío. */
+  optional?: boolean;
+  /** Se rellenó desde el evento al crear el formato. */
+  bind?: string;
+  /** Ancho en el encabezado (de 12 columnas). */
+  cols?: number;
+  placeholder?: string;
 };
 
 export type ChecklistSection = {
   id: string;
   title: string;
   items: ChecklistItem[];
+  /** `header`: datos del show en rejilla · `columns`: casillas a dos columnas. */
+  layout?: 'list' | 'columns' | 'header';
 };
+
+export const YES_LABEL = 'SÍ';
+export const NO_LABEL = 'NO';
+
+export function isCheckItem(it: Pick<ChecklistItem, 'type'>): boolean {
+  return it.type === 'check' || !it.type;
+}
+
+function hasText(value: unknown): boolean {
+  return value !== null && value !== undefined && String(value).trim() !== '';
+}
+
+/** Renglones de una tabla con algo escrito. */
+export function tableRowsWithContent(rows?: ChecklistRow[] | null): ChecklistRow[] {
+  return (Array.isArray(rows) ? rows : []).filter((r) => !!r && Object.values(r).some(hasText));
+}
+
+/** Misma regla que el servidor (`isFormatItemComplete`). */
+export function isItemDone(it: ChecklistItem): boolean {
+  if (isCheckItem(it)) return !!it.done;
+  if (it.type === 'table') return tableRowsWithContent(it.rows).length > 0;
+  if (it.type === 'attachment') return hasText(it.value) || hasText(it.fileId);
+  if (it.type === 'signature') return true;
+  return hasText(it.value);
+}
+
+/** Un ítem opcional vacío no cuenta para el avance. */
+export function isScoringItem(it: ChecklistItem): boolean {
+  if (it.type === 'signature') return false;
+  return !it.optional || isItemDone(it);
+}
 
 /** El contenido del formato. Llega con el formato abierto, no con la lista. */
 export type ChecklistData = { sections: ChecklistSection[] };

@@ -132,6 +132,37 @@ describe('diffChecklistData', () => {
     expect(diff.summary.removed).toBe(2);
   });
 
+  it('tablas, SÍ/NO y notas de casilla se leen como texto de persona', () => {
+    const before = checklist([
+      {
+        id: 'hotel',
+        title: 'Hotel',
+        items: [
+          { id: 'desayuno', label: 'Incluye desayuno', type: 'yesno', value: null },
+          { id: 'audio', label: 'Audio', type: 'check', done: true, note: '' },
+          { id: 'party_a', label: 'Party A', type: 'table', columns: [{ id: 'nombre', label: 'Nombre' }, { id: 'hab', label: 'Habitación' }], rows: [] },
+        ],
+      },
+    ]);
+    const after = checklist([
+      {
+        id: 'hotel',
+        title: 'Hotel',
+        items: [
+          { id: 'desayuno', label: 'Incluye desayuno', type: 'yesno', value: 'SÍ' },
+          { id: 'audio', label: 'Audio', type: 'check', done: true, note: 'Meyer Sound' },
+          { id: 'party_a', label: 'Party A', type: 'table', columns: [{ id: 'nombre', label: 'Nombre' }, { id: 'hab', label: 'Habitación' }], rows: [{ nombre: 'Ana', hab: '101' }, { nombre: '', hab: '' }] },
+        ],
+      },
+    ]);
+    const diff = diffChecklistData(before, after);
+    expect(diff.changes.map((c) => [c.label, c.kind, c.after])).toEqual([
+      ['Incluye desayuno', 'added', 'SÍ'],
+      ['Audio', 'changed', 'Sí (Meyer Sound)'],
+      ['Party A', 'added', 'Ana · 101'],
+    ]);
+  });
+
   it('aguanta datos corruptos', () => {
     expect(diffChecklistData(null, null).changes).toEqual([]);
     expect(diffChecklistData(undefined, {}).changes).toEqual([]);

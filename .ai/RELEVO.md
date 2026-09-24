@@ -1,10 +1,74 @@
 # RELEVO
 
 - **Último turno:** claude-code
-- **Fecha:** 2026-09-16
+- **Fecha:** 2026-09-23
 - **Rama:** main
 
 ## Hecho en este turno
+
+**Formatos estándar desde la carpeta «FORMATOS ARTA» de Drive** (pedido de Adam, 23-09).
+Guía completa en `docs/FORMATOS.md`; plan y reparto en `.ai/EXEC-PACKET.md`.
+
+- Los 10 archivos de Drive (6 checklists Word, pendones Excel, boletera Word, OC Excel ×2;
+  Adam los bajó a Descargas) se leyeron y se convirtieron en **7 formatos estándar** fieles
+  al cliente: `EVENTO_GENERAL` (42 puntos), `PRODUCCION`, `HOSPEDAJE`, `TRANSPORTACION`,
+  `RUEDA_PRENSA`, `ARTES_SHOWS`, `PENDONES`. Boletera y Orden de compra ya eran módulos
+  con su PDF: sus plantillas-checklist duplicadas (y Corrida, Campaña, Anticipos) se
+  retiran (inactivas; lo existente sigue abriendo).
+- **Contrato único** `apps/api/src/common/format-schema.ts`: tipos `check` (con nota),
+  `text`, `longtext`, `number`, `date`, `time`, `yesno`, `select`, `table` (columnas,
+  renglones, totales), `attachment` (nombre/link + `fileId`), `signature`; `optional`;
+  `bind` al evento. Avance (`checklist-progress`) y diff (`doc-diff`) delegan ahí.
+- **Catálogo** `apps/api/src/checklists/format-catalog.ts` con ids estables para los
+  índices por módulo (`nombre`, `contacto`, `desayuno`, `prov`, `vans`, `modelo`,
+  `venue`, `hora`, `ciudad`, `promotores`, `boletera`, `sponsors`).
+- **PDF reescrito** (`checklist-pdf.service.ts`, pdfkit): logo y banda de pie sacados de
+  los propios Word del cliente (`apps/api/assets/brand/`), encabezado del show en rejilla,
+  casillas a dos columnas, SÍ/NO, tablas con totales y total general, adjuntos con link,
+  firmas, folio. Mapa de campos para capturar sobre la hoja (tablas/adjuntos: formulario).
+- **Encabezado desde el evento**: al crear evento o formato, `bindFormatToEvent` llena
+  show, fecha (zona México), hora, ciudad y venue.
+- **Seed**: las 7 estándar salen del catálogo; ya **no reescribe** plantillas con
+  `version > 1` (editadas en Plantillas) ni reactiva las desactivadas.
+- **Script** `apps/api/scripts/upgrade-format-templates.ts` (`--dry`,
+  `--confirm-produccion`, `--keep-duplicates`, `--skip-instances`): sube plantillas con
+  snapshot, migra formatos en borrador/revisión sin autorizar conservando respuestas,
+  regenera PDFs, retira duplicados. `scripts/render-format-samples.ts` imprime los 7 sin base.
+- **Web**: tipos en `event-detail.types.ts`; `ChecklistFieldControls.tsx` (SÍ/NO, adjunto
+  que se sube o se elige desde el propio campo, tabla con filas y totales);
+  `EventChecklistsPanel` capta todos los tipos, encabezado en rejilla, casillas a dos
+  columnas con «+ nota»; `ChecklistPdfEditor` entiende hora y SÍ/NO; editor de plantillas
+  con los tipos nuevos (columnas separadas por coma, `*` = suma); `styles/_formats.scss`;
+  Hospedaje muestra Desayuno en vez de Habitaciones; `onUpload` del evento devuelve el
+  archivo para enlazarlo al campo.
+- Pruebas nuevas: `format-schema.spec`, `format-catalog.spec`, `checklist-pdf.service.spec`
+  (+ casos en progreso y diff). Fixtures e2e regenerados con el generador nuevo.
+
+### Verde
+- `tsc --noEmit` api y web limpios; seed y scripts tipados aparte (limpios).
+- jest API **227/227** (antes 198).
+- PDFs de muestra revisados a ojo (render en Node): logo, pie, tablas, SÍ/NO, firmas.
+
+## A medias
+
+1. **Sin revisión visual en Docker con sesión real** (Docker no corría al empezar). Falta:
+   levantar el stack local, correr `upgrade-format-templates.ts --dry` y luego real,
+   abrir un evento y revisar los 7 formatos y sus PDFs con la sesión de Adam.
+2. e2e `checklist-pdf.spec.ts` no se corrió tras regenerar fixtures (Playwright).
+3. Producción: desplegar (bundle + `update.sh --no-pull`) y correr el script de upgrade
+   en el contenedor con `--confirm-produccion`.
+
+## Siguiente paso
+
+1. Cursor: lo del EXEC-PACKET «Resto para Cursor» (Docker local, upgrade, revisión visual,
+   e2e, despliegue).
+2. Decidir con Adam si CATERING y MANTENIMIENTO (no vienen de Drive) siguen activas.
+
+---
+
+## Turno anterior (16-09-2026)
+
+### Hecho
 
 **Correcciones de la junta del 11-09-2026** (PDF «Correciones Dashboard ARTA 11 de SEP 2026»).
 Mandato de Adam: simple, elegante y visualmente atractivo; nada de texto de más.
@@ -200,7 +264,7 @@ con la auditoría como user.seeder, algo limpio».
 - Docker local: db 5439, api 4100, web 3100 (3000/4000/5432 los usa NEXARA; 5433 un
   Postgres nativo). Override en el scratchpad de la sesión, no en el repo.
 
-## A medias
+### A medias (16-09)
 
 1. **Sin revisión visual con sesión real**: el agente no teclea contraseñas; Adam entra en
    http://localhost:3100 y revisa. Los PDFs se probaron renderizando en Node (logo solo
@@ -260,7 +324,7 @@ con la auditoría como user.seeder, algo limpio».
   (bandera o `NODE_ENV`), desplegar, y (2) borrar esos eventos. No se hizo nada: pendiente
   de visto bueno de Adam (borrar datos de producción no se deshace).
 
-## Siguiente paso
+### Siguiente paso (16-09)
 
 1. Desplegar la «Quinta vuelta» (textos limpios) cuando Adam dé el visto bueno: bundle +
    `update.sh --no-pull`, sin migraciones ni scripts.
