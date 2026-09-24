@@ -4,14 +4,13 @@ import { PrismaService } from '../common/prisma/prisma.service';
 import { canAccessEventOps, isDirectionRole, type EntityKey, type RoleKey } from '../common/rbac/roles';
 import { assertSameTenant } from '../common/tenant';
 import { extname } from 'path';
-import { DirectionService } from '../common/rbac/direction.service';
 
 type AuthUser = { id: string; roleKey: string; permissions: string[]; entities: string[]; organizationId?: string | null };
 
 @Controller('slots')
 @UseGuards(JwtAuthGuard)
 export class SlotsController {
-  constructor(private prisma: PrismaService, private dirService: DirectionService) {}
+  constructor(private prisma: PrismaService) {}
 
   private async assertEvent(user: AuthUser, eventId: string) {
     const event = await this.prisma.event.findUnique({ where: { id: eventId } });
@@ -51,8 +50,7 @@ export class SlotsController {
     const file = await this.prisma.eventFile.findUnique({ where: { id: body.fileId } });
     if (!file || file.eventId !== event.id) throw new BadRequestException('Archivo no encontrado en el evento');
     const ext = extname(file.fileName).toLowerCase();
-    if (body.kind === 'CHECKLIST' && !['.docx', '.pdf'].includes(ext))
-      throw new BadRequestException('Un checklist se reemplaza con .docx o PDF final firmado');
+    if (body.kind === 'CHECKLIST' && ext !== '.docx') throw new BadRequestException('Un checklist se reemplaza con .docx');
     if ((body.kind === 'CAMPAIGN' || body.kind === 'CORRIDA') && !['.xlsx', '.xls'].includes(ext))
       throw new BadRequestException('Campaña/Corrida se reemplaza con Excel');
 
@@ -102,11 +100,10 @@ export class SlotsController {
   async restore(
     @Req() req: { user: AuthUser; ip?: string; headers?: Record<string, string> },
     @Param('eventId') eventId: string,
-    @Body() body: { kind: 'CHECKLIST' | 'CAMPAIGN' | 'CORRIDA' | 'PENDONES' | 'OC' | 'BOLETERA'; checklistTemplateId?: string | null; note?: string },
+    @Body() body: { kind: 'CHECKLIST' | 'CAMPAIGN' | 'CORRIDA' | 'PENDONES' | 'OC' | 'BOLETERA'; checklistTemplateId?: string | null },
   ) {
+    if (!isDirectionRole(req.user.roleKey as RoleKey)) throw new ForbiddenException('Solo dirección restaura internos');
     const event = await this.assertEvent(req.user, eventId);
-    const ok = await this.dirService.isDirection(req.user, event.organizationId ?? req.user.organizationId ?? null);
-    if (!ok) throw new ForbiddenException('Solo dirección restaura internos');
     const slot = await this.prisma.eventDocumentSlot.upsert({
       where: {
         eventId_kind_checklistTemplateId: {
@@ -136,7 +133,7 @@ export class SlotsController {
         action: 'slot.restore',
         resource: 'Event',
         resourceId: event.id,
-        metaJson: { kind: body.kind, checklistTemplateId: body.checklistTemplateId || null, note: body.note || null },
+        metaJson: { kind: body.kind, checklistTemplateId: body.checklistTemplateId || null },
         ip: req.ip,
         userAgent: req.headers?.['user-agent']?.slice(0, 300),
       },

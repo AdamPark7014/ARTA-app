@@ -46,8 +46,7 @@ describe('SlotsController (replacement auto-cancel)', () => {
       },
       auditLog: { create: async () => ({}) },
     } as unknown as PrismaService;
-    const dirService = { isDirection: async () => true } as any;
-    const controller = new SlotsController(prisma as any, dirService);
+    const controller = new SlotsController(prisma);
     return { controller, prisma, event, files, slots };
   }
 

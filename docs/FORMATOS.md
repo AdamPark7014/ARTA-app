@@ -97,8 +97,6 @@ con su nombre o como link clicable.
 Scripts:
 - `backfill-document-slots.ts --dry|--confirm-produccion`: crea slots por evento sin tocar documentos.
 
-Nota: los «formatos personalizados con data bindings» quedan diferidos a una fase posterior; esta PR deja el andamiaje (campos extra a nivel plantilla/evento) y la documentación.
-
 ## Qué se ve en pantalla
 
 Al abrir un formato aparece la **hoja** (fondo blanco, marca, mismo orden que el

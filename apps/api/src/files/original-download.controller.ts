@@ -1,30 +1,27 @@
 import { Controller, ForbiddenException, Param, Post, Req, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PrismaService } from '../common/prisma/prisma.service';
-import { type RoleKey } from '../common/rbac/roles';
-import { DirectionService } from '../common/rbac/direction.service';
+import { isDirectionRole, type RoleKey } from '../common/rbac/roles';
 
 type AuthUser = { id: string; roleKey: string; organizationId?: string | null };
 
 @Controller('files')
 @UseGuards(JwtAuthGuard)
 export class OriginalDownloadController {
-  constructor(private prisma: PrismaService, private direction: DirectionService) {}
+  constructor(private prisma: PrismaService) {}
 
   /** Direction-only: request to download original editable file. Audited. */
   @Post(':id/download-original')
   async downloadOriginal(@Req() req: { user: AuthUser; ip?: string; headers?: Record<string, string> }, @Param('id') id: string) {
-    const file = await this.prisma.eventFile.findUnique({ where: { id } });
-    if (!file) throw new ForbiddenException('Archivo no encontrado');
-    const event = file.eventId ? await this.prisma.event.findUnique({ where: { id: file.eventId } }) : null;
-    const ok = await this.direction.isDirection(req.user, event?.organizationId ?? req.user.organizationId ?? null);
-    if (!ok) {
+    if (!isDirectionRole(req.user.roleKey as RoleKey)) {
       throw new ForbiddenException('Solo dirección puede descargar originales');
     }
+    const file = await this.prisma.eventFile.findUnique({ where: { id } });
+    if (!file) throw new ForbiddenException('Archivo no encontrado');
     await this.prisma.auditLog.create({
       data: {
         userId: req.user.id,
-        organizationId: event?.organizationId ?? req.user.organizationId ?? null,
+        organizationId: req.user.organizationId ?? null,
         action: 'download_original',
         resource: 'EventFile',
         resourceId: id,
