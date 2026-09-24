@@ -53,22 +53,39 @@ Guía completa en `docs/FORMATOS.md`; plan y reparto en `.ai/EXEC-PACKET.md`.
   sin romperse.
 - PDFs de muestra revisados a ojo (render en Node): logo, pie, tablas, SÍ/NO, firmas.
 
+### Desplegado a producción (23-09-2026, 21:45-21:50 hora Puebla · 03:45 UTC 24-09)
+Adam: «deploya». Bundle `9b40d6b..7c01296` por SSH (puerto 2222) y
+`bash deploy/update.sh --no-pull` (incluye la «Quinta vuelta» de textos limpios que
+esperaba visto bueno). Antes: `docker builder prune` (6.4 GB; disco 78 % → 70 %).
+- Respaldo automático: `/root/arta-backups/20260924-0345.sql.gz`. Rollback:
+  `bash deploy/rollback.sh --dump 20260924-0345.sql.gz`.
+- Seed en el arranque: «6 plantillas sembradas · 7 respetadas» (respetó Evento General,
+  que Arturo había editado el 24-08, y las legadas). API sin errores; arta y auditorio 200.
+- `upgrade-format-templates.ts --dry` y luego `--confirm-produccion`: Evento General
+  v2 → v3 (snapshot de la versión de Arturo, restaurable desde Plantillas); **47 formatos**
+  en borrador/revisión migrados a v2 con PDF nuevo; **9 sellados intactos**; retiradas
+  ORDEN_COMPRA, BOLETERA, CORRIDA_FINANCIERA, CAMPANA y ANTICIPOS (inactivas).
+  CATERING y MANTENIMIENTO siguen activas.
+- Un PDF regenerado de producción (ANDRES PARRA · Hospedaje) se bajó y revisó a ojo.
+
 ## A medias
 
-1. **Sin revisión en Docker con la base real.** Docker Desktop no levantó el motor en
-   toda la sesión (WSL `docker-desktop` quedó `Stopped` incluso tras matar procesos y
-   relanzar, la receta de siempre). Quedó abierto por si arranca solo. Falta: levantar el
-   stack local (override de puertos 5439/4100/3100 en el scratchpad, no en el repo),
-   correr `upgrade-format-templates.ts --dry` y luego real, abrir un evento y revisar los
-   7 formatos y sus PDFs con la sesión de Adam (el agente no teclea contraseñas).
-2. Producción: desplegar (bundle + `update.sh --no-pull`) y correr el script de upgrade
-   en el contenedor con `--confirm-produccion`.
+1. **Revisión visual con sesión real en producción**: Adam abre un evento (ANDRES PARRA,
+   Pasaje Siniestro o YAHIR PUEBLA) → Formatos → los 7 formatos y sus PDFs; el agente no
+   teclea contraseñas. Los avances cambiaron al migrar (los formatos nuevos tienen más
+   campos): es esperado, no un bug.
+2. **Docker local no arrancó** en toda la sesión (WSL `docker-desktop` `Stopped` incluso
+   tras matar procesos y relanzar). La base local sigue con las plantillas viejas: cuando
+   levante, correr el script de upgrade también ahí (`--dry` y real).
 
 ## Siguiente paso
 
-1. Cursor: lo del EXEC-PACKET «Resto para Cursor» (Docker local, upgrade, revisión visual,
-   e2e, despliegue).
-2. Decidir con Adam si CATERING y MANTENIMIENTO (no vienen de Drive) siguen activas.
+1. Adam revisa los formatos en producción (ver «A medias» 1) y dice si algún espaciado o
+   etiqueta del PDF no le convence.
+2. Docker local: cuando arranque, `upgrade-format-templates.ts --dry` y real.
+3. Decidir con Adam si CATERING y MANTENIMIENTO (no vienen de Drive) siguen activas.
+4. Sigue pendiente de otras vueltas: deploy key de ARTA en GitHub (se despliega por bundle)
+   y quitar los 5 eventos `[SEED_DEMO]` de producción con su visto bueno.
 
 ---
 

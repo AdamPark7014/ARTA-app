@@ -35,7 +35,8 @@ módulos propios con su PDF (se retiran sus plantillas-checklist duplicadas, nad
 - [x] `scripts/upgrade-format-templates.ts`: sube plantillas a v2 (con snapshot), migra formatos en borrador conservando respuestas, retira duplicados, regenera PDFs. `--dry` / `--confirm-produccion`.
 - [x] Web: captura de todos los tipos (tabla con filas/totales, SÍ/NO, hora, adjunto desde el propio formato), editor de plantillas con los tipos nuevos.
 - [x] tests: jest API 227/227 (nuevos: format-schema, format-catalog, checklist-pdf.service) · e2e `checklist-pdf.spec.ts` 3/3.
-- [ ] verificación manual: Docker local → `upgrade-format-templates.ts --dry` y real → evento nuevo → 7 formatos → PDF de cada uno. **Docker Desktop no arrancó en la sesión de Claude (23-09); queda para Cursor/Adam.**
+- [x] producción (23-09): desplegado `7c01296` por bundle, `upgrade-format-templates.ts` corrido en el contenedor (`--dry` y real): 47 formatos migrados, 9 sellados intactos, 5 plantillas retiradas. Respaldo `20260924-0345.sql.gz`.
+- [ ] verificación manual con sesión real: Adam abre un evento en producción → Formatos → 7 formatos y sus PDFs. Docker local sigue sin arrancar; cuando levante, correr el script ahí también.
 
 ## Contexto mínimo a cargar (≤7 archivos)
 - `apps/api/src/common/format-schema.ts`
