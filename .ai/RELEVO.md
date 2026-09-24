@@ -5,6 +5,21 @@
 - **Rama:** main
 
 ## Hecho en este turno
+
+### ⚠️ Deploy 0a93391 (PR #2) FALLIDO y revertido (2026-09-24 13:30 CT · 19:30 UTC)
+- Bundle `e616db5..0a93391` al server (ff-merge OK) + `bash deploy/update.sh --no-pull`.
+- Respaldo: `/root/arta-backups/20260924-1930.sql.gz`.
+- Migración `20260924064800_excel_template_url` **aplicada** en prod (solo `ADD COLUMN "excelTemplateUrl" TEXT`; aditiva, el código viejo la ignora).
+- El API nuevo **no arrancó** (crash-loop, web quedó en Created → sitio caído ~2 min):
+  `Nest can't resolve dependencies of the CampaignsController (PrismaService, NotificationsService, ?, ExcelPdfService)`
+  → `CampaignExcelService` no está en `CampaignsModule` (`campaigns.module.ts` solo importa NotificationsModule).
+  Arreglo propuesto (NO aplicado): en `CampaignsModule` `imports: [NotificationsModule, UploadsModule]` y `providers: [CampaignExcelService]` (UploadsModule exporta ExcelPdfService). Probar arranque real (DI no lo atrapa tsc/jest unitarios).
+- `bash deploy/rollback.sh` (solo imágenes, sin dump): api/web `:prev` (código e616db5) sanos; arta/auditorio 307 → /dashboard; `/ready` 200.
+- **Estado raro del server:** checkout git en 0a93391 (y ahora este RELEVO) pero contenedores corren imágenes de e616db5. El próximo `update.sh --no-pull` reconstruye desde el checkout: arreglar el DI antes.
+- **No se corrió ningún script de formatos** (register-format-sources, sync-checklists-from-docx, upgrade-excel-templates, generate-missing-campaign-and-corrida). Ojo al revisarlos antes de correr:
+  - `sync-checklists-from-docx`: el `--dry` no muestra diff; el parser junta todos los párrafos entre encabezados en UNA línea (`\s+`→' ' y luego split por `\n`), reemplaza el catálogo v2 (ids estables `nombre`, `venue`…) por ids-slug heurísticos (carryFormatValues perdería valores), y migra toda instancia con `authorizedAt: null` sin filtrar estado/sello. Parece destructivo; revisar antes.
+  - `upgrade-excel-templates` y `generate-missing-…` crean EventFiles con `createdById: null` y `kind: 'excel'`: el filtro de Documentos los oculta y `cleanup-event-files.ts` los marcaría como basura. No excluyen `[SEED_DEMO]`.
+  - Scripts resuelven assets con `process.cwd()/apps/api/assets/...` → correr desde `/app` en el contenedor; uploads = volumen `arta_arta_uploads` en `/app/uploads`.
 ### Campaña y Corrida — machotes estándar + generación y pruebas (24-09 noche)
 - Registrar machotes desde repo: `register-format-sources.ts` ahora copia también
   `CAMPANA_BASE.xlsx` → `/uploads/format-campaign.xlsx` y `CORRIDA_BASE.xlsx` →
