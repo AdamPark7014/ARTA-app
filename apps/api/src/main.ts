@@ -12,9 +12,6 @@ import { JsonLogger } from './common/logging/json-logger';
 import { initSentry, captureException } from './common/sentry';
 import { JwtService } from '@nestjs/jwt';
 import { isDirectionRole } from './common/rbac/roles';
-import { DirectionService } from './common/rbac/direction.service';
-import type { JwtPayload } from './auth/jwt.strategy';
-import { configureApp } from './bootstrap-config';
 
 /**
  * Browser traffic in prod/dev always reaches the API same-origin (Traefik/Next
@@ -40,7 +37,66 @@ async function bootstrap() {
     rawBody: true,
     logger,
   });
-  await configureApp(app);
+  app.enableCors({ origin: corsOrigins(), credentials: true });
+  // PDFs/images under /uploads are embedded in the panel via iframe/object.
+  // Helmet's full CSP (object-src 'none', etc.) on those responses breaks
+  // Chrome's built-in PDF viewer; keep only frame-ancestors for embeds.
+  const jwt = app.get(JwtService);
+  app.use(async (req: Request, res: Response, next: NextFunction) => {
+    if (req.path.startsWith('/uploads/')) {
+      // Server-side enforcement: block direct download of editable originals for non-direction
+      const ext = req.path.toLowerCase().split('.').pop() || '';
+      const isEditable = ext === 'xlsx' || ext === 'xls' || ext === 'docx';
+      if (isEditable) {
+        const token = req.cookies?.arta_access || '';
+        let ok = false;
+        if (token) {
+          try {
+            const payload = await jwt.verifyAsync<{ roleKey?: string }>(token);
+            ok = !!payload?.roleKey && isDirectionRole(payload.roleKey as any);
+          } catch {
+            ok = false;
+          }
+        }
+        if (!ok) {
+          res.status(403).send('Solo dirección puede descargar originales');
+          return;
+        }
+      }
+      res.setHeader('Content-Security-Policy', "frame-ancestors 'self'");
+      res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+      res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+      res.setHeader('X-Content-Type-Options', 'nosniff');
+      return next();
+    }
+    return helmet({
+      contentSecurityPolicy: {
+        directives: {
+          defaultSrc: ["'self'"],
+          scriptSrc: ["'self'", "'unsafe-inline'"],
+          styleSrc: ["'self'", "'unsafe-inline'"],
+          imgSrc: ["'self'", 'data:', 'blob:'],
+          frameAncestors: ["'self'"],
+          frameSrc: ["'self'", 'blob:'],
+          objectSrc: ["'self'"],
+          mediaSrc: ["'self'", 'blob:'],
+        },
+      },
+      crossOriginResourcePolicy: { policy: 'cross-origin' },
+    })(req, res, next);
+  });
+  app.use(cookieParser());
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      transform: true,
+      transformOptions: { enableImplicitConversion: true },
+    }),
+  );
+
+  const uploadDir = process.env.UPLOAD_DIR || join(process.cwd(), 'uploads');
+  if (!existsSync(uploadDir)) mkdirSync(uploadDir, { recursive: true });
+  app.useStaticAssets(uploadDir, { prefix: '/uploads/' });
 
   const swagger = new DocumentBuilder()
     .setTitle('ARTA API')
