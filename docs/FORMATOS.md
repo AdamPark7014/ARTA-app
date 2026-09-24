@@ -58,6 +58,15 @@ con su nombre o como link clicable.
   para una tabla se escriben las columnas separadas por coma y `*` al final de
   la que se suma.
 
+## Qué se ve en pantalla
+
+Al abrir un formato aparece la **hoja** (fondo blanco, marca, mismo orden que el
+PDF) y se escribe directo: texto en su línea, casillas, SÍ/NO, tablas renglón
+por renglón, adjuntos desde el propio campo, firmas al pie. «Ampliar a pantalla
+completa» la lleva a toda la ventana. «Guardar y generar PDF» imprime la salida;
+«Ver el PDF» la enseña. El modo «Lista» es la misma captura en formulario
+compacto, útil en pantallas chicas.
+
 ## Poner al día una base que ya existía
 
 ```bash

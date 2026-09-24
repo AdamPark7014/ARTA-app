@@ -41,6 +41,7 @@ import {
   type RoleKey,
 } from '../common/rbac/roles';
 import { ChecklistPdfService } from './checklist-pdf.service';
+import { VISIBLE_CHECKLIST_WHERE } from './checklist-visibility';
 
 type AuthUser = {
   id: string;
@@ -245,7 +246,7 @@ export class ChecklistsController {
     if (!event) throw new BadRequestException('Evento no encontrado');
     this.assertEventAccess(req.user, event);
     return this.prisma.checklistInstance.findMany({
-      where: { eventId },
+      where: { eventId, AND: [VISIBLE_CHECKLIST_WHERE] },
       include: {
         template: true,
         lastEditedBy: { select: { id: true, fullName: true, email: true } },

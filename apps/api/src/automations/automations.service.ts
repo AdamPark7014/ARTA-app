@@ -2,6 +2,7 @@ import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { WebhooksService } from '../webhooks/webhooks.service';
+import { VISIBLE_CHECKLIST_WHERE } from '../checklists/checklist-visibility';
 
 @Injectable()
 export class AutomationsService implements OnModuleInit {
@@ -101,7 +102,7 @@ export class AutomationsService implements OnModuleInit {
           id: true,
           name: true,
           startsAt: true,
-          checklists: { select: { progressPct: true } },
+          checklists: { where: VISIBLE_CHECKLIST_WHERE, select: { progressPct: true } },
         },
       }),
       this.prisma.checklistInstance.count({

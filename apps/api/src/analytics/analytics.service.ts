@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { ChecklistTemplateKey, EntityKey } from '@prisma/client';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { financeTotals } from '../finance/finance-totals';
+import { VISIBLE_CHECKLIST_WHERE } from '../checklists/checklist-visibility';
 
 function monthKey(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
@@ -35,7 +36,8 @@ export class AnalyticsService {
         },
       }),
       this.prisma.checklistInstance.findMany({
-        where: { event: { entity, organizationId } },
+        // Los formatos vacíos de plantillas retiradas no bajan el avance medio.
+        where: { event: { entity, organizationId }, AND: [VISIBLE_CHECKLIST_WHERE] },
         select: {
           id: true,
           eventId: true,

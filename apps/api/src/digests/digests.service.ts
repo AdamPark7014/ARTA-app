@@ -4,6 +4,7 @@ import { Prisma } from '@prisma/client';
 import * as nodemailer from 'nodemailer';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { WebhooksService } from '../webhooks/webhooks.service';
+import { VISIBLE_CHECKLIST_WHERE } from '../checklists/checklist-visibility';
 
 @Injectable()
 export class DigestsService {
@@ -108,7 +109,7 @@ export class DigestsService {
       }),
       this.prisma.event.findMany({
         where: { status: { in: ['ACTIVE', 'DRAFT'] }, organizationId },
-        select: { id: true, name: true, startsAt: true, checklists: { select: { progressPct: true } } },
+        select: { id: true, name: true, startsAt: true, checklists: { where: VISIBLE_CHECKLIST_WHERE, select: { progressPct: true } } },
       }),
       this.prisma.checklistInstance.count({
         where: {

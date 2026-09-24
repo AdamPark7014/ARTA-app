@@ -26,6 +26,7 @@ import {
   type RoleKey,
 } from '../common/rbac/roles';
 import { ChecklistPdfService } from '../checklists/checklist-pdf.service';
+import { VISIBLE_CHECKLIST_WHERE } from '../checklists/checklist-visibility';
 import { calcProgress } from '../common/checklist-progress';
 import { bindFormatToEvent, normalizeFormatData } from '../common/format-schema';
 import { assertSameTenant, tenantIdOf } from '../common/tenant';
@@ -139,7 +140,7 @@ export class EventsController {
       take: 500,
       include: {
         createdBy: { select: { id: true, fullName: true } },
-        _count: { select: { checklists: true, purchaseOrders: true, tasks: true } },
+        _count: { select: { checklists: { where: VISIBLE_CHECKLIST_WHERE }, purchaseOrders: true, tasks: true } },
       },
     });
   }
@@ -167,6 +168,8 @@ export class EventsController {
          * firma es un PNG en base64.
          */
         checklists: {
+          // Los formatos vacíos de plantillas retiradas no se listan.
+          where: VISIBLE_CHECKLIST_WHERE,
           select: {
             id: true,
             eventId: true,

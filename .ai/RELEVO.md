@@ -68,6 +68,30 @@ esperaba visto bueno). Antes: `docker builder prune` (6.4 GB; disco 78 % → 70 
   CATERING y MANTENIMIENTO siguen activas.
 - Un PDF regenerado de producción (ANDRES PARRA · Hospedaje) se bajó y revisó a ojo.
 
+### Segunda vuelta: el formato como documento (23-09, 22:00)
+Adam, con captura de producción: «se sobreponen; ¿por qué es PDF si quedamos que los que
+son como PDF son Words hasta salir del sistema?». El modo «Sobre el PDF» dibujaba cajas
+encima del valor ya impreso (se veía doble) y contradecía lo acordado.
+- **`FormatSheet.tsx` + `_sheet.scss`**: el formato abre como la hoja misma (blanca, logo
+  y pie del cliente, misma estructura que el PDF) y se llena en sitio. Modo por defecto;
+  «Lista» queda como segundo modo. Tema claro propio dentro del panel oscuro (variables
+  redefinidas en `.fsheet`; los inputs pisan `.shell input`).
+- **Fuera** `ChecklistPdfEditor` (cajas sobre el PDF), sus fixtures y su spec. El API sigue
+  dejando `pdfFieldsJson`; la web no lo usa.
+- e2e nuevo `checklist-sheet.spec.ts` (hoja con marca, captura en sitio, modos) con
+  fixture compartido `support/format-fixture.ts`; `layout.spec.ts` adaptado (y su selector
+  del menú, que llevaba roto desde el rediseño del 15-09). **6/6** con build real.
+- Capturas revisadas a ojo (Playwright): tabla en blanco, etiquetas en una línea.
+- Commit `682fa5a`; **desplegado a producción 22:09** (bundle + `update.sh --no-pull`,
+  respaldo automático del deploy); web y api sanos, `/brand/arta-logo-ink.png` 200.
+- Adam (captura con la versión vieja, 22:06): «todos los formatos siguen siendo PDF; los
+  verticales son Word y las cosas horizontales como campañas son Excel». Además el evento
+  listaba **13 formatos** porque seguían los vacíos de las plantillas retiradas.
+  **`checklist-visibility.ts`**: un formato de plantilla inactiva solo se lista si alguien
+  lo empezó (avance, estado, firma o adjuntos); aplica al detalle del evento, a la lista
+  por evento, al conteo de la lista de eventos, a los promedios de automatizaciones y
+  resúmenes y al overview. No se borra nada.
+
 ## A medias
 
 1. **Revisión visual con sesión real en producción**: Adam abre un evento (ANDRES PARRA,
