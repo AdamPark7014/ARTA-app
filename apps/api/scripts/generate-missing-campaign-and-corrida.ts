@@ -40,12 +40,14 @@ async function main() {
       console.log('Falta --actor <email> (quién ejecuta). Aborta para no crear archivos sin autor.');
       process.exit(2);
     }
-    const actor = await prisma.user.findFirst({ where: { email: actorArg }, select: { id: true } });
+    const actor = await prisma.user.findFirst({ where: { email: actorArg }, select: { id: true, fullName: true } });
     if (!actor) {
       console.log(`Usuario no encontrado: ${actorArg}`);
       process.exit(2);
     }
     actorId = actor.id;
+    // Stash for PDF author metadata
+    (global as any).__ARTA_ACTOR_FULLNAME__ = actor.fullName || null;
   }
 
   const campaignSrc = join(uploadRoot, 'format-campaign.xlsx');
@@ -133,7 +135,7 @@ async function main() {
           eventName: event.name,
           entity: event.entity,
           fileName: name,
-          exportedBy: author?.fullName ?? null,
+          exportedBy: ((global as any).__ARTA_ACTOR_FULLNAME__ as string) || author?.fullName || null,
         });
       }
       madeCampaign += 1;
@@ -173,7 +175,7 @@ async function main() {
           eventName: event.name,
           entity: event.entity,
           fileName: name,
-          exportedBy: author?.fullName ?? null,
+          exportedBy: ((global as any).__ARTA_ACTOR_FULLNAME__ as string) || author?.fullName || null,
         });
       }
       madeCorrida += 1;
