@@ -33,9 +33,6 @@ type DocInput = {
   blocks: DocBlock[];
   updatedBy?: string | null;
   updatedAt?: Date | null;
-  draftWatermark?: boolean;
-  folio?: string | null;
-  status?: string | null;
 };
 
 /**
@@ -83,11 +80,8 @@ export class DocumentPdfService {
         version,
         generatedBy: input.updatedBy || null,
         generatedAt: input.updatedAt || new Date(),
-        folio: input.folio || null,
-        status: input.status || null,
       };
       this.branding.drawHeaderFooter(doc, meta, right - left, 100);
-      if (input.draftWatermark) this.branding.draftWatermark(doc);
       doc.moveDown(4.6);
 
       const accent = input.entity === 'EXPLANADA' ? '#1f5c50' : '#8b6914';

@@ -74,8 +74,6 @@ type PdfInput = {
   /** Optional ticketing brand for header (name + logo file path). */
   boleteraName?: string | null;
   boleteraLogoPath?: string | null;
-  /** Optional folio id rendered in footer. */
-  folio?: string | null;
 };
 
 /* ── Hoja ───────────────────────────────────────────────────────────────── */
@@ -175,7 +173,6 @@ type Cursor = {
   logo: string | null;
   footer: string | null;
   revisionLabel: string;
-  isDraft: boolean;
 };
 
 @Injectable()
@@ -242,7 +239,6 @@ export class ChecklistPdfService {
         logo: brandAsset('arta-logo-ink.png'),
         footer: brandAsset('arta-footer.png'),
         revisionLabel: revision === undefined ? '' : `Rev. ${revision}`,
-        isDraft: !/^(aprobado|sellado)$/i.test(String(input.statusLabel || '').trim()),
       };
 
       // Branding header/footer
@@ -253,12 +249,9 @@ export class ChecklistPdfService {
         version: revision ?? 1,
         generatedBy: input.editedBy || null,
         generatedAt: input.editedAt || new Date(),
-        status: input.statusLabel || null,
-        folio: input.folio || null,
       };
       doc.addPage({ size: 'LETTER', margin: 0 });
       this.branding.drawHeaderFooter(doc, meta, RIGHT - M, 110);
-      if (cur.isDraft) this.branding.draftWatermark(doc);
       cur.page += 1;
       cur.y = TOP + 40;
 
@@ -293,7 +286,6 @@ export class ChecklistPdfService {
     const { doc, input } = cur;
     doc.addPage({ size: 'LETTER', margin: 0 });
     cur.page += 1;
-    if (cur.isDraft) this.branding.draftWatermark(doc);
 
     // Logo del cliente (los Word lo traen en el encabezado).
     const logoH = first ? 40 : 24;
@@ -900,9 +892,6 @@ export class ChecklistPdfService {
     // evento si la persona no lo escribió; lo capturado manda.
     const data = bindFormatToEvent(normalizeFormatData(item.dataJson), item.event);
 
-    const shortId = item.event.id.replace(/-/g, '').slice(0, 6).toUpperCase();
-    const folio = `ARTA-${shortId}-${(item.template?.key || item.title || 'FORMATO').toString().toUpperCase()}-V${item.revision ?? 1}`;
-
     const { url, fieldMap } = await this.generate(
       checklistId,
       {
@@ -925,7 +914,6 @@ export class ChecklistPdfService {
         statusLabel: DOC_STATUS_LABEL[item.status] ?? null,
         boleteraName: ticketing?.boletera || null,
         boleteraLogoPath: this.resolveUploadPath(ticketing?.logoUrl),
-        folio,
       },
       item.revision,
     );
