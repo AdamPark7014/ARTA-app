@@ -1,6 +1,6 @@
 # RELEVO
 
-- **Último turno:** claude-code
+- **Último turno:** cursor
 - **Fecha:** 2026-09-24
 - **Rama:** main
 
@@ -115,6 +115,16 @@ accesibilidad a la edición».
   Ojo: esto revierte «no editar la corrida desde la página» de la junta del 11-09; manda
   lo que Adam pidió el 24-09.
 - Verde: tsc api/web/seed/scripts; jest **229/229**.
+
+
+### Desplegado a producción (24-09-2026, ~09:02 hora Puebla · 15:02 UTC)
+Manager de Arta (Grok Bot): sync local→GitHub (1441860..e7d27f6, 9 commits) y bundle
+6d723e8..e7d27f6 + `deploy/update.sh --no-pull`. Respaldo
+`/root/arta-backups/20260924-1502.sql.gz`. API y web sanos; sitios 307→/dashboard.
+`upgrade-format-templates.ts --confirm-produccion`: 9 formatos migrados (Catering ×6,
+Mantenimiento ×2, Transportación ANDRES PARRA); 11 sellados intactos. Anticipos ya no
+cuenta el PDF base como «empezado». Campos GrowingText y Excel editable (Corrida/Campaña)
+en vivo.
 
 ## A medias
 
@@ -335,7 +345,17 @@ con la auditoría como user.seeder, algo limpio».
 - Docker local: db 5439, api 4100, web 3100 (3000/4000/5432 los usa NEXARA; 5433 un
   Postgres nativo). Override en el scratchpad de la sesión, no en el repo.
 
-### A medias (16-09)
+#
+### Desplegado a producción (24-09-2026, ~09:02 hora Puebla · 15:02 UTC)
+Manager de Arta (Grok Bot): sync local→GitHub (1441860..e7d27f6, 9 commits) y bundle
+6d723e8..e7d27f6 + `deploy/update.sh --no-pull`. Respaldo
+`/root/arta-backups/20260924-1502.sql.gz`. API y web sanos; sitios 307→/dashboard.
+`upgrade-format-templates.ts --confirm-produccion`: 9 formatos migrados (Catering ×6,
+Mantenimiento ×2, Transportación ANDRES PARRA); 11 sellados intactos. Anticipos ya no
+cuenta el PDF base como «empezado». Campos GrowingText y Excel editable (Corrida/Campaña)
+en vivo.
+
+## A medias (16-09)
 
 1. **Sin revisión visual con sesión real**: el agente no teclea contraseñas; Adam entra en
    http://localhost:3100 y revisa. Los PDFs se probaron renderizando en Node (logo solo
