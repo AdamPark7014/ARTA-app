@@ -3,7 +3,7 @@
 - **Escrito por:** Claude (cabeza)
 - **Fecha:** 2026-09-23
 - **Rama:** main
-- **Estado:** LISTO PARA CURSOR (núcleo hecho y committeado por Claude en `a6e987d` + `4216a4f`; Cursor toma el «Resto para Cursor»)
+- **Estado:** LISTO PARA CURSOR
 <!-- Estados: BORRADOR → LISTO PARA CURSOR → EN EJECUCION → CERRADO -->
 
 ## Objetivo
@@ -42,7 +42,7 @@ módulos propios con su PDF (se retiran sus plantillas-checklist duplicadas, nad
 - `apps/api/src/checklists/format-catalog.ts`
 - `apps/api/src/checklists/checklist-pdf.service.ts`
 - `apps/web/components/events/EventChecklistsPanel.tsx`
-- `apps/web/components/events/ChecklistTableField.tsx`
+- `apps/web/components/events/ChecklistFieldControls.tsx` (SÍ/NO, adjunto, tabla)
 - `apps/api/scripts/upgrade-format-templates.ts`
 - `docs/FORMATOS.md`
 
@@ -57,7 +57,7 @@ módulos propios con su PDF (se retiran sus plantillas-checklist duplicadas, nad
 | `apps/api/prisma/seed.ts` | editar | usa el catálogo; no pisa plantillas editadas |
 | `apps/api/scripts/upgrade-format-templates.ts` | nuevo | migración |
 | `apps/web/components/events/event-detail.types.ts` | editar | tipos |
-| `apps/web/components/events/EventChecklistsPanel.tsx` + `ChecklistTableField.tsx` | editar/nuevo | captura |
+| `apps/web/components/events/EventChecklistsPanel.tsx` + `ChecklistFieldControls.tsx` | editar/nuevo | captura |
 | `apps/web/components/files/ChecklistPdfEditor.tsx` · `checklists/TemplateSchemaEditor.tsx` · `app/(app)/checklists/page.tsx` | editar | tipos nuevos |
 | `apps/web/app/(app)/hospitality/page.tsx` | editar | columna Desayuno en vez de Habitaciones |
 | `apps/web/styles/_hub.scss` | editar | tabla, SÍ/NO, adjunto, nota |
@@ -97,7 +97,11 @@ npx -w apps/web tsc --noEmit -p apps/web/tsconfig.json
 -
 
 ## No hacer / riesgos
--
+- No cambiar ids de ítem del catálogo (los índices por módulo los leen) ni bajar `STANDARD_FORMAT_VERSION`.
+- No editar las plantillas estándar a mano en la UI para «subirlas»: eso lo hace el script con snapshot.
+- El script no toca formatos aprobados/sellados/autorizados; no forzarlo con `--include-signed` (no existe a propósito).
+- Docker Desktop en esta máquina a veces no levanta el motor: matar procesos y relanzar; nunca «Reset to factory defaults» (borra la base).
+- Los estilos nuevos van en `styles/_formats.scss` (no en `_hub.scss` como decía el plan).
 
 ## Handoff a Cursor
 (Una sola frase de arranque. `packet.ps1 handoff` la copia al portapapeles junto con el boot.)
