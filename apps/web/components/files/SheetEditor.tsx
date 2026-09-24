@@ -3,6 +3,20 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as XLSX from 'xlsx';
 import { HyperFormula, type SimpleCellAddress } from 'hyperformula';
+// Registrar idioma para evitar "Language not registered"
+let HF_LANG_READY = false;
+try {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const esES = require('hyperformula/es/languages/esES').default || require('hyperformula/es/languages/esES');
+  if (esES) {
+    // @ts-ignore
+    HyperFormula.registerLanguage('esES', esES);
+    HF_LANG_READY = true;
+  }
+} catch {
+  // Ignorar: HyperFormula puede trabajar en idioma por defecto si es necesario
+  HF_LANG_READY = false;
+}
 import type { SaveFile } from '@/lib/file-save';
 import { api } from '@/lib/api';
 import { ExpandBox } from '@/components/ui/ExpandBox';
@@ -267,42 +281,51 @@ export function SheetEditor({
 
   function initHyperFormula(wb: XLSX.WorkBook) {
     try {
-      hfRef.current?.destroy();
-    } catch {
-      /* ignore */
-    }
-    hfRef.current = null;
-    hfSheetIdByNameRef.current = new Map();
-    const hf = HyperFormula.buildEmpty({ licenseKey: 'gpl-v3', language: 'esES' });
-    wb.SheetNames.forEach((name) => {
-      const ws = wb.Sheets[name];
-      const rows = (XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: true }) as unknown[][]) || [];
-      const withFormulas = rows.map((row, r) =>
-        row.map((cell, c) => {
-          const addr = XLSX.utils.encode_cell({ r, c });
-          const obj = ws?.[addr] as XLSX.CellObject | undefined;
-          if (obj?.f) return `=${obj.f}`;
-          return cell === undefined || cell === null ? '' : (typeof cell === 'number' ? cell : String(cell));
-        }),
-      );
-      const id = (hf as any).addSheet(name) as number;
-      (hf as any).setSheetContent(id, withFormulas);
-      hfSheetIdByNameRef.current.set(name, id);
-      const set = new Set<string>();
-      const ref = (ws as any)['!ref'] as string | undefined;
-      if (ref) {
-        const range = XLSX.utils.decode_range(ref);
-        for (let r = 0; r <= range.e.r; r += 1) {
-          for (let c = 0; c <= range.e.c; c += 1) {
-            const a = XLSX.utils.encode_cell({ r, c });
-            const obj = ws?.[a] as XLSX.CellObject | undefined;
-            if (obj?.f) set.add(a);
+      try {
+        hfRef.current?.destroy();
+      } catch {
+        /* ignore */
+      }
+      hfRef.current = null;
+      hfSheetIdByNameRef.current = new Map();
+      const hf = HyperFormula.buildEmpty({
+        licenseKey: 'gpl-v3',
+        language: HF_LANG_READY ? 'esES' : undefined,
+      } as any);
+      wb.SheetNames.forEach((name) => {
+        const ws = wb.Sheets[name];
+        const rows = (XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: true }) as unknown[][]) || [];
+        const withFormulas = rows.map((row, r) =>
+          row.map((cell, c) => {
+            const addr = XLSX.utils.encode_cell({ r, c });
+            const obj = ws?.[addr] as XLSX.CellObject | undefined;
+            if (obj?.f) return `=${obj.f}`;
+            return cell === undefined || cell === null ? '' : (typeof cell === 'number' ? cell : String(cell));
+          }),
+        );
+        const id = (hf as any).addSheet(name) as number;
+        (hf as any).setSheetContent(id, withFormulas);
+        hfSheetIdByNameRef.current.set(name, id);
+        const set = new Set<string>();
+        const ref = (ws as any)['!ref'] as string | undefined;
+        if (ref) {
+          const range = XLSX.utils.decode_range(ref);
+          for (let r = 0; r <= range.e.r; r += 1) {
+            for (let c = 0; c <= range.e.c; c += 1) {
+              const a = XLSX.utils.encode_cell({ r, c });
+              const obj = ws?.[a] as XLSX.CellObject | undefined;
+              if (obj?.f) set.add(a);
+            }
           }
         }
-      }
-      originalFormulaCellsRef.current.set(name, set);
-    });
-    hfRef.current = hf;
+        originalFormulaCellsRef.current.set(name, set);
+      });
+      hfRef.current = hf;
+    } catch (e) {
+      // Si algo falla (idioma no registrado, etc.), no bloquea la apertura
+      hfRef.current = null;
+      console.warn('HyperFormula init failed; falling back to static values');
+    }
   }
 
   useEffect(() => {
