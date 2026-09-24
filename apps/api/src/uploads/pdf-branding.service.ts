@@ -48,7 +48,7 @@ export class PdfBrandingService {
     const when = meta.generatedAt ? ` el ${meta.generatedAt.toLocaleString('es-MX')}` : '';
     const folio = meta.folio ? ` · Folio ${meta.folio}` : '';
     const ver = meta.version != null ? ` · v${meta.version}` : '';
-    const stat = meta.status && meta.status !== 'AUTHORIZED' ? ` · ${meta.status}` : '';
+    const stat = meta.status && !/^authorized|aprobado|sellado$/i.test(String(meta.status)) ? ` · ${meta.status}` : '';
     const footer = `${meta.fileName || ''}${ver}${folio}${by}${when}${stat}`.trim();
     if (footer) {
       doc

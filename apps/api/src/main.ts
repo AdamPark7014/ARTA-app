@@ -12,6 +12,8 @@ import { JsonLogger } from './common/logging/json-logger';
 import { initSentry, captureException } from './common/sentry';
 import { JwtService } from '@nestjs/jwt';
 import { isDirectionRole } from './common/rbac/roles';
+import { DirectionService } from './common/rbac/direction.service';
+import type { JwtPayload } from './auth/jwt.strategy';
 
 /**
  * Browser traffic in prod/dev always reaches the API same-origin (Traefik/Next
@@ -42,6 +44,7 @@ async function bootstrap() {
   // Helmet's full CSP (object-src 'none', etc.) on those responses breaks
   // Chrome's built-in PDF viewer; keep only frame-ancestors for embeds.
   const jwt = app.get(JwtService);
+  const direction = app.get(DirectionService);
   app.use(async (req: Request, res: Response, next: NextFunction) => {
     if (req.path.startsWith('/uploads/')) {
       // Server-side enforcement: block direct download of editable originals for non-direction
@@ -52,8 +55,13 @@ async function bootstrap() {
         let ok = false;
         if (token) {
           try {
-            const payload = await jwt.verifyAsync<{ roleKey?: string }>(token);
-            ok = !!payload?.roleKey && isDirectionRole(payload.roleKey as any);
+            const payload = await jwt.verifyAsync<JwtPayload>(token);
+            if (payload?.sub) {
+              ok = await direction.isDirection(
+                { id: payload.sub, roleKey: payload.roleKey },
+                payload.organizationId || null,
+              );
+            }
           } catch {
             ok = false;
           }

@@ -101,7 +101,7 @@ export class SlotsController {
   async restore(
     @Req() req: { user: AuthUser; ip?: string; headers?: Record<string, string> },
     @Param('eventId') eventId: string,
-    @Body() body: { kind: 'CHECKLIST' | 'CAMPAIGN' | 'CORRIDA' | 'PENDONES' | 'OC' | 'BOLETERA'; checklistTemplateId?: string | null },
+    @Body() body: { kind: 'CHECKLIST' | 'CAMPAIGN' | 'CORRIDA' | 'PENDONES' | 'OC' | 'BOLETERA'; checklistTemplateId?: string | null; note?: string },
   ) {
     const event = await this.assertEvent(req.user, eventId);
     const ok = await this.dirService.isDirection(req.user, event.organizationId ?? req.user.organizationId ?? null);
@@ -135,7 +135,7 @@ export class SlotsController {
         action: 'slot.restore',
         resource: 'Event',
         resourceId: event.id,
-        metaJson: { kind: body.kind, checklistTemplateId: body.checklistTemplateId || null },
+        metaJson: { kind: body.kind, checklistTemplateId: body.checklistTemplateId || null, note: body.note || null },
         ip: req.ip,
         userAgent: req.headers?.['user-agent']?.slice(0, 300),
       },
