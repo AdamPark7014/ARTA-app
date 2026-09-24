@@ -270,42 +270,6 @@ export function EventChecklistsPanel({
     return (event.files || []).filter((f) => f.checklistId === activeChecklist.id);
   }, [event.files, activeChecklist]);
 
-  /** Sección e ítem para Campos adicionales (tabla Etiqueta/Valor). */
-  const hasExtras = useMemo(() => {
-    if (!activeChecklist?.dataJson?.sections) return false;
-    return !!activeChecklist.dataJson.sections.find((s) => s.id === 'extras');
-  }, [activeChecklist?.dataJson]);
-
-  async function ensureExtrasSection() {
-    if (!activeChecklist) return;
-    if (hasExtras) return;
-    const base = activeChecklist.dataJson || { sections: [] };
-    const next = {
-      ...base,
-      sections: [
-        ...(base.sections || []),
-        {
-          id: 'extras',
-          title: 'Campos adicionales',
-          items: [
-            {
-              id: 'extras',
-              label: 'Campos adicionales',
-              type: 'table',
-              columns: [
-                { id: 'label', label: 'Etiqueta', width: 2 },
-                { id: 'value', label: 'Valor', width: 4 },
-              ],
-              rows: [],
-              minRows: 3,
-            },
-          ],
-        },
-      ],
-    };
-    await onAutosaveChecklist(next);
-  }
-
   /*
    * Un formato aprobado o sellado no se edita. `REVIEW` sí: es una bandera
    * para pedir revisión, no un candado — si bloqueara, nadie cerraría su
@@ -315,9 +279,7 @@ export function EventChecklistsPanel({
   const lockedByStatus = status === 'APPROVED' || status === 'SEALED';
   const readOnly = closed || lockedByStatus;
   const checklistSlot =
-    activeChecklist &&
-    (event.slots || []).find((s) => s.kind === 'CHECKLIST' && s.checklistTemplateId === (activeChecklist.template?.id || null)) ||
-    null;
+    activeChecklist && (event.slots || []).find((s) => s.kind === 'CHECKLIST' && s.checklistTemplateId === activeChecklist.templateId) || null;
   const replacedByExternal = !!checklistSlot && checklistSlot.status === 'REPLACED';
 
   // Al cambiar de formato se vuelve al principio.
@@ -407,7 +369,7 @@ export function EventChecklistsPanel({
       const f = await api<EventFile>('/uploads', { method: 'POST', body: fd });
       await api(`/slots/event/${event.id}/replace`, {
         method: 'POST',
-        body: JSON.stringify({ kind: 'CHECKLIST', checklistTemplateId: activeChecklist.template?.id || null, fileId: f.id, note }),
+        body: JSON.stringify({ kind: 'CHECKLIST', checklistTemplateId: activeChecklist.templateId, fileId: f.id, note }),
       });
       await onFilesChanged();
     } catch (e) {
@@ -420,7 +382,7 @@ export function EventChecklistsPanel({
     const note = window.prompt('Motivo para reactivar el formato interno (dirección)') || '';
     await api(`/slots/event/${event.id}/restore`, {
       method: 'POST',
-      body: JSON.stringify({ kind: 'CHECKLIST', checklistTemplateId: activeChecklist.template?.id || null, note }),
+      body: JSON.stringify({ kind: 'CHECKLIST', checklistTemplateId: activeChecklist.templateId, note }),
     });
     await onFilesChanged();
   }
@@ -625,7 +587,14 @@ export function EventChecklistsPanel({
                   replacedByExternal ? (
                     <button
                       type="button"
-                      onClick={() => void restoreInternalChecklist()}
+                      onClick={async () => {
+                        try {
+                          await restoreInternalChecklist();
+                          flash('Formato interno reactivado', 'success');
+                        } catch (e) {
+                          flash(e instanceof Error ? e.message : 'No se pudo reactivar', 'error');
+                        }
+                      }}
                     >
                       Revertir a interno
                     </button>
@@ -636,10 +605,16 @@ export function EventChecklistsPanel({
                         type="file"
                         hidden
                         accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/pdf,.pdf"
-                        onChange={(e) => {
+                        onChange={async (e) => {
                           const f = e.target.files?.[0];
                           e.target.value = '';
-                          if (f) void replaceWithExternal(f);
+                          if (!f) return;
+                          try {
+                            await replaceWithExternal(f);
+                            flash('Formato reemplazado por documento externo', 'success');
+                          } catch (err) {
+                            flash(err instanceof Error ? err.message : 'No se pudo reemplazar', 'error');
+                          }
                         }}
                       />
                     </label>
@@ -674,16 +649,6 @@ export function EventChecklistsPanel({
             <span className="hub-doc__status">
               <DocStatusControl status={status} roleKey={roleKey} busy={saving} onChange={onChangeStatus} />
             </span>
-          ) : null}
-          {!closed && !hasExtras ? (
-            <button
-              className="btn-quiet"
-              type="button"
-              title="Agregar una tabla de Etiqueta/Valor al final del formato"
-              onClick={() => void ensureExtrasSection()}
-            >
-              + Campos adicionales
-            </button>
           ) : null}
         </div>
       </header>
@@ -855,16 +820,6 @@ export function EventChecklistsPanel({
         <section className="surface hub-drawer">
           <div className="surface__head">
             <h3 className="surface__title">Historial de versiones</h3>
-            {activeChecklist ? (
-              <a
-                className="btn-quiet"
-                href={`/api/audit/resource/CHECKLIST/${activeChecklist.id}/pdf`}
-                target="_blank"
-                rel="noreferrer"
-              >
-                Exportar historial PDF
-              </a>
-            ) : null}
             <button className="icon-btn" type="button" aria-label="Cerrar" onClick={() => setDrawer(null)}>
               ×
             </button>

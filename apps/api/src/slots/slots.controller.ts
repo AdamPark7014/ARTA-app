@@ -51,7 +51,8 @@ export class SlotsController {
     const file = await this.prisma.eventFile.findUnique({ where: { id: body.fileId } });
     if (!file || file.eventId !== event.id) throw new BadRequestException('Archivo no encontrado en el evento');
     const ext = extname(file.fileName).toLowerCase();
-    if (body.kind === 'CHECKLIST' && ext !== '.docx') throw new BadRequestException('Un checklist se reemplaza con .docx');
+    if (body.kind === 'CHECKLIST' && !['.docx', '.pdf'].includes(ext))
+      throw new BadRequestException('Un checklist se reemplaza con .docx o PDF final firmado');
     if ((body.kind === 'CAMPAIGN' || body.kind === 'CORRIDA') && !['.xlsx', '.xls'].includes(ext))
       throw new BadRequestException('Campaña/Corrida se reemplaza con Excel');
 
