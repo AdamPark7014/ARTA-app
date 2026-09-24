@@ -2,7 +2,9 @@
 module.exports = {
   rootDir: '.',
   testEnvironment: 'node',
-  transform: { '^.+\\.tsx?$': 'ts-jest' },
+  transform: { '^.+\\.(t|j)sx?$': ['ts-jest', { tsconfig: { allowJs: true } }] },
+  // Transform ESM-only deps used transitively (otplib → @scure/*, @noble/*)
+  transformIgnorePatterns: ['node_modules/(?!(otplib|@otplib|@scure|@noble)/)'],
   testRegex: '.*\\.spec\\.ts$',
   moduleFileExtensions: ['js', 'json', 'ts'],
   collectCoverageFrom: ['src/**/*.(t|j)s'],

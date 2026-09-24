@@ -18,7 +18,22 @@ describe('Checklist templates — create/import endpoints (smoke)', () => {
 
   let controller: ChecklistsController;
 
-  beforeAll(() => {
+  beforeAll(async () => {
+    // Ensure req.user.id exists to satisfy FK-constrained audit logs
+    const exists = await prisma.user.findUnique({ where: { id: dir.user.id } });
+    if (!exists) {
+      await prisma.user.create({
+        data: {
+          id: dir.user.id,
+          email: `dir-${Date.now()}@e2e.test`,
+          passwordHash: 'x',
+          fullName: dir.user.fullName,
+          roleKey: dir.user.roleKey,
+          entities: ['ARTA', 'EXPLANADA'] as any,
+          organizationId: null,
+        },
+      });
+    }
     controller = new ChecklistsController(
       prisma as never,
       new ChecklistPdfService(prisma as never),

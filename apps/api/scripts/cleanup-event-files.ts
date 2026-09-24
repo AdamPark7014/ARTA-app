@@ -33,8 +33,15 @@ async function main() {
     OR: [
       // PDFs base generados al crear el evento desde plantillas de checklist.
       { AND: [{ createdById: null }, { url: { startsWith: '/uploads/checklists/' } }] },
-      // Cualquier archivo sin autor que NO sea PDF (basura / placeholders antiguos).
-      { AND: [{ createdById: null }, { kind: { not: 'pdf' } }] },
+      // Cualquier archivo sin autor que NO sea PDF (basura / placeholders antiguos),
+      // EXCLUYENDO Excel generados del sistema que deben quedar visibles en sus módulos.
+      {
+        AND: [
+          { createdById: null },
+          { kind: { not: 'pdf' } },
+          { module: { notIn: ['campaign', 'finance', 'checklist'] } },
+        ],
+      },
       // Mojibake notorio de «CAMPAÑA».
       { fileName: { contains: 'CAMPAÃ' } },
     ],

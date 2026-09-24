@@ -780,7 +780,12 @@ export class PurchaseOrdersController {
         url: `/uploads/${excelPath.split('/').pop()}`,
         kind: 'excel',
         module: 'oc',
-        updatedById: req.user.id,
+        // Robust: if the acting user isn't a real User row (tests, system), leave null
+        updatedById:
+          (await this.prisma.user
+            .findUnique({ where: { id: req.user.id }, select: { id: true } })
+            .then((u) => u?.id)
+            .catch(() => null)) || null,
         sha256: createHash('sha256').update(buf).digest('hex'),
       },
       include: { event: { select: { organizationId: true } } },

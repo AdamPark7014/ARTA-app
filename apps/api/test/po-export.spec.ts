@@ -51,6 +51,15 @@ describe('PurchaseOrdersController export (Excel/PDF) smoke', () => {
         entities: { set: ['ARTA'] as any },
       },
     });
+    const dir = await prisma.user.create({
+      data: {
+        email: `dir-${Date.now()}@x.test`,
+        passwordHash: 'x',
+        fullName: 'Dir',
+        roleKey: 'dir_general',
+        entities: { set: ['ARTA'] as any },
+      },
+    });
     const po = await prisma.purchaseOrder.create({
       data: {
         eventId: ev.id,
@@ -66,7 +75,7 @@ describe('PurchaseOrdersController export (Excel/PDF) smoke', () => {
       include: { lines: true, createdBy: true },
     });
     const res = await controller.exportExcelPdf(
-      { user: { id: 'u', roleKey: 'dir_general', permissions: [], entities: ['ARTA'], fullName: 'Dir' } } as never,
+      { user: { id: dir.id, roleKey: 'dir_general', permissions: [], entities: ['ARTA'], fullName: 'Dir' } } as never,
       po.id,
       {},
     );

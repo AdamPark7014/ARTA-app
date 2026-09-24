@@ -189,7 +189,12 @@ describe('Multi-org tenant isolation (e2e, real DB)', () => {
     let controller: CampaignsController;
 
     beforeAll(() => {
-      controller = new CampaignsController(prisma as never);
+      controller = new CampaignsController(
+        prisma as never,
+        { notify: async () => undefined, notifyMany: async () => undefined } as unknown as NotificationsService,
+        {} as never,
+        {} as never,
+      );
     });
 
     it('blocks reading another org event campaign', async () => {

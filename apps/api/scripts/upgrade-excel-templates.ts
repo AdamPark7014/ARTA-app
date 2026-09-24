@@ -16,10 +16,36 @@ import { PrismaClient } from '@prisma/client';
 import { uploadRoot } from '../src/uploads/upload-storage';
 
 const prisma = new PrismaClient();
-const DRY = process.argv.includes('--dry');
+const DRY = process.argv.includes('--dry') || !process.argv.includes('--confirm-produccion');
 const CONFIRM = process.argv.includes('--confirm-produccion');
 
+function getArg(name: string): string | null {
+  const pref = `--${name}=`;
+  const hit = process.argv.find((a) => a.startsWith(pref));
+  if (hit) return hit.slice(pref.length);
+  const idx = process.argv.indexOf(`--${name}`);
+  if (idx >= 0 && process.argv[idx + 1] && !process.argv[idx + 1].startsWith('--')) {
+    return process.argv[idx + 1];
+  }
+  return null;
+}
+
 async function main() {
+  const actorEmail = getArg('actor');
+  let actorId: string | null = null;
+  if (!DRY) {
+    if (!actorEmail) {
+      console.error('Falta --actor <email> (quién ejecuta). Aborta para no crear archivos sin autor.');
+      process.exit(2);
+    }
+    const actor = await prisma.user.findFirst({ where: { email: actorEmail }, select: { id: true } });
+    if (!actor) {
+      console.error(`Usuario no encontrado: ${actorEmail}`);
+      process.exit(2);
+    }
+    actorId = actor.id;
+  }
+
   const templates = await prisma.checklistTemplate.findMany({
     where: { active: true },
     orderBy: { name: 'asc' },
@@ -31,10 +57,16 @@ async function main() {
   }
   const events = await prisma.event.findMany({
     orderBy: { updatedAt: 'desc' },
-    select: { id: true, name: true, entity: true },
+    select: { id: true, name: true, notes: true, entity: true },
   });
   let toCopy = 0;
   for (const ev of events) {
+    // Saltar eventos de demo por defecto
+    const seedTagged =
+      (ev.name && /\[SEED_DEMO\]/i.test(ev.name)) || (ev.notes && /\[SEED_DEMO\]/i.test(ev.notes));
+    if (!process.argv.includes('--include-seed') && seedTagged) {
+      continue;
+    }
     for (const t of excelTpls) {
       const srcUrl = (t as any).excelTemplateUrl as string;
       const rel = srcUrl.replace(/^\/uploads\//, '');
@@ -63,8 +95,8 @@ async function main() {
           url: `/uploads/${stamp}.xlsx`,
           kind: 'excel',
           module: 'checklist',
-          createdById: null,
-          updatedById: null,
+          createdById: actorId,
+          updatedById: actorId,
           sha256: createHash('sha256').update(buf).digest('hex'),
         },
       });

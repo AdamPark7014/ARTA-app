@@ -30,7 +30,12 @@ describe('PurchaseOrdersController authorization (e2e, real DB)', () => {
   });
 
   beforeAll(async () => {
-    controller = new PurchaseOrdersController(prisma as never);
+    controller = new PurchaseOrdersController(
+      prisma as never,
+      { notifyMany: async () => undefined } as never,
+      {} as never,
+      {} as never,
+    );
     const suffix = Date.now().toString(36);
 
     orgA = await prisma.organization.create({ data: { slug: `poa-${suffix}`, name: 'PO Org A' } });

@@ -24,11 +24,28 @@ function has(name: string): boolean {
 
 async function main() {
   const prisma = new PrismaClient();
-  const DRY = has('dry');
+  const DRY = has('dry') || !has('confirm-produccion');
   const CONFIRM = has('confirm-produccion');
-  if (!DRY && !CONFIRM) {
-    console.log('Modo seguro: agrega --dry para simulación o --confirm-produccion para ejecutar.');
-    process.exit(2);
+  const actorArg = (() => {
+    const pref = '--actor=';
+    const arg = process.argv.find((a) => a.startsWith(pref));
+    if (arg) return arg.slice(pref.length);
+    const i = process.argv.indexOf('--actor');
+    if (i >= 0 && process.argv[i + 1] && !process.argv[i + 1].startsWith('--')) return process.argv[i + 1];
+    return null;
+  })();
+  let actorId: string | null = null;
+  if (!DRY) {
+    if (!actorArg) {
+      console.log('Falta --actor <email> (quién ejecuta). Aborta para no crear archivos sin autor.');
+      process.exit(2);
+    }
+    const actor = await prisma.user.findFirst({ where: { email: actorArg }, select: { id: true } });
+    if (!actor) {
+      console.log(`Usuario no encontrado: ${actorArg}`);
+      process.exit(2);
+    }
+    actorId = actor.id;
   }
 
   const campaignSrc = join(uploadRoot, 'format-campaign.xlsx');
@@ -44,6 +61,7 @@ async function main() {
     select: {
       id: true,
       name: true,
+      notes: true,
       entity: true,
       organizationId: true,
       startsAt: true,
@@ -53,6 +71,11 @@ async function main() {
     },
   });
   for (const event of events) {
+    // Saltar eventos de demo por defecto
+    const seedTagged =
+      (event.name && /\[SEED_DEMO\]/i.test(event.name)) ||
+      (event.notes && /\[SEED_DEMO\]/i.test(event.notes));
+    if (!has('include-seed') && seedTagged) continue;
     const files = await prisma.eventFile.findMany({
       where: { eventId: event.id, deletedAt: null },
       select: { id: true, module: true },
@@ -90,7 +113,8 @@ async function main() {
             url: `/uploads/${excelPath.split('/').pop()}`,
             kind: 'excel',
             module: 'campaign',
-            updatedById: null,
+            createdById: actorId,
+            updatedById: actorId,
             sha256: createHash('sha256').update(buf).digest('hex'),
           },
         });
@@ -119,7 +143,8 @@ async function main() {
             url: `/uploads/${excelPath.split('/').pop()}`,
             kind: 'excel',
             module: 'finance',
-            updatedById: null,
+            createdById: actorId,
+            updatedById: actorId,
             sha256: createHash('sha256').update(buf).digest('hex'),
           },
         });
