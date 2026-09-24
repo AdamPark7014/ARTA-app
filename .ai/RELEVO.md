@@ -98,6 +98,24 @@ encima del valor ya impreso (se veía doble) y contradecía lo acordado.
   desde `campaign-sheet-template.ts`-style, abrirlo en `SheetEditor`, PDF por
   `/uploads/:id/pdf`.
 
+### Tercera vuelta: campos que crecen, Excel editable, Catering y Mantenimiento con campos (24-09, 08:45)
+Adam, con captura de «Anticipos y pagos» aún visible: «deberías poder ampliar los campos,
+y más que palomitas colocar los campos necesarios; lo mismo con los Excel, les falta
+accesibilidad a la edición».
+- **Bug del filtro**: el PDF base que registra el alta es un `EventFile` del formato, así
+  que `files: { some: {} }` hacía visibles todos. Ahora cuenta solo adjuntos con autor
+  (`createdById` no nulo) y no borrados.
+- **Campos que crecen**: `GrowingText` (textarea de una línea que se estira) para todo
+  campo de texto en la hoja y en «Lista»; Enter no parte la línea, Shift+Enter sí.
+- **Catering y Mantenimiento** pasan al catálogo v2 con campos y tablas (ya no son listas
+  de casillas); fuera del seed legado. El script de upgrade los migra igual que al resto.
+- **Excel**: la Corrida abre en `SheetEditor` (variant `finance`) para quien puede editar,
+  guardando por celdas y con «Salir en PDF»; la Campaña abre ya en modo editar sin pedir
+  «Ver / Editar». Celdas más altas (`padding 0.5rem`) y hoja hasta 72 vh.
+  Ojo: esto revierte «no editar la corrida desde la página» de la junta del 11-09; manda
+  lo que Adam pidió el 24-09.
+- Verde: tsc api/web/seed/scripts; jest **229/229**.
+
 ## A medias
 
 1. **Revisión visual con sesión real en producción**: Adam abre un evento (ANDRES PARRA,

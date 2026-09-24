@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useRef } from 'react';
 import { AttachmentField, TableField } from '@/components/events/ChecklistFieldControls';
 import {
   NO_LABEL,
@@ -113,7 +114,7 @@ export function FormatSheet({
                   style={{ gridColumn: `span ${Math.min(12, Math.max(2, item.cols ?? 6))}` }}
                 >
                   <span className="fsheet__lbl">{item.label}</span>
-                  <ValueInput item={item} readOnly={readOnly} onPatch={patch(section, item)} ariaLabel={item.label} />
+                  <ValueInput item={item} readOnly={readOnly} onPatch={patch(section, item)} ariaLabel={item.label} compact />
                 </label>
               ))}
             </div>
@@ -243,11 +244,14 @@ function ValueInput({
   readOnly,
   onPatch,
   ariaLabel,
+  compact = false,
 }: {
   item: ChecklistItem;
   readOnly: boolean;
   onPatch: (p: Partial<ChecklistItem>) => void;
   ariaLabel: string;
+  /** En el encabezado: una línea fija. */
+  compact?: boolean;
 }) {
   const value = item.value === null || item.value === undefined ? '' : String(item.value);
   if (item.type === 'select') {
@@ -269,6 +273,19 @@ function ValueInput({
     );
   }
   const type = item.type === 'number' || item.type === 'date' || item.type === 'time' ? item.type : 'text';
+  if (type === 'text' && !compact) {
+    // Un dato de texto crece con lo que se escribe: nada se corta ni se esconde.
+    return (
+      <GrowingText
+        className="fsheet__in fsheet__in--text"
+        value={value}
+        disabled={readOnly}
+        placeholder={readOnly ? '' : item.placeholder || ''}
+        ariaLabel={ariaLabel}
+        onChange={(v) => onPatch({ value: v })}
+      />
+    );
+  }
   return (
     <input
       className={`fsheet__in fsheet__in--${type}`}
@@ -282,6 +299,49 @@ function ValueInput({
           value: type === 'number' ? (e.target.value === '' ? null : Number(e.target.value)) : e.target.value,
         })
       }
+    />
+  );
+}
+
+/** Textarea de una línea que crece sola con el contenido (y encoge al borrar). */
+export function GrowingText({
+  className,
+  value,
+  disabled,
+  placeholder,
+  ariaLabel,
+  onChange,
+  minRows = 1,
+}: {
+  className?: string;
+  value: string;
+  disabled?: boolean;
+  placeholder?: string;
+  ariaLabel?: string;
+  onChange: (value: string) => void;
+  minRows?: number;
+}) {
+  const ref = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${Math.min(el.scrollHeight, 480)}px`;
+  }, [value]);
+  return (
+    <textarea
+      ref={ref}
+      className={className}
+      rows={minRows}
+      disabled={disabled}
+      value={value}
+      placeholder={placeholder}
+      aria-label={ariaLabel}
+      onChange={(e) => onChange(e.target.value)}
+      onKeyDown={(e) => {
+        // Enter no parte la línea en un dato corto; Shift+Enter sí.
+        if (e.key === 'Enter' && !e.shiftKey && minRows === 1) e.preventDefault();
+      }}
     />
   );
 }

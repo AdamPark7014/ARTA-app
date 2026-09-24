@@ -71,6 +71,13 @@
   font-style: normal;
 }
 
+.shell .hub-field textarea.hub-field__grow {
+  min-height: 2.6rem;
+  overflow: hidden;
+  resize: none;
+  line-height: 1.45;
+}
+
 .hub-field__opt {
   color: var(--muted);
   font-size: 0.74rem;

@@ -536,6 +536,111 @@ export const STANDARD_FORMATS: StandardFormat[] = [
       },
     ),
   },
+
+  /*
+   * Los dos siguientes no vienen de Drive: son formatos del sistema que ya
+   * existían como listas de casillas. Adam (24-09): «más que palomitas,
+   * colocar los campos necesarios». Se les da la misma forma de documento.
+   */
+  {
+    key: 'CATERING',
+    name: 'Catering y Camerinos',
+    description: 'Proveedor, menú, horarios de servicio y camerinos',
+    entities: [],
+    schema: schema(
+      header(),
+      {
+        id: 'proveedor',
+        title: 'Catering',
+        items: [
+          text('proveedor', 'Proveedor de catering'),
+          text('contacto', 'Contacto del proveedor'),
+          number('personas', 'Personas a atender'),
+          longtext('menu', 'Menú confirmado'),
+          longtext('restricciones', 'Restricciones dietéticas', { optional: true }),
+        ],
+      },
+      {
+        id: 'horarios',
+        title: 'Horarios de servicio',
+        items: [
+          table('horarios', 'Horarios de servicio', [
+            col('hora', 'Hora', { type: 'time', width: 1 }),
+            col('servicio', 'Servicio', { width: 2 }),
+            col('personas', 'Personas', { type: 'number', width: 1 }),
+            col('lugar', 'Lugar', { width: 2 }),
+          ]),
+        ],
+      },
+      {
+        id: 'camerinos',
+        title: 'Camerinos',
+        items: [
+          table('camerinos', 'Camerinos', [
+            col('camerino', 'Camerino', { width: 1 }),
+            col('para', 'Para quién', { width: 2 }),
+            col('medidas', 'Medidas', { width: 1 }),
+            col('equipamiento', 'Equipamiento', { width: 2 }),
+            col('listo', 'Listo', { width: 1 }),
+          ]),
+          longtext('observaciones', 'Observaciones', { optional: true }),
+        ],
+      },
+    ),
+  },
+
+  {
+    key: 'MANTENIMIENTO',
+    name: 'Mantenimiento (Auditorio)',
+    description: 'Inspección del venue, hallazgos, reparaciones e inventario técnico',
+    entities: ['EXPLANADA'],
+    schema: schema(
+      {
+        id: HEADER_SECTION_ID,
+        title: 'Datos',
+        layout: 'header',
+        items: [
+          text('evento', 'Evento', { bind: 'event.name', cols: 6 }),
+          date('fecha_inspeccion', 'Fecha de inspección', { cols: 3 }),
+          text('responsable', 'Responsable', { cols: 3 }),
+        ],
+      },
+      {
+        id: 'hallazgos',
+        title: 'Inspección del venue',
+        items: [
+          table('hallazgos', 'Hallazgos', [
+            col('area', 'Área', { width: 1 }),
+            col('hallazgo', 'Hallazgo', { width: 3 }),
+            col('prioridad', 'Prioridad', { width: 1 }),
+            col('estado', 'Estado', { width: 1 }),
+          ]),
+        ],
+      },
+      {
+        id: 'inventario',
+        title: 'Inventario técnico',
+        items: [
+          table('inventario', 'Inventario técnico', [
+            col('equipo', 'Equipo', { width: 2 }),
+            col('cantidad', 'Cantidad', { type: 'number', width: 1 }),
+            col('estado', 'Estado', { width: 1 }),
+            col('observacion', 'Observación', { width: 2 }),
+          ]),
+        ],
+      },
+      checks('cierre', 'Cierre', [
+        ['inspeccion', 'Inspección del venue realizada'],
+        ['reparaciones', 'Reparaciones atendidas'],
+        ['inventario_ok', 'Inventario técnico revisado'],
+      ]),
+      {
+        id: 'observaciones',
+        title: 'Observaciones',
+        items: [longtext('observaciones', 'Observaciones', { optional: true })],
+      },
+    ),
+  },
 ];
 
 /**

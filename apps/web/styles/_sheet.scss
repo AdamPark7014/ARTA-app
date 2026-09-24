@@ -64,6 +64,13 @@
   background: color-mix(in srgb, var(--accent) 7%, #fff) !important;
 }
 
+/* Texto de una línea que crece: sin barra de scroll ni asa de redimensionar. */
+.shell .fsheet textarea.fsheet__in--text {
+  overflow: hidden;
+  resize: none;
+  min-height: 1.6em;
+}
+
 .shell .fsheet input::placeholder,
 .shell .fsheet textarea::placeholder {
   color: #b4b4bc;

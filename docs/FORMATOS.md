@@ -20,6 +20,14 @@ Excel, editarlo fuera y volverlo a subir.
 | CREACIÓN BOLETERA.docx | Módulo **Boletera** del evento (`lib/boletera-pdf.ts`) | Ya existía y reproduce el machote; la plantilla-checklist `BOLETERA` se retira |
 | ORDEN DE COMPRA.xlsx (dos copias, misma plantilla) | Módulo **Órdenes de compra** (`lib/po-pdf.ts`) | Ya existía con el machote; la plantilla-checklist `ORDEN_COMPRA` se retira |
 
+Además, dos formatos que no vienen de Drive pero ya existían en el sistema como
+listas de casillas se rehicieron con campos de verdad (Adam, 24-09: «más que
+palomitas, colocar los campos necesarios»): **Catering y Camerinos**
+(`CATERING`: proveedor, contacto, personas, menú, restricciones, horarios de
+servicio en tabla, camerinos en tabla) y **Mantenimiento (Auditorio)**
+(`MANTENIMIENTO`, solo Explanada: fecha de inspección, responsable, hallazgos e
+inventario técnico en tabla, cierre).
+
 Los «BOTÓN» del Word (rider, layout, party A/B, confirmaciones, artes) eran un
 archivo aparte. Ahora son un **adjunto del propio formato** (se sube desde el
 campo o se elige entre los adjuntos del formato) o una **tabla** que se llena
@@ -61,8 +69,14 @@ con su nombre o como link clicable.
 ## Qué se ve en pantalla
 
 Al abrir un formato aparece la **hoja** (fondo blanco, marca, mismo orden que el
-PDF) y se escribe directo: texto en su línea, casillas, SÍ/NO, tablas renglón
-por renglón, adjuntos desde el propio campo, firmas al pie. «Ampliar a pantalla
+PDF) y se escribe directo: texto en su línea (la línea crece con lo que se
+escribe), casillas, SÍ/NO, tablas renglón por renglón, adjuntos desde el propio
+campo, firmas al pie.
+
+Los **Excel** del evento (Corrida y Campaña) abren directamente en el editor de
+hoja para quien puede editar: celdas amplias, barra de fórmulas, filas y
+columnas, «Salir en PDF». Antes la corrida solo se consultaba y la campaña pedía
+«Ver / Editar»; Adam (24-09): «a los Excel les falta accesibilidad a la edición». «Ampliar a pantalla
 completa» la lleva a toda la ventana. «Guardar y generar PDF» imprime la salida;
 «Ver el PDF» la enseña. El modo «Lista» es la misma captura en formulario
 compacto, útil en pantallas chicas.

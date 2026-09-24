@@ -102,6 +102,13 @@ export function EventCampaignPanel({
     [event.files],
   );
   const sheet = campaignFiles.find(isSheet) || null;
+
+  // El Excel de campaña abre ya en el editor (Adam, 24-09: «les falta
+  // accesibilidad a la edición»); antes había que pedir «Ver / Editar».
+  useEffect(() => {
+    if (sheet && sheetMode === null) setSheetMode(canEdit && !closed ? 'edit' : 'view');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sheet?.id]);
   const others = campaignFiles.filter((f) => f.id !== sheet?.id);
 
   function patch(i: number, next: Partial<CampaignConceptRow>) {

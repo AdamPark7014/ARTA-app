@@ -4934,7 +4934,7 @@ body.site-nav-open {
 /* Hoja de cálculo — look claro tipo Excel, no tabla oscura */
 .sheet-wrap {
   overflow: auto;
-  max-height: 62vh;
+  max-height: 72vh;
   border: 1px solid #b8c2ce;
   border-radius: 6px;
   background: #ffffff;
@@ -5007,7 +5007,7 @@ body.site-nav-open {
 .sheet__cell {
   width: 100% !important;
   min-width: 104px;
-  padding: 0.32rem 0.45rem !important;
+  padding: 0.5rem 0.55rem !important;
   border: 0 !important;
   border-radius: 0 !important;
   background: transparent !important;

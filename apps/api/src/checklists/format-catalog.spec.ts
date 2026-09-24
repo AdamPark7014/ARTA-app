@@ -13,10 +13,19 @@ const STABLE_IDS: Record<string, string[]> = {
 };
 
 describe('format-catalog', () => {
-  it('trae los siete formatos de la carpeta del cliente, con versión', () => {
-    expect(STANDARD_FORMATS.map((f) => f.key).sort()).toEqual(
-      ['ARTES_SHOWS', 'EVENTO_GENERAL', 'HOSPEDAJE', 'PENDONES', 'PRODUCCION', 'RUEDA_PRENSA', 'TRANSPORTACION'],
-    );
+  it('trae los siete formatos de la carpeta del cliente más Catering y Mantenimiento, con versión', () => {
+    expect(STANDARD_FORMATS.map((f) => f.key).sort()).toEqual([
+      'ARTES_SHOWS',
+      'CATERING',
+      'EVENTO_GENERAL',
+      'HOSPEDAJE',
+      'MANTENIMIENTO',
+      'PENDONES',
+      'PRODUCCION',
+      'RUEDA_PRENSA',
+      'TRANSPORTACION',
+    ]);
+    expect(standardFormat('MANTENIMIENTO')!.entities).toEqual(['EXPLANADA']);
     for (const f of STANDARD_FORMATS) {
       expect(storedFormatVersion(f.schema)).toBe(STANDARD_FORMAT_VERSION);
       expect(f.schema.sections[f.schema.sections.length - 1].id).toBe(SIGNATURES_SECTION_ID);

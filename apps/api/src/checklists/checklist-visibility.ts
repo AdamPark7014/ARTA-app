@@ -17,6 +17,8 @@ export const VISIBLE_CHECKLIST_WHERE: Prisma.ChecklistInstanceWhereInput = {
     { status: { not: 'DRAFT' } },
     { deliveredAt: { not: null } },
     { authorizedAt: { not: null } },
-    { files: { some: {} } },
+    // El PDF base que registra el alta no tiene autor; un adjunto de una
+    // persona sí. Sin esta distinción todos los formatos «tenían archivos».
+    { files: { some: { createdById: { not: null }, deletedAt: null } } },
   ],
 };

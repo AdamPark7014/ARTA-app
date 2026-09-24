@@ -2,7 +2,7 @@
 
 import { FileViewer, PdfEditor } from '@/components/files/lazy';
 import { ExpandBox } from '@/components/ui/ExpandBox';
-import { FormatSheet } from '@/components/events/FormatSheet';
+import { FormatSheet, GrowingText } from '@/components/events/FormatSheet';
 import { useEffect, useMemo, useState } from 'react';
 import { SignaturePad } from '@/components/ui/SignaturePad';
 import { createEventFile } from '@/lib/file-save';
@@ -203,14 +203,15 @@ function FieldControl({
       );
     }
     default:
-      // `text` y cualquier tipo desconocido: una línea.
+      // `text` y cualquier tipo desconocido: una línea que crece con lo escrito.
       return (
-        <input
-          type="text"
+        <GrowingText
+          className="hub-field__grow"
           disabled={readOnly}
-          value={value}
+          value={String(value)}
           placeholder={item.placeholder || 'Respuesta…'}
-          onChange={(e) => onPatch({ value: e.target.value })}
+          ariaLabel={item.label}
+          onChange={(v) => onPatch({ value: v })}
         />
       );
   }

@@ -251,9 +251,9 @@ const USER_VIEWS: Record<
 };
 
 /**
- * Plantillas que NO vienen de un formato del cliente. Las siete estándar
- * (Evento general, Producción, Hospedaje, Transportación, Rueda de prensa,
- * Artes, Pendones) viven en `src/checklists/format-catalog.ts`.
+ * Plantillas retiradas. Las nueve estándar (Evento general, Producción,
+ * Hospedaje, Transportación, Rueda de prensa, Artes, Pendones, Catering y
+ * Mantenimiento) viven en `src/checklists/format-catalog.ts`.
  *
  * `active: false` = retirada: duplica un módulo del sistema (OC, boletera,
  * corrida, campaña, anticipos). Se conserva para que los formatos ya creados
@@ -279,22 +279,6 @@ const LEGACY_TEMPLATES: Array<{
           'Pendiente autorización',
           'Autorizada',
           'Pagada / comprobante',
-        ]),
-      ],
-    },
-  },
-  {
-    key: 'CATERING',
-    name: 'Catering y Camerinos',
-    description: 'Hospitality backstage',
-    entities: [],
-    schema: {
-      sections: [
-        section('cat', 'Catering / camerinos', [
-          'Menú confirmado',
-          'Camerinos listos',
-          'Restricciones dietéticas',
-          'Horarios servicio',
         ]),
       ],
     },
@@ -351,21 +335,6 @@ const LEGACY_TEMPLATES: Array<{
           'Anticipos solicitados',
           'Comprobantes subidos',
           'Conciliación',
-        ]),
-      ],
-    },
-  },
-  {
-    key: 'MANTENIMIENTO',
-    name: 'Mantenimiento (Auditorio)',
-    description: 'Mantenimiento Explanada / Auditorio Arema',
-    entities: ['EXPLANADA'],
-    schema: {
-      sections: [
-        section('mant', 'Mantenimiento', [
-          'Inspección venue',
-          'Reparaciones',
-          'Inventario técnico',
         ]),
       ],
     },

@@ -1,18 +1,20 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { FileViewer } from '@/components/files/lazy';
+import { FileViewer, SheetEditor } from '@/components/files/lazy';
 import { EmptyLite, FileRow, SectionHead } from '@/components/ui/Lite';
 import { api } from '@/lib/api';
+import { patchEventFileCells, replaceEventFile } from '@/lib/file-save';
 import { FINANCE_FILE_MODULE, type EventFile, type EventPanelProps } from './event-detail.types';
 
 /**
  * Corrida financiera.
  *
- * Junta 11-09-2026: «Quitar la nueva hoja de corridas de Excel, porque solo
- * debe haber 1 corrida» y «no editar desde la página». Así que aquí ya no se
- * genera ninguna hoja ni se edita nada: el Excel de la corrida se sube, se
- * consulta embebido, se descarga y, cuando cambia, se reemplaza (con versión).
+ * Junta 11-09-2026: «solo debe haber 1 corrida»; aquí no se genera ninguna
+ * hoja: el Excel se sube una vez y se reemplaza con versión. Adam (24-09): «a
+ * los Excel les falta accesibilidad a la edición», así que la corrida se abre
+ * **en el editor de hoja**, en sitio, para quien puede editar; el PDF sale
+ * desde ahí. Ver solo lectura para el resto.
  */
 
 function isSheet(f: EventFile) {
@@ -99,7 +101,10 @@ export function EventFinancePanel({
 
   return (
     <div className="sx-stack">
-      <SectionHead title="Corrida" sub="Una sola corrida por evento. Aquí se consulta; se trabaja en Excel." />
+      <SectionHead
+        title="Corrida"
+        sub={editable ? 'Una sola corrida por evento. Se edita aquí, como Excel, y sale en PDF.' : 'Una sola corrida por evento.'}
+      />
 
       {!corrida ? (
         <div className="surface">
@@ -131,12 +136,28 @@ export function EventFinancePanel({
 
           {open ? (
             <div className="surface finance-viewer">
-              <FileViewer
-                url={corrida.url}
-                fileName={corrida.fileName}
-                kind={corrida.kind}
-                cacheKey={corrida.updatedAt || corrida.createdAt}
-              />
+              {editable && isSheet(corrida) ? (
+                <SheetEditor
+                  key={`${corrida.id}-${corrida.version ?? 1}`}
+                  url={corrida.url}
+                  fileName={corrida.fileName}
+                  fileId={corrida.id}
+                  canEdit
+                  variant="finance"
+                  onSave={replaceEventFile(corrida.id)}
+                  onSaveCells={patchEventFileCells(corrida.id)}
+                  panelEditable={corrida.panelEditable !== false}
+                  blockReason={corrida.panelBlockReason}
+                  onSaved={onChanged}
+                />
+              ) : (
+                <FileViewer
+                  url={corrida.url}
+                  fileName={corrida.fileName}
+                  kind={corrida.kind}
+                  cacheKey={corrida.updatedAt || corrida.createdAt}
+                />
+              )}
             </div>
           ) : null}
         </>
