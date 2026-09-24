@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import * as XLSX from 'xlsx';
+import { SheetEditor } from './SheetEditor';
 import { ExpandBox } from '@/components/ui/ExpandBox';
 import { fixMojibake } from '@/lib/text';
 
@@ -153,27 +154,8 @@ export function FileViewer({ url, fileName, kind, cacheKey, fileId }: Props) {
   }
 
   if (isExcel) {
-    return (
-      <ExpandBox title={displayName}>
-      <div className="stack">
-        {loading ? <p className="muted">Cargando hoja…</p> : null}
-        {error ? (
-          <div className="form-error" role="alert">
-            {error}
-          </div>
-        ) : null}
-        {sheetHtml ? (
-          <div
-            className="docview docview--sheet panel-body"
-            dangerouslySetInnerHTML={{ __html: sheetHtml }}
-          />
-        ) : null}
-        <a className="btn ghost btn-sm" href={url} target="_blank" rel="noreferrer">
-          Descargar {displayName}
-        </a>
-      </div>
-      </ExpandBox>
-    );
+    // Usa el mismo renderizador que el editor, en modo solo lectura.
+    return <SheetEditor url={inlineUrl} fileName={displayName} canEdit={false} onSave={async () => undefined} />;
   }
 
   return (
