@@ -1302,7 +1302,7 @@ export function SheetEditor({
                           <td key={c} className={isSel ? 'sheet__td--sel' : undefined} colSpan={colSpan}>
                             <input
                               className="sheet__cell"
-                              value={isSel ? (grid[r]?.[c] ?? '') : row[c]}
+                              value={row[c]}
                               readOnly={!canEdit}
                               aria-label={`Celda ${colLabel(c)}${r + 1}`}
                               onFocus={() => setSel({ r, c })}
