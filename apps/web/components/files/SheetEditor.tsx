@@ -211,20 +211,27 @@ export function SheetEditor({
           104;
         px.push(w);
       }
-      // widen by visible content in first rows; never clip numbers
+    // widen by visible content in first rows; never clip numbers
       const sampleRows = Math.min(30, rows.length);
-      for (let c = 0; c < px.length; c += 1) {
+    for (let c = 0; c < px.length; c += 1) {
         let maxLen = 0;
         for (let r = 0; r < sampleRows; r += 1) {
-          const cell = rows[r]?.[c];
-          const len = cell == null ? 0 : String(cell).length;
+        const cell = rows[r]?.[c];
+        if (cell == null) continue;
+        const s = String(cell);
+        // Only auto-fit from numbers or short text (<= 24 chars). Long text should
+        // either wrap or visually spill into empty neighbours, not force wide columns.
+        const { v, t } = toCellValue(s);
+        const isNumeric = t === 'n';
+        const isShort = s.length <= 24;
+        if (isNumeric || isShort) {
+          const len = isNumeric ? String(v).length : s.length;
           if (len > maxLen) maxLen = len;
+        }
         }
         const contentW = Math.max(60, Math.min(640, Math.floor(maxLen * 7 + 16)));
         px[c] = Math.max(px[c] || 0, contentW);
       }
-      // Column A labels persist and are legible
-      if (px.length > 0) px[0] = Math.max(px[0], 420);
       setColPx(px);
       mergesRef.current =
         (((ws as XLSX.WorkSheet)['!merges'] as unknown) as Array<{
@@ -760,7 +767,7 @@ export function SheetEditor({
 
   function sumColumn(col: number) {
     let total = 0;
-    for (const row of grid) {
+    for (const row of displayGrid) {
       total += parseMoney(row[col] || '');
     }
     setMsg(`Suma columna ${colLabel(col)}: ${total.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })}`);
