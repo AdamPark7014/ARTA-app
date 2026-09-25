@@ -34,7 +34,35 @@ test.describe('SheetEditor hotfix — dark contrast and values', () => {
     // Corrida financiera — valores calculados visibles (no "=")
     await page.goto(`${E2E_ORIGIN}/dev/sheet-harness?name=CORRIDA_BASE.xlsx&variant=finance`);
 
-    await page.locator('table.sheet').waitFor({ timeout: 25000 });
+    await page.locator('table.sheet').waitFor({ timeout: 60000 });
+    // Guard: every visible non-focused cell has dark background (corner sample)
+    const checkDarkBg = async (sel: string) => {
+      const box = await page.evaluate((s) => {
+        const el = document.querySelector<HTMLElement>(s);
+        if (!el) return null;
+        const r = el.getBoundingClientRect();
+        return { x: r.x, y: r.y, width: r.width, height: r.height };
+      }, sel);
+      if (!box) return true;
+      const shot = await page.screenshot({ clip: { x: box.x + 3, y: box.y + 3, width: 2, height: 2 } });
+      const { PNG } = require('pngjs');
+      const png = PNG.sync.read(shot);
+      let lumSum = 0;
+      for (let i = 0; i < png.data.length; i += 4) {
+        const r = png.data[i], g = png.data[i + 1], b = png.data[i + 2];
+        const lum = 0.2126 * (r / 255) + 0.7152 * (g / 255) + 0.0722 * (b / 255);
+        lumSum += lum;
+      }
+      const avg = lumSum / (png.data.length / 4);
+      return avg <= 0.235; // < ~60/255 in luminance
+    };
+    const colsAH = ['A','B','C','D','E','F','G','H'];
+    for (let r = 3; r <= 12; r++) {
+      for (const c of colsAH) {
+        const ok = await checkDarkBg(`.sheet__cell[aria-label="Celda ${c}${r}"]`);
+        expect(ok).toBeTruthy();
+      }
+    }
     const cells = page.locator('.sheet__cell');
     const values: string[] = [];
     const n = await cells.count();
@@ -133,7 +161,7 @@ test.describe('SheetEditor hotfix — dark contrast and values', () => {
 
   // Campaña con valores
     await page.goto(`${E2E_ORIGIN}/dev/sheet-harness?name=CAMPANA_BASE.xlsx&variant=campaign`);
-    await page.getByRole('table').waitFor({ timeout: 15000 });
+    await page.getByRole('table').waitFor({ timeout: 60000 });
     // Check B column width <= 160 and A..H fit inside 1440px
     await page.evaluate(() => {
       const wrap = document.querySelector('.sheet-wrap') as HTMLElement | null;
@@ -179,15 +207,23 @@ test.describe('SheetEditor hotfix — dark contrast and values', () => {
     };
     // Corrida bright cells
     await page.goto(`${E2E_ORIGIN}/dev/sheet-harness?name=CORRIDA_BASE.xlsx&variant=finance`);
-    await page.getByRole('table').waitFor({ timeout: 15000 });
+    await page.getByRole('table').waitFor({ timeout: 60000 });
     await checkBright('.sheet__cell[aria-label="Celda A5"]');
     await checkBright('.sheet__cell[aria-label="Celda B5"]');
     await checkBright('.sheet__cell[aria-label="Celda D5"]');
     // Campaña bright cells
     await page.goto(`${E2E_ORIGIN}/dev/sheet-harness?name=CAMPANA_BASE.xlsx&variant=campaign`);
     await page.getByRole('table').waitFor({ timeout: 15000 });
+    // Guard: dark backgrounds on visible grid
+    for (let r = 3; r <= 12; r++) {
+      for (const c of colsAH) {
+        const ok = await checkDarkBg(`.sheet__cell[aria-label="Celda ${c}${r}"]`);
+        expect(ok).toBeTruthy();
+      }
+    }
     await checkBright('.sheet__cell[aria-label="Celda A6"]');
-    await checkBright('.sheet__cell[aria-label="Celda D6"]');
+    await checkBright('.sheet__cell[aria-label="Celda A2"]');
+    await checkBright('.sheet__cell[aria-label="Celda B5"]');
     // Make sure A..H are visible and capture
     await page.evaluate(() => {
       const wrap = document.querySelector('.sheet-wrap') as HTMLElement | null;

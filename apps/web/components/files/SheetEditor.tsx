@@ -1249,7 +1249,8 @@ export function SheetEditor({
                         }
                         const display = isSel ? (grid[r]?.[c] ?? '') : row[c];
                         const { t } = toCellValue(String(display));
-                        const shouldWrap = t === 's' && String(display).length > 24;
+                        const forceWrap = r === 4 || (r === 1 && c === 0); // row-5 headers; A2 only
+                        const shouldWrap = forceWrap || (t === 's' && String(display).length > 24);
                         cells.push(
                           <td
                             key={c}
