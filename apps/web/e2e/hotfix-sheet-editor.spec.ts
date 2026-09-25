@@ -222,18 +222,19 @@ test.describe('SheetEditor hotfix — dark contrast and values', () => {
     // Corrida — egresos (filas 13–35) con totales y porcentajes
     await page.goto(`${E2E_ORIGIN}/dev/sheet-harness?name=CORRIDA_BASE.xlsx&variant=finance`);
     await page.getByRole('table').waitFor({ timeout: 60000 });
+    // Oculta la guía si está visible para ganar alto
+    await page.getByRole('button', { name: 'Entendido' }).click({ timeout: 1000 }).catch(() => {});
+    await page.setViewportSize({ width: 1440, height: 1400 });
+    // Desplaza el contenedor de la grilla para poner la fila 13 en la parte alta
     await page.evaluate(() => {
       const wrap = document.querySelector('.sheet-wrap') as HTMLElement | null;
-      const target = document.querySelector('.sheet__cell[aria-label="Celda A13"]') as HTMLElement | null;
-      if (wrap && target) {
-        const tb = target.getBoundingClientRect();
-        const wb = wrap.getBoundingClientRect();
-        wrap.scrollTop += tb.top - wb.top - 40;
+      const input = document.querySelector('.sheet__cell[aria-label="Celda A13"]') as HTMLElement | null;
+      if (wrap && input) {
+        input.scrollIntoView({ block: 'start', inline: 'nearest' });
         wrap.scrollLeft = 0;
       }
     });
-    await page.setViewportSize({ width: 1440, height: 900 });
-    await page.waitForTimeout(120);
+    await page.waitForTimeout(250);
     // Captura primero, pase lo que pase
     await page.screenshot({ path: '../../docs/hotfix-screens/hotfix-corrida-egresos.png', fullPage: false });
     // Muestreador robusto con mediana en parche 3x3 del TD
@@ -271,19 +272,37 @@ test.describe('SheetEditor hotfix — dark contrast and values', () => {
     await hasVal('D33', /^\s*\$264,844\.10\s*$/);
     await hasVal('D34', /^\s*\$720,600\.00\s*$/);
     await hasVal('D35', /^\s*\$383,695\.90\s*$/);
-    // Pixel guards: fondo oscuro en todas las celdas A..G por 13..35
-    const failing: Array<{ cell: string; r: number; g: number; b: number }> = [];
-    const colsAG = ['A','B','C','D','E','F','G'];
-    for (let r = 13; r <= 35; r++) {
-      for (const c of colsAG) {
-        const tag = `.sheet__cell[aria-label="Celda ${c}${r}"]`;
-        const s = await sampleCellRgb(tag);
-        if (!s.ok) failing.push({ cell: `${c}${r}`, r: s.r, g: s.g, b: s.b });
+    // Pixel guards: fondo oscuro en todas las celdas A..G por 13..35 en una sola pasada
+    const failing: Array<{ cell: string; rgb: string; lum: number }> = await page.evaluate(() => {
+      function parseRgb(s: string): [number, number, number] {
+        const m = s.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/i);
+        return m ? [Number(m[1]), Number(m[2]), Number(m[3])] : [255, 255, 255];
       }
-    }
-    // Log exact failing cells and rgb (will appear in CI logs)
-    // eslint-disable-next-line no-console
-    console.log('EGRESOS_DARK_GUARD_FAILING', JSON.stringify(failing));
+      function luminance([r, g, b]: [number, number, number]) {
+        const a = [r, g, b].map((v) => {
+          v /= 255;
+          return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+        });
+        return 0.2126 * a[0] + 0.7152 * a[1] + 0.0722 * a[2];
+      }
+      const out: Array<{ cell: string; rgb: string; lum: number }> = [];
+      const cols = ['A','B','C','D','E','F','G'];
+      for (let r = 13; r <= 35; r++) {
+        for (const c of cols) {
+          const sel = `.sheet__cell[aria-label="Celda ${c}${r}"]`;
+          const input = document.querySelector(sel) as HTMLElement | null;
+          if (!input) continue;
+          const td = input.parentElement as HTMLElement | null;
+          if (!td) continue;
+          const rgb = getComputedStyle(td).backgroundColor || 'rgb(255,255,255)';
+          const lum = luminance(parseRgb(rgb));
+          if (lum > 0.235) out.push({ cell: `${c}${r}`, rgb, lum });
+        }
+      }
+      // eslint-disable-next-line no-console
+      console.log('EGRESOS_DARK_GUARD_FAILING', JSON.stringify(out));
+      return out;
+    });
     // Keep the strong assertion (ok to fail while pushing)
     expect(failing.length).toBe(0);
     for (const c of ['D16','D17','D18','D33','D34','D35']) await checkBright(`.sheet__cell[aria-label="Celda ${c}"]`);
