@@ -230,7 +230,14 @@ test.describe('Stack real: Excel + Word con archivos reales', () => {
   await page.getByRole('button', { name: 'Cerrar' }).first().click();
 
   // Corrida — editor assertions for the same cells
-  await corrRow.getByRole('button', { name: /^Editar$/ }).click();
+  {
+    const editBtn = corrRow.getByRole('button', { name: /^Editar$/ });
+    if (await editBtn.isVisible().catch(() => false)) {
+      await editBtn.click();
+    } else {
+      await corrRow.getByRole('button', { name: /Ver \/ Editar/ }).click();
+    }
+  }
   await expect(page.locator('.surface .sheet-editor').first()).toBeVisible();
   await expect(page.getByLabel('Celda D13', { exact: true })).toHaveValue(/\$?\s*720,600\.00/);
   await expect(page.getByLabel('Celda D16', { exact: true })).toHaveValue(/\$?\s*14,412\.00/);
