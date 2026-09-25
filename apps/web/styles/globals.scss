@@ -5056,10 +5056,22 @@ body.site-nav-open {
   overflow: visible;
   pointer-events: none;
   color: #1a2330;
-  z-index: 0;
+  z-index: 2;
 }
 .sheet__td--sel .sheet__display {
   display: none;
+}
+
+/* Solo una capa pinta texto cuando NO hay foco (evita ghost/double) */
+.sheet td .sheet__cell:not(:focus) {
+  color: transparent !important;
+  -webkit-text-fill-color: transparent !important;
+}
+.sheet__td--sel .sheet__cell,
+.sheet .sheet__cell:focus {
+  /* visibilidad restablecida en celda activa */
+  color: #111111 !important;
+  -webkit-text-fill-color: #111111 !important;
 }
 
 /* Creación visual de archivos por sección */

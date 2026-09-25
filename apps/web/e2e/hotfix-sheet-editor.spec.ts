@@ -91,6 +91,16 @@ test.describe('SheetEditor hotfix — dark contrast and values', () => {
     // Espera a que recalculen algunos dependientes
     await expect(page.locator('tbody tr:nth-of-type(6) td:nth-of-type(4) .sheet__display')).toContainText('18,000.00', { timeout: 5000 });
     await expect(page.locator('tbody tr:nth-of-type(6) td:nth-of-type(5) .sheet__display')).toContainText('16,200.00', { timeout: 5000 });
+    // A-column labels still visible
+    await expect(page.locator('tbody tr:nth-of-type(3) td:nth-of-type(1)')).toContainText('INGRESOS');
+    await expect(page.locator('tbody tr:nth-of-type(5) td:nth-of-type(1)')).toContainText('VIP');
+    await expect(page.locator('tbody tr:nth-of-type(6) td:nth-of-type(1)')).toContainText('Preferente');
+    await expect(page.locator('tbody tr:nth-of-type(7) td:nth-of-type(1)')).toContainText('Bronce');
+    // Overflow width assertion: B2 spans beyond column B when neighbors empty
+    const b2Overlay = page.locator('tbody tr:nth-of-type(2) td:nth-of-type(2) .sheet__display');
+    const bHeader = page.locator('thead th').nth(2); // 0: corner, 1:A, 2:B
+    const [wOverlay, wB] = await Promise.all([b2Overlay.boundingBox(), bHeader.boundingBox()]);
+    expect((wOverlay?.width || 0) > (wB?.width || 0)).toBeTruthy();
     await page.screenshot({ path: '../../docs/hotfix-screens/hotfix-recalc.png', fullPage: false });
 
     // Toolbar / tabs contraste >= 3:1

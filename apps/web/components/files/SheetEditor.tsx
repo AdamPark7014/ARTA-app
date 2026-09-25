@@ -1068,13 +1068,22 @@ export function SheetEditor({
                     </th>
                     {row.map((cell, c) => {
                       const isSel = sel?.r === r && sel?.c === c;
-                      const nextEmpty = (row[c + 1] ?? '').toString().trim() === '';
+                      // Calcular overflow a través de vecinos vacíos consecutivos
+                      let nextEmpty = false;
+                      let extra = 0;
+                      for (let n = c + 1; n < row.length; n += 1) {
+                        const empty = (row[n] ?? '').toString().trim() === '';
+                        const mergedStartsHere = mergesRef.current.some((m) => m.s.r === r && m.s.c === n);
+                        if (!empty || mergedStartsHere) break;
+                        nextEmpty = true;
+                        extra += colPx[n] || 104;
+                      }
                       const merge = mergesRef.current.find((m) => m.s.r === r && m.s.c === c);
                       let displayWidth = colPx[c] || 104;
                       if (merge) {
                         for (let i = merge.s.c + 1; i <= merge.e.c; i += 1) displayWidth += (colPx[i] || 104);
                       } else if (nextEmpty) {
-                        displayWidth += colPx[c + 1] || 104;
+                        displayWidth += extra;
                       }
                       return (
                         <td
