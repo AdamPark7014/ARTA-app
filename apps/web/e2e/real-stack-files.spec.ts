@@ -340,6 +340,8 @@ test.describe('Stack real: Excel + Word con archivos reales', () => {
     const bolPath = await importDocx('CREACION_BOLETERA.docx');
     const bolHtml = (await mammoth.convertToHtml({ buffer: fs.readFileSync(bolPath) })).value || '';
     expect(/BOLETERA/i.test(bolHtml)).toBeTruthy();
+  // Assert real table rendering preserved (not flattened)
+  await expect(page.locator('.docedit__table')).toBeVisible();
     await page.locator('.docedit-app').first().screenshot({ path: path.join(OUT_DIR, 'boletera.png'), animations: 'disabled' });
     await testInfo.attach('boletera.png', { path: path.join(OUT_DIR, 'boletera.png') });
 
