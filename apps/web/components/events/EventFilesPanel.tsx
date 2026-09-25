@@ -160,7 +160,12 @@ export function EventFilesPanel({
     setError('');
     try {
       const blocks = await pdfToBlocks(file.url);
-      if (!blocks.some((b) => b.text.trim())) {
+      if (
+        !blocks.some((b: any) =>
+          (b?.type === 'table' && Array.isArray((b as any).rows) && (b as any).rows.flat().some((s: any) => String(s || '').trim()))
+          || (typeof (b as any)?.text === 'string' && (b as any).text.trim())
+        )
+      ) {
         setError(`«${file.fileName}» no trae texto seleccionable (parece escaneado).`);
         return;
       }

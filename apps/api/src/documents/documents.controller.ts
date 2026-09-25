@@ -65,10 +65,51 @@ const DOC_INCLUDE = {
 /** .docx (HTML de mammoth) → bloques del editor embebido. */
 function htmlToBlocks(html: string): DocBlock[] {
   const blocks: DocBlock[] = [];
+  // 1) Tables → preserve as editable table blocks (rows/cols)
+  const tables: Array<{ start: number; end: number; html: string }> = [];
+  {
+    const tre = /<table[\s\S]*?<\/table>/gi;
+    let tm: RegExpExecArray | null;
+    while ((tm = tre.exec(html))) {
+      tables.push({ start: tm.index, end: tm.index + tm[0].length, html: tm[0] });
+    }
+  }
+  // Replace tables with placeholders to avoid re-parsing them as paragraphs
+  let htmlNoTables = html;
+  const placeholders: string[] = [];
+  tables.forEach((t, idx) => {
+    const token = `__DOC_TABLE_${idx}__`;
+    placeholders.push(token);
+    htmlNoTables = htmlNoTables.replace(t.html, `\n<p>${token}</p>\n`);
+    // Parse rows/cells
+    const rows: string[][] = [];
+    const rre = /<tr[\s\S]*?<\/tr>/gi;
+    let rm: RegExpExecArray | null;
+    while ((rm = rre.exec(t.html))) {
+      const rowHtml = rm[0];
+      const cells: string[] = [];
+      const cre = /<(td|th)[^>]*>([\s\S]*?)<\/\1>/gi;
+      let cm: RegExpExecArray | null;
+      while ((cm = cre.exec(rowHtml))) {
+        const text = (cm[2] || '')
+          .replace(/<[^>]+>/g, ' ')
+          .replace(/&nbsp;/g, ' ')
+          .replace(/&amp;/g, '&')
+          .replace(/&lt;/g, '<')
+          .replace(/&gt;/g, '>')
+          .replace(/\s+/g, ' ')
+          .trim();
+        cells.push(text);
+      }
+      if (cells.length) rows.push(cells);
+    }
+    blocks.push({ type: 'table', rows } as unknown as DocBlock);
+  });
+
   const re =
     /<(h1|h2|p|li)[^>]*>([\s\S]*?)<\/\1>|<hr\s*\/?>/gi;
   let m: RegExpExecArray | null;
-  while ((m = re.exec(html))) {
+  while ((m = re.exec(htmlNoTables))) {
     if (m[0].toLowerCase().startsWith('<hr')) {
       blocks.push({ type: 'divider', text: '' });
       continue;
@@ -82,6 +123,9 @@ function htmlToBlocks(html: string): DocBlock[] {
       .replace(/&gt;/g, '>')
       .trim();
     if (!text && tag !== 'p') continue;
+    // If this paragraph is a table placeholder, skip (already added as table)
+    const phIdx = placeholders.indexOf(text);
+    if (phIdx >= 0) continue;
     if (tag === 'h1') blocks.push({ type: 'h1', text });
     else if (tag === 'h2') blocks.push({ type: 'h2', text });
     else if (tag === 'li') blocks.push({ type: 'bullet', text });

@@ -7,8 +7,10 @@ import { RevisionHistory } from '@/components/ui/RevisionHistory';
 import { useSaveHotkey } from '@/lib/use-save-hotkey';
 import { useDirtyGuard } from '@/lib/use-dirty-guard';
 
-export type DocBlockType = 'h1' | 'h2' | 'p' | 'bullet' | 'divider';
-export type DocBlock = { type: DocBlockType; text: string };
+export type DocBlockType = 'h1' | 'h2' | 'p' | 'bullet' | 'divider' | 'table';
+export type DocTextBlock = { type: 'h1' | 'h2' | 'p' | 'bullet' | 'divider'; text: string };
+export type DocTableBlock = { type: 'table'; rows: string[][] };
+export type DocBlock = DocTextBlock | DocTableBlock;
 
 export type EventDocumentRow = {
   id: string;
@@ -30,7 +32,7 @@ type Props = {
   onClose: () => void;
 };
 
-const TYPE_LABEL: Record<DocBlockType, string> = {
+const TYPE_LABEL: Record<Exclude<DocBlockType, 'table'>, string> = {
   h1: 'Título',
   h2: 'Subtítulo',
   p: 'Párrafo',
@@ -38,7 +40,7 @@ const TYPE_LABEL: Record<DocBlockType, string> = {
   divider: 'Separador',
 };
 
-const TYPE_HINT: Record<DocBlockType, string> = {
+const TYPE_HINT: Record<Exclude<DocBlockType, 'table'>, string> = {
   h1: 'T',
   h2: 'S',
   p: '¶',
@@ -46,7 +48,7 @@ const TYPE_HINT: Record<DocBlockType, string> = {
   divider: '—',
 };
 
-const ADDABLE: DocBlockType[] = ['h1', 'h2', 'p', 'bullet', 'divider'];
+const ADDABLE: Exclude<DocBlockType, 'table'>[] = ['h1', 'h2', 'p', 'bullet', 'divider'];
 
 function formatWhen(iso: string): string {
   try {
@@ -67,10 +69,14 @@ export function normalizeBlocks(raw: unknown): DocBlock[] {
   const out = raw
     .map((b) => {
       const block = b as Partial<DocBlock>;
-      const type = (ADDABLE as string[]).includes(block?.type as string)
-        ? (block!.type as DocBlockType)
-        : 'p';
-      return { type, text: typeof block?.text === 'string' ? block.text : '' };
+      if (block?.type === 'table' && Array.isArray((block as any).rows)) {
+        const rows = ((block as any).rows as unknown[][])
+          .slice(0, 200)
+          .map((r) => r.map((c) => (c == null ? '' : String(c)).slice(0, 2000)));
+        return { type: 'table', rows } as DocTableBlock;
+      }
+      const type = (ADDABLE as string[]).includes(block?.type as string) ? (block!.type as DocBlockType) : 'p';
+      return { type, text: typeof (block as any)?.text === 'string' ? (block as any).text : '' } as DocTextBlock;
     })
     .filter((b): b is DocBlock => !!b);
   return out.length ? out : [{ type: 'p', text: '' }];
@@ -168,11 +174,11 @@ export function DocEditor({ doc, canEdit, onSaved, onDeleted, onClose }: Props) 
   }
 
   function setBlock(i: number, patch: Partial<DocBlock>) {
-    setBlocks((prev) => prev.map((b, idx) => (idx === i ? { ...b, ...patch } : b)));
+    setBlocks((prev) => prev.map((b, idx) => (idx === i ? ({ ...b, ...patch } as DocBlock) : b)));
     touch();
   }
 
-  function insertAfter(i: number, type: DocBlockType = 'p') {
+  function insertAfter(i: number, type: Exclude<DocBlockType, 'table'> = 'p') {
     setBlocks((prev) => {
       const next = prev.slice();
       next.splice(i + 1, 0, { type, text: '' });
@@ -214,7 +220,8 @@ export function DocEditor({ doc, canEdit, onSaved, onDeleted, onClose }: Props) 
       insertAfter(i, blocks[i].type === 'bullet' ? 'bullet' : 'p');
       return;
     }
-    if (e.key === 'Backspace' && !blocks[i].text && blocks.length > 1) {
+    const emptyText = blocks[i].type === 'table' ? false : !(blocks[i] as DocTextBlock).text;
+    if (e.key === 'Backspace' && emptyText && blocks.length > 1) {
       e.preventDefault();
       removeAt(i);
     }
@@ -452,6 +459,31 @@ export function DocEditor({ doc, canEdit, onSaved, onDeleted, onClose }: Props) 
 
                   {block.type === 'divider' ? (
                     <hr className="docedit__divider" />
+                  ) : block.type === 'table' ? (
+                    <div className="docedit__table-wrap">
+                      <table className="docedit__table">
+                        <tbody>
+                          {block.rows.map((row, ri) => (
+                            <tr key={ri}>
+                              {row.map((cell, ci) => (
+                                <td key={ci}>
+                                  <input
+                                    className="docedit__cell"
+                                    value={cell}
+                                    readOnly={!canEdit}
+                                    onChange={(e) => {
+                                      const rows = block.rows.map((r) => r.slice());
+                                      rows[ri][ci] = e.target.value;
+                                      setBlock(i, { rows } as DocTableBlock);
+                                    }}
+                                  />
+                                </td>
+                              ))}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
                   ) : (
                     <textarea
                       ref={(el) => {
@@ -459,20 +491,20 @@ export function DocEditor({ doc, canEdit, onSaved, onDeleted, onClose }: Props) 
                       }}
                       className="docedit__text"
                       rows={1}
-                      value={block.text}
+                      value={(block as DocTextBlock).text}
                       readOnly={!canEdit}
                       placeholder={
-                        block.type === 'h1'
+                        (block as DocTextBlock).type === 'h1'
                           ? 'Título de sección'
-                          : block.type === 'h2'
+                          : (block as DocTextBlock).type === 'h2'
                             ? 'Subtítulo'
-                            : block.type === 'bullet'
+                            : (block as DocTextBlock).type === 'bullet'
                               ? 'Punto de la lista'
                               : 'Escribe aquí…'
                       }
                       onKeyDown={(e) => onKeyDown(e, i)}
                       onChange={(e) => {
-                        setBlock(i, { text: e.target.value });
+                        setBlock(i, { text: e.target.value } as Partial<DocTextBlock>);
                         fitTextarea(e.currentTarget);
                       }}
                     />

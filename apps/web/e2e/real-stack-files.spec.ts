@@ -102,6 +102,14 @@ test.describe('Stack real: Excel + Word con archivos reales', () => {
     await page.locator('input[name="password"]').fill('ArtaDevLocal-1');
     await page.getByRole('button', { name: 'Entrar', exact: true }).click();
     await page.waitForURL('**/dashboard');
+    // Global: avoid sticky app header covering screenshots
+    await page.addStyleTag({
+      content:
+        `
+        .app-header, .site-header, .brand, .sticky, .sticky-top, .brandbar, .shell .header { position: static !important; box-shadow: none !important; }
+        .global-banner, .top-toast, .announce, .toaster { display: none !important; }
+        `,
+    });
 
     // 3) Crear evento vía API y abrir Documentos
     const createdId = await page.evaluate(async () => {
@@ -115,7 +123,7 @@ test.describe('Stack real: Excel + Word con archivos reales', () => {
       const res = await fetch('/api/events', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
-        body: JSON.stringify({ entity: 'ARTA', name: `E2E Real ${Date.now()}` }),
+        body: JSON.stringify({ entity: 'ARTA', name: `Validación E2E` }),
       });
       if (!res.ok) return '';
       const data = await res.json();
@@ -158,6 +166,14 @@ test.describe('Stack real: Excel + Word con archivos reales', () => {
     const campRow = page.locator('.hub-item', { hasText: 'CAMPANA_BASE.xlsx' }).first();
     await campRow.getByRole('button', { name: /Ver|Ver \/ Editar/ }).click();
     await expect(page.locator('.sheet-editor')).toBeVisible();
+    // Evitar que la cabecera sticky tape contenido en las capturas
+    await page.addStyleTag({
+      content:
+        `
+        .app-header, .site-header, .brand, .sticky, .sticky-top, .brandbar, .shell .header { position: static !important; box-shadow: none !important; }
+        .global-banner, .top-toast, .announce, .toaster { display: none !important; }
+        `,
+    });
     await expect(page.locator('.sheet-state--error')).toHaveCount(0);
     fs.mkdirSync(OUT_DIR, { recursive: true });
     await page.locator('.sheet-editor').first().screenshot({ path: path.join(OUT_DIR, 'campana.png'), animations: 'disabled' });
@@ -228,9 +244,50 @@ test.describe('Stack real: Excel + Word con archivos reales', () => {
     await expect(page.getByLabel('Celda A26', { exact: true })).toHaveValue('3');
     const anyFormula = await page.$$eval('.sheet__cell', (els) => els.some((e) => (e as HTMLInputElement).value.trim().startsWith('=')));
     expect(anyFormula).toBeFalsy();
-    // Contrastes mínimos en oscuro (celda activa y toolbar)
+    // Contrastes mínimos en oscuro (celda activa y TODAS las acciones de toolbar y herramientas)
     await expectContrast(page, '.sheet__cell:focus', 4.5);
-    await expectContrast(page, '.sheet-toolbar .btn', 3.0);
+    const enabledButtons = page.locator('.sheet-toolbar .btn:not([disabled]), .sheet-tools .btn:not([disabled])');
+    const n = await enabledButtons.count();
+    for (let i = 0; i < n; i += 1) {
+      const handle = enabledButtons.nth(i);
+      await handle.scrollIntoViewIfNeeded();
+      const { ok, ratio, sel } = await handle.evaluate((el) => {
+        function srgbToLinear(c: number): number {
+          const cs = c / 255;
+          return cs <= 0.03928 ? cs / 12.92 : Math.pow((cs + 0.055) / 1.055, 2.4);
+        }
+        function luminance(rgb: [number, number, number]): number {
+          const [r, g, b] = rgb.map((x) => srgbToLinear(x as number)) as [number, number, number];
+          return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+        }
+        function parseCssColor(s: string): [number, number, number] | null {
+          const m = /rgba?\((\d+),\s*(\d+),\s*(\d+)/.exec(s);
+          if (!m) return null;
+          return [Number(m[1]), Number(m[2]), Number(m[3])];
+        }
+        // Resolve effective background up the tree if transparent
+        function effectiveBg(node: Element | null): string {
+          while (node) {
+            const cs = window.getComputedStyle(node);
+            const bg = cs.backgroundColor || '';
+            if (bg && !/rgba?\(\s*0\s*,\s*0\s*,\s*0\s*,\s*0\s*\)/.test(bg)) return bg;
+            node = node.parentElement;
+          }
+          return 'rgb(255,255,255)';
+        }
+        const cs = window.getComputedStyle(el as Element);
+        const fg = cs.color;
+        const bg = effectiveBg(el);
+        const fgRgb = parseCssColor(fg);
+        const bgRgb = parseCssColor(bg);
+        if (!fgRgb || !bgRgb) return { ok: false, ratio: 0, sel: (el as HTMLElement).outerHTML.slice(0, 64) };
+        const l1 = luminance(fgRgb) + 0.05;
+        const l2 = luminance(bgRgb) + 0.05;
+        const ratio = l1 > l2 ? l1 / l2 : l2 / l1;
+        return { ok: ratio >= 4.5, ratio, sel: (el as HTMLElement).innerText.slice(0, 24) };
+      });
+      expect(ok, `Low contrast for toolbar button "${sel}": ratio ${ratio.toFixed(2)}`).toBeTruthy();
+    }
   // Banner compacto como mucho uno visible (no 3 apilados)
   const banners = await page.locator('.module-banner').count();
   expect(banners).toBeLessThanOrEqual(1);

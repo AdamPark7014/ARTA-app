@@ -4543,6 +4543,20 @@ body.site-nav-open {
   background: linear-gradient(180deg, #f8faf9 0%, #eef3f0 100%);
   border-bottom: 1px solid #d5dde6;
 }
+/* Ensure enabled toolbar buttons have strong contrast in dark theme */
+.sheet-toolbar .btn,
+.sheet-tools .btn {
+  color: #1a2330 !important; /* dark text */
+}
+.sheet-toolbar .btn.ghost,
+.sheet-tools .btn.ghost {
+  background-color: #ffffff !important; /* light background behind text */
+  border-color: #b8c2ce !important;
+}
+.sheet-toolbar .btn.ghost:hover,
+.sheet-tools .btn.ghost:hover {
+  background-color: #f0f3f6 !important;
+}
 
 .sheet-tabs {
   display: flex;
