@@ -33,7 +33,7 @@ async function loadWorkbook(fileName: string): Promise<Excel.Workbook> {
   const wb = new Excel.Workbook();
   const file = path.resolve(process.cwd(), '../api/assets/format-sources', fileName);
   const buf = readFileSync(file);
-  await wb.xlsx.load(buf as unknown as Buffer);
+  await wb.xlsx.load(buf as unknown as ArrayBuffer);
   return wb;
 }
 
