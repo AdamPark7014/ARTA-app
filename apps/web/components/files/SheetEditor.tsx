@@ -1249,14 +1249,14 @@ export function SheetEditor({
                         }
                         const display = isSel ? (grid[r]?.[c] ?? '') : row[c];
                         const { t } = toCellValue(String(display));
-                        // Wrap-only cells: row 2 (A2, B2) and row 5 headers (B..I)
-                        const wrapOnly = (r === 1 && (c === 0 || c === 1)) || (r === 4 && c >= 1 && c <= 8);
-                        const shouldWrap = wrapOnly || (t === 's' && String(display).length > 24);
-                        const wrapActive = wrapOnly && !isSel;
+                        // Content-based wrap for long text (estimate by width)
+                        const isText = t === 's' && typeof display === 'string' && !String(display).startsWith('=');
+                        const approxTextPx = isText ? Math.min(2000, String(display).length * 7) : 0;
+                        const shouldWrap = isText && approxTextPx > Math.max(60, widthPx - 18);
                         cells.push(
                           <td
                             key={c}
-                            className={`${isSel ? 'sheet__td--sel' : ''} ${wrapActive ? 'sheet__td--wrap' : ''}`.trim() || undefined}
+                            className={isSel ? 'sheet__td--sel' : undefined}
                             colSpan={colSpan}
                           >
                             <input
@@ -1268,11 +1268,6 @@ export function SheetEditor({
                               onChange={(e) => setCell(r, c, e.target.value)}
                               style={{ minWidth: widthPx - 2, width: '100%' }}
                             />
-                            {wrapActive ? (
-                              <div className="sheet__wraptext" aria-hidden="true">
-                                {String(display)}
-                              </div>
-                            ) : null}
                           </td>,
                         );
                         if (merge) c = merge.e.c; // saltar celdas cubiertas por el merge

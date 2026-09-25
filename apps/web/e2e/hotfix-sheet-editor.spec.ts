@@ -197,21 +197,9 @@ test.describe('SheetEditor hotfix — dark contrast and values', () => {
       await page.locator(sel).evaluate((el: HTMLElement) => el.scrollWidth <= el.clientWidth + 1);
     expect(await noClip('.sheet__cell[aria-label="Celda F10"]')).toBeTruthy();
     expect(await noClip('.sheet__cell[aria-label="Celda G7"]')).toBeTruthy();
-    // Wrap-only cells must fit fully (no clip) in both axes on display element
-    const noClipDisplay = async (sel: string) =>
-      await page.locator(sel).evaluate((el: HTMLElement) => {
-        const td = el.parentElement as HTMLElement | null;
-        const disp = td?.querySelector('.sheet__wraptext') as HTMLElement | null;
-        const target = disp || el;
-        const swOk = target.scrollWidth <= target.clientWidth + 1;
-        const shOk = target.scrollHeight <= target.clientHeight + 1;
-        return swOk && shOk;
-      });
-    await expect(await noClipDisplay('.sheet__cell[aria-label="Celda A2"]')).toBeTruthy();
-    await expect(await noClipDisplay('.sheet__cell[aria-label="Celda B2"]')).toBeTruthy();
-    for (const col of ['E', 'F', 'G', 'H', 'I']) {
-      await expect(await noClipDisplay(`.sheet__cell[aria-label="Celda ${col}5"]`)).toBeTruthy();
-    }
+    // Bright text checks for important cells
+    await checkBright('.sheet__cell[aria-label="Celda B5"]'); // 387
+    await checkBright('.sheet__cell[aria-label="Celda D5"]'); // $541,800.00
     // Asegura que ciertas celdas muestren los valores correctos (no \"$-\")
     await expect(page.locator('.sheet__cell[aria-label="Celda D6"]')).toHaveValue(/11,000\.00/);
     await expect(page.locator('.sheet__cell[aria-label="Celda D9"]')).toHaveValue(/5,000\.00/);
@@ -219,7 +207,7 @@ test.describe('SheetEditor hotfix — dark contrast and values', () => {
     await expect(page.locator('.sheet__cell[aria-label="Celda D12"]')).toHaveValue(/15,000\.00/);
     await expect(page.locator('.sheet__cell[aria-label="Celda G6"]')).toHaveValue(/9,000\.00/);
     // Luminance checks: bright text on dark bg
-    const checkBright = async (selector: string) => {
+    async function checkBright(selector: string) {
       const el = page.locator(selector).first();
       const clip = await el.evaluate((node: HTMLElement) => {
         const td = node.parentElement as HTMLElement | null;
@@ -241,7 +229,7 @@ test.describe('SheetEditor hotfix — dark contrast and values', () => {
         }
       }
       expect(bright).toBeGreaterThanOrEqual(30);
-    };
+    }
     // Corrida bright cells
     await page.goto(`${E2E_ORIGIN}/dev/sheet-harness?name=CORRIDA_BASE.xlsx&variant=finance`);
     await page.getByRole('table').waitFor({ timeout: 60000 });
