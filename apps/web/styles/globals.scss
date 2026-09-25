@@ -5025,6 +5025,11 @@ body.site-nav-open {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.sheet__cell--wrap {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: unset;
+}
 
 .sheet__cell:focus {
   outline: none;

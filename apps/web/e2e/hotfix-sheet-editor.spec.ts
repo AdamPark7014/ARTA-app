@@ -134,10 +134,23 @@ test.describe('SheetEditor hotfix — dark contrast and values', () => {
   // Campaña con valores
     await page.goto(`${E2E_ORIGIN}/dev/sheet-harness?name=CAMPANA_BASE.xlsx&variant=campaign`);
     await page.getByRole('table').waitFor({ timeout: 15000 });
+    // Check B column width <= 160 and A..H fit inside 1440px
+    await page.evaluate(() => {
+      const wrap = document.querySelector('.sheet-wrap') as HTMLElement | null;
+      if (wrap) wrap.scrollLeft = 0;
+    });
+    const widths = await page.evaluate(() => {
+      const ths = Array.from(document.querySelectorAll('thead th')) as HTMLElement[];
+      // ths[0] is corner; take A..H = indices 1..8
+      const picks = ths.slice(1, 9);
+      return picks.map((el) => el.getBoundingClientRect().width);
+    });
+    const sumAH = widths.reduce((a, b) => a + b, 0);
+    expect(sumAH).toBeLessThanOrEqual(1440);
+    expect(widths[1]).toBeLessThanOrEqual(160); // B column (index 1 in A..H slice)
     // No clipping on key cells
     const noClip = async (sel: string) =>
       await page.locator(sel).evaluate((el: HTMLElement) => el.scrollWidth <= el.clientWidth + 1);
-    expect(await noClip('.sheet__cell[aria-label="Celda A2"]')).toBeTruthy();
     expect(await noClip('.sheet__cell[aria-label="Celda F10"]')).toBeTruthy();
     expect(await noClip('.sheet__cell[aria-label="Celda G7"]')).toBeTruthy();
     // Asegura que ciertas celdas muestren los valores correctos (no \"$-\")

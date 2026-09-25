@@ -455,20 +455,27 @@ export function SheetEditor({
           104;
         px.push(w);
       }
-      // ensancha por contenido visible en primeras filas
+      // ensancha por contenido visible (solo números o texto corto) en primeras filas
       const sampleRows = Math.min(30, rows.length);
       for (let c = 0; c < px.length; c += 1) {
         let maxLen = 0;
         for (let r = 0; r < sampleRows; r += 1) {
           const cell = rows[r]?.[c];
-          const len = cell == null ? 0 : String(cell).length;
-          if (len > maxLen) maxLen = len;
+          if (cell == null) continue;
+          const s = String(cell);
+          const { t } = toCellValue(s);
+          const isNumeric = t === 'n';
+          const consider = isNumeric || s.length <= 24;
+          if (!consider) continue;
+          if (s.length > maxLen) maxLen = s.length;
         }
         const contentW = Math.max(60, Math.min(640, Math.floor(maxLen * 7 + 16)));
         px[c] = Math.max(px[c] || 0, contentW);
       }
-      // Columna A: etiquetas largas — evita clipping
-      if (px.length > 0) px[0] = Math.max(px[0], 420);
+      // Columna A: etiquetas largas — evita clipping pero sin exceder ~300px
+      if (px.length > 0) px[0] = Math.min(Math.max(px[0], 220), 300);
+      // Columna B en campaña: números/cantidades — no debe ser ancha
+      if (campaign && px.length > 1) px[1] = Math.min(px[1], 160);
       setColPx(px);
       mergesRef.current = (((ws as XLSX.WorkSheet)['!merges'] as unknown) as Array<{
         s: { r: number; c: number };
@@ -1240,6 +1247,9 @@ export function SheetEditor({
                           colSpan = merge.e.c - merge.s.c + 1;
                           for (let i = merge.s.c + 1; i <= merge.e.c; i += 1) widthPx += colPx[i] || 104;
                         }
+                        const display = isSel ? (grid[r]?.[c] ?? '') : row[c];
+                        const { t } = toCellValue(String(display));
+                        const shouldWrap = t === 's' && String(display).length > 24;
                         cells.push(
                           <td
                             key={c}
@@ -1247,8 +1257,8 @@ export function SheetEditor({
                             colSpan={colSpan}
                           >
                             <input
-                              className="sheet__cell"
-                              value={isSel ? (grid[r]?.[c] ?? '') : row[c]}
+                              className={`sheet__cell${shouldWrap ? ' sheet__cell--wrap' : ''}`}
+                              value={display as string}
                               readOnly={!canEdit}
                               aria-label={`Celda ${colLabel(c)}${r + 1}`}
                               onFocus={() => setSel({ r, c })}
