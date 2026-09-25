@@ -878,7 +878,9 @@ export function SheetEditor({
     return () => window.removeEventListener('keydown', onKey);
   }, [sel]);
 
-  const shownRows = useMemo(() => grid.slice(0, visibleRows), [grid, visibleRows]);
+  // Filas que se renderizan: muestran valores evaluados,
+  // excepto la celda enfocada que mantiene el texto crudo para edición.
+  const shownRows = useMemo(() => displayGrid.slice(0, visibleRows), [displayGrid, visibleRows]);
   const selLabel = sel ? `${colLabel(sel.c)}${sel.r + 1}` : '';
   const fxValue = useMemo(() => {
     if (!sel) return '';
@@ -1302,7 +1304,7 @@ export function SheetEditor({
                           <td key={c} className={isSel ? 'sheet__td--sel' : undefined} colSpan={colSpan}>
                             <input
                               className="sheet__cell"
-                              value={row[c]}
+                              value={isSel ? grid[r][c] : row[c]}
                               readOnly={!canEdit}
                               aria-label={`Celda ${colLabel(c)}${r + 1}`}
                               onFocus={() => setSel({ r, c })}
