@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as XLSX from 'xlsx';
 import FastFormulaParser from 'fast-formula-parser';
+import { createEvaluator } from '@/lib/sheet-evaluator';
 import type { SaveFile } from '@/lib/file-save';
 import { api } from '@/lib/api';
 import { ExpandBox } from '@/components/ui/ExpandBox';
@@ -183,6 +184,7 @@ export function SheetEditor({
     if (!wb || !activeSheet) return grid;
     const ws = wb.Sheets[activeSheet];
     const parser = new (FastFormulaParser as any)();
+    const evaluator = createEvaluator(wb as unknown as XLSX.WorkBook, activeSheet, grid);
     const normalizeFormulaName = (s: string) => {
       const map: Record<string, string> = {
         SUMA: 'SUM',
@@ -253,7 +255,7 @@ export function SheetEditor({
               }
               return arr;
             };
-            const evaluated = (parser as any).parse(normalizeFormulaName(String(raw).replace(/^=/, '')));
+            const evaluated = evaluator.evaluateFormula(String(raw), r + 1, c + 1);
             const addr = XLSX.utils.encode_cell({ r, c });
             const obj = ws?.[addr] as XLSX.CellObject | undefined;
             if (typeof evaluated === 'number') {
@@ -269,11 +271,7 @@ export function SheetEditor({
                   }),
                 );
               }
-            } else if (typeof evaluated === 'string') {
-              row.push(evaluated);
-            } else {
-              row.push(String(evaluated ?? ''));
-            }
+            } else row.push(String(evaluated ?? ''));
           } catch {
             const addr = XLSX.utils.encode_cell({ r, c });
             const obj = ws?.[addr] as XLSX.CellObject | undefined;
