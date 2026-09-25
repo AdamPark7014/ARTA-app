@@ -15,6 +15,7 @@ export type Grid = string[][];
 
 export function createEvaluator(wb: XLSX.WorkBook, activeSheet: string, grid: Grid) {
   const parser = new Parser();
+  const memo = new Map<string, number>();
   // Named ranges
   const names: Record<string, { sheet: string; r0: number; c0: number; r1: number; c1: number } | null> = {};
   const wbNames = (wb.Workbook as any)?.Names as Array<{ Name: string; Ref: string }> | undefined;
@@ -55,7 +56,13 @@ export function createEvaluator(wb: XLSX.WorkBook, activeSheet: string, grid: Gr
     const cc = ref.col - 1;
     const ws = wb.Sheets[s] as XLSX.WorkSheet;
     const obj = (ws as any)[XLSX.utils.encode_cell({ r: rr, c: cc })];
-    if (obj?.f) return Number(obj.v) || 0;
+    if (obj?.f) {
+      const key = `${s}!${XLSX.utils.encode_cell({ r: rr, c: cc })}`;
+      if (memo.has(key)) return memo.get(key)!;
+      const val = evaluateFormula(String(obj.f), rr + 1, cc + 1);
+      memo.set(key, val);
+      return val;
+    }
     const v = s === activeSheet ? grid[rr]?.[cc] ?? '' : (obj?.w ?? obj?.v ?? '');
     const n = toNum(v);
     return Number.isFinite(n) ? n : 0;

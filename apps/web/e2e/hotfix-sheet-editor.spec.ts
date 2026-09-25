@@ -116,8 +116,37 @@ test.describe('SheetEditor hotfix — dark contrast and values', () => {
     await expect
       .poll(async () => await page.locator('.sheet__cell[aria-label="Celda D6"]').inputValue())
       .not.toBe(beforeD6);
-    // Sum row D13 remains visible and formatted as currency
-    await expect(page.locator('.sheet__cell[aria-label="Celda D13"]')).toHaveValue(/\$?720,600\.00/);
+    // Espera a que dependientes se actualicen: calcula esperados y compara
+    const parseMoney = (s: string) => Number(String(s).replace(/[^0-9.-]/g, '')) || 0;
+    const getVal = async (cell: string) =>
+      parseMoney(await page.locator(`.sheet__cell[aria-label="Celda ${cell}"]`).first().inputValue());
+    // D13 = SUM(D5:D12)
+    const dVals = await Promise.all(Array.from({ length: 8 }, async (_, i) => getVal(`D${5 + i}`)));
+    const expD13 = dVals.reduce((a, b) => a + b, 0);
+    await expect.poll(async () => getVal('D13')).toBeGreaterThan(0);
+    expect(Math.abs((await getVal('D13')) - expD13)).toBeLessThanOrEqual(1);
+    // E5/E6 = 90% de D5/D6; E13 = SUM(E5:E12)
+    const expE5 = Math.round((dVals[0] * 0.9) * 100) / 100;
+    const expE6 = Math.round((dVals[1] * 0.9) * 100) / 100;
+    const eVals = await Promise.all(Array.from({ length: 8 }, async (_, i) => getVal(`E${5 + i}`)));
+    const expE13 = eVals.reduce((a, b) => a + b, 0);
+    expect(Math.abs((await getVal('E5')) - expE5)).toBeLessThanOrEqual(1);
+    expect(Math.abs((await getVal('E6')) - expE6)).toBeLessThanOrEqual(1);
+    await expect.poll(async () => getVal('E13')).toBeGreaterThan(0);
+    expect(Math.abs((await getVal('E13')) - expE13)).toBeLessThanOrEqual(1);
+    // D16 = 2% de D13; D17 = 8% de D13; D18 = D16 + D17; D34 = D13; D35 = D34 - D33 - D18
+    const d13Now = await getVal('D13');
+    const d33 = await getVal('D33');
+    const expD16 = Math.round(d13Now * 0.02 * 100) / 100;
+    const expD17 = Math.round(d13Now * 0.08 * 100) / 100;
+    const expD18 = Math.round((expD16 + expD17) * 100) / 100;
+    const expD34 = d13Now;
+    const expD35 = Math.round((expD34 - d33 - expD18) * 100) / 100;
+    expect(Math.abs((await getVal('D16')) - expD16)).toBeLessThanOrEqual(1);
+    expect(Math.abs((await getVal('D17')) - expD17)).toBeLessThanOrEqual(1);
+    expect(Math.abs((await getVal('D18')) - expD18)).toBeLessThanOrEqual(1);
+    expect(Math.abs((await getVal('D34')) - expD34)).toBeLessThanOrEqual(1);
+    expect(Math.abs((await getVal('D35')) - expD35)).toBeLessThanOrEqual(1);
     // G2 must show 1
     await expect(page.locator('.sheet__cell[aria-label="Celda G2"]')).toHaveValue('1');
     // A-column labels still visible
@@ -292,11 +321,17 @@ test.describe('SheetEditor hotfix — dark contrast and values', () => {
           const sel = `.sheet__cell[aria-label="Celda ${c}${r}"]`;
           const input = document.querySelector(sel) as HTMLElement | null;
           if (!input) continue;
-          const td = input.parentElement as HTMLElement | null;
-          if (!td) continue;
-          const rgb = getComputedStyle(td).backgroundColor || 'rgb(255,255,255)';
+          let el: HTMLElement | null = (input.parentElement as HTMLElement | null) || input;
+          let rgb = 'rgba(0,0,0,0)';
+          while (el) {
+            const bg = getComputedStyle(el).backgroundColor || 'rgba(0,0,0,0)';
+            rgb = bg;
+            const isTransparent = /^rgba\(\s*0\s*,\s*0\s*,\s*0\s*,\s*0\s*\)$/i.test(bg) || bg === 'transparent';
+            if (!isTransparent) break;
+            el = el.parentElement as HTMLElement | null;
+          }
           const lum = luminance(parseRgb(rgb));
-          if (lum > 0.235) out.push({ cell: `${c}${r}`, rgb, lum });
+          if (lum > 0.2) out.push({ cell: `${c}${r}`, rgb, lum });
         }
       }
       // eslint-disable-next-line no-console
