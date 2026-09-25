@@ -82,9 +82,25 @@ function toCellValue(text: string): { v: string | number; t: 's' | 'n' } {
   const trimmed = text.trim();
   if (!trimmed) return { v: '', t: 's' };
   if (trimmed.startsWith('=')) return { v: trimmed, t: 's' };
-  const normalized = trimmed.replace(/\s/g, '').replace(/\$/g, '').replace(',', '.');
-  if (/^-?\d+(\.\d+)?$/.test(normalized)) {
-    const n = Number(normalized);
+  // Normalize common currency/number formats:
+  // - Remove spaces and currency symbols
+  // - If both comma and dot appear, treat comma as thousands and strip it
+  // - If only comma appears, treat it as decimal separator and convert to dot
+  // - Strip thousands separators
+  let s = trimmed.replace(/[\s\u00A0]/g, '').replace(/[\$£€¥%]/g, '');
+  const hasComma = s.includes(',');
+  const hasDot = s.includes('.');
+  if (hasComma && hasDot) {
+    s = s.replace(/,/g, '');
+  } else if (hasComma && !hasDot) {
+    s = s.replace(/,/g, '.');
+  }
+  // Parentheses for negatives: (123.45) → -123.45
+  s = s.replace(/^\((.*)\)$/, '-$1');
+  // Remove remaining thousands separators (common in some exports)
+  s = s.replace(/(?<=\d)[,](?=\d{3}\b)/g, '');
+  if (/^-?\d+(\.\d+)?$/.test(s)) {
+    const n = Number(s);
     if (Number.isFinite(n)) return { v: n, t: 'n' };
   }
   return { v: text, t: 's' };
@@ -246,7 +262,65 @@ export function SheetEditor({
           } catch {
             const addr = XLSX.utils.encode_cell({ r, c });
             const obj = ws?.[addr] as XLSX.CellObject | undefined;
-            row.push(obj?.w != null ? String(obj.w) : '#¿?');
+            // Fallback: evaluador simple de + - * / ^ y paréntesis sustituyendo refs por números
+            try {
+              const f = typeof obj?.f === 'string' ? String(obj!.f) : '';
+              if (f) {
+                const expr = f.replace(/\$?[A-Z]+\$?\d+/g, (m) => {
+                  // Resolver referencia con recursion mínima
+                  const maddr = XLSX.utils.decode_cell(m.replace(/\$/g, ''));
+                  const num =
+                    ((): number => {
+                      const rawAt = grid[maddr.r]?.[maddr.c] ?? '';
+                      const { v: nv, t } = toCellValue(String(rawAt));
+                      if (t === 'n') return nv as number;
+                      // Si es fórmula, no recursamos profundo: usa 0 en fallback
+                      return Number(nv) || 0;
+                    })();
+                  return String(Number.isFinite(num) ? num : 0);
+                });
+                if (/^[0-9+\-*/^().\s]+$/.test(expr)) {
+                  // ^ no es JS: reemplazar por ** para exponenciación
+                  const safe = expr.replace(/\^/g, '**');
+                  // eslint-disable-next-line no-new-func
+                  const val = Function(`\"use strict\";return (${safe});`)();
+                  if (typeof val === 'number' && Number.isFinite(val)) {
+                    const hasDecimals = Math.abs(val % 1) > 1e-6;
+                    row.push(
+                      val.toLocaleString('es-MX', {
+                        minimumFractionDigits: hasDecimals ? 2 : 0,
+                        maximumFractionDigits: hasDecimals ? 6 : 0,
+                      }),
+                    );
+                    continue;
+                  }
+                }
+              }
+            } catch {
+              /* ignore and fallback below */
+            }
+            // Si falla la evaluación, usa el valor cacheado de Excel si existe
+            const cache = obj?.v as unknown;
+            const fmt = (FastFormulaParser as any).SSF?.format;
+            const z = (obj as any)?.z ?? undefined;
+            if (typeof cache === 'number') {
+              try {
+                if (fmt && z) row.push(fmt(z, cache));
+                else {
+                  const hasDecimals = Math.abs((cache as number) % 1) > 1e-6;
+                  row.push(
+                    (cache as number).toLocaleString('es-MX', {
+                      minimumFractionDigits: hasDecimals ? 2 : 0,
+                      maximumFractionDigits: hasDecimals ? 6 : 0,
+                    }),
+                  );
+                }
+              } catch {
+                row.push(String(cache));
+              }
+            } else {
+              row.push(obj?.w != null ? String(obj.w) : '#¿?');
+            }
           }
         } else {
           const addr = XLSX.utils.encode_cell({ r, c });
@@ -1066,55 +1140,38 @@ export function SheetEditor({
                     <th className="sheet__rownum" scope="row">
                       {r + 1}
                     </th>
-                    {row.map((cell, c) => {
-                      const isSel = sel?.r === r && sel?.c === c;
-                      // Calcular overflow a través de vecinos vacíos consecutivos
-                      let nextEmpty = false;
-                      let extra = 0;
-                      for (let n = c + 1; n < row.length; n += 1) {
-                        const empty = (row[n] ?? '').toString().trim() === '';
-                        const mergedStartsHere = mergesRef.current.some((m) => m.s.r === r && m.s.c === n);
-                        if (!empty || mergedStartsHere) break;
-                        nextEmpty = true;
-                        extra += colPx[n] || 104;
+                    {(() => {
+                      const cells: JSX.Element[] = [];
+                      for (let c = 0; c < row.length; c += 1) {
+                        const isSel = sel?.r === r && sel?.c === c;
+                        const merge = mergesRef.current.find((m) => m.s.r === r && m.s.c === c);
+                        let colSpan = 1;
+                        let widthPx = colPx[c] || 104;
+                        if (merge) {
+                          colSpan = merge.e.c - merge.s.c + 1;
+                          for (let i = merge.s.c + 1; i <= merge.e.c; i += 1) widthPx += colPx[i] || 104;
+                        }
+                        cells.push(
+                          <td
+                            key={c}
+                            className={isSel ? 'sheet__td--sel' : undefined}
+                            colSpan={colSpan}
+                          >
+                            <input
+                              className="sheet__cell"
+                              value={isSel ? (grid[r]?.[c] ?? '') : row[c]}
+                              readOnly={!canEdit}
+                              aria-label={`Celda ${colLabel(c)}${r + 1}`}
+                              onFocus={() => setSel({ r, c })}
+                              onChange={(e) => setCell(r, c, e.target.value)}
+                              style={{ minWidth: widthPx - 2, width: '100%' }}
+                            />
+                          </td>,
+                        );
+                        if (merge) c = merge.e.c; // saltar celdas cubiertas por el merge
                       }
-                      const merge = mergesRef.current.find((m) => m.s.r === r && m.s.c === c);
-                      let displayWidth = colPx[c] || 104;
-                      if (merge) {
-                        for (let i = merge.s.c + 1; i <= merge.e.c; i += 1) displayWidth += (colPx[i] || 104);
-                      } else if (nextEmpty) {
-                        displayWidth += extra;
-                      }
-                      return (
-                        <td
-                          key={c}
-                          className={isSel ? 'sheet__td--sel' : undefined}
-                          style={{ position: 'relative' }}
-                        >
-                          {!isSel ? (
-                            <span
-                              className={`sheet__display${nextEmpty || merge ? ' is-over' : ''}`}
-                              style={{
-                                minWidth: (colPx[c] || 104) - 10,
-                                width: Math.max(displayWidth - 10, (colPx[c] || 104) - 10),
-                              }}
-                              aria-hidden="true"
-                            >
-                              {cell}
-                            </span>
-                          ) : null}
-                          <input
-                            className="sheet__cell"
-                            value={isSel ? (grid[r]?.[c] ?? '') : cell}
-                            readOnly={!canEdit}
-                            aria-label={`Celda ${colLabel(c)}${r + 1}`}
-                            onFocus={() => setSel({ r, c })}
-                            onChange={(e) => setCell(r, c, e.target.value)}
-                            style={{ minWidth: (colPx[c] || 104) - 2, width: '100%' }}
-                          />
-                        </td>
-                      );
-                    })}
+                      return cells;
+                    })()}
                   </tr>
                 ))}
               </tbody>
