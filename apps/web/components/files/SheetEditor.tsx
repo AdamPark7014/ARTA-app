@@ -7,7 +7,13 @@ import { HyperFormula, type SimpleCellAddress } from 'hyperformula';
 let HF_LANG_READY = false;
 try {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const esES = require('hyperformula/es/languages/esES').default || require('hyperformula/es/languages/esES');
+  const esES =
+    // Newer HyperFormula
+    (require('hyperformula/i18n/languages/esES')?.default ||
+      require('hyperformula/i18n/languages/esES')) ||
+    // Older HyperFormula path (best-effort)
+    (require('hyperformula/es/languages/esES')?.default ||
+      require('hyperformula/es/languages/esES'));
   if (esES) {
     // @ts-ignore
     HyperFormula.registerLanguage('esES', esES);
