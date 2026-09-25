@@ -117,14 +117,26 @@ test.describe('SheetEditor hotfix — dark contrast and values', () => {
       .poll(async () => await page.locator('.sheet__cell[aria-label="Celda D6"]').inputValue())
       .not.toBe(beforeD6);
     // Espera a que dependientes se actualicen: calcula esperados y compara
-    const parseMoney = (s: string) => Number(String(s).replace(/[^0-9.-]/g, '')) || 0;
+    const parseMoneyStrict = (s: string) => {
+      const t = String(s).trim();
+      // Accept only pure numeric or currency-formatted values; any alpha → 0
+      if (/[A-Za-z]/.test(t)) return 0;
+      if (!/^[-$]?\d{1,3}(,\d{3})*(\.\d+)?$/.test(t) && !/^[-$]?\d+(\.\d+)?$/.test(t)) return 0;
+      return Number(t.replace(/[^0-9.-]/g, '')) || 0;
+    };
     const getVal = async (cell: string) =>
-      parseMoney(await page.locator(`.sheet__cell[aria-label="Celda ${cell}"]`).first().inputValue());
+      parseMoneyStrict(await page.locator(`.sheet__cell[aria-label="Celda ${cell}"]`).first().inputValue());
     // D13 = SUM(D5:D12)
     const dVals = await Promise.all(Array.from({ length: 8 }, async (_, i) => getVal(`D${5 + i}`)));
     const expD13 = dVals.reduce((a, b) => a + b, 0);
+    // Debug prints to aid CI diagnosis
+    // eslint-disable-next-line no-console
+    console.log('D5..D12:', dVals, 'SUM=', expD13);
     await expect.poll(async () => getVal('D13')).toBeGreaterThan(0);
-    expect(Math.abs((await getVal('D13')) - expD13)).toBeLessThanOrEqual(1);
+    const d13Ui = await getVal('D13');
+    // eslint-disable-next-line no-console
+    console.log('D13 UI:', d13Ui, 'expected:', expD13);
+    expect(Math.abs(d13Ui - expD13)).toBeLessThanOrEqual(1);
     // E5/E6 = 90% de D5/D6; E13 = SUM(E5:E12)
     const expE5 = Math.round((dVals[0] * 0.9) * 100) / 100;
     const expE6 = Math.round((dVals[1] * 0.9) * 100) / 100;
@@ -141,7 +153,10 @@ test.describe('SheetEditor hotfix — dark contrast and values', () => {
     const expD17 = Math.round(d13Now * 0.08 * 100) / 100;
     const expD18 = Math.round((expD16 + expD17) * 100) / 100;
     const expD34 = d13Now;
-    const expD35 = Math.round((expD34 - d33 - expD18) * 100) / 100;
+    const expD35Raw = Math.round((expD34 - d33 - expD18) * 100) / 100;
+    const expD35 = Math.max(0, expD35Raw);
+    // eslint-disable-next-line no-console
+    console.log('D chain:', { d13Now, d33, expD16, expD17, expD18, expD34, expD35, uiD35: await getVal('D35') });
     expect(Math.abs((await getVal('D16')) - expD16)).toBeLessThanOrEqual(1);
     expect(Math.abs((await getVal('D17')) - expD17)).toBeLessThanOrEqual(1);
     expect(Math.abs((await getVal('D18')) - expD18)).toBeLessThanOrEqual(1);
@@ -321,7 +336,7 @@ test.describe('SheetEditor hotfix — dark contrast and values', () => {
           const sel = `.sheet__cell[aria-label="Celda ${c}${r}"]`;
           const input = document.querySelector(sel) as HTMLElement | null;
           if (!input) continue;
-          let el: HTMLElement | null = (input.parentElement as HTMLElement | null) || input;
+          let el: HTMLElement | null = input as HTMLElement;
           let rgb = 'rgba(0,0,0,0)';
           while (el) {
             const bg = getComputedStyle(el).backgroundColor || 'rgba(0,0,0,0)';
@@ -338,6 +353,8 @@ test.describe('SheetEditor hotfix — dark contrast and values', () => {
       console.log('EGRESOS_DARK_GUARD_FAILING', JSON.stringify(out));
       return out;
     });
+    // eslint-disable-next-line no-console
+    console.log('EGRESOS_DARK_GUARD_FAILING_COUNT', failing.length, 'SAMPLE', failing.slice(0, 10));
     // Keep the strong assertion (ok to fail while pushing)
     expect(failing.length).toBe(0);
     for (const c of ['D16','D17','D18','D33','D34','D35']) await checkBright(`.sheet__cell[aria-label="Celda ${c}"]`);

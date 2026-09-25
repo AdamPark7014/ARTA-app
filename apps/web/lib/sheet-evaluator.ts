@@ -55,17 +55,30 @@ export function createEvaluator(wb: XLSX.WorkBook, activeSheet: string, grid: Gr
     const rr = ref.row - 1;
     const cc = ref.col - 1;
     const ws = wb.Sheets[s] as XLSX.WorkSheet;
-    const obj = (ws as any)[XLSX.utils.encode_cell({ r: rr, c: cc })];
-    if (obj?.f) {
-      const key = `${s}!${XLSX.utils.encode_cell({ r: rr, c: cc })}`;
-      if (memo.has(key)) return memo.get(key)!;
-      const val = evaluateFormula(String(obj.f), rr + 1, cc + 1);
-      memo.set(key, val);
-      return val;
+    const addr = XLSX.utils.encode_cell({ r: rr, c: cc });
+    if (s === activeSheet) {
+      const v = grid[rr]?.[cc] ?? '';
+      if (typeof v === 'string' && v.trim().startsWith('=')) {
+        const key = `${s}!${addr}`;
+        if (memo.has(key)) return memo.get(key)!;
+        const val = evaluateFormula(String(v), rr + 1, cc + 1);
+        memo.set(key, val);
+        return val;
+      }
+      const n = toNum(v);
+      return Number.isFinite(n) ? n : 0;
+    } else {
+      const obj = (ws as any)[addr];
+      if (obj?.f) {
+        const key = `${s}!${addr}`;
+        if (memo.has(key)) return memo.get(key)!;
+        const val = evaluateFormula(String(obj.f), rr + 1, cc + 1);
+        memo.set(key, val);
+        return val;
+      }
+      const n = toNum(obj?.w ?? obj?.v ?? '');
+      return Number.isFinite(n) ? n : 0;
     }
-    const v = s === activeSheet ? grid[rr]?.[cc] ?? '' : (obj?.w ?? obj?.v ?? '');
-    const n = toNum(v);
-    return Number.isFinite(n) ? n : 0;
   };
   parser.onRange = (ref: any) => {
     const s = ref.sheet || activeSheet;
@@ -74,12 +87,35 @@ export function createEvaluator(wb: XLSX.WorkBook, activeSheet: string, grid: Gr
     for (let rr = ref.from.row - 1; rr <= ref.to.row - 1; rr++) {
       const row: number[] = [];
       for (let cc = ref.from.col - 1; cc <= ref.to.col - 1; cc++) {
-        const obj = (ws as any)[XLSX.utils.encode_cell({ r: rr, c: cc })];
-        if (obj?.f) row.push(Number(obj.v) || 0);
-        else {
-          const v = s === activeSheet ? grid[rr]?.[cc] ?? '' : (obj?.w ?? obj?.v ?? '');
-          const n = toNum(v);
-          row.push(Number.isFinite(n) ? n : 0);
+        const addr = XLSX.utils.encode_cell({ r: rr, c: cc });
+        if (s === activeSheet) {
+          const v = grid[rr]?.[cc] ?? '';
+          if (typeof v === 'string' && v.trim().startsWith('=')) {
+            const key = `${s}!${addr}`;
+            if (memo.has(key)) row.push(memo.get(key)!);
+            else {
+              const val = evaluateFormula(String(v), rr + 1, cc + 1);
+              memo.set(key, val);
+              row.push(val);
+            }
+          } else {
+            const n = toNum(v);
+            row.push(Number.isFinite(n) ? n : 0);
+          }
+        } else {
+          const obj = (ws as any)[addr];
+          if (obj?.f) {
+            const key = `${s}!${addr}`;
+            if (memo.has(key)) row.push(memo.get(key)!);
+            else {
+              const val = evaluateFormula(String(obj.f), rr + 1, cc + 1);
+              memo.set(key, val);
+              row.push(val);
+            }
+          } else {
+            const n = toNum(obj?.w ?? obj?.v ?? '');
+            row.push(Number.isFinite(n) ? n : 0);
+          }
         }
       }
       out.push(row);
@@ -92,7 +128,15 @@ export function createEvaluator(wb: XLSX.WorkBook, activeSheet: string, grid: Gr
     if (!def) return 0;
     const ws = wb.Sheets[def.sheet] as XLSX.WorkSheet;
     if (def.r0 === def.r1 && def.c0 === def.c1) {
-      const cell = (ws as any)[XLSX.utils.encode_cell({ r: def.r0, c: def.c0 })];
+      const r = def.r0, c = def.c0;
+      const cell = (ws as any)[XLSX.utils.encode_cell({ r, c })];
+      if (cell?.f) {
+        const key = `${def.sheet}!${XLSX.utils.encode_cell({ r, c })}`;
+        if (memo.has(key)) return memo.get(key)!;
+        const val = evaluateFormula(String(cell.f), r + 1, c + 1);
+        memo.set(key, val);
+        return val;
+      }
       return Number(cell?.v) || toNum(cell?.w) || 0;
     }
     const out: number[][] = [];
