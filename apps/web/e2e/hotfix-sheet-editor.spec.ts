@@ -125,7 +125,7 @@ test.describe('SheetEditor hotfix — dark contrast and values', () => {
       const wrap = document.querySelector('.sheet-wrap') as HTMLElement | null;
       if (wrap) wrap.scrollLeft = 0;
     });
-    await page.setViewportSize({ width: 1600, height: 900 });
+    await page.setViewportSize({ width: 1440, height: 900 });
     await page.waitForTimeout(60);
     await page.screenshot({ path: '../../docs/hotfix-screens/hotfix-recalc.png', fullPage: false });
 
@@ -148,11 +148,83 @@ test.describe('SheetEditor hotfix — dark contrast and values', () => {
     const sumAH = widths.reduce((a, b) => a + b, 0);
     expect(sumAH).toBeLessThanOrEqual(1440);
     expect(widths[1]).toBeLessThanOrEqual(160); // B column (index 1 in A..H slice)
-    // No clipping on key cells
     const noClip = async (sel: string) =>
-      await page.locator(sel).evaluate((el: HTMLElement) => el.scrollWidth <= el.clientWidth + 1);
+      await page.locator(sel).evaluate((el: HTMLElement) => {
+        const td = el.parentElement as HTMLElement | null;
+        const disp = td?.querySelector('.sheet__spilltext') as HTMLElement | null;
+        const target = disp && getComputedStyle(disp).display !== 'none' ? disp : el;
+        return target.scrollWidth <= target.clientWidth + 1;
+      });
+    // A2/B2 long texts fully visible: no ellipsis; A2 should wrap, B2 should spill
+    const noEllipsis = async (sel: string) =>
+      await page.locator(sel).evaluate((el: HTMLElement) => {
+        const td = el.parentElement as HTMLElement | null;
+        const disp = td?.querySelector('.sheet__spilltext') as HTMLElement | null;
+        const target = disp && getComputedStyle(disp).display !== 'none' ? disp : el;
+        return getComputedStyle(target).textOverflow !== 'ellipsis';
+      });
+    // Debug styles for A2/B2 (helps diagnose regressions locally)
+    // eslint-disable-next-line no-console
+    console.log(
+      await page
+        .locator('.sheet__cell[aria-label="Celda A2"]')
+        .evaluate((el: HTMLElement) => ({
+          cls: el.className,
+          ws: getComputedStyle(el).whiteSpace,
+          to: getComputedStyle(el).textOverflow,
+          ov: getComputedStyle(el).overflow,
+        })),
+    );
+    // eslint-disable-next-line no-console
+    console.log(
+      await page
+        .locator('.sheet__cell[aria-label="Celda B2"]')
+        .evaluate((el: HTMLElement) => ({
+          cls: el.className,
+          ws: getComputedStyle(el).whiteSpace,
+          to: getComputedStyle(el).textOverflow,
+          ov: getComputedStyle(el).overflow,
+        })),
+    );
+    expect(await noEllipsis('.sheet__cell[aria-label="Celda A2"]')).toBeTruthy();
+    expect(await noEllipsis('.sheet__cell[aria-label=\"Celda B2\"]')).toBeTruthy();
+    // A2 wraps (content fits inside its own box)
+    expect(await noClip('.sheet__cell[aria-label="Celda A2"]')).toBeTruthy();
+    // B2 spills across empty neighbours (C2..H2 are empty)
+    const emptiesRow2 = await page.evaluate(() => {
+      const take = (col: string) =>
+        (document.querySelector<HTMLInputElement>(`.sheet__cell[aria-label="Celda ${col}2"]`)?.value ?? '').trim();
+      return {
+        C2: take('C'),
+        D2: take('D'),
+        E2: take('E'),
+        F2: take('F'),
+        G2: take('G'),
+        H2: take('H'),
+      };
+    });
+    expect(Object.values(emptiesRow2).every((v) => v === '')).toBeTruthy();
+    // No two non-empty cells in row 2 overlap horizontally
+    const noOverlapRow2 = await page.evaluate(() => {
+      const cells = Array.from(document.querySelectorAll<HTMLInputElement>('tbody tr:nth-of-type(2) .sheet__cell'))
+        .filter((el) => (el.value || '').trim() !== '')
+        .map((el) => el.getBoundingClientRect())
+        .sort((a, b) => a.left - b.left);
+      for (let i = 0; i < cells.length - 1; i++) {
+        if (cells[i].right > cells[i + 1].left + 1) return false;
+      }
+      return true;
+    });
+    expect(noOverlapRow2).toBeTruthy();
+    // No clipping on key cells
     expect(await noClip('.sheet__cell[aria-label="Celda F10"]')).toBeTruthy();
     expect(await noClip('.sheet__cell[aria-label="Celda G7"]')).toBeTruthy();
+    // Row-5 headers wrap instead of ellipsis and are not clipped
+    for (const col of ['B', 'C', 'D', 'E', 'F', 'G', 'H']) {
+      const sel = `.sheet__cell[aria-label="Celda ${col}5"]`;
+      expect(await noEllipsis(sel)).toBeTruthy();
+      expect(await noClip(sel)).toBeTruthy();
+    }
     // Asegura que ciertas celdas muestren los valores correctos (no \"$-\")
     await expect(page.locator('.sheet__cell[aria-label="Celda D6"]')).toHaveValue(/11,000\.00/);
     await expect(page.locator('.sheet__cell[aria-label="Celda D9"]')).toHaveValue(/5,000\.00/);
@@ -161,9 +233,17 @@ test.describe('SheetEditor hotfix — dark contrast and values', () => {
     await expect(page.locator('.sheet__cell[aria-label="Celda G6"]')).toHaveValue(/9,000\.00/);
     // Luminance checks: bright text on dark bg
     const checkBright = async (selector: string) => {
-      const el = page.locator(selector).first();
-      const box = await (await el.elementHandle())!.boundingBox();
-      const shot = await page.screenshot({ clip: box! });
+      const base = page.locator(selector).first();
+      let clipBox = await (await base.elementHandle())!.boundingBox();
+      const dbox = await base.evaluate((el: HTMLElement) => {
+        const td = el.parentElement as HTMLElement | null;
+        const disp = td?.querySelector('.sheet__spilltext') as HTMLElement | null;
+        if (!disp) return null;
+        const r = disp.getBoundingClientRect();
+        return { x: r.x, y: r.y, width: r.width, height: r.height };
+      });
+      if (dbox && (dbox as any).width > 0 && (dbox as any).height > 0) clipBox = dbox as any;
+      const shot = await page.screenshot({ clip: clipBox! });
       const { PNG } = require('pngjs');
       const png = PNG.sync.read(shot);
       let bright = 0;
@@ -180,6 +260,22 @@ test.describe('SheetEditor hotfix — dark contrast and values', () => {
     // Corrida bright cells
     await page.goto(`${E2E_ORIGIN}/dev/sheet-harness?name=CORRIDA_BASE.xlsx&variant=finance`);
     await page.getByRole('table').waitFor({ timeout: 15000 });
+    // Debug A5 render target
+    // eslint-disable-next-line no-console
+    console.log(
+      await page.locator('.sheet__cell[aria-label="Celda A5"]').evaluate((el: HTMLElement) => {
+        const td = el.parentElement as HTMLElement | null;
+        const disp = td?.querySelector('.sheet__spilltext') as HTMLElement | null;
+        const box = el.getBoundingClientRect();
+        const dbox = disp?.getBoundingClientRect();
+        return {
+          input: { ws: getComputedStyle(el).whiteSpace, color: getComputedStyle(el).color, ov: getComputedStyle(el).overflow, box },
+          span: disp
+            ? { ws: getComputedStyle(disp).whiteSpace, color: getComputedStyle(disp).color, display: getComputedStyle(disp).display, dbox }
+            : null,
+        };
+      }),
+    );
     await checkBright('.sheet__cell[aria-label="Celda A5"]');
     await checkBright('.sheet__cell[aria-label="Celda B5"]');
     await checkBright('.sheet__cell[aria-label="Celda D5"]');
@@ -193,7 +289,7 @@ test.describe('SheetEditor hotfix — dark contrast and values', () => {
       const wrap = document.querySelector('.sheet-wrap') as HTMLElement | null;
       if (wrap) wrap.scrollLeft = 0;
     });
-    await page.setViewportSize({ width: 1600, height: 900 });
+    await page.setViewportSize({ width: 1440, height: 900 });
     await page.waitForTimeout(60);
     await page.screenshot({ path: '../../docs/hotfix-screens/hotfix-campana.png', fullPage: false });
 

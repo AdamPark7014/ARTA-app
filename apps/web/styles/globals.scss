@@ -5004,10 +5004,20 @@ body.site-nav-open {
   border-right: 1px solid #e6ebf1;
   border-bottom: 1px solid #e6ebf1;
   background: #fff;
+  position: relative; /* permite control de z-index por celda para evitar solapes */
+  overflow: visible; /* permitir que el contenido de la izquierda se derrame si procede */
 }
 
 .sheet tr:nth-child(even) td {
   background: #fafbfc;
+}
+
+/* Vecinos vacíos: fondo transparente para que el texto derramado sea visible */
+.sheet td.sheet__td--empty {
+  background: transparent !important;
+}
+.sheet tr:nth-child(even) td.sheet__td--empty {
+  background: transparent !important;
 }
 
 .sheet__cell {
@@ -5029,6 +5039,15 @@ body.site-nav-open {
   white-space: normal;
   overflow: visible;
   text-overflow: unset;
+}
+
+/* Derrame visual tipo Excel a través de vecinos vacíos (sin overlays absolutos) */
+.sheet__cell--spill {
+  overflow: visible !important;
+  text-overflow: clip !important;
+  white-space: nowrap !important;
+  position: relative;
+  z-index: 1;
 }
 
 .sheet__cell:focus {
@@ -5055,8 +5074,38 @@ body.site-nav-open {
   color: #6b7785 !important;
 }
 
+/* Oculta el texto del input cuando no está enfocado (lo pinta la capa de display) */
+.sheet__cell--masked {
+  position: absolute !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  width: 0 !important;
+  height: 0 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border: 0 !important;
+}
+
 /* Display layer: valores visibles y overflow tipo Excel cuando hay espacio */
 /* No overlay: el input pinta el texto en todo momento; reglas de foco arriba */
+
+/* Capa de display simple dentro del mismo <td>, sin posicionamiento absoluto */
+.sheet__spilltext {
+  position: relative;
+  z-index: 1;
+  display: block;
+  padding: 0.5rem 0.55rem;
+  white-space: nowrap;
+  overflow: visible;
+  color: var(--text);
+  pointer-events: none;
+}
+.sheet__spilltext--wrap {
+  white-space: normal;
+}
+.sheet__spilltext--spill {
+  white-space: nowrap;
+}
 
 /* Creación visual de archivos por sección */
 .file-create {
