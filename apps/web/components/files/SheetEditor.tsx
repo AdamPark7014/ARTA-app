@@ -260,6 +260,15 @@ export function SheetEditor({
     if (!wb || !activeSheet) return grid;
     const ws = wb.Sheets[activeSheet];
     const parser = new (FastFormulaParser as any)();
+    // Build a simple named ranges map from the workbook (SheetJS: Workbook.Names)
+    const namesArr =
+      (((wb as unknown as { Workbook?: { Names?: Array<{ Name: string; Ref: string }> } }).Workbook?.Names ||
+        []) as Array<{ Name: string; Ref: string }>) || [];
+    const namedMap = new Map<string, string>();
+    for (const n of namesArr) {
+      if (n?.Name && n?.Ref) namedMap.set(n.Name.toUpperCase(), n.Ref);
+    }
+    const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const normalizeFormulaName = (s: string) => {
       const map: Record<string, string> = {
         SUMA: 'SUM',
@@ -268,10 +277,20 @@ export function SheetEditor({
         MAX: 'MAX',
         SI: 'IF',
         REDONDEAR: 'ROUND',
+        'SUMAR.SI': 'SUMIF',
+        'CONTAR.SI': 'COUNTIF',
+        CONTAR: 'COUNT',
       };
       let out = s;
       for (const [es, en] of Object.entries(map)) {
         out = out.replace(new RegExp(`\\b${es}\\b`, 'g'), en);
+      }
+      return out;
+    };
+    const replaceNamedRanges = (expr: string) => {
+      let out = expr;
+      for (const [k, ref] of namedMap.entries()) {
+        out = out.replace(new RegExp(`\\b${escapeRe(k)}\\b`, 'g'), ref);
       }
       return out;
     };
@@ -291,7 +310,9 @@ export function SheetEditor({
                 const v = grid[rr]?.[cc] ?? '';
                 if (typeof v === 'string' && v.trim().startsWith('=')) {
                   (parser as any).position = { sheet: s, row: rr + 1, col: cc + 1 };
-                  const inner = (parser as any).parse(String(v).replace(/^=/, ''));
+                  const inner = (parser as any).parse(
+                    replaceNamedRanges(normalizeFormulaName(String(v).replace(/^=/, ''))),
+                  );
                   return typeof inner === 'number' ? inner : Number(inner) || 0;
                 }
                 const { v: nv, t } = toCellValue(String(v));
@@ -299,9 +320,21 @@ export function SheetEditor({
               }
               const addr = XLSX.utils.encode_cell({ r: rr, c: cc });
               const obj = (wb.Sheets[s] as XLSX.WorkSheet)?.[addr] as XLSX.CellObject | undefined;
-              if (obj?.f) return 0;
-              const num = Number(obj?.v);
-              return Number.isFinite(num) ? num : 0;
+              // Prefer Excel's cached numeric value; if absent and there's a formula, try recursive parse.
+              const cached = Number((obj as any)?.v);
+              if (Number.isFinite(cached)) return cached;
+              if (obj?.f) {
+                try {
+                  (parser as any).position = { sheet: s, row: rr + 1, col: cc + 1 };
+                  const inner = (parser as any).parse(
+                    replaceNamedRanges(normalizeFormulaName(String(obj.f))),
+                  );
+                  return typeof inner === 'number' ? inner : Number(inner) || 0;
+                } catch {
+                  /* fall through */
+                }
+              }
+              return 0;
             };
             (parser as any).onRange = (ref: { sheet?: string; from: { row: number; col: number }; to: { row: number; col: number } }) => {
               const s = ref.sheet ?? activeSheet;
@@ -313,7 +346,9 @@ export function SheetEditor({
                     const v = grid[rr]?.[cc] ?? '';
                     if (typeof v === 'string' && v.trim().startsWith('=')) {
                       (parser as any).position = { sheet: s, row: rr + 1, col: cc + 1 };
-                      const inner = (parser as any).parse(String(v).replace(/^=/, ''));
+                      const inner = (parser as any).parse(
+                        replaceNamedRanges(normalizeFormulaName(String(v).replace(/^=/, ''))),
+                      );
                       arow.push(typeof inner === 'number' ? inner : Number(inner) || 0);
                     } else {
                       const { v: nv, t } = toCellValue(String(v));
@@ -322,15 +357,30 @@ export function SheetEditor({
                   } else {
                     const addr = XLSX.utils.encode_cell({ r: rr, c: cc });
                     const obj = (wb.Sheets[s] as XLSX.WorkSheet)?.[addr] as XLSX.CellObject | undefined;
-                    const num = Number(obj?.v);
-                    arow.push(Number.isFinite(num) ? num : 0);
+                    const cached = Number((obj as any)?.v);
+                    if (Number.isFinite(cached)) arow.push(cached);
+                    else if (obj?.f) {
+                      try {
+                        (parser as any).position = { sheet: s, row: rr + 1, col: cc + 1 };
+                        const inner = (parser as any).parse(
+                          replaceNamedRanges(normalizeFormulaName(String(obj.f))),
+                        );
+                        arow.push(typeof inner === 'number' ? inner : Number(inner) || 0);
+                      } catch {
+                        arow.push(0);
+                      }
+                    } else {
+                      arow.push(0);
+                    }
                   }
                 }
                 arr.push(arow);
               }
               return arr;
             };
-            const evaluated = (parser as any).parse(normalizeFormulaName(String(raw).replace(/^=/, '')));
+            const evaluated = (parser as any).parse(
+              replaceNamedRanges(normalizeFormulaName(String(raw).replace(/^=/, ''))),
+            );
             const addr = XLSX.utils.encode_cell({ r, c });
             const obj = ws?.[addr] as XLSX.CellObject | undefined;
             if (typeof evaluated === 'number') {

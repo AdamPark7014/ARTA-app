@@ -106,7 +106,7 @@ test.describe('Stack real: Excel + Word con archivos reales', () => {
     await page.addStyleTag({
       content:
         `
-        .app-header, .site-header, .brand, .sticky, .sticky-top, .brandbar, .shell .header { position: static !important; box-shadow: none !important; }
+        .app-header, .site-header, .brand, .sticky, .sticky-top, .brandbar, .shell .header, .topbar { position: static !important; box-shadow: none !important; z-index: 0 !important; }
         .global-banner, .top-toast, .announce, .toaster { display: none !important; }
         `,
     });
@@ -170,7 +170,7 @@ test.describe('Stack real: Excel + Word con archivos reales', () => {
     await page.addStyleTag({
       content:
         `
-        .app-header, .site-header, .brand, .sticky, .sticky-top, .brandbar, .shell .header { position: static !important; box-shadow: none !important; }
+        .app-header, .site-header, .brand, .sticky, .sticky-top, .brandbar, .shell .header, .topbar { position: static !important; box-shadow: none !important; z-index: 0 !important; }
         .global-banner, .top-toast, .announce, .toaster { display: none !important; }
         `,
     });
