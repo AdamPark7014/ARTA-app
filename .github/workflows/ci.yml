@@ -200,7 +200,9 @@ jobs:
             BR="${GITHUB_HEAD_REF:-${GITHUB_REF_NAME}}"
             # Ensure we are on the PR head branch (checkout action uses a detached HEAD on refs/pull/* by default)
             git fetch origin "$BR"
-            git checkout -B "$BR" "origin/$BR"
+            # Discard the detached HEAD workspace to avoid checkout conflicts (artifact files are re-copied below)
+            git reset --hard
+            git checkout -B "$BR" "origin/$BR" -f
             git pull --rebase origin "$BR" || true
             git add docs/pr5-screens
             git commit -m "docs: add PR5 real-stack screenshots"
