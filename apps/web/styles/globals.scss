@@ -5055,6 +5055,22 @@ body.site-nav-open {
   color: #6b7785 !important;
 }
 
+/* Wrap-only display for specific cells (row 2/5) */
+.sheet__td--wrap .sheet__cell {
+  color: transparent !important;
+  -webkit-text-fill-color: transparent !important;
+  text-overflow: unset !important;
+  overflow: visible !important;
+}
+.sheet__wraptext {
+  display: block;
+  padding: 0.5rem 0.55rem;
+  white-space: normal;
+  color: var(--text);
+  pointer-events: none;
+  line-height: 1.15;
+}
+
 /* Display layer: valores visibles y overflow tipo Excel cuando hay espacio */
 /* No overlay: el input pinta el texto en todo momento; reglas de foco arriba */
 

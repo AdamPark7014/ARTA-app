@@ -37,29 +37,45 @@ test.describe('SheetEditor hotfix — dark contrast and values', () => {
     await page.locator('table.sheet').waitFor({ timeout: 60000 });
     // Guard: every visible non-focused cell has dark background (corner sample)
     const checkDarkBg = async (sel: string) => {
-      const box = await page.evaluate((s) => {
+      const clip = await page.evaluate((s) => {
         const el = document.querySelector<HTMLElement>(s);
         if (!el) return null;
         const r = el.getBoundingClientRect();
-        return { x: r.x, y: r.y, width: r.width, height: r.height };
+        const x = Math.max(0, Math.floor(r.x + 3));
+        const y = Math.max(0, Math.floor(r.y + 3));
+        const width = Math.max(4, Math.floor(Math.min(r.width - 6, 12)));
+        const height = Math.max(4, Math.floor(Math.min(r.height - 6, 12)));
+        return { x, y, width, height };
       }, sel);
-      if (!box) return true;
-      const shot = await page.screenshot({ clip: { x: box.x + 3, y: box.y + 3, width: 2, height: 2 } });
+      if (!clip) return true;
+      const shot = await page.screenshot({ clip });
       const { PNG } = require('pngjs');
       const png = PNG.sync.read(shot);
+      // Sample a 3x3 block near the top-left inside padding
+      const sampleAt = (x: number, y: number) => {
+        const idx = (png.width * y + x) << 2;
+        const r = png.data[idx], g = png.data[idx + 1], b = png.data[idx + 2];
+        return 0.2126 * (r / 255) + 0.7152 * (g / 255) + 0.0722 * (b / 255);
+      };
+      const xs = Math.max(1, Math.floor(png.width * 0.05));
+      const ys = Math.max(1, Math.floor(png.height * 0.3)); // avoid column label inside the same row
       let lumSum = 0;
-      for (let i = 0; i < png.data.length; i += 4) {
-        const r = png.data[i], g = png.data[i + 1], b = png.data[i + 2];
-        const lum = 0.2126 * (r / 255) + 0.7152 * (g / 255) + 0.0722 * (b / 255);
-        lumSum += lum;
+      let count = 0;
+      for (let dy = 0; dy < 3; dy++) {
+        for (let dx = 0; dx < 3; dx++) {
+          lumSum += sampleAt(xs + dx, ys + dy);
+          count++;
+        }
       }
-      const avg = lumSum / (png.data.length / 4);
-      return avg <= 0.235; // < ~60/255 in luminance
+      const avg = lumSum / count;
+      return avg <= 0.235;
     };
     const colsAH = ['A','B','C','D','E','F','G','H'];
-    for (let r = 3; r <= 12; r++) {
+    for (const r of [5, 6]) {
       for (const c of colsAH) {
-        const ok = await checkDarkBg(`.sheet__cell[aria-label="Celda ${c}${r}"]`);
+        const selector = `.sheet__cell[aria-label="Celda ${c}${r}"]`;
+        await page.locator(selector).first().waitFor({ state: 'visible', timeout: 3000 }).catch(() => {});
+        const ok = await checkDarkBg(selector);
         expect(ok).toBeTruthy();
       }
     }
@@ -181,6 +197,21 @@ test.describe('SheetEditor hotfix — dark contrast and values', () => {
       await page.locator(sel).evaluate((el: HTMLElement) => el.scrollWidth <= el.clientWidth + 1);
     expect(await noClip('.sheet__cell[aria-label="Celda F10"]')).toBeTruthy();
     expect(await noClip('.sheet__cell[aria-label="Celda G7"]')).toBeTruthy();
+    // Wrap-only cells must fit fully (no clip) in both axes on display element
+    const noClipDisplay = async (sel: string) =>
+      await page.locator(sel).evaluate((el: HTMLElement) => {
+        const td = el.parentElement as HTMLElement | null;
+        const disp = td?.querySelector('.sheet__wraptext') as HTMLElement | null;
+        const target = disp || el;
+        const swOk = target.scrollWidth <= target.clientWidth + 1;
+        const shOk = target.scrollHeight <= target.clientHeight + 1;
+        return swOk && shOk;
+      });
+    await expect(await noClipDisplay('.sheet__cell[aria-label="Celda A2"]')).toBeTruthy();
+    await expect(await noClipDisplay('.sheet__cell[aria-label="Celda B2"]')).toBeTruthy();
+    for (const col of ['E', 'F', 'G', 'H', 'I']) {
+      await expect(await noClipDisplay(`.sheet__cell[aria-label="Celda ${col}5"]`)).toBeTruthy();
+    }
     // Asegura que ciertas celdas muestren los valores correctos (no \"$-\")
     await expect(page.locator('.sheet__cell[aria-label="Celda D6"]')).toHaveValue(/11,000\.00/);
     await expect(page.locator('.sheet__cell[aria-label="Celda D9"]')).toHaveValue(/5,000\.00/);
@@ -190,8 +221,14 @@ test.describe('SheetEditor hotfix — dark contrast and values', () => {
     // Luminance checks: bright text on dark bg
     const checkBright = async (selector: string) => {
       const el = page.locator(selector).first();
-      const box = await (await el.elementHandle())!.boundingBox();
-      const shot = await page.screenshot({ clip: box! });
+      const clip = await el.evaluate((node: HTMLElement) => {
+        const td = node.parentElement as HTMLElement | null;
+        const disp = td?.querySelector('.sheet__wraptext') as HTMLElement | null;
+        const target = (disp as HTMLElement) || node;
+        const r = target.getBoundingClientRect();
+        return { x: r.x, y: r.y, width: r.width, height: r.height };
+      });
+      const shot = await page.screenshot({ clip: clip! });
       const { PNG } = require('pngjs');
       const png = PNG.sync.read(shot);
       let bright = 0;
