@@ -3,26 +3,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as XLSX from 'xlsx';
 import { HyperFormula, type SimpleCellAddress } from 'hyperformula';
-// Registrar idioma para evitar "Language not registered"
-let HF_LANG_READY = false;
-try {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const esES =
-    // Newer HyperFormula
-    (require('hyperformula/i18n/languages/esES')?.default ||
-      require('hyperformula/i18n/languages/esES')) ||
-    // Older HyperFormula path (best-effort)
-    (require('hyperformula/es/languages/esES')?.default ||
-      require('hyperformula/es/languages/esES'));
-  if (esES) {
-    // @ts-ignore
-    HyperFormula.registerLanguage('esES', esES);
-    HF_LANG_READY = true;
-  }
-} catch {
-  // Ignorar: HyperFormula puede trabajar en idioma por defecto si es necesario
-  HF_LANG_READY = false;
-}
 import type { SaveFile } from '@/lib/file-save';
 import { api } from '@/lib/api';
 import { ExpandBox } from '@/components/ui/ExpandBox';
@@ -294,10 +274,7 @@ export function SheetEditor({
       }
       hfRef.current = null;
       hfSheetIdByNameRef.current = new Map();
-      const hf = HyperFormula.buildEmpty({
-        licenseKey: 'gpl-v3',
-        language: HF_LANG_READY ? 'esES' : undefined,
-      } as any);
+      const hf = HyperFormula.buildEmpty({ licenseKey: 'gpl-v3' } as any);
       wb.SheetNames.forEach((name) => {
         const ws = wb.Sheets[name];
         const rows = (XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: true }) as unknown[][]) || [];

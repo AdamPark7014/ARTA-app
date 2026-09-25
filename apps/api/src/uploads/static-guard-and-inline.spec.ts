@@ -142,6 +142,8 @@ describe('Static /uploads guard order + in-app inline (no DB)', () => {
       entities: ['ARTA'],
       permissions: [],
       organizationId: 'org1',
+      jti: 'test-jti-2',
+      fullName: 'Usuario Logistica',
     } as any);
     await request(app.getHttpServer())
       .get('/files/f2/inline')
@@ -167,6 +169,8 @@ describe('Static /uploads guard order + in-app inline (no DB)', () => {
       entities: ['ARTA', 'EXPLANADA'],
       permissions: [],
       organizationId: 'org1',
+      jti: 'test-jti-3',
+      fullName: 'Dirección',
     } as any);
     await request(app.getHttpServer())
       .get('/files/f3/inline')

@@ -55,11 +55,42 @@ function fx(selector: string) {
 
 const ROOT = path.resolve(process.cwd(), '..'); // apps/
 const TPL_DIR = path.resolve(ROOT, 'api/assets/format-sources');
+const OUT_DIR = path.resolve(process.cwd(), 'e2e-screens');
+
+// WCAG contrast helpers
+function srgbToLinear(c: number): number {
+  const cs = c / 255;
+  return cs <= 0.03928 ? cs / 12.92 : Math.pow((cs + 0.055) / 1.055, 2.4);
+}
+function luminance(rgb: [number, number, number]): number {
+  const [r, g, b] = rgb.map(srgbToLinear) as [number, number, number];
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+function parseCssColor(s: string): [number, number, number] | null {
+  const m = /rgba?\((\d+),\s*(\d+),\s*(\d+)/.exec(s);
+  if (!m) return null;
+  return [Number(m[1]), Number(m[2]), Number(m[3])];
+}
+async function expectContrast(page, selector: string, min: number) {
+  const { fg, bg } = await page.$eval(selector, (el) => {
+    const cs = window.getComputedStyle(el as Element);
+    return { fg: cs.color, bg: cs.backgroundColor };
+  });
+  const fgRgb = parseCssColor(fg);
+  const bgRgb = parseCssColor(bg);
+  expect(fgRgb && bgRgb).toBeTruthy();
+  const l1 = luminance(fgRgb as any) + 0.05;
+  const l2 = luminance(bgRgb as any) + 0.05;
+  const ratio = l1 > l2 ? l1 / l2 : l2 / l1;
+  expect(ratio).toBeGreaterThanOrEqual(min);
+}
+
+test.use({ colorScheme: 'dark' });
 
 test.describe('Stack real: Excel + Word con archivos reales', () => {
   test.setTimeout(180_000);
 
-  test('Carga real, edición y capturas con verificación de calidad', async ({ page, baseURL }) => {
+  test('Carga real, edición y capturas con verificación de calidad', async ({ page, baseURL }, testInfo) => {
     // 1) API real lista
     await waitApiReady();
 
@@ -71,14 +102,26 @@ test.describe('Stack real: Excel + Word con archivos reales', () => {
     await page.getByRole('button', { name: 'Entrar', exact: true }).click();
     await page.waitForURL('**/dashboard');
 
-    // 3) Ir a eventos y abrir uno
-    await page.goto('/events');
-    const anyEvent = page.locator('.ev-card').first();
-    await anyEvent.click();
-    await expect(page.getByRole('heading', { name: /Evento/i })).toBeVisible({ timeout: 10_000 });
-
-    // 4) Ir a Documentos
-    await page.getByRole('tab', { name: 'Documentos' }).click();
+    // 3) Crear evento vía API y abrir Documentos
+    const createdId = await page.evaluate(async () => {
+      const getCookie = (name: string) =>
+        document.cookie
+          .split(';')
+          .map((s) => s.trim())
+          .map((s) => s.split('='))
+          .reduce<Record<string, string>>((acc, [k, v]) => ((acc[k] = decodeURIComponent(v || '')), acc), {})[name];
+      const csrf = getCookie('arta_csrf') || '';
+      const res = await fetch('/api/events', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+        body: JSON.stringify({ entity: 'ARTA', name: `E2E Real ${Date.now()}` }),
+      });
+      if (!res.ok) return '';
+      const data = await res.json();
+      return data?.id || data?.event?.id || '';
+    });
+    expect(createdId).toBeTruthy();
+    await page.goto(`/events/${createdId}?tab=files`);
     await expect(page.getByRole('heading', { name: 'Documentos' })).toBeVisible();
 
     // Helper: subir archivo por etiqueta "Subir archivo"
@@ -112,10 +155,12 @@ test.describe('Stack real: Excel + Word con archivos reales', () => {
     expect(campRows.flat().some((cell) => String(cell).toUpperCase().includes(campHtmlNeedle))).toBeTruthy();
     // Abrir visor
     const campRow = page.locator('.hub-item', { hasText: 'CAMPANA_BASE.xlsx' }).first();
-    await campRow.getByRole('button', { name: 'Ver' }).click();
+    await campRow.getByRole('button', { name: /Ver|Ver \/ Editar/ }).click();
     await expect(page.locator('.sheet-editor')).toBeVisible();
     await expect(page.locator('.sheet-state--error')).toHaveCount(0);
-    await page.locator('.sheet-editor').first().screenshot({ path: '/opt/cursor/artifacts/campana.png', animations: 'disabled' });
+    fs.mkdirSync(OUT_DIR, { recursive: true });
+    await page.locator('.sheet-editor').first().screenshot({ path: path.join(OUT_DIR, 'campana.png'), animations: 'disabled' });
+    await testInfo.attach('campana.png', { path: path.join(OUT_DIR, 'campana.png') });
 
     // Excel: Corrida
     const corrPath = await uploadXlsx('CORRIDA_BASE.xlsx');
@@ -124,9 +169,10 @@ test.describe('Stack real: Excel + Word con archivos reales', () => {
     const corrRows: unknown[][] = XLSX.utils.sheet_to_json(corrWb.Sheets[corrFirst], { header: 1, defval: '' }) as any;
     expect(corrRows.flat().some((cell) => String(cell).toUpperCase().includes('CONCEPTO') || String(cell).toUpperCase().includes('INGRES'))).toBeTruthy();
     const corrRow = page.locator('.hub-item', { hasText: 'CORRIDA_BASE.xlsx' }).first();
-    await corrRow.getByRole('button', { name: 'Ver' }).click();
+    await corrRow.getByRole('button', { name: /Ver|Ver \/ Editar/ }).click();
     await expect(page.locator('.surface .sheet-editor').nth(1)).toBeVisible();
-    await page.locator('.surface .sheet-editor').nth(1).screenshot({ path: '/opt/cursor/artifacts/corrida.png', animations: 'disabled' });
+    await page.locator('.surface .sheet-editor').nth(1).screenshot({ path: path.join(OUT_DIR, 'corrida.png'), animations: 'disabled' });
+    await testInfo.attach('corrida.png', { path: path.join(OUT_DIR, 'corrida.png') });
 
     // Excel: Pendones
     const pendPath = await uploadXlsx('DISTRIBUCION_PENDONES.xlsx');
@@ -135,9 +181,10 @@ test.describe('Stack real: Excel + Word con archivos reales', () => {
     const pendRows: unknown[][] = XLSX.utils.sheet_to_json(pendWb.Sheets[pendFirst], { header: 1, defval: '' }) as any;
     expect(pendRows.flat().some((cell) => String(cell).toUpperCase().includes('PENDONES'))).toBeTruthy();
     const pendRow = page.locator('.hub-item', { hasText: 'DISTRIBUCION_PENDONES.xlsx' }).first();
-    await pendRow.getByRole('button', { name: 'Ver' }).click();
+    await pendRow.getByRole('button', { name: /Ver|Ver \/ Editar/ }).click();
     await expect(page.locator('.surface .sheet-editor').nth(2)).toBeVisible();
-    await page.locator('.surface .sheet-editor').nth(2).screenshot({ path: '/opt/cursor/artifacts/pendones.png', animations: 'disabled' });
+    await page.locator('.surface .sheet-editor').nth(2).screenshot({ path: path.join(OUT_DIR, 'pendones.png'), animations: 'disabled' });
+    await testInfo.attach('pendones.png', { path: path.join(OUT_DIR, 'pendones.png') });
 
     // Excel: Orden de compra
     const ocPath = await uploadXlsx('ORDEN_DE_COMPRA.xlsx');
@@ -146,9 +193,10 @@ test.describe('Stack real: Excel + Word con archivos reales', () => {
     const ocRows: unknown[][] = XLSX.utils.sheet_to_json(ocWb.Sheets[ocFirst], { header: 1, defval: '' }) as any;
     expect(ocRows.flat().some((cell) => String(cell).toUpperCase().includes('ORDEN') || String(cell).toUpperCase().includes('COMPRA'))).toBeTruthy();
     const ocRow = page.locator('.hub-item', { hasText: 'ORDEN_DE_COMPRA.xlsx' }).first();
-    await ocRow.getByRole('button', { name: 'Ver' }).click();
+    await ocRow.getByRole('button', { name: /Ver|Ver \/ Editar/ }).click();
     await expect(page.locator('.surface .sheet-editor').nth(3)).toBeVisible();
-    await page.locator('.surface .sheet-editor').nth(3).screenshot({ path: '/opt/cursor/artifacts/oc.png', animations: 'disabled' });
+    await page.locator('.surface .sheet-editor').nth(3).screenshot({ path: path.join(OUT_DIR, 'oc.png'), animations: 'disabled' });
+    await testInfo.attach('oc.png', { path: path.join(OUT_DIR, 'oc.png') });
 
     // Excel: edición y recálculo (crear una suma simple propia para validar HF)
     await campRow.getByRole('button', { name: /Editar|Editar aquí/ }).click();
@@ -161,28 +209,39 @@ test.describe('Stack real: Excel + Word con archivos reales', () => {
     await page.getByLabel('Editar A26', { exact: true }).fill('=A24+A25');
     // Seleccionar fórmula para mostrar en barra fx
     await page.getByLabel('Celda A26', { exact: true }).click();
-    // Debe valer 3
+    // Debe valer 3 y no se muestran fórmulas visibles
     await expect(page.getByLabel('Celda A26', { exact: true })).toHaveValue('3');
-    await editor.screenshot({ path: '/opt/cursor/artifacts/excel-editando.png', animations: 'disabled' });
+    const anyFormula = await page.$$eval('.sheet__cell', (els) => els.some((e) => (e as HTMLInputElement).value.trim().startsWith('=')));
+    expect(anyFormula).toBeFalsy();
+    // Contrastes mínimos en oscuro (celda activa y toolbar)
+    await expectContrast(page, '.sheet__cell:focus', 4.5);
+    await expectContrast(page, '.sheet-toolbar .btn', 3.0);
+    // Un único banner visible
+    await expect(page.locator('.module-banner')).toHaveCount(0, { timeout: 1000 });
+    await editor.screenshot({ path: path.join(OUT_DIR, 'excel-editando.png'), animations: 'disabled' });
+    await testInfo.attach('excel-editando.png', { path: path.join(OUT_DIR, 'excel-editando.png') });
 
     // Visor puro del mismo archivo
     await page.getByRole('button', { name: 'Cerrar' }).first().click();
-    await campRow.getByRole('button', { name: 'Ver' }).click();
+    await campRow.getByRole('button', { name: /Ver|Ver \/ Editar/ }).click();
     const viewer = page.locator('.surface .sheet-editor').first();
     await expect(viewer).toBeVisible();
-    await viewer.screenshot({ path: '/opt/cursor/artifacts/visor-excel.png', animations: 'disabled' });
+    await viewer.screenshot({ path: path.join(OUT_DIR, 'visor-excel.png'), animations: 'disabled' });
+    await testInfo.attach('visor-excel.png', { path: path.join(OUT_DIR, 'visor-excel.png') });
 
     // Word: importar Checklist Producción
     const prodPath = await importDocx('CHECKLIST_PRODUCCION.docx');
     const prodHtml = (await mammoth.convertToHtml({ buffer: fs.readFileSync(prodPath) })).value || '';
     expect(/PRODUCCI[ÓO]N/i.test(prodHtml)).toBeTruthy();
-    await page.locator('.docedit-app').first().screenshot({ path: '/opt/cursor/artifacts/checklist-produccion.png', animations: 'disabled' });
+    await page.locator('.docedit-app').first().screenshot({ path: path.join(OUT_DIR, 'checklist-produccion.png'), animations: 'disabled' });
+    await testInfo.attach('checklist-produccion.png', { path: path.join(OUT_DIR, 'checklist-produccion.png') });
 
     // Word: importar Creación de boletera
     const bolPath = await importDocx('CREACION_BOLETERA.docx');
     const bolHtml = (await mammoth.convertToHtml({ buffer: fs.readFileSync(bolPath) })).value || '';
     expect(/BOLETERA/i.test(bolHtml)).toBeTruthy();
-    await page.locator('.docedit-app').first().screenshot({ path: '/opt/cursor/artifacts/boletera.png', animations: 'disabled' });
+    await page.locator('.docedit-app').first().screenshot({ path: path.join(OUT_DIR, 'boletera.png'), animations: 'disabled' });
+    await testInfo.attach('boletera.png', { path: path.join(OUT_DIR, 'boletera.png') });
 
     // Word: edición rápida y Tab al siguiente campo
     await page.locator('.docedit__title').fill('Prueba edición Word');
@@ -190,18 +249,19 @@ test.describe('Stack real: Excel + Word con archivos reales', () => {
     await firstArea.fill('Campo 1');
     await firstArea.press('Tab');
     await page.locator('.docedit__text').nth(1).fill('Campo 2');
-    await page.locator('.docedit-app').first().screenshot({ path: '/opt/cursor/artifacts/word-editando.png', animations: 'disabled' });
+    await page.locator('.docedit-app').first().screenshot({ path: path.join(OUT_DIR, 'word-editando.png'), animations: 'disabled' });
+    await testInfo.attach('word-editando.png', { path: path.join(OUT_DIR, 'word-editando.png') });
 
     // 5) Validación de calidad de PNG: >= 30 KB y >= 50 colores
-    await expectPngQuality('/opt/cursor/artifacts/campana.png');
-    await expectPngQuality('/opt/cursor/artifacts/corrida.png');
-    await expectPngQuality('/opt/cursor/artifacts/pendones.png');
-    await expectPngQuality('/opt/cursor/artifacts/oc.png');
-    await expectPngQuality('/opt/cursor/artifacts/visor-excel.png');
-    await expectPngQuality('/opt/cursor/artifacts/excel-editando.png');
-    await expectPngQuality('/opt/cursor/artifacts/checklist-produccion.png');
-    await expectPngQuality('/opt/cursor/artifacts/boletera.png');
-    await expectPngQuality('/opt/cursor/artifacts/word-editando.png');
+    await expectPngQuality(path.join(OUT_DIR, 'campana.png'));
+    await expectPngQuality(path.join(OUT_DIR, 'corrida.png'));
+    await expectPngQuality(path.join(OUT_DIR, 'pendones.png'));
+    await expectPngQuality(path.join(OUT_DIR, 'oc.png'));
+    await expectPngQuality(path.join(OUT_DIR, 'visor-excel.png'));
+    await expectPngQuality(path.join(OUT_DIR, 'excel-editando.png'));
+    await expectPngQuality(path.join(OUT_DIR, 'checklist-produccion.png'));
+    await expectPngQuality(path.join(OUT_DIR, 'boletera.png'));
+    await expectPngQuality(path.join(OUT_DIR, 'word-editando.png'));
   });
 });
 

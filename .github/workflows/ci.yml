@@ -108,6 +108,8 @@ jobs:
   e2e-real:
     name: E2E real stack — API + Web + Playwright (real templates)
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     services:
       postgres:
         image: postgres:16
@@ -176,6 +178,30 @@ jobs:
       - name: Run real-stack Playwright spec
         working-directory: apps/web
         run: npx playwright test e2e/real-stack-files.spec.ts
+
+      - name: Upload screenshots
+        uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: e2e-screens
+          path: apps/web/e2e-screens
+          retention-days: 7
+          if-no-files-found: warn
+
+      - name: Commit screenshots into docs/pr5-screens
+        if: ${{ !cancelled() }}
+        run: |
+          mkdir -p docs/pr5-screens
+          cp -r apps/web/e2e-screens/* docs/pr5-screens/ || true
+          if git status --porcelain | grep -q "docs/pr5-screens"; then
+            git config user.name "arta-ci"
+            git config user.email "ci@arta.local"
+            git add docs/pr5-screens
+            git commit -m "docs: add PR5 real-stack screenshots"
+            git push
+          else
+            echo "No screenshots to commit"
+          fi
 
       - name: Upload Playwright report (real stack)
         uses: actions/upload-artifact@v4
