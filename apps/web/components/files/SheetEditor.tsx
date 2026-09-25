@@ -183,6 +183,21 @@ export function SheetEditor({
     if (!wb || !activeSheet) return grid;
     const ws = wb.Sheets[activeSheet];
     const parser = new (FastFormulaParser as any)();
+    const normalizeFormulaName = (s: string) => {
+      const map: Record<string, string> = {
+        SUMA: 'SUM',
+        PROMEDIO: 'AVERAGE',
+        MIN: 'MIN',
+        MAX: 'MAX',
+        SI: 'IF',
+        REDONDEAR: 'ROUND',
+      };
+      let out = s;
+      for (const [es, en] of Object.entries(map)) {
+        out = out.replace(new RegExp(`\\b${es}\\b`, 'g'), en);
+      }
+      return out;
+    };
     const out: Grid = [];
     for (let r = 0; r < grid.length; r += 1) {
       const row: string[] = [];
@@ -238,7 +253,7 @@ export function SheetEditor({
               }
               return arr;
             };
-            const evaluated = (parser as any).parse(String(raw).replace(/^=/, ''));
+            const evaluated = (parser as any).parse(normalizeFormulaName(String(raw).replace(/^=/, '')));
             const addr = XLSX.utils.encode_cell({ r, c });
             const obj = ws?.[addr] as XLSX.CellObject | undefined;
             if (typeof evaluated === 'number') {
@@ -299,6 +314,59 @@ export function SheetEditor({
             } catch {
               /* ignore and fallback below */
             }
+            // Fallback específico: SUM/SUMA con rangos/argumentos
+            try {
+              const ftxt = String(raw).trim().toUpperCase();
+              const m = ftxt.match(/^=(SUM|SUMA)\(([^)]+)\)$/);
+              if (m) {
+                const args = m[2].split(/[;,]/).map((s) => s.trim());
+                let total = 0;
+                const addCell = (rr: number, cc: number) => {
+                  const vraw = grid[rr]?.[cc] ?? '';
+                  if (typeof vraw === 'string' && vraw.startsWith('=')) {
+                    try {
+                      (parser as any).position = { sheet: activeSheet, row: rr + 1, col: cc + 1 };
+                      const val = (parser as any).parse(normalizeFormulaName(vraw.slice(1)));
+                      total += Number(val) || 0;
+                    } catch {
+                      const cellObj = ws?.[XLSX.utils.encode_cell({ r: rr, c: cc })] as XLSX.CellObject | undefined;
+                      total += Number(cellObj?.v) || 0;
+                    }
+                  } else {
+                    const { v: nv, t } = toCellValue(String(vraw));
+                    total += t === 'n' ? (nv as number) : Number(nv) || 0;
+                  }
+                };
+                for (const a of args) {
+                  const rng = a.match(/^([A-Z]+\d+):([A-Z]+\d+)$/);
+                  if (rng) {
+                    const s = XLSX.utils.decode_cell(rng[1]);
+                    const e = XLSX.utils.decode_cell(rng[2]);
+                    for (let rr = Math.min(s.r, e.r); rr <= Math.max(s.r, e.r); rr += 1) {
+                      for (let cc = Math.min(s.c, e.c); cc <= Math.max(s.c, e.c); cc += 1) addCell(rr, cc);
+                    }
+                  } else {
+                    const one = a.match(/^([A-Z]+\d+)$/);
+                    if (one) {
+                      const p = XLSX.utils.decode_cell(one[1]);
+                      addCell(p.r, p.c);
+                    } else {
+                      total += Number(a) || 0;
+                    }
+                  }
+                }
+                const hasDecimals = Math.abs(total % 1) > 1e-6;
+                row.push(
+                  total.toLocaleString('es-MX', {
+                    minimumFractionDigits: hasDecimals ? 2 : 0,
+                    maximumFractionDigits: hasDecimals ? 6 : 0,
+                  }),
+                );
+                continue;
+              }
+            } catch {
+              /* ignore and continue to cache fallback */
+            }
             // Si falla la evaluación, usa el valor cacheado de Excel si existe
             const cache = obj?.v as unknown;
             const fmt = (FastFormulaParser as any).SSF?.format;
@@ -325,7 +393,8 @@ export function SheetEditor({
         } else {
           const addr = XLSX.utils.encode_cell({ r, c });
           const obj = ws?.[addr] as XLSX.CellObject | undefined;
-          row.push(obj?.w != null ? String(obj.w) : String(raw ?? ''));
+          const txt = (raw !== '' && raw != null) ? String(raw) : (obj?.w != null ? String(obj.w) : '');
+          row.push(txt);
         }
       }
       out.push(row);
@@ -376,10 +445,24 @@ export function SheetEditor({
         const d = defs?.[i];
         const w =
           (d?.wpx && Math.max(60, Math.floor(d.wpx))) ||
-          (d?.wch && Math.max(60, Math.floor(d.wch * 8) + 12)) ||
+          (d?.wch && Math.max(60, Math.floor(d.wch * 7 + 10))) ||
           104;
         px.push(w);
       }
+      // ensancha por contenido visible en primeras filas
+      const sampleRows = Math.min(30, rows.length);
+      for (let c = 0; c < px.length; c += 1) {
+        let maxLen = 0;
+        for (let r = 0; r < sampleRows; r += 1) {
+          const cell = rows[r]?.[c];
+          const len = cell == null ? 0 : String(cell).length;
+          if (len > maxLen) maxLen = len;
+        }
+        const contentW = Math.max(60, Math.min(640, Math.floor(maxLen * 7 + 16)));
+        px[c] = Math.max(px[c] || 0, contentW);
+      }
+      // Columna A: etiquetas largas — evita clipping
+      if (px.length > 0) px[0] = Math.max(px[0], 420);
       setColPx(px);
       mergesRef.current = (((ws as XLSX.WorkSheet)['!merges'] as unknown) as Array<{
         s: { r: number; c: number };

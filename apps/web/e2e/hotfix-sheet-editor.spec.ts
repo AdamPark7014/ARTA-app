@@ -91,10 +91,27 @@ test.describe('SheetEditor hotfix — dark contrast and values', () => {
     await page.keyboard.type('200');
     // Espera a que recalculen algunos dependientes (en inputs no enfocados)
     await expect
-      .poll(
-      async () => await page.locator('.sheet__cell[aria-label="Celda D6"]').inputValue(),
-      )
+      .poll(async () => await page.locator('.sheet__cell[aria-label="Celda D6"]').inputValue())
       .not.toBe(beforeD6);
+    // Sum row D13 should reflect the update (sum of D5:D12)
+    const sumRange = await page.evaluate(() => {
+      const toNum = (s: string) => {
+        const str = String(s);
+        if (/[A-Za-z]/.test(str)) return 0;
+        return Number(str.replace(/[^0-9.-]/g, '')) || 0;
+      };
+      let total = 0;
+      for (let r = 5; r <= 12; r++) {
+        const el = document.querySelector<HTMLInputElement>(`.sheet__cell[aria-label="Celda D${r}"]`);
+        if (el) total += toNum(el.value);
+      }
+      return total;
+    });
+    const d13 = await page.locator('.sheet__cell[aria-label="Celda D13"]').inputValue();
+    const d13Num = Number(d13.replace(/[^0-9.-]/g, '')) || 0;
+    expect(Math.abs(d13Num - sumRange)).toBeLessThanOrEqual(1);
+    // G2 must show 1
+    await expect(page.locator('.sheet__cell[aria-label="Celda G2"]')).toHaveValue('1');
     // A-column labels still visible
     await expect(page.locator('.sheet__cell[aria-label="Celda A3"]')).toHaveValue(/INGRESOS/);
     await expect(page.locator('.sheet__cell[aria-label="Celda A5"]')).toHaveValue(/VIP/);
@@ -106,15 +123,50 @@ test.describe('SheetEditor hotfix — dark contrast and values', () => {
 
     // Omitimos captura dedicada de toolbar; ya es visible en las demás tomas
 
-    // Campaña con valores
+  // Campaña con valores
     await page.goto(`${E2E_ORIGIN}/dev/sheet-harness?name=CAMPANA_BASE.xlsx&variant=campaign`);
     await page.getByRole('table').waitFor({ timeout: 15000 });
+    // No clipping on key cells
+    const noClip = async (sel: string) =>
+      await page.locator(sel).evaluate((el: HTMLElement) => el.scrollWidth <= el.clientWidth + 1);
+    expect(await noClip('.sheet__cell[aria-label="Celda A2"]')).toBeTruthy();
+    expect(await noClip('.sheet__cell[aria-label="Celda F10"]')).toBeTruthy();
+    expect(await noClip('.sheet__cell[aria-label="Celda G7"]')).toBeTruthy();
     // Asegura que ciertas celdas muestren los valores correctos (no \"$-\")
     await expect(page.locator('.sheet__cell[aria-label="Celda D6"]')).toHaveValue(/11,000\.00/);
     await expect(page.locator('.sheet__cell[aria-label="Celda D9"]')).toHaveValue(/5,000\.00/);
     await expect(page.locator('.sheet__cell[aria-label="Celda D10"]')).toHaveValue(/5,000\.00/);
     await expect(page.locator('.sheet__cell[aria-label="Celda D12"]')).toHaveValue(/15,000\.00/);
     await expect(page.locator('.sheet__cell[aria-label="Celda G6"]')).toHaveValue(/9,000\.00/);
+    // Luminance checks: bright text on dark bg
+    const checkBright = async (selector: string) => {
+      const el = page.locator(selector).first();
+      const box = await (await el.elementHandle())!.boundingBox();
+      const shot = await page.screenshot({ clip: box! });
+      const { PNG } = require('pngjs');
+      const png = PNG.sync.read(shot);
+      let bright = 0;
+      for (let y = 0; y < png.height; y++) {
+        for (let x = 0; x < png.width; x++) {
+          const idx = (png.width * y + x) << 2;
+          const r = png.data[idx], g = png.data[idx + 1], b = png.data[idx + 2];
+          const lum = 0.2126 * (r / 255) + 0.7152 * (g / 255) + 0.0722 * (b / 255);
+          if (lum > 0.67) bright++;
+        }
+      }
+      expect(bright).toBeGreaterThanOrEqual(30);
+    };
+    // Corrida bright cells
+    await page.goto(`${E2E_ORIGIN}/dev/sheet-harness?name=CORRIDA_BASE.xlsx&variant=finance`);
+    await page.getByRole('table').waitFor({ timeout: 15000 });
+    await checkBright('.sheet__cell[aria-label="Celda A5"]');
+    await checkBright('.sheet__cell[aria-label="Celda B5"]');
+    await checkBright('.sheet__cell[aria-label="Celda D5"]');
+    // Campaña bright cells
+    await page.goto(`${E2E_ORIGIN}/dev/sheet-harness?name=CAMPANA_BASE.xlsx&variant=campaign`);
+    await page.getByRole('table').waitFor({ timeout: 15000 });
+    await checkBright('.sheet__cell[aria-label="Celda A6"]');
+    await checkBright('.sheet__cell[aria-label="Celda D6"]');
     // Screenshot d)
     await page.screenshot({ path: '../../docs/hotfix-screens/hotfix-campana.png', fullPage: false });
 

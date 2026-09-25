@@ -4969,6 +4969,7 @@ body.site-nav-open {
   border-right: 1px solid #cfd7e0;
   border-bottom: 1px solid #b8c2ce;
   min-width: 104px;
+  white-space: normal; /* permitir wrap en headers largos */
 }
 
 .sheet__corner,
