@@ -205,8 +205,12 @@ jobs:
             git checkout -B "$BR" "origin/$BR" -f
             git pull --rebase origin "$BR" || true
             git add docs/pr5-screens
-            git commit -m "docs: add PR5 real-stack screenshots"
-            git push
+            if git diff --staged --quiet; then
+              echo "No screenshot diffs to commit"
+            else
+              git commit -m "docs: add PR5 real-stack screenshots"
+              git push
+            fi
           else
             echo "No screenshots to commit"
           fi
