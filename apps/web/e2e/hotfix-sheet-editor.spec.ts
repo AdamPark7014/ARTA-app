@@ -119,6 +119,14 @@ test.describe('SheetEditor hotfix — dark contrast and values', () => {
     await expect(page.locator('.sheet__cell[aria-label="Celda A7"]')).toHaveValue(/Bronce/);
     // No overlay elements must exist (evita fugas/solapamientos)
     await expect(page.locator('.sheet__display')).toHaveCount(0);
+    // Ensure A..G are visible: blur, scrollLeft=0, widen viewport, then capture
+    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+    await page.evaluate(() => {
+      const wrap = document.querySelector('.sheet-wrap') as HTMLElement | null;
+      if (wrap) wrap.scrollLeft = 0;
+    });
+    await page.setViewportSize({ width: 1600, height: 900 });
+    await page.waitForTimeout(60);
     await page.screenshot({ path: '../../docs/hotfix-screens/hotfix-recalc.png', fullPage: false });
 
     // Omitimos captura dedicada de toolbar; ya es visible en las demás tomas
@@ -167,7 +175,13 @@ test.describe('SheetEditor hotfix — dark contrast and values', () => {
     await page.getByRole('table').waitFor({ timeout: 15000 });
     await checkBright('.sheet__cell[aria-label="Celda A6"]');
     await checkBright('.sheet__cell[aria-label="Celda D6"]');
-    // Screenshot d)
+    // Make sure A..H are visible and capture
+    await page.evaluate(() => {
+      const wrap = document.querySelector('.sheet-wrap') as HTMLElement | null;
+      if (wrap) wrap.scrollLeft = 0;
+    });
+    await page.setViewportSize({ width: 1600, height: 900 });
+    await page.waitForTimeout(60);
     await page.screenshot({ path: '../../docs/hotfix-screens/hotfix-campana.png', fullPage: false });
 
     // Verificar que las PNG no estén en blanco (tiene píxeles distintos)
