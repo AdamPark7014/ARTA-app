@@ -200,8 +200,10 @@ test.describe('Stack real: Excel + Word con archivos reales', () => {
   await page.locator('.surface .sheet-editor').first().screenshot({ path: path.join(OUT_DIR, 'oc.png'), animations: 'disabled' });
     await testInfo.attach('oc.png', { path: path.join(OUT_DIR, 'oc.png') });
 
-    // Excel: edición y recálculo (crear una suma simple propia para validar HF)
-    await campRow.getByRole('button', { name: /Editar|Editar aquí/ }).click();
+  // Excel: edición y recálculo (crear una suma simple propia para validar HF)
+  // Reabre Campaña y entra a edición explícita
+  await campRow.getByRole('button', { name: /Ver|Ver \/ Editar/ }).click();
+  await page.getByRole('button', { name: 'Editar aquí' }).click();
     const editor = page.locator('.surface .sheet-editor').first();
     await expect(editor).toBeVisible();
     // Escribir datos en A24 y A25 y fórmula en A26
