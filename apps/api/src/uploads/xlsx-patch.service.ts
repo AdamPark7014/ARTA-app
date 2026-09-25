@@ -123,6 +123,14 @@ export class XlsxPatchService {
       }
     }
 
+    // Garantiza que Excel recalcule al abrir (para PDF y salidas oficiales)
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (workbook as any).calcProperties = (workbook as any).calcProperties || {};
+      (workbook as any).calcProperties.fullCalcOnLoad = true;
+    } catch {
+      /* noop */
+    }
     const out = await workbook.xlsx.writeBuffer();
     return Buffer.from(out);
   }

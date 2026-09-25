@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as XLSX from 'xlsx';
+import FastFormulaParser from 'fast-formula-parser';
 import type { SaveFile } from '@/lib/file-save';
 import { api } from '@/lib/api';
 import { ExpandBox } from '@/components/ui/ExpandBox';
@@ -155,6 +156,107 @@ export function SheetEditor({
   const finance = variant === 'finance';
   const richTools = campaign || finance;
 
+  /**
+   * Grid de presentación: muestra valores calculados y cacheados.
+   * La celda enfocada sigue mostrando el `grid` crudo con "=…".
+   */
+  const displayGrid: Grid = useMemo(() => {
+    const wb = workbookRef.current;
+    if (!wb || !activeSheet) return grid;
+    const ws = wb.Sheets[activeSheet];
+    const parser = new (FastFormulaParser as any)();
+    const out: Grid = [];
+    for (let r = 0; r < grid.length; r += 1) {
+      const row: string[] = [];
+      for (let c = 0; c < (grid[r]?.length || 0); c += 1) {
+        const raw = grid[r]?.[c] ?? '';
+        if (typeof raw === 'string' && raw.trim().startsWith('=')) {
+          try {
+            (parser as any).position = { sheet: activeSheet, row: r + 1, col: c + 1 };
+            (parser as any).onCell = (ref: { sheet?: string; row: number; col: number }) => {
+              const s = ref.sheet ?? activeSheet;
+              const rr = ref.row - 1;
+              const cc = ref.col - 1;
+              if (s === activeSheet) {
+                const v = grid[rr]?.[cc] ?? '';
+                if (typeof v === 'string' && v.trim().startsWith('=')) {
+                  (parser as any).position = { sheet: s, row: rr + 1, col: cc + 1 };
+                  const inner = (parser as any).parse(String(v).replace(/^=/, ''));
+                  return typeof inner === 'number' ? inner : Number(inner) || 0;
+                }
+                const { v: nv, t } = toCellValue(String(v));
+                return t === 'n' ? (nv as number) : Number(nv) || 0;
+              }
+              const addr = XLSX.utils.encode_cell({ r: rr, c: cc });
+              const obj = (wb.Sheets[s] as XLSX.WorkSheet)?.[addr] as XLSX.CellObject | undefined;
+              if (obj?.f) return 0;
+              const num = Number(obj?.v);
+              return Number.isFinite(num) ? num : 0;
+            };
+            (parser as any).onRange = (ref: { sheet?: string; from: { row: number; col: number }; to: { row: number; col: number } }) => {
+              const s = ref.sheet ?? activeSheet;
+              const arr: number[][] = [];
+              for (let rr = ref.from.row - 1; rr <= ref.to.row - 1; rr += 1) {
+                const arow: number[] = [];
+                for (let cc = ref.from.col - 1; cc <= ref.to.col - 1; cc += 1) {
+                  if (s === activeSheet) {
+                    const v = grid[rr]?.[cc] ?? '';
+                    if (typeof v === 'string' && v.trim().startsWith('=')) {
+                      (parser as any).position = { sheet: s, row: rr + 1, col: cc + 1 };
+                      const inner = (parser as any).parse(String(v).replace(/^=/, ''));
+                      arow.push(typeof inner === 'number' ? inner : Number(inner) || 0);
+                    } else {
+                      const { v: nv, t } = toCellValue(String(v));
+                      arow.push(t === 'n' ? (nv as number) : Number(nv) || 0);
+                    }
+                  } else {
+                    const addr = XLSX.utils.encode_cell({ r: rr, c: cc });
+                    const obj = (wb.Sheets[s] as XLSX.WorkSheet)?.[addr] as XLSX.CellObject | undefined;
+                    const num = Number(obj?.v);
+                    arow.push(Number.isFinite(num) ? num : 0);
+                  }
+                }
+                arr.push(arow);
+              }
+              return arr;
+            };
+            const evaluated = (parser as any).parse(String(raw).replace(/^=/, ''));
+            const addr = XLSX.utils.encode_cell({ r, c });
+            const obj = ws?.[addr] as XLSX.CellObject | undefined;
+            if (typeof evaluated === 'number') {
+              const fmt = (FastFormulaParser as any).SSF?.format;
+              const z = (obj as any)?.z ?? undefined;
+              if (fmt && z) row.push(fmt(z, evaluated));
+              else {
+                const hasDecimals = Math.abs(evaluated % 1) > 1e-6;
+                row.push(
+                  evaluated.toLocaleString('es-MX', {
+                    minimumFractionDigits: hasDecimals ? 2 : 0,
+                    maximumFractionDigits: hasDecimals ? 6 : 0,
+                  }),
+                );
+              }
+            } else if (typeof evaluated === 'string') {
+              row.push(evaluated);
+            } else {
+              row.push(String(evaluated ?? ''));
+            }
+          } catch {
+            const addr = XLSX.utils.encode_cell({ r, c });
+            const obj = ws?.[addr] as XLSX.CellObject | undefined;
+            row.push(obj?.w != null ? String(obj.w) : '#¿?');
+          }
+        } else {
+          const addr = XLSX.utils.encode_cell({ r, c });
+          const obj = ws?.[addr] as XLSX.CellObject | undefined;
+          row.push(obj?.w != null ? String(obj.w) : String(raw ?? ''));
+        }
+      }
+      out.push(row);
+    }
+    return out;
+  }, [grid, activeSheet]);
+
   useEffect(() => {
     try {
       if (sessionStorage.getItem('arta-sheet-coach') !== '1') setShowCoach(true);
@@ -234,7 +336,7 @@ export function SheetEditor({
     };
   }, [url, fileId, loadSheet]);
 
-  const cols = grid[0]?.length || MIN_COLS;
+  const cols = displayGrid[0]?.length || MIN_COLS;
 
   function markDirty() {
     setDirty(true);
@@ -489,7 +591,7 @@ export function SheetEditor({
 
   function sumColumn(col: number) {
     let total = 0;
-    for (const row of grid) {
+    for (const row of displayGrid) {
       total += parseMoney(row[col] || '');
     }
     setMsg(`Suma columna ${colLabel(col)}: ${total.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })}`);
@@ -598,7 +700,7 @@ export function SheetEditor({
     return () => window.removeEventListener('keydown', onKey);
   }, [sel]);
 
-  const shownRows = useMemo(() => grid.slice(0, visibleRows), [grid, visibleRows]);
+  const shownRows = useMemo(() => displayGrid.slice(0, visibleRows), [displayGrid, visibleRows]);
   const selLabel = sel ? `${colLabel(sel.c)}${sel.r + 1}` : '';
   const fxValue = sel ? (grid[sel.r]?.[sel.c] ?? '') : '';
 
@@ -953,7 +1055,7 @@ export function SheetEditor({
                       >
                         <input
                           className="sheet__cell"
-                          value={cell}
+                          value={sel?.r === r && sel?.c === c ? (grid[r]?.[c] ?? '') : cell}
                           readOnly={!canEdit}
                           aria-label={`Celda ${colLabel(c)}${r + 1}`}
                           onFocus={() => setSel({ r, c })}
@@ -975,13 +1077,13 @@ export function SheetEditor({
           </div>
         ) : null}
 
-        {!showStyled && grid.length > visibleRows ? (
+        {!showStyled && displayGrid.length > visibleRows ? (
           <button
             className="btn ghost btn-sm"
             type="button"
             onClick={() => setVisibleRows((v) => v + ROW_PAGE)}
           >
-            Ver más filas ({grid.length - visibleRows} restantes)
+            Ver más filas ({displayGrid.length - visibleRows} restantes)
           </button>
         ) : null}
 

@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@arta/rbac": "*",
+    "fast-formula-parser": "^1.0.19",
     "next": "^14.2.35",
     "pdf-lib": "^1.17.1",
     "pdfjs-dist": "^4.10.38",
