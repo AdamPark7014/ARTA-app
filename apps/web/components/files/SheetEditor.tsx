@@ -524,6 +524,12 @@ export function SheetEditor({
     }
     return out;
   }, [grid, activeSheet]);
+  // Evaluador centralizado (reutilizable) — preferido
+  const displayGrid2: Grid = useMemo(() => {
+    const wb = workbookRef.current;
+    if (!wb || !activeSheet) return grid;
+    return evaluateDisplayGrid(wb, activeSheet, grid);
+  }, [grid, activeSheet]);
 
   useEffect(() => {
     let cancelled = false;
@@ -561,7 +567,7 @@ export function SheetEditor({
     };
   }, [url, fileId, loadSheet]);
 
-  const cols = displayGrid[0]?.length || MIN_COLS;
+  const cols = displayGrid2[0]?.length || MIN_COLS;
 
   function markDirty() {
     setDirty(true);
@@ -818,7 +824,7 @@ export function SheetEditor({
 
   function sumColumn(col: number) {
     let total = 0;
-    for (const row of displayGrid) {
+    for (const row of displayGrid2) {
       total += parseMoney(row[col] || '');
     }
     setMsg(`Suma columna ${colLabel(col)}: ${total.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })}`);
@@ -931,7 +937,7 @@ export function SheetEditor({
 
   // Filas que se renderizan: muestran valores evaluados,
   // excepto la celda enfocada que mantiene el texto crudo para edición.
-  const shownRows = useMemo(() => displayGrid.slice(0, visibleRows), [displayGrid, visibleRows]);
+  const shownRows = useMemo(() => displayGrid2.slice(0, visibleRows), [displayGrid2, visibleRows]);
   const selLabel = sel ? `${colLabel(sel.c)}${sel.r + 1}` : '';
   const fxValue = useMemo(() => {
     if (!sel) return '';
@@ -1386,13 +1392,13 @@ export function SheetEditor({
           </div>
         ) : null}
 
-        {!showStyled && displayGrid.length > visibleRows ? (
+        {!showStyled && displayGrid2.length > visibleRows ? (
           <button
             className="btn ghost btn-sm"
             type="button"
             onClick={() => setVisibleRows((v) => v + ROW_PAGE)}
           >
-            Ver más filas ({displayGrid.length - visibleRows} restantes)
+            Ver más filas ({displayGrid2.length - visibleRows} restantes)
           </button>
         ) : null}
 
