@@ -1,3 +1,4 @@
+/// <reference path="./types/fast-formula-parser.d.ts" />
 import { describe, it, expect } from '@jest/globals';
 import * as path from 'node:path';
 import { readFileSync } from 'node:fs';
@@ -32,7 +33,7 @@ async function loadWorkbook(fileName: string): Promise<Excel.Workbook> {
   const wb = new Excel.Workbook();
   const file = path.resolve(process.cwd(), '../api/assets/format-sources', fileName);
   const buf = readFileSync(file);
-  await wb.xlsx.load(Buffer.from(buf));
+  await wb.xlsx.load(buf as unknown as Buffer);
   return wb;
 }
 
