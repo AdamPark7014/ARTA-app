@@ -207,9 +207,16 @@ test.describe('Stack real: Excel + Word con archivos reales', () => {
 
   // Excel: edición y recálculo (crear una suma simple propia para validar HF)
   // Reabre Campaña y entra a edición explícita
-  await campRow.getByRole('button', { name: /Ver|Ver \/ Editar/ }).click();
+  await campRow.getByRole('button', { name: /^Editar$/ }).click();
     const editor = page.locator('.surface .sheet-editor').first();
     await expect(editor).toBeVisible();
+  // Si aparece la guía inicial, ciérrala para no tapar controles
+  const coachDismiss = page.locator('.editor-coach__dismiss');
+  if (await coachDismiss.isVisible({ timeout: 500 }).catch(() => false)) {
+    await coachDismiss.click();
+  }
+  // Asegura que las celdas sean realmente editables (no solo visor)
+  await expect(page.getByLabel('Celda A24', { exact: true })).toBeEditable();
     // Escribir datos en A24 y A25 y fórmula en A26
     await page.getByLabel('Celda A24', { exact: true }).fill('1');
     await page.getByLabel('Celda A25', { exact: true }).fill('2');
