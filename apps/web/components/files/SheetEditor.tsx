@@ -355,13 +355,19 @@ export function SheetEditor({
                     }
                   }
                 }
-                const hasDecimals = Math.abs(total % 1) > 1e-6;
-                row.push(
-                  total.toLocaleString('es-MX', {
-                    minimumFractionDigits: hasDecimals ? 2 : 0,
-                    maximumFractionDigits: hasDecimals ? 6 : 0,
-                  }),
-                );
+                const fmt = (FastFormulaParser as any).SSF?.format;
+                const z = (obj as any)?.z ?? undefined;
+                if (fmt && z) {
+                  row.push(fmt(z, total));
+                } else {
+                  const hasDecimals = Math.abs(total % 1) > 1e-6;
+                  row.push(
+                    total.toLocaleString('es-MX', {
+                      minimumFractionDigits: hasDecimals ? 2 : 0,
+                      maximumFractionDigits: hasDecimals ? 6 : 0,
+                    }),
+                  );
+                }
                 continue;
               }
             } catch {

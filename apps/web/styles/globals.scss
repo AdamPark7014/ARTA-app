@@ -5021,6 +5021,9 @@ body.site-nav-open {
   font-size: 0.84rem;
   font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
   outline-offset: -2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .sheet__cell:focus {
