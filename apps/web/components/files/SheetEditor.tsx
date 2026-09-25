@@ -9,6 +9,7 @@ import { ExpandBox } from '@/components/ui/ExpandBox';
 import { RevisionHistory } from '@/components/ui/RevisionHistory';
 import { useSaveHotkey } from '@/lib/use-save-hotkey';
 import { useDirtyGuard } from '@/lib/use-dirty-guard';
+import { buildDisplayGrid as evaluateDisplayGrid } from '@/lib/sheet-evaluator';
 
 type Props = {
   url: string;

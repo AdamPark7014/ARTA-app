@@ -193,6 +193,14 @@ test.describe('Stack real: Excel + Word con archivos reales', () => {
   await expect(page.locator('.surface .sheet-editor').first()).toBeVisible();
   await page.locator('.surface .sheet-editor').first().screenshot({ path: path.join(OUT_DIR, 'corrida.png'), animations: 'disabled' });
   await testInfo.attach('corrida.png', { path: path.join(OUT_DIR, 'corrida.png') });
+  // Assert Corrida key totals (viewer mode)
+  await expect(page.getByLabel('Celda D13', { exact: true })).toHaveValue(/\$?\s*720,600\.00/);
+  await expect(page.getByLabel('Celda D16', { exact: true })).toHaveValue(/\$?\s*14,412\.00/);
+  await expect(page.getByLabel('Celda D17', { exact: true })).toHaveValue(/\$?\s*57,648\.00/);
+  await expect(page.getByLabel('Celda D18', { exact: true })).toHaveValue(/\$?\s*72,060\.00/);
+  await expect(page.getByLabel('Celda D33', { exact: true })).toHaveValue(/\$?\s*264,844\.10/);
+  await expect(page.getByLabel('Celda D34', { exact: true })).toHaveValue(/\$?\s*720,600\.00/);
+  await expect(page.getByLabel('Celda D35', { exact: true })).toHaveValue(/\$?\s*383,695\.90/);
   await page.getByRole('button', { name: 'Cerrar' }).first().click();
 
     // Excel: Pendones
@@ -219,6 +227,18 @@ test.describe('Stack real: Excel + Word con archivos reales', () => {
   await expect(page.locator('.surface .sheet-editor').first()).toBeVisible();
   await page.locator('.surface .sheet-editor').first().screenshot({ path: path.join(OUT_DIR, 'oc.png'), animations: 'disabled' });
   await testInfo.attach('oc.png', { path: path.join(OUT_DIR, 'oc.png') });
+  await page.getByRole('button', { name: 'Cerrar' }).first().click();
+
+  // Corrida — editor assertions for the same cells
+  await corrRow.getByRole('button', { name: /^Editar$/ }).click();
+  await expect(page.locator('.surface .sheet-editor').first()).toBeVisible();
+  await expect(page.getByLabel('Celda D13', { exact: true })).toHaveValue(/\$?\s*720,600\.00/);
+  await expect(page.getByLabel('Celda D16', { exact: true })).toHaveValue(/\$?\s*14,412\.00/);
+  await expect(page.getByLabel('Celda D17', { exact: true })).toHaveValue(/\$?\s*57,648\.00/);
+  await expect(page.getByLabel('Celda D18', { exact: true })).toHaveValue(/\$?\s*72,060\.00/);
+  await expect(page.getByLabel('Celda D33', { exact: true })).toHaveValue(/\$?\s*264,844\.10/);
+  await expect(page.getByLabel('Celda D34', { exact: true })).toHaveValue(/\$?\s*720,600\.00/);
+  await expect(page.getByLabel('Celda D35', { exact: true })).toHaveValue(/\$?\s*383,695\.90/);
   await page.getByRole('button', { name: 'Cerrar' }).first().click();
 
   // Excel: edición y recálculo (crear una suma simple propia para validar HF)
