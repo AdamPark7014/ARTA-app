@@ -744,16 +744,16 @@ export function SheetEditor({
         {blockNotice}
 
         {showCoach ? (
-          <div className="editor-coach" role="note">
-            <p className="editor-coach__text">
-              Edita celdas → <strong>Guardar</strong> → <strong>Salir en PDF</strong>.
+          <div className="editor-coach" role="note" style={{ alignItems: 'center' }}>
+            <p className="editor-coach__text" style={{ margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              Copia de trabajo interna · Ctrl+S guarda · Esc quita la selección ·{' '}
+              {campaign
+                ? 'Campaña: «+ Concepto» → CANTIDAD×COSTO → total; en convenios, describe en CANTIDAD y cortesías en COSTO.'
+                : finance
+                ? 'Corrida: completa Ingresos y Egresos; «Σ Montos» verifica la columna C. El Resumen se actualiza al guardar.'
+                : 'Edita celdas → Guardar → Salir en PDF.'}
             </p>
-            <button
-              type="button"
-              className="editor-coach__dismiss"
-              onClick={dismissCoach}
-              aria-label="Cerrar guía"
-            >
+            <button type="button" className="editor-coach__dismiss" onClick={dismissCoach} aria-label="Cerrar guía">
               Entendido
             </button>
           </div>
@@ -858,17 +858,10 @@ export function SheetEditor({
           </div>
         </div>
 
-        <p className="sheet-note muted kpi-sub" role="note">
-          Copia de trabajo interna. Lo que circula fuera es el <strong>PDF de salida</strong>.
-          {canEdit ? ' Ctrl+S guarda · Esc quita la selección.' : ''}{' '}
-          {showStyled ? 'Vista con formato: solo lectura.' : ''}
-        </p>
-
-        {richTools ? (
-          <p className="sheet-tip" role="note">
-            {campaign
-              ? 'Campaña: usa «+ Concepto» para CANTIDAD × COSTO → total. En convenios, describe en CANTIDAD y pon cortesías en COSTO.'
-              : 'Corrida financiera: completa Ingresos y Egresos; «Σ Montos» verifica la columna C. El Resumen se actualiza al guardar.'}
+        {/* Nota compacta unificada — se muestra solo si no ha sido descartada (reduce altura) */}
+        {!showCoach && showStyled ? (
+          <p className="sheet-note muted kpi-sub" role="note">
+            Vista con formato: solo lectura.
           </p>
         ) : null}
 
