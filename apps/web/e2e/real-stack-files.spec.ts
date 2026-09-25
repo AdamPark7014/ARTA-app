@@ -171,8 +171,9 @@ test.describe('Stack real: Excel + Word con archivos reales', () => {
     expect(corrRows.flat().some((cell) => String(cell).toUpperCase().includes('CONCEPTO') || String(cell).toUpperCase().includes('INGRES'))).toBeTruthy();
     const corrRow = page.locator('.hub-item', { hasText: 'CORRIDA_BASE.xlsx' }).first();
     await corrRow.getByRole('button', { name: /Ver|Ver \/ Editar/ }).click();
-    await expect(page.locator('.surface .sheet-editor').nth(1)).toBeVisible();
-    await page.locator('.surface .sheet-editor').nth(1).screenshot({ path: path.join(OUT_DIR, 'corrida.png'), animations: 'disabled' });
+  // Solo hay un editor montado a la vez
+  await expect(page.locator('.surface .sheet-editor').first()).toBeVisible();
+  await page.locator('.surface .sheet-editor').first().screenshot({ path: path.join(OUT_DIR, 'corrida.png'), animations: 'disabled' });
     await testInfo.attach('corrida.png', { path: path.join(OUT_DIR, 'corrida.png') });
 
     // Excel: Pendones
@@ -183,8 +184,8 @@ test.describe('Stack real: Excel + Word con archivos reales', () => {
     expect(pendRows.flat().some((cell) => String(cell).toUpperCase().includes('PENDONES'))).toBeTruthy();
     const pendRow = page.locator('.hub-item', { hasText: 'DISTRIBUCION_PENDONES.xlsx' }).first();
     await pendRow.getByRole('button', { name: /Ver|Ver \/ Editar/ }).click();
-    await expect(page.locator('.surface .sheet-editor').nth(2)).toBeVisible();
-    await page.locator('.surface .sheet-editor').nth(2).screenshot({ path: path.join(OUT_DIR, 'pendones.png'), animations: 'disabled' });
+  await expect(page.locator('.surface .sheet-editor').first()).toBeVisible();
+  await page.locator('.surface .sheet-editor').first().screenshot({ path: path.join(OUT_DIR, 'pendones.png'), animations: 'disabled' });
     await testInfo.attach('pendones.png', { path: path.join(OUT_DIR, 'pendones.png') });
 
     // Excel: Orden de compra
@@ -195,8 +196,8 @@ test.describe('Stack real: Excel + Word con archivos reales', () => {
     expect(ocRows.flat().some((cell) => String(cell).toUpperCase().includes('ORDEN') || String(cell).toUpperCase().includes('COMPRA'))).toBeTruthy();
     const ocRow = page.locator('.hub-item', { hasText: 'ORDEN_DE_COMPRA.xlsx' }).first();
     await ocRow.getByRole('button', { name: /Ver|Ver \/ Editar/ }).click();
-    await expect(page.locator('.surface .sheet-editor').nth(3)).toBeVisible();
-    await page.locator('.surface .sheet-editor').nth(3).screenshot({ path: path.join(OUT_DIR, 'oc.png'), animations: 'disabled' });
+  await expect(page.locator('.surface .sheet-editor').first()).toBeVisible();
+  await page.locator('.surface .sheet-editor').first().screenshot({ path: path.join(OUT_DIR, 'oc.png'), animations: 'disabled' });
     await testInfo.attach('oc.png', { path: path.join(OUT_DIR, 'oc.png') });
 
     // Excel: edición y recálculo (crear una suma simple propia para validar HF)
@@ -217,8 +218,9 @@ test.describe('Stack real: Excel + Word con archivos reales', () => {
     // Contrastes mínimos en oscuro (celda activa y toolbar)
     await expectContrast(page, '.sheet__cell:focus', 4.5);
     await expectContrast(page, '.sheet-toolbar .btn', 3.0);
-    // Un único banner visible
-    await expect(page.locator('.module-banner')).toHaveCount(0, { timeout: 1000 });
+  // Banner compacto como mucho uno visible (no 3 apilados)
+  const banners = await page.locator('.module-banner').count();
+  expect(banners).toBeLessThanOrEqual(1);
     await editor.screenshot({ path: path.join(OUT_DIR, 'excel-editando.png'), animations: 'disabled' });
     await testInfo.attach('excel-editando.png', { path: path.join(OUT_DIR, 'excel-editando.png') });
 
