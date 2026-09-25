@@ -32,7 +32,7 @@ async function loadWorkbook(fileName: string): Promise<Excel.Workbook> {
   const wb = new Excel.Workbook();
   const file = path.resolve(process.cwd(), '../api/assets/format-sources', fileName);
   const buf = readFileSync(file);
-  await wb.xlsx.load(buf);
+  await wb.xlsx.load(Buffer.from(buf));
   return wb;
 }
 
@@ -54,6 +54,7 @@ function evaluateFormula(wb: Excel.Workbook, sheet: Excel.Worksheet, row: number
   (parser as any).onCell = (ref: { sheet?: string; row: number; col: number }) => {
     const s = ref.sheet ? String(ref.sheet) : sheet.name;
     const ws = wb.getWorksheet(s);
+    if (!ws) return 0;
     const cell = ws.getCell(ref.row, ref.col);
     if (cell.formula) {
       (parser as any).position = { sheet: s, row: ref.row, col: ref.col };
@@ -65,6 +66,7 @@ function evaluateFormula(wb: Excel.Workbook, sheet: Excel.Worksheet, row: number
   (parser as any).onRange = (ref: { sheet?: string; from: { row: number; col: number }; to: { row: number; col: number } }) => {
     const s = ref.sheet ? String(ref.sheet) : sheet.name;
     const ws = wb.getWorksheet(s);
+    if (!ws) return [];
     const out: number[][] = [];
     for (let r = ref.from.row; r <= ref.to.row; r += 1) {
       const rowVals: number[] = [];
