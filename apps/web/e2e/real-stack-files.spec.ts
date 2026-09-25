@@ -162,6 +162,8 @@ test.describe('Stack real: Excel + Word con archivos reales', () => {
     fs.mkdirSync(OUT_DIR, { recursive: true });
     await page.locator('.sheet-editor').first().screenshot({ path: path.join(OUT_DIR, 'campana.png'), animations: 'disabled' });
     await testInfo.attach('campana.png', { path: path.join(OUT_DIR, 'campana.png') });
+    // Cerrar visor antes de abrir otro
+    await page.getByRole('button', { name: 'Cerrar' }).first().click();
 
     // Excel: Corrida
     const corrPath = await uploadXlsx('CORRIDA_BASE.xlsx');
@@ -174,7 +176,8 @@ test.describe('Stack real: Excel + Word con archivos reales', () => {
   // Solo hay un editor montado a la vez
   await expect(page.locator('.surface .sheet-editor').first()).toBeVisible();
   await page.locator('.surface .sheet-editor').first().screenshot({ path: path.join(OUT_DIR, 'corrida.png'), animations: 'disabled' });
-    await testInfo.attach('corrida.png', { path: path.join(OUT_DIR, 'corrida.png') });
+  await testInfo.attach('corrida.png', { path: path.join(OUT_DIR, 'corrida.png') });
+  await page.getByRole('button', { name: 'Cerrar' }).first().click();
 
     // Excel: Pendones
     const pendPath = await uploadXlsx('DISTRIBUCION_PENDONES.xlsx');
@@ -186,7 +189,8 @@ test.describe('Stack real: Excel + Word con archivos reales', () => {
     await pendRow.getByRole('button', { name: /Ver|Ver \/ Editar/ }).click();
   await expect(page.locator('.surface .sheet-editor').first()).toBeVisible();
   await page.locator('.surface .sheet-editor').first().screenshot({ path: path.join(OUT_DIR, 'pendones.png'), animations: 'disabled' });
-    await testInfo.attach('pendones.png', { path: path.join(OUT_DIR, 'pendones.png') });
+  await testInfo.attach('pendones.png', { path: path.join(OUT_DIR, 'pendones.png') });
+  await page.getByRole('button', { name: 'Cerrar' }).first().click();
 
     // Excel: Orden de compra
     const ocPath = await uploadXlsx('ORDEN_DE_COMPRA.xlsx');
@@ -198,7 +202,8 @@ test.describe('Stack real: Excel + Word con archivos reales', () => {
     await ocRow.getByRole('button', { name: /Ver|Ver \/ Editar/ }).click();
   await expect(page.locator('.surface .sheet-editor').first()).toBeVisible();
   await page.locator('.surface .sheet-editor').first().screenshot({ path: path.join(OUT_DIR, 'oc.png'), animations: 'disabled' });
-    await testInfo.attach('oc.png', { path: path.join(OUT_DIR, 'oc.png') });
+  await testInfo.attach('oc.png', { path: path.join(OUT_DIR, 'oc.png') });
+  await page.getByRole('button', { name: 'Cerrar' }).first().click();
 
   // Excel: edición y recálculo (crear una suma simple propia para validar HF)
   // Reabre Campaña y entra a edición explícita
