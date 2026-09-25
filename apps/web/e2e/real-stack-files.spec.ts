@@ -189,9 +189,11 @@ test.describe('Stack real: Excel + Word con archivos reales', () => {
     expect(corrRows.flat().some((cell) => String(cell).toUpperCase().includes('CONCEPTO') || String(cell).toUpperCase().includes('INGRES'))).toBeTruthy();
     const corrRow = page.locator('.hub-item', { hasText: 'CORRIDA_BASE.xlsx' }).first();
     await corrRow.getByRole('button', { name: /Ver|Ver \/ Editar/ }).click();
-  // Solo hay un editor montado a la vez
-  await expect(page.locator('.surface .sheet-editor').first()).toBeVisible();
-  await page.locator('.surface .sheet-editor').first().screenshot({ path: path.join(OUT_DIR, 'corrida.png'), animations: 'disabled' });
+  // Solo hay un editor montado a la vez; desplazar para que filas 13–35 queden visibles
+  const corridaEditor = page.locator('.surface .sheet-editor').first();
+  await expect(corridaEditor).toBeVisible();
+  await page.getByLabel('Celda D34', { exact: true }).scrollIntoViewIfNeeded();
+  await corridaEditor.screenshot({ path: path.join(OUT_DIR, 'corrida.png'), animations: 'disabled' });
   await testInfo.attach('corrida.png', { path: path.join(OUT_DIR, 'corrida.png') });
   // Assert Corrida key totals (viewer mode)
   await expect(page.getByLabel('Celda D13', { exact: true })).toHaveValue(/\$?\s*720,600\.00/);
