@@ -1248,26 +1248,16 @@ export function SheetEditor({
                           for (let i = merge.s.c + 1; i <= merge.e.c; i += 1) widthPx += colPx[i] || 104;
                         }
                         const display = isSel ? (grid[r]?.[c] ?? '') : row[c];
-                        const displayStr = String(display ?? '');
-                        const { t } = toCellValue(displayStr);
-                        const rightDisplay = row[c + 1] ?? '';
-                        const rightEmpty = String(rightDisplay ?? '').trim() === '';
-                        // Regla de overflow:
-                        // - Si la celda es texto y su vecino derecho está vacío → puede “derramarse” visualmente.
-                        // - Si no puede derramarse (vecino no vacío) y es texto → envolver (dos líneas posibles).
-                        const allowSpill = !isSel && t === 's' && rightEmpty;
-                        const shouldWrap = t === 's' && (!rightEmpty || displayStr.length > 24);
-                        const extraClass =
-                          allowSpill && !shouldWrap ? ' sheet__cell--spill' : (shouldWrap ? ' sheet__cell--wrap' : '');
-                        const isEmptyDisplay = displayStr.trim() === '';
+                        const { t } = toCellValue(String(display));
+                        const shouldWrap = t === 's' && String(display).length > 24;
                         cells.push(
                           <td
                             key={c}
-                            className={`${isSel ? 'sheet__td--sel' : ''} ${isEmptyDisplay ? 'sheet__td--empty' : ''}`.trim() || undefined}
+                            className={isSel ? 'sheet__td--sel' : undefined}
                             colSpan={colSpan}
                           >
                             <input
-                              className={`sheet__cell${extraClass}${!isSel && t === 's' ? ' sheet__cell--masked' : ''}`}
+                              className={`sheet__cell${shouldWrap ? ' sheet__cell--wrap' : ''}`}
                               value={display as string}
                               readOnly={!canEdit}
                               aria-label={`Celda ${colLabel(c)}${r + 1}`}
@@ -1275,17 +1265,6 @@ export function SheetEditor({
                               onChange={(e) => setCell(r, c, e.target.value)}
                               style={{ minWidth: widthPx - 2, width: '100%' }}
                             />
-                            {t === 's' ? (
-                              <span
-                                aria-hidden="true"
-                                className={`sheet__spilltext${
-                                  shouldWrap ? ' sheet__spilltext--wrap' : allowSpill ? ' sheet__spilltext--spill' : ''
-                                }`}
-                                style={{ display: isSel ? 'none' : 'block', minWidth: widthPx - 2 }}
-                              >
-                                {displayStr}
-                              </span>
-                            ) : null}
                           </td>,
                         );
                         if (merge) c = merge.e.c; // saltar celdas cubiertas por el merge
