@@ -196,6 +196,12 @@ jobs:
           if git status --porcelain | grep -q "docs/pr5-screens"; then
             git config user.name "arta-ci"
             git config user.email "ci@arta.local"
+            git config --global --add safe.directory "$GITHUB_WORKSPACE"
+            # Rebase on latest head in case parallel jobs raced to push
+            if [ -n "${GITHUB_HEAD_REF:-}" ]; then
+              git fetch origin "${GITHUB_HEAD_REF}"
+              git pull --rebase origin "${GITHUB_HEAD_REF}" || true
+            fi
             git add docs/pr5-screens
             git commit -m "docs: add PR5 real-stack screenshots"
             git push
