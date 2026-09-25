@@ -12,6 +12,7 @@ import {
   Put,
   Query,
   Req,
+  Res,
   UploadedFile,
   UseGuards,
   UseInterceptors,
