@@ -155,6 +155,8 @@ export function SheetEditor({
   const campaign = variant === 'campaign';
   const finance = variant === 'finance';
   const richTools = campaign || finance;
+  const [colPx, setColPx] = useState<number[]>([]);
+  const mergesRef = useRef<Array<{ s: { r: number; c: number }; e: { r: number; c: number } }>>([]);
 
   /**
    * Grid de presentación: muestra valores calculados y cacheados.
@@ -291,6 +293,28 @@ export function SheetEditor({
     setGrid(padGrid(withFormulas as unknown[][], MIN_ROWS, campaign || finance ? MIN_COLS : 8));
     setVisibleRows(ROW_PAGE);
     setSel(null);
+    // Column widths + merges
+    try {
+      const defs = (ws as XLSX.WorkSheet)['!cols'] as Array<{ wpx?: number; wch?: number }> | undefined;
+      const px: number[] = [];
+      const widthCount = Math.max(rows[0]?.length ?? 0, defs?.length ?? 0, MIN_COLS);
+      for (let i = 0; i < widthCount; i += 1) {
+        const d = defs?.[i];
+        const w =
+          (d?.wpx && Math.max(60, Math.floor(d.wpx))) ||
+          (d?.wch && Math.max(60, Math.floor(d.wch * 8) + 12)) ||
+          104;
+        px.push(w);
+      }
+      setColPx(px);
+      mergesRef.current = (((ws as XLSX.WorkSheet)['!merges'] as unknown) as Array<{
+        s: { r: number; c: number };
+        e: { r: number; c: number };
+      }>) || [];
+    } catch {
+      setColPx([]);
+      mergesRef.current = [];
+    }
     try {
       // Vista de solo lectura con estilos básicos (ancho de columnas, merges, negritas)
       const html = XLSX.utils.sheet_to_html(ws, { id: 'styled-view', editable: false });
@@ -1029,6 +1053,7 @@ export function SheetEditor({
                       key={c}
                       scope="col"
                       className={sel?.c === c ? 'sheet__col--sel' : undefined}
+                      style={{ width: (colPx[c] || 104) + 'px', minWidth: (colPx[c] || 104) + 'px' }}
                     >
                       {colLabel(c)}
                     </th>
@@ -1041,21 +1066,46 @@ export function SheetEditor({
                     <th className="sheet__rownum" scope="row">
                       {r + 1}
                     </th>
-                    {row.map((cell, c) => (
-                      <td
-                        key={c}
-                        className={sel?.r === r && sel?.c === c ? 'sheet__td--sel' : undefined}
-                      >
-                        <input
-                          className="sheet__cell"
-                          value={sel?.r === r && sel?.c === c ? (grid[r]?.[c] ?? '') : cell}
-                          readOnly={!canEdit}
-                          aria-label={`Celda ${colLabel(c)}${r + 1}`}
-                          onFocus={() => setSel({ r, c })}
-                          onChange={(e) => setCell(r, c, e.target.value)}
-                        />
-                      </td>
-                    ))}
+                    {row.map((cell, c) => {
+                      const isSel = sel?.r === r && sel?.c === c;
+                      const nextEmpty = (row[c + 1] ?? '').toString().trim() === '';
+                      const merge = mergesRef.current.find((m) => m.s.r === r && m.s.c === c);
+                      let displayWidth = colPx[c] || 104;
+                      if (merge) {
+                        for (let i = merge.s.c + 1; i <= merge.e.c; i += 1) displayWidth += (colPx[i] || 104);
+                      } else if (nextEmpty) {
+                        displayWidth += colPx[c + 1] || 104;
+                      }
+                      return (
+                        <td
+                          key={c}
+                          className={isSel ? 'sheet__td--sel' : undefined}
+                          style={{ position: 'relative' }}
+                        >
+                          {!isSel ? (
+                            <span
+                              className={`sheet__display${nextEmpty || merge ? ' is-over' : ''}`}
+                              style={{
+                                minWidth: (colPx[c] || 104) - 10,
+                                width: Math.max(displayWidth - 10, (colPx[c] || 104) - 10),
+                              }}
+                              aria-hidden="true"
+                            >
+                              {cell}
+                            </span>
+                          ) : null}
+                          <input
+                            className="sheet__cell"
+                            value={isSel ? (grid[r]?.[c] ?? '') : cell}
+                            readOnly={!canEdit}
+                            aria-label={`Celda ${colLabel(c)}${r + 1}`}
+                            onFocus={() => setSel({ r, c })}
+                            onChange={(e) => setCell(r, c, e.target.value)}
+                            style={{ minWidth: (colPx[c] || 104) - 2, width: '100%' }}
+                          />
+                        </td>
+                      );
+                    })}
                   </tr>
                 ))}
               </tbody>

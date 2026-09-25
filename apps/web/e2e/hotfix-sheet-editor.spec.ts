@@ -45,20 +45,53 @@ test.describe('SheetEditor hotfix — dark contrast and values', () => {
     // Screenshot a)
     await page.screenshot({ path: '../../docs/hotfix-screens/hotfix-values.png', fullPage: false });
 
-    // Focus una celda y escribir — debería ser legible
-    const target = page.locator('tbody tr:nth-of-type(6) td:nth-of-type(4) .sheet__cell').first();
-    await target.click();
-    await target.fill('12345 PRUEBA');
-    // Eval contrast on the formula bar input, which mirrors the focused cell
-    const fx = page.locator('.sheet-fxbar__input');
-    const styles = await fx.evaluate((el) => {
+    // Focus una celda y escribir — debe verse dentro de la celda
+    const cellInput = page.locator('tbody tr:nth-of-type(7) td:nth-of-type(4) .sheet__cell').first();
+    await cellInput.click();
+    await page.keyboard.press('Control+a');
+    await page.keyboard.type('12345 PRUEBA');
+    await expect(cellInput).toHaveValue('12345 PRUEBA');
+    // Contraste en la celda enfocada
+    const styles = await cellInput.evaluate((el) => {
       const cs = getComputedStyle(el as HTMLInputElement);
       return { bg: cs.backgroundColor || 'rgb(255,255,255)', fg: cs.color || 'rgb(17,17,17)' };
     });
     const cr = contrastRatio(styles.fg, styles.bg);
     expect(cr).toBeGreaterThanOrEqual(4.5);
+    // Pixel check: recorte de la celda debe tener pixeles oscuros sobre fondo blanco
+    const handle = await cellInput.elementHandle();
+    const box = await handle!.boundingBox();
+    const shot = await page.screenshot({ clip: box! });
+    const { PNG } = require('pngjs');
+    const png = PNG.sync.read(shot);
+    let dark = 0;
+    for (let y = 0; y < png.height; y++) {
+      for (let x = 0; x < png.width; x++) {
+        const idx = (png.width * y + x) << 2;
+        const r = png.data[idx], g = png.data[idx + 1], b = png.data[idx + 2];
+        const lum = 0.2126 * (r / 255) + 0.7152 * (g / 255) + 0.0722 * (b / 255);
+        if (lum < 0.31) dark++;
+      }
+    }
+    expect(dark).toBeGreaterThanOrEqual(30);
     // Screenshot b)
     await page.screenshot({ path: '../../docs/hotfix-screens/hotfix-editing.png', fullPage: false });
+
+    // Recalculo: escribe 200 en C6 (PRECIO Preferente) y valida D6/E6
+    // Asegura que G2 (FUNCIONES) sea 1 para coincidir con el ejemplo
+    const funcInput = page.locator('tbody tr:nth-of-type(2) td:nth-of-type(7) .sheet__cell').first();
+    await funcInput.click();
+    await page.keyboard.press('Control+a');
+    await page.keyboard.type('1');
+    await expect(funcInput).toHaveValue('1');
+    const priceInput = page.locator('tbody tr:nth-of-type(6) td:nth-of-type(3) .sheet__cell').first();
+    await priceInput.click();
+    await page.keyboard.press('Control+a');
+    await page.keyboard.type('200');
+    // Espera a que recalculen algunos dependientes
+    await expect(page.locator('tbody tr:nth-of-type(6) td:nth-of-type(4) .sheet__display')).toContainText('18,000.00', { timeout: 5000 });
+    await expect(page.locator('tbody tr:nth-of-type(6) td:nth-of-type(5) .sheet__display')).toContainText('16,200.00', { timeout: 5000 });
+    await page.screenshot({ path: '../../docs/hotfix-screens/hotfix-recalc.png', fullPage: false });
 
     // Toolbar / tabs contraste >= 3:1
     const toolbar = page.locator('.sheet-toolbar');

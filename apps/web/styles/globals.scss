@@ -5024,7 +5024,10 @@ body.site-nav-open {
 
 .sheet__cell:focus {
   outline: none;
-  background: #f3fbf6 !important;
+  background: #ffffff !important;
+  color: #111111 !important;
+  -webkit-text-fill-color: #111111 !important;
+  caret-color: #111111;
 }
 
 .sheet__cell:focus-visible {
@@ -5033,11 +5036,30 @@ body.site-nav-open {
 }
 
 .sheet__td--sel .sheet__cell:focus {
-  background: #f3fbf6 !important;
+  background: #ffffff !important;
+  color: #111111 !important;
+  -webkit-text-fill-color: #111111 !important;
+  caret-color: #111111;
 }
 
 .sheet__cell[readonly] {
   color: #6b7785 !important;
+}
+
+/* Display layer: valores visibles y overflow tipo Excel cuando hay espacio */
+.sheet__display {
+  position: absolute;
+  left: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  white-space: nowrap;
+  overflow: visible;
+  pointer-events: none;
+  color: #1a2330;
+  z-index: 0;
+}
+.sheet__td--sel .sheet__display {
+  display: none;
 }
 
 /* Creación visual de archivos por sección */
