@@ -1272,8 +1272,21 @@ export function SheetEditor({
                         if (!isActive && cell?.startsWith('=')) {
                           const hf = hfRef.current;
                           const sid = hfSheetIdByNameRef.current.get(activeSheet);
-                          const val = hf && sid !== undefined ? hf.getCellValue({ sheet: sid, col: c, row: r } as SimpleCellAddress) : null;
-                          shown = val === null || val === undefined ? '' : String(val);
+                          if (hf && sid !== undefined) {
+                            const val = hf.getCellValue({ sheet: sid, col: c, row: r } as SimpleCellAddress);
+                            shown = val === null || val === undefined ? '' : String(val);
+                          } else {
+                            // Fallback: muestra el valor en caché del archivo si el motor de fórmulas no está disponible.
+                            const ws = workbookRef.current?.Sheets[activeSheet];
+                            const addr = XLSX.utils.encode_cell({ r, c });
+                            const obj = ws?.[addr] as XLSX.CellObject | undefined;
+                            shown =
+                              obj?.w !== undefined && obj?.w !== null
+                                ? String(obj.w)
+                                : obj?.v !== undefined && obj?.v !== null
+                                  ? String(obj.v as any)
+                                  : '';
+                          }
                         }
                         return (
                           <td

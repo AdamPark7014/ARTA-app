@@ -8,7 +8,8 @@ import { join } from 'path';
 import * as ExcelJS from 'exceljs';
 import { uploadRoot } from '../src/uploads/upload-storage';
 
-const hasDb = !!process.env.DATABASE_URL;
+// Solo corre con DB real en CI. En local (sin Postgres), se omite.
+const hasDb = !!process.env.CI;
 
 describe('PurchaseOrdersController export (Excel/PDF) smoke', () => {
   const prisma = new PrismaClient();

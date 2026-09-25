@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import type { Page } from '@playwright/test';
 import path from 'node:path';
 import fs from 'node:fs';
 import * as XLSX from 'xlsx';
@@ -71,8 +72,8 @@ function parseCssColor(s: string): [number, number, number] | null {
   if (!m) return null;
   return [Number(m[1]), Number(m[2]), Number(m[3])];
 }
-async function expectContrast(page, selector: string, min: number) {
-  const { fg, bg } = await page.$eval(selector, (el) => {
+async function expectContrast(page: Page, selector: string, min: number) {
+  const { fg, bg } = await page.$eval(selector, (el: Element) => {
     const cs = window.getComputedStyle(el as Element);
     return { fg: cs.color, bg: cs.backgroundColor };
   });
