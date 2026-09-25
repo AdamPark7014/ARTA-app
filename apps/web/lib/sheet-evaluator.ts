@@ -163,12 +163,109 @@ export function buildDisplayGrid(workbook: XLSX.WorkBook, sheetName: string, gri
           } else {
             row.push(String(evaluated ?? ''));
           }
-        } catch {
-          // Fallback: Excel cached display or raw
-          const addr = XLSX.utils.encode_cell({ r, c });
-          const obj = ws?.[addr] as XLSX.CellObject | undefined;
-          const cache = obj?.w != null ? String(obj.w) : obj?.v != null ? String(obj.v) : '';
-          row.push(cache || '');
+          } catch {
+            // Fallback 1: lightweight evaluator by substitution for simple references and arithmetic
+            try {
+              const addr = XLSX.utils.encode_cell({ r, c });
+              const obj = ws?.[addr] as XLSX.CellObject | undefined;
+              const f = typeof obj?.f === 'string' ? String(obj!.f) : String(raw).replace(/^=/, '');
+              if (f) {
+                // Replace single-cell refs with numeric values from current grid/workbook
+                const expr = f
+                  .replace(/\$?[A-Z]+\$?\d+/g, (m) => {
+                    const maddr = XLSX.utils.decode_cell(m.replace(/\$/g, ''));
+                    const vraw = grid[maddr.r]?.[maddr.c] ?? '';
+                    if (typeof vraw === 'string' && vraw.startsWith('=')) {
+                      try {
+                        (parser as any).position = { sheet: sheetName, row: maddr.r + 1, col: maddr.c + 1 };
+                        const inner = (parser as any).parse(replaceNamed(normalizeFnNames(String(vraw).slice(1)), names));
+                        const num = typeof inner === 'number' ? inner : Number(inner) || 0;
+                        return String(Number.isFinite(num) ? num : 0);
+                      } catch {
+                        // fallback to workbook cached value
+                        const o = (workbook.Sheets[sheetName] as XLSX.WorkSheet)?.[
+                          XLSX.utils.encode_cell({ r: maddr.r, c: maddr.c })
+                        ] as XLSX.CellObject | undefined;
+                        const num = Number(o?.v);
+                        return String(Number.isFinite(num) ? num : 0);
+                      }
+                    }
+                    const { v: nv, ok } = toCellNumber(String(vraw));
+                    return String(ok ? nv : Number(vraw) || 0);
+                  })
+                  .replace(/\^/g, '**');
+                // eslint-disable-next-line no-new-func
+                const val = Function('"use strict";return (' + expr + ')')();
+                if (typeof val === 'number' && Number.isFinite(val)) {
+                  const hasDecimals = Math.abs(val % 1) > 1e-6;
+                  row.push(
+                    val.toLocaleString('es-MX', {
+                      minimumFractionDigits: hasDecimals ? 2 : 0,
+                      maximumFractionDigits: hasDecimals ? 6 : 0,
+                    }),
+                  );
+                  continue;
+                }
+                // Fallback 2: SUM/SUMA with args/ranges
+                const ftxt = f.trim().toUpperCase();
+                const m = ftxt.match(/^\\s*(SUM|SUMA)\\(([^)]+)\\)\\s*$/);
+                if (m) {
+                  const args = m[2].split(/[;,]/).map((s) => s.trim());
+                  let total = 0;
+                  const addCell = (rr: number, cc: number) => {
+                    const vraw = grid[rr]?.[cc] ?? '';
+                    if (typeof vraw === 'string' && vraw.startsWith('=')) {
+                      try {
+                        (parser as any).position = { sheet: sheetName, row: rr + 1, col: cc + 1 };
+                        const inner = (parser as any).parse(replaceNamed(normalizeFnNames(String(vraw).slice(1)), names));
+                        total += typeof inner === 'number' ? inner : Number(inner) || 0;
+                      } catch {
+                        const o = (workbook.Sheets[sheetName] as XLSX.WorkSheet)?.[
+                          XLSX.utils.encode_cell({ r: rr, c: cc })
+                        ] as XLSX.CellObject | undefined;
+                        total += Number(o?.v) || 0;
+                      }
+                    } else {
+                      const { v: nv, ok } = toCellNumber(String(vraw));
+                      total += ok ? nv : Number(vraw) || 0;
+                    }
+                  };
+                  for (const a of args) {
+                    const rng = a.match(/^([A-Z]+\\d+):([A-Z]+\\d+)$/);
+                    if (rng) {
+                      const s = XLSX.utils.decode_cell(rng[1]);
+                      const e = XLSX.utils.decode_cell(rng[2]);
+                      for (let rr = Math.min(s.r, e.r); rr <= Math.max(s.r, e.r); rr += 1) {
+                        for (let cc = Math.min(s.c, e.c); cc <= Math.max(s.c, e.c); cc += 1) addCell(rr, cc);
+                      }
+                    } else {
+                      const one = a.match(/^([A-Z]+\\d+)$/);
+                      if (one) {
+                        const p = XLSX.utils.decode_cell(one[1]);
+                        addCell(p.r, p.c);
+                      } else {
+                        total += Number(a) || 0;
+                      }
+                    }
+                  }
+                  const hasDecimals = Math.abs(total % 1) > 1e-6;
+                  row.push(
+                    total.toLocaleString('es-MX', {
+                      minimumFractionDigits: hasDecimals ? 2 : 0,
+                      maximumFractionDigits: hasDecimals ? 6 : 0,
+                    }),
+                  );
+                  continue;
+                }
+              }
+            } catch {
+              /* ignore and continue to cache */
+            }
+            // Fallback 3: Excel cached display or raw
+            const addr = XLSX.utils.encode_cell({ r, c });
+            const obj = ws?.[addr] as XLSX.CellObject | undefined;
+            const cache = obj?.w != null ? String(obj.w) : obj?.v != null ? String(obj.v) : '';
+            row.push(cache || '');
         }
       } else {
         const addr = XLSX.utils.encode_cell({ r, c });
