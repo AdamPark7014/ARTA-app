@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as XLSX from 'xlsx';
-import { HyperFormula, type SimpleCellAddress } from 'hyperformula';
+import FastFormulaParser from 'fast-formula-parser';
 import type { SaveFile } from '@/lib/file-save';
 import { api } from '@/lib/api';
 import { ExpandBox } from '@/components/ui/ExpandBox';
@@ -18,8 +18,6 @@ type Props = {
   canEdit: boolean;
   /** Dónde se guarda el .xlsx reconstruido (respaldo si no hay guardado por celdas) */
   onSave: SaveFile;
-  /** Renderiza sin barra de pantalla completa cuando se usa en FileViewer. */
-  standalone?: boolean;
   /**
    * Guardado por celdas: la vía buena. Si viene, se manda el delta y el
    * servidor lo aplica con ExcelJS sin degradar el resto del libro.
@@ -84,9 +82,20 @@ function toCellValue(text: string): { v: string | number; t: 's' | 'n' } {
   const trimmed = text.trim();
   if (!trimmed) return { v: '', t: 's' };
   if (trimmed.startsWith('=')) return { v: trimmed, t: 's' };
-  const normalized = trimmed.replace(/\s/g, '').replace(/\$/g, '').replace(',', '.');
-  if (/^-?\d+(\.\d+)?$/.test(normalized)) {
-    const n = Number(normalized);
+  // Normalize common currency/number formats:
+  // - Remove spaces and currency symbols
+  // - If both comma and dot appear, treat comma as thousands and strip it
+  // - If only comma appears, treat it as decimal separator and convert to dot
+  // - Strip thousands separators; parentheses for negatives
+  let s = trimmed.replace(/[\s\u00A0]/g, '').replace(/[\$£€¥%]/g, '');
+  const hasComma = s.includes(',');
+  const hasDot = s.includes('.');
+  if (hasComma && hasDot) s = s.replace(/,/g, '');
+  else if (hasComma && !hasDot) s = s.replace(/,/g, '.');
+  s = s.replace(/^\((.*)\)$/, '-$1');
+  s = s.replace(/(?<=\d)[,](?=\d{3}\b)/g, '');
+  if (/^-?\d+(\.\d+)?$/.test(s)) {
+    const n = Number(s);
     if (Number.isFinite(n)) return { v: n, t: 'n' };
   }
   return { v: text, t: 's' };
@@ -123,36 +132,13 @@ export function SheetEditor({
   panelEditable = true,
   blockReason,
   variant = 'default',
-  standalone = true,
 }: Props) {
   // Un libro con gráficas se ve, pero no se edita: el round-trip las perdería.
   const canEdit = canEditProp && panelEditable;
   const workbookRef = useRef<XLSX.WorkBook | null>(null);
-  const originalBufferRef = useRef<ArrayBuffer | null>(null);
-  const lastSavedAtRef = useRef<number | null>(null);
-  const [saveStatus, setSaveStatus] = useState('');
-  // HyperFormula para cálculo local de fórmulas
-  const hfRef = useRef<HyperFormula | null>(null);
-  const hfSheetIdByNameRef = useRef<Map<string, number>>(new Map());
-  const originalFormulaCellsRef = useRef<Map<string, Set<string>>>(new Map());
-  // Layout/estilo visible de la hoja activa
-  const [colWidths, setColWidths] = useState<number[]>([]);
-  const [rowHeights, setRowHeights] = useState<number[]>([]);
-  const [hiddenCols, setHiddenCols] = useState<Set<number>>(new Set());
-  const [hiddenRows, setHiddenRows] = useState<Set<number>>(new Set());
-  const [mergeSpans, setMergeSpans] = useState<Map<string, { rs: number; cs: number }>>(new Map());
-  const [coveredCells, setCoveredCells] = useState<Set<string>>(new Set());
-  const [zoom, setZoom] = useState(1);
-  const undoRef = useRef<Array<{ r: number; c: number; prev: string; next: string }>>([]);
-  const redoRef = useRef<Array<{ r: number; c: number; prev: string; next: string }>>([]);
   /**
    * Celdas tocadas desde que se abrió el archivo, por hoja.
-   *
-   * Es lo que se manda al servidor: un delta, no un libro reconstruido. Con la
-   * edición Community de SheetJS, reescribir el `.xlsx` completo desde el
-   * navegador emite una fuente fija y tira formato condicional y validaciones
-   * de TODO el libro. Mandando solo el delta, ExcelJS lo aplica en el servidor
-   * sobre el archivo real y lo que nadie tocó sobrevive.
+   * Es lo que se manda al servidor: un delta, no un libro reconstruido.
    */
   const pendingCellsRef = useRef<Map<string, Map<string, CellChange>>>(new Map());
   const [sheetNames, setSheetNames] = useState<string[]>([]);
@@ -175,6 +161,8 @@ export function SheetEditor({
   const campaign = variant === 'campaign';
   const finance = variant === 'finance';
   const richTools = campaign || finance;
+  const [colPx, setColPx] = useState<number[]>([]);
+  const mergesRef = useRef<Array<{ s: { r: number; c: number }; e: { r: number; c: number } }>>([]);
 
   useEffect(() => {
     try {
@@ -194,52 +182,6 @@ export function SheetEditor({
   }
 
   const loadSheet = useCallback((wb: XLSX.WorkBook, name: string) => {
-    // Reconstruye layout visible para la hoja
-    const ws0 = wb.Sheets[name];
-    if (ws0) {
-      const nextColW: number[] = [];
-      const nextRowH: number[] = [];
-      const nextHiddenCols = new Set<number>();
-      const nextHiddenRows = new Set<number>();
-      const nextSpans = new Map<string, { rs: number; cs: number }>();
-      const nextCovered = new Set<string>();
-      const colsMeta = (ws0 as any)['!cols'] as Array<{ wpx?: number; wch?: number; hidden?: boolean }> | undefined;
-      if (colsMeta?.length) {
-        colsMeta.forEach((c, i) => {
-          if (c?.hidden) nextHiddenCols.add(i);
-          const px = c?.wpx ?? (c?.wch ? Math.round(c.wch * 9) : undefined);
-          nextColW[i] = Math.max(56, Math.min(420, px || 104));
-        });
-      }
-      const rowsMeta = (ws0 as any)['!rows'] as Array<{ hpx?: number; hpt?: number; hidden?: boolean }> | undefined;
-      if (rowsMeta?.length) {
-        rowsMeta.forEach((r, i) => {
-          if (r?.hidden) nextHiddenRows.add(i);
-          const px = r?.hpx ?? (r?.hpt ? Math.round(r.hpt * (96 / 72)) : undefined);
-          nextRowH[i] = Math.max(20, Math.min(120, px || 34));
-        });
-      }
-      const merges = (ws0 as any)['!merges'] as Array<{ s: { r: number; c: number }; e: { r: number; c: number } }> | undefined;
-      if (merges?.length) {
-        for (const m of merges) {
-          const rs = (m.e.r - m.s.r) + 1;
-          const cs = (m.e.c - m.s.c) + 1;
-          nextSpans.set(`${m.s.r}:${m.s.c}`, { rs, cs });
-          for (let r = m.s.r; r <= m.e.r; r += 1) {
-            for (let c = m.s.c; c <= m.e.c; c += 1) {
-              if (r === m.s.r && c === m.s.c) continue;
-              nextCovered.add(`${r}:${c}`);
-            }
-          }
-        }
-      }
-      setColWidths(nextColW);
-      setRowHeights(nextRowH);
-      setHiddenCols(nextHiddenCols);
-      setHiddenRows(nextHiddenRows);
-      setMergeSpans(nextSpans);
-      setCoveredCells(nextCovered);
-    }
     const ws = wb.Sheets[name];
     const rows = ws
       ? (XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: false }) as unknown[][])
@@ -256,6 +198,43 @@ export function SheetEditor({
     setGrid(padGrid(withFormulas as unknown[][], MIN_ROWS, campaign || finance ? MIN_COLS : 8));
     setVisibleRows(ROW_PAGE);
     setSel(null);
+    // Column widths + merges to avoid number clipping and keep column A readable
+    try {
+      const defs = (ws as XLSX.WorkSheet)['!cols'] as Array<{ wpx?: number; wch?: number }> | undefined;
+      const px: number[] = [];
+      const widthCount = Math.max(rows[0]?.length ?? 0, defs?.length ?? 0, MIN_COLS);
+      for (let i = 0; i < widthCount; i += 1) {
+        const d = defs?.[i];
+        const w =
+          (d?.wpx && Math.max(60, Math.floor(d.wpx))) ||
+          (d?.wch && Math.max(60, Math.floor(d.wch * 7 + 10))) ||
+          104;
+        px.push(w);
+      }
+      // widen by visible content in first rows; never clip numbers
+      const sampleRows = Math.min(30, rows.length);
+      for (let c = 0; c < px.length; c += 1) {
+        let maxLen = 0;
+        for (let r = 0; r < sampleRows; r += 1) {
+          const cell = rows[r]?.[c];
+          const len = cell == null ? 0 : String(cell).length;
+          if (len > maxLen) maxLen = len;
+        }
+        const contentW = Math.max(60, Math.min(640, Math.floor(maxLen * 7 + 16)));
+        px[c] = Math.max(px[c] || 0, contentW);
+      }
+      // Column A labels persist and are legible
+      if (px.length > 0) px[0] = Math.max(px[0], 420);
+      setColPx(px);
+      mergesRef.current =
+        (((ws as XLSX.WorkSheet)['!merges'] as unknown) as Array<{
+          s: { r: number; c: number };
+          e: { r: number; c: number };
+        }>) || [];
+    } catch {
+      setColPx([]);
+      mergesRef.current = [];
+    }
     try {
       // Vista de solo lectura con estilos básicos (ancho de columnas, merges, negritas)
       const html = XLSX.utils.sheet_to_html(ws, { id: 'styled-view', editable: false });
@@ -265,58 +244,234 @@ export function SheetEditor({
     }
   }, [campaign, finance]);
 
-  function initHyperFormula(wb: XLSX.WorkBook) {
-    try {
-      try {
-        hfRef.current?.destroy();
-      } catch {
-        /* ignore */
+  /**
+   * Grid de presentación: muestra valores calculados y cacheados.
+   * La celda enfocada sigue mostrando el `grid` crudo con "=…".
+   */
+  const displayGrid: Grid = useMemo(() => {
+    const wb = workbookRef.current;
+    if (!wb || !activeSheet) return grid;
+    const ws = wb.Sheets[activeSheet];
+    const parser = new (FastFormulaParser as any)();
+    const normalizeFormulaName = (s: string) => {
+      const map: Record<string, string> = {
+        SUMA: 'SUM',
+        PROMEDIO: 'AVERAGE',
+        MIN: 'MIN',
+        MAX: 'MAX',
+        SI: 'IF',
+        REDONDEAR: 'ROUND',
+      };
+      let out = s;
+      for (const [es, en] of Object.entries(map)) {
+        out = out.replace(new RegExp(`\\b${es}\\b`, 'g'), en);
       }
-      hfRef.current = null;
-      hfSheetIdByNameRef.current = new Map();
-      const hf = HyperFormula.buildEmpty({ licenseKey: 'gpl-v3' } as any);
-      wb.SheetNames.forEach((name) => {
-        const ws = wb.Sheets[name];
-        const rows = (XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: true }) as unknown[][]) || [];
-        const withFormulas = rows.map((row, r) =>
-          row.map((cell, c) => {
+      return out;
+    };
+    const out: Grid = [];
+    for (let r = 0; r < grid.length; r += 1) {
+      const row: string[] = [];
+      for (let c = 0; c < (grid[r]?.length || 0); c += 1) {
+        const raw = grid[r]?.[c] ?? '';
+        if (typeof raw === 'string' && raw.trim().startsWith('=')) {
+          try {
+            (parser as any).position = { sheet: activeSheet, row: r + 1, col: c + 1 };
+            (parser as any).onCell = (ref: { sheet?: string; row: number; col: number }) => {
+              const s = ref.sheet ?? activeSheet;
+              const rr = ref.row - 1;
+              const cc = ref.col - 1;
+              if (s === activeSheet) {
+                const v = grid[rr]?.[cc] ?? '';
+                if (typeof v === 'string' && v.trim().startsWith('=')) {
+                  (parser as any).position = { sheet: s, row: rr + 1, col: cc + 1 };
+                  const inner = (parser as any).parse(String(v).replace(/^=/, ''));
+                  return typeof inner === 'number' ? inner : Number(inner) || 0;
+                }
+                const { v: nv, t } = toCellValue(String(v));
+                return t === 'n' ? (nv as number) : Number(nv) || 0;
+              }
+              const addr = XLSX.utils.encode_cell({ r: rr, c: cc });
+              const obj = (wb.Sheets[s] as XLSX.WorkSheet)?.[addr] as XLSX.CellObject | undefined;
+              if (obj?.f) return 0;
+              const num = Number(obj?.v);
+              return Number.isFinite(num) ? num : 0;
+            };
+            (parser as any).onRange = (ref: { sheet?: string; from: { row: number; col: number }; to: { row: number; col: number } }) => {
+              const s = ref.sheet ?? activeSheet;
+              const arr: number[][] = [];
+              for (let rr = ref.from.row - 1; rr <= ref.to.row - 1; rr += 1) {
+                const arow: number[] = [];
+                for (let cc = ref.from.col - 1; cc <= ref.to.col - 1; cc += 1) {
+                  if (s === activeSheet) {
+                    const v = grid[rr]?.[cc] ?? '';
+                    if (typeof v === 'string' && v.trim().startsWith('=')) {
+                      (parser as any).position = { sheet: s, row: rr + 1, col: cc + 1 };
+                      const inner = (parser as any).parse(String(v).replace(/^=/, ''));
+                      arow.push(typeof inner === 'number' ? inner : Number(inner) || 0);
+                    } else {
+                      const { v: nv, t } = toCellValue(String(v));
+                      arow.push(t === 'n' ? (nv as number) : Number(nv) || 0);
+                    }
+                  } else {
+                    const addr = XLSX.utils.encode_cell({ r: rr, c: cc });
+                    const obj = (wb.Sheets[s] as XLSX.WorkSheet)?.[addr] as XLSX.CellObject | undefined;
+                    const num = Number(obj?.v);
+                    arow.push(Number.isFinite(num) ? num : 0);
+                  }
+                }
+                arr.push(arow);
+              }
+              return arr;
+            };
+            const evaluated = (parser as any).parse(normalizeFormulaName(String(raw).replace(/^=/, '')));
             const addr = XLSX.utils.encode_cell({ r, c });
             const obj = ws?.[addr] as XLSX.CellObject | undefined;
-            if (obj?.f) return `=${obj.f}`;
-            return cell === undefined || cell === null ? '' : (typeof cell === 'number' ? cell : String(cell));
-          }),
-        );
-        const id = (hf as any).addSheet(name) as number;
-        (hf as any).setSheetContent(id, withFormulas);
-        hfSheetIdByNameRef.current.set(name, id);
-        const set = new Set<string>();
-        const ref = (ws as any)['!ref'] as string | undefined;
-        if (ref) {
-          const range = XLSX.utils.decode_range(ref);
-          for (let r = 0; r <= range.e.r; r += 1) {
-            for (let c = 0; c <= range.e.c; c += 1) {
-              const a = XLSX.utils.encode_cell({ r, c });
-              const obj = ws?.[a] as XLSX.CellObject | undefined;
-              if (obj?.f) set.add(a);
+            if (typeof evaluated === 'number') {
+              const fmt = (FastFormulaParser as any).SSF?.format;
+              const z = (obj as any)?.z ?? undefined;
+              if (fmt && z) row.push(fmt(z, evaluated));
+              else {
+                const hasDecimals = Math.abs(evaluated % 1) > 1e-6;
+                row.push(
+                  evaluated.toLocaleString('es-MX', {
+                    minimumFractionDigits: hasDecimals ? 2 : 0,
+                    maximumFractionDigits: hasDecimals ? 6 : 0,
+                  }),
+                );
+              }
+            } else if (typeof evaluated === 'string') {
+              row.push(evaluated);
+            } else {
+              row.push(String(evaluated ?? ''));
+            }
+          } catch {
+            const addr = XLSX.utils.encode_cell({ r, c });
+            const obj = ws?.[addr] as XLSX.CellObject | undefined;
+            // Fallback simple
+            try {
+              const f = typeof obj?.f === 'string' ? String(obj!.f) : '';
+              if (f) {
+                const expr = f.replace(/\$?[A-Z]+\$?\d+/g, (m) => {
+                  const maddr = XLSX.utils.decode_cell(m.replace(/\$/g, ''));
+                  const rawAt = grid[maddr.r]?.[maddr.c] ?? '';
+                  const { v: nv, t } = toCellValue(String(rawAt));
+                  const num = t === 'n' ? (nv as number) : Number(nv) || 0;
+                  return String(Number.isFinite(num) ? num : 0);
+                }).replace(/\^/g, '**');
+                // eslint-disable-next-line no-new-func
+                const val = Function(`\"use strict\";return (${expr});`)();
+                if (typeof val === 'number' && Number.isFinite(val)) {
+                  const hasDecimals = Math.abs(val % 1) > 1e-6;
+                  row.push(
+                    val.toLocaleString('es-MX', {
+                      minimumFractionDigits: hasDecimals ? 2 : 0,
+                      maximumFractionDigits: hasDecimals ? 6 : 0,
+                    }),
+                  );
+                  continue;
+                }
+              }
+            } catch {
+              /* ignore and fallback below */
+            }
+            // Fallback específico: SUM/SUMA
+            try {
+              const ftxt = String(raw).trim().toUpperCase();
+              const m = ftxt.match(/^=(SUM|SUMA)\(([^)]+)\)$/);
+              if (m) {
+                const args = m[2].split(/[;,]/).map((s) => s.trim());
+                let total = 0;
+                const addCell = (rr: number, cc: number) => {
+                  const vraw = grid[rr]?.[cc] ?? '';
+                  if (typeof vraw === 'string' && vraw.startsWith('=')) {
+                    try {
+                      (parser as any).position = { sheet: activeSheet, row: rr + 1, col: cc + 1 };
+                      const val = (parser as any).parse(normalizeFormulaName(vraw.slice(1)));
+                      total += Number(val) || 0;
+                    } catch {
+                      const cellObj = ws?.[XLSX.utils.encode_cell({ r: rr, c: cc })] as XLSX.CellObject | undefined;
+                      total += Number(cellObj?.v) || 0;
+                    }
+                  } else {
+                    const { v: nv, t } = toCellValue(String(vraw));
+                    total += t === 'n' ? (nv as number) : Number(nv) || 0;
+                  }
+                };
+                for (const a of args) {
+                  const rng = a.match(/^([A-Z]+\d+):([A-Z]+\d+)$/);
+                  if (rng) {
+                    const s = XLSX.utils.decode_cell(rng[1]);
+                    const e = XLSX.utils.decode_cell(rng[2]);
+                    for (let rr = Math.min(s.r, e.r); rr <= Math.max(s.r, e.r); rr += 1) {
+                      for (let cc = Math.min(s.c, e.c); cc <= Math.max(s.c, e.c); cc += 1) addCell(rr, cc);
+                    }
+                  } else {
+                    const one = a.match(/^([A-Z]+\d+)$/);
+                    if (one) {
+                      const p = XLSX.utils.decode_cell(one[1]);
+                      addCell(p.r, p.c);
+                    } else {
+                      total += Number(a) || 0;
+                    }
+                  }
+                }
+                const fmt = (FastFormulaParser as any).SSF?.format;
+                const z = (obj as any)?.z ?? undefined;
+                if (fmt && z) row.push(fmt(z, total));
+                else {
+                  const hasDecimals = Math.abs(total % 1) > 1e-6;
+                  row.push(
+                    total.toLocaleString('es-MX', {
+                      minimumFractionDigits: hasDecimals ? 2 : 0,
+                      maximumFractionDigits: hasDecimals ? 6 : 0,
+                    }),
+                  );
+                }
+                continue;
+              }
+            } catch {
+              /* ignore and continue to cache */
+            }
+            // Último recurso: valor cacheado de Excel si existe
+            const cache = obj?.v as unknown;
+            const fmt = (FastFormulaParser as any).SSF?.format;
+            const z = (obj as any)?.z ?? undefined;
+            if (typeof cache === 'number') {
+              try {
+                if (fmt && z) row.push(fmt(z, cache));
+                else {
+                  const hasDecimals = Math.abs((cache as number) % 1) > 1e-6;
+                  row.push(
+                    (cache as number).toLocaleString('es-MX', {
+                      minimumFractionDigits: hasDecimals ? 2 : 0,
+                      maximumFractionDigits: hasDecimals ? 6 : 0,
+                    }),
+                  );
+                }
+              } catch {
+                row.push(String(cache));
+              }
+            } else {
+              row.push(obj?.w != null ? String(obj.w) : '#¿?');
             }
           }
+        } else {
+          const addr = XLSX.utils.encode_cell({ r, c });
+          const obj = ws?.[addr] as XLSX.CellObject | undefined;
+          const txt = raw !== '' && raw != null ? String(raw) : obj?.w != null ? String(obj.w) : '';
+          row.push(txt);
         }
-        originalFormulaCellsRef.current.set(name, set);
-      });
-      hfRef.current = hf;
-    } catch (e) {
-      // Si algo falla (idioma no registrado, etc.), no bloquea la apertura
-      hfRef.current = null;
-      console.warn('HyperFormula init failed; falling back to static values');
+      }
+      out.push(row);
     }
-  }
+    return out;
+  }, [grid, activeSheet]);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setError('');
     setDirty(false);
-    setSaveStatus('');
     setPdfUrl('');
     setShowHistory(false);
     setMsg('');
@@ -330,10 +485,8 @@ export function SheetEditor({
       })
       .then((buf) => {
         if (cancelled) return;
-        originalBufferRef.current = buf;
         const wb = XLSX.read(buf, { type: 'array', cellStyles: true, cellFormula: true });
         workbookRef.current = wb;
-        initHyperFormula(wb);
         setSheetNames(wb.SheetNames);
         const first = wb.SheetNames[0] || '';
         setActiveSheet(first);
@@ -350,7 +503,7 @@ export function SheetEditor({
     };
   }, [url, fileId, loadSheet]);
 
-  const cols = grid[0]?.length || MIN_COLS;
+  const cols = displayGrid[0]?.length || MIN_COLS;
 
   function markDirty() {
     setDirty(true);
@@ -358,26 +511,11 @@ export function SheetEditor({
   }
 
   function setCell(row: number, col: number, value: string) {
-    // Guarda en pila de deshacer
-    undoRef.current.push({ r: row, c: col, prev: grid[row]?.[col] ?? '', next: value });
-    // Limpiar rehacer en una nueva edición
-    redoRef.current = [];
     setGrid((prev) => {
       const next = prev.map((r) => r.slice());
       next[row][col] = value;
       return next;
     });
-    // Actualiza HyperFormula
-    const hf = hfRef.current;
-    const sid = hfSheetIdByNameRef.current.get(activeSheet);
-    if (hf && sid !== undefined) {
-      const contents: string | number | null =
-        value === '' ? null : value.startsWith('=') ? value : (() => {
-          const { v } = toCellValue(value);
-          return v as string | number;
-        })();
-      hf.setCellContents({ sheet: sid, col, row } as SimpleCellAddress, contents as any);
-    }
     markDirty();
   }
 
@@ -459,49 +597,7 @@ export function SheetEditor({
     wb.Sheets[activeSheet] = ws;
   }
 
-  function undo() {
-    const last = undoRef.current.pop();
-    if (!last) return;
-    redoRef.current.push(last);
-    setGrid((prev) => {
-      const next = prev.map((r) => r.slice());
-      next[last.r][last.c] = last.prev;
-      return next;
-    });
-    const hf = hfRef.current;
-    const sid = hfSheetIdByNameRef.current.get(activeSheet);
-    if (hf && sid !== undefined) {
-      const contents: string | number | null =
-        last.prev === '' ? null : last.prev.startsWith('=') ? last.prev : (() => {
-          const { v } = toCellValue(last.prev);
-          return v as string | number;
-        })();
-      hf.setCellContents({ sheet: sid, col: last.c, row: last.r } as SimpleCellAddress, contents as any);
-    }
-    markDirty();
-  }
-
-  function redo() {
-    const last = redoRef.current.pop();
-    if (!last) return;
-    undoRef.current.push(last);
-    setGrid((prev) => {
-      const next = prev.map((r) => r.slice());
-      next[last.r][last.c] = last.next;
-      return next;
-    });
-    const hf = hfRef.current;
-    const sid = hfSheetIdByNameRef.current.get(activeSheet);
-    if (hf && sid !== undefined) {
-      const contents: string | number | null =
-        last.next === '' ? null : last.next.startsWith('=') ? last.next : (() => {
-          const { v } = toCellValue(last.next);
-          return v as string | number;
-        })();
-      hf.setCellContents({ sheet: sid, col: last.c, row: last.r } as SimpleCellAddress, contents as any);
-    }
-    markDirty();
-  }
+  // undo/redo removed for simplicity in evaluator transition
 
   function switchSheet(name: string) {
     if (name === activeSheet) return;
@@ -659,11 +755,6 @@ export function SheetEditor({
       next[r][3] = String(Math.round(qty * cost * 100) / 100);
       return next;
     });
-    const hf = hfRef.current;
-    const sid = hfSheetIdByNameRef.current.get(activeSheet);
-    if (hf && sid !== undefined) {
-      hf.setCellContents({ sheet: sid, col: 3, row: r } as SimpleCellAddress, Math.round(qty * cost * 100) / 100 as any);
-    }
     markDirty();
   }
 
@@ -688,22 +779,7 @@ export function SheetEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [grid, activeSheet]);
 
-  function discardChanges() {
-    if (!dirty) return;
-    if (!confirm('Descartar cambios sin guardar y recargar desde el archivo?')) return;
-    const buf = originalBufferRef.current;
-    if (!buf) return;
-    const wb = XLSX.read(buf, { type: 'array', cellStyles: true, cellFormula: true });
-    workbookRef.current = wb;
-    initHyperFormula(wb);
-    const name = activeSheet || wb.SheetNames[0] || '';
-    loadSheet(wb, name);
-    pendingCellsRef.current = new Map();
-    undoRef.current = [];
-    redoRef.current = [];
-    setDirty(false);
-    setMsg('Descartado — de vuelta al archivo original');
-  }
+  // discardChanges removed
 
   async function save() {
     if (!canEdit) return;
@@ -741,8 +817,6 @@ export function SheetEditor({
       setMsg('Guardado — edición registrada en el historial');
       setRevKey((k) => k + 1);
       await onSaved?.();
-      lastSavedAtRef.current = Date.now();
-      setSaveStatus('Guardado ahora');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'No se pudo guardar');
     } finally {
@@ -812,12 +886,6 @@ export function SheetEditor({
 
   function setFxValue(value: string) {
     if (!sel || !canEdit) return;
-    const originalSet = originalFormulaCellsRef.current.get(activeSheet) || new Set<string>();
-    const ref = XLSX.utils.encode_cell({ r: sel.r, c: sel.c });
-    if (!value.startsWith('=') && originalSet.has(ref)) {
-      const ok = window.confirm('Esta celda tiene una fórmula. ¿Sobrescribir con un valor fijo?');
-      if (!ok) return;
-    }
     setCell(sel.r, sel.c, value);
   }
 
@@ -893,17 +961,6 @@ export function SheetEditor({
           const cc = c0 + dc;
           if (rr < next.length && cc < next[rr].length) {
             next[rr][cc] = cell;
-            // HF
-            const hf = hfRef.current;
-            const sid = hfSheetIdByNameRef.current.get(activeSheet);
-            if (hf && sid !== undefined) {
-              const contents: string | number | null =
-                cell === '' ? null : cell.startsWith('=') ? cell : (() => {
-                  const { v } = toCellValue(cell);
-                  return v as string | number;
-                })();
-              hf.setCellContents({ sheet: sid, col: cc, row: rr } as SimpleCellAddress, contents as any);
-            }
             const addr = XLSX.utils.encode_cell({ r: rr, c: cc });
             recordCellChange(activeSheet, addr, cell);
           }
@@ -965,30 +1022,6 @@ export function SheetEditor({
 
         <div className="sheet-chrome">
           <div className="sheet-toolbar">
-            <div className="row row--tight sheet-toolbar__actions" style={{ justifyContent: 'flex-start', gap: '0.5rem' }}>
-              {canEdit ? (
-                <>
-                  <button className="btn ghost btn-sm" type="button" disabled={!undoRef.current.length} onClick={undo} title="Deshacer (Ctrl+Z)">
-                    Deshacer
-                  </button>
-                  <button className="btn ghost btn-sm" type="button" disabled={!redoRef.current.length} onClick={redo} title="Rehacer (Ctrl+Y)">
-                    Rehacer
-                  </button>
-                </>
-              ) : null}
-              <div className="sheet-toolbar__sheets" aria-label="Zoom" role="group">
-                <button className="btn ghost btn-sm" type="button" onClick={() => setZoom((z) => Math.max(0.7, Math.round((z - 0.1) * 10) / 10))} title="Alejar">
-                  −
-                </button>
-                <span className="muted kpi-sub" aria-live="polite" style={{ minWidth: 44, display: 'inline-block', textAlign: 'center' }}>
-                  {Math.round(zoom * 100)}%
-                </span>
-                <button className="btn ghost btn-sm" type="button" onClick={() => setZoom((z) => Math.min(2, Math.round((z + 0.1) * 10) / 10))} title="Acercar">
-                  +
-                </button>
-              </div>
-            </div>
-
             <div className="row row--tight sheet-toolbar__actions">
               {fileId ? (
                 <button
@@ -1002,23 +1035,15 @@ export function SheetEditor({
                 </button>
               ) : null}
               {canEdit ? (
-                <>
-                  <button
-                    className="btn ghost btn-sm"
-                    type="button"
-                    disabled={!dirty || saving}
-                    onClick={save}
-                    title="Ctrl+S / ⌘S — guarda la copia de trabajo (auditoría)"
-                  >
-                    {saving ? 'Guardando…' : dirty ? 'Guardar' : 'Sin cambios'}
-                  </button>
-                  {dirty ? (
-                    <button className="btn ghost btn-sm" type="button" onClick={discardChanges} title="Descartar cambios sin guardar">
-                      Descartar
-                    </button>
-                  ) : null}
-                  {saveStatus ? <span className="muted kpi-sub" aria-live="polite">{saveStatus}</span> : null}
-                </>
+                <button
+                  className="btn ghost btn-sm"
+                  type="button"
+                  disabled={!dirty || saving}
+                  onClick={save}
+                  title="Ctrl+S / ⌘S — guarda la copia de trabajo (auditoría)"
+                >
+                  {saving ? 'Guardando…' : dirty ? 'Guardar' : 'Sin cambios'}
+                </button>
               ) : (
                 <span className="muted kpi-sub sheet-toolbar__readonly">
                   {panelEditable ? 'Solo lectura' : 'No editable aquí'}
@@ -1064,11 +1089,11 @@ export function SheetEditor({
           </div>
         </div>
 
-        <p className="sheet-note muted kpi-sub" role="note">
-          Copia de trabajo interna. Lo que circula fuera es el <strong>PDF de salida</strong>.
-          {canEdit ? ' Ctrl+S guarda · Esc quita la selección.' : ''}{' '}
-          {showStyled ? 'Vista con formato: solo lectura.' : ''}
-        </p>
+        {!showCoach && showStyled ? (
+          <p className="sheet-note muted kpi-sub" role="note">
+            Vista con formato: solo lectura.
+          </p>
+        ) : null}
 
         {richTools ? (
           <p className="sheet-tip" role="note">
@@ -1230,89 +1255,65 @@ export function SheetEditor({
             </p>
           </div>
         ) : (
-          <div className="sheet-wrap" style={{ zoom }}>
+          <div className="sheet-wrap">
             <table className="sheet">
-              <colgroup>
-                {Array.from({ length: cols }, (_, c) => (
-                  <col key={c} style={{ display: hiddenCols.has(c) ? 'none' : undefined, width: colWidths[c] || 104 }} />
-                ))}
-              </colgroup>
               <thead>
                 <tr>
                   <th className="sheet__corner" scope="col">
                     <span className="sr-only">Fila / columna</span>
                   </th>
-                  {Array.from({ length: cols }, (_, c) =>
-                    hiddenCols.has(c) ? null : (
-                      <th
-                        key={c}
-                        scope="col"
-                        className={sel?.c === c ? 'sheet__col--sel' : undefined}
-                      >
-                        {colLabel(c)}
-                      </th>
-                    ),
-                  )}
+                  {Array.from({ length: cols }, (_, c) => (
+                    <th
+                      key={c}
+                      scope="col"
+                      className={sel?.c === c ? 'sheet__col--sel' : undefined}
+                      style={{ width: (colPx[c] || 104) + 'px', minWidth: (colPx[c] || 104) + 'px' }}
+                    >
+                      {colLabel(c)}
+                    </th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
-                {shownRows.map((row, r) =>
-                  hiddenRows.has(r) ? null : (
-                    <tr key={r} className={sel?.r === r ? 'sheet__row--sel' : undefined} style={{ height: rowHeights[r] || undefined }}>
-                      <th className="sheet__rownum" scope="row">
-                        {r + 1}
-                      </th>
-                      {row.map((cell, c) => {
-                        if (hiddenCols.has(c)) return null;
-                        const covered = coveredCells.has(`${r}:${c}`);
-                        if (covered) return null;
-                        const span = mergeSpans.get(`${r}:${c}`);
-                        const isActive = sel?.r === r && sel?.c === c;
-                        let shown = cell;
-                        if (!isActive && cell?.startsWith('=')) {
-                          const hf = hfRef.current;
-                          const sid = hfSheetIdByNameRef.current.get(activeSheet);
-                          if (hf && sid !== undefined) {
-                            const val = hf.getCellValue({ sheet: sid, col: c, row: r } as SimpleCellAddress);
-                            shown = val === null || val === undefined ? '' : String(val);
-                          } else {
-                            // Fallback: muestra el valor en caché del archivo si el motor de fórmulas no está disponible.
-                            const ws = workbookRef.current?.Sheets[activeSheet];
-                            const addr = XLSX.utils.encode_cell({ r, c });
-                            const obj = ws?.[addr] as XLSX.CellObject | undefined;
-                            shown =
-                              obj?.w !== undefined && obj?.w !== null
-                                ? String(obj.w)
-                                : obj?.v !== undefined && obj?.v !== null
-                                  ? String(obj.v as any)
-                                  : '';
-                          }
+                {shownRows.map((row, r) => (
+                  <tr key={r} className={sel?.r === r ? 'sheet__row--sel' : undefined}>
+                    <th className="sheet__rownum" scope="row">
+                      {r + 1}
+                    </th>
+                    {(() => {
+                      const cells: JSX.Element[] = [];
+                      for (let c = 0; c < row.length; c += 1) {
+                        const isSel = sel?.r === r && sel?.c === c;
+                        const merge = mergesRef.current.find((m) => m.s.r === r && m.s.c === c);
+                        let colSpan = 1;
+                        let widthPx = colPx[c] || 104;
+                        if (merge) {
+                          colSpan = merge.e.c - merge.s.c + 1;
+                          for (let i = merge.s.c + 1; i <= merge.e.c; i += 1) widthPx += colPx[i] || 104;
                         }
-                        return (
-                          <td
-                            key={c}
-                            className={isActive ? 'sheet__td--sel' : undefined}
-                            rowSpan={span?.rs}
-                            colSpan={span?.cs}
-                          >
+                        cells.push(
+                          <td key={c} className={isSel ? 'sheet__td--sel' : undefined} colSpan={colSpan}>
                             <input
                               className="sheet__cell"
-                              data-r={r}
-                              data-c={c}
-                              value={shown}
-                              readOnly={!canEdit || !isActive}
+                              value={isSel ? (grid[r]?.[c] ?? '') : row[c]}
+                              readOnly={!canEdit}
                               aria-label={`Celda ${colLabel(c)}${r + 1}`}
                               onFocus={() => setSel({ r, c })}
                               onChange={(e) => setCell(r, c, e.target.value)}
                               onKeyDown={(e) => onKeyNav(e, r, c)}
                               onPaste={(e) => onPasteRange(e, r, c)}
+                              data-r={r}
+                              data-c={c}
+                              style={{ minWidth: widthPx - 2, width: '100%' }}
                             />
-                          </td>
+                          </td>,
                         );
-                      })}
-                    </tr>
-                  ),
-                )}
+                        if (merge) c = merge.e.c;
+                      }
+                      return cells;
+                    })()}
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
@@ -1325,13 +1326,13 @@ export function SheetEditor({
           </div>
         ) : null}
 
-        {!showStyled && grid.length > visibleRows ? (
+        {!showStyled && displayGrid.length > visibleRows ? (
           <button
             className="btn ghost btn-sm"
             type="button"
             onClick={() => setVisibleRows((v) => v + ROW_PAGE)}
           >
-            Ver más filas ({grid.length - visibleRows} restantes)
+            Ver más filas ({displayGrid.length - visibleRows} restantes)
           </button>
         ) : null}
 
