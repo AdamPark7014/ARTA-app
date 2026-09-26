@@ -17,9 +17,11 @@
   },
   "dependencies": {
     "@arta/rbac": "*",
+    "fast-formula-parser": "^1.0.19",
     "next": "^14.2.35",
     "pdf-lib": "^1.17.1",
     "pdfjs-dist": "^4.10.38",
+    "pngjs": "^7.0.0",
     "react": "18.2.0",
     "react-dom": "18.2.0",
     "xlsx": "^0.18.5"

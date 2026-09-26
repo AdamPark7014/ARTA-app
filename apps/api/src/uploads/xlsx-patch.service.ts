@@ -123,6 +123,7 @@ export class XlsxPatchService {
       }
     }
 
+    // Mantener el comportamiento existente: no forzar recálculo en apertura aquí.
     const out = await workbook.xlsx.writeBuffer();
     return Buffer.from(out);
   }

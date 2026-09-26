@@ -4524,12 +4524,12 @@ body.site-nav-open {
   position: sticky;
   top: 0;
   z-index: 6;
-  border: 1px solid #d0d7e0;
+  border: 1px solid var(--line);
   border-radius: 10px;
-  background: #f4f7f5;
+  background: var(--bg-elev);
   box-shadow:
-    0 1px 0 rgba(26, 35, 48, 0.04),
-    0 6px 16px rgba(26, 35, 48, 0.04);
+    0 1px 0 rgba(0, 0, 0, 0.12),
+    0 6px 16px rgba(0, 0, 0, 0.18);
   overflow: hidden;
 }
 
@@ -4540,8 +4540,8 @@ body.site-nav-open {
   justify-content: space-between;
   gap: 0.55rem 0.85rem;
   padding: 0.6rem 0.8rem;
-  background: linear-gradient(180deg, #f8faf9 0%, #eef3f0 100%);
-  border-bottom: 1px solid #d5dde6;
+  background: var(--bg-elev);
+  border-bottom: 1px solid var(--line);
 }
 
 .sheet-tabs {
@@ -4609,7 +4609,7 @@ body.site-nav-open {
   gap: 0;
   min-height: 2.25rem;
   background: #fff;
-  border-top: 1px solid #e2e8ee;
+  border-top: 1px solid var(--line);
 }
 
 .sheet-fxbar__ref {
@@ -4670,6 +4670,11 @@ body.site-nav-open {
   color: #8a96a3 !important;
   background: #fafbfc !important;
   cursor: default;
+}
+
+/* Mejora de contraste del cursor en la barra de fórmulas */
+.sheet-fxbar__input {
+  caret-color: #1a2330;
 }
 
 /* Coach de primer uso (hoja / documento) */
@@ -4759,9 +4764,9 @@ body.site-nav-open {
 }
 
 .sheet-history {
-  border: 1px solid #d5dde6;
+  border: 1px solid var(--line);
   border-radius: 8px;
-  background: #f9fbfc;
+  background: var(--bg-elev);
   padding: 0.85rem 1rem 1rem;
 }
 
@@ -4831,9 +4836,9 @@ body.site-nav-open {
   flex-wrap: wrap;
   gap: 0.55rem 0.85rem;
   padding: 0.5rem 0.7rem;
-  border: 1px solid #d8dee6;
+  border: 1px solid var(--line);
   border-radius: 8px;
-  background: #f4f7fb;
+  background: var(--bg-elev);
 }
 
 .sheet-tools__group {
@@ -4964,6 +4969,7 @@ body.site-nav-open {
   border-right: 1px solid #cfd7e0;
   border-bottom: 1px solid #b8c2ce;
   min-width: 104px;
+  white-space: normal; /* permitir wrap en headers largos */
 }
 
 .sheet__corner,
@@ -5015,11 +5021,22 @@ body.site-nav-open {
   font-size: 0.84rem;
   font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
   outline-offset: -2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sheet__cell--wrap {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: unset;
 }
 
 .sheet__cell:focus {
   outline: none;
-  background: #f3fbf6 !important;
+  background: #ffffff !important;
+  color: #111111 !important;
+  -webkit-text-fill-color: #111111 !important;
+  caret-color: #111111;
 }
 
 .sheet__cell:focus-visible {
@@ -5028,12 +5045,20 @@ body.site-nav-open {
 }
 
 .sheet__td--sel .sheet__cell:focus {
-  background: #f3fbf6 !important;
+  background: #ffffff !important;
+  color: #111111 !important;
+  -webkit-text-fill-color: #111111 !important;
+  caret-color: #111111;
 }
 
 .sheet__cell[readonly] {
   color: #6b7785 !important;
 }
+
+/* (wrap-only layer removed; keep 5328e87 rendering) */
+
+/* Display layer: valores visibles y overflow tipo Excel cuando hay espacio */
+/* No overlay: el input pinta el texto en todo momento; reglas de foco arriba */
 
 /* Creación visual de archivos por sección */
 .file-create {

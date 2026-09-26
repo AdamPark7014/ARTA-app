@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as XLSX from 'xlsx';
+import FastFormulaParser from 'fast-formula-parser';
+import { createEvaluator } from '@/lib/sheet-evaluator';
 import type { SaveFile } from '@/lib/file-save';
 import { api } from '@/lib/api';
 import { ExpandBox } from '@/components/ui/ExpandBox';
@@ -81,9 +83,25 @@ function toCellValue(text: string): { v: string | number; t: 's' | 'n' } {
   const trimmed = text.trim();
   if (!trimmed) return { v: '', t: 's' };
   if (trimmed.startsWith('=')) return { v: trimmed, t: 's' };
-  const normalized = trimmed.replace(/\s/g, '').replace(/\$/g, '').replace(',', '.');
-  if (/^-?\d+(\.\d+)?$/.test(normalized)) {
-    const n = Number(normalized);
+  // Normalize common currency/number formats:
+  // - Remove spaces and currency symbols
+  // - If both comma and dot appear, treat comma as thousands and strip it
+  // - If only comma appears, treat it as decimal separator and convert to dot
+  // - Strip thousands separators
+  let s = trimmed.replace(/[\s\u00A0]/g, '').replace(/[\$£€¥%]/g, '');
+  const hasComma = s.includes(',');
+  const hasDot = s.includes('.');
+  if (hasComma && hasDot) {
+    s = s.replace(/,/g, '');
+  } else if (hasComma && !hasDot) {
+    s = s.replace(/,/g, '.');
+  }
+  // Parentheses for negatives: (123.45) → -123.45
+  s = s.replace(/^\((.*)\)$/, '-$1');
+  // Remove remaining thousands separators (common in some exports)
+  s = s.replace(/(?<=\d)[,](?=\d{3}\b)/g, '');
+  if (/^-?\d+(\.\d+)?$/.test(s)) {
+    const n = Number(s);
     if (Number.isFinite(n)) return { v: n, t: 'n' };
   }
   return { v: text, t: 's' };
@@ -154,6 +172,239 @@ export function SheetEditor({
   const campaign = variant === 'campaign';
   const finance = variant === 'finance';
   const richTools = campaign || finance;
+  const [colPx, setColPx] = useState<number[]>([]);
+  const mergesRef = useRef<Array<{ s: { r: number; c: number }; e: { r: number; c: number } }>>([]);
+
+  /**
+   * Grid de presentación: muestra valores calculados y cacheados.
+   * La celda enfocada sigue mostrando el `grid` crudo con "=…".
+   */
+  const displayGrid: Grid = useMemo(() => {
+    const wb = workbookRef.current;
+    if (!wb || !activeSheet) return grid;
+    const ws = wb.Sheets[activeSheet];
+    const parser = new (FastFormulaParser as any)();
+    const evaluator = createEvaluator(wb as unknown as XLSX.WorkBook, activeSheet, grid);
+    const normalizeFormulaName = (s: string) => {
+      const map: Record<string, string> = {
+        SUMA: 'SUM',
+        PROMEDIO: 'AVERAGE',
+        MIN: 'MIN',
+        MAX: 'MAX',
+        SI: 'IF',
+        REDONDEAR: 'ROUND',
+      };
+      let out = s;
+      for (const [es, en] of Object.entries(map)) {
+        out = out.replace(new RegExp(`\\b${es}\\b`, 'g'), en);
+      }
+      return out;
+    };
+    const out: Grid = [];
+    for (let r = 0; r < grid.length; r += 1) {
+      const row: string[] = [];
+      for (let c = 0; c < (grid[r]?.length || 0); c += 1) {
+        const raw = grid[r]?.[c] ?? '';
+        if (typeof raw === 'string' && raw.trim().startsWith('=')) {
+          try {
+            (parser as any).position = { sheet: activeSheet, row: r + 1, col: c + 1 };
+            (parser as any).onCell = (ref: { sheet?: string; row: number; col: number }) => {
+              const s = ref.sheet ?? activeSheet;
+              const rr = ref.row - 1;
+              const cc = ref.col - 1;
+              if (s === activeSheet) {
+                const v = grid[rr]?.[cc] ?? '';
+                if (typeof v === 'string' && v.trim().startsWith('=')) {
+                  (parser as any).position = { sheet: s, row: rr + 1, col: cc + 1 };
+                  const inner = (parser as any).parse(String(v).replace(/^=/, ''));
+                  return typeof inner === 'number' ? inner : Number(inner) || 0;
+                }
+                const { v: nv, t } = toCellValue(String(v));
+                return t === 'n' ? (nv as number) : Number(nv) || 0;
+              }
+              const addr = XLSX.utils.encode_cell({ r: rr, c: cc });
+              const obj = (wb.Sheets[s] as XLSX.WorkSheet)?.[addr] as XLSX.CellObject | undefined;
+              if (obj?.f) return 0;
+              const num = Number(obj?.v);
+              return Number.isFinite(num) ? num : 0;
+            };
+            (parser as any).onRange = (ref: { sheet?: string; from: { row: number; col: number }; to: { row: number; col: number } }) => {
+              const s = ref.sheet ?? activeSheet;
+              const arr: number[][] = [];
+              for (let rr = ref.from.row - 1; rr <= ref.to.row - 1; rr += 1) {
+                const arow: number[] = [];
+                for (let cc = ref.from.col - 1; cc <= ref.to.col - 1; cc += 1) {
+                  if (s === activeSheet) {
+                    const v = grid[rr]?.[cc] ?? '';
+                    if (typeof v === 'string' && v.trim().startsWith('=')) {
+                      (parser as any).position = { sheet: s, row: rr + 1, col: cc + 1 };
+                      const inner = (parser as any).parse(String(v).replace(/^=/, ''));
+                      arow.push(typeof inner === 'number' ? inner : Number(inner) || 0);
+                    } else {
+                      const { v: nv, t } = toCellValue(String(v));
+                      arow.push(t === 'n' ? (nv as number) : Number(nv) || 0);
+                    }
+                  } else {
+                    const addr = XLSX.utils.encode_cell({ r: rr, c: cc });
+                    const obj = (wb.Sheets[s] as XLSX.WorkSheet)?.[addr] as XLSX.CellObject | undefined;
+                    const num = Number(obj?.v);
+                    arow.push(Number.isFinite(num) ? num : 0);
+                  }
+                }
+                arr.push(arow);
+              }
+              return arr;
+            };
+            const evaluated = evaluator.evaluateFormula(String(raw), r + 1, c + 1);
+            const addr = XLSX.utils.encode_cell({ r, c });
+            const obj = ws?.[addr] as XLSX.CellObject | undefined;
+            if (typeof evaluated === 'number') {
+              const fmt = (FastFormulaParser as any).SSF?.format;
+              const z = (obj as any)?.z ?? undefined;
+              if (fmt && z) row.push(fmt(z, evaluated));
+              else {
+                const hasDecimals = Math.abs(evaluated % 1) > 1e-6;
+                row.push(
+                  evaluated.toLocaleString('es-MX', {
+                    minimumFractionDigits: hasDecimals ? 2 : 0,
+                    maximumFractionDigits: hasDecimals ? 6 : 0,
+                  }),
+                );
+              }
+            } else row.push(String(evaluated ?? ''));
+          } catch {
+            const addr = XLSX.utils.encode_cell({ r, c });
+            const obj = ws?.[addr] as XLSX.CellObject | undefined;
+            // Fallback: evaluador simple de + - * / ^ y paréntesis sustituyendo refs por números
+            try {
+              const f = typeof obj?.f === 'string' ? String(obj!.f) : '';
+              if (f) {
+                const expr = f.replace(/\$?[A-Z]+\$?\d+/g, (m) => {
+                  // Resolver referencia con recursion mínima
+                  const maddr = XLSX.utils.decode_cell(m.replace(/\$/g, ''));
+                  const num =
+                    ((): number => {
+                      const rawAt = grid[maddr.r]?.[maddr.c] ?? '';
+                      const { v: nv, t } = toCellValue(String(rawAt));
+                      if (t === 'n') return nv as number;
+                      // Si es fórmula, no recursamos profundo: usa 0 en fallback
+                      return Number(nv) || 0;
+                    })();
+                  return String(Number.isFinite(num) ? num : 0);
+                });
+                if (/^[0-9+\-*/^().\s]+$/.test(expr)) {
+                  // ^ no es JS: reemplazar por ** para exponenciación
+                  const safe = expr.replace(/\^/g, '**');
+                  // eslint-disable-next-line no-new-func
+                  const val = Function(`\"use strict\";return (${safe});`)();
+                  if (typeof val === 'number' && Number.isFinite(val)) {
+                    const hasDecimals = Math.abs(val % 1) > 1e-6;
+                    row.push(
+                      val.toLocaleString('es-MX', {
+                        minimumFractionDigits: hasDecimals ? 2 : 0,
+                        maximumFractionDigits: hasDecimals ? 6 : 0,
+                      }),
+                    );
+                    continue;
+                  }
+                }
+              }
+            } catch {
+              /* ignore and fallback below */
+            }
+            // Fallback específico: SUM/SUMA con rangos/argumentos
+            try {
+              const ftxt = String(raw).trim().toUpperCase();
+              const m = ftxt.match(/^=(SUM|SUMA)\(([^)]+)\)$/);
+              if (m) {
+                const args = m[2].split(/[;,]/).map((s) => s.trim());
+                let total = 0;
+                const addCell = (rr: number, cc: number) => {
+                  const vraw = grid[rr]?.[cc] ?? '';
+                  if (typeof vraw === 'string' && vraw.startsWith('=')) {
+                    try {
+                      (parser as any).position = { sheet: activeSheet, row: rr + 1, col: cc + 1 };
+                      const val = (parser as any).parse(normalizeFormulaName(vraw.slice(1)));
+                      total += Number(val) || 0;
+                    } catch {
+                      const cellObj = ws?.[XLSX.utils.encode_cell({ r: rr, c: cc })] as XLSX.CellObject | undefined;
+                      total += Number(cellObj?.v) || 0;
+                    }
+                  } else {
+                    const { v: nv, t } = toCellValue(String(vraw));
+                    total += t === 'n' ? (nv as number) : Number(nv) || 0;
+                  }
+                };
+                for (const a of args) {
+                  const rng = a.match(/^([A-Z]+\d+):([A-Z]+\d+)$/);
+                  if (rng) {
+                    const s = XLSX.utils.decode_cell(rng[1]);
+                    const e = XLSX.utils.decode_cell(rng[2]);
+                    for (let rr = Math.min(s.r, e.r); rr <= Math.max(s.r, e.r); rr += 1) {
+                      for (let cc = Math.min(s.c, e.c); cc <= Math.max(s.c, e.c); cc += 1) addCell(rr, cc);
+                    }
+                  } else {
+                    const one = a.match(/^([A-Z]+\d+)$/);
+                    if (one) {
+                      const p = XLSX.utils.decode_cell(one[1]);
+                      addCell(p.r, p.c);
+                    } else {
+                      total += Number(a) || 0;
+                    }
+                  }
+                }
+                const fmt = (FastFormulaParser as any).SSF?.format;
+                const z = (obj as any)?.z ?? undefined;
+                if (fmt && z) {
+                  row.push(fmt(z, total));
+                } else {
+                  const hasDecimals = Math.abs(total % 1) > 1e-6;
+                  row.push(
+                    total.toLocaleString('es-MX', {
+                      minimumFractionDigits: hasDecimals ? 2 : 0,
+                      maximumFractionDigits: hasDecimals ? 6 : 0,
+                    }),
+                  );
+                }
+                continue;
+              }
+            } catch {
+              /* ignore and continue to cache fallback */
+            }
+            // Si falla la evaluación, usa el valor cacheado de Excel si existe
+            const cache = obj?.v as unknown;
+            const fmt = (FastFormulaParser as any).SSF?.format;
+            const z = (obj as any)?.z ?? undefined;
+            if (typeof cache === 'number') {
+              try {
+                if (fmt && z) row.push(fmt(z, cache));
+                else {
+                  const hasDecimals = Math.abs((cache as number) % 1) > 1e-6;
+                  row.push(
+                    (cache as number).toLocaleString('es-MX', {
+                      minimumFractionDigits: hasDecimals ? 2 : 0,
+                      maximumFractionDigits: hasDecimals ? 6 : 0,
+                    }),
+                  );
+                }
+              } catch {
+                row.push(String(cache));
+              }
+            } else {
+              row.push(obj?.w != null ? String(obj.w) : '#¿?');
+            }
+          }
+        } else {
+          const addr = XLSX.utils.encode_cell({ r, c });
+          const obj = ws?.[addr] as XLSX.CellObject | undefined;
+          const txt = (raw !== '' && raw != null) ? String(raw) : (obj?.w != null ? String(obj.w) : '');
+          row.push(txt);
+        }
+      }
+      out.push(row);
+    }
+    return out;
+  }, [grid, activeSheet]);
 
   useEffect(() => {
     try {
@@ -189,6 +440,49 @@ export function SheetEditor({
     setGrid(padGrid(withFormulas as unknown[][], MIN_ROWS, campaign || finance ? MIN_COLS : 8));
     setVisibleRows(ROW_PAGE);
     setSel(null);
+    // Column widths + merges
+    try {
+      const defs = (ws as XLSX.WorkSheet)['!cols'] as Array<{ wpx?: number; wch?: number }> | undefined;
+      const px: number[] = [];
+      const widthCount = Math.max(rows[0]?.length ?? 0, defs?.length ?? 0, MIN_COLS);
+      for (let i = 0; i < widthCount; i += 1) {
+        const d = defs?.[i];
+        const w =
+          (d?.wpx && Math.max(60, Math.floor(d.wpx))) ||
+          (d?.wch && Math.max(60, Math.floor(d.wch * 7 + 10))) ||
+          104;
+        px.push(w);
+      }
+      // ensancha por contenido visible (solo números o texto corto) en primeras filas
+      const sampleRows = Math.min(30, rows.length);
+      for (let c = 0; c < px.length; c += 1) {
+        let maxLen = 0;
+        for (let r = 0; r < sampleRows; r += 1) {
+          const cell = rows[r]?.[c];
+          if (cell == null) continue;
+          const s = String(cell);
+          const { t } = toCellValue(s);
+          const isNumeric = t === 'n';
+          const consider = isNumeric || s.length <= 24;
+          if (!consider) continue;
+          if (s.length > maxLen) maxLen = s.length;
+        }
+        const contentW = Math.max(60, Math.min(640, Math.floor(maxLen * 7 + 16)));
+        px[c] = Math.max(px[c] || 0, contentW);
+      }
+      // Columna A: etiquetas largas — evita clipping pero sin exceder ~300px
+      if (px.length > 0) px[0] = Math.min(Math.max(px[0], 220), 300);
+      // Columna B en campaña: números/cantidades — no debe ser ancha
+      if (campaign && px.length > 1) px[1] = Math.min(px[1], 160);
+      setColPx(px);
+      mergesRef.current = (((ws as XLSX.WorkSheet)['!merges'] as unknown) as Array<{
+        s: { r: number; c: number };
+        e: { r: number; c: number };
+      }>) || [];
+    } catch {
+      setColPx([]);
+      mergesRef.current = [];
+    }
     try {
       // Vista de solo lectura con estilos básicos (ancho de columnas, merges, negritas)
       const html = XLSX.utils.sheet_to_html(ws, { id: 'styled-view', editable: false });
@@ -234,7 +528,7 @@ export function SheetEditor({
     };
   }, [url, fileId, loadSheet]);
 
-  const cols = grid[0]?.length || MIN_COLS;
+  const cols = displayGrid[0]?.length || MIN_COLS;
 
   function markDirty() {
     setDirty(true);
@@ -489,7 +783,7 @@ export function SheetEditor({
 
   function sumColumn(col: number) {
     let total = 0;
-    for (const row of grid) {
+    for (const row of displayGrid) {
       total += parseMoney(row[col] || '');
     }
     setMsg(`Suma columna ${colLabel(col)}: ${total.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })}`);
@@ -598,7 +892,7 @@ export function SheetEditor({
     return () => window.removeEventListener('keydown', onKey);
   }, [sel]);
 
-  const shownRows = useMemo(() => grid.slice(0, visibleRows), [grid, visibleRows]);
+  const shownRows = useMemo(() => displayGrid.slice(0, visibleRows), [displayGrid, visibleRows]);
   const selLabel = sel ? `${colLabel(sel.c)}${sel.r + 1}` : '';
   const fxValue = sel ? (grid[sel.r]?.[sel.c] ?? '') : '';
 
@@ -642,16 +936,16 @@ export function SheetEditor({
         {blockNotice}
 
         {showCoach ? (
-          <div className="editor-coach" role="note">
-            <p className="editor-coach__text">
-              Edita celdas → <strong>Guardar</strong> → <strong>Salir en PDF</strong>.
+          <div className="editor-coach" role="note" style={{ alignItems: 'center' }}>
+            <p className="editor-coach__text" style={{ margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              Copia de trabajo interna · Ctrl+S guarda · Esc quita la selección ·{' '}
+              {campaign
+                ? 'Campaña: «+ Concepto» → CANTIDAD×COSTO → total; en convenios, describe en CANTIDAD y cortesías en COSTO.'
+                : finance
+                ? 'Corrida: completa Ingresos y Egresos; «Σ Montos» verifica la columna C. El Resumen se actualiza al guardar.'
+                : 'Edita celdas → Guardar → Salir en PDF.'}
             </p>
-            <button
-              type="button"
-              className="editor-coach__dismiss"
-              onClick={dismissCoach}
-              aria-label="Cerrar guía"
-            >
+            <button type="button" className="editor-coach__dismiss" onClick={dismissCoach} aria-label="Cerrar guía">
               Entendido
             </button>
           </div>
@@ -756,17 +1050,10 @@ export function SheetEditor({
           </div>
         </div>
 
-        <p className="sheet-note muted kpi-sub" role="note">
-          Copia de trabajo interna. Lo que circula fuera es el <strong>PDF de salida</strong>.
-          {canEdit ? ' Ctrl+S guarda · Esc quita la selección.' : ''}{' '}
-          {showStyled ? 'Vista con formato: solo lectura.' : ''}
-        </p>
-
-        {richTools ? (
-          <p className="sheet-tip" role="note">
-            {campaign
-              ? 'Campaña: usa «+ Concepto» para CANTIDAD × COSTO → total. En convenios, describe en CANTIDAD y pon cortesías en COSTO.'
-              : 'Corrida financiera: completa Ingresos y Egresos; «Σ Montos» verifica la columna C. El Resumen se actualiza al guardar.'}
+        {/* Nota compacta unificada — se muestra solo si no ha sido descartada (reduce altura) */}
+        {!showCoach && showStyled ? (
+          <p className="sheet-note muted kpi-sub" role="note">
+            Vista con formato: solo lectura.
           </p>
         ) : null}
 
@@ -934,6 +1221,7 @@ export function SheetEditor({
                       key={c}
                       scope="col"
                       className={sel?.c === c ? 'sheet__col--sel' : undefined}
+                      style={{ width: (colPx[c] || 104) + 'px', minWidth: (colPx[c] || 104) + 'px' }}
                     >
                       {colLabel(c)}
                     </th>
@@ -946,21 +1234,44 @@ export function SheetEditor({
                     <th className="sheet__rownum" scope="row">
                       {r + 1}
                     </th>
-                    {row.map((cell, c) => (
-                      <td
-                        key={c}
-                        className={sel?.r === r && sel?.c === c ? 'sheet__td--sel' : undefined}
-                      >
-                        <input
-                          className="sheet__cell"
-                          value={cell}
-                          readOnly={!canEdit}
-                          aria-label={`Celda ${colLabel(c)}${r + 1}`}
-                          onFocus={() => setSel({ r, c })}
-                          onChange={(e) => setCell(r, c, e.target.value)}
-                        />
-                      </td>
-                    ))}
+                    {(() => {
+                      const cells: JSX.Element[] = [];
+                      for (let c = 0; c < row.length; c += 1) {
+                        const isSel = sel?.r === r && sel?.c === c;
+                        const merge = mergesRef.current.find((m) => m.s.r === r && m.s.c === c);
+                        let colSpan = 1;
+                        let widthPx = colPx[c] || 104;
+                        if (merge) {
+                          colSpan = merge.e.c - merge.s.c + 1;
+                          for (let i = merge.s.c + 1; i <= merge.e.c; i += 1) widthPx += colPx[i] || 104;
+                        }
+                        const display = isSel ? (grid[r]?.[c] ?? '') : row[c];
+                        const { t } = toCellValue(String(display));
+                        // Content-based wrap for long text (estimate by width)
+                        const isText = t === 's' && typeof display === 'string' && !String(display).startsWith('=');
+                        const approxTextPx = isText ? Math.min(2000, String(display).length * 7) : 0;
+                        const shouldWrap = isText && approxTextPx > Math.max(60, widthPx - 18);
+                        cells.push(
+                          <td
+                            key={c}
+                            className={isSel ? 'sheet__td--sel' : undefined}
+                            colSpan={colSpan}
+                          >
+                            <input
+                              className={`sheet__cell${shouldWrap ? ' sheet__cell--wrap' : ''}`}
+                              value={display as string}
+                              readOnly={!canEdit}
+                              aria-label={`Celda ${colLabel(c)}${r + 1}`}
+                              onFocus={() => setSel({ r, c })}
+                              onChange={(e) => setCell(r, c, e.target.value)}
+                              style={{ minWidth: widthPx - 2, width: '100%' }}
+                            />
+                          </td>,
+                        );
+                        if (merge) c = merge.e.c; // saltar celdas cubiertas por el merge
+                      }
+                      return cells;
+                    })()}
                   </tr>
                 ))}
               </tbody>
@@ -975,13 +1286,13 @@ export function SheetEditor({
           </div>
         ) : null}
 
-        {!showStyled && grid.length > visibleRows ? (
+        {!showStyled && displayGrid.length > visibleRows ? (
           <button
             className="btn ghost btn-sm"
             type="button"
             onClick={() => setVisibleRows((v) => v + ROW_PAGE)}
           >
-            Ver más filas ({grid.length - visibleRows} restantes)
+            Ver más filas ({displayGrid.length - visibleRows} restantes)
           </button>
         ) : null}
 

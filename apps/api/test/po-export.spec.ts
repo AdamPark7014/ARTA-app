@@ -14,7 +14,7 @@ describe('PurchaseOrdersController export (Excel/PDF) smoke', () => {
   const prisma = new PrismaClient();
   let controller: PurchaseOrdersController;
 
-  beforeAll(() => {
+  beforeAll(async () => {
     controller = new PurchaseOrdersController(
       prisma as never,
       { notifyMany: async () => undefined } as unknown as NotificationsService,
@@ -31,7 +31,7 @@ describe('PurchaseOrdersController export (Excel/PDF) smoke', () => {
     ws.getCell('B11').value = 'NOMBRE DE PROVEEDOR:';
     ws.getRow(14).values = [null, 'CANTIDAD', 'DESCRIPCIÓN DEL PRODUCTO', 'PRECIO', 'SUBTOTAL'];
     const bufPath = join(uploadRoot, 'format-oc.xlsx');
-    wb.xlsx.writeFile(bufPath);
+    await wb.xlsx.writeFile(bufPath);
   });
 
   afterAll(async () => {
