@@ -1,3 +1,5 @@
+import { attachmentLabel } from './chat-attachments';
+
 /**
  * Texto del chat. Las menciones viajan como `[@Nombre](user:<id>)` para que el
  * cliente las pinte como chip y el API sepa a quién avisar sin adivinar por nombre.
@@ -45,22 +47,17 @@ export function slugify(name: string, max = 60): string {
     .slice(0, max);
 }
 
-const IMAGE_EXT = /\.(jpe?g|png|gif|webp|heic)(\?|$)/i;
-
-/** Texto del aviso: adjuntos por su tipo («Foto», «Archivo: x.pdf»). */
+/** Texto del aviso: adjuntos por su tipo («📷 Foto», «🎤 Nota de voz», «📄 x.pdf»). */
 export function pushText(message: {
   body: string;
   attachmentUrl: string | null;
   attachmentName: string | null;
+  attachmentMime?: string | null;
 }): string {
   const text = chatPreview(message.body);
   if (!message.attachmentUrl) return text || 'Mensaje nuevo';
-  const label = IMAGE_EXT.test(message.attachmentUrl)
-    ? 'Foto'
-    : message.attachmentName
-      ? `Archivo: ${message.attachmentName}`
-      : 'Archivo adjunto';
-  return text && !text.startsWith('Archivo: ') ? `${label} · ${text}` : label;
+  const label = attachmentLabel(message.attachmentUrl, message.attachmentName, message.attachmentMime);
+  return text ? `${label} · ${text}` : label;
 }
 
 /** Directo entre dos personas: ids ordenados (igual que el backfill en SQL con colación C). */

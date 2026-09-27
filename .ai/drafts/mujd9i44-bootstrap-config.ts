@@ -8,7 +8,6 @@ import { existsSync, mkdirSync } from 'fs';
 import { JwtService } from '@nestjs/jwt';
 import { DirectionService } from './common/rbac/direction.service';
 import type { JwtPayload } from './auth/jwt.strategy';
-import { chatRuleFor } from './chat/chat-attachments';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 
 function corsOrigins(): (string | RegExp)[] {
@@ -18,6 +17,22 @@ function corsOrigins(): (string | RegExp)[] {
     .filter(Boolean);
   if (process.env.NODE_ENV === 'production') return configured;
   return [...configured, /^https?:\/\/localhost:\d+$/, /^https?:\/\/127\.0\.0\.1:\d+$/];
+}
+
+function chatMimeFor(ext: string): string | undefined {
+  switch (ext.toLowerCase()) {
+    case 'heic':
+    case 'heif':
+      return 'image/heif';
+    case 'm4a':
+    case 'opus':
+    case 'aac':
+    case 'mov':
+    case 'webm':
+      return 'video/' + ext;
+    default:
+      return undefined;
+  }
 }
 
 export async function configureApp(app: INestApplication | NestExpressApplication) {
@@ -87,10 +102,12 @@ export async function configureApp(app: INestApplication | NestExpressApplicatio
   if (!existsSync(uploadDir)) mkdirSync(uploadDir, { recursive: true });
   nest.useStaticAssets(uploadDir, {
     prefix: '/uploads/',
-    // HEIC, m4a, opus… no siempre están en la tabla de `send`; sin tipo, los reproductores nativos los rechazan.
-    setHeaders: (res, filePath) => {
-      const rule = chatRuleFor(filePath);
-      if (rule) res.setHeader('Content-Type', rule.mime.startsWith('text/') ? `${rule.mime}; charset=utf-8` : rule.mime);
+    setHeaders: (res, path, stat) => {
+      const ext = path.toLowerCase().split('.').pop() || '';
+      const mime = chatMimeFor(ext);
+      if (mime) {
+        res.setHeader('Content-Type', mime);
+      }
     },
   });
 
@@ -103,4 +120,3 @@ export async function configureApp(app: INestApplication | NestExpressApplicatio
     .build();
   SwaggerModule.setup('docs', nest, SwaggerModule.createDocument(nest, swagger));
 }
-

@@ -1,5 +1,5 @@
 import { Injectable, Logger, Optional } from '@nestjs/common';
-import { EntityKey } from '@prisma/client';
+import { EntityKey, Notification, User } from '@prisma/client';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { PushDispatchService, type PushPayload } from '../devices/push-dispatch.service';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
@@ -71,48 +71,6 @@ export class NotificationsService {
   }
 
   /**
-   * Equipo de un evento (no hay tabla de equipo): quien lo creó, quien tiene tareas
-   * en él y los miembros de su canal de chat. Solo personas activas.
-   */
-  async eventAudience(eventId: string, excludeUserId?: string | null): Promise<string[]> {
-    const [event, tasks, channel] = await Promise.all([
-      this.prisma.event.findUnique({ where: { id: eventId }, select: { createdById: true } }),
-      this.prisma.taskAssignment.findMany({
-        where: { eventId, assigneeId: { not: null } },
-        select: { assigneeId: true },
-        distinct: ['assigneeId'],
-      }),
-      this.prisma.chatChannel.findUnique({
-        where: { eventId },
-        select: { members: { select: { userId: true } } },
-      }),
-    ]);
-    const ids = new Set<string>();
-    if (event?.createdById) ids.add(event.createdById);
-    for (const t of tasks) if (t.assigneeId) ids.add(t.assigneeId);
-    for (const m of channel?.members ?? []) ids.add(m.userId);
-    if (excludeUserId) ids.delete(excludeUserId);
-    if (ids.size === 0) return [];
-    const active = await this.prisma.user.findMany({
-      where: { id: { in: [...ids] }, active: true },
-      select: { id: true },
-    });
-    return active.map((u) => u.id);
-  }
-
-  /** Aviso a todo el equipo del evento menos a quien hizo el cambio. Nunca lanza. */
-  async notifyEventTeam(eventId: string, input: Omit<NotifyInput, 'userId'>, extraUserIds: string[] = []) {
-    try {
-      const audience = new Set(await this.eventAudience(eventId, input.actorId));
-      for (const id of extraUserIds) if (id && id !== input.actorId) audience.add(id);
-      return await this.notifyMany([...audience].map((userId) => ({ ...input, userId })));
-    } catch (err) {
-      this.logger.warn(`No se pudo avisar al equipo del evento ${eventId}: ${String(err)}`);
-      return [];
-    }
-  }
-
-  /**
    * Solo teléfono, sin fila en la campana: mensajes de chat (el mensaje ya vive
    * en su conversación, igual que WhatsApp no lo duplica en otra bandeja).
    */
@@ -177,5 +135,21 @@ export class NotificationsService {
       senderName: row.actor?.fullName ?? null,
       threadId: row.linkUrl ? `link:${row.linkUrl.split('?')[0]}` : null,
     });
+  }
+
+  async eventAudience(eventId: string, excludeUserId?: string): Promise<string[]> {
+    const [creator, assignees, chatMembers] = await Promise.all([
+      this.prisma.event.findUnique({ where: { id: eventId } }).creatorId(),
+      this.prisma.task.findMany({ where: { eventId } }).assigneeId(),
+      this.prisma.chatMember.findMany({ where: { eventId } }).userId(),
+    ]);
+    const audience = new Set([...creator, ...assignees, ...chatMembers]);
+    if (excludeUserId) audience.delete(excludeUserId);
+    return Array.from(audience);
+  }
+
+  async notifyEventTeam(eventId: string, input: NotifyInput): Promise<void> {
+    const userIds = await this.eventAudience(eventId, input.userId);
+    await this.notifyMany(userIds.map((userId) => ({ ...input, userId })));
   }
 }

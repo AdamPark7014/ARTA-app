@@ -27,10 +27,10 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
-import { extname } from 'path';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { contentMatchesExtension, discardUpload, MULTER_OPTIONS } from '../uploads/upload-storage';
-import { CHAT_ATTACHMENT_EXT, ChatService, MAX_BODY, type ChatUser } from './chat.service';
+import { discardUpload } from '../uploads/upload-storage';
+import { attachmentKind, CHAT_MULTER_OPTIONS, chatContentMatches, chatMimeFor } from './chat-attachments';
+import { ChatService, MAX_BODY, type ChatUser } from './chat.service';
 
 type AuthUser = ChatUser & { entities: string[]; permissions: string[] };
 type Req_ = { user: AuthUser };
@@ -230,21 +230,25 @@ export class ChatController {
     return this.chat.listColleagues(req.user, q);
   }
 
-  /** Foto o PDF para adjuntar; devuelve lo que luego va en `POST …/messages`. */
+  /**
+   * Foto, video, nota de voz o documento (hasta 100 MB); devuelve lo que luego va
+   * en `POST …/messages`. Un mensaje = un adjunto: varios archivos, varios mensajes.
+   */
   @Post('upload')
-  @UseInterceptors(FileInterceptor('file', MULTER_OPTIONS))
+  @UseInterceptors(FileInterceptor('file', CHAT_MULTER_OPTIONS))
   upload(@UploadedFile() file?: Express.Multer.File) {
     if (!file) throw new BadRequestException('Archivo requerido');
-    const ext = extname(file.originalname).toLowerCase();
-    if (!CHAT_ATTACHMENT_EXT.has(ext) || !contentMatchesExtension(file.path, file.originalname)) {
+    if (!chatContentMatches(file.path, file.originalname)) {
       discardUpload(file.path);
-      throw new BadRequestException('En el chat se comparten fotos y PDF');
+      throw new BadRequestException('El archivo no coincide con su tipo');
     }
+    const mime = chatMimeFor(file.originalname, file.mimetype);
     return {
       url: `/uploads/${file.filename}`,
       name: file.originalname.slice(0, 200),
-      mime: file.mimetype,
+      mime,
       size: file.size,
+      kind: attachmentKind(mime),
     };
   }
 

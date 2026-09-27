@@ -25,7 +25,9 @@ export function pushMetaFor(type: string): PushMeta {
   if (t.startsWith('campaign.') || t.startsWith('convenios.') || t.startsWith('checklist.')) {
     return { channel: 'approvals', priority: 'normal' };
   }
-  if (t.startsWith('event.')) return { channel: 'events', priority: 'normal' };
+  if (t.startsWith('event.')) {
+    return { channel: 'events', priority: t === 'event.cancelled' || t === 'event.rescheduled' ? 'high' : 'normal' };
+  }
   return { channel: 'general', priority: 'normal' };
 }
 

@@ -21,6 +21,8 @@ import { calcProgress } from '../common/checklist-progress';
 import { diffFinanceRows } from '../common/doc-diff';
 import { actorFrom, RevisionService } from '../common/revisions/revision.service';
 import { withServerTotals, type FinancePayload } from './finance-totals';
+import { NotificationsService } from '../notifications/notifications.service';
+import { shortName } from '../notifications/notification-push-meta';
 
 type AuthUser = {
   id: string;
@@ -36,7 +38,46 @@ export class FinanceController {
   constructor(
     private prisma: PrismaService,
     private revisions: RevisionService,
+    private notifications: NotificationsService,
   ) {}
+
+  /**
+   * Aviso de finanzas: a quien puede editar finanzas en la entidad del evento
+   * (y al equipo del evento cuando `team`), nunca al que hizo el cambio.
+   */
+  private async notifyFinance(
+    user: AuthUser & { fullName?: string },
+    event: { id: string; name: string; entity: string; organizationId: string | null },
+    type: string,
+    title: string,
+    body: string,
+    team = false,
+  ) {
+    try {
+      const people = await this.prisma.user.findMany({
+        where: { active: true, ...(event.organizationId ? { organizationId: event.organizationId } : {}) },
+        select: { id: true, roleKey: true, entities: true, permissions: true },
+      });
+      const editors = people
+        .filter((p) => p.id !== user.id)
+        .filter((p) => hasPermission(p.roleKey as RoleKey, p.permissions, PERMISSIONS.FINANCE_EDIT))
+        .filter((p) => canAccessEventOps(p.entities as EntityKey[], p.roleKey as RoleKey, event.entity as EntityKey))
+        .map((p) => p.id);
+      const input = {
+        organizationId: event.organizationId,
+        actorId: user.id,
+        type,
+        title,
+        body,
+        linkUrl: `/events/${event.id}?tab=finance`,
+        entity: event.entity as EntityKey,
+      };
+      if (team) await this.notifications.notifyEventTeam(event.id, input, editors);
+      else await this.notifications.notifyMany(editors.map((userId) => ({ ...input, userId })));
+    } catch {
+      /* un aviso que falla no tumba la operación */
+    }
+  }
 
   private async assertEventOps(user: AuthUser, eventId: string) {
     const event = await this.prisma.event.findUnique({ where: { id: eventId } });
@@ -141,7 +182,7 @@ export class FinanceController {
     }
     const event = await this.assertEventOps(req.user, body.eventId);
     assertEventNotClosed(event.status);
-    return this.prisma.paymentProof.create({
+    const proof = await this.prisma.paymentProof.create({
       data: {
         eventId: body.eventId,
         label: body.label || 'Anticipo',
@@ -150,6 +191,17 @@ export class FinanceController {
         uploadedById: req.user.id,
       },
     });
+    const amount = body.amount != null
+      ? ` · ${Number(body.amount).toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })}`
+      : '';
+    await this.notifyFinance(
+      req.user,
+      event,
+      'finance.advance',
+      `${shortName((req.user as { fullName?: string }).fullName) || 'Alguien del equipo'} registró un anticipo`,
+      `${proof.label}${amount} · ${event.name}`,
+    );
+    return proof;
   }
 
   @Get('advances/event/:eventId')
@@ -258,6 +310,20 @@ export class FinanceController {
     const payload = (dataJson || updated.dataJson) as FinancePayload;
     await this.syncCorridaChecklist(updated.eventId, withServerTotals(payload), updated.locked);
 
+    if (!existing.locked && updated.locked) {
+      const event = await this.prisma.event.findUnique({ where: { id: updated.eventId } });
+      if (event) {
+        await this.notifyFinance(
+          req.user,
+          event,
+          'finance.sealed',
+          `${shortName((req.user as { fullName?: string }).fullName) || 'Finanzas'} selló la corrida financiera`,
+          event.name,
+          true,
+        );
+      }
+    }
+
     return updated;
   }
 
@@ -326,6 +392,18 @@ export class FinanceController {
         userAgent: req.headers?.['user-agent']?.slice(0, 300),
       },
     });
+
+    const event = await this.prisma.event.findUnique({ where: { id: existing.eventId } });
+    if (event) {
+      await this.notifyFinance(
+        req.user,
+        event,
+        'finance.unlocked',
+        `${shortName((req.user as { fullName?: string }).fullName) || 'Dirección'} quitó el sello de la corrida`,
+        `${event.name} · ${reason}`,
+        true,
+      );
+    }
 
     return updated;
   }

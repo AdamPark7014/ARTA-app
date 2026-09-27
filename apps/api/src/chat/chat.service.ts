@@ -19,6 +19,7 @@ import {
   pushText,
   slugify,
 } from './chat-text';
+import { chatMimeFor } from './chat-attachments';
 
 /**
  * Chat tipo Slack (portado de NEXARA y ajustado a ARTA):
@@ -47,8 +48,6 @@ const PAGE_MAX = 200;
 /** Silenciado «siempre» (como WhatsApp). */
 const MUTE_FOREVER = new Date('2099-12-31T00:00:00.000Z');
 const DEFAULTS_TTL_MS = 60_000;
-/** Adjuntos del chat: fotos y PDF (los Office se reservan a dirección en /uploads). */
-export const CHAT_ATTACHMENT_EXT = new Set(['.jpg', '.jpeg', '.png', '.gif', '.webp', '.pdf']);
 
 const authorSelect = { id: true, fullName: true, title: true } as const;
 
@@ -654,7 +653,7 @@ export class ChatService {
         body,
         attachmentUrl,
         attachmentName: input.attachmentName?.slice(0, 200) || null,
-        attachmentMime: input.attachmentMime?.slice(0, 100) || null,
+        attachmentMime: attachmentUrl ? chatMimeFor(attachmentUrl, input.attachmentMime) : null,
         attachmentSize: input.attachmentSize ?? null,
       },
       include: messageInclude,
@@ -821,7 +820,7 @@ export class ChatService {
     const latest = await this.prisma.chatMessage.findFirst({
       where: { channelId, deletedAt: null, parentId: null },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-      select: { body: true, attachmentUrl: true, attachmentName: true, createdAt: true },
+      select: { body: true, attachmentUrl: true, attachmentName: true, attachmentMime: true, createdAt: true },
     });
     await this.prisma.chatChannel.update({
       where: { id: channelId },

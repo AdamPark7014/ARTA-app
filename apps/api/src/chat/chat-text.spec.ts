@@ -39,8 +39,11 @@ describe('chat-text', () => {
   });
 
   it('describe adjuntos en el aviso', () => {
-    expect(pushText({ body: '', attachmentUrl: '/uploads/1.jpg', attachmentName: 'foto.jpg' })).toBe('Foto');
-    expect(pushText({ body: '', attachmentUrl: '/uploads/2.pdf', attachmentName: 'x.pdf' })).toBe('Archivo: x.pdf');
-    expect(pushText({ body: 'listo', attachmentUrl: '/uploads/1.png', attachmentName: null })).toBe('Foto · listo');
+    expect(pushText({ body: '', attachmentUrl: '/uploads/1.jpg', attachmentName: 'foto.jpg' })).toBe('📷 Foto');
+    expect(pushText({ body: '', attachmentUrl: '/uploads/2.pdf', attachmentName: 'x.pdf' })).toBe('📄 x.pdf');
+    expect(pushText({ body: 'listo', attachmentUrl: '/uploads/1.png', attachmentName: null })).toBe('📷 Foto · listo');
+    expect(pushText({ body: '', attachmentUrl: '/uploads/3.m4a', attachmentName: 'nota-de-voz.m4a', attachmentMime: 'audio/mp4' })).toBe(
+      '🎤 Nota de voz',
+    );
   });
 });

@@ -595,6 +595,20 @@ export class PurchaseOrdersController {
       fileUrl: proof.fileUrl,
       amount: Number(proof.amount ?? 0),
     });
+    if (order.createdById && order.createdById !== req.user.id) {
+      const who = (req.user as { fullName?: string }).fullName || 'Finanzas';
+      const amount = Number(proof.amount ?? order.amount).toLocaleString('es-MX', { style: 'currency', currency: 'MXN' });
+      await this.notifications.notify({
+        userId: order.createdById,
+        organizationId: order.event.organizationId,
+        actorId: req.user.id,
+        type: 'po.proof',
+        title: `${who} subió el comprobante de tu orden de compra`,
+        body: `${order.vendorName || 'Sin proveedor'} · ${amount} · ${order.event.name}`,
+        linkUrl: `/events/${order.eventId}?tab=ocs`,
+        entity: order.event.entity as EntityKey,
+      });
+    }
     return proof;
   }
 

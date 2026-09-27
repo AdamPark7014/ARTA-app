@@ -34,6 +34,8 @@ import { assertEventSlotAvailable } from '../common/plan-limits';
 import { uploadRoot } from '../uploads/upload-storage';
 import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { createHash } from 'crypto';
+import { NotificationsService } from '../notifications/notifications.service';
+import { shortName } from '../notifications/notification-push-meta';
 
 class CreateEventDto {
   @IsEnum(EntityKey)
@@ -89,7 +91,31 @@ export class EventsController {
   constructor(
     private prisma: PrismaService,
     private pdfs: ChecklistPdfService,
+    private notifications: NotificationsService,
   ) {}
+
+  /** Cambio de estado o de fecha: le llega al equipo del evento (teléfono y campana). */
+  private async notifyTeam(
+    user: AuthUser & { fullName?: string },
+    event: { id: string; name: string; entity: EntityKey; organizationId: string | null },
+    type: string,
+    title: string,
+    body?: string,
+  ) {
+    await this.notifications.notifyEventTeam(event.id, {
+      organizationId: event.organizationId,
+      actorId: user.id,
+      type,
+      title,
+      body: body ?? event.name,
+      linkUrl: `/events/${event.id}`,
+      entity: event.entity,
+    });
+  }
+
+  private who(user: { fullName?: string }) {
+    return shortName(user.fullName) || 'Dirección';
+  }
 
   private assertEntity(user: AuthUser, entity: EntityKey) {
     if (!canAccessEventOps(user.entities as EK[], user.roleKey as RoleKey, entity as EK)) {
@@ -438,6 +464,7 @@ export class EventsController {
     await this.prisma.auditLog.create({
       data: { userId: req.user.id, action: 'event.close', resource: 'Event', resourceId: id },
     });
+    await this.notifyTeam(req.user, event, 'event.closed', `${this.who(req.user)} cerró el evento`);
     return event;
   }
 
@@ -457,6 +484,7 @@ export class EventsController {
     await this.prisma.auditLog.create({
       data: { userId: req.user.id, action: 'event.reopen', resource: 'Event', resourceId: id },
     });
+    await this.notifyTeam(req.user, event, 'event.reopened', `${this.who(req.user)} reabrió el evento`);
     return event;
   }
 
@@ -477,6 +505,7 @@ export class EventsController {
     await this.prisma.auditLog.create({
       data: { userId: req.user.id, action: 'event.cancel', resource: 'Event', resourceId: id },
     });
+    await this.notifyTeam(req.user, event, 'event.cancelled', `${this.who(req.user)} canceló el evento`);
     return event;
   }
 
@@ -538,6 +567,21 @@ export class EventsController {
         metaJson: dto as object,
       },
     });
+
+    if (event.startsAt && existing.startsAt?.getTime() !== event.startsAt.getTime()) {
+      const when = event.startsAt.toLocaleString('es-MX', {
+        dateStyle: 'medium',
+        timeStyle: 'short',
+        timeZone: 'America/Mexico_City',
+      });
+      await this.notifyTeam(
+        req.user,
+        event,
+        'event.rescheduled',
+        `${this.who(req.user)} cambió la fecha del evento`,
+        `${event.name} · ${when}`,
+      );
+    }
 
     return event;
   }
