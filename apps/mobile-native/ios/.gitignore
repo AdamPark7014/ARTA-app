@@ -1,0 +1,10 @@
+ArtaApp.xcodeproj/
+*.xcworkspace/
+xcuserdata/
+DerivedData/
+build/
+build.log
+.spm-cache/
+.swiftpm/
+# Configuración de Firebase del cliente: la escribe CI desde un secreto.
+Resources/GoogleService-Info.plist

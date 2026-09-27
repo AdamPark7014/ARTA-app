@@ -1,0 +1,68 @@
+name: iOS · compilar
+
+# Compila la app iOS para simulador, SIN firma y sin secretos: sirve para saber
+# que el código Swift compila sin tener una Mac. La firma y la subida a
+# TestFlight irán en otro flujo (ver NEXARA-app/.github/workflows/ios-testflight.yml).
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'apps/mobile-native/ios/**'
+      - '.github/workflows/ios-build.yml'
+
+concurrency:
+  group: ios-build-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Compilar para simulador
+    runs-on: macos-15
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: apps/mobile-native/ios
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Versión de Xcode del runner
+        run: xcodebuild -version && swift --version
+
+      - name: Instalar XcodeGen
+        run: brew install xcodegen
+
+      - name: Caché de paquetes Swift
+        uses: actions/cache@v4
+        with:
+          path: apps/mobile-native/ios/.spm-cache
+          key: spm-${{ runner.os }}-${{ hashFiles('apps/mobile-native/ios/project.yml') }}
+          restore-keys: spm-${{ runner.os }}-
+
+      - name: Generar ArtaApp.xcodeproj
+        run: xcodegen generate
+
+      - name: Compilar (Debug, simulador, sin firma)
+        run: |
+          set +e
+          xcodebuild build \
+            -project ArtaApp.xcodeproj \
+            -scheme ArtaApp \
+            -configuration Debug \
+            -destination 'generic/platform=iOS Simulator' \
+            -clonedSourcePackagesDirPath .spm-cache \
+            CODE_SIGNING_ALLOWED=NO 2>&1 | tee build.log | grep -E "error:|BUILD (SUCCEEDED|FAILED)"
+          status=${PIPESTATUS[0]}
+          exit $status
+
+      - name: Guardar el log si falló
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-build-log
+          path: apps/mobile-native/ios/build.log
+          retention-days: 7
