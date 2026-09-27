@@ -3,96 +3,79 @@
 - **Último turno:** cursor
 - **Fecha:** 2026-09-26
 - **Rama:** feature/mobile-chat-push
+- **Producción:** `6b6624b` desplegado en `/var/www/arta-app` el 2026-09-27 04:14 UTC
 
 ## Hecho en este turno
 
-Pedido de Adam: «armar la app Android e iOS como NEXARA-app… primero toda la
-sistematización de mensajes tipo Slack (y perfeccionarla) y el esquema de push
-como WhatsApp, para todos los procesos».
+Pedido de Adam: «continúa mejorando los huecos que veas y cuando acabes deploya por SSH».
 
-### `d5cf1b3` API: chat tipo Slack + Socket.IO + push FCM
-- Prisma, migración `20260926210000_chat_channels_push` (backfill del chat viejo):
-  canales públicos, privados y directos, miembros con `lastReadAt` y silencio,
-  hilos, reacciones, fijados, menciones y `UserPushEndpoint`.
-- `RealtimeGateway` (Socket.IO en `/api/socket.io`, sesión por cookie `arta_access`
-  validada contra `UserSession`). Eventos `chat:*` y `notification:new`.
-- `ChatService` v2: canales y directos, hilos, reacciones, fijados, editar (1 h) y
-  borrar, búsqueda, menciones, silenciar, adjuntos (`chat/upload`) y escribiendo.
-  Los endpoints viejos del chat siguen vivos para la web actual.
-- `DevicesModule` (`POST|DELETE /devices/push`) + `PushDispatchService` (firebase-admin):
-  - Android recibe solo `data`.
-  - iOS recibe `alert` con `thread-id`, las categorías `ARTA_CHAT`/`ARTA_EVENT` y `mutable-content`.
-  - `chat.read` se manda como push silencioso.
-- Push en todos los procesos que ya avisaban: `NotificationsService` empuja cada aviso.
-  - Nuevos: OC (autorizada, pagada, rechazada, cancelada, y «por pagar» a quien paga).
-  - Formatos: enviado a revisión (a los aprobadores), aprobado, sellado, regresado y reabierto.
-- `uploads/upload-storage.ts`: `uploadRoot` depende de `UPLOAD_DIR`.
-- Jest API **278/278** con Postgres de prueba.
+### Verificación antes del deploy
+- La API compilada arranca de verdad (`node dist/main.js` contra el Postgres local).
+  No hay errores de DI y `RealtimeGateway` y `/devices/push` quedan montados.
+- Smoke en vivo `.ai/scratch/live-smoke.mjs` (login con cookie + CSRF, socket con cookie):
+  - Mensaje recibido en vivo por `chat:message`, conteo de no leídos y borrado.
+  - Aviso por mención + `read-all`, que emite `notification:read` con `unread: 0`.
+  - Uso: variables `SMOKE_A_EMAIL/PASS`, `SMOKE_B_EMAIL/PASS` y `SMOKE_NODE_MODULES`
+    (una carpeta con `socket.io-client`).
+- Traefik no necesita cambios. `/api/socket.io` entra por el router `arta-api`, se le quita `/api`
+  y el upgrade a WebSocket pasa (verificado en producción: `wss` llega al gateway y este
+  responde `unauthorized` sin sesión).
+- La migración `20260926210000_chat_channels_push` se probó sobre una copia de la base de
+  producción (base temporal `arta_migtest`, ya borrada), en una transacción: aplica limpia.
+  En producción el chat no tenía mensajes, así que el backfill no movió nada.
 
-### `53f5d77` App Android nativa (`apps/mobile-native/android`)
-- Kotlin + Compose, `com.artaproducciones.ops`, minSdk 26.
-- Cookies en EncryptedSharedPreferences + CSRF, login con 2FA.
-- Chats con filtros y búsqueda.
-- Conversaciones: hilos, reacciones, fijados, menciones, foto y PDF, ✓/✓✓, escribiendo y silenciar.
-- Pestaña de avisos y socket en vivo.
-- FCM estilo WhatsApp:
-  - 6 canales por tipo; `MessagingStyle` por conversación.
-  - Responder y marcar como leído desde la notificación.
-  - No suena con la conversación abierta; `chat.read` quita los avisos.
-- `testDebugUnitTest` (PushPayload 6/6) y `assembleDebug` en verde; APK debug de 24 MB.
-- Sin `google-services.json` compila sin push (`HAS_FIREBASE=false`).
+### `6b6624b` Globo unificado y aviso leído sincronizado
+- `PushDispatchService.appBadge()` = avisos sin leer + chat sin leer (sin archivados ni silenciados).
+  - Si el llamador no fija `badge`, `sendToUser` lo calcula; con `null` no toca el globo.
+  - Chat y avisos ya no mandan su propio conteo. Se quitó el hueco de «badge inconsistente».
+- `NotificationsService.syncRead()`: al marcar un aviso o todos como leídos (`PATCH
+  /notifications/:id/read`, `POST /notifications/read-all`) se hacen dos cosas:
+  - Se emite el socket `notification:read`.
+  - Se manda un push silencioso `notification.read`.
+- Android (`ArtaPushRenderer`):
+  - `notification.read` quita ese aviso de la bandeja, o todos los de procesos si no trae id.
+  - Cada conversación usa su propio conteo en `setNumber`, ya no el total. Así los launchers que suman no cuentan de más.
+- iOS (`PushManager.handleSilent`): mismo manejo de `notification.read`.
+- Nuevo `devices/push-dispatch.service.spec.ts`. Jest API **281/281** y Android
+  `testDebugUnitTest` + `assembleDebug` en verde.
 
-### `479e513` App iOS nativa (`apps/mobile-native/ios`)
-- SwiftUI + XcodeGen (`project.yml`), iOS 17, mismas pantallas y flujos que Android.
-- Cookies en `HTTPCookieStorage` + CSRF.
-- `PushManager`:
-  - Token FCM; categorías `ARTA_CHAT` (responder, marcar leído) y `ARTA_EVENT`.
-  - Sin banner si la conversación está abierta; silenciosos quitan los avisos.
-- Extensión `NotificationService`: notificaciones de comunicación con avatar de iniciales (como WhatsApp).
-- Workflow `.github/workflows/ios-build.yml`: compila para simulador sin firma.
-  - Se lanza con `workflow_dispatch` o en un PR que toque `apps/mobile-native/ios`.
-- `deploy/docker-compose.arta.yml` ahora pasa `FIREBASE_SERVICE_ACCOUNT_JSON` al API.
-  - Antes no llegaba al contenedor.
-  - Documentado en `deploy/.env.arta.example`.
-- `apps/mobile-native/README.md`: qué hace, pasos de Firebase y cómo compilar.
+### Deploy
+- `main` avanzado por fast-forward a `6b6624b`, subido por bundle y desplegado con `update.sh --no-pull`.
+- Respaldo de la base: `/root/arta-backups/20260927-0412.sql.gz`. Imágenes anteriores en `arta-web:prev` y `arta-api:prev`.
+- Estado tras el deploy:
+  - Migración aplicada y los 3 contenedores healthy, con 0 reinicios.
+  - `/api/ready` responde 200. arta y auditorio devuelven 307, y el sitio público redirige a `/p/arta`.
+- Rollback si hiciera falta: `bash deploy/rollback.sh` (añadir `--dump 20260927-0412.sql.gz` para restaurar también la base).
 
 ## A medias
 
-1. **iOS nunca se ha compilado**: no hay Mac ni Swift en esta máquina.
-   - Se revisó a mano, pero el primer build real puede tener errores de tipo.
-   - Hay que lanzar `ios-build.yml` y corregir lo que salga.
-2. **Push sin probar de punta a punta**. Falta Firebase: `google-services.json`,
-   `GoogleService-Info.plist`, la clave APNs `.p8` y `FIREBASE_SERVICE_ACCOUNT_JSON`
-   en el `.env.arta` del servidor. Pasos en `apps/mobile-native/README.md`.
-3. **Android sin probar en dispositivo o emulador**: compila y pasa unitarias, nada más.
-4. **Badge inconsistente**: los push de avisos mandan `badge` = avisos sin leer y los
-   de chat mandan `badge` = chat sin leer. Con la app abierta, iOS pone la suma.
-   - Unificar en el API (`notifications.service.ts` y `chat.service.ts`) cuidando la
-     dependencia circular Chat ↔ Notifications.
-5. **La web de chat sigue usando los endpoints de compatibilidad**. Falta pasarla a
-   `chat/channels/*` y al socket (hilos, reacciones y fijados solo se ven en móvil).
-6. Decisiones anotadas:
-   - La supervisión de directos por dirección se omitió a propósito, por privacidad.
-   - Las menciones llegan como aviso aparte, no dentro del `MessagingStyle`.
-   - Drift previo de `EventDocumentSlot` visto al generar la migración (no se tocó).
+1. **Push apagado en producción**: `FIREBASE_SERVICE_ACCOUNT_JSON` no está en
+   `deploy/.env.arta` del servidor ni en el contenedor. Sin eso el chat avisa solo por socket.
+   Adam lo añade (no lo edita el agente) y después reinicia el API:
+   `docker compose --env-file deploy/.env.arta -f deploy/docker-compose.arta.yml up -d api`.
+2. **iOS nunca se ha compilado**: no hay Mac. Hay que lanzar `ios-build.yml` y corregir lo que salga.
+3. **La web de chat sigue usando los endpoints de compatibilidad**. Funciona, pero hilos,
+   reacciones y fijados solo se ven en móvil y la web no escucha el socket.
+   - Referencia a copiar: `NEXARA-app/apps/web/components/WorkspaceChat.tsx` (~2950 líneas).
+   - Hace falta `socket.io-client` en `apps/web`.
+   - Se dejó fuera de este deploy a propósito por tamaño y riesgo.
+4. Android sin probar en dispositivo; iOS y Android sin Firebase configurado.
 
 ## Siguiente paso
 
-1. Push de la rama y PR a `main`. Lanzar «iOS · compilar» y corregir hasta verde.
-2. Adam: crear o usar el proyecto Firebase de ARTA y registrar las apps Android e iOS
-   `com.artaproducciones.ops`. Subir la `.p8` y poner la cuenta de servicio en `.env.arta`.
-3. Deploy: la migración `20260926210000_chat_channels_push` es aditiva y trae backfill.
-   - Respaldo automático de `update.sh`.
-   - Después, revisar que `/api/socket.io` pase por Traefik (mismo host, sin puerto nuevo).
+1. Adam: proyecto Firebase de ARTA, apps `com.artaproducciones.ops` (Android e iOS), clave
+   APNs `.p8` y la cuenta de servicio en `.env.arta` del servidor. Pasos en `apps/mobile-native/README.md`.
+2. Push de la rama a GitHub y lanzar «iOS · compilar». Corregir hasta verde.
+3. Migrar la web de chat a `chat/channels/*` + socket (canales, hilos, reacciones, fijados, escribiendo).
+   También la campana web con `notification:new` y `notification:read`.
 4. Probar en teléfonos reales:
-   - Chat en vivo, responder desde la notificación y leer en un dispositivo para que se quite en el otro.
+   - Chat en vivo, responder desde la notificación, leer en uno y que se quite en el otro.
    - Avisos de OC y de formatos.
-5. Flujo TestFlight para iOS copiando `NEXARA-app/.github/workflows/ios-testflight.yml`
-   (secretos del certificado y de App Store Connect).
-6. Pendientes de turnos anteriores que siguen:
-   - Deploy key de ARTA en GitHub (se despliega por bundle).
-   - Quitar los eventos `[SEED_DEMO]` de producción cuando Adam dé el visto bueno.
-   - Revisión visual de los formatos con sesión real.
+5. TestFlight para iOS copiando `NEXARA-app/.github/workflows/ios-testflight.yml`.
+6. Pendientes de antes:
+   - Deploy key de ARTA en GitHub.
+   - Quitar `[SEED_DEMO]` de producción con visto bueno.
+   - Revisión visual de formatos.
 
 ## No tocar
 
