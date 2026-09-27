@@ -1,0 +1,44 @@
+xcodeGen:
+  project_name: ArtaApp
+  organization_name: ArtaProducciones
+  team_id: "YOUR_TEAM_ID"
+  platform: iOS
+  language: Swift
+  swift_version: 5.7
+  bundle_identifier: com.artaproducciones.ops
+  targets:
+    - name: ArtaApp
+      type: application
+      platform: iOS
+      deployment_target: 17.0
+      dependencies:
+        - name: SocketIO
+          url: https://github.com/socketio/socket.io-client-swift.git
+          revision: 1.5.18
+        - name: FirebaseMessaging
+          url: https://github.com/firebase/firebase-ios-sdk.git
+          revision: 10.15.0
+      resources:
+        - path: Resources
+      entitlements: Debug/Release.entitlements
+      build_settings:
+        ARTA_API_BASE_URL: "https://api.artaproducciones.com"
+    - name: NotificationService
+      type: app_extension
+      platform: iOS
+      deployment_target: 17.0
+      dependencies:
+        - name: FirebaseMessaging
+          url: https://github.com/firebase/firebase-ios-sdk.git
+          revision: 10.15.0
+      resources:
+        - path: NotificationService
+      entitlements: Debug/Release.entitlements
+      app_extension_type: NotificationService
+  schemes:
+    - name: ArtaApp
+      project: ArtaApp
+      targets: [ArtaApp, NotificationService]
+      configurations:
+        - Debug
+        - Release
