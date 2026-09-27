@@ -111,7 +111,14 @@ struct ChatAttachment: Codable, Equatable {
     var mime: String?
     var size: Int64?
 
-    var isImage: Bool { mime?.hasPrefix("image/") == true }
+    private var ext: String { ((name ?? url) as NSString).pathExtension.lowercased() }
+    var isImage: Bool { mime.map { $0.hasPrefix("image/") } ?? ["jpg", "jpeg", "png", "gif", "webp", "heic", "heif"].contains(ext) }
+    var isVideo: Bool { mime.map { $0.hasPrefix("video/") } ?? ["mp4", "m4v", "mov", "3gp", "webm"].contains(ext) }
+    var isAudio: Bool { mime.map { $0.hasPrefix("audio/") } ?? ["m4a", "aac", "mp3", "ogg", "opus", "wav"].contains(ext) }
+    /// Grabada en la app (Android, iPhone o web): burbuja de voz, no archivo.
+    var isVoiceNote: Bool {
+        isAudio && (name ?? "").range(of: #"^nota[-_ ]de[-_ ]voz"#, options: [.regularExpression, .caseInsensitive]) != nil
+    }
 }
 
 struct ReactionUser: Codable, Equatable {
@@ -205,6 +212,8 @@ struct UploadResult: Decodable, Equatable {
     var name: String?
     var mime: String?
     var size: Int64?
+    /// image | video | audio | file, decidido por el API.
+    var kind: String?
 }
 
 struct UnreadTotal: Decodable { var total: Int? }

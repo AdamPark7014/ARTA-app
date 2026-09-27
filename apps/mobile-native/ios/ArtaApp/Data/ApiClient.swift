@@ -60,6 +60,8 @@ final class ApiClient {
     private static let safeMethods: Set<String> = ["GET", "HEAD", "OPTIONS"]
 
     let session: URLSession
+    /// Subidas del chat: un video de 100 MB con datos móviles no cabe en los 120 s de `session`.
+    private let uploadSession: URLSession
     private let cookies = HTTPCookieStorage.shared
     private let decoder = JSONDecoder()
     private let encoder = JSONEncoder()
@@ -74,14 +76,23 @@ final class ApiClient {
     }()
 
     private init() {
+        // `self.cookies` no se puede leer hasta inicializar todas las propiedades.
+        let jar = HTTPCookieStorage.shared
         let config = URLSessionConfiguration.default
-        config.httpCookieStorage = cookies
+        config.httpCookieStorage = jar
         config.httpCookieAcceptPolicy = .always
         config.httpShouldSetCookies = true
         config.timeoutIntervalForRequest = 30
         config.timeoutIntervalForResource = 120
         config.waitsForConnectivity = false
         session = URLSession(configuration: config)
+        let uploads = URLSessionConfiguration.default
+        uploads.httpCookieStorage = jar
+        uploads.httpCookieAcceptPolicy = .always
+        uploads.httpShouldSetCookies = true
+        uploads.timeoutIntervalForRequest = 120
+        uploads.timeoutIntervalForResource = 60 * 60
+        uploadSession = URLSession(configuration: uploads)
         cookies.cookieAcceptPolicy = .always
     }
 
@@ -184,24 +195,51 @@ final class ApiClient {
 
     /// `multipart/form-data` con el campo `file`, como `POST chat/upload` en la web.
     func upload(_ path: String, data fileData: Data, filename: String, mime: String) async throws -> UploadResult {
+        let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("upload-\(UUID().uuidString)")
+        try fileData.write(to: tmp)
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        return try await uploadFile(path, fileURL: tmp, filename: filename, mime: mime)
+    }
+
+    /// Igual, pero leyendo del disco: el archivo nunca se carga entero en memoria.
+    /// [progress] 0‥1 desde la cola de URLSession (hay que saltar al hilo principal).
+    func uploadFile(
+        _ path: String,
+        fileURL: URL,
+        filename: String,
+        mime: String,
+        progress: (@Sendable (Double) -> Void)? = nil
+    ) async throws -> UploadResult {
         var req = request("POST", path)
-        req.timeoutInterval = 120
         let boundary = "arta-\(UUID().uuidString)"
         req.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
-        let safeName = filename.replacingOccurrences(of: "\"", with: "")
-        var body = Data()
-        body.append(Data("--\(boundary)\r\n".utf8))
-        body.append(Data("Content-Disposition: form-data; name=\"file\"; filename=\"\(safeName)\"\r\n".utf8))
-        body.append(Data("Content-Type: \(mime)\r\n\r\n".utf8))
-        body.append(fileData)
-        body.append(Data("\r\n--\(boundary)--\r\n".utf8))
-        let (data, response) = try await session.upload(for: req, from: body)
+        let body = try Self.multipartFile(for: fileURL, filename: filename, mime: mime, boundary: boundary)
+        defer { try? FileManager.default.removeItem(at: body) }
+        let delegate = progress.map { UploadProgressDelegate(onProgress: $0) }
+        let (data, response) = try await uploadSession.upload(for: req, fromFile: body, delegate: delegate)
         guard let http = response as? HTTPURLResponse else { throw ApiError(status: nil, message: "Respuesta inválida") }
         guard (200..<300).contains(http.statusCode) else {
             if http.statusCode == 401 { DispatchQueue.main.async { self.unauthorized.send(()) } }
             throw ApiError(status: http.statusCode, message: Self.message(from: data, status: http.statusCode))
         }
         return try decoder.decode(UploadResult.self, from: data)
+    }
+
+    private static func multipartFile(for fileURL: URL, filename: String, mime: String, boundary: String) throws -> URL {
+        let out = FileManager.default.temporaryDirectory.appendingPathComponent("multipart-\(UUID().uuidString)")
+        FileManager.default.createFile(atPath: out.path, contents: nil)
+        let writer = try FileHandle(forWritingTo: out)
+        defer { try? writer.close() }
+        let safeName = filename.components(separatedBy: CharacterSet(charactersIn: "\"\r\n")).joined()
+        let head = "--\(boundary)\r\nContent-Disposition: form-data; name=\"file\"; filename=\"\(safeName)\"\r\nContent-Type: \(mime)\r\n\r\n"
+        try writer.write(contentsOf: Data(head.utf8))
+        let reader = try FileHandle(forReadingFrom: fileURL)
+        defer { try? reader.close() }
+        while let chunk = try reader.read(upToCount: 1 << 20), !chunk.isEmpty {
+            try writer.write(contentsOf: chunk)
+        }
+        try writer.write(contentsOf: Data("\r\n--\(boundary)--\r\n".utf8))
+        return out
     }
 
     /// Baja un adjunto con la cookie de sesión a un archivo temporal (para Vista Rápida).
@@ -279,4 +317,18 @@ extension ApiClient {
 
     func registerPush(_ body: RegisterPushBody) async throws { try await send("POST", "devices/push", body: body) }
     func removePush(_ token: String) async throws { try await send("DELETE", "devices/push", body: RemovePushBody(token: token)) }
+}
+
+/// Delegado por tarea: solo reporta cuánto del cuerpo ya salió.
+private final class UploadProgressDelegate: NSObject, URLSessionTaskDelegate {
+    let onProgress: @Sendable (Double) -> Void
+
+    init(onProgress: @escaping @Sendable (Double) -> Void) {
+        self.onProgress = onProgress
+    }
+
+    func urlSession(_ session: URLSession, task: URLSessionTask, didSendBodyData bytesSent: Int64, totalBytesSent: Int64, totalBytesExpectedToSend: Int64) {
+        guard totalBytesExpectedToSend > 0 else { return }
+        onProgress(min(1, Double(totalBytesSent) / Double(totalBytesExpectedToSend)))
+    }
 }

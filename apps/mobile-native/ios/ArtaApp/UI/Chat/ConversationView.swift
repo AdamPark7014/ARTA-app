@@ -19,10 +19,14 @@ struct ConversationView: View {
     @State private var showPins = false
     @State private var pinned: [ChatMessage] = []
     @State private var showPhotos = false
-    @State private var photoItem: PhotosPickerItem?
+    @State private var photoItems: [PhotosPickerItem] = []
     @State private var showFiles = false
+    @State private var showCamera = false
     @State private var viewerURL: URL?
+    @State private var videoURL: URL?
     @State private var previewURL: URL?
+    @State private var shareURL: URL?
+    @StateObject private var recorder = VoiceRecorder()
     @State private var olderAnchor: String?
     @State private var onScreen = false
     @State private var highlighted: String?
@@ -38,8 +42,18 @@ struct ConversationView: View {
     var body: some View {
         VStack(spacing: 0) {
             messageList
+                .fullScreenCover(item: Binding(get: { videoURL.map(IdentifiedURL.init) }, set: { videoURL = $0?.url })) { item in
+                    VideoScreen(url: item.url)
+                }
             if !model.typing.isEmpty { typingBar }
             composerArea
+                .fullScreenCover(isPresented: $showCamera) {
+                    CameraPicker { result in
+                        showCamera = false
+                        if let result { sendCamera(result) }
+                    }
+                    .ignoresSafeArea()
+                }
         }
         .background(ArtaColor.bg)
         .navigationBarTitleDisplayMode(.inline)
@@ -52,6 +66,8 @@ struct ConversationView: View {
         .onDisappear {
             onScreen = false
             model.onVisible(false)
+            ChatAudioPlayer.shared.stop()
+            recorder.cancel()
         }
         .onChange(of: scenePhase) { _, phase in
             if onScreen { model.onVisible(phase == .active) }
@@ -72,14 +88,21 @@ struct ConversationView: View {
             ImageViewer(url: item.url)
         }
         .quickLookPreview($previewURL)
-        .photosPicker(isPresented: $showPhotos, selection: $photoItem, matching: .images)
-        .onChange(of: photoItem) { _, item in
-            guard let item else { return }
-            photoItem = nil
-            Task { await sendPhoto(item) }
+        .sheet(item: Binding(get: { shareURL.map(IdentifiedURL.init) }, set: { shareURL = $0?.url })) { item in
+            ActivityView(items: [item.url])
+                .presentationDetents([.medium, .large])
         }
-        .fileImporter(isPresented: $showFiles, allowedContentTypes: [.pdf, .image]) { result in
-            if case .success(let url) = result { sendFile(url) }
+        .photosPicker(isPresented: $showPhotos, selection: $photoItems, maxSelectionCount: 10, matching: .any(of: [.images, .videos]))
+        .onChange(of: photoItems) { _, items in
+            guard !items.isEmpty else { return }
+            photoItems = []
+            sendPicked(items)
+        }
+        .fileImporter(isPresented: $showFiles, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
+            switch result {
+            case .success(let urls): sendDocuments(urls)
+            case .failure(let error): model.error = error.userMessage
+            }
         }
     }
 
@@ -266,6 +289,7 @@ struct ConversationView: View {
                     onRetry: { model.retry(m) },
                     onDiscard: { model.discard(m) },
                     onImage: { viewerURL = $0 },
+                    onVideo: { videoURL = $0 },
                     onFile: { openFile($0) }
                 )
                 .padding(.top, showAuthor ? 6 : 0)
@@ -295,6 +319,9 @@ struct ConversationView: View {
         }
         if !m.text.isEmpty {
             Button { UIPasteboard.general.string = plainText(m.text) } label: { Label("Copiar texto", systemImage: "doc.on.doc") }
+        }
+        if let a = m.attachment, !m.pending {
+            Button { share(a) } label: { Label("Compartir o guardar", systemImage: "square.and.arrow.up") }
         }
         if !m.pending && !m.failed {
             Button { model.togglePin(m) } label: {
@@ -377,17 +404,34 @@ struct ConversationView: View {
                     .padding(.vertical, 8)
                     .background(ArtaColor.bgElev)
                 }
+                if let upload = model.upload { UploadBar(progress: upload) }
+                if recorder.isRecording {
+                    RecordingBar(recorder: recorder, onCancel: { recorder.cancel() }, onSend: finishRecording)
+                } else {
+                    composerRow
+                }
+            }
+        }
+    }
+
+    private var draftIsEmpty: Bool { draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+
+    private var composerRow: some View {
                 HStack(alignment: .bottom, spacing: 8) {
                     if editing == nil {
+                        // Se puede seguir adjuntando mientras sube lo anterior: entra a la cola.
                         Menu {
-                            Button { showPhotos = true } label: { Label("Foto", systemImage: "photo") }
-                            Button { showFiles = true } label: { Label("Documento PDF", systemImage: "doc") }
+                            if CameraPicker.isAvailable {
+                                Button { showCamera = true } label: { Label("Cámara", systemImage: "camera") }
+                            }
+                            Button { showPhotos = true } label: { Label("Fotos y videos", systemImage: "photo.on.rectangle") }
+                            Button { showFiles = true } label: { Label("Documento", systemImage: "doc") }
                         } label: {
                             Image(systemName: "plus.circle.fill")
                                 .font(.system(size: 28))
-                                .foregroundStyle(ArtaColor.muted)
+                                .foregroundStyle(model.uploading ? ArtaColor.gold : ArtaColor.muted)
                         }
-                        .disabled(model.uploading)
+                        .accessibilityLabel("Adjuntar")
                     }
                     TextField(inThread ? "Responder en el hilo" : "Mensaje", text: $draft, axis: .vertical)
                         .lineLimit(1...6)
@@ -399,23 +443,26 @@ struct ConversationView: View {
                         .onChange(of: draft) { _, value in
                             if !value.isEmpty && editing == nil { model.onTyping() }
                         }
-                    if model.uploading {
-                        ProgressView().tint(ArtaColor.gold).frame(width: 32, height: 32)
+                    if editing == nil && draftIsEmpty {
+                        Button(action: startRecording) {
+                            Image(systemName: "mic.circle.fill")
+                                .font(.system(size: 32))
+                                .foregroundStyle(ArtaColor.gold)
+                        }
+                        .accessibilityLabel("Grabar nota de voz")
                     } else {
                         Button(action: submit) {
                             Image(systemName: editing == nil ? "arrow.up.circle.fill" : "checkmark.circle.fill")
                                 .font(.system(size: 32))
-                                .foregroundStyle(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? ArtaColor.muted : ArtaColor.gold)
+                                .foregroundStyle(draftIsEmpty ? ArtaColor.muted : ArtaColor.gold)
                         }
-                        .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        .disabled(draftIsEmpty)
                         .accessibilityLabel(editing == nil ? "Enviar" : "Guardar")
                     }
                 }
                 .padding(.horizontal, 10)
                 .padding(.vertical, 8)
                 .background(ArtaColor.bgElev)
-            }
-        }
     }
 
     private func insertMention(_ person: ChannelMember) {
@@ -471,43 +518,71 @@ struct ConversationView: View {
 
     // MARK: Adjuntos
 
-    private func sendPhoto(_ item: PhotosPickerItem) async {
-        guard let data = try? await item.loadTransferable(type: Data.self), let jpeg = Self.jpeg(from: data) else {
-            model.error = "No se pudo leer la foto"
-            return
-        }
-        model.sendFile(data: jpeg, filename: "foto-\(Int(Date().timeIntervalSince1970)).jpg", mime: "image/jpeg", caption: takeDraft())
-    }
-
-    private func sendFile(_ url: URL) {
-        let scoped = url.startAccessingSecurityScopedResource()
-        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-        guard let data = try? Data(contentsOf: url) else {
-            model.error = "No se pudo leer el archivo"
-            return
-        }
-        let type = UTType(filenameExtension: url.pathExtension)
-        if type?.conforms(to: .image) == true {
-            guard let jpeg = Self.jpeg(from: data) else {
-                model.error = "No se pudo leer la imagen"
-                return
+    /// Varias fotos y videos de la galería: cada uno en su mensaje.
+    private func sendPicked(_ items: [PhotosPickerItem]) {
+        let jobs: [@Sendable () async throws -> PreparedUpload] = items.map { item in
+            let isVideo = item.supportedContentTypes.contains { $0.conforms(to: .movie) }
+            return { @Sendable in
+                if isVideo {
+                    guard let movie = try await item.loadTransferable(type: PickedMovie.self) else {
+                        throw MediaError("No se pudo leer el video")
+                    }
+                    return try await MediaPrep.video(at: movie.url, ownsSource: true)
+                }
+                guard let data = try await item.loadTransferable(type: Data.self) else {
+                    throw MediaError("No se pudo leer la foto")
+                }
+                return try await MediaPrep.photo(data: data)
             }
-            let name = url.deletingPathExtension().lastPathComponent + ".jpg"
-            model.sendFile(data: jpeg, filename: name, mime: "image/jpeg", caption: takeDraft())
-        } else {
-            model.sendFile(data: data, filename: url.lastPathComponent, mime: type?.preferredMIMEType ?? "application/pdf", caption: takeDraft())
+        }
+        model.sendFiles(jobs, caption: takeDraft())
+    }
+
+    private func sendDocuments(_ urls: [URL]) {
+        let jobs: [@Sendable () async throws -> PreparedUpload] = urls.map { url in
+            { @Sendable in try await MediaPrep.document(at: url) }
+        }
+        model.sendFiles(jobs, caption: takeDraft())
+    }
+
+    private func sendCamera(_ result: CameraPicker.Result) {
+        let job: @Sendable () async throws -> PreparedUpload
+        switch result {
+        case .photo(let image):
+            job = { @Sendable in try await MediaPrep.photo(image: image) }
+        case .video(let url):
+            job = { @Sendable in try await MediaPrep.video(at: url, ownsSource: true) }
+        }
+        model.sendFiles([job], caption: takeDraft())
+    }
+
+    private func startRecording() {
+        Task {
+            do {
+                try await recorder.start()
+            } catch {
+                model.error = error.userMessage
+            }
         }
     }
 
-    /// HEIC/PNG → JPEG de 2048 px como máximo (lo que acepta y muestra bien la web).
-    private static func jpeg(from data: Data) -> Data? {
-        guard let image = UIImage(data: data) else { return nil }
-        let maxSide: CGFloat = 2048
-        let scale = min(1, maxSide / max(image.size.width, image.size.height))
-        if scale >= 1 { return image.jpegData(compressionQuality: 0.85) }
-        let size = CGSize(width: image.size.width * scale, height: image.size.height * scale)
-        let resized = UIGraphicsImageRenderer(size: size).image { _ in image.draw(in: CGRect(origin: .zero, size: size)) }
-        return resized.jpegData(compressionQuality: 0.85)
+    private func finishRecording() {
+        guard let url = recorder.stop() else {
+            model.error = "Mantén la grabación al menos un segundo."
+            return
+        }
+        model.sendFiles([{ @Sendable in MediaPrep.voice(url) }], caption: "")
+    }
+
+    private func share(_ attachment: ChatAttachment) {
+        guard let url = ApiConfig.resolve(attachment.url) else { return }
+        Task {
+            do {
+                shareURL = try await ApiClient.shared.download(url, suggestedName: attachment.name)
+            } catch {
+                model.error = error.userMessage
+            }
+        }
     }
 
     private func openFile(_ attachment: ChatAttachment) {
@@ -578,6 +653,7 @@ struct MessageBubble: View {
     var onRetry: () -> Void
     var onDiscard: () -> Void
     var onImage: (URL) -> Void
+    var onVideo: (URL) -> Void
     var onFile: (ChatAttachment) -> Void
 
     var body: some View {
@@ -622,7 +698,9 @@ struct MessageBubble: View {
                     .font(.caption2)
                     .foregroundStyle(ArtaColor.muted)
             }
-            if let attachment = message.attachment { attachmentView(attachment) }
+            if let attachment = message.attachment {
+                AttachmentContent(attachment: attachment, mine: mine, onImage: onImage, onVideo: onVideo, onFile: onFile)
+            }
             if !message.text.isEmpty {
                 Text(mentionText(message.text))
                     .foregroundStyle(ArtaColor.text)
@@ -653,41 +731,6 @@ struct MessageBubble: View {
             Text("✓✓").foregroundStyle(ArtaColor.read).accessibilityLabel("Leído")
         } else {
             Text("✓").accessibilityLabel("Enviado")
-        }
-    }
-
-    @ViewBuilder
-    private func attachmentView(_ a: ChatAttachment) -> some View {
-        if a.isImage, let url = ApiConfig.resolve(a.url) {
-            AsyncImage(url: url) { phase in
-                switch phase {
-                case .success(let image):
-                    image.resizable().scaledToFill()
-                case .failure:
-                    Image(systemName: "photo").font(.largeTitle).foregroundStyle(ArtaColor.muted)
-                default:
-                    ProgressView().tint(ArtaColor.gold)
-                }
-            }
-            .frame(width: 220, height: 220)
-            .clipShape(RoundedRectangle(cornerRadius: 12))
-            .contentShape(Rectangle())
-            .onTapGesture { onImage(url) }
-        } else {
-            Button { onFile(a) } label: {
-                HStack(spacing: 10) {
-                    Image(systemName: a.mime == "application/pdf" ? "doc.richtext" : "doc")
-                        .font(.title2)
-                        .foregroundStyle(ArtaColor.gold)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(a.name ?? "Archivo").font(.subheadline).foregroundStyle(ArtaColor.text).lineLimit(2)
-                        Text(fileSize(a.size)).font(.caption2).foregroundStyle(ArtaColor.muted)
-                    }
-                }
-                .padding(10)
-                .background(RoundedRectangle(cornerRadius: 10).fill(ArtaColor.surface2))
-            }
-            .buttonStyle(.plain)
         }
     }
 

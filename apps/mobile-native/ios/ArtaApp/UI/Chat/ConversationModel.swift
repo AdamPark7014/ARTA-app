@@ -2,10 +2,17 @@ import Combine
 import Foundation
 import UIKit
 
+/// [fraction] nil mientras se prepara (convirtiendo el video, comprimiendo la foto…).
+struct UploadProgress: Equatable {
+    let label: String
+    let index: Int
+    let total: Int
+    let fraction: Double?
+}
+
 /// Estado de una conversación o de un hilo (mismo flujo que `ConversationViewModel` en Android).
 @MainActor
 final class ConversationModel: ObservableObject {
-    static let maxUploadBytes = 20 * 1024 * 1024
     static let editWindow: TimeInterval = 60 * 60
 
     let channelId: String
@@ -19,7 +26,8 @@ final class ConversationModel: ObservableObject {
     @Published private(set) var loadingOlder = false
     @Published private(set) var hasMore = false
     @Published private(set) var typing: [String] = []
-    @Published private(set) var uploading = false
+    @Published private(set) var upload: UploadProgress?
+    var uploading: Bool { upload != nil }
     @Published var error: String?
     @Published var focusMessageId: String?
 
@@ -288,22 +296,53 @@ final class ConversationModel: ObservableObject {
         messages.removeAll { $0.clientId == m.clientId && $0.failed }
     }
 
-    /// Sube una foto o PDF y la manda como mensaje (con el texto escrito, si hay).
-    func sendFile(data: Data, filename: String, mime: String, caption: String) {
-        guard data.count <= Self.maxUploadBytes else {
-            error = "El archivo pesa más de 20 MB"
-            return
+    /// Fotos, videos, notas de voz o documentos: un mensaje por archivo, como WhatsApp.
+    /// El texto escrito va como pie del primero. Se preparan y suben en orden.
+    func sendFiles(_ items: [@Sendable () async throws -> PreparedUpload], caption: String) {
+        guard !items.isEmpty else { return }
+        for (i, item) in items.enumerated() {
+            uploadQueue.append((item, i == 0 ? caption : ""))
         }
-        uploading = true
-        Task {
+        queuedTotal += items.count
+        guard !draining else { return }
+        draining = true
+        Task { await drainUploads() }
+    }
+
+    private var uploadQueue: [(prepare: @Sendable () async throws -> PreparedUpload, caption: String)] = []
+    private var queuedTotal = 0
+    private var queuedDone = 0
+    private var draining = false
+
+    private func drainUploads() async {
+        while !uploadQueue.isEmpty {
+            let next = uploadQueue.removeFirst()
+            let index = queuedDone + 1
+            upload = UploadProgress(label: "archivo", index: index, total: queuedTotal, fraction: nil)
+            var prepared: PreparedUpload?
             do {
-                let uploaded = try await ApiClient.shared.upload("chat/upload", data: data, filename: filename, mime: mime)
-                send(caption, attachment: uploaded)
+                let p = try await next.prepare()
+                prepared = p
+                let label = p.label
+                upload = UploadProgress(label: label, index: index, total: queuedTotal, fraction: 0)
+                let uploaded = try await ApiClient.shared.uploadFile("chat/upload", fileURL: p.fileURL, filename: p.filename, mime: p.mime) { [weak self] fraction in
+                    Task { @MainActor in
+                        guard let self, let current = self.upload, current.index == index else { return }
+                        if let shown = current.fraction, Int(shown * 100) == Int(fraction * 100) { return }
+                        self.upload = UploadProgress(label: label, index: index, total: self.queuedTotal, fraction: fraction)
+                    }
+                }
+                send(next.caption, attachment: uploaded)
             } catch {
                 self.error = error.userMessage
             }
-            uploading = false
+            prepared?.dispose()
+            queuedDone += 1
         }
+        queuedTotal = 0
+        queuedDone = 0
+        draining = false
+        upload = nil
     }
 
     // MARK: Acciones sobre mensajes
