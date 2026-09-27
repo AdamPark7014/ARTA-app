@@ -4,7 +4,7 @@ import { createWriteStream, existsSync, mkdirSync, readFileSync } from 'fs';
 import { join } from 'path';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../common/prisma/prisma.service';
-import { PdfBrandingService, type BrandingMeta } from '../uploads/pdf-branding.service';
+import { PdfBrandingService } from '../uploads/pdf-branding.service';
 import { DOC_STATUS_LABEL } from '../common/doc-guards';
 import {
   HEADER_SECTION_ID,
@@ -211,10 +211,6 @@ export class ChecklistPdfService {
     revision?: number,
   ): Promise<{ url: string; filePath: string; fieldMap: PdfFieldMap }> {
     const dir = this.uploadRoot();
-    // Estandariza nombre visible para descarga, pero conservamos ruta estable por id/version.
-    const dateLabel = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-    const safe = (s: string) => s.normalize('NFKD').replace(/[^\w\s-]/g, '').replace(/\s+/g, '_').slice(0, 80);
-    const visibleName = `${safe(input.eventName)}_${dateLabel}_${safe(input.title)}_v${revision ?? 1}.pdf`.toUpperCase();
     const fileName = revision === undefined ? `${checklistId}.pdf` : `${checklistId}-r${revision}.pdf`;
     const filePath = join(dir, fileName);
     const data = normalizeFormatData(input.data);
@@ -245,22 +241,9 @@ export class ChecklistPdfService {
         isDraft: !/^(aprobado|sellado)$/i.test(String(input.statusLabel || '').trim()),
       };
 
-      // Branding header/footer
-      const meta: BrandingMeta = {
-        entity: input.entity,
-        eventName: input.eventName,
-        fileName: `${input.title}`,
-        version: revision ?? 1,
-        generatedBy: input.editedBy || null,
-        generatedAt: input.editedAt || new Date(),
-        status: input.statusLabel || null,
-        folio: input.folio || null,
-      };
-      doc.addPage({ size: 'LETTER', margin: 0 });
-      this.branding.drawHeaderFooter(doc, meta, RIGHT - M, 110);
-      if (cur.isDraft) this.branding.draftWatermark(doc);
-      cur.page += 1;
-      cur.y = TOP + 40;
+      // La primera página lleva el logo, el título del formato y la línea del
+      // evento; la cabecera genérica del servicio de marca no sustituye eso.
+      this.newPage(cur, true);
 
       for (const section of data.sections) {
         if (section.id === SIGNATURES_SECTION_ID) continue;
@@ -385,7 +368,8 @@ export class ChecklistPdfService {
         align: 'right',
         lineBreak: false,
       });
-      doc.text('Formato generado en el sistema ARTA · sin validez sin firmas', M, PAGE_H - 30 - 18, {
+      const folio = cur.input.folio ? `Folio ${cur.input.folio} · ` : '';
+      doc.text(`${folio}Formato generado en el sistema ARTA · sin validez sin firmas`, M, PAGE_H - 30 - 18, {
         width: W,
         align: 'right',
         lineBreak: false,

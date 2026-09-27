@@ -114,6 +114,26 @@ completa» la lleva a toda la ventana. «Guardar y generar PDF» imprime la sali
 «Ver el PDF» la enseña. El modo «Lista» es la misma captura en formulario
 compacto, útil en pantallas chicas.
 
+## Salida en PDF de los Excel
+
+`apps/api/src/uploads/sheet-layout.ts` convierte la hoja de ExcelJS en un modelo
+imprimible (celdas combinadas una sola vez, anchos y altos del libro, negritas,
+rellenos, bordes, alineación, formatos de número, fórmulas calculadas con
+`fast-formula-parser` cuando el libro no trae el resultado, imágenes ancladas a
+su celda) y `excel-pdf.service.ts` lo dibuja con la marca común
+(`pdf-branding.service.ts`: logo, entidad, título, evento, banda de pie y
+«Página n de N»). La hoja se encoge para caber a lo ancho; si en vertical
+quedaría por debajo del 72 % pasa a apaisado (o si el libro lo pide). Muestras
+sin base: `scripts/render-sheet-samples.ts` (imprime los libros base de
+`assets/format-sources`).
+
+Lo que había antes repetía el título combinado en cada celda, ignoraba anchos y
+estilos y dejaba una hoja en blanco al inicio: el pie se escribía en una `y`
+fija fuera del margen apaisado y pdfkit abría página nueva. El servicio de marca
+ahora pinta el pie con el margen inferior en cero y lo restaura (ver
+`inFooterZone`). Ese mismo servicio de marca lo usan documentos, boletera e
+historial; el PDF de checklists dibuja su propia primera página y no lo llama.
+
 ## Poner al día una base que ya existía
 
 ```bash

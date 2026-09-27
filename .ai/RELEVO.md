@@ -12,6 +12,30 @@
 - Commit en `main`, `git push origin main` y deploy desde `main`.
 - El servidor (`/var/www/arta-app`) está en `main`, sin otras ramas.
 
+## Turno claude-code (2026-09-27, 14:00): PDFs «horribles» y hoja en blanco
+
+Adam, con el PDF de `Distribución de Pendones (Excel)` en producción: «tus pdfs salen
+horribles raros y además dejan hoja en blanco al inicio».
+- Causa 1 (hoja en blanco): `PdfBrandingService.drawHeaderFooter` (PR #3) escribía el pie en
+  `y=570` fijo; en carta apaisada eso cae bajo el margen y pdfkit abre página nueva. Ahora
+  el servicio usa `doc.page.width/height`, pinta el pie con el margen inferior en cero
+  (`inFooterZone`) y trae la marca real (logo, banda, «Página n de N»). Lo usan documentos,
+  boletera, historial y Excel.
+- Causa 2 (raro): el exportador de Excel recorría celda por celda: el título combinado
+  A1:E5 salía 25 veces, anchos iguales, sin estilos, fórmulas vacías. Nuevo
+  `sheet-layout.ts` (modelo de hoja: merges, anchos/altos, estilos, bordes, formatos de
+  número, fórmulas con `fast-formula-parser`, fórmulas compartidas trasladadas, imágenes
+  ancladas) + `excel-pdf.service.ts` reescrito (ajuste a lo ancho, apaisado si hace falta,
+  encoger antes de cortar, paginación por filas). `scripts/render-sheet-samples.ts`.
+- Causa 3: Cursor había enganchado ese servicio de marca al PDF de checklists **encima** de
+  la primera página que ya tenía logo y título: salía texto plano, pie a media página y
+  «BORRADOR» gigante. Restaurado `newPage(cur, true)`; el folio de Cursor se imprime en
+  el pie; la marca de agua de borrador queda tenue (9 %).
+- Pruebas: `sheet-layout.spec.ts` (con los libros base del cliente) y
+  `excel-pdf.service.spec.ts` (sin hoja en blanco, conteo de páginas). Jest API en verde.
+- Revisado a ojo: pendones (1 página, título una vez, totales), corrida (apaisada,
+  moneda, banda negra con texto blanco, logo), campaña (2 páginas), checklist Hospedaje.
+
 ## Turno claude-code (2026-09-27, 12:30): retomar tras Cursor
 
 - Mi trabajo del 24-09 (campos de texto que crecen, Catering y Mantenimiento con campos y
