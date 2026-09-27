@@ -12,6 +12,24 @@
 - Commit en `main`, `git push origin main` y deploy desde `main`.
 - El servidor (`/var/www/arta-app`) está en `main`, sin otras ramas.
 
+## Turno claude-code (2026-09-27, 15:30): «Salir en PDF» daba 500 y la cuadrícula llena de vacíos
+
+Adam, con el editor del Excel de pendones: «server error, y muestra solo las casillas escritas
+en el Excel con posibilidad de ampliarse».
+- **500**: `exportPdf` anotaba una `DocRevision` sobre el Excel de origen con la versión del
+  Excel, que no cambia al exportar; la segunda exportación chocaba con la única
+  (`docType, docId, revision`). Ahora la exportación queda en el `auditLog`
+  (`file.export.pdf`) y en la revisión del PDF de salida (que sí sube de versión), y
+  `recordFileRevision` ignora un P2002 en vez de tumbar la operación.
+- **Cuadrícula**: `SheetEditor` rellenaba 24 filas × 9 columnas mínimo. Ahora `trimGrid`
+  recorta filas y columnas vacías del final y muestra solo lo escrito (más una fila libre si
+  se puede editar); «+ Fila», «+ 10 al final» y «+ Columna al final» amplían.
+- e2e: `checklist-sheet` 3/3 en verde (build real, puerto 3101 porque el 3100 lo ocupa ahora el
+  Docker local). `editors.spec` y `excel-hf.spec` **fallan desde antes**: piden el botón «Editar
+  aquí» (ya es «Editar»; corregido) y cargan el Excel por `/api/files/:id/inline` (PR #5),
+  ruta que su mock no responde → la celda A1 recibe «[]». Pendiente para Cursor: stub de
+  `files/:id/inline` en `support/mock-api.ts` o en esos specs.
+
 ## Turno claude-code (2026-09-27, 14:00): PDFs «horribles» y hoja en blanco
 
 Adam, con el PDF de `Distribución de Pendones (Excel)` en producción: «tus pdfs salen

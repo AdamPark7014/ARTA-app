@@ -107,22 +107,29 @@ export class UploadsController {
   ) {
     // `DocRevision` cuelga de un evento; un archivo suelto no tiene historial.
     if (!file.eventId) return;
-    await this.revisions.record({
-      organizationId: event?.organizationId || '(sin-organizacion)',
-      eventId: file.eventId,
-      docType: DocType.FILE,
-      docId: file.id,
-      revision: file.version,
-      fileUrl: file.url,
-      fileHash: file.sha256,
-      sizeBytes: file.sizeBytes,
-      diff: diffBinary(
-        previous ? { fileName: previous.fileName, hash: previous.sha256, sizeBytes: previous.sizeBytes } : null,
-        { fileName: file.fileName, hash: file.sha256, sizeBytes: file.sizeBytes },
-      ),
-      note,
-      actor: actorFrom(req as never),
-    });
+    try {
+      await this.revisions.record({
+        organizationId: event?.organizationId || '(sin-organizacion)',
+        eventId: file.eventId,
+        docType: DocType.FILE,
+        docId: file.id,
+        revision: file.version,
+        fileUrl: file.url,
+        fileHash: file.sha256,
+        sizeBytes: file.sizeBytes,
+        diff: diffBinary(
+          previous ? { fileName: previous.fileName, hash: previous.sha256, sizeBytes: previous.sizeBytes } : null,
+          { fileName: file.fileName, hash: file.sha256, sizeBytes: file.sizeBytes },
+        ),
+        note,
+        actor: actorFrom(req as never),
+      });
+    } catch (e) {
+      // Una revisión repetida (misma versión ya anotada) es contabilidad, no
+      // motivo para tumbar la operación que ya se hizo en disco y en la base.
+      if ((e as { code?: string })?.code === 'P2002') return;
+      throw e;
+    }
   }
 
   private async assertEventOps(user: AuthUser, eventId: string) {
@@ -572,22 +579,25 @@ export class UploadsController {
       }
     }
 
-    await this.recordFileRevision(
-      {
-        id: current.id,
-        eventId: current.eventId,
-        url: current.url,
-        fileName: current.fileName,
-        sizeBytes: current.sizeBytes,
-        sha256: current.sha256,
-        version: current.version,
+    /*
+     * La exportación se registra en el PDF de salida, que sube de versión en
+     * cada «Salir en PDF». Antes se anotaba además una revisión sobre el Excel
+     * de origen con la versión del Excel —que no cambia al exportar—, así que
+     * la segunda exportación chocaba con la revisión ya existente
+     * (`docType, docId, revision` únicos) y el botón devolvía 500.
+     */
+    await this.prisma.auditLog.create({
+      data: {
+        userId: req.user.id,
+        organizationId: current.event.organizationId,
+        action: 'file.export.pdf',
+        resource: 'EventFile',
+        resourceId: current.id,
+        metaJson: { fileName: current.fileName, version: current.version, pdfFileId: pdfFile.id, pdfVersion: pdfFile.version },
+        ip: req.ip,
+        userAgent: req.headers?.['user-agent']?.slice(0, 300),
       },
-      current.event,
-      null,
-      req,
-      `Salida PDF v${current.version}` +
-        (exporter?.fullName ? ` · ${exporter.fullName}` : ''),
-    );
+    });
 
     await this.recordFileRevision(
       {

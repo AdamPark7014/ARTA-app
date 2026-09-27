@@ -48,7 +48,7 @@ export type CellChange = {
 type Grid = string[][];
 type Sel = { r: number; c: number } | null;
 
-const MIN_ROWS = 24;
+/** Ancho mínimo para calcular anchos de columna; la cuadrícula muestra solo lo escrito. */
 const MIN_COLS = 9;
 const ROW_PAGE = 120;
 
@@ -61,6 +61,30 @@ function colLabel(index: number): string {
     n = Math.floor(n / 26) - 1;
   } while (n >= 0);
   return out;
+}
+
+/**
+ * Recorta filas y columnas vacías del final: el libro guarda un rango
+ * (`!ref`) que suele ir más allá de lo escrito y llenaba la cuadrícula de
+ * celdas en blanco. Adam (27-09): «muestra solo las casillas escritas en el
+ * Excel, con posibilidad de ampliarse» — ampliar es lo que hacen los botones
+ * de filas y columnas.
+ */
+function trimGrid(rows: unknown[][]): unknown[][] {
+  const filled = (v: unknown) => v !== undefined && v !== null && String(v).trim() !== '';
+  let height = rows.length;
+  while (height > 0 && !rows[height - 1].some(filled)) height -= 1;
+  let width = 0;
+  for (let r = 0; r < height; r += 1) {
+    const row = rows[r];
+    for (let c = row.length - 1; c >= width; c -= 1) {
+      if (filled(row[c])) {
+        width = c + 1;
+        break;
+      }
+    }
+  }
+  return rows.slice(0, height).map((r) => r.slice(0, width));
 }
 
 function padGrid(rows: unknown[][], minRows: number, minCols: number): Grid {
@@ -437,7 +461,9 @@ export function SheetEditor({
         return cell === undefined || cell === null ? '' : String(cell);
       }),
     );
-    setGrid(padGrid(withFormulas as unknown[][], MIN_ROWS, campaign || finance ? MIN_COLS : 8));
+    // Solo lo escrito (más una fila libre para seguir capturando); el resto se amplía con los botones.
+    const used = trimGrid(withFormulas as unknown[][]);
+    setGrid(padGrid(used, Math.max(1, used.length + (canEditProp ? 1 : 0)), Math.max(1, used[0]?.length ?? 1)));
     setVisibleRows(ROW_PAGE);
     setSel(null);
     // Column widths + merges

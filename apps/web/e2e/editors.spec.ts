@@ -85,7 +85,7 @@ test.describe('Editores embebidos', () => {
 
     await page.goto('/events/evt-e2e-1?tab=files');
 
-    await page.getByRole('button', { name: 'Editar aquí' }).click();
+    await page.getByRole('button', { name: 'Editar', exact: true }).click();
 
     // El contenido real del archivo llega a la cuadrícula
     const a1 = page.getByLabel('Celda A1', { exact: true });
@@ -211,7 +211,7 @@ test.describe('Editores embebidos', () => {
     });
 
     await page.goto('/events/evt-e2e-1?tab=files');
-    await page.getByRole('button', { name: 'Editar aquí' }).click();
+    await page.getByRole('button', { name: 'Editar', exact: true }).click();
 
     // La celda con fórmula muestra el valor calculado
     await expect(page.getByLabel('Celda B4', { exact: true })).toHaveValue('20000');
