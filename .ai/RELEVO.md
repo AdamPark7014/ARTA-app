@@ -35,6 +35,10 @@ horribles raros y además dejan hoja en blanco al inicio».
   `excel-pdf.service.spec.ts` (sin hoja en blanco, conteo de páginas). Jest API en verde.
 - Revisado a ojo: pendones (1 página, título una vez, totales), corrida (apaisada,
   moneda, banda negra con texto blanco, logo), campaña (2 páginas), checklist Hospedaje.
+- **Desplegado `88ec1c3` a producción 27-09 14:24** (bundle + `update.sh --no-pull`,
+  respaldo automático del deploy). api y web sanos; el Excel real de pendones impreso en el
+  contenedor con el exportador nuevo: 1 página, sin hoja en blanco. Adam debe volver a
+  pulsar «Salir en PDF» en cada Excel para regenerar los PDF ya existentes.
 
 ## Turno claude-code (2026-09-27, 12:30): retomar tras Cursor
 
