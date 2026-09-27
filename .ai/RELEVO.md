@@ -17,7 +17,7 @@
 Pedido: «todo mergeado y fusionado, canónico en `main`; no quiero ramas sobreescribiéndose».
 
 ### Limpieza de ramas
-- Respaldo de todas las ramas antes de borrar: `C:\dev\backups\arta-ramas\arta-ramas-20260927.bundle`.
+- Sin copias de ramas (pedido de Adam: todo canónico en `main`).
 - `feature/mobile-chat-push` fusionada en `main` por fast-forward y borrada.
 - GitHub iba 11 commits atrás (sin el chat ni las apps móviles). Ahora `origin/main` está al día.
 - Borradas de GitHub porque ya estaban en `main` (se comparó el contenido, no solo el historial):
