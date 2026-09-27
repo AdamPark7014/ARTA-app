@@ -3,7 +3,7 @@
 - **Último turno:** cursor
 - **Fecha:** 2026-09-27
 - **Rama:** feature/mobile-chat-push
-- **Producción:** `6b6624b` (deploy de este turno en curso; ver «Deploy»)
+- **Producción:** `735c8c7` desplegado en `/var/www/arta-app` el 2026-09-27 06:40 UTC
 
 ## Hecho en este turno
 
@@ -57,7 +57,16 @@ nativa total y notificaciones push de todo».
 
 ## Deploy
 
-Pendiente de anotar el resultado (se actualiza al cerrar el turno).
+- `main` avanzado por fast-forward a `735c8c7` (incluye `f6945ad`, `45164cd`, `cd15a24`, `17654c1`),
+  subido por bundle y desplegado con `update.sh --no-pull` el 2026-09-27 06:40 UTC.
+- Respaldo de la base: `/root/arta-backups/20260927-0640.sql.gz`.
+- Estado tras el deploy:
+  - Sin migraciones pendientes (29 aplicadas).
+  - «Nest application successfully started»; api, web y db healthy.
+  - `/api/ready` responde 200. `/chat` sin sesión manda a `/login?next=%2Fchat` y `/login` responde 200.
+  - El handshake de Socket.IO por `/api/socket.io/` con `Origin: https://arta.artaproducciones.com` da 200 y CORS permite ese origen.
+- No se mandaron mensajes de prueba en producción, para no ensuciar el chat real.
+- Rollback: `bash deploy/rollback.sh` (añadir `--dump 20260927-0640.sql.gz` para restaurar también la base).
 
 ## A medias
 
