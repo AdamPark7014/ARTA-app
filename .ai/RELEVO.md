@@ -4,7 +4,7 @@
 - **Fecha:** 2026-09-27
 - **Rama:** main
   (Adam es el único programador).
-- **Producción:** `f5e0c52` desplegado desde `main` el 2026-09-27 14:54 UTC
+- **Producción:** `4745dd4` desplegado desde `main` el 2026-09-27 22:39 UTC
 
 ## Regla de ramas (pedido de Adam, 2026-09-27)
 
@@ -58,6 +58,17 @@ negrita, cursiva, alineación, color, relleno y bordes. `SheetEditor.tsx` lo con
   igual que antes — no hay regresión si `/layout` no responde.
 - `tsc --noEmit` limpio en `apps/api` y `apps/web`; jest de `calendar`/`pdf-branding` en
   verde (12/12).
+- **Desplegado `4745dd4` a producción 27-09 22:39 UTC**: bundle + `update.sh --no-pull`
+  (respaldo automático de la BD). `arta-api`/`arta-web` sanos; migración `CalendarNote`
+  aplicada y verificada en la BD de producción (`\dt "CalendarNote"` en `arta-db`).
+  Verifiqué `buildSheetModel` (lo que sirve `/uploads/:id/layout`) corriéndolo dentro de
+  `arta-api` contra el Excel real de pendones (`DISTRIBUCION_PENDONES.xlsx`): trae los 4
+  merges reales (título 5×5, banda 1×5, columna lateral 10×1), negrita donde toca y los
+  rellenos `#000000`/`#F2F2F2` — coincide con el PDF. No hice login en producción para
+  verlo desde el navegador (no tengo ni debo usar la contraseña real de Adam en un sitio que
+  no es localhost); falta que Adam lo confirme a ojo en un evento real con Excel. Tampoco se
+  pudo levantar el stack local (los puertos 3000/4000/5432 del docker-compose de ARTA los
+  ocupan ahora los contenedores de NEXARA-dev).
 
 ## Turno claude-code (2026-09-27, 15:30): «Salir en PDF» daba 500 y la cuadrícula llena de vacíos
 
