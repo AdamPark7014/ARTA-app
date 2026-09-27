@@ -692,14 +692,6 @@ export class ChatService {
     });
     const memberIds = members.map((m) => m.userId);
     const preview = pushText(message);
-    this.realtime.emitToUsers(memberIds, 'chat:channel-activity', {
-      channelId: channel.id,
-      messageId: message.id,
-      parentId: message.parentId,
-      preview,
-      senderId: user.id,
-      at: message.createdAt.toISOString(),
-    });
 
     const now = Date.now();
     const isMuted = (m: { mutedUntil: Date | null }) => Boolean(m.mutedUntil && m.mutedUntil.getTime() > now);
@@ -709,6 +701,26 @@ export class ChatService {
       ? memberIds.filter((id) => id !== user.id)
       : [];
     for (const id of everyone) mentioned.add(id);
+
+    // `notify`: el navegador con la pestaña oculta muestra aviso de escritorio. No a quien
+    // silenció, ni en hilos, ni a mencionados (a ellos ya les llega por la campana).
+    const activity = {
+      channelId: channel.id,
+      messageId: message.id,
+      parentId: message.parentId,
+      preview,
+      senderId: user.id,
+      senderName: user.fullName || message.sender.fullName || null,
+      channelName: channel.kind === ChatChannelKind.DIRECT ? null : channel.name,
+      at: message.createdAt.toISOString(),
+    };
+    const loud = new Set(
+      message.parentId
+        ? []
+        : members.filter((m) => m.userId !== user.id && !isMuted(m) && !mentioned.has(m.userId)).map((m) => m.userId),
+    );
+    this.realtime.emitToUsers(memberIds.filter((id) => loud.has(id)), 'chat:channel-activity', { ...activity, notify: true });
+    this.realtime.emitToUsers(memberIds.filter((id) => !loud.has(id)), 'chat:channel-activity', { ...activity, notify: false });
 
     let audience = members.filter((m) => m.userId !== user.id && !isMuted(m)).map((m) => m.userId);
     if (message.parentId) {

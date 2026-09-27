@@ -15,7 +15,7 @@ import { useRealtime, useRealtimeStatus } from '@/lib/realtime';
 export function useChatUnread(enabled: boolean): number {
   const [total, setTotal] = useState(0);
 
-  const load = useCallback(() => {
+  const refresh = useCallback(() => {
     if (document.hidden) return;
     api<{ total: number }>('/chat/unread')
       .then((r) => setTotal(Number(r?.total) || 0))
@@ -26,25 +26,25 @@ export function useChatUnread(enabled: boolean): number {
     'chat:unread',
     (p) => {
       if (typeof p?.total === 'number') setTotal(p.total);
-      else load();
+      else refresh();
     },
     enabled,
   );
-  useRealtime('chat:channel-activity', load, enabled);
-  useRealtimeStatus(load, enabled);
+  useRealtime('chat:channel-activity', refresh, enabled);
+  useRealtimeStatus(refresh, enabled);
 
   useEffect(() => {
     if (!enabled) return;
-    load();
-    const timer = window.setInterval(load, 60_000);
-    window.addEventListener('arta:chat-read', load);
-    document.addEventListener('visibilitychange', load);
+    refresh();
+    const timer = window.setInterval(refresh, 60_000);
+    window.addEventListener('arta:chat-read', refresh);
+    document.addEventListener('visibilitychange', refresh);
     return () => {
       window.clearInterval(timer);
-      window.removeEventListener('arta:chat-read', load);
-      document.removeEventListener('visibilitychange', load);
+      window.removeEventListener('arta:chat-read', refresh);
+      document.removeEventListener('visibilitychange', refresh);
     };
-  }, [enabled, load]);
+  }, [enabled, refresh]);
 
   return total;
 }

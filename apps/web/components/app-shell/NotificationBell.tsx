@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
+import { useRealtime, useRealtimeStatus } from '@/lib/realtime';
 
 type Notification = {
   id: string;
@@ -15,7 +16,7 @@ type Notification = {
   actor?: { id: string; fullName: string } | null;
 };
 
-const POLL_MS = 45_000;
+const POLL_MS = 120_000;
 
 function timeAgo(iso: string) {
   const diff = Date.now() - new Date(iso).getTime();
@@ -29,11 +30,19 @@ function timeAgo(iso: string) {
   return new Date(iso).toLocaleDateString('es-MX');
 }
 
+function canNotifyDesktop() {
+  return typeof window !== 'undefined' && 'Notification' in window;
+}
+
 /**
  * Avisos dentro de la plataforma.
  *
  * Junta 2026-08-28: «la persona a quien se le asigne una tarea deberá recibir
  * una notificación dentro de la plataforma, para que quede enterada».
+ *
+ * Llegan en vivo por socket (`notification:new` / `notification:read`). Con la
+ * pestaña en segundo plano se muestra además un aviso del sistema, si la
+ * persona lo permitió al abrir la campana.
  */
 export function NotificationBell() {
   const router = useRouter();
@@ -63,6 +72,62 @@ export function NotificationBell() {
     }
   }, []);
 
+  useRealtime<{ notification?: Notification; unread?: number }>('notification:new', (p) => {
+    const n = p?.notification;
+    if (typeof p?.unread === 'number') setCount(p.unread);
+    else setCount((c) => c + 1);
+    if (!n) return;
+    setItems((prev) => (prev.some((i) => i.id === n.id) ? prev : [n, ...prev].slice(0, 20)));
+    if (document.hidden && canNotifyDesktop() && window.Notification.permission === 'granted') {
+      try {
+        const shown = new window.Notification(n.title, { body: n.body ?? undefined, tag: n.id });
+        shown.onclick = () => {
+          window.focus();
+          shown.close();
+          if (n.linkUrl) router.push(n.linkUrl);
+        };
+      } catch {
+        // Algunos navegadores móviles solo permiten avisos desde un service worker.
+      }
+    }
+  });
+
+  // Mensajes de chat (directos y canales sin silenciar): solo aviso del sistema, no van a la campana.
+  useRealtime<{
+    channelId: string;
+    messageId: string;
+    preview?: string;
+    senderName?: string | null;
+    channelName?: string | null;
+    notify?: boolean;
+  }>('chat:channel-activity', (p) => {
+    if (!p?.notify || !document.hidden || !canNotifyDesktop() || window.Notification.permission !== 'granted') return;
+    const who = p.senderName || 'Nuevo mensaje';
+    try {
+      const shown = new window.Notification(p.channelName ? `${who} en #${p.channelName}` : who, {
+        body: p.preview || undefined,
+        tag: `chat-${p.channelId}`,
+      });
+      shown.onclick = () => {
+        window.focus();
+        shown.close();
+        router.push(`/chat?channel=${encodeURIComponent(p.channelId)}&msg=${encodeURIComponent(p.messageId)}`);
+      };
+    } catch {
+      // Algunos navegadores móviles solo permiten avisos desde un service worker.
+    }
+  });
+
+  useRealtime<{ notificationId?: string; unread?: number }>('notification:read', (p) => {
+    if (typeof p?.unread === 'number') setCount(p.unread);
+    if (p?.notificationId) {
+      const at = new Date().toISOString();
+      setItems((prev) => prev.map((i) => (i.id === p.notificationId ? { ...i, readAt: i.readAt || at } : i)));
+    }
+  });
+
+  useRealtimeStatus(loadCount);
+
   useEffect(() => {
     loadCount();
     const id = setInterval(loadCount, POLL_MS);
@@ -88,6 +153,14 @@ export function NotificationBell() {
       document.removeEventListener('keydown', onEsc);
     };
   }, [open]);
+
+  function toggle() {
+    setOpen((v) => !v);
+    // El permiso solo se puede pedir desde un clic.
+    if (canNotifyDesktop() && window.Notification.permission === 'default') {
+      void window.Notification.requestPermission().catch(() => undefined);
+    }
+  }
 
   async function openNotification(n: Notification) {
     setOpen(false);
@@ -115,7 +188,7 @@ export function NotificationBell() {
         aria-haspopup="true"
         aria-expanded={open}
         aria-label={count ? `Avisos (${count} sin leer)` : 'Avisos'}
-        onClick={() => setOpen((v) => !v)}
+        onClick={toggle}
       >
         <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden focusable="false">
           <path

@@ -1,81 +1,83 @@
 # RELEVO
 
 - **Último turno:** cursor
-- **Fecha:** 2026-09-26
+- **Fecha:** 2026-09-27
 - **Rama:** feature/mobile-chat-push
-- **Producción:** `6b6624b` desplegado en `/var/www/arta-app` el 2026-09-27 04:14 UTC
+- **Producción:** `6b6624b` (deploy de este turno en curso; ver «Deploy»)
 
 ## Hecho en este turno
 
-Pedido de Adam: «continúa mejorando los huecos que veas y cuando acabes deploya por SSH».
+Pedido de Adam: «continúa, falta paridad total: documentos, fotos, todo con compatibilidad
+nativa total y notificaciones push de todo».
 
-### Verificación antes del deploy
-- La API compilada arranca de verdad (`node dist/main.js` contra el Postgres local).
-  No hay errores de DI y `RealtimeGateway` y `/devices/push` quedan montados.
-- Smoke en vivo `.ai/scratch/live-smoke.mjs` (login con cookie + CSRF, socket con cookie):
-  - Mensaje recibido en vivo por `chat:message`, conteo de no leídos y borrado.
-  - Aviso por mención + `read-all`, que emite `notification:read` con `unread: 0`.
-  - Uso: variables `SMOKE_A_EMAIL/PASS`, `SMOKE_B_EMAIL/PASS` y `SMOKE_NODE_MODULES`
-    (una carpeta con `socket.io-client`).
-- Traefik no necesita cambios. `/api/socket.io` entra por el router `arta-api`, se le quita `/api`
-  y el upgrade a WebSocket pasa (verificado en producción: `wss` llega al gateway y este
-  responde `unauthorized` sin sesión).
-- La migración `20260926210000_chat_channels_push` se probó sobre una copia de la base de
-  producción (base temporal `arta_migtest`, ya borrada), en una transacción: aplica limpia.
-  En producción el chat no tenía mensajes, así que el backfill no movió nada.
+### API (`f6945ad`, `45164cd`)
+- Adjuntos de chat: fotos (HEIC incluido), video, notas de voz, Office, Pages/Numbers/Keynote,
+  zip, csv y txt, hasta 100 MB. El tipo lo decide la tabla de `chat-attachments.ts` más la
+  firma del contenido. Nada ejecutable entra.
+- Los archivos van a `/uploads/chat/`, fuera del candado de originales de dirección (docx/xlsx),
+  y los nombres llegan en UTF-8 («Cotización.pdf»).
+- Push de procesos que faltaban: evento cerrado, reabierto, cancelado o reprogramado;
+  anticipos de finanzas; comprobantes de OC.
+- `chat:channel-activity` ahora trae `senderName`, `channelName` y `notify`. `notify` es true
+  solo para quien no silenció, no es el autor ni fue mencionado, y no es respuesta en hilo.
+  El navegador lo usa para el aviso de escritorio.
 
-### `6b6624b` Globo unificado y aviso leído sincronizado
-- `PushDispatchService.appBadge()` = avisos sin leer + chat sin leer (sin archivados ni silenciados).
-  - Si el llamador no fija `badge`, `sendToUser` lo calcula; con `null` no toca el globo.
-  - Chat y avisos ya no mandan su propio conteo. Se quitó el hueco de «badge inconsistente».
-- `NotificationsService.syncRead()`: al marcar un aviso o todos como leídos (`PATCH
-  /notifications/:id/read`, `POST /notifications/read-all`) se hacen dos cosas:
-  - Se emite el socket `notification:read`.
-  - Se manda un push silencioso `notification.read`.
-- Android (`ArtaPushRenderer`):
-  - `notification.read` quita ese aviso de la bandeja, o todos los de procesos si no trae id.
-  - Cada conversación usa su propio conteo en `setNumber`, ya no el total. Así los launchers que suman no cuentan de más.
-- iOS (`PushManager.handleSilent`): mismo manejo de `notification.read`.
-- Nuevo `devices/push-dispatch.service.spec.ts`. Jest API **281/281** y Android
-  `testDebugUnitTest` + `assembleDebug` en verde.
+### Android (`cd15a24`) e iOS (`17654c1`)
+- Cámara (foto y video), galería múltiple, documentos y notas de voz AAC `.m4a`.
+- Vista previa y reproducción nativa (Media3 / AVPlayer), compartir y guardar, y barra de avance de subida.
+- Android: `testDebugUnitTest`, `assembleDebug` y `assembleRelease` en verde.
+- iOS: **sin compilar** (no hay Mac aquí).
 
-### Deploy
-- `main` avanzado por fast-forward a `6b6624b`, subido por bundle y desplegado con `update.sh --no-pull`.
-- Respaldo de la base: `/root/arta-backups/20260927-0412.sql.gz`. Imágenes anteriores en `arta-web:prev` y `arta-api:prev`.
-- Estado tras el deploy:
-  - Migración aplicada y los 3 contenedores healthy, con 0 reinicios.
-  - `/api/ready` responde 200. arta y auditorio devuelven 307, y el sitio público redirige a `/p/arta`.
-- Rollback si hiciera falta: `bash deploy/rollback.sh` (añadir `--dump 20260927-0412.sql.gz` para restaurar también la base).
+### Web: chat en canales + socket (este commit)
+- `apps/web/app/(app)/chat/page.tsx` reescrito sobre `chat/channels/*`, el mismo API que las apps. Tiene:
+  - Canales, eventos y directos; hilos en panel lateral; reacciones; fijados.
+  - Editar (1 h) y borrar; «escribiendo…»; «Visto / Visto por N»; silenciar.
+  - Búsqueda de mensajes; nuevo directo y nuevo canal; paginación hacia atrás.
+  - Enlaces `?channel=&msg=` (avisos), `?with=dm:<id>` y `?event=<id>`.
+- Adjuntos (`components/chat/`):
+  - Se mandan por botón, arrastrar o pegar; varios a la vez, con cola y barra de avance (XHR).
+  - Fotos grandes o HEIC se pasan a JPEG de 2560 px.
+  - Nota de voz: AAC `.m4a` si el navegador lo graba, si no WAV 16 kHz. Así se oye nativa en iPhone y Android (WebM/Opus no suena en iOS).
+  - Se ven en línea imagen, video, audio y documento. Lo que el navegador no puede mostrar queda como descarga.
+- `lib/realtime.ts`: un socket por pestaña a `/api/socket.io` con cookie. Repite `chat:join` al reconectar y avisa presencia.
+- Campana en vivo (`notification:new` / `notification:read`) y aviso de escritorio con la pestaña oculta. Incluye mensajes de chat con `notify`. El permiso se pide al abrir la campana.
+- Globo del menú en vivo por `chat:unread`.
+- `next.config.js`: reescritura `/api/socket.io` → `socket.io/` solo para desarrollo. En producción Traefik va directo al API.
+- Dependencia nueva: `socket.io-client` en `apps/web`.
+
+### Verificación
+- Jest API 298/298. `tsc` web y API limpios. `next build` en verde.
+- Prueba en navegador contra el API local, con JP simulado desde `.ai/scratch/web-peer.mjs`. Funcionó en vivo:
+  - «escribiendo…», texto, nota de voz WAV, PDF con acento, 👍, hilo y «Visto por 1».
+  - Arrastrar PNG y CSV se envía; `.exe` se rechaza.
+  - Visor de fotos, responder en hilo, vista de teléfono y directo nuevo en la lista.
+- Scripts (leen las contraseñas de variables de entorno, nunca del repo):
+  - `live-smoke.mjs`, `web-peer.mjs`, `web-dm.mjs`, `web-activity.mjs`.
+  - `web-session.mjs`: login local y cookies para el navegador.
+
+## Deploy
+
+Pendiente de anotar el resultado (se actualiza al cerrar el turno).
 
 ## A medias
 
 1. **Push apagado en producción**: `FIREBASE_SERVICE_ACCOUNT_JSON` no está en
-   `deploy/.env.arta` del servidor ni en el contenedor. Sin eso el chat avisa solo por socket.
-   Adam lo añade (no lo edita el agente) y después reinicia el API:
+   `deploy/.env.arta` del servidor. Adam lo añade (no el agente) y reinicia el API:
    `docker compose --env-file deploy/.env.arta -f deploy/docker-compose.arta.yml up -d api`.
-2. **iOS nunca se ha compilado**: no hay Mac. Hay que lanzar `ios-build.yml` y corregir lo que salga.
-3. **La web de chat sigue usando los endpoints de compatibilidad**. Funciona, pero hilos,
-   reacciones y fijados solo se ven en móvil y la web no escucha el socket.
-   - Referencia a copiar: `NEXARA-app/apps/web/components/WorkspaceChat.tsx` (~2950 líneas).
-   - Hace falta `socket.io-client` en `apps/web`.
-   - Se dejó fuera de este deploy a propósito por tamaño y riesgo.
-4. Android sin probar en dispositivo; iOS y Android sin Firebase configurado.
+2. **iOS nunca se ha compilado**: lanzar `ios-build.yml` (workflow_dispatch o PR) y corregir.
+3. Web: los avisos de escritorio funcionan con la pestaña abierta. Para que lleguen con el navegador cerrado faltaría Web Push (VAPID y service worker); no está hecho.
+4. Android y iOS sin probar en dispositivo real.
 
 ## Siguiente paso
 
-1. Adam: proyecto Firebase de ARTA, apps `com.artaproducciones.ops` (Android e iOS), clave
-   APNs `.p8` y la cuenta de servicio en `.env.arta` del servidor. Pasos en `apps/mobile-native/README.md`.
-2. Push de la rama a GitHub y lanzar «iOS · compilar». Corregir hasta verde.
-3. Migrar la web de chat a `chat/channels/*` + socket (canales, hilos, reacciones, fijados, escribiendo).
-   También la campana web con `notification:new` y `notification:read`.
-4. Probar en teléfonos reales:
-   - Chat en vivo, responder desde la notificación, leer en uno y que se quite en el otro.
-   - Avisos de OC y de formatos.
-5. TestFlight para iOS copiando `NEXARA-app/.github/workflows/ios-testflight.yml`.
-6. Pendientes de antes:
-   - Deploy key de ARTA en GitHub.
-   - Quitar `[SEED_DEMO]` de producción con visto bueno.
-   - Revisión visual de formatos.
+1. Adam: Firebase de ARTA (Android e iOS, clave APNs `.p8`) y la cuenta de servicio en `.env.arta`. Pasos en `apps/mobile-native/README.md`.
+2. Push de la rama a GitHub y correr «iOS · compilar» hasta verde.
+3. Probar en teléfonos:
+   - Adjuntos de cada tipo en ambos sentidos (web ↔ Android ↔ iPhone).
+   - Responder desde la notificación.
+   - Leer en un dispositivo y que el aviso se quite en el otro.
+4. Opcional: Web Push con service worker para avisos con el navegador cerrado.
+5. Pendientes de antes: deploy key de ARTA en GitHub, quitar `[SEED_DEMO]` con visto bueno, revisión visual de formatos.
 
 ## No tocar
 
