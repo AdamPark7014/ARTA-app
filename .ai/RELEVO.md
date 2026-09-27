@@ -1,6 +1,6 @@
 # RELEVO
 
-- **Último turno:** cursor
+- **Último turno:** claude-code
 - **Fecha:** 2026-09-27
 - **Rama:** main
   (Adam es el único programador).
@@ -12,7 +12,21 @@
 - Commit en `main`, `git push origin main` y deploy desde `main`.
 - El servidor (`/var/www/arta-app`) está en `main`, sin otras ramas.
 
-## Hecho en este turno
+## Turno claude-code (2026-09-27, 12:30): retomar tras Cursor
+
+- Mi trabajo del 24-09 (campos de texto que crecen, Catering y Mantenimiento con campos y
+  tablas en el catálogo v2, Corrida y Campaña abriendo en el editor de hoja, filtro de
+  formatos retirados corregido) lo rescató Cursor en `e7d27f6` y está en `main`; Cursor
+  siguió encima (PR #2, #3, #5) y lo desplegó. Verificado en producción: Catering y
+  Mantenimiento ya en v2 (plantillas e instancias), `upgrade-format-templates.ts --dry`
+  → «9 ya al día · 0 migrados · 11 sellados intactos». Nada que correr.
+- Quitado `apps/web/e2e/_shot.spec.ts` (spec temporal de capturas que entró en el rescate).
+- Regla «solo main» revisada: ya está en `~/.claude/CLAUDE.md` (regla 5), `C:\dev\CLAUDE.md`,
+  `GIT-SOLO-MAIN.md` y el hook; guardada también como memoria por defecto de Claude. Se
+  quitaron los restos de «un writer por worktree» en `.cursor/rules/fusion-boot.mdc`,
+  `packet.ps1` y `boot-fusion.ps1`, y la sección Worktrees del EXEC-PACKET dice «no aplica».
+
+## Turno cursor (2026-09-27)
 
 Pedido: «todo mergeado y fusionado, canónico en `main`; no quiero ramas sobreescribiéndose».
 

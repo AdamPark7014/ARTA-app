@@ -94,7 +94,8 @@ npx -w apps/web tsc --noEmit -p apps/web/tsconfig.json
 - **MCP / Firecrawl / n8n / Temporal**:
 
 ## Worktrees
-(Si hay paralelismo: `pwsh -File C:\Users\adpoz\Projects\ai-oss-2026\scripts\worktree-new.ps1 -RepoPath . -Name <slice>`)
+No aplica: todo va directo en `main`, sin ramas ni worktrees (Adam es el único programador;
+regla en `C:\dev\scripts\ai-os\GIT-SOLO-MAIN.md`). Varios agentes = mismo checkout y archivos distintos.
 -
 
 ## No hacer / riesgos
