@@ -114,6 +114,10 @@ dependencies {
     implementation("androidx.compose.material3:material3:1.3.2")
     implementation("androidx.compose.material:material-icons-extended")
     implementation("io.coil-kt:coil-compose:2.7.0")
+    // Video y notas de voz del chat: mp4/mov/webm/m4a/ogg con la misma sesión (OkHttp) y rangos.
+    implementation("androidx.media3:media3-exoplayer:1.6.1")
+    implementation("androidx.media3:media3-ui:1.6.1")
+    implementation("androidx.media3:media3-datasource-okhttp:1.6.1")
 
     implementation("androidx.navigation:navigation-compose:2.9.0")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.9.0")

@@ -1,13 +1,18 @@
 package com.artaproducciones.ops.ui.chat
 
+import android.Manifest
 import android.app.Application
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
-import android.content.Intent
+import android.content.pm.PackageManager
+import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.core.content.ContextCompat
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -176,12 +181,68 @@ fun ConversationScreen(
         }
     }
 
-    val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) {
-            vm.sendFile(uri, resolveMentions(draft.text, mentions))
-            draft = TextFieldValue("")
-            mentions.clear()
+    var attachOpen by remember { mutableStateOf(false) }
+    val recorder = remember { VoiceRecorder(context) }
+    var recording by remember { mutableStateOf(false) }
+    // Sobrevive a que Android mate la app mientras la cámara está abierta.
+    var captureUri by rememberSaveable { mutableStateOf<String?>(null) }
+    DisposableEffect(Unit) {
+        onDispose {
+            recorder.cancel()
+            ChatAudio.stop()
         }
+    }
+
+    fun sendUris(uris: List<Uri>) {
+        if (uris.isEmpty()) return
+        vm.sendFiles(uris, resolveMentions(draft.text, mentions))
+        draft = TextFieldValue("")
+        mentions.clear()
+    }
+
+    val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
+        captureUri?.let { if (ok) sendUris(listOf(Uri.parse(it))) }
+        captureUri = null
+    }
+    val videoLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CaptureVideo()) { ok ->
+        captureUri?.let { if (ok) sendUris(listOf(Uri.parse(it))) }
+        captureUri = null
+    }
+    val galleryLauncher = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(10)) { sendUris(it) }
+    val documentLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { sendUris(it) }
+
+    fun startRecording() {
+        try {
+            ChatAudio.stop()
+            recorder.start()
+            recording = true
+        } catch (e: Exception) {
+            Toast.makeText(context, "No se pudo usar el micrófono", Toast.LENGTH_LONG).show()
+        }
+    }
+    val micPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) startRecording()
+        else Toast.makeText(context, "Activa el micrófono en Ajustes para mandar notas de voz", Toast.LENGTH_LONG).show()
+    }
+
+    fun onAttachSource(source: AttachSource) {
+        attachOpen = false
+        try {
+            when (source) {
+                AttachSource.Camera -> ChatMedia.captureUri(context, "jpg").also { captureUri = it.toString(); cameraLauncher.launch(it) }
+                AttachSource.Video -> ChatMedia.captureUri(context, "mp4").also { captureUri = it.toString(); videoLauncher.launch(it) }
+                AttachSource.Gallery -> galleryLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo))
+                AttachSource.Document -> documentLauncher.launch(arrayOf("*/*"))
+            }
+        } catch (_: android.content.ActivityNotFoundException) {
+            captureUri = null
+            Toast.makeText(context, "No hay una app para esto en el teléfono", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    fun onMic() {
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) startRecording()
+        else micPermission.launch(Manifest.permission.RECORD_AUDIO)
     }
 
     // Lista invertida: índice 0 = mensaje más nuevo, así el teclado y lo nuevo quedan abajo.
@@ -289,7 +350,11 @@ fun ConversationScreen(
                                 onReact = { emoji -> vm.react(row.message, emoji) },
                                 onOpenThread = { openThread(row.message.id) },
                                 onOpenAttachment = { a ->
-                                    if (a.isImage) viewer = a else scope.launch { openFile(context, a) }
+                                    if (a.isImage || a.isVideo) viewer = a
+                                    else scope.launch {
+                                        runCatching { openAttachment(context, a) }
+                                            .onFailure { Toast.makeText(context, it.userMessage(), Toast.LENGTH_LONG).show() }
+                                    }
                                 },
                                 onRetry = { vm.retry(row.message) },
                                 onDiscard = { vm.discard(row.message) },
@@ -334,25 +399,43 @@ fun ConversationScreen(
                         IconButton(onClick = { editing = null; draft = TextFieldValue("") }) { Icon(Icons.Outlined.Close, "Cancelar") }
                     }
                 }
-                Composer(
-                    value = draft,
-                    uploading = state.uploading,
-                    placeholder = if (parentId != null) "Responder en el hilo" else "Mensaje",
-                    onChange = {
-                        draft = it
-                        if (it.text.isNotBlank()) vm.onTyping()
-                    },
-                    onAttach = { picker.launch(arrayOf("image/*", "application/pdf")) },
-                    onSend = {
-                        val body = resolveMentions(draft.text, mentions)
-                        val e = editing
-                        if (e != null) vm.edit(e, body) else vm.send(body)
-                        editing = null
-                        draft = TextFieldValue("")
-                        mentions.clear()
-                    },
-                    canAttach = editing == null,
-                )
+                state.upload?.let { UploadBar(it) }
+                if (recording) {
+                    RecordingBar(
+                        recorder = recorder,
+                        onCancel = {
+                            recorder.cancel()
+                            recording = false
+                        },
+                        onSend = {
+                            val file = recorder.stop()
+                            recording = false
+                            if (file != null) vm.sendVoice(file)
+                            else Toast.makeText(context, "Mantén la grabación al menos un segundo", Toast.LENGTH_SHORT).show()
+                        },
+                    )
+                } else {
+                    Composer(
+                        value = draft,
+                        uploading = state.uploading,
+                        placeholder = if (parentId != null) "Responder en el hilo" else "Mensaje",
+                        onChange = {
+                            draft = it
+                            if (it.text.isNotBlank()) vm.onTyping()
+                        },
+                        onAttach = { attachOpen = true },
+                        onMic = { onMic() },
+                        onSend = {
+                            val body = resolveMentions(draft.text, mentions)
+                            val e = editing
+                            if (e != null) vm.edit(e, body) else vm.send(body)
+                            editing = null
+                            draft = TextFieldValue("")
+                            mentions.clear()
+                        },
+                        canAttach = editing == null,
+                    )
+                }
             }
         }
     }
@@ -378,8 +461,17 @@ fun ConversationScreen(
                 draft = TextFieldValue(plainTextKeepingMentions(m.body, mentions))
             },
             onDelete = { confirmDelete = m },
+            onShare = {
+                val a = m.attachment ?: return@MessageActions
+                scope.launch {
+                    runCatching { shareAttachment(context, a) }
+                        .onFailure { Toast.makeText(context, it.userMessage(), Toast.LENGTH_LONG).show() }
+                }
+            },
         )
     }
+
+    if (attachOpen) AttachSheet(onPick = ::onAttachSource, onDismiss = { attachOpen = false })
 
     confirmDelete?.let { m ->
         AlertDialog(
@@ -393,21 +485,7 @@ fun ConversationScreen(
 
     if (pinsOpen) PinsSheet(vm = vm, onDismiss = { pinsOpen = false })
 
-    viewer?.let { a ->
-        Dialog(onDismissRequest = { viewer = null }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-            Box(Modifier.fillMaxSize().background(Color.Black).clickable { viewer = null }) {
-                AsyncImage(
-                    model = ApiClient.resolveUrl(a.url),
-                    contentDescription = a.name,
-                    contentScale = ContentScale.Fit,
-                    modifier = Modifier.fillMaxSize(),
-                )
-                IconButton(onClick = { viewer = null }, modifier = Modifier.align(Alignment.TopEnd).padding(16.dp)) {
-                    Icon(Icons.Outlined.Close, "Cerrar", tint = Color.White)
-                }
-            }
-        }
-    }
+    viewer?.let { a -> MediaViewer(a, onDismiss = { viewer = null }) }
 }
 
 // ─── Filas de la lista ───────────────────────────────────────────────────────
@@ -526,7 +604,7 @@ private fun MessageBubble(
                             Text(" Fijado", color = ArtaColors.Gold, style = MaterialTheme.typography.labelSmall)
                         }
                     }
-                    m.attachment?.let { a -> AttachmentView(a) { onOpenAttachment(a) } }
+                    m.attachment?.let { a -> AttachmentView(a, mine) { onOpenAttachment(a) } }
                     if (m.body.isNotBlank()) Text(mentionText(m.body), style = MaterialTheme.typography.bodyLarge)
                     Row(
                         Modifier.align(Alignment.End),
@@ -585,39 +663,6 @@ private fun MessageBubble(
 }
 
 @Composable
-private fun AttachmentView(a: ChatAttachment, onClick: () -> Unit) {
-    if (a.isImage) {
-        AsyncImage(
-            model = ApiClient.resolveUrl(a.url),
-            contentDescription = a.name,
-            contentScale = ContentScale.Crop,
-            modifier = Modifier
-                .padding(vertical = 4.dp)
-                .widthIn(max = 260.dp)
-                .heightIn(min = 120.dp, max = 260.dp)
-                .background(ArtaColors.Surface2, RoundedCornerShape(10.dp))
-                .clickable(onClick = onClick),
-        )
-    } else {
-        Row(
-            Modifier
-                .padding(vertical = 4.dp)
-                .background(ArtaColors.Surface2, RoundedCornerShape(10.dp))
-                .clickable(onClick = onClick)
-                .padding(10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(Icons.Outlined.Description, null, tint = ArtaColors.Gold)
-            Spacer(Modifier.width(8.dp))
-            Column {
-                Text(a.name ?: "Archivo", maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.Medium)
-                Text(fileSize(a.size), color = ArtaColors.Muted, style = MaterialTheme.typography.labelSmall)
-            }
-        }
-    }
-}
-
-@Composable
 private fun Composer(
     value: TextFieldValue,
     uploading: Boolean,
@@ -625,6 +670,7 @@ private fun Composer(
     canAttach: Boolean,
     onChange: (TextFieldValue) -> Unit,
     onAttach: () -> Unit,
+    onMic: () -> Unit,
     onSend: () -> Unit,
 ) {
     Row(
@@ -632,9 +678,9 @@ private fun Composer(
         verticalAlignment = Alignment.Bottom,
     ) {
         if (canAttach) {
-            IconButton(onClick = onAttach, enabled = !uploading) {
-                if (uploading) CircularProgressIndicator(Modifier.size(20.dp), color = ArtaColors.Gold, strokeWidth = 2.dp)
-                else Icon(Icons.Outlined.AttachFile, "Adjuntar foto o PDF", tint = ArtaColors.Muted)
+            // Se puede seguir adjuntando mientras sube lo anterior: entra a la cola.
+            IconButton(onClick = onAttach) {
+                Icon(Icons.Outlined.AttachFile, "Adjuntar foto, video o documento", tint = if (uploading) ArtaColors.Gold else ArtaColors.Muted)
             }
         }
         TextField(
@@ -652,6 +698,10 @@ private fun Composer(
             modifier = Modifier.weight(1f),
         )
         Spacer(Modifier.width(6.dp))
+        if (canAttach && value.text.isBlank()) {
+            MicButton(onClick = onMic)
+            return@Row
+        }
         IconButton(
             onClick = onSend,
             enabled = value.text.isNotBlank(),
@@ -738,6 +788,7 @@ private fun MessageActions(
     onPin: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
+    onShare: () -> Unit,
 ) {
     val editable = mine && m.attachment == null &&
         (parseInstant(m.createdAt)?.let { Instant.now().toEpochMilli() - it.toEpochMilli() < ConversationViewModel.EDIT_WINDOW_MS } == true)
@@ -757,6 +808,7 @@ private fun MessageActions(
         HorizontalDivider(color = ArtaColors.Line)
         if (!inThread) SheetItem("Responder en hilo") { onThread(); onDismiss() }
         if (m.body.isNotBlank()) SheetItem("Copiar texto") { onCopy(); onDismiss() }
+        if (m.attachment != null) SheetItem("Compartir o guardar archivo") { onShare(); onDismiss() }
         SheetItem(if (m.pinnedAt != null) "Desfijar" else "Fijar en la conversación") { onPin(); onDismiss() }
         if (editable) SheetItem("Editar") { onEdit(); onDismiss() }
         if (mine || canManage) SheetItem("Eliminar", danger = true) { onDelete(); onDismiss() }
@@ -795,28 +847,5 @@ private fun PinsSheet(vm: ConversationViewModel, onDismiss: () -> Unit) {
             }
         }
         Spacer(Modifier.navigationBarsPadding().padding(bottom = 12.dp))
-    }
-}
-
-/** PDF: se baja con la cookie de sesión y se abre con el visor del teléfono. */
-private suspend fun openFile(context: Context, a: ChatAttachment) {
-    try {
-        val file = withContext(Dispatchers.IO) {
-            val dir = File(context.cacheDir, "chat-files").apply { mkdirs() }
-            val safeName = (a.name ?: a.url.substringAfterLast('/')).replace(Regex("[^\\w.\\- ]"), "_")
-            val target = File(dir, safeName)
-            ApiClient.http.newCall(Request.Builder().url(ApiClient.resolveUrl(a.url)).build()).execute().use { res ->
-                if (!res.isSuccessful) error("No se pudo descargar (${res.code})")
-                target.outputStream().use { out -> res.body?.byteStream()?.copyTo(out) }
-            }
-            target
-        }
-        val uri = FileProvider.getUriForFile(context, context.packageName + ".files", file)
-        val intent = Intent(Intent.ACTION_VIEW)
-            .setDataAndType(uri, a.mime ?: "application/pdf")
-            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
-        context.startActivity(Intent.createChooser(intent, a.name ?: "Abrir").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-    } catch (e: Exception) {
-        Toast.makeText(context, e.userMessage(), Toast.LENGTH_LONG).show()
     }
 }

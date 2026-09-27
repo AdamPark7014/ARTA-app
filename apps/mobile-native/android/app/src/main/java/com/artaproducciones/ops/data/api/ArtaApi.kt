@@ -86,7 +86,19 @@ data class ChannelDetail(
 )
 
 data class ChatAttachment(val url: String, val name: String? = null, val mime: String? = null, val size: Long? = null) {
-    val isImage: Boolean get() = mime?.startsWith("image/") == true
+    private val ext: String get() = (name ?: url).substringAfterLast('.', "").lowercase()
+    val isImage: Boolean get() = mime?.startsWith("image/") ?: (ext in IMAGE_EXT)
+    val isVideo: Boolean get() = mime?.startsWith("video/") ?: (ext in VIDEO_EXT)
+    val isAudio: Boolean get() = mime?.startsWith("audio/") ?: (ext in AUDIO_EXT)
+    /** Grabada en la app (Android, iPhone o web): se pinta como burbuja de voz, no como archivo. */
+    val isVoiceNote: Boolean get() = isAudio && VOICE_NAME.containsMatchIn(name.orEmpty())
+
+    private companion object {
+        val IMAGE_EXT = setOf("jpg", "jpeg", "png", "gif", "webp", "heic", "heif")
+        val VIDEO_EXT = setOf("mp4", "m4v", "mov", "3gp", "webm")
+        val AUDIO_EXT = setOf("m4a", "aac", "mp3", "ogg", "opus", "wav")
+        val VOICE_NAME = Regex("^nota[-_ ]de[-_ ]voz", RegexOption.IGNORE_CASE)
+    }
 }
 
 data class ReactionUser(val id: String, val fullName: String)
@@ -131,7 +143,7 @@ data class ReactionBody(val emoji: String)
 data class MuteBody(val muted: Boolean, val hours: Int? = null)
 data class DirectBody(val userId: String)
 data class Colleague(val id: String, val fullName: String, val title: String? = null, val email: String? = null)
-data class UploadResult(val url: String, val name: String? = null, val mime: String? = null, val size: Long? = null)
+data class UploadResult(val url: String, val name: String? = null, val mime: String? = null, val size: Long? = null, val kind: String? = null)
 data class UnreadTotal(val total: Int = 0)
 
 // ─── Avisos y dispositivos ──────────────────────────────────────────────────

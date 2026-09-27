@@ -27,11 +27,13 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
-import okhttp3.RequestBody.Companion.toRequestBody
+import java.io.File
 import java.time.Instant
 import java.util.UUID
+
+/** [fraction] null mientras se prepara (p. ej. comprimiendo la foto) o si no se sabe el tamaño. */
+data class UploadProgress(val label: String, val index: Int, val total: Int, val fraction: Float?)
 
 data class ConversationState(
     val channel: ChannelDetail? = null,
@@ -42,9 +44,11 @@ data class ConversationState(
     val hasMore: Boolean = false,
     val typing: List<String> = emptyList(),
     val error: String? = null,
-    val uploading: Boolean = false,
+    val upload: UploadProgress? = null,
     val focusMessageId: String? = null,
-)
+) {
+    val uploading: Boolean get() = upload != null
+}
 
 class ConversationViewModel(
     app: Application,
@@ -286,41 +290,70 @@ class ConversationViewModel(
         _state.update { s -> s.copy(messages = s.messages.filterNot { it.clientId == m.clientId && it.failed }) }
     }
 
-    /** Sube una foto o PDF y la manda como mensaje (con el texto escrito, si hay). */
-    fun sendFile(uri: Uri, caption: String) {
-        _state.update { it.copy(uploading = true) }
-        viewModelScope.launch {
+    private var uploadJob: Job? = null
+    /** (cómo preparar el archivo, pie de foto). */
+    private val uploadQueue = ArrayDeque<Pair<suspend () -> PreparedUpload, String>>()
+    private var queuedTotal = 0
+    private var queuedDone = 0
+
+    /**
+     * Fotos, videos o documentos (uno o varios): un mensaje por archivo, como WhatsApp.
+     * El texto escrito va como pie del primero. Se suben en orden y en streaming.
+     */
+    fun sendFiles(uris: List<Uri>, caption: String) {
+        if (uris.isEmpty()) return
+        val app = getApplication<Application>()
+        enqueue(uris.map { uri -> suspend { ChatMedia.prepare(app, uri) } }, caption)
+    }
+
+    /** Nota de voz grabada en la app. */
+    fun sendVoice(file: File) = enqueue(listOf(suspend { ChatMedia.prepareFile(file) }), "")
+
+    private fun enqueue(items: List<suspend () -> PreparedUpload>, caption: String) {
+        items.forEachIndexed { i, prepare -> uploadQueue.addLast(prepare to if (i == 0) caption else "") }
+        queuedTotal += items.size
+        if (uploadJob?.isActive == true) return
+        uploadJob = viewModelScope.launch { drainUploads() }
+    }
+
+    private suspend fun drainUploads() {
+        while (uploadQueue.isNotEmpty()) {
+            val (next, caption) = uploadQueue.removeFirst()
+            val index = queuedDone + 1
+            _state.update { it.copy(upload = UploadProgress("archivo", index, queuedTotal, null)) }
+            var prepared: PreparedUpload? = null
             try {
-                val uploaded = withContext(Dispatchers.IO) { upload(uri) }
+                val p = next().also { prepared = it }
+                val label = when (p.kind) {
+                    "image" -> "foto"
+                    "video" -> "video"
+                    "audio" -> if (p.name.startsWith("nota-de-voz")) "nota de voz" else "audio"
+                    else -> p.name
+                }
+                var lastPct = -1
+                val body = p.body { sent, total ->
+                    if (total <= 0) return@body
+                    val pct = (sent * 100 / total).toInt()
+                    if (pct != lastPct) {
+                        lastPct = pct
+                        _state.update { it.copy(upload = UploadProgress(label, index, queuedTotal, pct / 100f)) }
+                    }
+                }
+                _state.update { it.copy(upload = UploadProgress(label, index, queuedTotal, if (p.size > 0) 0f else null)) }
+                val uploaded = withContext(Dispatchers.IO) {
+                    ApiClient.api.upload(MultipartBody.Part.createFormData("file", p.name, body))
+                }
                 send(caption, uploaded)
             } catch (e: Exception) {
                 _state.update { it.copy(error = e.userMessage()) }
             } finally {
-                _state.update { it.copy(uploading = false) }
+                prepared?.dispose()
+                queuedDone++
             }
         }
-    }
-
-    private suspend fun upload(uri: Uri): UploadResult {
-        val resolver = getApplication<Application>().contentResolver
-        val mime = resolver.getType(uri) ?: "application/octet-stream"
-        var name = "archivo"
-        resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->
-            if (c.moveToFirst()) name = c.getString(0) ?: name
-        }
-        if (!name.contains('.')) {
-            name += when {
-                mime == "application/pdf" -> ".pdf"
-                mime == "image/png" -> ".png"
-                mime == "image/webp" -> ".webp"
-                mime.startsWith("image/") -> ".jpg"
-                else -> ""
-            }
-        }
-        val bytes = resolver.openInputStream(uri)?.use { it.readBytes() } ?: error("No se pudo leer el archivo")
-        require(bytes.size <= MAX_UPLOAD_BYTES) { "El archivo pesa más de 20 MB" }
-        val part = MultipartBody.Part.createFormData("file", name, bytes.toRequestBody(mime.toMediaTypeOrNull()))
-        return ApiClient.api.upload(part)
+        queuedTotal = 0
+        queuedDone = 0
+        _state.update { it.copy(upload = null) }
     }
 
     fun react(m: ChatMessage, emoji: String) = mutate { ApiClient.api.react(m.id, ReactionBody(emoji)) }
