@@ -4855,6 +4855,16 @@ body.site-nav-open {
   background: var(--bg-elev);
 }
 
+/* Vive dentro de `.sheet-chrome` (que ya queda fijo arriba al hacer scroll:
+   Adam, 27-09-2026, «no puedo agregar columnas y filas» — los botones antes
+   quedaban fuera de esa cabecera fija y se perdian de vista en una hoja
+   larga). Se ve como otra fila del mismo panel, no como una tarjeta aparte. */
+.sheet-chrome > .sheet-tools {
+  border: 0;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+}
+
 .sheet-tools__group {
   display: flex;
   flex-wrap: wrap;
@@ -5067,6 +5077,18 @@ body.site-nav-open {
 
 .sheet .sheet__cell[readonly] {
   color: #6b7785 !important;
+}
+
+/* Estilo real leído del libro (negritas, color, alineación) — GET /uploads/:id/layout.
+   Variables porque .sheet__cell fuerza color con !important arriba. */
+.sheet .sheet__cell--styled {
+  color: var(--cell-fg, #1a2330) !important;
+  font-weight: var(--cell-weight, 400);
+  font-style: var(--cell-style, normal);
+  text-align: var(--cell-align, left);
+}
+.sheet .sheet__cell--styled[readonly] {
+  color: var(--cell-fg, #6b7785) !important;
 }
 
 /* (wrap-only layer removed; keep 5328e87 rendering) */

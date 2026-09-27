@@ -4,7 +4,7 @@ import PDFDocument = require('pdfkit');
 import { createWriteStream, existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
 import { uploadRoot } from './upload-storage';
-import { PdfBrandingService, type BrandingMeta, FOOTER_RESERVE } from './pdf-branding.service';
+import { cleanDisplayTitle, PdfBrandingService, type BrandingMeta, FOOTER_RESERVE } from './pdf-branding.service';
 import { buildSheetModel, type CellBox, type SheetModel } from './sheet-layout';
 
 type SheetPdfInput = {
@@ -65,7 +65,7 @@ export class ExcelPdfService {
     // Nombre visible: <EVENTO>_<AAAAMMDD>_<FORMATO>_v<N>.pdf
     const safeName = (s: string) => s.normalize('NFKD').replace(/[^\w\s-]/g, '').replace(/\s+/g, '_').slice(0, 80);
     const dateLabel = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-    const baseTitle = input.fileName.replace(/\.(xlsx?|csv)$/i, '');
+    const baseTitle = cleanDisplayTitle(input.fileName.replace(/\.(xlsx?|csv)$/i, ''));
     const visibleBase = `${safeName(input.eventName)}_${dateLabel}_${safeName(baseTitle)}_v${version}`.toUpperCase();
     const storageName = `${sourceFileId}-v${version}.pdf`;
     const filePath = join(dir, storageName);

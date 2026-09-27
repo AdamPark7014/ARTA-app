@@ -12,6 +12,53 @@
 - Commit en `main`, `git push origin main` y deploy desde `main`.
 - El servidor (`/var/www/arta-app`) está en `main`, sin otras ramas.
 
+## Turno claude-code (2026-09-27, 17:20): notas de calendario del equipo + cuadrícula del Excel con el estilo real
+
+Adam pidió dos cosas seguidas:
+
+1. «igual ayudame a que el equipo pueda escribir sobre el calendario por favor»
+2. «ayudame a que cuadre y se vea asi el excel y ademas que no puedo agregar columnas y
+   filas y que el pdf se vea productivo no diga excel asi todo raro mejora el formato»
+
+**Notas de calendario** (nuevo, de cero):
+- Modelo `CalendarNote` (migración `20260927220000_calendar_notes`, solo tablas/índices
+  nuevos) + `CalendarController` (`GET/POST/PATCH/DELETE /calendar/notes`) con las mismas
+  reglas de acceso que el resto (`canAccessEventOps`, `assertSameTenant`); cualquiera con
+  acceso a la entidad puede escribir, editar o borrar la nota de un compañero (es del
+  equipo, no de quien la escribió). 8 tests en verde
+  (`src/calendar/calendar.controller.spec.ts`), incluyendo que `dir_auditorio` sigue sin
+  poder tocar notas de `ARTA` y que un organizador de otra organización no entra.
+- `MonthCalendar` gana `onDayClick`/`renderDay` (opcionales, no rompen su otro uso en
+  Campañas); `calendar/page.tsx` pinta las notas como chips en cada día con un mini-form
+  (Guardar/Cancelar/Eliminar, Ctrl+Enter para guardar).
+
+**Título sin «(Excel)» feo**: `cleanDisplayTitle()` en `pdf-branding.service.ts` (4 tests)
+quita el sufijo `(Excel|Word|PDF|xlsx…)` del nombre visible; se usa tanto en el título
+impreso del PDF como en el nombre de archivo de salida.
+
+**No se podían agregar filas/columnas**: la barra `.sheet-tools` (+Fila, +Columna, +10 al
+final) vivía FUERA de `.sheet-chrome`, que es `position: sticky`; en una hoja alta la barra
+se iba scroll abajo y quedaba inalcanzable. Se movió el JSX de `.sheet-tools` adentro de
+`.sheet-chrome` (después de `.sheet-fxbar`) + ajuste de borde en `globals.scss`.
+
+**«que cuadre y se vea así» (el editor debía verse como el PDF)**: SheetJS Community
+(cliente) no trae estilos, solo valores/merges/anchos aproximados. Nuevo endpoint
+`GET /uploads/:id/layout` (sin efectos, mismo chequeo de acceso que `exportPdf`) que corre
+el `buildSheetModel` de `sheet-layout.ts` — el mismo que arma el PDF — y regresa por hoja:
+anchos reales de columna (en puntos) y cada celda maestra con su `rowSpan`/`colSpan`,
+negrita, cursiva, alineación, color, relleno y bordes. `SheetEditor.tsx` lo consume
+(`serverLayouts`, useEffect no bloqueante — si falla, se ve como antes) y en el render:
+- las celdas cubiertas por un merge del servidor no se dibujan;
+- la celda maestra sale con `rowSpan`/`colSpan`, fondo, bordes y (`.sheet__cell--styled`
+  + variables CSS, porque `.sheet__cell` fuerza `color` con `!important`) negrita/cursiva/
+  color/alineación reales;
+- los anchos de columna (`effectiveColPx`) usan el ancho real del libro (pt → px) cuando el
+  servidor lo conoce, y el cálculo por contenido de siempre para el resto;
+- todo lo que el servidor no conoce (hoja sin evento, celda no vista) se ve exactamente
+  igual que antes — no hay regresión si `/layout` no responde.
+- `tsc --noEmit` limpio en `apps/api` y `apps/web`; jest de `calendar`/`pdf-branding` en
+  verde (12/12).
+
 ## Turno claude-code (2026-09-27, 15:30): «Salir en PDF» daba 500 y la cuadrícula llena de vacíos
 
 Adam, con el editor del Excel de pendones: «server error, y muestra solo las casillas escritas

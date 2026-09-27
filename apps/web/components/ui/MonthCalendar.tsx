@@ -28,7 +28,17 @@ function toDay(value?: string | null): string | null {
 }
 
 /** Mes con los días de cada concepto y del show. Sin librerías. */
-export function MonthCalendar({ items }: { items: CalendarItem[] }) {
+export function MonthCalendar({
+  items,
+  onDayClick,
+  renderDay,
+}: {
+  items: CalendarItem[];
+  /** El día completo (no un chip ni un enlace) se puede tocar — p. ej. para escribir una nota. */
+  onDayClick?: (dayKey: string) => void;
+  /** Contenido extra bajo los chips del show, por ejemplo notas del equipo. */
+  renderDay?: (dayKey: string) => import('react').ReactNode;
+}) {
   const [month, setMonth] = useState(() => {
     const d = new Date();
     return new Date(d.getFullYear(), d.getMonth(), 1);
@@ -110,7 +120,23 @@ export function MonthCalendar({ items }: { items: CalendarItem[] }) {
             .sort((a, b) => (a.tone === 'show' ? -1 : 0) - (b.tone === 'show' ? -1 : 0));
           const out = d.getMonth() !== month.getMonth();
           return (
-            <div key={key} className={`mcal__day ${out ? 'is-out' : ''} ${key === todayKey ? 'is-today' : ''}`}>
+            <div
+              key={key}
+              className={`mcal__day ${out ? 'is-out' : ''} ${key === todayKey ? 'is-today' : ''} ${onDayClick ? 'is-clickable' : ''}`}
+              onClick={onDayClick ? () => onDayClick(key) : undefined}
+              role={onDayClick ? 'button' : undefined}
+              tabIndex={onDayClick ? 0 : undefined}
+              onKeyDown={
+                onDayClick
+                  ? (e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        onDayClick(key);
+                      }
+                    }
+                  : undefined
+              }
+            >
               <span className="mcal__num">{d.getDate()}</span>
               {active.slice(0, MAX_CHIPS).map((it) => {
                 const cls = `mcal__chip ${it.tone === 'show' ? 'mcal__chip--show' : ''}`;
@@ -125,6 +151,7 @@ export function MonthCalendar({ items }: { items: CalendarItem[] }) {
                 );
               })}
               {active.length > MAX_CHIPS ? <span className="mcal__more">+{active.length - MAX_CHIPS} más</span> : null}
+              {renderDay ? renderDay(key) : null}
             </div>
           );
         })}

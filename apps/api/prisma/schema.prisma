@@ -120,6 +120,7 @@ model Organization {
   sharedFolders    SharedFolder[]
   tasks            TaskAssignment[]
   notifications    Notification[]
+  calendarNotes    CalendarNote[]
 }
 
 model OrgInvite {
@@ -182,44 +183,46 @@ model User {
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt
 
-  eventsCreated       Event[]                    @relation("EventCreator")
-  checklistEdits      ChecklistInstance[]        @relation("ChecklistLastEditor")
-  checklistDelivered  ChecklistInstance[]        @relation("ChecklistDelivered")
-  checklistAuthorized ChecklistInstance[]        @relation("ChecklistAuthorized")
-  checklistVersions   ChecklistVersion[]
-  templateVersions    ChecklistTemplateVersion[]
-  assignedTasks       TaskAssignment[]           @relation("TaskAssignee")
-  createdTasks        TaskAssignment[]           @relation("TaskCreator")
-  filesEdited         EventFile[]                @relation("FileEditor")
-  filesUploaded       EventFile[]                @relation("FileUploader")
-  filesDeleted        EventFile[]                @relation("FileDeleter")
-  documentsCreated    EventDocument[]            @relation("DocumentCreator")
-  documentsEdited     EventDocument[]            @relation("DocumentEditor")
-  notifications       Notification[]             @relation("NotificationRecipient")
-  notificationsSent   Notification[]             @relation("NotificationActor")
-  auditLogs           AuditLog[]
-  purchaseOrders      PurchaseOrder[]            @relation("PoCreator")
-  poAuthorizations    PurchaseOrder[]            @relation("PoAuthorizer")
-  paymentsUploaded    PaymentProof[]
-  taskEvidences       TaskEvidence[]
-  taskActivities      TaskActivity[]
-  checklistsCreated   ChecklistInstance[]        @relation("ChecklistCreator")
-  financeRunsCreated  FinanceRun[]               @relation("FinanceCreator")
-  financeRunsEdited   FinanceRun[]               @relation("FinanceEditor")
-  docRevisions        DocRevision[]              @relation("RevisionAuthor")
-  slotsReplaced       EventDocumentSlot[]
-  tasksApproved       TaskAssignment[]           @relation("TaskApprover")
-  tasksRejected       TaskAssignment[]           @relation("TaskRejecter")
-  sessions            UserSession[]
-  handoffs            AuthHandoff[]
-  memberships         OrgMembership[]
-  totpChallenges      TotpChallenge[]
-  chatSent            ChatMessage[]              @relation("ChatSent")
-  chatReceived        ChatMessage[]              @relation("ChatReceived")
-  chatReads           ChatReadMarker[]
-  chatMemberships     ChatChannelMember[]
-  chatReactions       ChatMessageReaction[]
-  pushEndpoints       UserPushEndpoint[]
+  eventsCreated        Event[]                    @relation("EventCreator")
+  checklistEdits       ChecklistInstance[]        @relation("ChecklistLastEditor")
+  checklistDelivered   ChecklistInstance[]        @relation("ChecklistDelivered")
+  checklistAuthorized  ChecklistInstance[]        @relation("ChecklistAuthorized")
+  checklistVersions    ChecklistVersion[]
+  templateVersions     ChecklistTemplateVersion[]
+  assignedTasks        TaskAssignment[]           @relation("TaskAssignee")
+  createdTasks         TaskAssignment[]           @relation("TaskCreator")
+  filesEdited          EventFile[]                @relation("FileEditor")
+  filesUploaded        EventFile[]                @relation("FileUploader")
+  filesDeleted         EventFile[]                @relation("FileDeleter")
+  documentsCreated     EventDocument[]            @relation("DocumentCreator")
+  documentsEdited      EventDocument[]            @relation("DocumentEditor")
+  notifications        Notification[]             @relation("NotificationRecipient")
+  notificationsSent    Notification[]             @relation("NotificationActor")
+  calendarNotesCreated CalendarNote[]             @relation("CalendarNoteCreator")
+  calendarNotesEdited  CalendarNote[]             @relation("CalendarNoteEditor")
+  auditLogs            AuditLog[]
+  purchaseOrders       PurchaseOrder[]            @relation("PoCreator")
+  poAuthorizations     PurchaseOrder[]            @relation("PoAuthorizer")
+  paymentsUploaded     PaymentProof[]
+  taskEvidences        TaskEvidence[]
+  taskActivities       TaskActivity[]
+  checklistsCreated    ChecklistInstance[]        @relation("ChecklistCreator")
+  financeRunsCreated   FinanceRun[]               @relation("FinanceCreator")
+  financeRunsEdited    FinanceRun[]               @relation("FinanceEditor")
+  docRevisions         DocRevision[]              @relation("RevisionAuthor")
+  slotsReplaced        EventDocumentSlot[]
+  tasksApproved        TaskAssignment[]           @relation("TaskApprover")
+  tasksRejected        TaskAssignment[]           @relation("TaskRejecter")
+  sessions             UserSession[]
+  handoffs             AuthHandoff[]
+  memberships          OrgMembership[]
+  totpChallenges       TotpChallenge[]
+  chatSent             ChatMessage[]              @relation("ChatSent")
+  chatReceived         ChatMessage[]              @relation("ChatReceived")
+  chatReads            ChatReadMarker[]
+  chatMemberships      ChatChannelMember[]
+  chatReactions        ChatMessageReaction[]
+  pushEndpoints        UserPushEndpoint[]
 
   @@index([organizationId])
 }
@@ -303,20 +306,20 @@ model Sponsor {
 
 // ─── Plantillas de checklist (jerárquicas) ───────────────────────────────────
 model ChecklistTemplate {
-  id          String               @id @default(cuid())
-  key         ChecklistTemplateKey
-  name        String
-  description String?
+  id               String               @id @default(cuid())
+  key              ChecklistTemplateKey
+  name             String
+  description      String?
   /// Aplica a qué entidad(es); vacío = ambas
-  entities    EntityKey[]
+  entities         EntityKey[]
   /// Árbol de secciones/ítems en JSON (labels, tipos, hijos)
-  schemaJson  Json
+  schemaJson       Json
   /// Si la plantilla es un formato Excel, aquí vive la URL del libro base (.xlsx) a copiar por evento.
   excelTemplateUrl String?
-  version     Int                  @default(1)
-  active      Boolean              @default(true)
-  createdAt   DateTime             @default(now())
-  updatedAt   DateTime             @updatedAt
+  version          Int                  @default(1)
+  active           Boolean              @default(true)
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
 
   instances ChecklistInstance[]
   versions  ChecklistTemplateVersion[]
@@ -660,11 +663,11 @@ model Notification {
 
 // ─── Archivos / Excel-PDF embebidos ──────────────────────────────────────────
 model EventFile {
-  id               String             @id @default(cuid())
+  id               String              @id @default(cuid())
   eventId          String?
-  event            Event?             @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  event            Event?              @relation(fields: [eventId], references: [id], onDelete: Cascade)
   checklistId      String?
-  checklist        ChecklistInstance? @relation(fields: [checklistId], references: [id], onDelete: SetNull)
+  checklist        ChecklistInstance?  @relation(fields: [checklistId], references: [id], onDelete: SetNull)
   fileName         String
   mimeType         String
   url              String
@@ -673,26 +676,26 @@ model EventFile {
   /// Sección del evento a la que pertenece: campaign | finance | general …
   module           String?
   /// Sube cada vez que alguien guarda el archivo editado desde el panel
-  version          Int                @default(1)
+  version          Int                 @default(1)
   /// Huella del contenido actual. Permite saber si un guardado cambió algo y
   /// direccionar las versiones anteriores sin depender del nombre en disco.
   sha256           String?
   createdById      String?
-  createdBy        User?              @relation("FileUploader", fields: [createdById], references: [id])
+  createdBy        User?               @relation("FileUploader", fields: [createdById], references: [id])
   updatedById      String?
-  updatedBy        User?              @relation("FileEditor", fields: [updatedById], references: [id])
+  updatedBy        User?               @relation("FileEditor", fields: [updatedById], references: [id])
   /// Borrado reversible: antes `DELETE` hacía `unlinkSync` y la fila
   /// desaparecía — irreversible, anónimo y sin auditoría.
   deletedAt        DateTime?
   deletedById      String?
-  deletedBy        User?              @relation("FileDeleter", fields: [deletedById], references: [id])
+  deletedBy        User?               @relation("FileDeleter", fields: [deletedById], references: [id])
   /// `false` cuando el libro trae gráficas, tablas dinámicas o macros: el
   /// round-trip las perdería, así que en el panel se ve pero no se edita.
-  panelEditable    Boolean            @default(true)
+  panelEditable    Boolean             @default(true)
   /// Por qué no es editable, para poder explicárselo a la persona.
   panelBlockReason String?
-  createdAt        DateTime           @default(now())
-  updatedAt        DateTime           @default(now()) @updatedAt
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @default(now()) @updatedAt
   slots            EventDocumentSlot[]
 
   @@index([eventId, module])
@@ -939,8 +942,8 @@ model EventDocumentSlot {
   createdAt           DateTime           @default(now())
   updatedAt           DateTime           @updatedAt
 
-  @@index([eventId, kind])
   @@unique([eventId, kind, checklistTemplateId])
+  @@index([eventId, kind])
 }
 
 /// One-time cross-host SSO (reemplaza JWT en query string)
@@ -1178,4 +1181,25 @@ model ChatReadMarker {
   lastReadAt DateTime @default(now())
 
   @@unique([userId, threadKey])
+}
+
+/// Nota libre del equipo sobre un día del calendario (recordatorio, aviso,
+/// pendiente) — no es un show ni una tarea con flujo, solo texto que
+/// cualquiera con acceso a la entidad puede dejar y editar entre todos.
+model CalendarNote {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  entity         EntityKey
+  /// Día en formato YYYY-MM-DD, sin hora: una nota vive en un día del mes.
+  date           String
+  text           String
+  createdById    String?
+  createdBy      User?        @relation("CalendarNoteCreator", fields: [createdById], references: [id])
+  updatedById    String?
+  updatedBy      User?        @relation("CalendarNoteEditor", fields: [updatedById], references: [id])
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([organizationId, entity, date])
 }

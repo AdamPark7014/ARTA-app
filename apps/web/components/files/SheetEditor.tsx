@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import * as XLSX from 'xlsx';
 import FastFormulaParser from 'fast-formula-parser';
 import { createEvaluator } from '@/lib/sheet-evaluator';
@@ -47,6 +47,29 @@ export type CellChange = {
 
 type Grid = string[][];
 type Sel = { r: number; c: number } | null;
+
+/**
+ * Cómo se ve REALMENTE la celda maestra de una fusión (combinada) o con
+ * estilo propio — viene de `GET /uploads/:id/layout`, calculado con ExcelJS
+ * en el servidor (la misma fuente que ya usa el PDF de salida). El navegador
+ * no sabe leer colores/negritas/bordes de un .xlsx por su cuenta; esto es lo
+ * que permite que la hoja editable se vea igual que al salir en PDF.
+ */
+type ServerBorderSide = { width: number; color: string };
+type ServerCell = {
+  row: number;
+  col: number;
+  rowSpan: number;
+  colSpan: number;
+  bold: boolean;
+  italic: boolean;
+  align: 'left' | 'center' | 'right';
+  valign: 'top' | 'middle' | 'bottom';
+  fill: string | null;
+  color: string;
+  border: { top?: ServerBorderSide; right?: ServerBorderSide; bottom?: ServerBorderSide; left?: ServerBorderSide };
+};
+type ServerLayout = { colWidths: number[]; cells: ServerCell[] };
 
 /** Ancho mínimo para calcular anchos de columna; la cuadrícula muestra solo lo escrito. */
 const MIN_COLS = 9;
@@ -198,6 +221,8 @@ export function SheetEditor({
   const richTools = campaign || finance;
   const [colPx, setColPx] = useState<number[]>([]);
   const mergesRef = useRef<Array<{ s: { r: number; c: number }; e: { r: number; c: number } }>>([]);
+  /** Estilo real por hoja (nombre → layout), leído del servidor una vez por libro/hoja. */
+  const [serverLayouts, setServerLayouts] = useState<Record<string, ServerLayout>>({});
 
   /**
    * Grid de presentación: muestra valores calculados y cacheados.
@@ -553,6 +578,55 @@ export function SheetEditor({
       cancelled = true;
     };
   }, [url, fileId, loadSheet]);
+
+  // Estilo real (merges, negritas, relleno, bordes, anchos) — sin esto la
+  // hoja no revienta, solo se ve como antes: liso, un dato por celda.
+  useEffect(() => {
+    if (!fileId) {
+      setServerLayouts({});
+      return;
+    }
+    let cancelled = false;
+    api<{ sheets: Record<string, ServerLayout> }>(`/uploads/${fileId}/layout`)
+      .then((res) => {
+        if (!cancelled) setServerLayouts(res?.sheets || {});
+      })
+      .catch(() => {
+        if (!cancelled) setServerLayouts({});
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [fileId, url]);
+
+  /** La hoja activa, ya indexada por «fila:columna» (1-based, como ExcelJS). */
+  const sheetLayout = serverLayouts[activeSheet];
+  const { serverCellsByKey, serverCovered } = useMemo(() => {
+    const byKey = new Map<string, ServerCell>();
+    const covered = new Set<string>();
+    for (const cell of sheetLayout?.cells || []) {
+      byKey.set(`${cell.row}:${cell.col}`, cell);
+      for (let dr = 0; dr < cell.rowSpan; dr += 1) {
+        for (let dc = 0; dc < cell.colSpan; dc += 1) {
+          if (dr === 0 && dc === 0) continue;
+          covered.add(`${cell.row + dr}:${cell.col + dc}`);
+        }
+      }
+    }
+    return { serverCellsByKey: byKey, serverCovered: covered };
+  }, [sheetLayout]);
+
+  /** Anchos reales del libro (puntos → px), con el cálculo de contenido como respaldo. */
+  const effectiveColPx = useMemo(() => {
+    const widths = sheetLayout?.colWidths;
+    if (!widths || !widths.length) return colPx;
+    const out = colPx.slice();
+    for (let i = 0; i < widths.length; i += 1) {
+      const px = Math.round(widths[i] / 0.75);
+      if (px > 0) out[i] = px;
+    }
+    return out;
+  }, [colPx, sheetLayout]);
 
   const cols = displayGrid[0]?.length || MIN_COLS;
 
@@ -1074,16 +1148,9 @@ export function SheetEditor({
               onChange={(e) => setFxValue(e.target.value)}
             />
           </div>
-        </div>
+        
 
-        {/* Nota compacta unificada — se muestra solo si no ha sido descartada (reduce altura) */}
-        {!showCoach && showStyled ? (
-          <p className="sheet-note muted kpi-sub" role="note">
-            Vista con formato: solo lectura.
-          </p>
-        ) : null}
-
-        {canEdit ? (
+          {canEdit ? (
           <div className="sheet-tools" role="toolbar" aria-label="Herramientas de hoja">
             <div className="sheet-tools__group">
               <span className="sheet-tools__label">Filas</span>
@@ -1196,6 +1263,14 @@ export function SheetEditor({
             ) : null}
           </div>
         ) : null}
+        </div>
+
+        {/* Nota compacta unificada — se muestra solo si no ha sido descartada (reduce altura) */}
+        {!showCoach && showStyled ? (
+          <p className="sheet-note muted kpi-sub" role="note">
+            Vista con formato: solo lectura.
+          </p>
+        ) : null}
 
         {pdfUrl ? (
           <div className="sheet-pdf-success" role="status">
@@ -1247,7 +1322,10 @@ export function SheetEditor({
                       key={c}
                       scope="col"
                       className={sel?.c === c ? 'sheet__col--sel' : undefined}
-                      style={{ width: (colPx[c] || 104) + 'px', minWidth: (colPx[c] || 104) + 'px' }}
+                      style={{
+                        width: (effectiveColPx[c] || 104) + 'px',
+                        minWidth: (effectiveColPx[c] || 104) + 'px',
+                      }}
                     >
                       {colLabel(c)}
                     </th>
@@ -1263,38 +1341,75 @@ export function SheetEditor({
                     {(() => {
                       const cells: JSX.Element[] = [];
                       for (let c = 0; c < row.length; c += 1) {
+                        // Celda cubierta por el rowSpan/colSpan de una maestra anterior: no se dibuja.
+                        if (serverCovered.has(`${r + 1}:${c + 1}`)) continue;
                         const isSel = sel?.r === r && sel?.c === c;
-                        const merge = mergesRef.current.find((m) => m.s.r === r && m.s.c === c);
+                        const serverCell = serverCellsByKey.get(`${r + 1}:${c + 1}`);
+                        const merge = serverCell
+                          ? undefined
+                          : mergesRef.current.find((m) => m.s.r === r && m.s.c === c);
                         let colSpan = 1;
-                        let widthPx = colPx[c] || 104;
-                        if (merge) {
+                        let widthPx = effectiveColPx[c] || 104;
+                        if (serverCell) {
+                          colSpan = serverCell.colSpan;
+                          for (let i = c + 1; i < c + serverCell.colSpan; i += 1) {
+                            widthPx += effectiveColPx[i] || 104;
+                          }
+                        } else if (merge) {
                           colSpan = merge.e.c - merge.s.c + 1;
-                          for (let i = merge.s.c + 1; i <= merge.e.c; i += 1) widthPx += colPx[i] || 104;
+                          for (let i = merge.s.c + 1; i <= merge.e.c; i += 1) {
+                            widthPx += effectiveColPx[i] || 104;
+                          }
                         }
+                        const rowSpan = serverCell && serverCell.rowSpan > 1 ? serverCell.rowSpan : undefined;
                         const display = isSel ? (grid[r]?.[c] ?? '') : row[c];
                         const { t } = toCellValue(String(display));
                         // Content-based wrap for long text (estimate by width)
                         const isText = t === 's' && typeof display === 'string' && !String(display).startsWith('=');
                         const approxTextPx = isText ? Math.min(2000, String(display).length * 7) : 0;
-                        const shouldWrap = isText && approxTextPx > Math.max(60, widthPx - 18);
+                        const shouldWrap =
+                          (isText && approxTextPx > Math.max(60, widthPx - 18)) || !!serverCell?.valign;
+                        const tdStyle: CSSProperties = {};
+                        if (serverCell?.fill) tdStyle.background = serverCell.fill;
+                        if (serverCell?.valign === 'middle') tdStyle.verticalAlign = 'middle';
+                        else if (serverCell?.valign === 'bottom') tdStyle.verticalAlign = 'bottom';
+                        const b = serverCell?.border;
+                        if (b?.top) tdStyle.borderTop = `${b.top.width}px solid ${b.top.color}`;
+                        if (b?.right) tdStyle.borderRight = `${b.right.width}px solid ${b.right.color}`;
+                        if (b?.bottom) tdStyle.borderBottom = `${b.bottom.width}px solid ${b.bottom.color}`;
+                        if (b?.left) tdStyle.borderLeft = `${b.left.width}px solid ${b.left.color}`;
+                        const inputStyle: CSSProperties = { minWidth: widthPx - 2, width: '100%' };
+                        if (serverCell) {
+                          Object.assign(inputStyle, {
+                            '--cell-fg': serverCell.color || '#1a2330',
+                            '--cell-weight': serverCell.bold ? 700 : 400,
+                            '--cell-style': serverCell.italic ? 'italic' : 'normal',
+                            '--cell-align': serverCell.align,
+                          });
+                        }
                         cells.push(
                           <td
                             key={c}
                             className={isSel ? 'sheet__td--sel' : undefined}
                             colSpan={colSpan}
+                            rowSpan={rowSpan}
+                            style={Object.keys(tdStyle).length ? tdStyle : undefined}
                           >
                             <input
-                              className={`sheet__cell${shouldWrap ? ' sheet__cell--wrap' : ''}`}
+                              className={`sheet__cell${shouldWrap ? ' sheet__cell--wrap' : ''}${
+                                serverCell ? ' sheet__cell--styled' : ''
+                              }`}
                               value={display as string}
                               readOnly={!canEdit}
                               aria-label={`Celda ${colLabel(c)}${r + 1}`}
                               onFocus={() => setSel({ r, c })}
                               onChange={(e) => setCell(r, c, e.target.value)}
-                              style={{ minWidth: widthPx - 2, width: '100%' }}
+                              style={inputStyle}
                             />
                           </td>,
                         );
-                        if (merge) c = merge.e.c; // saltar celdas cubiertas por el merge
+                        if (serverCell && serverCell.colSpan > 1) c += serverCell.colSpan - 1;
+                        else if (merge) c = merge.e.c; // saltar celdas cubiertas por el merge
                       }
                       return cells;
                     })()}

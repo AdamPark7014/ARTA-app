@@ -67,6 +67,26 @@ function fmtDateTime(d: Date): string {
   return d.toLocaleString('es-MX', { timeZone: 'America/Mexico_City', dateStyle: 'medium', timeStyle: 'short' });
 }
 
+/**
+ * «Distribución de Pendones (Excel).xlsx» → «Distribución de Pendones».
+ *
+ * Adam (27-09-2026): «que el pdf se vea productivo, no diga Excel así todo
+ * raro». Quien nombra sus archivos en Drive suele apuntar de qué programa
+ * viene («(Excel)», «(Word)»...) para no confundirlos entre sí, pero esa
+ * marca solo tiene sentido junto al icono del archivo — repetida en el
+ * título del documento que GENERAMOS (el PDF de salida) se lee como un error.
+ * Se limpia solo para lo que el sistema imprime o nombra por su cuenta; el
+ * nombre que la persona le dio a su archivo original nunca se toca.
+ */
+export function cleanDisplayTitle(name: string): string {
+  let out = String(name ?? '').trim();
+  const trailingQualifier = /\s*[\(\[]\s*(excel|word|xlsx?|docx?|csv|pdf)\s*[\)\]]\s*$/i;
+  while (trailingQualifier.test(out)) {
+    out = out.replace(trailingQualifier, '').trim();
+  }
+  return out.replace(/\s+/g, ' ').trim() || String(name ?? '').trim();
+}
+
 function safe(text: unknown): string {
   return String(text ?? '')
     .replace(/[‘’]/g, "'")

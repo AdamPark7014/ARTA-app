@@ -18,6 +18,7 @@ import { UploadsModule } from './uploads/uploads.module';
 import { CampaignsModule } from './campaigns/campaigns.module';
 import { TicketingModule } from './ticketing/ticketing.module';
 import { TasksModule } from './tasks/tasks.module';
+import { CalendarModule } from './calendar/calendar.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { DocumentsModule } from './documents/documents.module';
 import { SponsorsModule } from './sponsors/sponsors.module';
@@ -61,6 +62,7 @@ import { DirectionService } from './common/rbac/direction.service';
     CampaignsModule,
     TicketingModule,
     TasksModule,
+    CalendarModule,
     NotificationsModule,
     DocumentsModule,
     SponsorsModule,

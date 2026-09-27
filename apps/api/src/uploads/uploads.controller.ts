@@ -30,6 +30,9 @@ import { actorFrom, RevisionService } from '../common/revisions/revision.service
 import { diffBinary } from '../common/doc-diff';
 import { XlsxPatchService, type CellPatch } from './xlsx-patch.service';
 import { ExcelPdfService } from './excel-pdf.service';
+import { cleanDisplayTitle } from './pdf-branding.service';
+import { buildSheetModel } from './sheet-layout';
+import * as ExcelJS from 'exceljs';
 import { FinanceExtractService } from '../finance/finance-extract.service';
 
 type AuthUser = {
@@ -474,6 +477,73 @@ export class UploadsController {
   }
 
   /**
+   * Cómo se ve la hoja de verdad: celdas combinadas, anchos de columna,
+   * negritas, relleno, alineación y bordes — lo que ExcelJS lee del propio
+   * libro (la misma fuente que ya usa el PDF de salida). El navegador solo
+   * sabe leer valores y fórmulas de un `.xlsx`, no sus estilos; esto es lo
+   * que permite que la hoja se vea EN el panel como se ve al salir en PDF.
+   *
+   * Adam (27-09-2026): «ayúdame a que cuadre y se vea así el Excel».
+   *
+   * De solo lectura (no cambia nada): se puede pedir aunque el evento esté
+   * cerrado. Si algo falla al leerlo, el panel simplemente no aplica estilos
+   * y se ve como antes — nunca rompe la edición.
+   */
+  @Get(':id/layout')
+  async sheetLayout(@Req() req: { user: AuthUser }, @Param('id') id: string) {
+    const file = await this.prisma.eventFile.findUnique({
+      where: { id },
+      include: { event: true },
+    });
+    if (!file) throw new NotFoundException('Archivo no encontrado');
+    if (!file.eventId || !file.event) {
+      throw new BadRequestException('Solo aplica a un Excel ligado a un evento');
+    }
+    if (
+      !canAccessEventOps(req.user.entities as EntityKey[], req.user.roleKey as RoleKey, file.event.entity as EntityKey)
+    ) {
+      throw new ForbiddenException('Sin acceso a archivos de este evento');
+    }
+    assertSameTenant(req.user, file.event.organizationId);
+
+    const ext = extname(file.fileName || file.url).toLowerCase();
+    if (!['.xlsx', '.xls'].includes(ext)) {
+      throw new BadRequestException('Solo aplica a un Excel');
+    }
+    const sourcePath = this.diskPathOf(file.url);
+    if (!existsSync(sourcePath)) throw new NotFoundException('El Excel ya no está en disco');
+
+    const wb = new ExcelJS.Workbook();
+    try {
+      await wb.xlsx.readFile(sourcePath);
+    } catch {
+      throw new BadRequestException('No se pudo leer el Excel');
+    }
+
+    const sheets: Record<string, { colWidths: number[]; cells: unknown[] }> = {};
+    for (const ws of wb.worksheets) {
+      const model = buildSheetModel(ws, wb);
+      sheets[ws.name] = {
+        colWidths: model.colWidths,
+        cells: model.cells.map((c) => ({
+          row: c.row,
+          col: c.col,
+          rowSpan: c.rowSpan,
+          colSpan: c.colSpan,
+          bold: c.bold,
+          italic: c.italic,
+          align: c.align,
+          valign: c.valign,
+          fill: c.fill,
+          color: c.color,
+          border: c.border,
+        })),
+      };
+    }
+    return { sheets };
+  }
+
+  /**
    * Salida oficial del Excel embebido: genera PDF, lo registra como EventFile
    * de la misma sección y deja auditoría de quién exportó.
    *
@@ -530,7 +600,7 @@ export class UploadsController {
       exportedBy: exporter?.fullName || null,
     });
 
-    const outName = current.fileName.replace(/\.(xlsx?|csv)$/i, '') + ' (salida).pdf';
+    const outName = cleanDisplayTitle(current.fileName.replace(/\.(xlsx?|csv)$/i, '')) + ' (salida).pdf';
     const existing = await this.prisma.eventFile.findFirst({
       where: {
         eventId: current.eventId,

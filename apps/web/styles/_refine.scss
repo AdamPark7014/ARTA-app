@@ -1002,6 +1002,86 @@ button.tile:hover {
   font-size: 0.66rem;
 }
 
+.mcal__day.is-clickable {
+  cursor: pointer;
+  transition: background-color 0.12s ease;
+}
+
+.mcal__day.is-clickable:hover,
+.mcal__day.is-clickable:focus-visible {
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+  outline: none;
+}
+
+/* Nota libre del equipo sobre un día. */
+.mcal__note {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.3rem;
+  padding: 0.14rem 0.35rem;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  color: var(--text);
+  font-size: 0.68rem;
+  line-height: 1.3;
+  text-align: left;
+  cursor: pointer;
+}
+
+.mcal__note:hover {
+  background: color-mix(in srgb, var(--text) 14%, transparent);
+}
+
+.mcal__note-text {
+  overflow: hidden;
+  flex: 1 1 auto;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.mcal__note-by {
+  display: block;
+  color: var(--muted);
+  font-size: 0.6rem;
+}
+
+.mcal__add-note {
+  padding: 0.1rem 0.35rem;
+  border: 1px dashed var(--line);
+  border-radius: 5px;
+  color: var(--muted);
+  font-size: 0.66rem;
+  text-align: left;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.mcal__day:hover .mcal__add-note,
+.mcal__day:focus-within .mcal__add-note {
+  opacity: 1;
+}
+
+.mcal__note-form {
+  display: grid;
+  gap: 0.3rem;
+  margin-top: 0.15rem;
+  cursor: default;
+}
+
+.mcal__note-form textarea {
+  width: 100%;
+  min-height: 2.6rem;
+  padding: 0.3rem 0.4rem;
+  border-radius: 6px;
+  font-size: 0.72rem;
+  resize: vertical;
+}
+
+.mcal__note-form .row {
+  gap: 0.3rem;
+}
+
 @media (max-width: 720px) {
   .mcal__day {
     min-height: 4.2rem;
