@@ -164,4 +164,60 @@ test.describe('Editores embebidos', () => {
 
     await expect(page.getByText(/quedó registrada/i)).toBeVisible();
   });
+
+  test('las fórmulas se recalculan y muestran el valor', async ({ page, baseURL }) => {
+    await seedSession(page, baseURL!);
+    await mockAuthenticatedApi(page, {
+      '/events/evt-e2e-1': {
+        ...EVENT,
+        files: [
+          {
+            id: 'file-xlsx',
+            fileName: 'Presupuesto.xlsx',
+            url: '/uploads/demo.xlsx',
+            kind: 'excel',
+            module: null,
+            createdAt: '2026-08-28T10:00:00.000Z',
+          },
+        ],
+      },
+      '/documents/event/evt-e2e-1': [],
+      '/vendor/event/evt-e2e-1': [],
+      '/uploads/file-xlsx/cells': async (route: Route) =>
+        route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ id: 'file-xlsx', version: 3, url: '/uploads/demo.xlsx' }),
+        }),
+    });
+
+    // Libro con fórmula en B4 = B2 + B3
+    await page.route('**/uploads/demo.xlsx', (route) => {
+      const ws = XLSX.utils.aoa_to_sheet([
+        ['Concepto', 'Monto'],
+        ['Audio', 12000],
+        ['Luces', 8000],
+        ['Total', null],
+      ]);
+      (ws as any)['B4'] = { t: 'n', f: 'B2+B3' }; // fórmula
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Presupuesto');
+      const buf = XLSX.write(wb, { bookType: 'xlsx', type: 'buffer' }) as Buffer;
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        body: buf,
+      });
+    });
+
+    await page.goto('/events/evt-e2e-1?tab=files');
+    await page.getByRole('button', { name: 'Editar aquí' }).click();
+
+    // La celda con fórmula muestra el valor calculado
+    await expect(page.getByLabel('Celda B4', { exact: true })).toHaveValue('20000');
+    // Cambiar B2 a 15000 → B4 = 23000
+    const b2 = page.getByLabel('Celda B2', { exact: true });
+    await b2.fill('15000');
+    await expect(page.getByLabel('Celda B4', { exact: true })).toHaveValue('23000');
+  });
 });

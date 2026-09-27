@@ -7,8 +7,10 @@ import { RevisionHistory } from '@/components/ui/RevisionHistory';
 import { useSaveHotkey } from '@/lib/use-save-hotkey';
 import { useDirtyGuard } from '@/lib/use-dirty-guard';
 
-export type DocBlockType = 'h1' | 'h2' | 'p' | 'bullet' | 'divider';
-export type DocBlock = { type: DocBlockType; text: string };
+export type DocBlockType = 'h1' | 'h2' | 'p' | 'bullet' | 'divider' | 'table';
+export type DocTextBlock = { type: 'h1' | 'h2' | 'p' | 'bullet' | 'divider'; text: string };
+export type DocTableBlock = { type: 'table'; rows: string[][] };
+export type DocBlock = DocTextBlock | DocTableBlock;
 
 export type EventDocumentRow = {
   id: string;
@@ -30,7 +32,7 @@ type Props = {
   onClose: () => void;
 };
 
-const TYPE_LABEL: Record<DocBlockType, string> = {
+const TYPE_LABEL: Record<Exclude<DocBlockType, 'table'>, string> = {
   h1: 'Título',
   h2: 'Subtítulo',
   p: 'Párrafo',
@@ -38,7 +40,7 @@ const TYPE_LABEL: Record<DocBlockType, string> = {
   divider: 'Separador',
 };
 
-const TYPE_HINT: Record<DocBlockType, string> = {
+const TYPE_HINT: Record<Exclude<DocBlockType, 'table'>, string> = {
   h1: 'T',
   h2: 'S',
   p: '¶',
@@ -46,7 +48,7 @@ const TYPE_HINT: Record<DocBlockType, string> = {
   divider: '—',
 };
 
-const ADDABLE: DocBlockType[] = ['h1', 'h2', 'p', 'bullet', 'divider'];
+const ADDABLE: Exclude<DocBlockType, 'table'>[] = ['h1', 'h2', 'p', 'bullet', 'divider'];
 
 function formatWhen(iso: string): string {
   try {
@@ -67,10 +69,14 @@ export function normalizeBlocks(raw: unknown): DocBlock[] {
   const out = raw
     .map((b) => {
       const block = b as Partial<DocBlock>;
-      const type = (ADDABLE as string[]).includes(block?.type as string)
-        ? (block!.type as DocBlockType)
-        : 'p';
-      return { type, text: typeof block?.text === 'string' ? block.text : '' };
+      if (block?.type === 'table' && Array.isArray((block as any).rows)) {
+        const rows = ((block as any).rows as unknown[][])
+          .slice(0, 200)
+          .map((r) => r.map((c) => (c == null ? '' : String(c)).slice(0, 2000)));
+        return { type: 'table', rows } as DocTableBlock;
+      }
+      const type = (ADDABLE as string[]).includes(block?.type as string) ? (block!.type as DocBlockType) : 'p';
+      return { type, text: typeof (block as any)?.text === 'string' ? (block as any).text : '' } as DocTextBlock;
     })
     .filter((b): b is DocBlock => !!b);
   return out.length ? out : [{ type: 'p', text: '' }];
@@ -107,6 +113,9 @@ export function DocEditor({ doc, canEdit, onSaved, onDeleted, onClose }: Props) 
   const [showCoach, setShowCoach] = useState(false);
   const refs = useRef<Array<HTMLTextAreaElement | null>>([]);
   const focusNext = useRef<number | null>(null);
+  const [zoom, setZoom] = useState(1);
+  const [saveStatus, setSaveStatus] = useState('');
+  const lastSavedAtRef = useRef<number | null>(null);
 
   useEffect(() => {
     try {
@@ -165,11 +174,11 @@ export function DocEditor({ doc, canEdit, onSaved, onDeleted, onClose }: Props) 
   }
 
   function setBlock(i: number, patch: Partial<DocBlock>) {
-    setBlocks((prev) => prev.map((b, idx) => (idx === i ? { ...b, ...patch } : b)));
+    setBlocks((prev) => prev.map((b, idx) => (idx === i ? ({ ...b, ...patch } as DocBlock) : b)));
     touch();
   }
 
-  function insertAfter(i: number, type: DocBlockType = 'p') {
+  function insertAfter(i: number, type: Exclude<DocBlockType, 'table'> = 'p') {
     setBlocks((prev) => {
       const next = prev.slice();
       next.splice(i + 1, 0, { type, text: '' });
@@ -198,13 +207,21 @@ export function DocEditor({ doc, canEdit, onSaved, onDeleted, onClose }: Props) 
   }
 
   function onKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>, i: number) {
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      const dir = e.shiftKey ? -1 : 1;
+      const j = Math.min(Math.max(0, i + dir), refs.current.length - 1);
+      refs.current[j]?.focus();
+      return;
+    }
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       // Una viñeta encadena viñetas; lo demás abre párrafo.
       insertAfter(i, blocks[i].type === 'bullet' ? 'bullet' : 'p');
       return;
     }
-    if (e.key === 'Backspace' && !blocks[i].text && blocks.length > 1) {
+    const emptyText = blocks[i].type === 'table' ? false : !(blocks[i] as DocTextBlock).text;
+    if (e.key === 'Backspace' && emptyText && blocks.length > 1) {
       e.preventDefault();
       removeAt(i);
     }
@@ -224,6 +241,8 @@ export function DocEditor({ doc, canEdit, onSaved, onDeleted, onClose }: Props) 
       setMsg('Guardado. La edición quedó registrada.');
       setRevKey((k) => k + 1);
       onSaved(saved);
+      lastSavedAtRef.current = Date.now();
+      setSaveStatus('Guardado ahora');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'No se pudo guardar el documento');
     } finally {
@@ -288,7 +307,7 @@ export function DocEditor({ doc, canEdit, onSaved, onDeleted, onClose }: Props) 
           </div>
         ) : null}
 
-        <div className="docedit-bar">
+        <div className="docedit-bar" style={{ position: 'sticky', top: 0, zIndex: 5 }}>
           <div className="docedit-bar__meta" aria-live="polite">
             <span className="docedit-pill docedit-pill--version">v{doc.version}</span>
             <span className="docedit-bar__who">
@@ -301,11 +320,22 @@ export function DocEditor({ doc, canEdit, onSaved, onDeleted, onClose }: Props) 
                 <>Sin ediciones registradas{editedWhen ? ` · ${editedWhen}` : ''}</>
               )}
             </span>
-            {dirty ? <span className="docedit-pill docedit-pill--dirty">Sin guardar</span> : null}
+            {dirty ? <span className="docedit-pill docedit-pill--dirty">Sin guardar</span> : saveStatus ? <span className="docedit-pill">{saveStatus}</span> : null}
             {canEdit ? <span className="docedit-bar__hint">Ctrl+S</span> : null}
           </div>
 
           <div className="docedit-bar__actions row row--tight">
+            <div className="sheet-toolbar__sheets" aria-label="Zoom" role="group">
+              <button className="btn ghost btn-sm" type="button" onClick={() => setZoom((z) => Math.max(0.8, Math.round((z - 0.1) * 10) / 10))} title="Alejar">
+                −
+              </button>
+              <span className="muted kpi-sub" aria-live="polite" style={{ minWidth: 44, display: 'inline-block', textAlign: 'center' }}>
+                {Math.round(zoom * 100)}%
+              </span>
+              <button className="btn ghost btn-sm" type="button" onClick={() => setZoom((z) => Math.min(2, Math.round((z + 0.1) * 10) / 10))} title="Acercar">
+                +
+              </button>
+            </div>
             <button
               className="btn btn-sm"
               type="button"
@@ -373,7 +403,7 @@ export function DocEditor({ doc, canEdit, onSaved, onDeleted, onClose }: Props) 
         ) : null}
 
         <div className="docedit-canvas">
-          <div className="docedit" data-readonly={!canEdit || undefined}>
+          <div className="docedit" data-readonly={!canEdit || undefined} style={{ zoom }}>
             <input
               className="docedit__title"
               value={title}
@@ -429,6 +459,31 @@ export function DocEditor({ doc, canEdit, onSaved, onDeleted, onClose }: Props) 
 
                   {block.type === 'divider' ? (
                     <hr className="docedit__divider" />
+                  ) : block.type === 'table' ? (
+                    <div className="docedit__table-wrap">
+                      <table className="docedit__table">
+                        <tbody>
+                          {block.rows.map((row, ri) => (
+                            <tr key={ri}>
+                              {row.map((cell, ci) => (
+                                <td key={ci}>
+                                  <input
+                                    className="docedit__cell"
+                                    value={cell}
+                                    readOnly={!canEdit}
+                                    onChange={(e) => {
+                                      const rows = block.rows.map((r) => r.slice());
+                                      rows[ri][ci] = e.target.value;
+                                      setBlock(i, { rows } as DocTableBlock);
+                                    }}
+                                  />
+                                </td>
+                              ))}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
                   ) : (
                     <textarea
                       ref={(el) => {
@@ -436,20 +491,20 @@ export function DocEditor({ doc, canEdit, onSaved, onDeleted, onClose }: Props) 
                       }}
                       className="docedit__text"
                       rows={1}
-                      value={block.text}
+                      value={(block as DocTextBlock).text}
                       readOnly={!canEdit}
                       placeholder={
-                        block.type === 'h1'
+                        (block as DocTextBlock).type === 'h1'
                           ? 'Título de sección'
-                          : block.type === 'h2'
+                          : (block as DocTextBlock).type === 'h2'
                             ? 'Subtítulo'
-                            : block.type === 'bullet'
+                            : (block as DocTextBlock).type === 'bullet'
                               ? 'Punto de la lista'
                               : 'Escribe aquí…'
                       }
                       onKeyDown={(e) => onKeyDown(e, i)}
                       onChange={(e) => {
-                        setBlock(i, { text: e.target.value });
+                        setBlock(i, { text: e.target.value } as Partial<DocTextBlock>);
                         fitTextarea(e.currentTarget);
                       }}
                     />

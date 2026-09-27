@@ -4543,6 +4543,20 @@ body.site-nav-open {
   background: var(--bg-elev);
   border-bottom: 1px solid var(--line);
 }
+/* Ensure enabled toolbar buttons have strong contrast in dark theme */
+.sheet-toolbar .btn,
+.sheet-tools .btn {
+  color: #1a2330 !important; /* dark text */
+}
+.sheet-toolbar .btn.ghost,
+.sheet-tools .btn.ghost {
+  background-color: #ffffff !important; /* light background behind text */
+  border-color: #b8c2ce !important;
+}
+.sheet-toolbar .btn.ghost:hover,
+.sheet-tools .btn.ghost:hover {
+  background-color: #f0f3f6 !important;
+}
 
 .sheet-tabs {
   display: flex;
@@ -5010,14 +5024,14 @@ body.site-nav-open {
   background: #fafbfc;
 }
 
-.sheet__cell {
+.sheet .sheet__cell {
   width: 100% !important;
   min-width: 104px;
   padding: 0.5rem 0.55rem !important;
   border: 0 !important;
   border-radius: 0 !important;
   background: transparent !important;
-  color: #1a2330 !important;
+  color: #1a2330 !important; /* force dark text on light grid in dark theme */
   font-size: 0.84rem;
   font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
   outline-offset: -2px;
@@ -5031,7 +5045,7 @@ body.site-nav-open {
   text-overflow: unset;
 }
 
-.sheet__cell:focus {
+.sheet .sheet__cell:focus {
   outline: none;
   background: #ffffff !important;
   color: #111111 !important;
@@ -5039,7 +5053,7 @@ body.site-nav-open {
   caret-color: #111111;
 }
 
-.sheet__cell:focus-visible {
+.sheet .sheet__cell:focus-visible {
   outline: none;
   box-shadow: inset 0 0 0 2px rgba(33, 115, 70, 0.45);
 }
@@ -5051,7 +5065,7 @@ body.site-nav-open {
   caret-color: #111111;
 }
 
-.sheet__cell[readonly] {
+.sheet .sheet__cell[readonly] {
   color: #6b7785 !important;
 }
 
@@ -5703,6 +5717,50 @@ body.site-nav-open {
 .shell .docedit__text:focus {
   outline: 0;
   background: transparent !important;
+}
+
+/* Editable table blocks (imported from Word) */
+.docedit__table-wrap {
+  margin: 0.4rem 0.2rem 0.8rem;
+  border: 1px solid #ddd6c8;
+  border-radius: 3px;
+  background: #fffef9;
+  overflow: auto;
+}
+.docedit__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.92rem;
+  color: #1a1a1a;
+}
+.docedit__table th,
+.docedit__table td {
+  border: 1px solid #e6e2d9;
+  padding: 4px 6px;
+  vertical-align: middle;
+  background: #fffef9;
+}
+.docedit__table th {
+  background: #f3efe6;
+  color: #6b5a3a;
+  font-weight: 700;
+  font-size: 0.78rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.docedit__cell {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  padding: 2px 3px;
+  background: transparent !important;
+  color: #1a1a1a !important;
+  font: inherit;
+}
+.docedit__cell:focus {
+  outline: none;
+  background: rgba(201, 169, 98, 0.12) !important;
+  box-shadow: inset 0 0 0 2px #c9a962;
 }
 
 .docedit__block--h1 .docedit__text {

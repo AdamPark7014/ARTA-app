@@ -104,3 +104,123 @@ jobs:
           path: apps/web/playwright-report
           retention-days: 7
           if-no-files-found: ignore
+
+  e2e-real:
+    name: E2E real stack — API + Web + Playwright (real templates)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: arta
+          POSTGRES_PASSWORD: arta
+          POSTGRES_DB: arta
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U arta"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://arta:arta@localhost:5432/arta?schema=public
+      JWT_SECRET: ci-e2e-secret
+      NEXT_PUBLIC_API_URL: http://127.0.0.1:4000
+      NEXT_PUBLIC_ROOT_DOMAIN: artaproducciones.com
+      NEXT_PUBLIC_ARTA_HOST: arta.artaproducciones.com
+      NEXT_PUBLIC_AUDITORIO_HOST: auditorio.artaproducciones.com
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Prepare API (prisma generate + migrate + seed)
+        working-directory: apps/api
+        run: |
+          npx prisma generate
+          npx prisma migrate deploy
+          SEED_PASSWORD="ArtaDevLocal-1" npx ts-node --transpile-only prisma/seed.ts
+
+      - name: Build API
+        working-directory: apps/api
+        run: npm run build
+
+      - name: Start API (background)
+        run: |
+          nohup node apps/api/dist/main.js > api.log 2>&1 &
+          echo $! > api.pid
+          sleep 2
+          grep -Eo '.*' api.log || true
+
+      - name: Verify API ready
+        run: |
+          for i in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:4000/ready >/dev/null; then
+              echo "API ready"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "API not ready"; tail -n +1 api.log || true; exit 1
+
+      - name: Install Playwright browser
+        working-directory: apps/web
+        run: npx playwright install --with-deps chromium
+
+      - name: Run real-stack Playwright spec
+        working-directory: apps/web
+        run: npx playwright test e2e/real-stack-files.spec.ts
+
+      - name: Upload screenshots
+        uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: e2e-screens
+          path: apps/web/e2e-screens
+          retention-days: 7
+          if-no-files-found: warn
+
+      - name: Commit screenshots into docs/pr5-screens
+        if: ${{ !cancelled() }}
+        run: |
+          mkdir -p docs/pr5-screens
+          cp -r apps/web/e2e-screens/* docs/pr5-screens/ || true
+          if git status --porcelain | grep -q "docs/pr5-screens"; then
+            git config user.name "arta-ci"
+            git config user.email "ci@arta.local"
+            git config --global --add safe.directory "$GITHUB_WORKSPACE"
+            BR="${GITHUB_HEAD_REF:-${GITHUB_REF_NAME}}"
+            # Ensure we are on the PR head branch (checkout action uses a detached HEAD on refs/pull/* by default)
+            git fetch origin "$BR"
+            # Discard the detached HEAD workspace to avoid checkout conflicts (artifact files are re-copied below)
+            git reset --hard
+            git checkout -B "$BR" "origin/$BR" -f
+            git pull --rebase origin "$BR" || true
+            git add docs/pr5-screens
+            if git diff --staged --quiet; then
+              echo "No screenshot diffs to commit"
+            else
+              git commit -m "docs: add PR5 real-stack screenshots"
+              git push
+            fi
+          else
+            echo "No screenshots to commit"
+          fi
+
+      - name: Upload Playwright report (real stack)
+        uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: playwright-report-real
+          path: apps/web/playwright-report
+          retention-days: 7
+          if-no-files-found: ignore
+

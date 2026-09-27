@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useMemo } from 'react';
 import { AttachmentField, TableField } from '@/components/events/ChecklistFieldControls';
 import {
   NO_LABEL,
@@ -71,6 +71,24 @@ export function FormatSheet({
   onUpload,
   onOpenSignatures,
 }: Props) {
+  const completion = useMemo(() => {
+    let total = 0;
+    let filled = 0;
+    for (const s of sections) {
+      for (const item of s.items) {
+        total += 1;
+        const v = (item as any).done ? true : (item as any).value;
+        if (Array.isArray((item as any).rows)) {
+          const rows = (item as any).rows as any[];
+          if (rows.some((r) => Object.values(r).some((c) => c !== null && c !== ''))) filled += 1;
+        } else if (v !== null && v !== undefined && String(v).trim() !== '') {
+          filled += 1;
+        }
+      }
+    }
+    const pct = total ? Math.round((filled / total) * 100) : 0;
+    return { total, filled, pct };
+  }, [sections]);
   const entityLabel = event.entity === 'EXPLANADA' ? 'AUDITORIO AREMA · EXPLANADA' : 'ARTA PRODUCCIONES';
   const sub = [event.name, event.artist, event.venue, event.city]
     .map((v) => (v ?? '').trim())
@@ -83,6 +101,19 @@ export function FormatSheet({
 
   return (
     <div className={`fsheet-wrap ${readOnly ? 'is-readonly' : ''}`}>
+      <aside className="fsheet-outline" aria-label="Progreso y secciones">
+        <div className="fsheet-outline__head">
+          <strong>Avance</strong>
+          <span className="fsheet-outline__pct">{completion.pct}%</span>
+        </div>
+        <ol className="fsheet-outline__list">
+          {sections.map((s) => (
+            <li key={s.id}>
+              <a href={`#sec-${s.id}`}>{s.title}</a>
+            </li>
+          ))}
+        </ol>
+      </aside>
       <article className={`fsheet ${event.entity === 'EXPLANADA' ? 'fsheet--explanada' : ''}`} aria-label={checklist.title}>
         <header className="fsheet__brand">
           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -119,7 +150,7 @@ export function FormatSheet({
               ))}
             </div>
           ) : (
-            <section key={section.id} className="fsheet__sec" aria-label={section.title}>
+            <section key={section.id} className="fsheet__sec" aria-label={section.title} id={`sec-${section.id}`}>
               <h2 className="fsheet__sec-title">{section.title}</h2>
               {twoColumns(section) ? (
                 <div className="fsheet__checks fsheet__checks--cols">

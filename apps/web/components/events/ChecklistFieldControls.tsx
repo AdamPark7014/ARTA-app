@@ -73,7 +73,10 @@ export function AttachmentField({
   const [linking, setLinking] = useState(false);
   const value = String(item.value ?? '');
   const linked = item.fileId ? files.find((f) => f.id === item.fileId) : undefined;
-  const href = linked?.url || (isHttp(value) ? value.trim() : '');
+  const href =
+    linked?.id && /\.(xlsx?|csv|docx)$/i.test(linked.fileName)
+      ? `/api/files/${linked.id}/inline`
+      : linked?.url || (isHttp(value) ? value.trim() : '');
   const shown = linked?.fileName || value;
 
   async function pick(file: File) {
@@ -96,9 +99,25 @@ export function AttachmentField({
             {linked ? '▤' : isHttp(value) ? '↗' : '·'}
           </span>
           {href ? (
-            <a href={href} target="_blank" rel="noreferrer" className="hub-attach__name">
-              {shown}
-            </a>
+            /\.(xlsx?)$/i.test(linked?.fileName || '')
+              ? (
+                <button
+                  type="button"
+                  className="btn-quiet hub-attach__name"
+                  onClick={() => {
+                    // Señal a EventChecklistsPanel para abrir el visor inline si aplica (usará el botón Ver)
+                    const ev = new CustomEvent('arta-open-attach', { detail: { fileId: linked?.id } });
+                    window.dispatchEvent(ev);
+                  }}
+                >
+                  {shown}
+                </button>
+                )
+              : (
+                <a href={href} target="_blank" rel="noreferrer" className="hub-attach__name">
+                  {shown}
+                </a>
+                )
           ) : (
             <span className="hub-attach__name">{shown}</span>
           )}

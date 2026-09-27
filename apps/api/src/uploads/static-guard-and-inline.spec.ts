@@ -2,22 +2,27 @@ import 'reflect-metadata';
 import { Test } from '@nestjs/testing';
 import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
-import { AppModule } from '../app.module';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { JwtService } from '@nestjs/jwt';
-import { writeFileSync, existsSync, mkdirSync } from 'fs';
-import { join } from 'path';
+import { writeFileSync, existsSync, mkdirSync, mkdtempSync, rmSync } from 'fs';
+import { join, sep } from 'path';
+import * as os from 'os';
+import * as FS from 'fs';
 
 describe('Static /uploads guard order + in-app inline (no DB)', () => {
   let app: INestApplication;
   let jwt: JwtService;
-  const uploadDir = join(process.cwd(), 'uploads');
+  let uploadDir: string;
   const testFileName = 'test-static.xlsx';
-  const testFilePath = join(uploadDir, testFileName);
+  let testFilePath: string;
 
   beforeAll(async () => {
     process.env.JWT_SECRET = process.env.JWT_SECRET || 'test-secret';
     process.env.JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
+    // Asegura que controladores que usan uploadRoot apunten a un dir temporal REAL.
+    uploadDir = mkdtempSync(join(os.tmpdir(), 'arta-uploads-'));
+    process.env.UPLOAD_DIR = uploadDir;
+    testFilePath = join(uploadDir, testFileName);
 
     const mockPrisma: Partial<PrismaService> = {
       $connect: jest.fn(),
@@ -56,6 +61,7 @@ describe('Static /uploads guard order + in-app inline (no DB)', () => {
       } as any,
     };
 
+    const { AppModule } = await import('../app.module');
     const moduleRef = await Test.createTestingModule({
       imports: [AppModule],
     })
@@ -76,6 +82,11 @@ describe('Static /uploads guard order + in-app inline (no DB)', () => {
 
   afterAll(async () => {
     await app.close();
+    try {
+      rmSync(uploadDir, { recursive: true, force: true });
+    } catch {
+      /* ignore */
+    }
   });
 
   it('direction cookie gets 200 on static .xlsx', async () => {
@@ -119,6 +130,61 @@ describe('Static /uploads guard order + in-app inline (no DB)', () => {
     } as any);
     await request(app.getHttpServer())
       .get('/files/f1/inline')
+      .set('Cookie', [`arta_access=${token}`, 'arta_session=1', 'arta_csrf=abc'])
+      .expect(200);
+  });
+
+  it('eventless EventFile inline denies non-direction', async () => {
+    // Rewire prisma mock to return an eventless file
+    const prisma = app.get(PrismaService) as any;
+    prisma.eventFile.findUnique = jest.fn().mockResolvedValue({
+      id: 'f2',
+      fileName: testFileName,
+      url: `/uploads/${testFileName}`,
+      mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      kind: 'excel',
+      eventId: null,
+      event: null,
+    });
+    const token = await jwt.signAsync({
+      sub: 'u4',
+      email: 'u@b.com',
+      roleKey: 'logistica',
+      entities: ['ARTA'],
+      permissions: [],
+      organizationId: 'org1',
+      jti: 'test-jti-2',
+      fullName: 'Usuario Logistica',
+    } as any);
+    await request(app.getHttpServer())
+      .get('/files/f2/inline')
+      .set('Cookie', [`arta_access=${token}`, 'arta_session=1', 'arta_csrf=abc'])
+      .expect(403);
+  });
+
+  it('eventless EventFile inline allows direction', async () => {
+    const prisma = app.get(PrismaService) as any;
+    prisma.eventFile.findUnique = jest.fn().mockResolvedValue({
+      id: 'f3',
+      fileName: testFileName,
+      url: `/uploads/${testFileName}`,
+      mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      kind: 'excel',
+      eventId: null,
+      event: null,
+    });
+    const token = await jwt.signAsync({
+      sub: 'u5',
+      email: 'd@b.com',
+      roleKey: 'dir_general',
+      entities: ['ARTA', 'EXPLANADA'],
+      permissions: [],
+      organizationId: 'org1',
+      jti: 'test-jti-3',
+      fullName: 'Dirección',
+    } as any);
+    await request(app.getHttpServer())
+      .get('/files/f3/inline')
       .set('Cookie', [`arta_access=${token}`, 'arta_session=1', 'arta_csrf=abc'])
       .expect(200);
   });

@@ -1,7 +1,7 @@
 import { Controller, Get, NotFoundException, Param, Req, Res, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PrismaService } from '../common/prisma/prisma.service';
-import { canAccessEventOps, type EntityKey, type RoleKey } from '../common/rbac/roles';
+import { canAccessEventOps, isDirectionRole, type EntityKey, type RoleKey } from '../common/rbac/roles';
 import { assertSameTenant } from '../common/tenant';
 import type { Response } from 'express';
 import { join } from 'path';
@@ -37,6 +37,15 @@ export class FileInlineController {
         return;
       }
       assertSameTenant(req.user, file.event.organizationId);
+    } else {
+      // Evento nulo: acceso solo para dirección (o misma organización por política futura).
+      // Evita que cualquier usuario autenticado pueda descargar originales fuera de contexto.
+      if (!isDirectionRole(req.user.roleKey)) {
+        res.status(403).send('No autorizado');
+        return;
+      }
+      // A futuro: si EventFile lleva organizationId, verificarlo:
+      // assertSameTenant(req.user, file.organizationId)
     }
     const rel = String(file.url || '').replace(/^\/uploads\//, '');
     const abs = join(uploadRoot, rel);
