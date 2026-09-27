@@ -629,7 +629,7 @@ export class ChatService {
     const attachmentUrl = input.attachmentUrl?.trim() || null;
     if (!body && !attachmentUrl) throw new BadRequestException('Escribe un mensaje');
     if (body.length > MAX_BODY) throw new BadRequestException(`El mensaje admite hasta ${MAX_BODY} caracteres`);
-    if (attachmentUrl && !/^\/uploads\/[\w.-]+$/.test(attachmentUrl)) {
+    if (attachmentUrl && !/^\/uploads\/(chat\/)?[\w.-]+$/.test(attachmentUrl)) {
       throw new BadRequestException('Adjunto no válido');
     }
 

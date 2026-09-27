@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { attachmentKind, attachmentLabel, chatContentMatches, chatMimeFor, chatRuleFor } from './chat-attachments';
+import { attachmentKind, attachmentLabel, chatContentMatches, chatMimeFor, chatRuleFor, utf8FileName } from './chat-attachments';
 
 describe('chat-attachments', () => {
   const dir = mkdtempSync(join(tmpdir(), 'chat-att-'));
@@ -51,5 +51,11 @@ describe('chat-attachments', () => {
     expect(attachmentLabel('/uploads/1.m4a', 'nota-de-voz-123.m4a', 'audio/mp4')).toBe('🎤 Nota de voz');
     expect(attachmentLabel('/uploads/1.mp3', 'cancion.mp3')).toBe('🎵 cancion.mp3');
     expect(attachmentLabel('/uploads/1.pdf', 'x.pdf')).toBe('📄 x.pdf');
+  });
+
+  it('nombres con acentos: latin1 de multer → UTF-8, sin romper los que ya vienen bien', () => {
+    const asMulter = Buffer.from('cotización año.pdf', 'utf8').toString('latin1');
+    expect(utf8FileName(asMulter)).toBe('cotización año.pdf');
+    expect(utf8FileName('plain.pdf')).toBe('plain.pdf');
   });
 });

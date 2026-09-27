@@ -1,8 +1,11 @@
 import { BadRequestException } from '@nestjs/common';
 import { closeSync, openSync, readSync } from 'fs';
 import { diskStorage } from 'multer';
-import { extname } from 'path';
+import { extname, join } from 'path';
 import { ensureDir, uploadRoot } from '../uploads/upload-storage';
+
+/** Carpeta propia: `/uploads/chat/*` queda fuera del candado de originales de dirección. */
+export const CHAT_UPLOAD_DIR = join(uploadRoot, 'chat');
 
 /**
  * Adjuntos del chat: todo lo que se comparte desde un teléfono (fotos, video,
@@ -116,8 +119,8 @@ export function chatContentMatches(filePath: string, fileName: string): boolean 
 export const CHAT_MULTER_OPTIONS = {
   storage: diskStorage({
     destination: (_req: unknown, _file: unknown, cb: (e: Error | null, dest: string) => void) => {
-      ensureDir(uploadRoot);
-      cb(null, uploadRoot);
+      ensureDir(CHAT_UPLOAD_DIR);
+      cb(null, CHAT_UPLOAD_DIR);
     },
     filename: (_req: unknown, file: Express.Multer.File, cb: (e: Error | null, name: string) => void) => {
       const unique = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
@@ -133,6 +136,12 @@ export const CHAT_MULTER_OPTIONS = {
     cb(null, true);
   },
 };
+
+/** Multer entrega el nombre como latin1; los teléfonos lo mandan en UTF-8 («cotización.pdf»). */
+export function utf8FileName(original: string): string {
+  const decoded = Buffer.from(original, 'latin1').toString('utf8');
+  return decoded.includes('\uFFFD') ? original : decoded;
+}
 
 /** Etiqueta del aviso y de la lista de chats, como WhatsApp («📷 Foto», «🎤 Nota de voz»). */
 export function attachmentLabel(url: string, name: string | null, mime?: string | null): string {

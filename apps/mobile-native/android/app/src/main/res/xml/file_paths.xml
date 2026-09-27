@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <paths>
-    <!-- PDFs del chat bajados con la sesión para abrirlos con el visor del teléfono. -->
+    <!-- Adjuntos del chat bajados con la sesión para abrirlos o compartirlos con otras apps. -->
     <cache-path name="chat_files" path="chat-files/" />
+    <!-- Fotos y videos recién tomados con la cámara, antes de subirlos. -->
+    <cache-path name="chat_capture" path="chat-capture/" />
 </paths>

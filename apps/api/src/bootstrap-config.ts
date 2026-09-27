@@ -30,7 +30,8 @@ export async function configureApp(app: INestApplication | NestExpressApplicatio
   nest.use(async (req: Request, res: Response, next: NextFunction) => {
     if (req.path.startsWith('/uploads/')) {
       const ext = req.path.toLowerCase().split('.').pop() || '';
-      const isEditable = ext === 'xlsx' || ext === 'xls' || ext === 'docx';
+      // Lo compartido en el chat ya lo pueden ver todos los miembros de la conversación.
+      const isEditable = (ext === 'xlsx' || ext === 'xls' || ext === 'docx') && !req.path.startsWith('/uploads/chat/');
       if (isEditable) {
         const token = req.cookies?.arta_access || '';
         let ok = false;

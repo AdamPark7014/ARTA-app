@@ -29,7 +29,7 @@ import {
 } from 'class-validator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { discardUpload } from '../uploads/upload-storage';
-import { attachmentKind, CHAT_MULTER_OPTIONS, chatContentMatches, chatMimeFor } from './chat-attachments';
+import { attachmentKind, CHAT_MULTER_OPTIONS, chatContentMatches, chatMimeFor, utf8FileName } from './chat-attachments';
 import { ChatService, MAX_BODY, type ChatUser } from './chat.service';
 
 type AuthUser = ChatUser & { entities: string[]; permissions: string[] };
@@ -244,8 +244,8 @@ export class ChatController {
     }
     const mime = chatMimeFor(file.originalname, file.mimetype);
     return {
-      url: `/uploads/${file.filename}`,
-      name: file.originalname.slice(0, 200),
+      url: `/uploads/chat/${file.filename}`,
+      name: utf8FileName(file.originalname).slice(0, 200),
       mime,
       size: file.size,
       kind: attachmentKind(mime),
