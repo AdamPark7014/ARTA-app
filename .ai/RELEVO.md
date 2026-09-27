@@ -2,9 +2,9 @@
 
 - **Último turno:** cursor
 - **Fecha:** 2026-09-27
-- **Rama:** `main`, la **única** rama canónica. Se trabaja directo en `main`, sin ramas de feature
+- **Rama:** main
   (Adam es el único programador).
-- **Producción:** `735c8c7` (deploy de este turno en curso; ver «Deploy»)
+- **Producción:** `f5e0c52` desplegado desde `main` el 2026-09-27 14:54 UTC
 
 ## Regla de ramas (pedido de Adam, 2026-09-27)
 
@@ -58,7 +58,14 @@ Pedido: «todo mergeado y fusionado, canónico en `main`; no quiero ramas sobree
 
 ## Deploy
 
-Pendiente de anotar el resultado (se actualiza al cerrar el turno).
+- `f5e0c52` desplegado desde `main` (bundle + `update.sh --no-pull`) el 2026-09-27 14:54 UTC.
+- Respaldo de la base: `/root/arta-backups/20260927-1454.sql.gz`.
+- Estado tras el deploy:
+  - Sin migraciones pendientes; «Nest application successfully started»; api, web y db healthy.
+  - `/api/ready` 200, `/login` 200, `/chat` sin sesión → `/login?next=%2Fchat`.
+  - Socket.IO con el Origin de la web responde 200. `folders/files/:id/inline` sin sesión responde 401.
+- El servidor solo tiene `main`; se borró la referencia vieja `remotes/bundle/main`.
+- Rollback: `bash deploy/rollback.sh` (añadir `--dump 20260927-1454.sql.gz` para restaurar también la base).
 
 ## A medias
 
