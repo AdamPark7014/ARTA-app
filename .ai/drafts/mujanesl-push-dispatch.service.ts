@@ -106,36 +106,18 @@ export class PushDispatchService {
     };
   }
 
-  /** Globo del ícono: avisos sin leer + chat sin leer (sin archivados ni silenciados), igual que la app. */
-  async appBadge(userId: string): Promise<number> {
-    const [notices, chat] = await Promise.all([
-      this.prisma.notification.count({ where: { userId, readAt: null } }),
-      this.prisma.$queryRaw<Array<{ n: number }>>`
-        SELECT COUNT(*)::int AS n
-        FROM "ChatMessage" m
-        JOIN "ChatChannelMember" mm ON mm."channelId" = m."channelId" AND mm."userId" = ${userId}
-        JOIN "ChatChannel" c ON c."id" = m."channelId" AND c."isArchived" = false
-        WHERE m."deletedAt" IS NULL
-          AND m."parentId" IS NULL
-          AND m."senderId" <> ${userId}
-          AND m."createdAt" > COALESCE(mm."lastReadAt", mm."joinedAt")
-          AND (mm."mutedUntil" IS NULL OR mm."mutedUntil" < now())`,
-    ]);
-    return notices + Number(chat[0]?.n ?? 0);
-  }
-
-  /** `badge` sin definir = total de la app; `null` = no tocar el globo. */
   async sendToUser(userId: string, payload: PushPayload): Promise<number> {
     if (!this.init()) return 0;
+    if (payload.badge === undefined) {
+      payload.badge = await this.appBadge(userId);
+    }
     const rows = await this.prisma.userPushEndpoint.findMany({
       where: { userId, fcmToken: { not: null } },
       select: { id: true, fcmToken: true },
     });
     if (rows.length === 0) return 0;
 
-    const badge = payload.badge !== undefined ? payload.badge : await this.appBadge(userId).catch(() => null);
-    const badgeAps = badge != null ? { badge } : {};
-    const data = this.buildData({ ...payload, badge });
+    const data = this.buildData(payload);
     const isChat = data.kind === 'chat';
     let sent = 0;
     for (const row of rows) {
@@ -149,7 +131,7 @@ export class PushDispatchService {
             apns: {
               headers: { 'apns-priority': '5', 'apns-push-type': 'background' },
               payload: {
-                aps: { contentAvailable: true, ...badgeAps },
+                aps: { contentAvailable: true, ...(payload.badge != null ? { badge: payload.badge } : {}) },
               },
             },
           });
@@ -177,7 +159,7 @@ export class PushDispatchService {
                 threadId: data.thread_id,
                 category: isChat ? 'ARTA_CHAT' : 'ARTA_EVENT',
                 mutableContent: true,
-                ...badgeAps,
+                ...(payload.badge != null ? { badge: payload.badge } : {}),
               },
             },
           },
@@ -195,5 +177,40 @@ export class PushDispatchService {
       }
     }
     return sent;
+  }
+
+  async appBadge(userId: string): Promise<number> {
+    const now = new Date();
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) return 0;
+
+    const lastReadAt = user.lastReadAt ?? user.joinedAt;
+    const unreadNotifications = await this.prisma.notification.count({
+      where: {
+        userId,
+        readAt: null,
+        OR: [
+          { channelId: null },
+          { channelId: { notIn: user.mutedChannelIds } },
+          { archived: false },
+        ],
+        createdAt: { gte: lastReadAt },
+      },
+    });
+
+    const unreadChats = await this.prisma.chatMessage.count({
+      where: {
+        senderId: { not: userId },
+        deleted: false,
+        OR: [
+          { channelId: null },
+          { channelId: { notIn: user.mutedChannelIds } },
+          { archived: false },
+        ],
+        createdAt: { gte: lastReadAt },
+      },
+    });
+
+    return unreadNotifications + unreadChats;
   }
 }

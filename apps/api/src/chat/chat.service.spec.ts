@@ -135,8 +135,10 @@ describe('ChatService', () => {
     const pushed = notifications.pushOnly.mock.calls.map((c) => c[0]);
     expect(pushed).toEqual(['u2']);
     expect(notifications.pushOnly.mock.calls[0][1]).toEqual(
-      expect.objectContaining({ title: 'Ana R. en #general', kind: 'chat', threadId: 'chat-c1', badge: 3 }),
+      expect.objectContaining({ title: 'Ana R. en #general', kind: 'chat', threadId: 'chat-c1' }),
     );
+    // El globo lo calcula PushDispatch (chat + avisos), no el chat.
+    expect(notifications.pushOnly.mock.calls[0][1].badge).toBeUndefined();
     expect(notifications.notifyMany).toHaveBeenCalledWith([
       expect.objectContaining({ userId: 'u4', type: 'chat.mention', linkUrl: '/chat?channel=c1&msg=msg1' }),
     ]);

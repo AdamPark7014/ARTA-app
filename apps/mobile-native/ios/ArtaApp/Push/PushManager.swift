@@ -17,8 +17,8 @@ import FirebaseMessaging
 ///   suena si esa conversación está abierta en pantalla. La extensión
 ///   `NotificationService` le pone la cara (iniciales) de quien escribe.
 /// - Procesos (`ARTA_EVENT`): OC, formatos, tareas… con «Marcar como leído».
-/// - Silenciosos (`silent=1`, p. ej. `chat.read`): quitan los avisos de una
-///   conversación que ya se leyó en otro dispositivo.
+/// - Silenciosos (`silent=1`: `chat.read`, `notification.read`): quitan los avisos
+///   de lo que ya se leyó en otro dispositivo y ajustan el globo del ícono.
 final class PushManager: NSObject, UNUserNotificationCenterDelegate {
     static let shared = PushManager()
 
@@ -163,14 +163,35 @@ final class PushManager: NSObject, UNUserNotificationCenterDelegate {
         removeDelivered(threadId: "chat-\(chatChannelId)")
     }
 
+    /// Quita avisos de procesos ya leídos: uno (`notification_id`) o todos si es `nil`.
+    static func removeDeliveredNotices(notificationId: String?) {
+        let center = UNUserNotificationCenter.current()
+        center.getDeliveredNotifications { list in
+            let ids = list
+                .filter { item in
+                    let info = item.request.content.userInfo
+                    guard text(info, "kind") != "chat" else { return false }
+                    guard let notificationId else { return true }
+                    return text(info, "notification_id") == notificationId
+                }
+                .map(\.request.identifier)
+            if !ids.isEmpty { center.removeDeliveredNotifications(withIdentifiers: ids) }
+        }
+    }
+
     func setBadge(_ count: Int) {
         UNUserNotificationCenter.current().setBadgeCount(max(0, count))
     }
 
-    /// Push silencioso (`content-available`), p. ej. `chat.read` desde otro dispositivo.
+    /// Push silencioso (`content-available`): `chat.read` o `notification.read` desde otro dispositivo.
     func handleSilent(_ userInfo: [AnyHashable: Any]) {
-        if let thread = Self.text(userInfo, "thread_id"), Self.text(userInfo, "type") == "chat.read" {
-            Self.removeDelivered(threadId: thread)
+        switch Self.text(userInfo, "type") {
+        case "chat.read":
+            if let thread = Self.text(userInfo, "thread_id") { Self.removeDelivered(threadId: thread) }
+        case "notification.read":
+            Self.removeDeliveredNotices(notificationId: Self.text(userInfo, "notification_id"))
+        default:
+            break
         }
         if let badge = Self.text(userInfo, "badge").flatMap({ Int($0) }) { setBadge(badge) }
     }

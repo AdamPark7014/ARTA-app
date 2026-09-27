@@ -112,7 +112,10 @@ object ArtaPushRenderer {
         try {
             if (!firstTime(payload)) return
             if (payload.silent) {
-                if (payload.type == "chat.read") dismissChat(app, payload.threadId)
+                when (payload.type) {
+                    "chat.read" -> dismissChat(app, payload.threadId)
+                    "notification.read" -> dismissEvents(app, payload.notificationId)
+                }
                 return
             }
             ArtaNotifications.ensureChannels(app)
@@ -136,6 +139,26 @@ object ArtaPushRenderer {
             if (remaining == 0) nm.cancel(summaryId(GROUP_CHAT))
         } catch (e: Exception) {
             Log.w(TAG, "No se pudo quitar el aviso: ${e.message}")
+        }
+    }
+
+    /**
+     * Aviso de proceso leído en otro lado: quita ese (el API lo etiqueta `arta-<id>`),
+     * o todos los que no son chat cuando no viene id (se marcaron todos).
+     */
+    fun dismissEvents(context: Context, notificationId: String) {
+        val app = context.applicationContext
+        try {
+            val nm = NotificationManagerCompat.from(app)
+            if (notificationId.isNotBlank()) {
+                nm.cancel("evt:arta-$notificationId".hashCode())
+            } else {
+                activeNotifications(app)
+                    .filter { it.notification.group != GROUP_CHAT && it.notification.group?.startsWith("arta_") == true }
+                    .forEach { nm.cancel(it.id) }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "No se pudieron quitar los avisos: ${e.message}")
         }
     }
 
@@ -244,7 +267,7 @@ object ArtaPushRenderer {
             .setLargeIcon(icon)
             .setCategory(NotificationCompat.CATEGORY_MESSAGE)
             .setGroup(GROUP_CHAT)
-            .setNumber(badge ?: pendingCount)
+            .setNumber(pendingCount)
             .setOnlyAlertOnce(!alert)
             .setContentIntent(contentIntent(app, notificationId, c.url, c.chatChannelId, lastOther?.messageId.orEmpty(), ""))
             .setPublicVersion(publicVersion(app, ArtaNotifications.CHANNEL_CHAT, "Nuevo mensaje"))
@@ -373,7 +396,6 @@ object ArtaPushRenderer {
             .setLargeIcon(initials(p.senderName.ifBlank { ArtaNotifications.label(channelId) }))
             .setContentIntent(contentIntent(app, notificationId, p.url, p.chatChannelId, p.messageId, p.notificationId))
             .setPublicVersion(publicVersion(app, channelId, "Nuevo aviso"))
-        if (p.badge != null) builder.setNumber(p.badge)
         if (p.body.isNotBlank()) {
             builder.setContentText(p.body).setStyle(NotificationCompat.BigTextStyle().setBigContentTitle(title).bigText(p.body))
         }

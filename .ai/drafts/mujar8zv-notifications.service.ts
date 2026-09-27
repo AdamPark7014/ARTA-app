@@ -88,24 +88,6 @@ export class NotificationsService {
     return this.prisma.notification.count({ where: { userId, readAt: null } });
   }
 
-  /**
-   * Leído en un dispositivo: los demás quitan el aviso de la bandeja y ajustan el
-   * globo. `notificationId` nulo = se marcaron todos.
-   */
-  async syncRead(userId: string, notificationId: string | null) {
-    const unread = await this.unreadCount(userId).catch(() => null);
-    if (unread != null) this.realtime?.emitToUser(userId, 'notification:read', { notificationId, unread });
-    await this.pushOnly(userId, {
-      title: '',
-      body: '',
-      type: 'notification.read',
-      kind: 'event',
-      silent: true,
-      notificationId,
-      tag: notificationId ? `arta-${notificationId}` : undefined,
-    });
-  }
-
   private async deliver(row: {
     id: string;
     userId: string;
@@ -134,6 +116,24 @@ export class NotificationsService {
       senderId: row.actorId,
       senderName: row.actor?.fullName ?? null,
       threadId: row.linkUrl ? `link:${row.linkUrl.split('?')[0]}` : null,
+      badge: unread - 1, // Remove explicit badge
     });
+  }
+
+  async syncRead(userId: string, notificationId: string | null) {
+    if (!this.push) return;
+    try {
+      await this.push.sendToUser(userId, {
+        type: 'notification.read',
+        kind: 'event',
+        title: '',
+        body: '',
+        silent: true,
+        notificationId,
+        tag: `arta-${notificationId}`,
+      });
+    } catch (err) {
+      this.logger.warn(`Sync read push failed: ${String(err)}`);
+    }
   }
 }

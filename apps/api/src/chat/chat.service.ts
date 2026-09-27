@@ -746,7 +746,6 @@ export class ChatService {
           threadTitle: channelLabel,
           channelId: channel.id,
           messageId: message.id,
-          badge: (await this.unreadTotal({ ...user, id: uid })).total,
         }),
       ),
     );
@@ -904,7 +903,6 @@ export class ChatService {
         silent: true,
         threadId: `chat-${channelId}`,
         channelId,
-        badge: unread.total,
       })
       .catch(() => undefined);
     return { ok: true, lastReadAt: at };

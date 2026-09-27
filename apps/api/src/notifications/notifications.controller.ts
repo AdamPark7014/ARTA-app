@@ -11,13 +11,17 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { NotificationsService } from './notifications.service';
 
 type AuthUser = { id: string };
 
 @Controller('notifications')
 @UseGuards(JwtAuthGuard)
 export class NotificationsController {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private notifications: NotificationsService,
+  ) {}
 
   /** Bandeja del usuario. `unread=1` deja solo lo no leído. */
   @Get()
@@ -51,7 +55,9 @@ export class NotificationsController {
     const found = await this.prisma.notification.findUnique({ where: { id } });
     if (!found || found.userId !== req.user.id) throw new NotFoundException('Aviso no encontrado');
     if (found.readAt) return found;
-    return this.prisma.notification.update({ where: { id }, data: { readAt: new Date() } });
+    const updated = await this.prisma.notification.update({ where: { id }, data: { readAt: new Date() } });
+    void this.notifications.syncRead(req.user.id, id).catch(() => undefined);
+    return updated;
   }
 
   @Post('read-all')
@@ -60,6 +66,7 @@ export class NotificationsController {
       where: { userId: req.user.id, readAt: null },
       data: { readAt: new Date() },
     });
+    if (res.count > 0) void this.notifications.syncRead(req.user.id, null).catch(() => undefined);
     return { ok: true, updated: res.count };
   }
 }
