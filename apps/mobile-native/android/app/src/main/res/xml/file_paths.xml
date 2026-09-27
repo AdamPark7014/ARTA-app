@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- PDFs del chat bajados con la sesión para abrirlos con el visor del teléfono. -->
+    <cache-path name="chat_files" path="chat-files/" />
+</paths>

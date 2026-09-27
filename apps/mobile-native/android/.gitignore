@@ -1,0 +1,13 @@
+.gradle/
+.kotlin/
+.idea/
+build/
+app/build/
+local.properties
+key.properties
+*.jks
+*.keystore
+# Credenciales de Firebase: se descargan de la consola, no van al repo.
+app/google-services.json
+captures/
+*.iml

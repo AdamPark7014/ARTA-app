@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="arta_bg">#FF09090B</color>
+    <color name="arta_bg_elev">#FF111113</color>
+    <color name="arta_gold">#FFC9A962</color>
+    <color name="arta_text">#FFFAFAFA</color>
+</resources>
