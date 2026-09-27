@@ -33,6 +33,8 @@ import { JobsModule } from './jobs/jobs.module';
 import { BillingModule } from './billing/billing.module';
 import { HealthModule } from './health/health.module';
 import { ChatModule } from './chat/chat.module';
+import { RealtimeModule } from './realtime/realtime.module';
+import { DevicesModule } from './devices/devices.module';
 import { SlotsController } from './slots/slots.controller';
 import { OriginalDownloadController } from './files/original-download.controller';
 import { FileInlineController } from './files/file-inline.controller';
@@ -44,6 +46,8 @@ import { DirectionService } from './common/rbac/direction.service';
     ScheduleModule.forRoot(),
     ThrottlerModule.forRoot([{ name: 'default', ttl: 60_000, limit: 240 }]),
     PrismaModule,
+    RealtimeModule,
+    DevicesModule,
     RevisionsModule,
     HealthModule,
     AuthModule,

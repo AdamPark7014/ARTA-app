@@ -217,6 +217,9 @@ model User {
   chatSent            ChatMessage[]              @relation("ChatSent")
   chatReceived        ChatMessage[]              @relation("ChatReceived")
   chatReads           ChatReadMarker[]
+  chatMemberships     ChatChannelMember[]
+  chatReactions       ChatMessageReaction[]
+  pushEndpoints       UserPushEndpoint[]
 
   @@index([organizationId])
 }
@@ -1042,20 +1045,128 @@ model NotificationOutbox {
 }
 
 // ─── Chat interno ────────────────────────────────────────────────────────────
-model ChatMessage {
-  id             String   @id @default(cuid())
-  organizationId String?
-  senderId       String
-  sender         User     @relation("ChatSent", fields: [senderId], references: [id], onDelete: Cascade)
-  /// null = canal general del equipo; si no, mensaje personal.
-  recipientId    String?
-  recipient      User?    @relation("ChatReceived", fields: [recipientId], references: [id], onDelete: Cascade)
-  body           String
-  createdAt      DateTime @default(now())
+enum ChatChannelKind {
+  PUBLIC
+  PRIVATE
+  DIRECT
+}
 
+enum ChatMessageKind {
+  TEXT
+  SYSTEM
+  FILE
+}
+
+/// Conversación tipo Slack: canal público, privado, directo (1:1) o de un evento.
+model ChatChannel {
+  id                 String              @id @default(cuid())
+  organizationId     String
+  kind               ChatChannelKind     @default(PUBLIC)
+  /// Solo canales públicos: general, anuncios, evento-…
+  slug               String?
+  name               String
+  topic              String?
+  description        String?
+  isArchived         Boolean             @default(false)
+  /// Directos: ids de las dos personas ordenados, «a:b».
+  dmKey              String?
+  /// Canal del evento (uno por evento).
+  eventId            String?             @unique
+  /// Solo dirección publica (anuncios).
+  postingRestricted  Boolean             @default(false)
+  createdById        String?
+  lastMessageAt      DateTime?
+  lastMessagePreview String?
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  members            ChatChannelMember[]
+  messages           ChatMessage[]
+
+  @@unique([organizationId, slug])
+  @@unique([organizationId, dmKey])
+  @@index([organizationId, lastMessageAt])
+}
+
+model ChatChannelMember {
+  id         String      @id @default(cuid())
+  channelId  String
+  channel    ChatChannel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// owner | member
+  role       String      @default("member")
+  lastReadAt DateTime?
+  mutedUntil DateTime?
+  joinedAt   DateTime    @default(now())
+
+  @@unique([channelId, userId])
+  @@index([userId, lastReadAt])
+}
+
+model ChatMessage {
+  id             String                @id @default(cuid())
+  organizationId String?
+  channelId      String
+  channel        ChatChannel           @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  /// Autor del mensaje.
+  senderId       String
+  sender         User                  @relation("ChatSent", fields: [senderId], references: [id], onDelete: Cascade)
+  /// Legado (chat de la junta 11-09): destinatario del mensaje personal. Ya no se escribe.
+  recipientId    String?
+  recipient      User?                 @relation("ChatReceived", fields: [recipientId], references: [id], onDelete: Cascade)
+  /// Respuesta dentro de un hilo.
+  parentId       String?
+  parent         ChatMessage?          @relation("ChatThread", fields: [parentId], references: [id], onDelete: Cascade)
+  replies        ChatMessage[]         @relation("ChatThread")
+  kind           ChatMessageKind       @default(TEXT)
+  body           String
+  attachmentUrl  String?
+  attachmentName String?
+  attachmentMime String?
+  attachmentSize Int?
+  pinnedAt       DateTime?
+  pinnedById     String?
+  editedAt       DateTime?
+  deletedAt      DateTime?
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @default(now()) @updatedAt
+  reactions      ChatMessageReaction[]
+
+  @@index([channelId, createdAt])
+  @@index([parentId, createdAt])
+  @@index([channelId, pinnedAt])
   @@index([organizationId, recipientId, createdAt])
   @@index([senderId, recipientId, createdAt])
   @@index([recipientId, senderId, createdAt])
+}
+
+model ChatMessageReaction {
+  id        String      @id @default(cuid())
+  messageId String
+  message   ChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  emoji     String
+  createdAt DateTime    @default(now())
+
+  @@unique([messageId, userId, emoji])
+}
+
+/// Teléfonos (FCM Android / iOS) que reciben avisos push de la persona.
+model UserPushEndpoint {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// android | ios | web
+  platform   String?
+  fcmToken   String?  @unique
+  deviceName String?
+  appVersion String?
+  lastSeenAt DateTime @default(now())
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([userId])
 }
 
 /// Hasta dónde leyó cada persona cada conversación ("general" o "dm:<userId>").

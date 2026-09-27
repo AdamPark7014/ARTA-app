@@ -1,9 +1,9 @@
 import { BadRequestException } from '@nestjs/common';
 import { diskStorage } from 'multer';
 import { closeSync, existsSync, mkdirSync, openSync, readSync, unlinkSync } from 'fs';
-import { extname, join } from 'path';
+import { extname, join, resolve } from 'path';
 
-export const uploadRoot = process.env.UPLOAD_DIR || join(process.cwd(), 'uploads');
+export const uploadRoot = resolve(process.env.UPLOAD_DIR || join(process.cwd(), 'uploads'));
 
 /**
  * Los archivos subidos se sirven estáticos en /uploads/* desde el mismo origen

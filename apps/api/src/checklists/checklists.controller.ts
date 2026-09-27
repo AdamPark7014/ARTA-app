@@ -47,6 +47,8 @@ import {
 } from '../common/rbac/roles';
 import { ChecklistPdfService } from './checklist-pdf.service';
 import { VISIBLE_CHECKLIST_WHERE } from './checklist-visibility';
+import { NotificationsService } from '../notifications/notifications.service';
+import { Optional } from '@nestjs/common';
 
 type AuthUser = {
   id: string;
@@ -70,6 +72,7 @@ export class ChecklistsController {
     private prisma: PrismaService,
     private pdfs: ChecklistPdfService,
     private revisions: RevisionService,
+    @Optional() private notifications?: NotificationsService,
   ) {}
 
   private assertEventAccess(user: AuthUser, event: { entity: string; organizationId?: string | null; status?: string }) {
@@ -792,7 +795,88 @@ export class ChecklistsController {
       },
     });
 
+    await this.notifyStatusChange(req.user, existing, from, to, reopening).catch(() => undefined);
     return updated;
+  }
+
+  /**
+   * Enviar a revisión avisa a quien aprueba en esa entidad; aprobar, sellar,
+   * regresar a borrador o reabrir avisa a quien lo mandó a revisión.
+   */
+  private async notifyStatusChange(
+    actor: AuthUser,
+    doc: {
+      id: string;
+      title: string;
+      eventId: string;
+      submittedById: string | null;
+      event: { name: string; entity: string; organizationId: string | null };
+    },
+    from: DocStatus,
+    to: DocStatus,
+    reopening: boolean,
+  ) {
+    if (!this.notifications) return;
+    const organizationId = doc.event.organizationId ?? null;
+    const entity = doc.event.entity as EntityKey;
+    const linkUrl = `/events/${doc.eventId}?tab=checklists&checklist=${doc.id}`;
+    const body = `${doc.title} · ${doc.event.name}`;
+    const who = actor.fullName || 'Alguien del equipo';
+
+    if (to === DocStatus.REVIEW) {
+      const people = await this.prisma.user.findMany({
+        where: { active: true, ...(organizationId ? { organizationId } : {}) },
+        select: { id: true, roleKey: true, entities: true },
+      });
+      const approvers = people.filter((p) => {
+        if (p.id === actor.id) return false;
+        const role = p.roleKey as RoleKey;
+        try {
+          assertCanTransition(role, DocStatus.APPROVED);
+        } catch {
+          return false;
+        }
+        if (!canAccessEventOps(p.entities as EntityKey[], role, entity)) return false;
+        if (role === 'gerente_arta' && entity !== 'ARTA') return false;
+        if (role === 'dir_auditorio' && entity !== 'EXPLANADA') return false;
+        return true;
+      });
+      await this.notifications.notifyMany(
+        approvers.map((p) => ({
+          userId: p.id,
+          organizationId,
+          actorId: actor.id,
+          type: 'checklist.submitted',
+          title: `${who} mandó un formato a revisión`,
+          body,
+          linkUrl,
+          entity,
+        })),
+      );
+      return;
+    }
+
+    const owner = doc.submittedById;
+    if (!owner || owner === actor.id) return;
+    const copy: Partial<Record<DocStatus, { type: string; title: string }>> = {
+      APPROVED: { type: 'checklist.approved', title: `${who} aprobó tu formato` },
+      SEALED: { type: 'checklist.sealed', title: `${who} selló tu formato` },
+      DRAFT: reopening
+        ? { type: 'checklist.reopened', title: `${who} reabrió un formato sellado` }
+        : { type: 'checklist.returned', title: `${who} regresó tu formato a borrador` },
+    };
+    const msg = from === to ? undefined : copy[to];
+    if (!msg) return;
+    await this.notifications.notify({
+      userId: owner,
+      organizationId,
+      actorId: actor.id,
+      type: msg.type,
+      title: msg.title,
+      body,
+      linkUrl,
+      entity,
+    });
   }
 
   @Post(':id/restore/:versionId')

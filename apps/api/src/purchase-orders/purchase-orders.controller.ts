@@ -133,6 +133,59 @@ export class PurchaseOrdersController {
     );
   }
 
+  /**
+   * Cada cambio de estatus le avisa a quien pidió la OC; al autorizarse, además
+   * a quien la puede pagar en esa entidad. Nunca al que hizo el cambio.
+   */
+  private async notifyStatusChange(
+    actor: { id: string; fullName?: string },
+    event: { id: string; name: string; entity: string; organizationId: string | null },
+    order: { createdById: string | null; vendorName: string | null; amount: Prisma.Decimal | number },
+    status: PoStatus,
+  ) {
+    const organizationId = event.organizationId ?? null;
+    const amount = Number(order.amount).toLocaleString('es-MX', { style: 'currency', currency: 'MXN' });
+    const who = actor.fullName || 'Dirección';
+    const detail = `${order.vendorName || 'Sin proveedor'} · ${amount} · ${event.name}`;
+    const linkUrl = `/events/${event.id}?tab=ocs`;
+    const entity = event.entity as EntityKey;
+    const copy: Partial<Record<PoStatus, { type: string; title: string }>> = {
+      AUTHORIZED: { type: 'po.authorized', title: `${who} autorizó tu orden de compra` },
+      PAID: { type: 'po.paid', title: 'Tu orden de compra ya se pagó' },
+      REJECTED: { type: 'po.rejected', title: `${who} rechazó tu orden de compra` },
+      CANCELLED: { type: 'po.cancelled', title: `${who} canceló tu orden de compra` },
+    };
+    const msg = copy[status];
+    if (!msg) return;
+    const items: Parameters<NotificationsService['notifyMany']>[0] = [];
+    if (order.createdById && order.createdById !== actor.id) {
+      items.push({ userId: order.createdById, organizationId, actorId: actor.id, type: msg.type, title: msg.title, body: detail, linkUrl, entity });
+    }
+    if (status === 'AUTHORIZED') {
+      const people = await this.prisma.user.findMany({
+        where: { active: true, ...(organizationId ? { organizationId } : {}) },
+        select: { id: true, roleKey: true, entities: true, permissions: true },
+      });
+      for (const p of people) {
+        const role = p.roleKey as RoleKey;
+        if (p.id === actor.id || p.id === order.createdById) continue;
+        if (!hasPermission(role, p.permissions, PERMISSIONS.PO_MARK_PAID)) continue;
+        if (!canAccessEventOps(p.entities as EntityKey[], role, entity)) continue;
+        items.push({
+          userId: p.id,
+          organizationId,
+          actorId: actor.id,
+          type: 'po.to_pay',
+          title: `OC autorizada por pagar · ${who}`,
+          body: detail,
+          linkUrl,
+          entity,
+        });
+      }
+    }
+    if (items.length) await this.notifications.notifyMany(items);
+  }
+
   /** Días de cobro del tenant (con los defaults de Arta: lunes, miércoles y viernes). */
   private async loadWindow(user: WindowUser): Promise<PoWindowConfig> {
     const org = await this.prisma.organization.findUnique({
@@ -599,6 +652,7 @@ export class PurchaseOrdersController {
         amount: Number(order.amount),
         paymentMethod: authorized.paymentMethod,
       });
+      await this.notifyStatusChange(req.user, order.event, order, 'AUTHORIZED').catch(() => undefined);
       return authorized;
     }
     if (body.status === 'PAID') {
@@ -662,6 +716,7 @@ export class PurchaseOrdersController {
         paymentMethod: method,
         proofCount,
       });
+      await this.notifyStatusChange(req.user, order.event, order, 'PAID').catch(() => undefined);
       return paid;
     }
     // Any other transition (REJECTED/CANCELLED/DRAFT/PENDING_AUTH) is still an
@@ -682,6 +737,7 @@ export class PurchaseOrdersController {
       to: body.status,
       amount: Number(order.amount),
     });
+    await this.notifyStatusChange(req.user, order.event, order, body.status).catch(() => undefined);
     return moved;
   }
 
