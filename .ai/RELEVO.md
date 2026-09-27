@@ -29,6 +29,8 @@ en el Excel con posibilidad de ampliarse».
   aquí» (ya es «Editar»; corregido) y cargan el Excel por `/api/files/:id/inline` (PR #5),
   ruta que su mock no responde → la celda A1 recibe «[]». Pendiente para Cursor: stub de
   `files/:id/inline` en `support/mock-api.ts` o en esos specs.
+- **Desplegado `99c43b8` a producción 27-09 15:37**: api y web sanos, el `dist` incluye el
+  arreglo (`file.export.pdf`). Falta que Adam pulse «Salir en PDF» en pendones para confirmar.
 
 ## Turno claude-code (2026-09-27, 14:00): PDFs «horribles» y hoja en blanco
 
