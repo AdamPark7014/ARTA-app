@@ -1,10 +1,37 @@
 # RELEVO
 
-- **Último turno:** claude-code
+- **Último turno:** cursor
 - **Fecha:** 2026-10-04
 - **Rama:** main
   (Adam es el único programador).
 - **Producción:** `4745dd4` desplegado desde `main` el 2026-09-27 22:39 UTC (lo de abajo NO está desplegado)
+
+## Turno cursor (2026-10-04): chat web v2 según `docs/CHAT-V2-CONTRATO.md` (commit `93a78bd`, sin push ni deploy)
+
+- Varios agentes trabajan a la vez en este checkout (API del chat, Android, iOS). Este turno solo tocó
+  `apps/web/app/(app)/chat/page.tsx`, `apps/web/components/chat/**` y `apps/web/styles/_chat.scss`.
+  **No se corrió `relevo cerrar`** porque hace `git add -A` y metería el trabajo sin commitear de los otros.
+- `page.tsx` queda como orquestador. Componentes nuevos: `Composer`, `MessageList`, `ChatPanels`
+  (fijados, guardados, info del canal), `ChatDialogs` (nueva conversación, Ctrl+K), `EmojiPicker` +
+  `emoji-data` (local, sin CDN), `chat-markdown` (parser puro, sin `dangerouslySetInnerHTML`), `chat-ui`.
+- Hecho:
+  - Menciones `[@Nombre](user:id)` como chips dorados, autocompletado con teclado y `@canal` para moderadores.
+  - Markdown del §7; 8 reacciones rápidas más el picker completo; quién reaccionó al pasar el cursor.
+  - Responder citando (`replyToId`); guardados (`GET /chat/saved`).
+  - Nuevas conversaciones: DM, grupo de 2 a 8 personas (`POST /chat/group-dm`) y canal con `memberIds`.
+  - Info del canal: editar, miembros con presencia, agregar o quitar, salir, archivar, silenciar 8 h, 1 semana o siempre.
+  - Presencia (`GET /chat/presence` + `chat:presence`); divisor «Mensajes nuevos» y botón «↓ N nuevos».
+  - Vista previa de enlaces (`GET /chat/link-preview`) y borradores por canal.
+  - Visor con zoom, arrastre y deslizar; reintento de subidas; «Mensaje eliminado».
+  - No molestar (`/chat/prefs`); esqueleto, vacío y error con «Reintentar».
+  - Atajos: Ctrl+K, Esc y flecha arriba para editar. A 390 px se ve como lista y conversación, con hojas a pantalla completa.
+- Todo campo nuevo del contrato se trata como opcional: la página funciona con el API actual.
+- Verificación: `npx -w apps/web tsc --noEmit -p tsconfig.json` limpio; `_chat.scss` compila con sass.
+  `apps/web` no tiene script de lint; no hay e2e de chat. **No se revisó en navegador.**
+- A medias o dependiente del API: presencia con `online` (hoy el servidor manda `status`; la web ignora el
+  socket hasta que responda `GET /chat/presence`), `deleted: true` en `chat:message-updated`, `isGroupDm`,
+  `replyTo` en la respuesta, `saved`, `/chat/prefs` y `/chat/link-preview`. Falta una e2e del chat y
+  revisarlo a ojo en escritorio y a 390 px.
 
 ## Turno claude-code (2026-10-04, 11:50): Firebase de ARTA y apps móviles
 
