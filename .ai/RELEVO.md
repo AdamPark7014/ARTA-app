@@ -6,6 +6,26 @@
   (Adam es el único programador).
 - **Producción:** `4745dd4` desplegado desde `main` el 2026-09-27 22:39 UTC (lo de abajo NO está desplegado)
 
+## Turno cursor (2026-10-04): chat Android v2 según `docs/CHAT-V2-CONTRATO.md` (sin push ni release)
+
+- Commits: `4677826` (conversación), `a030df9` (búsqueda, guardados, nueva conversación), `e2bf445` (lista,
+  info del canal, rutas, imágenes), `03c8600` (vistas previas y avatar de grupo). Solo se tocó
+  `ui/chat/**`, `data/api/ArtaApi.kt`, `data/realtime/RealtimeClient.kt` y rutas en `ui/ArtaApp.kt`.
+  `4677826` arrastró sin querer los campos `entities`/`permissions` de `UserDto` que otro agente tenía sin
+  commitear en `ArtaApi.kt` (aditivos, se dejaron).
+- **No se corrió `relevo cerrar`** (hace `git add -A` y metería el Swift sin commitear del agente de iOS).
+- Pantallas nuevas: `ChatSearchScreen`, `SavedMessagesScreen`, `NewConversationScreen` (DM, grupo 2–8,
+  canal), `ChannelInfoScreen`. Rutas literales `chat/buscar`, `chat/guardados`, `chat/nueva`,
+  `chat/{id}/info` declaradas antes de `chat/{channelId}?msg=`: así `HomeScreen` no cambia (sigue usando
+  `openChat(id)`); las constantes están en `ChatRoutes` (`ConversationScreen.kt`).
+- Hecho: secciones Canales / Eventos / Mensajes directos / Explorar canales, No molestar, presencia,
+  markdown §7, chips de mención, citas con deslizar, guardados, vista previa de enlaces, emojis completos,
+  borradores por canal (8000), visor con zoom y paginado, «Visto / Visto por N», «Mensaje eliminado»,
+  divisor de no leídos y «↓ N nuevos», esqueleto / vacío / error con «Reintentar», imágenes sin recorte.
+- Verificación: `gradlew :app:compileDebugKotlin` limpio (con `--rerun-tasks`). **No se probó en
+  dispositivo ni contra el API v2 real.** Pendiente: abrir un canal de «Explorar canales» del que no se es
+  miembro (depende de cómo responda el API), y revisar a ojo todo lo anterior.
+
 ## Turno cursor (2026-10-04): chat web v2 según `docs/CHAT-V2-CONTRATO.md` (commit `93a78bd`, sin push ni deploy)
 
 - Varios agentes trabajan a la vez en este checkout (API del chat, Android, iOS). Este turno solo tocó
