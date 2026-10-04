@@ -89,6 +89,17 @@ describe('format-catalog', () => {
     expect(table.columns!.filter((c) => c.total).map((c) => c.id)).toEqual(['parte1', 'parte2', 'parte3']);
   });
 
+  it('Rueda de prensa: Convocatoria es el primer rubro y el Timeline va después de medios', () => {
+    const sections = standardFormat('RUEDA_PRENSA')!.schema.sections.map((s) => s.id);
+    expect(sections.indexOf('convocatoria')).toBe(1);
+    expect(sections.indexOf('timeline')).toBe(sections.indexOf('medios') + 1);
+    const conv = standardFormat('RUEDA_PRENSA')!.schema.sections.find((s) => s.id === 'convocatoria')!;
+    expect(conv.items.map((i) => i.label)).toEqual(['Encargado', 'Drive de contenido para rueda']);
+    const timeline = standardFormat('RUEDA_PRENSA')!.schema.sections.find((s) => s.id === 'timeline')!;
+    expect(timeline.items.map((i) => i.id)).toEqual(['pre', 'durante', 'despues']);
+    for (const t of timeline.items) expect(t.columns!.map((c) => c.id)).toEqual(['hora', 'actividad', 'responsable']);
+  });
+
   it('las plantillas retiradas no se solapan con las estándar', () => {
     const standard = new Set(STANDARD_FORMATS.map((f) => f.key));
     for (const r of RETIRED_TEMPLATES) expect(standard.has(r.key)).toBe(false);

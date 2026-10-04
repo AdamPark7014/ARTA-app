@@ -36,6 +36,7 @@ import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { createHash } from 'crypto';
 import { NotificationsService } from '../notifications/notifications.service';
 import { shortName } from '../notifications/notification-push-meta';
+import { withAssignees } from '../tasks/task-workflow';
 
 class CreateEventDto {
   @IsEnum(EntityKey)
@@ -241,6 +242,10 @@ export class EventsController {
         tasks: {
           include: {
             assignee: { select: { id: true, fullName: true } },
+            coAssignees: {
+              include: { user: { select: { id: true, fullName: true } } },
+              orderBy: { createdAt: 'asc' },
+            },
             createdBy: { select: { id: true, fullName: true } },
             approvedBy: { select: { id: true, fullName: true } },
             rejectedBy: { select: { id: true, fullName: true } },
@@ -287,7 +292,7 @@ export class EventsController {
     // en orden de sucesión: se devuelven ascendentes, como el resto del API.
     return {
       ...event,
-      tasks: event.tasks.map((t) => ({ ...t, activities: [...t.activities].reverse() })),
+      tasks: event.tasks.map((t) => withAssignees({ ...t, activities: [...t.activities].reverse() })),
     };
   }
 

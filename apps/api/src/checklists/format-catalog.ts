@@ -26,8 +26,11 @@ import {
   type FormatSection,
 } from '../common/format-schema';
 
-/** Sube cuando cambie la forma de algún formato estándar. */
-export const STANDARD_FORMAT_VERSION = 2;
+/**
+ * Sube cuando cambie la forma de algún formato estándar.
+ * v3 (30-09-2026): Rueda de Prensa con Convocatoria y Timeline.
+ */
+export const STANDARD_FORMAT_VERSION = 3;
 
 export type StandardFormat = {
   key: ChecklistTemplateKey;
@@ -99,6 +102,13 @@ const table = (
   minRows: 6,
   ...extra,
 });
+
+/** Renglones de un cronograma: hora, qué pasa y quién lo lleva. */
+const timelineColumns = (): FormatColumn[] => [
+  col('hora', 'Hora', { type: 'time', width: 1 }),
+  col('actividad', 'Actividad', { width: 3 }),
+  col('responsable', 'Responsable', { width: 2 }),
+];
 
 const checks = (id: string, title: string, entries: Array<[string, string]>): FormatSection => ({
   id,
@@ -401,7 +411,7 @@ export const STANDARD_FORMATS: StandardFormat[] = [
   {
     key: 'RUEDA_PRENSA',
     name: 'Checklist Rueda de Prensa',
-    description: 'Datos de la RP, encargados, montaje, medios confirmados',
+    description: 'Datos de la RP, convocatoria, encargados, montaje, medios confirmados y timeline',
     entities: [],
     schema: schema(
       {
@@ -414,6 +424,15 @@ export const STANDARD_FORMATS: StandardFormat[] = [
           text('hora', 'Hora de la RP', { cols: 3, placeholder: '11:00' }),
           text('ciudad', 'Ciudad de la RP', { bind: 'event.city', cols: 6 }),
           text('venue', 'Venue de la RP', { cols: 6 }),
+        ],
+      },
+      // Correcciones 30-09-2026: «agregar como primer rubro un cintillo que diga convocatoria».
+      {
+        id: 'convocatoria',
+        title: 'Convocatoria',
+        items: [
+          text('conv_encargado', 'Encargado', { placeholder: 'Nombre y contacto de quien convoca a medios' }),
+          text('conv_drive', 'Drive de contenido para rueda', { placeholder: 'Liga del Drive (artes, boletín, fotos…)' }),
         ],
       },
       {
@@ -440,6 +459,16 @@ export const STANDARD_FORMATS: StandardFormat[] = [
             col('contacto', 'Contacto', { width: 2 }),
             col('confirmado', 'Confirmado', { width: 1 }),
           ]),
+        ],
+      },
+      // Correcciones 30-09-2026: después de medios, cronograma antes, durante y después de la RP.
+      {
+        id: 'timeline',
+        title: 'Timeline de la rueda de prensa',
+        items: [
+          table('pre', 'Antes de la rueda de prensa', timelineColumns(), { minRows: 4 }),
+          table('durante', 'Durante la rueda de prensa', timelineColumns(), { minRows: 4 }),
+          table('despues', 'Después de la rueda de prensa', timelineColumns(), { minRows: 3 }),
         ],
       },
       {

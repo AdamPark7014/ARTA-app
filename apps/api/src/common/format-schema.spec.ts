@@ -123,6 +123,14 @@ describe('format-schema · enlace con el evento', () => {
     expect(eventDateValue(null)).toBe('');
     expect(eventDateValue('no-es-fecha')).toBe('');
   });
+
+  it('con varias funciones la hora se lee «16:00 y 20:00»', () => {
+    expect(eventTimeValue({ schedule: 'Función 1 — 16:00 · Función 2 — 20:00' })).toBe('16:00 y 20:00');
+    expect(eventTimeValue({ schedule: 'Función 1 — 13:00 · Función 2 — 16:00 · Función 3 — 20:00' })).toBe(
+      '13:00, 16:00 y 20:00',
+    );
+    expect(eventTimeValue({ schedule: 'Función 2 — 20:00' })).toBe('20:00');
+  });
 });
 
 describe('format-schema · migración de respuestas', () => {

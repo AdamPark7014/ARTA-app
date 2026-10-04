@@ -190,6 +190,7 @@ model User {
   checklistVersions    ChecklistVersion[]
   templateVersions     ChecklistTemplateVersion[]
   assignedTasks        TaskAssignment[]           @relation("TaskAssignee")
+  coAssignedTasks      TaskCoAssignee[]
   createdTasks         TaskAssignment[]           @relation("TaskCreator")
   filesEdited          EventFile[]                @relation("FileEditor")
   filesUploaded        EventFile[]                @relation("FileUploader")
@@ -601,13 +602,29 @@ model TaskAssignment {
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
 
-  evidences  TaskEvidence[]
-  activities TaskActivity[]
+  evidences   TaskEvidence[]
+  activities  TaskActivity[]
+  /// Más responsables además de `assignee` (correcciones 30-09-2026)
+  coAssignees TaskCoAssignee[]
 
   @@index([assigneeId, status])
   @@index([organizationId, status])
   @@index([eventId])
   @@index([createdById, status])
+}
+
+/// Una tarea puede ser de 1 o más personas (correcciones 30-09-2026).
+/// `TaskAssignment.assigneeId` sigue siendo la primera persona; aquí van las
+/// demás. Todas la ven en «Mis tareas», reciben los avisos y pueden entregarla.
+model TaskCoAssignee {
+  taskId    String
+  task      TaskAssignment @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime       @default(now())
+
+  @@id([taskId, userId])
+  @@index([userId])
 }
 
 model TaskEvidence {

@@ -31,6 +31,9 @@ export type TaskRecord = {
   rejectedAt?: string | null;
   assigneeId?: string | null;
   assignee?: { id: string; fullName: string; email?: string } | null;
+  /** Todos los responsables, el principal primero (correcciones 30-09-2026). */
+  assigneeIds?: string[];
+  assignees?: Array<{ id: string; fullName: string; email?: string | null }>;
   createdById?: string | null;
   createdBy?: { id: string; fullName: string } | null;
   approvedBy?: { id: string; fullName: string } | null;
@@ -40,8 +43,26 @@ export type TaskRecord = {
   activities?: TaskActivity[];
 };
 
-export function taskNeedsApproval(t: Pick<TaskRecord, 'assigneeId' | 'createdById'>) {
-  return !!t.createdById && t.createdById !== t.assigneeId;
+type AssigneeFields = Pick<TaskRecord, 'assigneeId' | 'assignee' | 'assigneeIds' | 'assignees'>;
+
+/** Responsables de la tarea (1 o más), el principal primero. */
+export function taskAssigneeIds(t: AssigneeFields): string[] {
+  if (t.assigneeIds?.length) return t.assigneeIds;
+  return t.assigneeId ? [t.assigneeId] : [];
+}
+
+export function taskAssigneeNames(t: AssigneeFields): string[] {
+  if (t.assignees?.length) return t.assignees.map((p) => p.fullName);
+  return t.assignee?.fullName ? [t.assignee.fullName] : [];
+}
+
+export function isTaskAssignee(t: AssigneeFields, userId?: string | null): boolean {
+  return !!userId && taskAssigneeIds(t).includes(userId);
+}
+
+/** Hay quien pidió y no está entre los responsables → hace falta visto bueno. */
+export function taskNeedsApproval(t: AssigneeFields & Pick<TaskRecord, 'createdById'>) {
+  return !!t.createdById && !isTaskAssignee(t, t.createdById);
 }
 
 export const TASK_STATUS_LABEL: Record<string, string> = {

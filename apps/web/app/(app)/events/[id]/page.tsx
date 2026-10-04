@@ -77,7 +77,13 @@ function EventDetailInner() {
   const [msg, setMsg] = useState('');
   const [msgVariant, setMsgVariant] = useState<FlashVariant>('success');
   const [directory, setDirectory] = useState<DirUser[]>([]);
-  const [taskForm, setTaskForm] = useState({ title: '', module: '', assigneeId: '', dueAt: '', detail: '' });
+  const [taskForm, setTaskForm] = useState({
+    title: '',
+    module: '',
+    assigneeIds: [] as string[],
+    dueAt: '',
+    detail: '',
+  });
   const [previewFile, setPreviewFile] = useState<EventDetail['files'][0] | null>(null);
   const [editingMeta, setEditingMeta] = useState(false);
 
@@ -512,12 +518,15 @@ function EventDetailInner() {
           title: taskForm.title,
           module: taskForm.module || undefined,
           detail: taskForm.detail || undefined,
-          assigneeId: taskForm.assigneeId || undefined,
+          assigneeIds: taskForm.assigneeIds,
           dueAt: taskForm.dueAt || undefined,
         }),
       });
-      const who = directory.find((d) => d.id === taskForm.assigneeId)?.fullName;
-      // Se conserva responsable y fecha: casi siempre se cargan varias seguidas.
+      const who = taskForm.assigneeIds
+        .map((pid) => directory.find((d) => d.id === pid)?.fullName)
+        .filter(Boolean)
+        .join(', ');
+      // Se conservan responsables y fecha: casi siempre se cargan varias seguidas.
       setTaskForm({ ...taskForm, title: '', detail: '' });
       flash(who ? `Tarea asignada a ${who} — le llega el aviso en su panel` : 'Tarea creada');
       setEvent((prev) => (prev ? { ...prev, tasks: [created, ...(prev.tasks || [])] } : prev));
@@ -709,13 +718,21 @@ function EventDetailInner() {
             setTaskForm={setTaskForm}
             onCreateTask={createTask}
             onSetTaskStatus={(taskId, status) => patchTask(taskId, { status }, { status })}
-            onReassignTask={(taskId, assigneeId) => {
-              const person = directory.find((d) => d.id === assigneeId);
+            onReassignTask={(taskId, assigneeIds) => {
+              const people = assigneeIds
+                .map((pid) => directory.find((d) => d.id === pid))
+                .filter(Boolean)
+                .map((p) => ({ id: p!.id, fullName: p!.fullName }));
               return patchTask(
                 taskId,
-                { assigneeId: assigneeId || null, assignee: person ? { id: person.id, fullName: person.fullName } : null },
-                { assigneeId: assigneeId || null },
-                assigneeId ? 'Tarea reasignada — se envió el aviso' : 'Tarea sin asignar',
+                {
+                  assigneeId: people[0]?.id ?? null,
+                  assignee: people[0] ?? null,
+                  assigneeIds: people.map((p) => p.id),
+                  assignees: people,
+                },
+                { assigneeIds },
+                people.length ? 'Responsables actualizados — se avisó a quien se sumó' : 'Tarea sin asignar',
               );
             }}
             onSetTaskDue={(taskId, dueAt) => patchTask(taskId, { dueAt: dueAt || null }, { dueAt: dueAt || null })}

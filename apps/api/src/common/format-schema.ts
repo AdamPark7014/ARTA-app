@@ -235,9 +235,20 @@ export function eventDateValue(startsAt?: Date | string | null): string {
   return `${get('year')}-${get('month')}-${get('day')}`;
 }
 
-/** Hora del show: el horario capturado («20:00 a 23:00») o la hora de inicio. */
+/**
+ * Hora del show: el horario capturado o la hora de inicio.
+ *
+ * Con varias funciones el evento guarda «Función 1 — 16:00 · Función 2 —
+ * 20:00» (correcciones 30-09-2026); en el renglón HORA de un formato eso se
+ * lee «16:00 y 20:00».
+ */
 export function eventTimeValue(event: FormatEventSource): string {
   const schedule = (event.schedule ?? '').trim();
+  if (/funci[oó]n/i.test(schedule)) {
+    const times = schedule.match(/\b\d{1,2}:\d{2}\b/g) ?? [];
+    if (times.length > 1) return `${times.slice(0, -1).join(', ')} y ${times[times.length - 1]}`;
+    if (times.length === 1) return times[0];
+  }
   if (schedule) return schedule;
   const d = toDate(event.startsAt);
   if (!d) return '';

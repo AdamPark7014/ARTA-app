@@ -1,10 +1,32 @@
 # RELEVO
 
 - **Último turno:** claude-code
-- **Fecha:** 2026-09-27
+- **Fecha:** 2026-10-04
 - **Rama:** main
   (Adam es el único programador).
-- **Producción:** `4745dd4` desplegado desde `main` el 2026-09-27 22:39 UTC
+- **Producción:** `4745dd4` desplegado desde `main` el 2026-09-27 22:39 UTC (lo de abajo NO está desplegado)
+
+## Turno claude-code (2026-10-04): «Correcciones Dashboard 30 de SEP 2026» (PDF del cliente) — EN CURSO
+
+PDF `Downloads\Dashboard ARTA 30 de SEP 2026.pdf`, seis puntos. Hechos y con pruebas (sin desplegar):
+
+1. **Crear evento · un horario por función**: `EventFields.tsx` pide «Función 1 · horario», «Función 2 ·
+   horario»… según «Funciones» (tope 12). `Event.schedule` guarda `Función 1 — 16:00 · Función 2 — 20:00`
+   (una función: solo `20:00`); `startsAt` = fecha + primera hora. En los formatos, `eventTimeValue`
+   lo lee «16:00 y 20:00». Eventos viejos «14:00 a 23:00»: se toma la apertura.
+2. **Sin «Horario · cierra»**: quitado del formulario (crear y editar).
+3. **Rueda de prensa**: catálogo v3 (`STANDARD_FORMAT_VERSION = 3`) — sección `convocatoria` (Encargado,
+   Drive de contenido para rueda) como primer rubro y `timeline` (tablas Antes / Durante / Después:
+   hora, actividad, responsable) después de Medios confirmados. **Tras desplegar hay que correr**
+   `scripts/upgrade-format-templates.ts --dry` y luego `--confirm-produccion` (sube las 9 plantillas a v3
+   y migra borradores conservando respuestas).
+4. **Tareas a 1 o más personas**: tabla `TaskCoAssignee` (migración `20261004120000_task_co_assignees`,
+   solo tabla nueva). `assigneeId` sigue siendo la persona principal; el API acepta `assigneeIds[]`
+   (create/PATCH) y devuelve `assigneeIds` + `assignees`. Todos la ven en «Mis tareas», reciben avisos,
+   pueden entregar; si quien pidió también la tiene, no pide visto bueno. Web: `AssigneesPicker`
+   (casillas + buscador; en filas guarda al cerrar). `AssigneeSelect` se borró (sin usos).
+
+Pendiente en este turno: punto 6 (Campañas: editor tipo Excel con filas/columnas que no desordenan).
 
 ## Regla de ramas (pedido de Adam, 2026-09-27)
 

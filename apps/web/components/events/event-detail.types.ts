@@ -259,6 +259,9 @@ export type Task = {
   rejectionNote?: string | null;
   assigneeId?: string | null;
   assignee?: { id: string; fullName: string } | null;
+  /** Todos los responsables, el principal primero (correcciones 30-09-2026). */
+  assigneeIds?: string[];
+  assignees?: Array<{ id: string; fullName: string }>;
   createdById?: string | null;
   createdBy?: { id: string; fullName: string } | null;
   approvedBy?: { id: string; fullName: string } | null;

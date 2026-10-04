@@ -77,10 +77,10 @@ export class NotificationsService {
   async eventAudience(eventId: string, excludeUserId?: string | null): Promise<string[]> {
     const [event, tasks, channel] = await Promise.all([
       this.prisma.event.findUnique({ where: { id: eventId }, select: { createdById: true } }),
+      // Responsables principales y corresponsables (una tarea puede ser de varias personas).
       this.prisma.taskAssignment.findMany({
-        where: { eventId, assigneeId: { not: null } },
-        select: { assigneeId: true },
-        distinct: ['assigneeId'],
+        where: { eventId, OR: [{ assigneeId: { not: null } }, { coAssignees: { some: {} } }] },
+        select: { assigneeId: true, coAssignees: { select: { userId: true } } },
       }),
       this.prisma.chatChannel.findUnique({
         where: { eventId },
@@ -89,7 +89,10 @@ export class NotificationsService {
     ]);
     const ids = new Set<string>();
     if (event?.createdById) ids.add(event.createdById);
-    for (const t of tasks) if (t.assigneeId) ids.add(t.assigneeId);
+    for (const t of tasks) {
+      if (t.assigneeId) ids.add(t.assigneeId);
+      for (const c of t.coAssignees ?? []) ids.add(c.userId);
+    }
     for (const m of channel?.members ?? []) ids.add(m.userId);
     if (excludeUserId) ids.delete(excludeUserId);
     if (ids.size === 0) return [];

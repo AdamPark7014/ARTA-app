@@ -376,7 +376,7 @@
   justify-content: flex-end;
 }
 
-.field--assignee {
+.task-row .assignees {
   max-width: 11rem;
 }
 
@@ -396,7 +396,7 @@
     row-gap: 0.45rem;
   }
 
-  .task-row .field--assignee,
+  .task-row .assignees,
   .task-row .field--date,
   .task-row__actions {
     grid-column: 3;

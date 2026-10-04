@@ -2,14 +2,14 @@
 
 import { useMemo, useRef, useState } from 'react';
 import { EmptyLite, Pill, SectionHead, Seg } from '@/components/ui/Lite';
-import { AssigneeSelect } from '@/components/ui/AssigneeSelect';
+import { AssigneesPicker } from '@/components/ui/AssigneesPicker';
 import { TaskApprovalActions } from '@/components/tasks/TaskApprovalActions';
 import { TaskActivityTimeline } from '@/components/tasks/TaskActivityTimeline';
 import { TaskDeliveryModal } from '@/components/tasks/TaskDeliveryModal';
-import { taskNeedsApproval } from '@/components/tasks/task-types';
+import { isTaskAssignee, taskAssigneeIds, taskAssigneeNames, taskNeedsApproval } from '@/components/tasks/task-types';
 import type { DirUser, Task } from '@/components/events/event-detail.types';
 
-type TaskForm = { title: string; module: string; assigneeId: string; dueAt: string; detail: string };
+type TaskForm = { title: string; module: string; assigneeIds: string[]; dueAt: string; detail: string };
 
 type EventTasksPanelProps = {
   closed: boolean;
@@ -20,7 +20,8 @@ type EventTasksPanelProps = {
   setTaskForm: (form: TaskForm) => void;
   onCreateTask: () => Promise<void>;
   onSetTaskStatus: (taskId: string, status: string) => Promise<void>;
-  onReassignTask?: (taskId: string, assigneeId: string) => Promise<void>;
+  /** Responsables de la tarea: 1 o más personas, la primera es la principal. */
+  onReassignTask?: (taskId: string, assigneeIds: string[]) => Promise<void>;
   onSetTaskDue?: (taskId: string, dueAt: string) => Promise<void>;
   onEditTask?: (taskId: string, patch: { title: string; detail: string }) => Promise<void>;
   onTaskUpdated?: (task: Task) => void;
@@ -107,7 +108,7 @@ export function EventTasksPanel({
       void onSetTaskStatus(t.id, 'OPEN');
       return;
     }
-    if (taskNeedsApproval(t) && t.assigneeId === currentUserId) {
+    if (taskNeedsApproval(t) && isTaskAssignee(t, currentUserId)) {
       setDeliveryTask(t);
       return;
     }
@@ -152,13 +153,12 @@ export function EventTasksPanel({
                 }
               }}
             />
-            <AssigneeSelect
-              value={taskForm.assigneeId}
+            <AssigneesPicker
+              value={taskForm.assigneeIds}
               directory={directory}
-              onChange={(id) => setTaskForm({ ...taskForm, assigneeId: id })}
-              label="Responsable"
+              onChange={(ids) => setTaskForm({ ...taskForm, assigneeIds: ids })}
+              label="Responsables"
               className="task-add__who"
-              eager
             />
             <input
               className="task-add__due"
@@ -235,9 +235,9 @@ export function EventTasksPanel({
             const key = dueKey(t.dueAt);
             const late = section === 'open' && !!key && key < today;
             const open = openId === t.id;
-            const needsDelivery = taskNeedsApproval(t) && t.assigneeId === currentUserId;
+            const needsDelivery = taskNeedsApproval(t) && isTaskAssignee(t, currentUserId);
             const canReview =
-              t.status === 'PENDING_APPROVAL' && t.createdById === currentUserId && t.createdById !== t.assigneeId;
+              t.status === 'PENDING_APPROVAL' && t.createdById === currentUserId && !isTaskAssignee(t, t.createdById);
             const isEditing = editing?.id === t.id;
 
             return (
@@ -259,7 +259,7 @@ export function EventTasksPanel({
                   <button type="button" className="task2__main" onClick={() => setOpenId(open ? null : t.id)}>
                     <span className="task2__title">{t.title}</span>
                     <span className="task2__meta">
-                      {t.assignee?.fullName || 'Sin asignar'}
+                      {taskAssigneeNames(t).join(', ') || 'Sin asignar'}
                       {t.module ? ` · ${t.module}` : ''}
                     </span>
                   </button>
@@ -315,15 +315,16 @@ export function EventTasksPanel({
                         ) : null}
                         <div className="task2__controls">
                           {onReassignTask && !closed ? (
-                            <label className="task2__control">
-                              Responsable
-                              <AssigneeSelect
-                                value={t.assigneeId || ''}
+                            <div className="task2__control">
+                              Responsables
+                              <AssigneesPicker
+                                value={taskAssigneeIds(t)}
                                 directory={directory}
-                                onChange={(id) => onReassignTask(t.id, id)}
-                                label={`Responsable de ${t.title}`}
+                                onChange={(ids) => void onReassignTask(t.id, ids)}
+                                label={`Responsables de ${t.title}`}
+                                commitOnClose
                               />
-                            </label>
+                            </div>
                           ) : null}
                           {onSetTaskDue && !closed ? (
                             <label className="task2__control">

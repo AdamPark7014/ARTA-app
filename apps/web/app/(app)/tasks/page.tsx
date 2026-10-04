@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { AppShell } from '@/components/app-shell/AppShell';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { LoadingBlock, LoadingKpis } from '@/components/ui/LoadingBlock';
-import { AssigneeSelect } from '@/components/ui/AssigneeSelect';
+import { AssigneesPicker } from '@/components/ui/AssigneesPicker';
 import { BulkBar, SelectCheck } from '@/components/ui/BulkBar';
 import {
   ActionLink,
@@ -23,6 +23,9 @@ import { TaskActivityTimeline } from '@/components/tasks/TaskActivityTimeline';
 import { TaskDeliveryModal } from '@/components/tasks/TaskDeliveryModal';
 import {
   TASK_STATUS_LABEL,
+  isTaskAssignee,
+  taskAssigneeIds,
+  taskAssigneeNames,
   taskNeedsApproval,
   type TaskRecord,
 } from '@/components/tasks/task-types';
@@ -68,7 +71,7 @@ const QUICK_FILTERS: Array<{ key: QuickFilter; label: string }> = [
 
 const STATUS_LABEL = TASK_STATUS_LABEL;
 
-const emptyForm = { title: '', detail: '', module: '', assigneeId: '', eventId: '', dueAt: '' };
+const emptyForm = { title: '', detail: '', module: '', assigneeIds: [] as string[], eventId: '', dueAt: '' };
 
 /** Arturo, José Luis, Marisol, Leida + gerencias. */
 const TEAM_ROLES = new Set([
@@ -113,7 +116,7 @@ function engagementLabel(t: TaskRecord): { label: string; tone: string } | null 
   if (t.status === 'PENDING_APPROVAL') return { label: 'Por aprobar', tone: 'warn' };
   if (t.status === 'BLOCKED') return { label: 'Bloqueada', tone: 'danger' };
   if (t.status === 'IN_PROGRESS') return { label: 'En curso', tone: 'warn' };
-  if (!t.assigneeId) return { label: 'Sin asignar', tone: 'muted-tone' };
+  if (!taskAssigneeIds(t).length) return { label: 'Sin asignar', tone: 'muted-tone' };
   if (!t.seenAt) return { label: 'Sin abrir', tone: 'warn' };
   return { label: 'Vio · sin avance', tone: 'warn' };
 }
@@ -193,7 +196,7 @@ export default function TasksPage() {
     else if (quick === 'blocked') list = list.filter((t) => t.status === 'BLOCKED');
     else if (quick === 'done') list = list.filter((t) => t.status === 'DONE');
     if (who !== 'all') {
-      list = list.filter((t) => (who === 'none' ? !t.assigneeId : t.assigneeId === who));
+      list = list.filter((t) => (who === 'none' ? !taskAssigneeIds(t).length : taskAssigneeIds(t).includes(who)));
     }
     if (q.trim()) {
       const n = q.toLowerCase();
@@ -202,7 +205,7 @@ export default function TasksPage() {
           t.title.toLowerCase().includes(n) ||
           (t.module || '').toLowerCase().includes(n) ||
           (t.detail || '').toLowerCase().includes(n) ||
-          (t.assignee?.fullName || '').toLowerCase().includes(n) ||
+          taskAssigneeNames(t).some((name) => name.toLowerCase().includes(n)) ||
           (t.event?.name || '').toLowerCase().includes(n),
       );
     }
@@ -215,13 +218,17 @@ export default function TasksPage() {
       return [{ key: 'all', label: `${VIEW_LABEL[view]} · ${filtered.length}`, tasks: filtered }];
     }
     if (group === 'assignee') {
+      // Una tarea de varias personas aparece con cada una de ellas.
       const map = new Map<string, { key: string; label: string; tasks: TaskRecord[] }>();
       for (const t of filtered) {
-        const key = t.assigneeId || 'none';
-        const label = t.assignee?.fullName || 'Sin asignar';
-        const bucket = map.get(key) || { key, label, tasks: [] };
-        bucket.tasks.push(t);
-        map.set(key, bucket);
+        const ids = taskAssigneeIds(t);
+        const names = taskAssigneeNames(t);
+        const owners = ids.length ? ids.map((id, i) => ({ key: id, label: names[i] || 'Sin nombre' })) : [{ key: 'none', label: 'Sin asignar' }];
+        for (const { key, label } of owners) {
+          const bucket = map.get(key) || { key, label, tasks: [] };
+          bucket.tasks.push(t);
+          map.set(key, bucket);
+        }
       }
       return [...map.values()].sort(
         (a, b) => b.tasks.length - a.tasks.length || a.label.localeCompare(b.label, 'es'),
@@ -244,7 +251,7 @@ export default function TasksPage() {
       open: rows.filter((t) => t.status === 'OPEN' || t.status === 'IN_PROGRESS').length,
       overdue: rows.filter((t) => isOverdue(t, today)).length,
       blocked: rows.filter((t) => t.status === 'BLOCKED').length,
-      unassigned: rows.filter((t) => !t.assigneeId && t.status !== 'DONE').length,
+      unassigned: rows.filter((t) => !taskAssigneeIds(t).length && t.status !== 'DONE').length,
       done: rows.filter((t) => t.status === 'DONE').length,
     }),
     [rows, today],
@@ -268,7 +275,7 @@ export default function TasksPage() {
       void setTaskStatus(t.id, 'OPEN');
       return;
     }
-    if (taskNeedsApproval(t) && t.assigneeId === user?.id) {
+    if (taskNeedsApproval(t) && isTaskAssignee(t, user?.id)) {
       setDeliveryTask(t);
       return;
     }
@@ -278,7 +285,7 @@ export default function TasksPage() {
   async function bulkMarkDone() {
     const ids = [...selected];
     const blocked = rows.filter(
-      (r) => ids.includes(r.id) && taskNeedsApproval(r) && r.assigneeId === user?.id,
+      (r) => ids.includes(r.id) && taskNeedsApproval(r) && isTaskAssignee(r, user?.id),
     );
     if (blocked.length) {
       setError('Varias tareas piden entrega con evidencia — complétalas una por una');
@@ -287,14 +294,24 @@ export default function TasksPage() {
     await bulkPatch({ status: 'DONE' }, 'marcadas como hechas');
   }
 
-  async function reassign(id: string, assigneeId: string) {
+  /** Responsables de una tarea: 1 o más personas; la primera es la principal. */
+  async function reassign(id: string, assigneeIds: string[]) {
     setError('');
     const prev = rows;
-    const person = directory.find((d) => d.id === assigneeId);
+    const people = assigneeIds
+      .map((pid) => directory.find((d) => d.id === pid))
+      .filter(Boolean)
+      .map((p) => ({ id: p!.id, fullName: p!.fullName }));
     setRows((rs) =>
       rs.map((r) =>
         r.id === id
-          ? { ...r, assigneeId: assigneeId || null, assignee: person ? { id: person.id, fullName: person.fullName } : null, seenAt: null }
+          ? {
+              ...r,
+              assigneeId: people[0]?.id ?? null,
+              assignee: people[0] ?? null,
+              assigneeIds: people.map((p) => p.id),
+              assignees: people,
+            }
           : r,
       ),
     );
@@ -302,10 +319,10 @@ export default function TasksPage() {
       patchRow(
         await api<TaskRecord>(`/tasks/${id}`, {
           method: 'PATCH',
-          body: JSON.stringify({ assigneeId: assigneeId || null }),
+          body: JSON.stringify({ assigneeIds }),
         }),
       );
-      setMsg(person ? `Tarea reasignada a ${person.fullName}` : 'Tarea sin asignar');
+      setMsg(people.length ? `Tarea asignada a ${people.map((p) => p.fullName).join(', ')}` : 'Tarea sin asignar');
     } catch (e) {
       setRows(prev);
       setError(e instanceof Error ? e.message : 'No se pudo reasignar');
@@ -332,8 +349,8 @@ export default function TasksPage() {
   /** ¿La tarea recién creada pertenece a la vista abierta? */
   function belongsToView(t: TaskRecord) {
     if (view === 'team') return true;
-    if (view === 'mine') return t.assigneeId === user?.id;
-    return t.createdById === user?.id && t.assigneeId !== user?.id;
+    if (view === 'mine') return isTaskAssignee(t, user?.id);
+    return t.createdById === user?.id && !isTaskAssignee(t, user?.id);
   }
 
   async function createTask() {
@@ -351,15 +368,23 @@ export default function TasksPage() {
           title: form.title.trim(),
           detail: form.detail || undefined,
           module: form.module || undefined,
-          assigneeId: form.assigneeId || undefined,
+          assigneeIds: form.assigneeIds,
           eventId: form.eventId || undefined,
           dueAt: form.dueAt || undefined,
         }),
       });
-      const who2 = directory.find((d) => d.id === form.assigneeId)?.fullName;
-      // Se conservan responsable/evento/fecha: normalmente se asignan varias seguidas.
+      const who2 = form.assigneeIds
+        .map((id) => directory.find((d) => d.id === id)?.fullName)
+        .filter(Boolean) as string[];
+      // Se conservan responsables/evento/fecha: normalmente se asignan varias seguidas.
       setForm({ ...form, title: '', detail: '' });
-      setMsg(who2 ? `Tarea asignada a ${who2} — le llega el aviso en su panel` : 'Tarea creada');
+      setMsg(
+        who2.length > 1
+          ? `Tarea asignada a ${who2.join(', ')} — a cada quien le llega el aviso en su panel`
+          : who2.length
+            ? `Tarea asignada a ${who2[0]} — le llega el aviso en su panel`
+            : 'Tarea creada',
+      );
       if (belongsToView(created)) setRows((rs) => [created, ...rs]);
       titleRef.current?.focus();
     } catch (e) {
@@ -454,13 +479,12 @@ export default function TasksPage() {
                 }
               }}
             />
-            <AssigneeSelect
-              value={form.assigneeId}
+            <AssigneesPicker
+              value={form.assigneeIds}
               directory={directory}
-              onChange={(id) => setForm({ ...form, assigneeId: id })}
+              onChange={(ids) => setForm({ ...form, assigneeIds: ids })}
               label="Asignar a"
-              className="field field--select quick-add__who"
-              eager
+              className="quick-add__who"
             />
             <input
               className="field quick-add__due"
@@ -773,7 +797,7 @@ export default function TasksPage() {
                           const done = t.status === 'DONE';
                           const pending = t.status === 'PENDING_APPROVAL';
                           const needsDelivery =
-                            taskNeedsApproval(t) && t.assigneeId === user?.id && view === 'mine';
+                            taskNeedsApproval(t) && isTaskAssignee(t, user?.id) && view === 'mine';
                           const canReview =
                             pending &&
                             (t.createdById === user?.id ||
@@ -832,11 +856,12 @@ export default function TasksPage() {
                                     </div>
                                   ) : null}
                                 </div>
-                                <AssigneeSelect
-                                  value={t.assigneeId || ''}
+                                <AssigneesPicker
+                                  value={taskAssigneeIds(t)}
                                   directory={directory}
-                                  onChange={(id) => reassign(t.id, id)}
-                                  label={`Responsable de ${t.title}`}
+                                  onChange={(ids) => void reassign(t.id, ids)}
+                                  label={`Responsables de ${t.title}`}
+                                  commitOnClose
                                 />
                                 <input
                                   className={`field field--date ${overdue ? 'field--overdue' : ''}`}

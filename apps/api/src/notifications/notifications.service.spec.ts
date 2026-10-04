@@ -26,6 +26,12 @@ describe('NotificationsService · equipo del evento', () => {
     expect(ids.sort()).toEqual(['ana', 'creador']);
   });
 
+  it('cuenta también a los corresponsables de una tarea', async () => {
+    prisma.taskAssignment.findMany.mockResolvedValue([{ assigneeId: 'ana', coAssignees: [{ userId: 'carla' }] }]);
+    prisma.chatChannel.findUnique.mockResolvedValue(null);
+    expect((await service.eventAudience('e1')).sort()).toEqual(['ana', 'carla', 'creador']);
+  });
+
   it('evento sin canal ni tareas: solo quien lo creó', async () => {
     prisma.taskAssignment.findMany.mockResolvedValue([]);
     prisma.chatChannel.findUnique.mockResolvedValue(null);

@@ -8,11 +8,60 @@ type TaskRow = {
   assigneeId: string | null;
   createdById: string | null;
   organizationId: string | null;
+  /** Más responsables (correcciones 30-09-2026). */
+  coAssignees?: Array<{ userId: string }> | null;
 };
 
-/** Hay quien pidió y no es el mismo asignado → hace falta visto bueno. */
-export function taskNeedsApproval(task: Pick<TaskRow, 'assigneeId' | 'createdById'>) {
-  return !!task.createdById && task.createdById !== task.assigneeId;
+/** Todos los responsables de la tarea: el principal primero, sin repetir. */
+export function taskAssigneeIds(task: Pick<TaskRow, 'assigneeId' | 'coAssignees'>): string[] {
+  const ids = [task.assigneeId, ...(task.coAssignees ?? []).map((c) => c.userId)].filter(
+    (id): id is string => !!id,
+  );
+  return [...new Set(ids)];
+}
+
+export function isTaskAssignee(userId: string, task: Pick<TaskRow, 'assigneeId' | 'coAssignees'>) {
+  return taskAssigneeIds(task).includes(userId);
+}
+
+type Person = { id: string; fullName: string; email?: string | null };
+
+/**
+ * Lo que el panel lee de una tarea con varias personas: `assigneeIds` y
+ * `assignees` (el principal primero). Se calcula aquí para que el panel no
+ * tenga que juntar `assignee` con `coAssignees` en cada pantalla.
+ */
+export function withAssignees<
+  T extends {
+    assigneeId: string | null;
+    assignee?: Person | null;
+    coAssignees?: Array<{ userId: string; user?: Person | null }> | null;
+  },
+>(task: T): T & { assigneeIds: string[]; assignees: Person[] } {
+  const people: Person[] = [];
+  const seen = new Set<string>();
+  for (const p of [task.assignee, ...(task.coAssignees ?? []).map((c) => c.user)]) {
+    if (p && !seen.has(p.id)) {
+      seen.add(p.id);
+      people.push(p);
+    }
+  }
+  return { ...task, assigneeIds: taskAssigneeIds(task), assignees: people };
+}
+
+/**
+ * Lista de responsables como llega del panel: sin vacíos ni repetidos, en el
+ * orden elegido (el primero queda como responsable principal).
+ */
+export function normalizeAssigneeIds(ids: unknown): string[] {
+  if (!Array.isArray(ids)) return [];
+  const clean = ids.filter((id): id is string => typeof id === 'string' && id.trim() !== '').map((id) => id.trim());
+  return [...new Set(clean)];
+}
+
+/** Hay quien pidió y no está entre los responsables → hace falta visto bueno. */
+export function taskNeedsApproval(task: Pick<TaskRow, 'assigneeId' | 'createdById' | 'coAssignees'>) {
+  return !!task.createdById && !isTaskAssignee(task.createdById, task);
 }
 
 export function canApproveTask(
@@ -52,8 +101,8 @@ export async function logTaskActivity(
   });
 }
 
-export function assertCanSubmit(userId: string, task: Pick<TaskRow, 'assigneeId'>) {
-  if (task.assigneeId !== userId) {
+export function assertCanSubmit(userId: string, task: Pick<TaskRow, 'assigneeId' | 'coAssignees'>) {
+  if (!isTaskAssignee(userId, task)) {
     throw new ForbiddenException('Solo quien tiene la tarea puede entregarla');
   }
 }
