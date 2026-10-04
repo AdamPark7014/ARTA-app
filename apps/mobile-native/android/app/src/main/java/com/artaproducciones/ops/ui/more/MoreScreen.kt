@@ -28,6 +28,7 @@ import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.Campaign
 import androidx.compose.material.icons.outlined.Checklist
 import androidx.compose.material.icons.outlined.ConfirmationNumber
+import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.DirectionsBus
 import androidx.compose.material.icons.outlined.DoNotDisturbOn
 import androidx.compose.material.icons.outlined.Event
@@ -42,6 +43,8 @@ import androidx.compose.material.icons.outlined.Key
 import androidx.compose.material.icons.outlined.Mic
 import androidx.compose.material.icons.outlined.NotificationsActive
 import androidx.compose.material.icons.outlined.Palette
+import androidx.compose.material.icons.outlined.PersonRemove
+import androidx.compose.material.icons.outlined.PrivacyTip
 import androidx.compose.material.icons.outlined.Public
 import androidx.compose.material.icons.outlined.Receipt
 import androidx.compose.material.icons.outlined.ReportProblem
@@ -50,6 +53,7 @@ import androidx.compose.material.icons.outlined.Restaurant
 import androidx.compose.material.icons.outlined.Security
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Summarize
+import androidx.compose.material.icons.outlined.SupportAgent
 import androidx.compose.material.icons.outlined.Webhook
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
@@ -80,6 +84,7 @@ import com.artaproducciones.ops.data.api.ApiClient
 import com.artaproducciones.ops.data.api.UserDto
 import com.artaproducciones.ops.push.PushRegistration
 import com.artaproducciones.ops.ui.common.Avatar
+import com.artaproducciones.ops.ui.common.LegalLinks
 import com.artaproducciones.ops.ui.modules.ModuleNav
 import com.artaproducciones.ops.ui.theme.ArtaColors
 import kotlinx.coroutines.Dispatchers
@@ -392,6 +397,41 @@ fun MoreScreen(user: UserDto, nav: ModuleNav) {
                 textColor = ArtaColors.Danger,
                 chevron = false,
                 onClick = { if (!loggingOut) confirmLogout = true },
+            )
+        }
+
+        // Política de datos de Play: privacidad, términos y borrado de cuenta a
+        // la vista. Se abren en el navegador (son páginas públicas).
+        item(key = "h-legal") { SectionLabel("Legal y soporte") }
+        item(key = "privacy") {
+            MoreRow(
+                icon = Icons.Outlined.PrivacyTip,
+                label = "Aviso de privacidad",
+                onClick = { LegalLinks.open(context, LegalLinks.PRIVACY) },
+            )
+        }
+        item(key = "terms") {
+            MoreRow(
+                icon = Icons.Outlined.Description,
+                label = "Términos de uso",
+                onClick = { LegalLinks.open(context, LegalLinks.TERMS) },
+            )
+        }
+        item(key = "support") {
+            MoreRow(
+                icon = Icons.Outlined.SupportAgent,
+                label = "Soporte",
+                onClick = { LegalLinks.open(context, LegalLinks.SUPPORT) },
+            )
+        }
+        item(key = "delete-account") {
+            // No hay alta desde la app: las cuentas las crea el administrador de
+            // la organización, así que el borrado también se solicita, no se ejecuta aquí.
+            MoreRow(
+                icon = Icons.Outlined.PersonRemove,
+                label = "Eliminar mi cuenta",
+                supporting = "Solicita el borrado de tu cuenta y tus datos",
+                onClick = { LegalLinks.open(context, LegalLinks.DELETE_ACCOUNT) },
             )
         }
         item(key = "version") {

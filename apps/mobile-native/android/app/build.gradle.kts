@@ -17,11 +17,19 @@ if (hasFirebaseConfig) {
 val keystorePropertiesFile = rootProject.file("key.properties")
 val keystoreProperties = Properties()
 if (keystorePropertiesFile.exists()) {
-    keystoreProperties.load(FileInputStream(keystorePropertiesFile))
+    FileInputStream(keystorePropertiesFile).use { keystoreProperties.load(it) }
 }
+// Si falta una clave, el preflight lo dice con nombre en vez de reventar al
+// configurar con un «null cannot be cast to String».
+val missingSigningKeys = listOf("storeFile", "storePassword", "keyAlias", "keyPassword")
+    .filter { keystoreProperties.getProperty(it).isNullOrBlank() }
+val uploadKeystoreFile: File? = keystoreProperties.getProperty("storeFile")?.takeIf { it.isNotBlank() }?.let { rootProject.file(it) }
+val hasUploadKey = keystorePropertiesFile.exists() && missingSigningKeys.isEmpty() && uploadKeystoreFile?.exists() == true
 
-val declaredVersionCode: Int? = (project.findProperty("VERSION_CODE") as String?)?.toIntOrNull()
-val declaredVersionName: String? = project.findProperty("VERSION_NAME") as String?
+// -PVERSION_CODE=N -PVERSION_NAME=X.Y.Z gana sobre gradle.properties.
+val rawVersionCode: String? = (project.findProperty("VERSION_CODE") as String?)?.trim()
+val declaredVersionCode: Int? = rawVersionCode?.toIntOrNull()?.takeIf { it > 0 }
+val declaredVersionName: String? = (project.findProperty("VERSION_NAME") as String?)?.trim()?.ifBlank { null }
 
 android {
     namespace = "com.artaproducciones.ops"
@@ -31,6 +39,8 @@ android {
         applicationId = "com.artaproducciones.ops"
         minSdk = 26
         targetSdk = 36
+        // El fallback es solo para que `assembleDebug` funcione en cualquier
+        // máquina. En release el preflight del final aborta si no hay versión.
         versionCode = declaredVersionCode ?: 1
         versionName = declaredVersionName ?: "0.1.0"
 
@@ -41,11 +51,11 @@ android {
 
     signingConfigs {
         create("release") {
-            if (keystorePropertiesFile.exists()) {
-                keyAlias = keystoreProperties["keyAlias"] as String
-                keyPassword = keystoreProperties["keyPassword"] as String
-                storeFile = rootProject.file(keystoreProperties["storeFile"] as String)
-                storePassword = keystoreProperties["storePassword"] as String
+            if (hasUploadKey) {
+                storeFile = uploadKeystoreFile
+                storePassword = keystoreProperties.getProperty("storePassword")
+                keyAlias = keystoreProperties.getProperty("keyAlias")
+                keyPassword = keystoreProperties.getProperty("keyPassword")
             }
         }
     }
@@ -66,11 +76,10 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
-            signingConfig = if (keystorePropertiesFile.exists()) {
-                signingConfigs.getByName("release")
-            } else {
-                signingConfigs.getByName("debug")
-            }
+            // NUNCA la llave de debug: Play rechaza ese AAB con «el certificado
+            // de subida no coincide», y solo después de subirlo. Sin llave el
+            // release queda sin firma y el preflight del final aborta el build.
+            signingConfig = if (hasUploadKey) signingConfigs.getByName("release") else null
         }
     }
 
@@ -143,4 +152,79 @@ dependencies {
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20240303")
+}
+
+// ===========================================================================
+// Preflight de release (igual que NEXARA)
+//
+// Dos formas de llegar a Play con un AAB inservible sin que el build se queje:
+//
+//   1. Sin `key.properties` (o sin el .jks) el AAB saldría sin la llave de
+//      subida y Play lo rechaza, pero solo después de subirlo.
+//   2. Sin VERSION_CODE el fallback pone `1` y Play rechaza cualquier
+//      versionCode ya subido, aunque el bundle se hubiera descartado.
+//
+// Ninguna rompe la compilación, así que se rompe a propósito. Solo actúa si el
+// grafo va a EMPAQUETAR un release (APK o AAB): debug, tests unitarios y
+// `signingReport` no pasan por aquí.
+// ===========================================================================
+gradle.taskGraph.whenReady {
+    val releasePackagingTasks = setOf("packageRelease", "packageReleaseBundle", "signReleaseBundle")
+    val packagesRelease = allTasks.any { it.project == project && it.name in releasePackagingTasks }
+    if (!packagesRelease) return@whenReady
+
+    val problems = mutableListOf<String>()
+
+    if (!keystorePropertiesFile.exists()) {
+        problems += """
+            |Falta ${keystorePropertiesFile.path}
+            |  Sin ese fichero el release no se firma con la llave de subida de Play
+            |  (arta-upload.jks). Recupéralo del respaldo; NO generes otro keystore:
+            |  una llave nueva no puede actualizar la app ya registrada en Play.
+        """.trimMargin()
+    } else if (missingSigningKeys.isNotEmpty()) {
+        problems += """
+            |key.properties incompleto: faltan ${missingSigningKeys.joinToString(", ")}.
+            |  Debe declarar storeFile, storePassword, keyAlias y keyPassword.
+        """.trimMargin()
+    } else if (uploadKeystoreFile?.exists() != true) {
+        problems += """
+            |key.properties apunta a un keystore que no existe: ${uploadKeystoreFile?.path}
+            |  Copia ahí arta-upload.jks desde el respaldo.
+        """.trimMargin()
+    }
+
+    if (declaredVersionCode == null) {
+        problems += """
+            |VERSION_CODE sin declarar o inválido (valor: «${rawVersionCode ?: ""}»).
+            |  Decláralo en gradle.properties o pásalo al build: -PVERSION_CODE=N
+            |  (entero mayor que 0 y mayor que el último subido a Play).
+        """.trimMargin()
+    }
+
+    if (declaredVersionName == null) {
+        problems += """
+            |VERSION_NAME sin declarar.
+            |  Decláralo en gradle.properties o pásalo al build: -PVERSION_NAME=X.Y.Z
+        """.trimMargin()
+    }
+
+    if (problems.isNotEmpty()) {
+        throw GradleException(
+            buildString {
+                appendLine()
+                appendLine("=".repeat(72))
+                appendLine("PREFLIGHT DE RELEASE FALLIDO — el release no se generó a propósito.")
+                appendLine("=".repeat(72))
+                problems.forEach {
+                    appendLine()
+                    appendLine(it)
+                }
+                appendLine()
+                appendLine("=".repeat(72))
+            },
+        )
+    }
+
+    logger.lifecycle("Preflight de release OK — versionCode=$declaredVersionCode versionName=$declaredVersionName")
 }
