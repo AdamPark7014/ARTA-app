@@ -83,6 +83,13 @@ object ArtaPushRenderer {
     const val EXTRA_CHANNEL_ID = "arta_channel_id"
     const val EXTRA_MESSAGE_ID = "arta_message_id"
     const val EXTRA_NOTIFICATION_ID = "arta_notification_id"
+    /** `type` del aviso (p. ej. `po.requested`): decide si una OC abre aprobaciones o la web. */
+    const val EXTRA_TYPE = "arta_type"
+    /** Destino forzado por una acción de la notificación. */
+    const val EXTRA_TARGET = "arta_target"
+    const val TARGET_APPROVALS = "approvals"
+    /** Id de la notificación a quitar al abrir desde una acción. */
+    const val EXTRA_DISMISS_ID = "arta_dismiss_id"
 
     /** El mismo aviso puede llegar dos veces (reintento de FCM). */
     private val seen = object : LinkedHashMap<String, Unit>(64, 0.75f, false) {
@@ -394,13 +401,37 @@ object ArtaPushRenderer {
             .setCategory(if (channelId == ArtaNotifications.CHANNEL_CHAT) NotificationCompat.CATEGORY_MESSAGE else NotificationCompat.CATEGORY_EVENT)
             .setGroup(group)
             .setLargeIcon(initials(p.senderName.ifBlank { ArtaNotifications.label(channelId) }))
-            .setContentIntent(contentIntent(app, notificationId, p.url, p.chatChannelId, p.messageId, p.notificationId))
+            .setContentIntent(contentIntent(app, notificationId, p.url, p.chatChannelId, p.messageId, p.notificationId, p.type))
             .setPublicVersion(publicVersion(app, channelId, "Nuevo aviso"))
         if (p.body.isNotBlank()) {
             builder.setContentText(p.body).setStyle(NotificationCompat.BigTextStyle().setBigContentTitle(title).bigText(p.body))
         }
+        // Sin aprobar desde la notificación: «Abrir» lleva a la pantalla donde se decide.
+        builder.addAction(eventAction(app, notificationId, p))
         notify(app, notificationId, builder.build())
         refreshEventSummary(app, channelId, group, notificationId, summaryLine(title, p.body))
+    }
+
+    private fun eventAction(app: Context, notificationId: Int, p: PushPayload): NotificationCompat.Action {
+        val intent = Intent(app, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            if (p.url.isNotBlank()) putExtra(EXTRA_URL, p.url)
+            if (p.type.isNotBlank()) putExtra(EXTRA_TYPE, p.type)
+            if (p.notificationId.isNotBlank()) putExtra(EXTRA_NOTIFICATION_ID, p.notificationId)
+            if (p.isApproval) putExtra(EXTRA_TARGET, TARGET_APPROVALS)
+            // Las acciones no cancelan solas (autoCancel solo aplica al toque): la app la quita.
+            putExtra(EXTRA_DISMISS_ID, notificationId)
+        }
+        val pi = PendingIntent.getActivity(
+            app,
+            notificationId * 31 + 3,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+        val label = if (p.isApproval) "Abrir" else "Ver"
+        return NotificationCompat.Action.Builder(IconCompat.createWithResource(app, R.drawable.ic_stat_arta), label, pi)
+            .setShowsUserInterface(true)
+            .build()
     }
 
     private fun eventNotificationId(p: PushPayload): Int {
@@ -492,6 +523,7 @@ object ArtaPushRenderer {
         chatChannelId: String,
         messageId: String,
         notificationId: String,
+        type: String = "",
     ): PendingIntent {
         val intent = Intent(app, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
@@ -499,6 +531,7 @@ object ArtaPushRenderer {
             if (chatChannelId.isNotBlank()) putExtra(EXTRA_CHANNEL_ID, chatChannelId)
             if (messageId.isNotBlank()) putExtra(EXTRA_MESSAGE_ID, messageId)
             if (notificationId.isNotBlank()) putExtra(EXTRA_NOTIFICATION_ID, notificationId)
+            if (type.isNotBlank()) putExtra(EXTRA_TYPE, type)
         }
         return PendingIntent.getActivity(app, requestCode, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
     }

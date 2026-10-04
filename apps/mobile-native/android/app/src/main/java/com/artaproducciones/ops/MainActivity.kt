@@ -10,6 +10,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.lifecycleScope
@@ -34,7 +35,8 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         splash.setKeepOnScreenCondition { Session.state.value is Session.State.Loading }
         lifecycleScope.launch { Session.restore() }
-        handle(intent)
+        // Al recrear (rotación) el sistema vuelve a entregar el mismo intent: no se reabre el aviso.
+        if (savedInstanceState == null) handle(intent)
         setContent {
             ArtaTheme {
                 ArtaApp(pendingLink = pendingLink, onLinkConsumed = { pendingLink.value = null })
@@ -54,10 +56,14 @@ class MainActivity : ComponentActivity() {
         if (!notificationId.isNullOrBlank()) {
             lifecycleScope.launch { runCatching { ApiClient.api.notificationRead(notificationId) } }
         }
+        val dismissId = intent.getIntExtra(ArtaPushRenderer.EXTRA_DISMISS_ID, 0)
+        if (dismissId != 0) NotificationManagerCompat.from(this).cancel(dismissId)
         val link = DeepLink.from(
             channelId = intent.getStringExtra(ArtaPushRenderer.EXTRA_CHANNEL_ID),
             messageId = intent.getStringExtra(ArtaPushRenderer.EXTRA_MESSAGE_ID),
             url = intent.getStringExtra(ArtaPushRenderer.EXTRA_URL) ?: intent.data?.let(::fromUri),
+            type = intent.getStringExtra(ArtaPushRenderer.EXTRA_TYPE),
+            forceApprovals = intent.getStringExtra(ArtaPushRenderer.EXTRA_TARGET) == ArtaPushRenderer.TARGET_APPROVALS,
         )
         if (link != null) pendingLink.value = link
     }

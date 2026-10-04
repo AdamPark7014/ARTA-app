@@ -1,7 +1,5 @@
 package com.artaproducciones.ops.ui.notifications
 
-import android.content.Intent
-import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -33,7 +31,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.artaproducciones.ops.data.api.ApiClient
@@ -49,8 +46,7 @@ import kotlinx.coroutines.launch
 /** Bandeja de avisos de todos los procesos (la campana del panel web). */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun NotificationsScreen(openChat: (String) -> Unit, onUnreadChange: (Int) -> Unit) {
-    val context = LocalContext.current
+fun NotificationsScreen(openLink: (DeepLink) -> Unit, onUnreadChange: (Int) -> Unit) {
     val scope = rememberCoroutineScope()
     var items by remember { mutableStateOf<List<NotificationDto>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
@@ -78,14 +74,8 @@ fun NotificationsScreen(openChat: (String) -> Unit, onUnreadChange: (Int) -> Uni
             onUnreadChange(items.count { it.readAt == null })
             scope.launch { runCatching { ApiClient.api.notificationRead(n.id) } }
         }
-        when (val link = DeepLink.from(null, null, n.linkUrl)) {
-            is DeepLink.Chat -> openChat(link.channelId)
-            is DeepLink.Notifications -> link.url?.let { url ->
-                // Lo que la app todavía no tiene en nativo (OC, formatos, tareas) se abre en el panel.
-                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(ApiClient.resolveUrl(url))))
-            }
-            null -> Unit
-        }
+        // Lo que no tiene pantalla nativa se abre en la vista web, dentro de la app.
+        DeepLink.from(null, null, n.linkUrl, type = n.type)?.let(openLink)
     }
 
     Column(Modifier.fillMaxSize()) {

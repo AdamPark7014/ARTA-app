@@ -1,26 +1,21 @@
 package com.artaproducciones.ops.ui
 
-import android.content.Intent
 import android.net.Uri
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Chat
+import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.outlined.Menu
 import androidx.compose.material.icons.outlined.Notifications
-import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.outlined.TaskAlt
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
-import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -30,13 +25,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.unit.dp
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -46,31 +37,97 @@ import com.artaproducciones.ops.data.Session
 import com.artaproducciones.ops.data.api.ApiClient
 import com.artaproducciones.ops.data.api.UserDto
 import com.artaproducciones.ops.data.realtime.RealtimeClient
-import com.artaproducciones.ops.push.PushRegistration
 import com.artaproducciones.ops.ui.chat.ChatListScreen
 import com.artaproducciones.ops.ui.chat.ConversationScreen
-import com.artaproducciones.ops.ui.common.Avatar
 import com.artaproducciones.ops.ui.login.LoginScreen
+import com.artaproducciones.ops.ui.modules.ApprovalsScreen
+import com.artaproducciones.ops.ui.modules.EventDetailScreen
+import com.artaproducciones.ops.ui.modules.EventsScreen
+import com.artaproducciones.ops.ui.modules.InicioScreen
+import com.artaproducciones.ops.ui.modules.ModuleNav
+import com.artaproducciones.ops.ui.modules.TaskDetailScreen
+import com.artaproducciones.ops.ui.modules.TasksScreen
+import com.artaproducciones.ops.ui.more.MoreScreen
 import com.artaproducciones.ops.ui.notifications.NotificationsScreen
 import com.artaproducciones.ops.ui.theme.ArtaColors
+import com.artaproducciones.ops.ui.web.ArtaWebScreen
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.launch
 
-/** A dónde lleva un aviso tocado (mismas URLs internas que genera el API). */
+/** Pestañas del cascarón, en el orden del contrato de paridad. */
+enum class Tab { Inicio, Chats, Tareas, Avisos, Mas }
+
+/**
+ * A dónde lleva un enlace interno del panel (`url` de avisos push y campana, enlaces
+ * de la vista web). Reglas en `docs/PARIDAD-MOVIL-CONTRATO.md` §4.
+ */
 sealed interface DeepLink {
     data class Chat(val channelId: String, val messageId: String?) : DeepLink
-    data class Notifications(val url: String?) : DeepLink
+    data class Task(val taskId: String) : DeepLink
+    data class Event(val eventId: String) : DeepLink
+    data object Approvals : DeepLink
+    data object Events : DeepLink
+    data class Section(val tab: Tab) : DeepLink
+    data class Web(val path: String, val title: String? = null) : DeepLink
+
+    val isNative: Boolean get() = this !is Web
 
     companion object {
-        fun from(channelId: String?, messageId: String?, url: String?): DeepLink? {
+        /** Pestañas del hub del evento que tienen versión nativa; las demás abren la web. */
+        private val NATIVE_EVENT_TABS = setOf("", "overview", "summary", "resumen", "tasks", "tareas")
+
+        fun from(
+            channelId: String?,
+            messageId: String?,
+            url: String?,
+            type: String? = null,
+            forceApprovals: Boolean = false,
+        ): DeepLink? {
             if (!channelId.isNullOrBlank()) return Chat(channelId, messageId?.takeIf { it.isNotBlank() })
-            if (url.isNullOrBlank()) return null
-            val uri = Uri.parse(url)
-            if (uri.path == "/chat") {
-                val channel = uri.getQueryParameter("channel")
-                if (!channel.isNullOrBlank()) return Chat(channel, uri.getQueryParameter("msg"))
+            val link = url?.takeIf { it.isNotBlank() }?.let { parse(it, type) }
+            if (forceApprovals) return link as? Task ?: Approvals
+            return link
+        }
+
+        /**
+         * `/ruta?query` (o URL absoluta del mismo panel) → destino. [type] es el `type`
+         * del aviso: una OC o anticipo con acción pendiente abre aprobaciones nativas.
+         * Devuelve null para hosts ajenos.
+         */
+        fun parse(url: String, type: String? = null): DeepLink? {
+            val uri = Uri.parse(url.trim())
+            if (uri.isAbsolute) {
+                val origin = Uri.parse(ApiClient.origin)
+                if (!uri.host.equals(origin.host, ignoreCase = true)) return null
             }
-            return Notifications(url)
+            val segments = uri.pathSegments.orEmpty().filter { it.isNotBlank() }
+            val relative = (uri.encodedPath ?: "/").ifBlank { "/" } + (uri.encodedQuery?.let { "?$it" } ?: "")
+            fun q(name: String) = runCatching { uri.getQueryParameter(name) }.getOrNull()?.takeIf { it.isNotBlank() }
+
+            return when (segments.firstOrNull()) {
+                null, "dashboard" -> Section(Tab.Inicio)
+                "notifications" -> Section(Tab.Avisos)
+                "chat" -> q("channel")?.let { Chat(it, q("msg")) } ?: Section(Tab.Chats)
+                "tasks" -> (segments.getOrNull(1) ?: q("task"))?.let(::Task) ?: Section(Tab.Tareas)
+                "calendar" -> Events
+                "events" -> {
+                    val id = segments.getOrNull(1)
+                    when {
+                        id == null -> if (q("scope") == "past") Web(relative) else Events
+                        id == "new" -> Web(relative)
+                        q("task") != null -> Task(q("task")!!)
+                        segments.size > 2 -> Web(relative)
+                        (q("tab") ?: "").lowercase() in NATIVE_EVENT_TABS -> Event(id)
+                        else -> Web(relative)
+                    }
+                }
+                "purchase-orders", "advances" -> if (isPendingApproval(type)) Approvals else Web(relative)
+                else -> Web(relative)
+            }
+        }
+
+        private fun isPendingApproval(type: String?): Boolean {
+            val t = type?.trim()?.lowercase().orEmpty()
+            return t == "po.requested" || t.endsWith(".review") || t.endsWith(".requested")
         }
     }
 }
@@ -85,28 +142,63 @@ fun ArtaApp(pendingLink: StateFlow<DeepLink?>, onLinkConsumed: () -> Unit) {
     }
 }
 
-private enum class Tab { Chats, Avisos, Perfil }
-
 @Composable
 private fun SignedInNav(user: UserDto, pendingLink: StateFlow<DeepLink?>, onLinkConsumed: () -> Unit) {
     val nav = rememberNavController()
-    var tab by rememberSaveable { mutableStateOf(Tab.Chats) }
+    var tab by rememberSaveable { mutableStateOf(Tab.Inicio) }
     val link by pendingLink.collectAsState()
 
-    LaunchedEffect(link) {
-        when (val l = link) {
-            is DeepLink.Chat -> {
+    fun go(target: DeepLink) {
+        when (target) {
+            is DeepLink.Chat -> nav.navigate("chat/${target.channelId}" + (target.messageId?.let { "?msg=$it" } ?: ""))
+            is DeepLink.Task -> nav.navigate("task/${Uri.encode(target.taskId)}")
+            is DeepLink.Event -> nav.navigate("event/${Uri.encode(target.eventId)}")
+            DeepLink.Approvals -> nav.navigate("approvals") { launchSingleTop = true }
+            DeepLink.Events -> nav.navigate("events") { launchSingleTop = true }
+            is DeepLink.Section -> {
                 nav.popBackStack("home", inclusive = false)
-                nav.navigate("chat/${l.channelId}" + (l.messageId?.let { "?msg=$it" } ?: ""))
-                onLinkConsumed()
+                tab = target.tab
             }
-            is DeepLink.Notifications -> {
-                nav.popBackStack("home", inclusive = false)
-                tab = Tab.Avisos
-                onLinkConsumed()
-            }
-            null -> Unit
+            is DeepLink.Web -> nav.navigate("web?path=${Uri.encode(target.path)}&title=${Uri.encode(target.title.orEmpty())}")
         }
+    }
+
+    /** ¿[target] es justo la pantalla nativa de arriba? Entonces se pide su versión web, no la misma. */
+    fun isCurrent(target: DeepLink): Boolean {
+        val entry = nav.currentBackStackEntry ?: return false
+        val args = entry.arguments
+        return when (target) {
+            is DeepLink.Task -> entry.destination.route == "task/{id}" && args?.getString("id") == target.taskId
+            is DeepLink.Event -> entry.destination.route == "event/{id}" && args?.getString("id") == target.eventId
+            DeepLink.Approvals -> entry.destination.route == "approvals"
+            DeepLink.Events -> entry.destination.route == "events"
+            else -> false
+        }
+    }
+
+    val moduleNav = remember(nav) {
+        object : ModuleNav {
+            override fun openTask(id: String) = go(DeepLink.Task(id))
+            override fun openEvent(id: String) = go(DeepLink.Event(id))
+            override fun openApprovals() = go(DeepLink.Approvals)
+            override fun openChat(channelId: String) = go(DeepLink.Chat(channelId, null))
+            override fun back() {
+                if (nav.previousBackStackEntry != null) nav.popBackStack() else tab = Tab.Inicio
+            }
+
+            // Lo que tiene pantalla nativa se abre nativo aunque lo pidan como web.
+            override fun openWeb(path: String, title: String?) {
+                val target = DeepLink.parse(path)
+                if (target != null && target.isNative && !isCurrent(target)) go(target) else go(DeepLink.Web(path, title))
+            }
+        }
+    }
+
+    LaunchedEffect(link) {
+        val l = link ?: return@LaunchedEffect
+        nav.popBackStack("home", inclusive = false)
+        go(l)
+        onLinkConsumed()
     }
 
     NavHost(navController = nav, startDestination = "home") {
@@ -116,6 +208,38 @@ private fun SignedInNav(user: UserDto, pendingLink: StateFlow<DeepLink?>, onLink
                 tab = tab,
                 onTab = { tab = it },
                 openChat = { id -> nav.navigate("chat/$id") },
+                moduleNav = moduleNav,
+                openLink = ::go,
+            )
+        }
+        composable(
+            route = "task/{id}",
+            arguments = listOf(navArgument("id") { type = NavType.StringType }),
+        ) { entry ->
+            TaskDetailScreen(taskId = entry.arguments?.getString("id").orEmpty(), nav = moduleNav)
+        }
+        composable(
+            route = "event/{id}",
+            arguments = listOf(navArgument("id") { type = NavType.StringType }),
+        ) { entry ->
+            EventDetailScreen(eventId = entry.arguments?.getString("id").orEmpty(), nav = moduleNav)
+        }
+        composable("approvals") { ApprovalsScreen(nav = moduleNav) }
+        composable("events") { EventsScreen(nav = moduleNav) }
+        composable(
+            route = "web?path={path}&title={title}",
+            arguments = listOf(
+                navArgument("path") { type = NavType.StringType; defaultValue = "/dashboard" },
+                navArgument("title") { type = NavType.StringType; defaultValue = "" },
+            ),
+        ) { entry ->
+            ArtaWebScreen(
+                path = entry.arguments?.getString("path").orEmpty().ifBlank { "/dashboard" },
+                title = entry.arguments?.getString("title")?.takeIf { it.isNotBlank() },
+                nav = moduleNav,
+                resolveNative = { path ->
+                    DeepLink.parse(path)?.takeIf { it.isNative }?.let { target -> { go(target) } }
+                },
             )
         }
         composable(
@@ -155,7 +279,14 @@ private fun SignedInNav(user: UserDto, pendingLink: StateFlow<DeepLink?>, onLink
 }
 
 @Composable
-private fun HomeScreen(user: UserDto, tab: Tab, onTab: (Tab) -> Unit, openChat: (String) -> Unit) {
+private fun HomeScreen(
+    user: UserDto,
+    tab: Tab,
+    onTab: (Tab) -> Unit,
+    openChat: (String) -> Unit,
+    moduleNav: ModuleNav,
+    openLink: (DeepLink) -> Unit,
+) {
     var chatUnread by remember { mutableIntStateOf(0) }
     var noticeUnread by remember { mutableIntStateOf(0) }
 
@@ -178,10 +309,24 @@ private fun HomeScreen(user: UserDto, tab: Tab, onTab: (Tab) -> Unit, openChat: 
                     unselectedTextColor = ArtaColors.Muted,
                 )
                 NavigationBarItem(
+                    selected = tab == Tab.Inicio,
+                    onClick = { onTab(Tab.Inicio) },
+                    icon = { Icon(Icons.Outlined.Home, null) },
+                    label = { Text("Inicio") },
+                    colors = colors,
+                )
+                NavigationBarItem(
                     selected = tab == Tab.Chats,
                     onClick = { onTab(Tab.Chats) },
                     icon = { Counted(chatUnread) { Icon(Icons.AutoMirrored.Outlined.Chat, null) } },
                     label = { Text("Chats") },
+                    colors = colors,
+                )
+                NavigationBarItem(
+                    selected = tab == Tab.Tareas,
+                    onClick = { onTab(Tab.Tareas) },
+                    icon = { Icon(Icons.Outlined.TaskAlt, null) },
+                    label = { Text("Tareas") },
                     colors = colors,
                 )
                 NavigationBarItem(
@@ -192,10 +337,10 @@ private fun HomeScreen(user: UserDto, tab: Tab, onTab: (Tab) -> Unit, openChat: 
                     colors = colors,
                 )
                 NavigationBarItem(
-                    selected = tab == Tab.Perfil,
-                    onClick = { onTab(Tab.Perfil) },
-                    icon = { Icon(Icons.Outlined.Person, null) },
-                    label = { Text("Perfil") },
+                    selected = tab == Tab.Mas,
+                    onClick = { onTab(Tab.Mas) },
+                    icon = { Icon(Icons.Outlined.Menu, null) },
+                    label = { Text("Más") },
                     colors = colors,
                 )
             }
@@ -203,9 +348,11 @@ private fun HomeScreen(user: UserDto, tab: Tab, onTab: (Tab) -> Unit, openChat: 
     ) { padding ->
         Box(Modifier.padding(padding)) {
             when (tab) {
+                Tab.Inicio -> InicioScreen(user = user, nav = moduleNav)
                 Tab.Chats -> ChatListScreen(openChat = openChat)
-                Tab.Avisos -> NotificationsScreen(openChat = openChat, onUnreadChange = { noticeUnread = it })
-                Tab.Perfil -> ProfileTab(user)
+                Tab.Tareas -> TasksScreen(nav = moduleNav)
+                Tab.Avisos -> NotificationsScreen(openLink = openLink, onUnreadChange = { noticeUnread = it })
+                Tab.Mas -> MoreScreen(user = user, nav = moduleNav)
             }
         }
     }
@@ -214,39 +361,4 @@ private fun HomeScreen(user: UserDto, tab: Tab, onTab: (Tab) -> Unit, openChat: 
 @Composable
 private fun Counted(count: Int, icon: @Composable () -> Unit) {
     if (count <= 0) icon() else BadgedBox(badge = { Badge { Text(if (count > 99) "99+" else "$count") } }) { icon() }
-}
-
-@Composable
-private fun ProfileTab(user: UserDto) {
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    var busy by remember { mutableStateOf(false) }
-    Column(
-        Modifier.fillMaxSize().padding(24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterVertically),
-    ) {
-        Avatar(user.fullName, size = 88.dp)
-        Text(user.fullName, style = MaterialTheme.typography.headlineSmall)
-        user.email?.let { Text(it, color = ArtaColors.Muted) }
-        if (!PushRegistration.available) {
-            Text(
-                "Esta compilación no tiene Firebase configurado: no llegarán avisos push.",
-                color = ArtaColors.Muted,
-                style = MaterialTheme.typography.bodySmall,
-            )
-        }
-        OutlinedButton(
-            onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(ApiClient.origin))) },
-            modifier = Modifier.fillMaxWidth(),
-        ) { Text("Abrir el panel web") }
-        Button(
-            onClick = {
-                busy = true
-                scope.launch { Session.logout() }
-            },
-            enabled = !busy,
-            modifier = Modifier.fillMaxWidth(),
-        ) { Text(if (busy) "Cerrando sesión…" else "Cerrar sesión") }
-    }
 }

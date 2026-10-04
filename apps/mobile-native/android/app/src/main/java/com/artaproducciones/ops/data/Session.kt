@@ -6,6 +6,7 @@ import com.artaproducciones.ops.data.api.LoginBody
 import com.artaproducciones.ops.data.api.LoginResponse
 import com.artaproducciones.ops.data.api.UserDto
 import com.artaproducciones.ops.data.api.VerifyLoginBody
+import com.artaproducciones.ops.data.api.WebSessionBridge
 import com.artaproducciones.ops.data.api.userMessage
 import com.artaproducciones.ops.data.realtime.RealtimeClient
 import com.artaproducciones.ops.push.ArtaPushRenderer
@@ -13,6 +14,7 @@ import com.artaproducciones.ops.push.PushRegistration
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.withTimeoutOrNull
+import org.json.JSONArray
 import org.json.JSONObject
 import retrofit2.HttpException
 
@@ -87,7 +89,17 @@ object Session {
 
     private fun signedIn(user: UserDto) {
         app.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
-            .putString(KEY_USER, JSONObject().put("id", user.id).put("fullName", user.fullName).put("email", user.email).put("roleKey", user.roleKey).toString())
+            .putString(
+                KEY_USER,
+                JSONObject()
+                    .put("id", user.id)
+                    .put("fullName", user.fullName)
+                    .put("email", user.email)
+                    .put("roleKey", user.roleKey)
+                    .put("entities", JSONArray(user.entities))
+                    .put("permissions", JSONArray(user.permissions))
+                    .toString(),
+            )
             .apply()
         _state.value = State.SignedIn(user)
         RealtimeClient.connect()
@@ -110,6 +122,7 @@ object Session {
     private fun clearLocal() {
         RealtimeClient.disconnect()
         ApiClient.cookies.clear()
+        WebSessionBridge.clear()
         ArtaPushRenderer.clearAll(app)
         app.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().clear().apply()
         _state.value = State.SignedOut
@@ -119,7 +132,15 @@ object Session {
         val raw = app.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_USER, null) ?: return null
         return runCatching {
             val o = JSONObject(raw)
-            UserDto(id = o.getString("id"), fullName = o.optString("fullName"), email = o.optString("email"), roleKey = o.optString("roleKey"))
+            fun list(key: String) = o.optJSONArray(key)?.let { a -> (0 until a.length()).map { a.optString(it) } }.orEmpty()
+            UserDto(
+                id = o.getString("id"),
+                fullName = o.optString("fullName"),
+                email = o.optString("email"),
+                roleKey = o.optString("roleKey"),
+                entities = list("entities"),
+                permissions = list("permissions"),
+            )
         }.getOrNull()
     }
 }

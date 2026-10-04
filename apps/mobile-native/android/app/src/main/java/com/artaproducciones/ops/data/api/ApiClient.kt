@@ -48,7 +48,7 @@ object ApiClient {
     val unauthorized: SharedFlow<Unit> = _unauthorized
 
     /** `ArtaApp/0.1.0 (Android 14; samsung SM-A536B)`: el API lo registra como «Móvil». */
-    private val userAgent: String by lazy {
+    val userAgent: String by lazy {
         val model = listOf(Build.MANUFACTURER, Build.MODEL).filter { !it.isNullOrBlank() }.joinToString(" ")
         "ArtaApp/${BuildConfig.VERSION_NAME} (Android ${Build.VERSION.RELEASE}; $model)"
     }

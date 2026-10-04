@@ -20,6 +20,7 @@ object ArtaNotifications {
     const val CHANNEL_TASKS = "arta_tasks"
     const val CHANNEL_FINANCE = "arta_finance"
     const val CHANNEL_EVENTS = "arta_events"
+    const val CHANNEL_DOCUMENTS = "arta_documents"
     const val CHANNEL_GENERAL = "arta_general"
 
     private const val GROUP = "arta"
@@ -29,22 +30,27 @@ object ArtaNotifications {
 
     private val VIBRATION = longArrayOf(0L, 220L, 120L, 220L)
 
-    /** Clave `channel` del push (ver `notification-push-meta.ts` en el API) → canal Android. */
+    /**
+     * Clave `channel` del push (ver `notification-push-meta.ts` en el API) → canal Android.
+     * Los ids `arta_*` ya están instalados en teléfonos: no se renombran, solo se agregan.
+     */
     fun channelFor(routing: String?): String = when (routing?.trim()?.lowercase()) {
         "chat" -> CHANNEL_CHAT
         "approvals" -> CHANNEL_APPROVALS
         "tasks" -> CHANNEL_TASKS
         "finance" -> CHANNEL_FINANCE
         "events" -> CHANNEL_EVENTS
+        "documents" -> CHANNEL_DOCUMENTS
         else -> CHANNEL_GENERAL
     }
 
     fun label(channelId: String): String = when (channelId) {
-        CHANNEL_CHAT -> "Mensajes"
-        CHANNEL_APPROVALS -> "Autorizaciones"
+        CHANNEL_CHAT -> "Chat"
+        CHANNEL_APPROVALS -> "Aprobaciones"
         CHANNEL_TASKS -> "Tareas"
-        CHANNEL_FINANCE -> "Órdenes de compra"
+        CHANNEL_FINANCE -> "Finanzas"
         CHANNEL_EVENTS -> "Eventos"
+        CHANNEL_DOCUMENTS -> "Documentos"
         else -> "General"
     }
 
@@ -60,12 +66,13 @@ object ArtaNotifications {
                 nm.createNotificationChannelGroup(NotificationChannelGroup(GROUP, "ARTA"))
                 nm.createNotificationChannels(
                     listOf(
-                        channel(CHANNEL_CHAT, "Mensajes", "Mensajes directos, canales y menciones del chat"),
-                        channel(CHANNEL_APPROVALS, "Autorizaciones", "Órdenes de compra y formatos por revisar o autorizar"),
-                        channel(CHANNEL_TASKS, "Tareas", "Tareas asignadas, rechazadas o por vencer"),
-                        channel(CHANNEL_FINANCE, "Órdenes de compra", "OC autorizadas, pagadas o rechazadas"),
-                        channel(CHANNEL_EVENTS, "Eventos", "Cambios en los eventos donde participas"),
-                        channel(CHANNEL_GENERAL, "General", "Otros avisos de ARTA"),
+                        channel(CHANNEL_CHAT, label(CHANNEL_CHAT), "Mensajes directos, canales y menciones del chat"),
+                        channel(CHANNEL_TASKS, label(CHANNEL_TASKS), "Tareas asignadas, rechazadas o por vencer"),
+                        channel(CHANNEL_APPROVALS, label(CHANNEL_APPROVALS), "Órdenes de compra, tareas y formatos por revisar o autorizar"),
+                        channel(CHANNEL_FINANCE, label(CHANNEL_FINANCE), "Órdenes de compra autorizadas, pagadas o rechazadas"),
+                        channel(CHANNEL_EVENTS, label(CHANNEL_EVENTS), "Cambios en los eventos donde participas"),
+                        channel(CHANNEL_DOCUMENTS, label(CHANNEL_DOCUMENTS), "Formatos, archivos y carpetas"),
+                        channel(CHANNEL_GENERAL, label(CHANNEL_GENERAL), "Otros avisos de ARTA"),
                     ),
                 )
                 ready = true

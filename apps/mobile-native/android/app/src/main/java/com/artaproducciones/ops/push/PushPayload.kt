@@ -35,12 +35,24 @@ data class PushPayload(
 
     val isChat: Boolean get() = kind == Kind.CHAT
 
+    /** Pide una decisión (autorizar o revisar): lleva la acción «Abrir» a aprobaciones. */
+    val isApproval: Boolean get() = isApprovalType(type)
+
     companion object {
+        private val APPROVAL_TYPES = setOf("po.requested", "task.submitted", "checklist.submitted")
+
+        /** Mismo criterio que `notification-push-meta.ts` del API. */
+        fun isApprovalType(type: String?): Boolean {
+            val t = type?.trim()?.lowercase().orEmpty()
+            return t in APPROVAL_TYPES || t.endsWith(".review")
+        }
+
         fun from(data: Map<String, String>, fallbackSentAt: Long = 0L): PushPayload {
             fun v(key: String): String = data[key]?.trim().orEmpty()
 
             val chatChannelId = v("channel_id")
-            val kind = if (v("kind").equals("chat", ignoreCase = true)) Kind.CHAT else Kind.EVENT
+            // Menciones y avisos con `channel_id` se apilan con su conversación y permiten responder.
+            val kind = if (v("kind").equals("chat", ignoreCase = true) || chatChannelId.isNotBlank()) Kind.CHAT else Kind.EVENT
             val threadId = v("thread_id").ifBlank { if (chatChannelId.isNotBlank()) "chat-$chatChannelId" else v("tag") }
             return PushPayload(
                 raw = data,

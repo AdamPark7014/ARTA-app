@@ -119,6 +119,8 @@ dependencies {
     implementation("androidx.media3:media3-ui:1.6.1")
     implementation("androidx.media3:media3-datasource-okhttp:1.6.1")
 
+    // Tirar para actualizar en la vista web (WebView no participa del nested scroll de Compose).
+    implementation("androidx.swiperefreshlayout:swiperefreshlayout:1.1.0")
     implementation("androidx.navigation:navigation-compose:2.9.0")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.9.0")
     implementation("androidx.lifecycle:lifecycle-process:2.9.0")
