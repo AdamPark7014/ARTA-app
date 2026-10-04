@@ -37,8 +37,12 @@ import com.artaproducciones.ops.data.Session
 import com.artaproducciones.ops.data.api.ApiClient
 import com.artaproducciones.ops.data.api.UserDto
 import com.artaproducciones.ops.data.realtime.RealtimeClient
+import com.artaproducciones.ops.ui.chat.ChannelInfoScreen
 import com.artaproducciones.ops.ui.chat.ChatListScreen
+import com.artaproducciones.ops.ui.chat.ChatSearchScreen
 import com.artaproducciones.ops.ui.chat.ConversationScreen
+import com.artaproducciones.ops.ui.chat.NewConversationScreen
+import com.artaproducciones.ops.ui.chat.SavedMessagesScreen
 import com.artaproducciones.ops.ui.login.LoginScreen
 import com.artaproducciones.ops.ui.modules.ApprovalsScreen
 import com.artaproducciones.ops.ui.modules.EventDetailScreen
@@ -240,6 +244,34 @@ private fun SignedInNav(user: UserDto, pendingLink: StateFlow<DeepLink?>, onLink
                 resolveNative = { path ->
                     DeepLink.parse(path)?.takeIf { it.isNative }?.let { target -> { go(target) } }
                 },
+            )
+        }
+        // Rutas literales de chat: van antes de "chat/{channelId}" y la coincidencia exacta gana.
+        composable("chat/buscar") {
+            ChatSearchScreen(onBack = { nav.popBackStack() }, openMessage = { c, m -> nav.navigate("chat/$c?msg=$m") })
+        }
+        composable("chat/guardados") {
+            SavedMessagesScreen(onBack = { nav.popBackStack() }, openMessage = { c, m -> nav.navigate("chat/$c?msg=$m") })
+        }
+        composable("chat/nueva") {
+            NewConversationScreen(
+                onBack = { nav.popBackStack() },
+                openChat = { id ->
+                    nav.popBackStack()
+                    nav.navigate("chat/$id")
+                },
+            )
+        }
+        composable(
+            route = "chat/{channelId}/info",
+            arguments = listOf(navArgument("channelId") { type = NavType.StringType }),
+        ) { entry ->
+            ChannelInfoScreen(
+                channelId = entry.arguments?.getString("channelId").orEmpty(),
+                onBack = { nav.popBackStack() },
+                openChat = { id -> nav.navigate("chat/$id") },
+                openMessage = { c, m -> nav.navigate("chat/$c?msg=$m") },
+                onLeft = { nav.popBackStack("home", inclusive = false) },
             )
         }
         composable(

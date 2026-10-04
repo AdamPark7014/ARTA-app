@@ -142,17 +142,18 @@ private fun ImageAttachment(a: ChatAttachment, onOpen: () -> Unit) {
     SubcomposeAsyncImage(
         model = ApiClient.resolveUrl(a.url),
         contentDescription = a.name,
-        contentScale = ContentScale.Crop,
-        loading = { Box(Modifier.fillMaxSize().background(ArtaColors.Surface2)) },
+        // Fit respeta la proporción de la foto: sin recortes en verticales ni panorámicas.
+        contentScale = ContentScale.Fit,
+        loading = { Box(Modifier.size(220.dp, 160.dp).background(ArtaColors.Surface2)) },
         error = {
-            Box(Modifier.fillMaxSize().background(ArtaColors.Surface2), contentAlignment = Alignment.Center) {
+            Box(Modifier.size(220.dp, 160.dp).background(ArtaColors.Surface2), contentAlignment = Alignment.Center) {
                 Icon(Icons.Outlined.BrokenImage, "No se pudo mostrar", tint = ArtaColors.Muted)
             }
         },
         modifier = Modifier
             .padding(vertical = 4.dp)
-            .widthIn(min = 160.dp, max = 260.dp)
-            .heightIn(min = 120.dp, max = 300.dp)
+            .widthIn(max = 260.dp)
+            .heightIn(max = 320.dp)
             .clip(RoundedCornerShape(10.dp))
             .clickable(onClick = onOpen),
     )
