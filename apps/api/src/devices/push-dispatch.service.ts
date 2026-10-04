@@ -142,6 +142,8 @@ export class PushDispatchService {
     const badgeAps = badge != null ? { badge } : {};
     const data = this.buildData({ ...payload, badge });
     const isChat = data.kind === 'chat';
+    // Las menciones salen como aviso (kind=event) pero traen conversación: necesitan «Responder».
+    const repliable = isChat || !!data.channel_id;
     let sent = 0;
     for (const row of rows) {
       const token = row.fcmToken as string;
@@ -180,7 +182,7 @@ export class PushDispatchService {
                 alert: { title: payload.title, body: payload.body },
                 sound: 'default',
                 threadId: data.thread_id,
-                category: isChat ? 'ARTA_CHAT' : 'ARTA_EVENT',
+                category: repliable ? 'ARTA_CHAT' : 'ARTA_EVENT',
                 mutableContent: true,
                 ...badgeAps,
               },
