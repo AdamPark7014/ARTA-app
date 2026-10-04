@@ -65,7 +65,10 @@ object LinkPreviews {
 
     suspend fun load(url: String): LinkPreview? {
         cache.get(url)?.let { return it as? LinkPreview }
-        val result = runCatching { ApiClient.api.linkPreview(url) }.getOrNull()
+        val fetched = runCatching { ApiClient.api.linkPreview(url) }
+        // Un fallo de red no significa "sin vista previa": se reintenta la próxima vez.
+        if (fetched.exceptionOrNull() is java.io.IOException) return null
+        val result = fetched.getOrNull()
             ?.takeIf { !it.title.isNullOrBlank() || !it.description.isNullOrBlank() || !it.image.isNullOrBlank() }
         cache.put(url, result ?: NONE)
         return result

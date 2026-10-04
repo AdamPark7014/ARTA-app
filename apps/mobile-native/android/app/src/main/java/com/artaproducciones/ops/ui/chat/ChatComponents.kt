@@ -34,9 +34,11 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.artaproducciones.ops.ui.common.Avatar
 import com.artaproducciones.ops.ui.theme.ArtaColors
 
@@ -86,7 +88,13 @@ fun StackedAvatars(names: List<String>, size: Dp = 44.dp, modifier: Modifier = M
             Modifier.align(Alignment.BottomEnd).size(small).background(ArtaColors.Bg, CircleShape).padding(2.dp),
             contentAlignment = Alignment.Center,
         ) {
-            Avatar(if (names.size > 2) "+ ${names.size - 1}" else names.getOrElse(1) { "+" }, size = small - 4.dp)
+            if (names.size > 2) {
+                Box(Modifier.size(small - 4.dp).background(ArtaColors.Surface2, CircleShape), contentAlignment = Alignment.Center) {
+                    Text("+${names.size - 1}", color = ArtaColors.Gold, fontWeight = FontWeight.Bold, fontSize = (small.value * 0.34f).sp)
+                }
+            } else {
+                Avatar(names.getOrElse(1) { "?" }, size = small - 4.dp)
+            }
         }
     }
 }
