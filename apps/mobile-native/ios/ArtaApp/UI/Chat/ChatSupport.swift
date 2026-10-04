@@ -29,12 +29,11 @@ func groupMemberNames(_ name: String) -> [String] {
 
 // MARK: - Hápticos
 
-@MainActor
-enum Haptics {
+// `Haptics` (success, warning, error, tap) vive en Modules/ModulesUI.swift.
+extension Haptics {
     static func send() { UIImpactFeedbackGenerator(style: .light).impactOccurred() }
     static func react() { UIImpactFeedbackGenerator(style: .medium).impactOccurred() }
     static func longPress() { UIImpactFeedbackGenerator(style: .rigid).impactOccurred() }
-    static func success() { UINotificationFeedbackGenerator().notificationOccurred(.success) }
 }
 
 // MARK: - Borradores por conversación

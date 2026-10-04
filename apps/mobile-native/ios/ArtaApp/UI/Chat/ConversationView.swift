@@ -4,17 +4,18 @@ import SwiftUI
 import UIKit
 import UniformTypeIdentifiers
 
-private let quickReactions = ["👍", "❤️", "😂", "😮", "🙏", "✅"]
-
 struct ConversationView: View {
     @StateObject private var model: ConversationModel
     @EnvironmentObject private var router: AppRouter
     @Environment(\.scenePhase) private var scenePhase
+    @ObservedObject private var presence = PresenceStore.shared
 
     @State private var draft = ""
     /// «@Nombre» visible en el borrador → id, para mandar el token `[@Nombre](user:id)`.
     @State private var mentionMap: [String: String] = [:]
     @State private var editing: ChatMessage?
+    @State private var replyingTo: ChatMessage?
+    @State private var actionTarget: ChatMessage?
     @State private var confirmDelete: ChatMessage?
     @State private var showPins = false
     @State private var pinned: [ChatMessage] = []
@@ -22,7 +23,7 @@ struct ConversationView: View {
     @State private var photoItems: [PhotosPickerItem] = []
     @State private var showFiles = false
     @State private var showCamera = false
-    @State private var viewerURL: URL?
+    @State private var gallery: GalleryRequest?
     @State private var videoURL: URL?
     @State private var previewURL: URL?
     @State private var shareURL: URL?
@@ -30,7 +31,15 @@ struct ConversationView: View {
     @State private var olderAnchor: String?
     @State private var onScreen = false
     @State private var highlighted: String?
+    @State private var atBottom = true
+    @State private var newBelow = 0
+    @State private var draftLoaded = false
+    @State private var didInitialScroll = false
     @FocusState private var composerFocused: Bool
+
+    private static let bottomId = "conversation-bottom"
+    private static let unreadId = "unread-divider"
+    private static let composerIcon: CGFloat = 30
 
     init(channelId: String, parentId: String?, focusMessageId: String?) {
         _model = StateObject(wrappedValue: ConversationModel(channelId: channelId, parentId: parentId, focusMessageId: focusMessageId))
@@ -38,14 +47,32 @@ struct ConversationView: View {
 
     private var inThread: Bool { model.parentId != nil }
     private var isDirect: Bool { model.channel?.isDirect ?? false }
+    private var isPeerOnline: Bool { presence.isOnline(model.channel?.peer?.id) }
 
     var body: some View {
         VStack(spacing: 0) {
-            messageList
+            content
                 .fullScreenCover(item: Binding(get: { videoURL.map(IdentifiedURL.init) }, set: { videoURL = $0?.url })) { item in
                     VideoScreen(url: item.url)
                 }
-            if !model.typing.isEmpty { typingBar }
+                .sheet(item: $actionTarget) { m in
+                    MessageActionsSheet(
+                        message: m,
+                        myId: model.myId,
+                        canThread: !inThread,
+                        canEdit: model.canEdit(m),
+                        canDelete: model.canDelete(m)
+                    ) { action in
+                        actionTarget = nil
+                        if case .react(let emoji) = action {
+                            model.react(m, emoji)
+                            Haptics.react()
+                        } else {
+                            // Esperar a que cierre la hoja antes de abrir otra cosa (diálogo, teclado).
+                            later(0.35) { perform(action, on: m) }
+                        }
+                    }
+                }
             composerArea
                 .fullScreenCover(isPresented: $showCamera) {
                     CameraPicker { result in
@@ -53,6 +80,10 @@ struct ConversationView: View {
                         if let result { sendCamera(result) }
                     }
                     .ignoresSafeArea()
+                }
+                .sheet(item: Binding(get: { shareURL.map(IdentifiedURL.init) }, set: { shareURL = $0?.url })) { item in
+                    ActivityView(items: [item.url])
+                        .presentationDetents([.medium, .large])
                 }
         }
         .background(ArtaColor.bg)
@@ -62,6 +93,8 @@ struct ConversationView: View {
             onScreen = true
             model.start()
             model.onVisible(scenePhase == .active)
+            loadDraft()
+            presence.refresh()
         }
         .onDisappear {
             onScreen = false
@@ -84,14 +117,10 @@ struct ConversationView: View {
             }
         }
         .sheet(isPresented: $showPins) { pinsSheet }
-        .fullScreenCover(item: Binding(get: { viewerURL.map(IdentifiedURL.init) }, set: { viewerURL = $0?.url })) { item in
-            ImageViewer(url: item.url)
+        .fullScreenCover(item: $gallery) { request in
+            ImageGallery(request: request)
         }
         .quickLookPreview($previewURL)
-        .sheet(item: Binding(get: { shareURL.map(IdentifiedURL.init) }, set: { shareURL = $0?.url })) { item in
-            ActivityView(items: [item.url])
-                .presentationDetents([.medium, .large])
-        }
         .photosPicker(isPresented: $showPhotos, selection: $photoItems, maxSelectionCount: 10, matching: .any(of: [.images, .videos]))
         .onChange(of: photoItems) { _, items in
             guard !items.isEmpty else { return }
@@ -106,29 +135,53 @@ struct ConversationView: View {
         }
     }
 
+    /// Cargando (esqueleto), error con «Reintentar», o la lista (con su estado vacío).
+    @ViewBuilder
+    private var content: some View {
+        if model.loading && model.messages.isEmpty {
+            ChatSkeleton()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if let failure = model.loadError, model.messages.isEmpty {
+            ChatErrorState(message: failure) { model.retryLoad() }
+        } else {
+            messageList
+        }
+    }
+
+    /// La pila de Chats es de `ChatRoute`; desde otra pestaña se abre en Chats.
+    private func pushChat(_ route: ChatRoute) {
+        if router.tab == .chats {
+            router.chatPath.append(route)
+        } else {
+            router.tab = .chats
+            router.chatPath = [.conversation(channelId: model.channelId, focusMessageId: nil), route]
+        }
+    }
+
     // MARK: Encabezado
 
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
         ToolbarItem(placement: .principal) {
-            VStack(spacing: 1) {
-                Text(inThread ? "Hilo" : (model.channel?.displayName ?? "…"))
-                    .font(.headline)
-                    .foregroundStyle(ArtaColor.text)
-                    .lineLimit(1)
-                Text(subtitle)
-                    .font(.caption)
-                    .foregroundStyle(model.typing.isEmpty ? ArtaColor.muted : ArtaColor.gold)
-                    .lineLimit(1)
+            if inThread {
+                titleBlock
+            } else {
+                Button { pushChat(.channelInfo(channelId: model.channelId)) } label: { titleBlock }
+                    .buttonStyle(.plain)
+                    .accessibilityHint("Abre la información de la conversación")
             }
         }
         if !inThread {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
+                    Button { pushChat(.channelInfo(channelId: model.channelId)) } label: {
+                        Label(isDirect ? "Detalles" : "Información del canal", systemImage: "info.circle")
+                    }
                     Button {
                         showPins = true
                         Task { pinned = await model.pins() }
                     } label: { Label("Mensajes fijados", systemImage: "pin") }
+                    Button { pushChat(.saved) } label: { Label("Mensajes guardados", systemImage: "bookmark") }
                     if model.channel?.isMuted == true {
                         Button { model.mute(false, hours: nil) } label: { Label("Quitar silencio", systemImage: "bell") }
                     } else {
@@ -141,17 +194,63 @@ struct ConversationView: View {
                 } label: {
                     Image(systemName: "ellipsis.circle")
                 }
+                .accessibilityLabel("Más opciones")
             }
         }
     }
 
+    private var titleBlock: some View {
+        HStack(spacing: 8) {
+            if !inThread { headerAvatar }
+            VStack(alignment: inThread ? .center : .leading, spacing: 1) {
+                Text(inThread ? "Hilo" : (model.channel?.displayName ?? "…"))
+                    .font(.headline)
+                    .foregroundStyle(ArtaColor.text)
+                    .lineLimit(1)
+                if !subtitle.isEmpty {
+                    Text(subtitle)
+                        .font(.caption)
+                        .foregroundStyle(subtitleColor)
+                        .lineLimit(1)
+                }
+            }
+        }
+        .frame(maxWidth: 260)
+        .contentShape(Rectangle())
+    }
+
+    @ViewBuilder
+    private var headerAvatar: some View {
+        if let ch = model.channel {
+            if ch.isGroup {
+                let others = ch.allMembers.filter { $0.id != model.myId }.map(\.fullName)
+                StackedAvatars(names: others.isEmpty ? groupMemberNames(ch.name) : others, size: 30)
+            } else if ch.isDirect {
+                Avatar(name: ch.displayName, size: 30)
+                    .overlay(alignment: .bottomTrailing) {
+                        if isPeerOnline { PresenceDot(online: true, size: 10) }
+                    }
+            } else {
+                Avatar(name: ch.displayName, size: 30, channel: true)
+            }
+        }
+    }
+
+    private var subtitleColor: Color {
+        if !model.typing.isEmpty { return ArtaColor.gold }
+        if !inThread && isDirect && isPeerOnline { return ArtaColor.online }
+        return ArtaColor.muted
+    }
+
+    /// Única indicación de «escribiendo…»: aquí, sin barra que empuje el composer.
     private var subtitle: String {
         if !model.typing.isEmpty {
             return model.typing.count == 1 ? "\(model.typing[0]) está escribiendo…" : "Varios están escribiendo…"
         }
         if inThread { return model.channel?.displayName ?? "" }
         guard let ch = model.channel else { return "" }
-        if ch.isDirect { return ch.peer?.title ?? "Mensaje directo" }
+        if ch.isDirect { return isPeerOnline ? "en línea" : (ch.peer?.title ?? "Mensaje directo") }
+        if let topic = ch.topic, !topic.isEmpty { return topic }
         var parts: [String] = []
         if let n = ch.memberCount, n > 0 { parts.append(n == 1 ? "1 miembro" : "\(n) miembros") }
         if ch.isMuted { parts.append("silenciado") }
@@ -162,7 +261,8 @@ struct ConversationView: View {
 
     private enum RowKind {
         case day(Date)
-        case message(ChatMessage, showAuthor: Bool)
+        case unread
+        case message(ChatMessage, showAuthor: Bool, seen: String?)
         case threadDivider(Int)
     }
 
@@ -175,18 +275,25 @@ struct ConversationView: View {
         var out: [Row] = []
         var lastDay: Date?
         var prev: ChatMessage?
+        let me = model.myId
+        let lastMine = model.messages.last(where: { $0.author.id == me && !$0.pending && !$0.failed && !$0.isDeleted && !$0.isSystem })?.id
         for (index, m) in model.messages.enumerated() {
             if let day = dayKey(m.createdAt), day != lastDay {
                 out.append(Row(id: "day-\(Int(day.timeIntervalSince1970))", kind: .day(day)))
                 lastDay = day
                 prev = nil
             }
+            if m.id == model.unreadMarkerId {
+                out.append(Row(id: Self.unreadId, kind: .unread))
+                prev = nil
+            }
             var grouped = false
-            if let p = prev, p.author.id == m.author.id, !p.isSystem,
+            if let p = prev, p.author.id == m.author.id, !p.isSystem, m.replyTo == nil,
                let a = parseDate(p.createdAt), let b = parseDate(m.createdAt), b.timeIntervalSince(a) < 300 {
                 grouped = true
             }
-            out.append(Row(id: m.id, kind: .message(m, showAuthor: !grouped)))
+            let seen = m.id == lastMine ? model.seenLabel(m) : nil
+            out.append(Row(id: m.id, kind: .message(m, showAuthor: !grouped, seen: seen)))
             if inThread && index == 0 {
                 out.append(Row(id: "thread-divider", kind: .threadDivider(model.messages.count - 1)))
                 prev = nil
@@ -198,55 +305,138 @@ struct ConversationView: View {
     }
 
     private var messageList: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                LazyVStack(spacing: 2) {
-                    if model.hasMore {
-                        ProgressView()
-                            .tint(ArtaColor.gold)
-                            .padding(12)
+        GeometryReader { geo in
+            let maxBubble = max(200, geo.size.width * 0.78)
+            ScrollViewReader { proxy in
+                ScrollView {
+                    LazyVStack(spacing: 2) {
+                        if model.hasMore {
+                            ProgressView()
+                                .tint(ArtaColor.gold)
+                                .padding(12)
+                                .onAppear {
+                                    olderAnchor = model.messages.first?.id
+                                    model.loadOlder()
+                                }
+                        }
+                        ForEach(rows) { row in
+                            rowView(row, maxBubble: maxBubble).id(row.id)
+                        }
+                        if model.hasNewer {
+                            ProgressView()
+                                .tint(ArtaColor.gold)
+                                .padding(12)
+                                .onAppear { model.loadNewer() }
+                        }
+                        Color.clear
+                            .frame(height: 1)
+                            .id(Self.bottomId)
                             .onAppear {
-                                olderAnchor = model.messages.first?.id
-                                model.loadOlder()
+                                atBottom = true
+                                newBelow = 0
                             }
+                            .onDisappear { atBottom = false }
                     }
-                    ForEach(rows) { row in
-                        rowView(row).id(row.id)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 8)
+                }
+                .defaultScrollAnchor(.bottom)
+                .scrollDismissesKeyboard(.interactively)
+                .overlay {
+                    if model.messages.isEmpty && !model.loading && model.loadError == nil {
+                        EmptyState(icon: "hand.wave", title: "Aún no hay mensajes", message: "Escribe el primero.")
                     }
                 }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 8)
-            }
-            .defaultScrollAnchor(.bottom)
-            .scrollDismissesKeyboard(.interactively)
-            .overlay {
-                if model.loading {
-                    ProgressView().tint(ArtaColor.gold)
-                } else if model.messages.isEmpty {
-                    EmptyState(icon: "hand.wave", title: "Aún no hay mensajes", message: "Escribe el primero.")
+                .overlay(alignment: .bottomTrailing) {
+                    jumpButton(proxy).animation(.easeOut(duration: 0.2), value: atBottom)
                 }
-            }
-            .onChange(of: model.messages.last?.id) { _, id in
-                guard let id else { return }
-                withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo(id, anchor: .bottom) }
-            }
-            .onChange(of: model.loadingOlder) { was, now in
-                if was && !now, let anchor = olderAnchor { proxy.scrollTo(anchor, anchor: .top) }
-            }
-            .onChange(of: model.loading) { _, loading in
-                guard !loading, let focus = model.focusMessageId else { return }
-                highlighted = focus
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { proxy.scrollTo(focus, anchor: .center) }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
-                    withAnimation { highlighted = nil }
-                    model.focusMessageId = nil
+                .onChange(of: model.messages.last?.id) { _, id in
+                    guard id != nil, let last = model.messages.last else { return }
+                    if atBottom || last.author.id == model.myId {
+                        withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo(Self.bottomId, anchor: .bottom) }
+                    } else if !model.hasNewer {
+                        newBelow += 1
+                    }
+                }
+                .onChange(of: model.loadingOlder) { was, now in
+                    if was && !now, let anchor = olderAnchor { proxy.scrollTo(anchor, anchor: .top) }
+                }
+                .onChange(of: model.loading) { _, loading in
+                    guard !loading, !didInitialScroll else { return }
+                    didInitialScroll = true
+                    guard model.unreadMarkerId != nil, model.jumpRequest == nil else { return }
+                    let unread = model.unreadAtOpen
+                    later(0.15) {
+                        proxy.scrollTo(Self.unreadId, anchor: .top)
+                        newBelow = unread
+                    }
+                }
+                .onChange(of: model.jumpRequest) { _, request in
+                    guard let request else { return }
+                    model.jumpRequest = nil
+                    highlighted = request.id
+                    later(0.15) {
+                        withAnimation { proxy.scrollTo(request.id, anchor: .center) }
+                    }
+                    later(2.5) {
+                        withAnimation { if highlighted == request.id { highlighted = nil } }
+                    }
+                }
+                .onChange(of: router.chatJump) { _, jump in
+                    guard let jump, jump.channelId == model.channelId, !inThread else { return }
+                    router.chatJump = nil
+                    model.jump(to: jump.messageId)
                 }
             }
         }
     }
 
+    // DispatchQueue.main.asyncAfter recibe un closure @Sendable en el SDK de iOS 18;
+    // un Task en el MainActor evita avisos de aislamiento al tocar estado de la vista.
+    private func later(_ seconds: Double, _ work: @escaping @MainActor () -> Void) {
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+            work()
+        }
+    }
+
+    /// «↓» para volver abajo; con mensajes nuevos debajo, «↓ N nuevos».
     @ViewBuilder
-    private func rowView(_ row: Row) -> some View {
+    private func jumpButton(_ proxy: ScrollViewProxy) -> some View {
+        if !atBottom || model.hasNewer {
+            Button {
+                newBelow = 0
+                if model.hasNewer {
+                    Task {
+                        await model.loadLatest()
+                        try? await Task.sleep(nanoseconds: 150_000_000)
+                        proxy.scrollTo(Self.bottomId, anchor: .bottom)
+                    }
+                } else {
+                    withAnimation(.easeOut(duration: 0.25)) { proxy.scrollTo(Self.bottomId, anchor: .bottom) }
+                }
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "arrow.down")
+                    if newBelow > 0 { Text(newBelow == 1 ? "1 nuevo" : "\(newBelow) nuevos") }
+                }
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(newBelow > 0 ? ArtaColor.bg : ArtaColor.text)
+                .padding(.horizontal, newBelow > 0 ? 14 : 12)
+                .padding(.vertical, 10)
+                .background(Capsule().fill(newBelow > 0 ? ArtaColor.gold : ArtaColor.surface2))
+                .overlay(Capsule().stroke(ArtaColor.line, lineWidth: newBelow > 0 ? 0 : 1))
+                .shadow(color: .black.opacity(0.35), radius: 6, y: 2)
+            }
+            .buttonStyle(.plain)
+            .padding(14)
+            .transition(.scale.combined(with: .opacity))
+            .accessibilityLabel(newBelow > 0 ? "Ir a los \(newBelow) mensajes nuevos" : "Ir al final")
+        }
+    }
+
+    @ViewBuilder
+    private func rowView(_ row: Row, maxBubble: CGFloat) -> some View {
         switch row.kind {
         case .day(let day):
             Text(dayLabel(day))
@@ -256,6 +446,16 @@ struct ConversationView: View {
                 .padding(.vertical, 4)
                 .background(Capsule().fill(ArtaColor.bgElev))
                 .padding(.vertical, 8)
+        case .unread:
+            HStack(spacing: 8) {
+                Rectangle().fill(ArtaColor.gold.opacity(0.6)).frame(height: 1)
+                Text("Mensajes nuevos")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(ArtaColor.gold)
+                    .fixedSize()
+                Rectangle().fill(ArtaColor.gold.opacity(0.6)).frame(height: 1)
+            }
+            .padding(.vertical, 8)
         case .threadDivider(let count):
             HStack {
                 Rectangle().fill(ArtaColor.line).frame(height: 1)
@@ -266,7 +466,7 @@ struct ConversationView: View {
                 Rectangle().fill(ArtaColor.line).frame(height: 1)
             }
             .padding(.vertical, 8)
-        case let .message(m, showAuthor):
+        case let .message(m, showAuthor, seen):
             if m.isSystem {
                 Text(plainText(m.text))
                     .font(.caption)
@@ -275,77 +475,79 @@ struct ConversationView: View {
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 6)
             } else {
+                let interactive = !m.pending && !m.failed && !m.isDeleted
                 MessageBubble(
                     message: m,
                     mine: m.author.id == model.myId,
                     showAuthor: showAuthor,
                     showName: !isDirect,
-                    read: m.author.id == model.myId && model.readByAll(m),
+                    read: m.author.id == model.myId && model.readers(m) > 0,
+                    seenLabel: seen,
                     highlighted: highlighted == m.id,
                     showReplies: !inThread,
                     myId: model.myId,
-                    onReact: { model.react(m, $0) },
-                    onThread: { router.chatPath.append(.thread(channelId: model.channelId, rootId: m.id)) },
+                    maxWidth: maxBubble,
+                    onReact: { emoji in
+                        model.react(m, emoji)
+                        Haptics.react()
+                    },
+                    onMoreReactions: { openActions(m) },
+                    onThread: { pushChat(.thread(channelId: model.channelId, rootId: m.id)) },
                     onRetry: { model.retry(m) },
                     onDiscard: { model.discard(m) },
-                    onImage: { viewerURL = $0 },
+                    onImage: { openImage($0) },
                     onVideo: { videoURL = $0 },
-                    onFile: { openFile($0) }
+                    onFile: { openFile($0) },
+                    onQuote: { model.jump(to: $0) }
                 )
                 .padding(.top, showAuthor ? 6 : 0)
-                .contextMenu { messageMenu(m) }
+                .modifier(SwipeToReply(enabled: interactive) { startReply(m) })
+                .simultaneousGesture(
+                    LongPressGesture(minimumDuration: 0.4).onEnded { _ in openActions(m) },
+                    including: m.pending ? .subviews : .all
+                )
+                .accessibilityAction(named: "Acciones del mensaje") { openActions(m) }
+                .accessibilityAction(named: "Responder citando") { if interactive { startReply(m) } }
             }
         }
     }
 
-    @ViewBuilder
-    private func messageMenu(_ m: ChatMessage) -> some View {
-        if !m.pending && !m.failed {
-            ControlGroup {
-                ForEach(quickReactions.prefix(4), id: \.self) { emoji in
-                    Button(emoji) { model.react(m, emoji) }
-                }
-            }
-            Menu("Más reacciones") {
-                ForEach(quickReactions.dropFirst(4), id: \.self) { emoji in
-                    Button(emoji) { model.react(m, emoji) }
-                }
-            }
-            if !inThread {
-                Button { router.chatPath.append(.thread(channelId: model.channelId, rootId: m.id)) } label: {
-                    Label("Responder en hilo", systemImage: "arrowshape.turn.up.left")
-                }
-            }
-        }
-        if !m.text.isEmpty {
-            Button { UIPasteboard.general.string = plainText(m.text) } label: { Label("Copiar texto", systemImage: "doc.on.doc") }
-        }
-        if let a = m.attachment, !m.pending {
-            Button { share(a) } label: { Label("Compartir o guardar", systemImage: "square.and.arrow.up") }
-        }
-        if !m.pending && !m.failed {
-            Button { model.togglePin(m) } label: {
-                Label(m.pinnedAt != nil ? "Desfijar" : "Fijar en la conversación", systemImage: m.pinnedAt != nil ? "pin.slash" : "pin")
-            }
-        }
-        if model.canEdit(m) {
-            Button { startEditing(m) } label: { Label("Editar", systemImage: "pencil") }
-        }
-        if model.canDelete(m) {
-            Button(role: .destructive) { confirmDelete = m } label: { Label("Eliminar", systemImage: "trash") }
+    private func openActions(_ m: ChatMessage) {
+        Haptics.longPress()
+        actionTarget = m
+    }
+
+    private func perform(_ action: MessageAction, on m: ChatMessage) {
+        switch action {
+        case .react(let emoji):
+            model.react(m, emoji)
+            Haptics.react()
+        case .reply:
+            startReply(m)
+        case .thread:
+            pushChat(.thread(channelId: model.channelId, rootId: m.id))
+        case .copy:
+            UIPasteboard.general.string = plainText(m.text)
+        case .save:
+            model.toggleSave(m)
+        case .pin:
+            model.togglePin(m)
+        case .share:
+            if let a = m.attachment { share(a) }
+        case .edit:
+            startEditing(m)
+        case .delete:
+            confirmDelete = m
         }
     }
 
-    private var typingBar: some View {
-        HStack(spacing: 6) {
-            TypingDots()
-            Text(model.typing.count == 1 ? "\(model.typing[0]) está escribiendo…" : "Varios están escribiendo…")
-                .font(.caption)
-                .foregroundStyle(ArtaColor.muted)
-            Spacer()
+    private func openImage(_ url: URL) {
+        let urls = model.messages.compactMap { m -> URL? in
+            guard !m.isDeleted, let a = m.attachment, a.isImage else { return nil }
+            return ApiConfig.resolve(a.url)
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 4)
+        let list = urls.contains(url) ? urls : [url]
+        gallery = GalleryRequest(urls: list, start: list.firstIndex(of: url) ?? 0)
     }
 
     // MARK: Redactar
@@ -360,7 +562,7 @@ struct ConversationView: View {
     @ViewBuilder
     private var composerArea: some View {
         if let ch = model.channel, !ch.mayPost {
-            Text("Solo quienes administran este canal pueden escribir aquí.")
+            Text("Solo dirección publica en este canal.")
                 .font(.footnote)
                 .foregroundStyle(ArtaColor.muted)
                 .frame(maxWidth: .infinity)
@@ -377,92 +579,171 @@ struct ConversationView: View {
                                     Button { insertMention(person) } label: {
                                         HStack(spacing: 10) {
                                             Avatar(name: person.fullName, size: 28)
+                                                .overlay(alignment: .bottomTrailing) {
+                                                    if presence.isOnline(person.id) { PresenceDot(online: true, size: 9) }
+                                                }
                                             Text(person.fullName).foregroundStyle(ArtaColor.text)
                                             Spacer()
                                         }
                                         .padding(.horizontal, 14)
                                         .padding(.vertical, 8)
+                                        .contentShape(Rectangle())
                                     }
+                                    .buttonStyle(.plain)
                                 }
                             }
                         }
                         .frame(maxHeight: 180)
-                        .background(ArtaColor.bgElev)
                     }
                 }
                 if let editing {
-                    HStack {
-                        Image(systemName: "pencil").foregroundStyle(ArtaColor.gold)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Editando mensaje").font(.caption.weight(.semibold)).foregroundStyle(ArtaColor.gold)
-                            Text(plainText(editing.text)).font(.caption).foregroundStyle(ArtaColor.muted).lineLimit(1)
-                        }
-                        Spacer()
-                        Button { cancelEditing() } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(ArtaColor.muted) }
-                    }
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 8)
-                    .background(ArtaColor.bgElev)
+                    contextBar(
+                        icon: "pencil",
+                        title: "Editando mensaje",
+                        detail: plainText(editing.text),
+                        cancelLabel: "Cancelar edición",
+                        onCancel: cancelEditing
+                    )
+                } else if let reply = replyingTo {
+                    contextBar(
+                        icon: "arrowshape.turn.up.left.fill",
+                        title: "Respondiendo a \(reply.author.fullName)",
+                        detail: replyExcerpt(reply),
+                        cancelLabel: "Cancelar respuesta",
+                        onCancel: { replyingTo = nil }
+                    )
                 }
                 if let upload = model.upload { UploadBar(progress: upload) }
+                if draft.count > chatMessageLimit - 500 {
+                    Text("\(draft.count) / \(chatMessageLimit)")
+                        .font(.caption2.monospacedDigit())
+                        .foregroundStyle(draft.count >= chatMessageLimit ? ArtaColor.danger : ArtaColor.muted)
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                        .padding(.horizontal, 16)
+                        .padding(.top, 4)
+                }
                 if recorder.isRecording {
                     RecordingBar(recorder: recorder, onCancel: { recorder.cancel() }, onSend: finishRecording)
                 } else {
                     composerRow
                 }
             }
+            .background(ArtaColor.bgElev)
+            .overlay(alignment: .top) { Rectangle().fill(ArtaColor.line).frame(height: 0.5) }
         }
+    }
+
+    private func contextBar(icon: String, title: String, detail: String, cancelLabel: String, onCancel: @escaping () -> Void) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: icon)
+                .font(.system(size: 15))
+                .foregroundStyle(ArtaColor.gold)
+                .frame(width: 22)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(.caption.weight(.semibold)).foregroundStyle(ArtaColor.gold).lineLimit(1)
+                Text(detail).font(.caption).foregroundStyle(ArtaColor.muted).lineLimit(1)
+            }
+            Spacer()
+            Button(action: onCancel) {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.system(size: 20))
+                    .foregroundStyle(ArtaColor.muted)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(cancelLabel)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
+        .overlay(alignment: .leading) { Rectangle().fill(ArtaColor.gold).frame(width: 3) }
+    }
+
+    private func replyExcerpt(_ m: ChatMessage) -> String {
+        if !m.text.isEmpty { return plainText(m.text) }
+        return m.attachment?.name ?? "Adjunto"
     }
 
     private var draftIsEmpty: Bool { draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
 
     private var composerRow: some View {
-                HStack(alignment: .bottom, spacing: 8) {
-                    if editing == nil {
-                        // Se puede seguir adjuntando mientras sube lo anterior: entra a la cola.
-                        Menu {
-                            if CameraPicker.isAvailable {
-                                Button { showCamera = true } label: { Label("Cámara", systemImage: "camera") }
-                            }
-                            Button { showPhotos = true } label: { Label("Fotos y videos", systemImage: "photo.on.rectangle") }
-                            Button { showFiles = true } label: { Label("Documento", systemImage: "doc") }
-                        } label: {
-                            Image(systemName: "plus.circle.fill")
-                                .font(.system(size: 28))
-                                .foregroundStyle(model.uploading ? ArtaColor.gold : ArtaColor.muted)
-                        }
-                        .accessibilityLabel("Adjuntar")
+        HStack(alignment: .bottom, spacing: 8) {
+            if editing == nil {
+                // Se puede seguir adjuntando mientras sube lo anterior: entra a la cola.
+                Menu {
+                    if CameraPicker.isAvailable {
+                        Button { showCamera = true } label: { Label("Cámara", systemImage: "camera") }
                     }
-                    TextField(inThread ? "Responder en el hilo" : "Mensaje", text: $draft, axis: .vertical)
-                        .lineLimit(1...6)
-                        .focused($composerFocused)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                        .background(RoundedRectangle(cornerRadius: 20).fill(ArtaColor.surface2))
-                        .foregroundStyle(ArtaColor.text)
-                        .onChange(of: draft) { _, value in
-                            if !value.isEmpty && editing == nil { model.onTyping() }
-                        }
-                    if editing == nil && draftIsEmpty {
-                        Button(action: startRecording) {
-                            Image(systemName: "mic.circle.fill")
-                                .font(.system(size: 32))
-                                .foregroundStyle(ArtaColor.gold)
-                        }
-                        .accessibilityLabel("Grabar nota de voz")
-                    } else {
-                        Button(action: submit) {
-                            Image(systemName: editing == nil ? "arrow.up.circle.fill" : "checkmark.circle.fill")
-                                .font(.system(size: 32))
-                                .foregroundStyle(draftIsEmpty ? ArtaColor.muted : ArtaColor.gold)
-                        }
-                        .disabled(draftIsEmpty)
-                        .accessibilityLabel(editing == nil ? "Enviar" : "Guardar")
-                    }
+                    Button { showPhotos = true } label: { Label("Fotos y videos", systemImage: "photo.on.rectangle") }
+                    Button { showFiles = true } label: { Label("Documento", systemImage: "doc") }
+                } label: {
+                    Image(systemName: "plus.circle.fill")
+                        .font(.system(size: Self.composerIcon))
+                        .foregroundStyle(model.uploading ? ArtaColor.gold : ArtaColor.muted)
+                        .frame(width: 36, height: 36)
                 }
-                .padding(.horizontal, 10)
+                .accessibilityLabel("Adjuntar")
+            }
+            TextField(inThread ? "Responder en el hilo" : "Mensaje", text: $draft, axis: .vertical)
+                .lineLimit(1...6)
+                .focused($composerFocused)
+                .padding(.horizontal, 12)
                 .padding(.vertical, 8)
-                .background(ArtaColor.bgElev)
+                .frame(minHeight: 36)
+                .background(RoundedRectangle(cornerRadius: 18).fill(ArtaColor.surface2))
+                .foregroundStyle(ArtaColor.text)
+                .tint(ArtaColor.gold)
+                .onChange(of: draft) { _, value in onDraftChange(value) }
+            if editing == nil && draftIsEmpty {
+                Button(action: startRecording) {
+                    Image(systemName: "mic.circle.fill")
+                        .font(.system(size: Self.composerIcon))
+                        .foregroundStyle(ArtaColor.gold)
+                        .frame(width: 36, height: 36)
+                }
+                .accessibilityLabel("Grabar nota de voz")
+            } else {
+                Button(action: submit) {
+                    Image(systemName: editing == nil ? "arrow.up.circle.fill" : "checkmark.circle.fill")
+                        .font(.system(size: Self.composerIcon))
+                        .foregroundStyle(draftIsEmpty ? ArtaColor.muted : ArtaColor.gold)
+                        .frame(width: 36, height: 36)
+                }
+                .disabled(draftIsEmpty)
+                .accessibilityLabel(editing == nil ? "Enviar" : "Guardar")
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+    }
+
+    private func onDraftChange(_ value: String) {
+        if value.count > chatMessageLimit {
+            draft = String(value.prefix(chatMessageLimit))
+            return
+        }
+        if !value.isEmpty && editing == nil { model.onTyping() }
+        if editing == nil && draftLoaded {
+            ChatDrafts.save(resolvedDraft(), channelId: model.channelId, parentId: model.parentId)
+        }
+    }
+
+    private func loadDraft() {
+        guard !draftLoaded else { return }
+        let saved = ChatDrafts.load(channelId: model.channelId, parentId: model.parentId)
+        if !saved.isEmpty { setDraft(fromTokens: saved) }
+        draftLoaded = true
+    }
+
+    /// Texto con tokens `[@Nombre](user:id)` → borrador visible con «@Nombre» y su mapa de ids.
+    private func setDraft(fromTokens text: String) {
+        var map: [String: String] = [:]
+        if let regex = try? NSRegularExpression(pattern: #"\[@([^\]]{1,80})\]\(user:([\w-]{1,64})\)"#) {
+            let ns = text as NSString
+            for match in regex.matches(in: text, range: NSRange(location: 0, length: ns.length)) {
+                map[ns.substring(with: match.range(at: 1))] = ns.substring(with: match.range(at: 2))
+            }
+        }
+        mentionMap = map
+        draft = plainText(text)
     }
 
     private func insertMention(_ person: ChannelMember) {
@@ -484,7 +765,14 @@ struct ConversationView: View {
         let text = resolvedDraft()
         draft = ""
         mentionMap = [:]
+        ChatDrafts.save("", channelId: model.channelId, parentId: model.parentId)
         return text
+    }
+
+    private func takeReply() -> ChatMessage? {
+        let reply = replyingTo
+        replyingTo = nil
+        return reply
     }
 
     private func submit() {
@@ -493,27 +781,31 @@ struct ConversationView: View {
             cancelEditing()
             return
         }
-        model.send(takeDraft())
+        let reply = takeReply()
+        model.send(takeDraft(), replyTo: reply)
+        Haptics.send()
     }
 
-    private func startEditing(_ m: ChatMessage) {
-        editing = m
-        var map: [String: String] = [:]
-        if let regex = try? NSRegularExpression(pattern: #"\[@([^\]]{1,80})\]\(user:([\w-]{1,64})\)"#) {
-            let ns = m.text as NSString
-            for match in regex.matches(in: m.text, range: NSRange(location: 0, length: ns.length)) {
-                map[ns.substring(with: match.range(at: 1))] = ns.substring(with: match.range(at: 2))
-            }
-        }
-        mentionMap = map
-        draft = plainText(m.text)
+    private func startReply(_ m: ChatMessage) {
+        if editing != nil { cancelEditing() }
+        replyingTo = m
         composerFocused = true
     }
 
+    private func startEditing(_ m: ChatMessage) {
+        replyingTo = nil
+        editing = m
+        setDraft(fromTokens: m.text)
+        composerFocused = true
+    }
+
+    /// Al salir de la edición vuelve el borrador que había (no se guardó mientras se editaba).
     private func cancelEditing() {
         editing = nil
         draft = ""
         mentionMap = [:]
+        let saved = ChatDrafts.load(channelId: model.channelId, parentId: model.parentId)
+        if !saved.isEmpty { setDraft(fromTokens: saved) }
     }
 
     // MARK: Adjuntos
@@ -535,14 +827,16 @@ struct ConversationView: View {
                 return try await MediaPrep.photo(data: data)
             }
         }
-        model.sendFiles(jobs, caption: takeDraft())
+        let reply = takeReply()
+        model.sendFiles(jobs, caption: takeDraft(), replyTo: reply)
     }
 
     private func sendDocuments(_ urls: [URL]) {
         let jobs: [@Sendable () async throws -> PreparedUpload] = urls.map { url in
             { @Sendable in try await MediaPrep.document(at: url) }
         }
-        model.sendFiles(jobs, caption: takeDraft())
+        let reply = takeReply()
+        model.sendFiles(jobs, caption: takeDraft(), replyTo: reply)
     }
 
     private func sendCamera(_ result: CameraPicker.Result) {
@@ -553,7 +847,8 @@ struct ConversationView: View {
         case .video(let url):
             job = { @Sendable in try await MediaPrep.video(at: url, ownsSource: true) }
         }
-        model.sendFiles([job], caption: takeDraft())
+        let reply = takeReply()
+        model.sendFiles([job], caption: takeDraft(), replyTo: reply)
     }
 
     private func startRecording() {
@@ -571,7 +866,9 @@ struct ConversationView: View {
             model.error = "Mantén la grabación al menos un segundo."
             return
         }
-        model.sendFiles([{ @Sendable in MediaPrep.voice(url) }], caption: "")
+        let reply = takeReply()
+        model.sendFiles([{ @Sendable in MediaPrep.voice(url) }], caption: "", replyTo: reply)
+        Haptics.send()
     }
 
     private func share(_ attachment: ChatAttachment) {
@@ -603,12 +900,7 @@ struct ConversationView: View {
             List(pinned) { m in
                 Button {
                     showPins = false
-                    if model.messages.contains(where: { $0.id == m.id }) {
-                        highlighted = m.id
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { withAnimation { highlighted = nil } }
-                    } else {
-                        router.chatPath.append(.conversation(channelId: model.channelId, focusMessageId: m.id))
-                    }
+                    model.jump(to: m.id)
                 } label: {
                     VStack(alignment: .leading, spacing: 4) {
                         HStack {
@@ -637,6 +929,49 @@ struct ConversationView: View {
     }
 }
 
+// MARK: - Deslizar para responder
+
+/// Arrastrar la burbuja hacia la derecha responde citando (como WhatsApp/Slack móvil).
+private struct SwipeToReply: ViewModifier {
+    let enabled: Bool
+    var onReply: () -> Void
+    @State private var dx: CGFloat = 0
+    @State private var armed = false
+
+    private static let threshold: CGFloat = 60
+
+    func body(content: Content) -> some View {
+        content
+            .offset(x: dx)
+            .background(alignment: .leading) {
+                Image(systemName: "arrowshape.turn.up.left.fill")
+                    .font(.subheadline)
+                    .foregroundStyle(ArtaColor.gold)
+                    .opacity(Double(min(1, dx / Self.threshold)))
+                    .scaleEffect(armed ? 1.15 : 0.85)
+                    .padding(.leading, 4)
+            }
+            .simultaneousGesture(
+                DragGesture(minimumDistance: 20)
+                    .onChanged { value in
+                        let w = value.translation.width
+                        guard w > 0, w > abs(value.translation.height) * 1.6 else { return }
+                        dx = min(90, w * 0.7)
+                        if dx >= Self.threshold && !armed {
+                            armed = true
+                            Haptics.react()
+                        }
+                    }
+                    .onEnded { _ in
+                        if armed { onReply() }
+                        armed = false
+                        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) { dx = 0 }
+                    },
+                including: enabled ? .all : .subviews
+            )
+    }
+}
+
 // MARK: - Burbuja
 
 struct MessageBubble: View {
@@ -645,33 +980,51 @@ struct MessageBubble: View {
     let showAuthor: Bool
     let showName: Bool
     let read: Bool
+    let seenLabel: String?
     let highlighted: Bool
     let showReplies: Bool
     let myId: String
+    let maxWidth: CGFloat
     var onReact: (String) -> Void
+    var onMoreReactions: () -> Void
     var onThread: () -> Void
     var onRetry: () -> Void
     var onDiscard: () -> Void
     var onImage: (URL) -> Void
     var onVideo: (URL) -> Void
     var onFile: (ChatAttachment) -> Void
+    var onQuote: (String) -> Void
+
+    private var linkURL: String? {
+        guard !message.isDeleted, message.attachment == nil, !message.pending else { return nil }
+        return ChatMarkdown.firstURL(in: message.text)
+    }
+
+    /// Mensaje corto de una línea: la hora va en la misma línea que el texto.
+    private var inlineMeta: Bool {
+        guard !message.isDeleted, message.attachment == nil, message.replyTo == nil, linkURL == nil else { return false }
+        let text = message.text
+        guard !text.isEmpty, !text.contains("\n"), !text.contains("```") else { return false }
+        return plainText(text).count <= 28
+    }
 
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
             if mine {
-                Spacer(minLength: 48)
+                Spacer(minLength: 0)
             } else if showName {
                 if showAuthor { Avatar(name: message.author.fullName, size: 30) } else { Color.clear.frame(width: 30, height: 1) }
             }
             VStack(alignment: mine ? .trailing : .leading, spacing: 4) {
                 bubble
-                if !message.allReactions.isEmpty { reactions }
+                if !message.allReactions.isEmpty && !message.isDeleted { reactions }
                 if showReplies && message.replies > 0 {
                     Button(action: onThread) {
                         Text(message.replies == 1 ? "1 respuesta ›" : "\(message.replies) respuestas ›")
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(ArtaColor.gold)
                     }
+                    .buttonStyle(.plain)
                 }
                 if message.failed {
                     HStack(spacing: 12) {
@@ -681,8 +1034,14 @@ struct MessageBubble: View {
                     }
                     .font(.caption)
                 }
+                if let seenLabel {
+                    Text(seenLabel)
+                        .font(.caption2)
+                        .foregroundStyle(ArtaColor.muted)
+                }
             }
-            if !mine { Spacer(minLength: 48) }
+            .frame(maxWidth: maxWidth, alignment: mine ? .trailing : .leading)
+            if !mine { Spacer(minLength: 0) }
         }
     }
 
@@ -693,32 +1052,64 @@ struct MessageBubble: View {
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(ArtaColor.gold)
             }
-            if message.pinnedAt != nil {
+            if message.pinnedAt != nil && !message.isDeleted {
                 Label("Fijado", systemImage: "pin.fill")
                     .font(.caption2)
                     .foregroundStyle(ArtaColor.muted)
             }
-            if let attachment = message.attachment {
-                AttachmentContent(attachment: attachment, mine: mine, onImage: onImage, onVideo: onVideo, onFile: onFile)
+            if let ref = message.replyTo, !message.isDeleted {
+                QuoteBlock(ref: ref)
+                    .onTapGesture { onQuote(ref.id) }
             }
-            if !message.text.isEmpty {
-                Text(mentionText(message.text))
-                    .foregroundStyle(ArtaColor.text)
-                    .textSelection(.enabled)
+            if message.isDeleted {
+                HStack(alignment: .lastTextBaseline, spacing: 6) {
+                    Label("Mensaje eliminado", systemImage: "nosign")
+                        .font(.subheadline.italic())
+                        .foregroundStyle(ArtaColor.muted)
+                    meta
+                }
+            } else if inlineMeta {
+                HStack(alignment: .lastTextBaseline, spacing: 8) {
+                    ChatRichText(source: message.text)
+                    meta
+                }
+            } else {
+                if let attachment = message.attachment {
+                    AttachmentContent(attachment: attachment, mine: mine, onImage: onImage, onVideo: onVideo, onFile: onFile)
+                }
+                if !message.text.isEmpty {
+                    ChatRichText(source: message.text)
+                }
+                if let linkURL {
+                    LinkPreviewCard(url: linkURL)
+                }
+                meta
             }
-            HStack(spacing: 4) {
-                if message.editedAt != nil { Text("editado") }
-                Text(messageTime(message.createdAt))
-                if mine { tick }
-            }
-            .font(.caption2)
-            .foregroundStyle(ArtaColor.muted)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
-        .background(RoundedRectangle(cornerRadius: 16).fill(mine ? ArtaColor.mine : ArtaColor.bgElev))
-        .overlay(RoundedRectangle(cornerRadius: 16).stroke(highlighted ? ArtaColor.gold : Color.clear, lineWidth: 1.5))
+        .background(RoundedRectangle(cornerRadius: 16).fill(message.isDeleted ? Color.clear : (mine ? ArtaColor.mine : ArtaColor.bgElev)))
+        .overlay(RoundedRectangle(cornerRadius: 16).stroke(bubbleStroke, lineWidth: highlighted ? 1.5 : 1))
         .opacity(message.pending ? 0.75 : 1)
+    }
+
+    private var bubbleStroke: Color {
+        if highlighted { return ArtaColor.gold }
+        return message.isDeleted ? ArtaColor.line : Color.clear
+    }
+
+    private var meta: some View {
+        HStack(spacing: 4) {
+            if message.isSaved && !message.isDeleted {
+                Image(systemName: "bookmark.fill").foregroundStyle(ArtaColor.gold).accessibilityLabel("Guardado")
+            }
+            if message.editedAt != nil && !message.isDeleted { Text("editado") }
+            Text(messageTime(message.createdAt))
+            if mine && !message.isDeleted { tick }
+        }
+        .font(.caption2)
+        .foregroundStyle(ArtaColor.muted)
+        .fixedSize()
     }
 
     @ViewBuilder
@@ -750,8 +1141,27 @@ struct MessageBubble: View {
                     .foregroundStyle(ArtaColor.text)
                 }
                 .buttonStyle(.plain)
+                .contextMenu {
+                    if let users = r.users, !users.isEmpty {
+                        ForEach(users, id: \.id) { u in
+                            Text(u.id == myId ? "Tú" : u.fullName)
+                        }
+                    } else {
+                        Text(r.count == 1 ? "1 persona" : "\(r.count) personas")
+                    }
+                }
                 .accessibilityLabel("\(r.emoji) \(r.count)")
             }
+            Button(action: onMoreReactions) {
+                Image(systemName: "face.smiling")
+                    .font(.caption)
+                    .foregroundStyle(ArtaColor.muted)
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 6)
+                    .background(Capsule().fill(ArtaColor.surface2))
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Agregar reacción")
         }
     }
 }
@@ -838,53 +1248,4 @@ struct TypingDots: View {
 struct IdentifiedURL: Identifiable {
     let url: URL
     var id: String { url.absoluteString }
-}
-
-/// Foto a pantalla completa con zoom (pellizcar) y compartir.
-struct ImageViewer: View {
-    let url: URL
-    @Environment(\.dismiss) private var dismiss
-    @State private var scale: CGFloat = 1
-    @State private var lastScale: CGFloat = 1
-    @State private var image: Image?
-
-    var body: some View {
-        NavigationStack {
-            ZStack {
-                Color.black.ignoresSafeArea()
-                AsyncImage(url: url) { phase in
-                    if let img = phase.image {
-                        img.resizable()
-                            .scaledToFit()
-                            .scaleEffect(scale)
-                            .gesture(
-                                MagnifyGesture()
-                                    .onChanged { value in scale = max(1, min(5, lastScale * value.magnification)) }
-                                    .onEnded { _ in lastScale = scale }
-                            )
-                            .onTapGesture(count: 2) {
-                                withAnimation { scale = scale > 1 ? 1 : 2.5 }
-                                lastScale = scale
-                            }
-                            .onAppear { image = img }
-                    } else if phase.error != nil {
-                        Image(systemName: "photo").font(.largeTitle).foregroundStyle(ArtaColor.muted)
-                    } else {
-                        ProgressView().tint(ArtaColor.gold)
-                    }
-                }
-            }
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button { dismiss() } label: { Image(systemName: "xmark") }
-                }
-                if let image {
-                    ToolbarItem(placement: .primaryAction) {
-                        ShareLink(item: image, preview: SharePreview("Foto", image: image))
-                    }
-                }
-            }
-            .toolbarBackground(.hidden, for: .navigationBar)
-        }
-    }
 }

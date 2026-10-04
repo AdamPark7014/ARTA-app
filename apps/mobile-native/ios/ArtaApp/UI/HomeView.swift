@@ -30,6 +30,10 @@ struct HomeView: View {
                             ConversationView(channelId: channelId, parentId: nil, focusMessageId: focus)
                         case let .thread(channelId, rootId):
                             ConversationView(channelId: channelId, parentId: rootId, focusMessageId: nil)
+                        case let .channelInfo(channelId):
+                            ChannelInfoView(channelId: channelId)
+                        case .saved:
+                            SavedMessagesView()
                         }
                     }
             }

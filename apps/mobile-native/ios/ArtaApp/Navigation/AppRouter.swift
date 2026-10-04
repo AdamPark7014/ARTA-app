@@ -128,6 +128,14 @@ enum PanelLink {
 enum ChatRoute: Hashable {
     case conversation(channelId: String, focusMessageId: String?)
     case thread(channelId: String, rootId: String)
+    case channelInfo(channelId: String)
+    case saved
+}
+
+/// Pedido de saltar a un mensaje en una conversación que ya está en la pila (fijados desde la info del canal).
+struct ChatJump: Equatable {
+    let channelId: String
+    let messageId: String
 }
 
 /// Pestaña y pila de navegación. Vive fuera de las vistas para que un toque en
@@ -140,6 +148,7 @@ final class AppRouter: ObservableObject {
 
     @Published var tab: Tab = .inicio
     @Published var chatPath: [ChatRoute] = []
+    @Published var chatJump: ChatJump?
     @Published var inicioPath: [AppRoute] = []
     @Published var tareasPath: [AppRoute] = []
     @Published var avisosPath: [AppRoute] = []

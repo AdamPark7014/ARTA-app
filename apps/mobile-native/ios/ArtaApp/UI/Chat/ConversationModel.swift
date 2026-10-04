@@ -10,6 +10,13 @@ struct UploadProgress: Equatable {
     let fraction: Double?
 }
 
+/// Pedido de desplazarse a un mensaje (búsqueda, fijados, cita). `token` hace que
+/// pedir dos veces el mismo mensaje vuelva a disparar el salto.
+struct JumpRequest: Equatable {
+    let id: String
+    let token = UUID()
+}
+
 /// Estado de una conversación o de un hilo (mismo flujo que `ConversationViewModel` en Android).
 @MainActor
 final class ConversationModel: ObservableObject {
@@ -23,13 +30,22 @@ final class ConversationModel: ObservableObject {
     /// Orden cronológico (el más viejo primero). En un hilo, el primero es la raíz.
     @Published private(set) var messages: [ChatMessage] = []
     @Published private(set) var loading = true
+    /// Falló la carga inicial: la vista muestra «Reintentar», no «Aún no hay mensajes».
+    @Published private(set) var loadError: String?
     @Published private(set) var loadingOlder = false
     @Published private(set) var hasMore = false
+    /// Hay mensajes más nuevos sin cargar (se abrió alrededor de un mensaje viejo).
+    @Published private(set) var hasNewer = false
+    @Published private(set) var loadingNewer = false
+    /// Primer mensaje sin leer al abrir (separador «Mensajes nuevos»); se fija una sola vez.
+    @Published private(set) var unreadMarkerId: String?
+    @Published private(set) var unreadAtOpen = 0
     @Published private(set) var typing: [String] = []
     @Published private(set) var upload: UploadProgress?
     var uploading: Bool { upload != nil }
     @Published var error: String?
     @Published var focusMessageId: String?
+    @Published var jumpRequest: JumpRequest?
 
     var myId: String { Session.shared.currentUser?.id ?? "" }
 
@@ -62,12 +78,16 @@ final class ConversationModel: ObservableObject {
     }
 
     private func loadInitial() async {
+        loading = true
+        loadError = nil
         do {
-            channel = try await ApiClient.shared.channel(channelId)
+            let detail = try await ApiClient.shared.channel(channelId)
+            channel = detail
             if let parentId {
                 let t = try await ApiClient.shared.thread(parentId)
                 messages = [t.root] + t.replies
                 hasMore = false
+                hasNewer = false
             } else {
                 let page: MessagePage
                 if let focus = focusMessageId {
@@ -77,13 +97,35 @@ final class ConversationModel: ObservableObject {
                 }
                 messages = page.messages
                 hasMore = page.hasMore ?? false
+                hasNewer = focusMessageId != nil ? (page.hasNewer ?? false) : false
+                if focusMessageId == nil { computeUnreadMarker(lastReadAt: detail.lastReadAt) }
             }
             error = nil
+            if let focus = focusMessageId {
+                focusMessageId = nil
+                jumpRequest = JumpRequest(id: focus)
+            }
             markReadIfVisible()
         } catch {
-            self.error = error.userMessage
+            loadError = error.userMessage
         }
         loading = false
+    }
+
+    func retryLoad() {
+        guard !loading else { return }
+        Task { await loadInitial() }
+    }
+
+    private func computeUnreadMarker(lastReadAt: String?) {
+        guard parentId == nil, unreadMarkerId == nil, let readAt = parseDate(lastReadAt) else { return }
+        let me = myId
+        let unread = messages.filter { m in
+            guard m.author.id != me, !m.isSystem, let at = parseDate(m.createdAt) else { return false }
+            return at > readAt
+        }
+        unreadMarkerId = unread.first?.id
+        unreadAtOpen = unread.count
     }
 
     private func belongsHere(_ m: ChatMessage) -> Bool {
@@ -98,24 +140,32 @@ final class ConversationModel: ObservableObject {
             guard let self, self.belongsHere(m) else {
                 // Respuesta de hilo: sube el contador del mensaje raíz en la vista del canal.
                 if let self, self.parentId == nil, m.channelId == self.channelId, let root = m.parentId {
-                    self.bumpReplies(root)
+                    self.bumpReplies(root, by: 1)
                 }
                 return
             }
-            self.upsert(m)
             self.typingUntil[m.author.id] = nil
             self.publishTyping()
+            // Viendo mensajes viejos: lo nuevo se trae al bajar (botón «↓»), sin dejar huecos.
+            if self.hasNewer && m.author.id != self.myId { return }
+            self.upsert(m)
             if m.author.id != self.myId { self.markReadIfVisible() }
         }.store(in: &bag)
 
         rt.updated.sink { [weak self] m in
             guard let self, m.channelId == self.channelId else { return }
-            if let i = self.messages.firstIndex(where: { $0.id == m.id }) { self.messages[i] = m }
+            if let i = self.messages.firstIndex(where: { $0.id == m.id }) {
+                var next = m
+                // `saved` es por persona: lo que llega por el socket no lo sabe.
+                next.saved = self.messages[i].saved
+                self.messages[i] = next
+            }
         }.store(in: &bag)
 
         rt.deleted.sink { [weak self] d in
             guard let self, d.channelId == self.channelId else { return }
-            self.messages.removeAll { $0.id == d.messageId }
+            self.applyDeleted(d.messageId)
+            if self.parentId == nil, let root = d.parentId { self.bumpReplies(root, by: -1) }
         }.store(in: &bag)
 
         rt.typing.sink { [weak self] t in
@@ -136,7 +186,7 @@ final class ConversationModel: ObservableObject {
 
         rt.channelsChanged.sink { [weak self] id in
             guard let self, id == self.channelId else { return }
-            Task { if let ch = try? await ApiClient.shared.channel(self.channelId) { self.channel = ch } }
+            Task { await self.reloadChannel() }
         }.store(in: &bag)
 
         // Reconexión (el socket ya volvió a unirse a la sala): pudo llegar algo mientras tanto.
@@ -146,8 +196,12 @@ final class ConversationModel: ObservableObject {
         }.store(in: &bag)
     }
 
+    func reloadChannel() async {
+        if let ch = try? await ApiClient.shared.channel(channelId) { channel = ch }
+    }
+
     private func catchUp() async {
-        guard let last = messages.last(where: { !$0.pending && !$0.failed }) else { return }
+        guard !hasNewer, let last = messages.last(where: { !$0.pending && !$0.failed }) else { return }
         if let parentId {
             if let t = try? await ApiClient.shared.thread(parentId) { ([t.root] + t.replies).forEach(upsert) }
         } else if let page = try? await ApiClient.shared.messages(channelId, after: last.id, limit: 200) {
@@ -159,7 +213,9 @@ final class ConversationModel: ObservableObject {
     private func upsert(_ m: ChatMessage) {
         var list = messages
         if let i = list.firstIndex(where: { $0.id == m.id }) {
-            list[i] = m
+            var next = m
+            if next.saved == nil { next.saved = list[i].saved }
+            list[i] = next
         } else if let cid = m.clientId, let i = list.firstIndex(where: { $0.clientId == cid && $0.pending }) {
             list[i] = m
         } else {
@@ -173,9 +229,23 @@ final class ConversationModel: ObservableObject {
         }
     }
 
-    private func bumpReplies(_ rootId: String) {
+    private func bumpReplies(_ rootId: String, by delta: Int) {
         guard let i = messages.firstIndex(where: { $0.id == rootId }) else { return }
-        messages[i].replyCount = messages[i].replies + 1
+        messages[i].replyCount = max(0, messages[i].replies + delta)
+    }
+
+    /// Con hilo (o la raíz del hilo abierto) queda «Mensaje eliminado»; si no, desaparece.
+    private func applyDeleted(_ id: String) {
+        guard let i = messages.firstIndex(where: { $0.id == id }) else { return }
+        if messages[i].replies > 0 || id == parentId {
+            messages[i].deleted = true
+            messages[i].body = ""
+            messages[i].attachment = nil
+            messages[i].reactions = nil
+            messages[i].pinnedAt = nil
+        } else {
+            messages.remove(at: i)
+        }
     }
 
     private func publishTyping() {
@@ -228,6 +298,58 @@ final class ConversationModel: ObservableObject {
         }
     }
 
+    func loadNewer() {
+        guard parentId == nil, hasNewer, !loadingNewer,
+              let newest = messages.last(where: { !$0.pending && !$0.failed }) else { return }
+        loadingNewer = true
+        Task {
+            do {
+                let page = try await ApiClient.shared.messages(channelId, after: newest.id, limit: 50)
+                page.messages.forEach(upsert)
+                hasNewer = page.hasNewer ?? (page.messages.count >= 50)
+            } catch {
+                self.error = error.userMessage
+            }
+            loadingNewer = false
+        }
+    }
+
+    /// Vuelve a lo más reciente (tras saltar a un mensaje viejo).
+    func loadLatest() async {
+        guard parentId == nil else { return }
+        do {
+            let page = try await ApiClient.shared.messages(channelId, limit: 50)
+            let local = messages.filter { $0.pending || $0.failed }
+            messages = page.messages + local
+            hasMore = page.hasMore ?? false
+            hasNewer = false
+            markReadIfVisible()
+        } catch {
+            self.error = error.userMessage
+        }
+    }
+
+    /// Desplazarse a un mensaje; si no está cargado, se trae la página alrededor de él.
+    func jump(to id: String) {
+        if messages.contains(where: { $0.id == id }) {
+            jumpRequest = JumpRequest(id: id)
+            return
+        }
+        guard parentId == nil else { return }
+        Task {
+            do {
+                let page = try await ApiClient.shared.messages(channelId, around: id, limit: 60)
+                let local = messages.filter { $0.pending || $0.failed }
+                messages = page.messages + local
+                hasMore = page.hasMore ?? false
+                hasNewer = page.hasNewer ?? true
+                jumpRequest = JumpRequest(id: id)
+            } catch {
+                self.error = error.userMessage
+            }
+        }
+    }
+
     func onTyping() {
         let now = Date()
         guard now.timeIntervalSince(lastTypingSent) >= 3 else { return }
@@ -237,9 +359,22 @@ final class ConversationModel: ObservableObject {
 
     // MARK: Enviar
 
-    func send(_ body: String, attachment: UploadResult? = nil) {
-        let text = body.trimmingCharacters(in: .whitespacesAndNewlines)
+    static func replyRef(_ m: ChatMessage) -> ChatReplyRef {
+        ChatReplyRef(
+            id: m.id,
+            authorId: m.author.id,
+            authorName: m.author.fullName,
+            excerpt: String(plainText(m.text).prefix(140)),
+            kind: m.kind,
+            attachmentName: m.attachment?.name,
+            deleted: m.deleted
+        )
+    }
+
+    func send(_ body: String, attachment: UploadResult? = nil, replyTo: ChatMessage? = nil) {
+        let text = String(body.trimmingCharacters(in: .whitespacesAndNewlines).prefix(chatMessageLimit))
         guard !text.isEmpty || attachment != nil else { return }
+        if hasNewer { Task { await loadLatest() } }
         let me = Session.shared.currentUser
         let clientId = "i-\(UUID().uuidString)"
         let optimistic = ChatMessage(
@@ -252,6 +387,7 @@ final class ConversationModel: ObservableObject {
             createdAt: isoNow(),
             author: ChatAuthor(id: me?.id ?? "", fullName: me?.name ?? ""),
             clientId: clientId,
+            replyTo: replyTo.map(Self.replyRef),
             pending: true
         )
         messages.append(optimistic)
@@ -268,12 +404,16 @@ final class ConversationModel: ObservableObject {
                     attachmentName: m.attachment?.name,
                     attachmentMime: m.attachment?.mime,
                     attachmentSize: m.attachment?.size,
-                    clientId: m.clientId
+                    clientId: m.clientId,
+                    replyToId: m.replyTo?.id
                 ))
-                if messages.contains(where: { $0.id == saved.id }) {
+                var result = saved
+                // El API viejo no devuelve `replyTo`: se conserva la cita local.
+                if result.replyTo == nil { result.replyTo = m.replyTo }
+                if messages.contains(where: { $0.id == result.id }) {
                     messages.removeAll { $0.clientId == m.clientId && $0.pending }
                 } else if let i = messages.firstIndex(where: { $0.clientId == m.clientId }) {
-                    messages[i] = saved
+                    messages[i] = result
                 }
             } catch {
                 if let i = messages.firstIndex(where: { $0.clientId == m.clientId }) {
@@ -297,11 +437,11 @@ final class ConversationModel: ObservableObject {
     }
 
     /// Fotos, videos, notas de voz o documentos: un mensaje por archivo, como WhatsApp.
-    /// El texto escrito va como pie del primero. Se preparan y suben en orden.
-    func sendFiles(_ items: [@Sendable () async throws -> PreparedUpload], caption: String) {
+    /// El texto escrito (y la cita) van en el primero. Se preparan y suben en orden.
+    func sendFiles(_ items: [@Sendable () async throws -> PreparedUpload], caption: String, replyTo: ChatMessage? = nil) {
         guard !items.isEmpty else { return }
         for (i, item) in items.enumerated() {
-            uploadQueue.append((item, i == 0 ? caption : ""))
+            uploadQueue.append((item, i == 0 ? caption : "", i == 0 ? replyTo : nil))
         }
         queuedTotal += items.count
         guard !draining else { return }
@@ -309,7 +449,7 @@ final class ConversationModel: ObservableObject {
         Task { await drainUploads() }
     }
 
-    private var uploadQueue: [(prepare: @Sendable () async throws -> PreparedUpload, caption: String)] = []
+    private var uploadQueue: [(prepare: @Sendable () async throws -> PreparedUpload, caption: String, replyTo: ChatMessage?)] = []
     private var queuedTotal = 0
     private var queuedDone = 0
     private var draining = false
@@ -332,7 +472,7 @@ final class ConversationModel: ObservableObject {
                         self.upload = UploadProgress(label: label, index: index, total: self.queuedTotal, fraction: fraction)
                     }
                 }
-                send(next.caption, attachment: uploaded)
+                send(next.caption, attachment: uploaded, replyTo: next.replyTo)
             } catch {
                 self.error = error.userMessage
             }
@@ -351,8 +491,20 @@ final class ConversationModel: ObservableObject {
 
     func togglePin(_ m: ChatMessage) { mutate { try await ApiClient.shared.pin(m.id) } }
 
+    func toggleSave(_ m: ChatMessage) {
+        Task {
+            do {
+                let saved = try await ApiClient.shared.toggleSave(m.id)
+                if let i = messages.firstIndex(where: { $0.id == m.id }) { messages[i].saved = saved }
+                Haptics.success()
+            } catch {
+                self.error = error.userMessage
+            }
+        }
+    }
+
     func edit(_ m: ChatMessage, _ body: String) {
-        let text = body.trimmingCharacters(in: .whitespacesAndNewlines)
+        let text = String(body.trimmingCharacters(in: .whitespacesAndNewlines).prefix(chatMessageLimit))
         guard !text.isEmpty, text != m.text else { return }
         mutate { try await ApiClient.shared.edit(m.id, body: text) }
     }
@@ -361,7 +513,7 @@ final class ConversationModel: ObservableObject {
         Task {
             do {
                 try await ApiClient.shared.deleteMessage(m.id)
-                messages.removeAll { $0.id == m.id }
+                applyDeleted(m.id)
             } catch {
                 self.error = error.userMessage
             }
@@ -389,22 +541,30 @@ final class ConversationModel: ObservableObject {
     func pins() async -> [ChatMessage] { (try? await ApiClient.shared.pins(channelId)) ?? [] }
 
     func canEdit(_ m: ChatMessage) -> Bool {
-        guard m.author.id == myId, m.attachment == nil, !m.pending, !m.failed, let at = parseDate(m.createdAt) else { return false }
+        guard m.author.id == myId, m.attachment == nil, !m.pending, !m.failed, !m.isDeleted,
+              let at = parseDate(m.createdAt) else { return false }
         return Date().timeIntervalSince(at) < Self.editWindow
     }
 
     func canDelete(_ m: ChatMessage) -> Bool {
-        !m.pending && (m.author.id == myId || (channel?.mayManage ?? false))
+        !m.pending && !m.isDeleted && (m.author.id == myId || (channel?.mayManage ?? false))
     }
 
-    /// ✓✓ cuando todos los demás miembros ya leyeron hasta ese mensaje (en directos, la otra persona).
-    func readByAll(_ m: ChatMessage) -> Bool {
-        let others = (channel?.allMembers ?? []).filter { $0.id != myId }
-        guard !others.isEmpty, let at = parseDate(m.createdAt) else { return false }
-        return others.allSatisfy { member in
-            guard let read = parseDate(member.lastReadAt) else { return false }
+    /// Cuántas de las otras personas ya leyeron hasta ese mensaje (por su `lastReadAt`).
+    func readers(_ m: ChatMessage) -> Int {
+        guard let at = parseDate(m.createdAt) else { return 0 }
+        return (channel?.allMembers ?? []).filter { member in
+            guard member.id != myId, let read = parseDate(member.lastReadAt) else { return false }
             return read >= at
-        }
+        }.count
+    }
+
+    /// «Visto» en directos, «Visto por N» en grupos y canales (no exige que lean todos).
+    func seenLabel(_ m: ChatMessage) -> String? {
+        let n = readers(m)
+        guard n > 0 else { return nil }
+        if channel?.isDirect == true { return "Visto" }
+        return "Visto por \(n)"
     }
 
     /// Miembros que se pueden mencionar con «@».

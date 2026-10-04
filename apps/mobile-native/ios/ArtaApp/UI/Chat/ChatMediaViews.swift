@@ -14,14 +14,23 @@ struct AttachmentContent: View {
             AsyncImage(url: url) { phase in
                 switch phase {
                 case .success(let image):
-                    image.resizable().scaledToFill()
+                    // Proporción original, sin recortar: horizontales anchas, verticales hasta 320 de alto.
+                    image.resizable()
+                        .scaledToFit()
+                        .frame(maxWidth: 240, maxHeight: 320)
                 case .failure:
-                    Image(systemName: "photo").font(.largeTitle).foregroundStyle(ArtaColor.muted)
+                    Image(systemName: "photo")
+                        .font(.largeTitle)
+                        .foregroundStyle(ArtaColor.muted)
+                        .frame(width: 220, height: 160)
+                        .background(ArtaColor.surface2)
                 default:
-                    ProgressView().tint(ArtaColor.gold)
+                    ProgressView()
+                        .tint(ArtaColor.gold)
+                        .frame(width: 220, height: 160)
+                        .background(ArtaColor.surface2)
                 }
             }
-            .frame(width: 220, height: 220)
             .clipShape(RoundedRectangle(cornerRadius: 12))
             .contentShape(Rectangle())
             .onTapGesture { onImage(url) }
