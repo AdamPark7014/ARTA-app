@@ -71,6 +71,8 @@ export function isPublicPath(pathname: string): boolean {
   if (pathname === '/' || pathname === '/login') return true;
   if (pathname.startsWith('/invite')) return true;
   if (pathname.startsWith('/p/')) return true;
+  // Aviso de privacidad, términos, eliminar cuenta y soporte: los enlazan App Store y Google Play.
+  if (pathname.startsWith('/legal')) return true;
   if (pathname.startsWith('/v/')) return true;
   if (pathname === '/sitemap.xml' || pathname === '/robots.txt') return true;
   if (pathname.startsWith('/_next')) return true;
