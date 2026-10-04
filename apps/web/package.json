@@ -19,6 +19,7 @@
     "@arta/rbac": "*",
     "docx-preview": "^0.3.5",
     "fast-formula-parser": "^1.0.19",
+    "firebase": "^11.10.0",
     "next": "^14.2.35",
     "pdf-lib": "^1.17.1",
     "pdfjs-dist": "^4.10.38",

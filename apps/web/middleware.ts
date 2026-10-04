@@ -65,5 +65,9 @@ export function middleware(request: NextRequest) {
 export const config = {
   // `pdf.worker.min.mjs` es el worker de pdf.js que sirve el editor de PDF:
   // es un asset estático de public/ y no debe pasar por el gate de sesión.
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|pdf.worker.min.mjs).*)'],
+  // El manifiesto y los íconos se piden sin cookies (instalar la PWA) y el SW de
+  // avisos se revisa en segundo plano: una redirección a /login los rompería.
+  matcher: [
+    '/((?!_next/static|_next/image|favicon.ico|pdf.worker.min.mjs|manifest.webmanifest|firebase-messaging-sw.js|icons/).*)',
+  ],
 };

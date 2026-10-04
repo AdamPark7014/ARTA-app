@@ -13,6 +13,7 @@ import {
 import { consumeHandoffParam } from '@/lib/cross-entity-handoff';
 import { entityFromHost } from '@/lib/domains';
 import { setEntityCookie, setSessionCookie } from '@/lib/session-cookie';
+import { unregisterWebPushOnLogout } from '@/lib/web-push';
 
 type LoginResult =
   | { requires2fa: true; challengeId: string }
@@ -181,11 +182,14 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   };
 
   const logout = () => {
-    api('/auth/logout', { method: 'POST' }).catch(() => undefined);
-    clearToken();
-    setSessionCookie(false);
-    setUser(null);
-    window.location.href = '/login';
+    // El token push del navegador se da de baja antes de que la sesión deje de existir.
+    void unregisterWebPushOnLogout().finally(() => {
+      api('/auth/logout', { method: 'POST' }).catch(() => undefined);
+      clearToken();
+      setSessionCookie(false);
+      setUser(null);
+      window.location.href = '/login';
+    });
   };
 
   return (

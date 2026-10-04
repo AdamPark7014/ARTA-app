@@ -17,8 +17,9 @@ export const metadata: Metadata = {
   manifest: '/manifest.webmanifest',
   icons: {
     icon: '/brand/arta-logo.png',
-    apple: '/brand/arta-logo.png',
+    apple: { url: '/icons/apple-touch-icon.png', sizes: '180x180', type: 'image/png' },
   },
+  appleWebApp: { capable: true, title: 'ARTA', statusBarStyle: 'black' },
   other: {
     'geo.region': 'MX-PUE',
     'geo.placename': 'Puebla',

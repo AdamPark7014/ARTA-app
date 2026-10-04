@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { AppShell } from '@/components/app-shell/AppShell';
 import { LoadingBlock } from '@/components/ui/LoadingBlock';
 import { SectionHead } from '@/components/ui/Lite';
+import { WebPushCard } from '@/components/web-push/WebPushCard';
 import { useUser } from '@/lib/user-context';
 import { userHasPermission } from '@/lib/access-matrix';
 import {
@@ -93,6 +94,7 @@ export default function SettingsPage() {
   return (
     <AppShell title="Configuración">
       <div className="sx-stack page-workspace oc-settings">
+        <WebPushCard />
         <SectionHead
           title="Días de cobro"
           sub="Las órdenes de compra se crean cualquier día; los pagos se registran solo en estos."
