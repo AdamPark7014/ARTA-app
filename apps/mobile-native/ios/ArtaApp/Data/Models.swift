@@ -62,13 +62,18 @@ struct ChannelSummary: Decodable, Identifiable, Equatable {
     var unreadCount: Int?
     var muted: Bool?
     var mutedUntil: String?
+    /// Chat v2: directo de grupo (`kind = PRIVATE`). Falta en el API viejo.
+    var isGroupDm: Bool?
 
     var isDirect: Bool { kind.uppercased() == "DM" || kind.uppercased() == "DIRECT" || peer != nil }
+    var isGroup: Bool { isGroupDm == true }
     var isPrivate: Bool { kind.uppercased() == "PRIVATE" }
     var isAnnouncement: Bool { postingRestricted == true }
+    var isEvent: Bool { eventId?.isEmpty == false }
     var displayName: String { peer?.fullName ?? name }
     var unread: Int { unreadCount ?? 0 }
     var isMuted: Bool { muted == true }
+    var joined: Bool { isMember ?? true }
 }
 
 struct ChannelMember: Codable, Identifiable, Equatable {
@@ -96,8 +101,14 @@ struct ChannelDetail: Decodable, Equatable {
     var lastReadAt: String?
     var memberCount: Int?
     var members: [ChannelMember]?
+    var isGroupDm: Bool?
 
     var isDirect: Bool { kind.uppercased() == "DM" || kind.uppercased() == "DIRECT" || peer != nil }
+    var isGroup: Bool { isGroupDm == true }
+    var isPrivate: Bool { kind.uppercased() == "PRIVATE" }
+    var isEvent: Bool { eventId?.isEmpty == false }
+    /// #general y #anuncios incluyen a toda la organización: no se sale ni se archiva.
+    var isOrgDefault: Bool { slug == "general" || slug == "anuncios" }
     var displayName: String { peer?.fullName ?? name }
     var allMembers: [ChannelMember] { members ?? [] }
     var mayPost: Bool { canPost ?? true }
@@ -139,6 +150,31 @@ struct ChatAuthor: Codable, Equatable {
     var title: String?
 }
 
+/// Mensaje citado (chat v2): `excerpt` ya viene en texto plano, ≤140 caracteres.
+struct ChatReplyRef: Codable, Equatable {
+    let id: String
+    var authorId: String?
+    var authorName: String?
+    var excerpt: String?
+    var kind: String?
+    var attachmentName: String?
+    var deleted: Bool?
+}
+
+/// Canal de un resultado de búsqueda o de un guardado.
+struct ChatChannelRef: Codable, Equatable {
+    let id: String
+    var name: String?
+    var kind: String?
+    var isGroupDm: Bool?
+
+    var isDirect: Bool { (kind ?? "").uppercased() == "DIRECT" || (kind ?? "").uppercased() == "DM" }
+    var label: String {
+        let n = name ?? ""
+        return isDirect || isGroupDm == true ? n : "#" + n
+    }
+}
+
 struct ChatMessage: Decodable, Identifiable, Equatable {
     var id: String
     var channelId: String
@@ -153,18 +189,26 @@ struct ChatMessage: Decodable, Identifiable, Equatable {
     var replyCount: Int?
     var reactions: [ChatReaction]?
     var clientId: String?
+    var replyTo: ChatReplyRef?
+    var saved: Bool?
+    var deleted: Bool?
+    /// Solo en resultados de `GET chat/search`.
+    var channel: ChatChannelRef?
     /// Solo en mensajes optimistas locales mientras el API responde.
     var pending = false
     var failed = false
 
     enum CodingKeys: String, CodingKey {
         case id, channelId, parentId, kind, body, attachment, pinnedAt, editedAt, createdAt, author, replyCount, reactions, clientId
+        case replyTo, saved, deleted, channel
     }
 
     var text: String { body ?? "" }
     var replies: Int { replyCount ?? 0 }
     var allReactions: [ChatReaction] { reactions ?? [] }
     var isSystem: Bool { (kind ?? "TEXT").uppercased() == "SYSTEM" }
+    var isDeleted: Bool { deleted == true }
+    var isSaved: Bool { saved == true }
 }
 
 struct MessagePage: Decodable {
@@ -190,6 +234,7 @@ struct PostMessageBody: Encodable {
     var attachmentMime: String?
     var attachmentSize: Int64?
     var clientId: String?
+    var replyToId: String?
 }
 
 struct EditBody: Encodable { let body: String }
@@ -217,6 +262,69 @@ struct UploadResult: Decodable, Equatable {
 }
 
 struct UnreadTotal: Decodable { var total: Int? }
+
+// MARK: - Chat v2 (docs/CHAT-V2-CONTRATO.md)
+
+struct SaveToggle: Decodable { var saved: Bool? }
+
+struct SavedItem: Decodable, Identifiable, Equatable {
+    let savedAt: String
+    let message: ChatMessage
+    var channel: ChatChannelRef?
+
+    var id: String { message.id }
+}
+
+struct SavedPage: Decodable { var items: [SavedItem]? }
+
+struct GroupDmBody: Encodable { let userIds: [String] }
+
+struct CreateChannelBody: Encodable {
+    let name: String
+    /// PUBLIC | PRIVATE
+    var kind: String?
+    var topic: String?
+    var description: String?
+    var memberIds: [String]?
+}
+
+struct UpdateChannelBody: Encodable {
+    var name: String?
+    var topic: String?
+    var description: String?
+}
+
+struct MembersBody: Encodable { let userIds: [String] }
+
+struct PresenceDto: Decodable { var online: [String]? }
+
+struct LinkPreview: Decodable, Equatable {
+    var url: String?
+    var title: String?
+    var description: String?
+    var image: String?
+    var siteName: String?
+
+    var isEmpty: Bool { (title ?? "").isEmpty && (description ?? "").isEmpty && (image ?? "").isEmpty }
+}
+
+struct ChatPrefs: Decodable { var dndUntil: String? }
+
+/// `dndUntil: null` apaga «No molestar»: hay que mandar el `null`, no omitir la clave.
+struct ChatPrefsBody: Encodable {
+    let dndUntil: String?
+
+    enum CodingKeys: String, CodingKey { case dndUntil }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        if let dndUntil {
+            try c.encode(dndUntil, forKey: .dndUntil)
+        } else {
+            try c.encodeNil(forKey: .dndUntil)
+        }
+    }
+}
 
 // MARK: - Avisos y dispositivos
 

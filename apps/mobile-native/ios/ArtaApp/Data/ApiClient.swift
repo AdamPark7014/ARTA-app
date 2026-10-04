@@ -174,6 +174,14 @@ final class ApiClient {
         return try decoder.decode(T.self, from: data)
     }
 
+    /// Rutas que responden `null`: Nest lo manda como cuerpo vacío.
+    func getOptional<T: Decodable>(_ path: String, query: [String: String?] = [:]) async throws -> T? {
+        let data = try await perform(request("GET", path, query: query))
+        let raw = String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+        if raw.isEmpty || raw == "null" { return nil }
+        return try decoder.decode(T.self, from: data)
+    }
+
     private func sendRaw(_ method: String, _ path: String, body: (any Encodable)?) async throws -> Data {
         var req = request(method, path)
         if let body {
@@ -306,6 +314,30 @@ extension ApiClient {
         let res: UnreadTotal = try await get("chat/unread")
         return res.total ?? 0
     }
+
+    // Chat v2 (docs/CHAT-V2-CONTRATO.md).
+    func toggleSave(_ messageId: String) async throws -> Bool {
+        let res = try await send("POST", "chat/messages/\(messageId)/save", as: SaveToggle.self)
+        return res.saved ?? false
+    }
+    func saved(before: String? = nil, limit: Int = 50) async throws -> [SavedItem] {
+        let res: SavedPage = try await get("chat/saved", query: ["before": before, "limit": String(limit)])
+        return res.items ?? []
+    }
+    func groupDm(_ userIds: [String]) async throws -> ChannelDetail { try await send("POST", "chat/group-dm", body: GroupDmBody(userIds: userIds), as: ChannelDetail.self) }
+    func createChannel(_ body: CreateChannelBody) async throws -> ChannelDetail { try await send("POST", "chat/channels", body: body, as: ChannelDetail.self) }
+    func updateChannel(_ channelId: String, _ body: UpdateChannelBody) async throws -> ChannelDetail { try await send("PATCH", "chat/channels/\(channelId)", body: body, as: ChannelDetail.self) }
+    func archiveChannel(_ channelId: String) async throws { try await send("POST", "chat/channels/\(channelId)/archive") }
+    func addMembers(_ channelId: String, userIds: [String]) async throws -> ChannelDetail { try await send("POST", "chat/channels/\(channelId)/members", body: MembersBody(userIds: userIds), as: ChannelDetail.self) }
+    func removeMember(_ channelId: String, userId: String) async throws { try await send("DELETE", "chat/channels/\(channelId)/members/\(userId)") }
+    func leaveChannel(_ channelId: String) async throws { try await send("POST", "chat/channels/\(channelId)/leave") }
+    func presence() async throws -> [String] {
+        let res: PresenceDto = try await get("chat/presence")
+        return res.online ?? []
+    }
+    func linkPreview(_ url: String) async throws -> LinkPreview? { try await getOptional("chat/link-preview", query: ["url": url]) }
+    func chatPrefs() async throws -> ChatPrefs { try await get("chat/prefs") }
+    func setDnd(until: String?) async throws { try await send("PATCH", "chat/prefs", body: ChatPrefsBody(dndUntil: until)) }
 
     func notifications(take: Int = 50) async throws -> [NotificationDto] { try await get("notifications", query: ["take": String(take)]) }
     func notificationsUnread() async throws -> Int {

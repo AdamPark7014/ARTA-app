@@ -27,6 +27,12 @@ struct ActivityEvent {
     let senderId: String
 }
 
+/// Chat v2: alguien de la organización se conectó o se desconectó.
+struct PresenceEvent {
+    let userId: String
+    let online: Bool
+}
+
 /// Socket.IO del API con la misma sesión que HTTP: el handshake manda la cookie
 /// `arta_access` (el gateway la valida contra `UserSession`). Detrás de Traefik
 /// el path es `/api/socket.io`. Los eventos llegan en el hilo principal.
@@ -45,6 +51,7 @@ final class RealtimeClient {
     let channelsChanged = PassthroughSubject<String, Never>()
     let chatUnread = PassthroughSubject<Int, Never>()
     let notificationsUnread = PassthroughSubject<Int, Never>()
+    let presence = PassthroughSubject<PresenceEvent, Never>()
     let connected = CurrentValueSubject<Bool, Never>(false)
 
     private var manager: SocketManager?
@@ -138,6 +145,11 @@ final class RealtimeClient {
         }
         s.on("notification:new") { [weak self] data, _ in
             if let o = Self.object(data) { self?.notificationsUnread.send((o["unread"] as? NSNumber)?.intValue ?? 0) }
+        }
+        s.on("chat:presence") { [weak self] data, _ in
+            guard let o = Self.object(data), let user = Self.string(o, "userId") else { return }
+            let online = (o["online"] as? Bool) ?? (o["online"] as? NSNumber)?.boolValue ?? false
+            self?.presence.send(PresenceEvent(userId: user, online: online))
         }
 
         self.manager = manager
