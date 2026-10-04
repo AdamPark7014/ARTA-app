@@ -1,0 +1,143 @@
+/* Teléfono (390 px) y «modo app»: el panel dentro de la vista web de las apps
+   nativas (docs/PARIDAD-MOVIL-CONTRATO.md §3). Va al final de globals para
+   ganar en cascada sin tocar las reglas de escritorio. */
+
+/* ── Modo app: la navegación, el título y los avisos los pone la app ─────── */
+
+html[data-shell='app'],
+body[data-shell='app'] {
+  overscroll-behavior: none;
+  -webkit-tap-highlight-color: transparent;
+  background: var(--bg);
+}
+
+[data-shell='app'] .shell,
+[data-shell='app'] .shell--nav-auto {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+[data-shell='app'] .sidebar,
+[data-shell='app'] .shell-backdrop,
+[data-shell='app'] .shell-hot-edge,
+[data-shell='app'] .topbar,
+[data-shell='app'] .notif,
+[data-shell='app'] .chat-launcher,
+[data-shell='app'] [data-floating-launcher] {
+  display: none !important;
+}
+
+[data-shell='app'] .content {
+  padding: max(0.75rem, env(safe-area-inset-top)) max(0.75rem, env(safe-area-inset-right))
+    calc(1.5rem + env(safe-area-inset-bottom)) max(0.75rem, env(safe-area-inset-left));
+}
+
+[data-shell='app'] .page-workspace {
+  max-width: none;
+}
+
+[data-shell='app'] .modal-backdrop {
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* ── Teléfono ─────────────────────────────────────────────────────────────── */
+
+@media (max-width: 640px) {
+  .topbar {
+    padding: 0.5rem 0.75rem;
+    gap: 0.5rem;
+  }
+
+  .topbar-left,
+  .topbar-left > div {
+    min-width: 0;
+  }
+
+  .topbar h1 {
+    font-size: 1.05rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .topbar-sub {
+    display: none;
+  }
+
+  .topbar-actions {
+    gap: 0.4rem;
+  }
+
+  .content {
+    padding: 0.85rem 0.75rem 2rem;
+  }
+
+  /* Tablas: se desplazan dentro de su caja, nunca empujan la página. */
+  .table {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .table-wrap > .table {
+    display: table;
+  }
+
+  .form-grid,
+  .form-grid--2,
+  .form-grid--3 {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* Modales: hoja a pantalla completa. */
+  .modal-backdrop {
+    padding: 0;
+    align-items: stretch;
+  }
+
+  .modal {
+    width: 100%;
+    max-height: none;
+    height: 100%;
+    border-radius: 0;
+    padding-bottom: calc(1rem + env(safe-area-inset-bottom));
+  }
+
+  .page-intro,
+  .panel-head,
+  .panel-head-actions,
+  .toolbar-row,
+  .surface__head,
+  .event-hero__actions {
+    flex-wrap: wrap;
+  }
+
+  /* Objetivos táctiles de al menos 40 px. */
+  .btn,
+  .btn-quiet,
+  .icon-btn,
+  .nav a {
+    min-height: 40px;
+  }
+
+  .icon-btn {
+    min-width: 40px;
+  }
+
+  /* 16 px evita que iOS acerque la página al enfocar un campo. */
+  .shell input:not([type='checkbox']):not([type='radio']):not([type='range']),
+  .shell select,
+  .shell textarea {
+    font-size: 16px;
+  }
+
+  .shell input:not([type='checkbox']):not([type='radio']):not([type='range']),
+  .shell select {
+    min-height: 40px;
+  }
+
+  .content img,
+  .content video {
+    max-width: 100%;
+  }
+}

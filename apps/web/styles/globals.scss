@@ -6325,3 +6325,6 @@ textarea.pdffield__input--text {
 @import "./sheet";
 @import "./tasks";
 @import "./sheet-excel";
+
+/* Teléfono y «modo app» (vista web de las apps nativas): siempre al final. */
+@import "./mobile";

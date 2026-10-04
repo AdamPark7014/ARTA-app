@@ -27,9 +27,17 @@ export const metadata: Metadata = {
   },
 };
 
+/**
+ * Respaldo del «modo app» del lado cliente: `(app)/layout` lo decide en el
+ * servidor, pero el login (y cualquier ruta fuera de ese grupo) llega aquí y
+ * una navegación suave posterior no vuelve a ejecutar scripts del servidor.
+ */
+const APP_SHELL_FALLBACK =
+  "try{if(/ArtaApp\\//.test(navigator.userAgent)){document.documentElement.setAttribute('data-shell','app');document.body.setAttribute('data-shell','app');}}catch(e){}";
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="es-MX">
+    <html lang="es-MX" suppressHydrationWarning>
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
@@ -38,7 +46,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           rel="stylesheet"
         />
       </head>
-      <body>
+      <body suppressHydrationWarning>
+        <script dangerouslySetInnerHTML={{ __html: APP_SHELL_FALLBACK }} />
         <UserProvider>{children}</UserProvider>
       </body>
     </html>
