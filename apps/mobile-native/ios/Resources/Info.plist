@@ -47,11 +47,11 @@
         <string>UIInterfaceOrientationLandscapeRight</string>
     </array>
     <key>NSCameraUsageDescription</key>
-    <string>La cámara se usa para mandar fotos y videos en el chat.</string>
+    <string>La cámara se usa para mandar fotos y videos en el chat y para subir archivos al panel.</string>
     <key>NSMicrophoneUsageDescription</key>
     <string>El micrófono se usa para grabar notas de voz y el sonido de los videos que mandas en el chat.</string>
     <key>NSPhotoLibraryUsageDescription</key>
-    <string>Tus fotos y videos se usan solo cuando eliges uno para mandarlo en el chat.</string>
+    <string>Tus fotos y videos se usan solo cuando eliges uno para mandarlo en el chat o subirlo al panel.</string>
     <key>NSPhotoLibraryAddUsageDescription</key>
     <string>Para guardar en tu carrete las fotos y videos que te mandan en el chat.</string>
     <key>NSUserActivityTypes</key>

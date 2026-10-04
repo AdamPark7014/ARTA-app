@@ -16,7 +16,8 @@ enum PanelTarget: Equatable {
 /// la vista web y `arta://`) a pantallas nativas. Contrato de paridad §4.
 enum PanelLink {
     /// Pestañas del hub del evento con versión nativa; las demás se quedan en la web.
-    private static let nativeEventTabs: Set<String> = ["overview", "tasks"]
+    /// `WebSession.interceptScript` repite estas reglas en JavaScript.
+    static let nativeEventTabs: Set<String> = ["overview", "tasks"]
 
     /// Avisos que piden una decisión (mismo criterio que `notification-push-meta.ts`).
     private static let approvalTypes: Set<String> = [
@@ -54,18 +55,19 @@ enum PanelLink {
         guard let first = parts.first else { return nil }
         switch first {
         case "chat":
+            guard parts.count == 1 else { return nil }
             if let channel = value("channel") {
                 return .screen(.chat(channelId: channel, messageId: value("msg")))
             }
-            return parts.count == 1 ? .tab(.chats) : nil
+            return .tab(.chats)
         case "tasks":
-            if parts.count >= 2 { return parts[1] == "new" ? nil : .screen(.task(parts[1])) }
+            if parts.count == 2 { return parts[1] == "new" ? nil : .screen(.task(parts[1])) }
+            guard parts.count == 1 else { return nil }
             if let task = value("task") { return .screen(.task(task)) }
             return .tab(.tareas)
         case "events":
-            guard parts.count >= 2, parts[1] != "new" else { return nil }
+            guard parts.count == 2, parts[1] != "new" else { return nil }
             if let task = value("task") { return .screen(.task(task)) }
-            guard parts.count == 2 else { return nil }
             if let tab = value("tab"), !nativeEventTabs.contains(tab) { return nil }
             return .screen(.event(parts[1]))
         case "dashboard":

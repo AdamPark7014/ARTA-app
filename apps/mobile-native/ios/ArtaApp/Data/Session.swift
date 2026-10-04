@@ -102,6 +102,7 @@ final class Session: ObservableObject {
     private func clearLocal() {
         RealtimeClient.shared.disconnect()
         ApiClient.shared.clearCookies()
+        Task { await WebSession.clearCookies() }
         PushManager.shared.clearDelivered()
         UserDefaults.standard.removeObject(forKey: Self.userKey)
         AppRouter.shared.reset()
