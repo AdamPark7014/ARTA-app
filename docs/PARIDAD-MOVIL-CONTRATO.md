@@ -63,8 +63,12 @@ Llamadas HTTP en `Data/ApiClient+Modules.swift` (extensión) y modelos en `Data/
 
 ## 3. Vista web dentro de la app
 
-- Android `WebView` / iOS `WKWebView` con la cookie de sesión copiada del almacén nativo
-  (`PersistentCookieJar` → `CookieManager`; `HTTPCookieStorage` → `WKHTTPCookieStore`) **antes** de cargar.
+- Android `WebView` / iOS `WKWebView`. Entrada con la sesión: **primero** el acceso de un solo uso que ya existe
+  (`POST /api/auth/handoff { entity, path }` con la cookie y `x-csrf-token` nativos → `{ code }`, 60 s, un uso;
+  cargar `<origin><path>?_nxt=<code>`; la web lo consume en `lib/user-context.tsx` y pone cookies frescas en la vista
+  web). Si el handoff falla, respaldo: copiar las cookies del almacén nativo (`PersistentCookieJar` → `CookieManager`;
+  `HTTPCookieStorage` → `WKHTTPCookieStore`) antes de cargar. Al cerrar sesión en la app se borran las cookies de la
+  vista web.
 - User-Agent = el de la app (`ArtaApp/<versión> (...)`) + el del sistema, para que la web active el modo app.
 - La web en modo app **no** muestra barra lateral ni barra superior propia (la pone la app), respeta
   `env(safe-area-inset-*)` y todo cabe en 390 px.
@@ -85,8 +89,15 @@ El API manda siempre `url` = ruta interna del panel (`linkUrl` de `Notifications
 | `/advances…` · `/purchase-orders…` con acción pendiente | aprobaciones nativas |
 | cualquier otra | vista web en esa ruta |
 
-Canales Android / categorías iOS por `channel` del push (`notification-push-meta.ts`):
-`chat`, `tareas`, `aprobaciones`, `eventos`, `documentos`, `general`. Cada aviso agrupa por entidad (`tag`).
+Canales Android / categorías iOS por `channel` del push (`notification-push-meta.ts`), **los que ya existen**
+(no renombrar: Android ya tiene `arta_<channel>` instalados en teléfonos):
+`chat`, `tasks`, `approvals`, `finance`, `events`, `general`, y uno nuevo `documents` (formatos, archivos,
+carpetas). Etiquetas visibles en español: Chat, Tareas, Aprobaciones, Finanzas, Eventos, Documentos, General.
+Cada aviso agrupa por entidad (`tag`).
+
+Menciones (`chat.mention`) y cualquier aviso cuyo `linkUrl` sea `/chat?channel=<id>&msg=<id>` deben llevar en el
+push `channel_id`, `message_id` y `thread_id = chat-<channelId>` para que se apilen con su conversación y permitan
+responder.
 
 ## 5. Reglas de UI (nativo)
 
