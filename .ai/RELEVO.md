@@ -6,6 +6,28 @@
   (Adam es el único programador).
 - **Producción:** `4745dd4` desplegado desde `main` el 2026-09-27 22:39 UTC (todo lo de abajo NO está desplegado)
 
+## Turno cursor (2026-10-04, 14:20–16:15): anticipos con aprobación, iOS en verde, firma de publicación
+
+- **Anticipos** (Adam dijo «sí»): contrato `docs/ANTICIPOS-CONTRATO.md` (`41fabe2`).
+  - API y web `d8f6d78`: enum `AdvanceStatus` en `PaymentProof`, migración
+    `20261004170000_advance_approval` (aditiva; `fileUrl` pasa a opcional; los anticipos viejos quedan `PAID`),
+    endpoints `pending`/`mine`/`approve`/`reject`/`paid`, avisos `advance.*`, página `/advances` con pestañas.
+    tsc de API y web en verde; jest en verde salvo `uploads/excel-pdf.service.spec.ts` y
+    `uploads/excel-templates.spec.ts` (timeout de 5 s en render de Excel, ya fallaban; no se tocaron).
+  - Android `e69ac90` (compila, 16 tests en verde) e iOS `a27f322`: sección «Anticipos» en Aprobaciones,
+    contador de Inicio, push `advance.requested`/`advance.to_pay` → Aprobaciones.
+- **iOS compila en verde en GitHub** («iOS · compilar», runs 37232442897, 37233024765, 37233179142).
+- **TestFlight de ARTA** (`77a1197`): `.github/workflows/ios-testflight.yml` (equipo NEXARA `AHNW9K8745`),
+  `scripts/asc_signing.py` registra bundle ids (app + `NotificationService`), activa push y comunicación,
+  y crea los dos perfiles con la llave de App Store Connect. Firma por target en
+  `apps/mobile-native/ios/Config/*.xcconfig` (`*.signing.xcconfig` los escribe CI; ignorados).
+  `Resources/PrivacyInfo.xcprivacy` nuevo. **Nunca se ha ejecutado** (faltan secretos).
+- **Android firmado:** llave de subida `apps/mobile-native/android/arta-upload.jks` + `key.properties`
+  (ignorados por git; respaldo en `Documents\LLAVES-ANDROID\ARTA`). AAB 1.0.0 (código 1) firmado y
+  verificado: `Documents\ARTA-builds\arta-1.0.0-1.aab`. Compilar: `.\gradlew.bat :app:bundleRelease
+  "-PVERSION_CODE=N" "-PVERSION_NAME=X.Y.Z"` (con comillas en PowerShell).
+- `gh` no tiene sesión; se usa el token del administrador de credenciales de git en `$env:GH_TOKEN`.
+
 ## Turno cursor (2026-10-04, 11:45–13:00): paridad web ↔ app, push de cada acción y chat v2
 
 Pedido de Adam: «paridad total de la app móvil, UI/UX perfecta, push de cada cosa (tareas, solicitudes,
@@ -327,27 +349,28 @@ Pedido: «todo mergeado y fusionado, canónico en `main`; no quiero ramas sobree
 
 1. **Push apagado en producción** hasta que Adam suba la cuenta de servicio NUEVA con
    `pwsh -File deploy/firebase-cuenta-servicio.ps1` (la vieja `73faf0e2…` se pegó en un chat: borrarla).
-2. **iOS nunca compilado**: lanzar «iOS · compilar» (`ios-build.yml`) **solo cuando Adam dé luz verde**, y
-   corregir lo que salga. Luego TestFlight con el equipo de Apple de NEXARA.
-3. Nada de hoy está desplegado. Al desplegar: migraciones `20261004120000_task_co_assignees` y
-   `20261004150000_chat_v2`, y `scripts/upgrade-format-templates.ts --dry` / `--confirm-produccion`
-   (Rueda de prensa v3).
-4. Huecos que la API no tiene (la app no los inventa): aprobar/rechazar/pagar **anticipos** (solo se
-   registran), motivo al rechazar una OC, comentarios y prioridad en tareas. Preguntado a Adam si se hace
-   el flujo de anticipos.
-5. Nada probado en teléfono real ni el chat v2 visto en navegador.
-6. 27 e2e viejas de la web por actualizar (lista arriba).
+2. **TestFlight sin ejecutar**: faltan secretos en el repo ARTA-app (`APP_STORE_CONNECT_KEY_ID`,
+   `APP_STORE_CONNECT_ISSUER_ID`, `APP_STORE_CONNECT_PRIVATE_KEY` y el certificado de distribución:
+   `CERTIFICATE_PRIVATE_KEY` + `DISTRIBUTION_CERT_CER_BASE64`, o `BUILD_CERTIFICATE_BASE64` + `P12_PASSWORD`)
+   y la app «ARTA» (`com.artaproducciones.ops`) creada a mano en App Store Connect. Si la API no activa
+   «Communication Notifications», el flujo quita ese permiso de la build y avisa.
+3. Nada de hoy está desplegado. Al desplegar: migraciones `20261004120000_task_co_assignees`,
+   `20261004150000_chat_v2` y `20261004170000_advance_approval`, y
+   `scripts/upgrade-format-templates.ts --dry` / `--confirm-produccion` (Rueda de prensa v3).
+   Las apps publicadas necesitan este API desplegado (anticipos, chat v2).
+4. Huecos que la API no tiene (la app no los inventa): motivo al rechazar una OC, comentarios y prioridad
+   en tareas. iOS: `?advance=<id>` abre Aprobaciones pero no resalta la tarjeta (Android sí).
+5. Nada probado en teléfono real ni el chat v2 / `/advances` vistos en navegador.
+6. 27 e2e viejas de la web por actualizar (lista arriba) + 2 specs jest de Excel con timeout.
 
 ## Siguiente paso
 
-1. Adam: luz verde para compilar; cuenta de servicio nueva; clave APNs `.p8` en Firebase → Cloud
-   Messaging; para push en navegador: registrar app **Web** en Firebase (`arta-app-fde07`), sacar la clave
-   VAPID (Cloud Messaging → Certificados push web) y poner `NEXT_PUBLIC_FIREBASE_*` en el build de la web.
-2. «iOS · compilar» hasta verde; Android release firmado (falta `key.properties`; hoy firma con debug).
-3. Publicar con las cuentas de NEXARA: App ID/perfil `com.artaproducciones.ops`, `ios-testflight.yml` de
-   ARTA con secretos, ficha en Play Console.
-4. Deploy de API y web desde `main` (bundle + `update.sh --no-pull`) con las migraciones de arriba.
-5. Probar en teléfonos: tareas, aprobaciones, vista web con sesión, avisos que abren su pantalla, chat.
+1. Adam: cuenta de servicio nueva; clave APNs `.p8` en Firebase → Cloud Messaging; app Web en Firebase +
+   VAPID → `NEXT_PUBLIC_FIREBASE_*`; secretos de TestFlight y app en App Store Connect; app en Play Console
+   (cuenta NEXARA) y subir a mano `Documents\ARTA-builds\arta-1.0.0-1.aab` (prueba interna primero).
+2. Deploy de API y web desde `main` (bundle + `update.sh --no-pull`) con las migraciones de arriba.
+3. Lanzar «iOS · TestFlight» (versión 1.0.0) y corregir hasta que suba.
+4. Probar en teléfonos: tareas, aprobaciones y anticipos, vista web con sesión, avisos, chat.
 
 ## No tocar
 
@@ -360,3 +383,5 @@ Pedido: «todo mergeado y fusionado, canónico en `main`; no quiero ramas sobree
   La cuenta de servicio nunca: solo por variable de entorno con el script.
 - No renombrar canales push existentes (`arta_<channel>` ya instalados en teléfonos).
 - No crear ramas: todo va a `main`.
+- Llave de subida Android (`arta-upload.jks`, `key.properties`): nunca en git; no regenerarla (Play la
+  registra en la primera subida).
