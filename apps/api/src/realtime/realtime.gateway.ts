@@ -197,6 +197,7 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
     this.emitToOrg(data.orgId, 'chat:presence', {
       userId: data.userId,
       status: body?.status === 'away' ? 'away' : 'online',
+      online: body?.status !== 'away',
       at: Date.now(),
     });
     return { ok: true };

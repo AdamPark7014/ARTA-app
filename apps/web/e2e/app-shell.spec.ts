@@ -10,6 +10,11 @@ import { mockAuthenticatedApi, mockApi, seedSession, TEST_USER } from './support
  * (Finanzas, Campañas, Plantillas…) solo aparecen al buscar.
  */
 test.describe('App shell', () => {
+  // El evento de prueba es del 20-09-2026: con el reloj real ya sería pasado.
+  test.beforeEach(async ({ page }) => {
+    await page.clock.setFixedTime(new Date('2026-09-15T12:00:00-06:00'));
+  });
+
   test('sin sesión el middleware devuelve a /login conservando el destino', async ({ page }) => {
     await mockApi(page);
 
@@ -122,7 +127,7 @@ test.describe('App shell', () => {
     await page.goto('/events?scope=past');
 
     // Ambos fixtures tienen fecha futura y estatus abierto: el archivo va vacío.
-    await expect(page.getByRole('heading', { name: 'Eventos pasados' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Eventos pasados' }).first()).toBeVisible();
     await expect(page.getByText('Noche de Bandas')).toHaveCount(0);
   });
 });
