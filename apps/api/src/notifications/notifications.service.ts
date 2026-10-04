@@ -117,6 +117,8 @@ export class NotificationsService {
     permission?: Permission;
     /** Solo dirección (super_admin, dir_general, dir_adjunta), sin gerencias. */
     directionOnly?: boolean;
+    /** Cualquier rol con acceso operativo a la entidad (equipo completo). */
+    anyRole?: boolean;
     exclude?: string | null;
   }): Promise<string[]> {
     try {
@@ -130,6 +132,7 @@ export class NotificationsService {
           if (p.id === opts.exclude) return false;
           const role = p.roleKey as RoleKey;
           if (entity && !canAccessEventOps(p.entities as RbacEntity[], role, entity)) return false;
+          if (opts.anyRole) return true;
           if (opts.permission) return hasPermission(role, p.permissions ?? [], opts.permission);
           if (isDirectionRole(role)) return true;
           if (opts.directionOnly) return false;

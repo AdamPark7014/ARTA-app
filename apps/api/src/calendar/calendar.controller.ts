@@ -12,8 +12,10 @@ import {
   Query,
   Req,
   UseGuards,
+  Optional,
 } from '@nestjs/common';
 import { IsString, MaxLength } from 'class-validator';
+import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { assertSameTenant, tenantIdOf } from '../common/tenant';
@@ -64,7 +66,46 @@ const NOTE_INCLUDE = {
 @Controller('calendar')
 @UseGuards(JwtAuthGuard)
 export class CalendarController {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    @Optional() private notifications?: NotificationsService,
+  ) {}
+
+  /** Nota nueva: a todo el equipo de la entidad. Editar o borrar: solo a quien la escribió. */
+  private async tell(
+    user: AuthUser,
+    note: { id: string; organizationId: string | null; entity: string; date: string; text: string; createdById: string | null },
+    type: 'calendar.note' | 'calendar.note_edited' | 'calendar.note_deleted',
+  ) {
+    if (!this.notifications) return;
+    try {
+      const recipients =
+        type === 'calendar.note'
+          ? await this.notifications.whoCan({
+              organizationId: note.organizationId,
+              entity: note.entity as EntityKey,
+              anyRole: true,
+              exclude: user.id,
+            })
+          : [note.createdById];
+      const verb = {
+        'calendar.note': 'dejó una nota en el calendario',
+        'calendar.note_edited': 'editó tu nota del calendario',
+        'calendar.note_deleted': 'borró tu nota del calendario',
+      }[type];
+      await this.notifications.notifyUsers(recipients, {
+        organizationId: note.organizationId,
+        actorId: user.id,
+        type,
+        title: `${user.fullName || 'Alguien del equipo'} ${verb}`,
+        body: `${note.date} · ${note.text.slice(0, 140)}`,
+        linkUrl: `/calendar?date=${note.date}`,
+        entity: note.entity as EntityKey,
+      });
+    } catch {
+      /* un aviso que falla no tumba la operación */
+    }
+  }
 
   private assertEntity(user: AuthUser, entity: EntityKey) {
     if (!canAccessEventOps(user.entities as EntityKey[], user.roleKey as RoleKey, entity)) {
@@ -108,7 +149,7 @@ export class CalendarController {
     this.assertDate(body.date);
     const text = body.text.trim();
     if (!text) throw new BadRequestException('La nota no puede quedar vacía');
-    return this.prisma.calendarNote.create({
+    const note = await this.prisma.calendarNote.create({
       data: {
         organizationId: tenantIdOf(req.user),
         entity: body.entity,
@@ -119,6 +160,8 @@ export class CalendarController {
       },
       include: NOTE_INCLUDE,
     });
+    void this.tell(req.user, note, 'calendar.note');
+    return note;
   }
 
   private async findOwn(req: { user: AuthUser }, id: string) {
@@ -134,17 +177,20 @@ export class CalendarController {
     await this.findOwn(req, id);
     const text = body.text.trim();
     if (!text) throw new BadRequestException('La nota no puede quedar vacía');
-    return this.prisma.calendarNote.update({
+    const note = await this.prisma.calendarNote.update({
       where: { id },
       data: { text, updatedById: req.user.id },
       include: NOTE_INCLUDE,
     });
+    void this.tell(req.user, note, 'calendar.note_edited');
+    return note;
   }
 
   @Delete('notes/:id')
   async remove(@Req() req: { user: AuthUser }, @Param('id') id: string) {
-    await this.findOwn(req, id);
+    const note = await this.findOwn(req, id);
     await this.prisma.calendarNote.delete({ where: { id } });
+    void this.tell(req.user, note, 'calendar.note_deleted');
     return { ok: true };
   }
 }

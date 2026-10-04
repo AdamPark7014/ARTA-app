@@ -16,8 +16,10 @@ import {
   UploadedFile,
   UseGuards,
   UseInterceptors,
+  Optional,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { NotificationsService } from '../notifications/notifications.service';
 import { extname } from 'path';
 import { EntityKey } from '@prisma/client';
 import { IsArray, IsOptional, IsString } from 'class-validator';
@@ -62,7 +64,52 @@ class FileDto {
 @Controller('folders')
 @UseGuards(JwtAuthGuard)
 export class FoldersController {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    @Optional() private notifications?: NotificationsService,
+  ) {}
+
+  /** Quien ve la carpeta: activo, de la organización, con la entidad y con un rol permitido. */
+  private async folderAudience(
+    folder: { organizationId: string | null; entity: EntityKey; allowedRoles: string[] },
+    excludeUserId: string,
+  ) {
+    const people = await this.prisma.user.findMany({
+      where: { active: true, ...(folder.organizationId ? { organizationId: folder.organizationId } : {}) },
+      select: { id: true, roleKey: true, entities: true, permissions: true },
+    });
+    return people
+      .filter((p) => p.id !== excludeUserId)
+      .filter((p) => canAccessEntity(p.entities as EK[], p.roleKey as RoleKey, folder.entity as EK))
+      .filter((p) => this.canSeeFolder({ ...p, organizationId: folder.organizationId }, folder.allowedRoles))
+      .map((p) => p.id);
+  }
+
+  /** Aviso a quien ve la carpeta (canal Documentos). Nunca lanza. */
+  private async tellFolder(
+    user: AuthUser & { fullName?: string },
+    folder: { id: string; name: string; organizationId: string | null; entity: EntityKey; allowedRoles: string[] },
+    type: string,
+    verb: string,
+    detail?: string,
+    onlyUserIds?: string[],
+  ) {
+    if (!this.notifications) return;
+    try {
+      const audience = onlyUserIds ?? (await this.folderAudience(folder, user.id));
+      await this.notifications.notifyUsers(audience, {
+        organizationId: folder.organizationId,
+        actorId: user.id,
+        type,
+        title: `${user.fullName || 'Alguien del equipo'} ${verb}`,
+        body: detail ? `${detail} · ${folder.name}` : folder.name,
+        linkUrl: type === 'folder.deleted' ? '/folders' : `/folders?folder=${folder.id}`,
+        entity: folder.entity,
+      });
+    } catch {
+      /* un aviso que falla no tumba la operación */
+    }
+  }
 
   private assertEntity(user: AuthUser, entity: EntityKey) {
     if (!canAccessEntity(user.entities as EK[], user.roleKey as RoleKey, entity as EK)) {
@@ -139,7 +186,7 @@ export class FoldersController {
   ) {
     if (!this.canEdit(req.user)) throw new ForbiddenException();
     this.assertEntity(req.user, body.entity);
-    return this.prisma.sharedFolder.create({
+    const folder = await this.prisma.sharedFolder.create({
       data: {
         organizationId: tenantIdOf(req.user),
         entity: body.entity,
@@ -149,6 +196,8 @@ export class FoldersController {
         createdById: req.user.id,
       },
     });
+    void this.tellFolder(req.user, folder, 'folder.created', 'creó una carpeta');
+    return folder;
   }
 
   @Patch(':id')
@@ -158,7 +207,8 @@ export class FoldersController {
     if (!folder) throw new NotFoundException();
     assertSameTenant(req.user, folder.organizationId);
     this.assertEntity(req.user, folder.entity);
-    return this.prisma.sharedFolder.update({
+    const before = body.allowedRoles !== undefined ? await this.folderAudience(folder, req.user.id) : null;
+    const updated = await this.prisma.sharedFolder.update({
       where: { id },
       data: {
         name: body.name,
@@ -166,6 +216,13 @@ export class FoldersController {
         allowedRoles: body.allowedRoles,
       },
     });
+    // Solo a quien gana acceso: los que ya la veían no necesitan aviso por un cambio de permisos.
+    if (before) {
+      const after = await this.folderAudience(updated, req.user.id).catch(() => [] as string[]);
+      const gained = after.filter((uid) => !before.includes(uid));
+      if (gained.length) void this.tellFolder(req.user, updated, 'folder.shared', 'te dio acceso a una carpeta', undefined, gained);
+    }
+    return updated;
   }
 
   @Delete(':id')
@@ -175,7 +232,9 @@ export class FoldersController {
     if (!folder) throw new NotFoundException();
     assertSameTenant(req.user, folder.organizationId);
     this.assertEntity(req.user, folder.entity);
+    const audience = await this.folderAudience(folder, req.user.id).catch(() => [] as string[]);
     await this.prisma.sharedFolder.delete({ where: { id } });
+    void this.tellFolder(req.user, folder, 'folder.deleted', 'eliminó una carpeta', undefined, audience);
     return { ok: true };
   }
 
@@ -186,7 +245,7 @@ export class FoldersController {
     if (!folder) throw new NotFoundException();
     assertSameTenant(req.user, folder.organizationId);
     this.assertEntity(req.user, folder.entity);
-    return this.prisma.sharedFile.create({
+    const file = await this.prisma.sharedFile.create({
       data: {
         folderId: id,
         fileName: body.fileName,
@@ -196,6 +255,8 @@ export class FoldersController {
         uploadedById: req.user.id,
       },
     });
+    void this.tellFolder(req.user, folder, 'folder.file_added', 'subió un archivo a una carpeta', file.fileName);
+    return file;
   }
 
   /**
@@ -259,6 +320,7 @@ export class FoldersController {
     assertSameTenant(req.user, file.folder.organizationId);
     this.assertEntity(req.user, file.folder.entity);
     await this.prisma.sharedFile.delete({ where: { id: fileId } });
+    void this.tellFolder(req.user, file.folder, 'folder.file_deleted', 'eliminó un archivo de una carpeta', file.fileName);
     return { ok: true };
   }
 }

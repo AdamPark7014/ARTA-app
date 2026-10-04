@@ -6,6 +6,7 @@ import {
   ForbiddenException,
   Get,
   NotFoundException,
+  Optional,
   Param,
   Patch,
   Post,
@@ -17,6 +18,7 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { DocType, Prisma } from '@prisma/client';
+import { NotificationsService } from '../notifications/notifications.service';
 import { IsOptional, IsString } from 'class-validator';
 import { readFileSync } from 'fs';
 import * as mammoth from 'mammoth';
@@ -156,7 +158,27 @@ export class DocumentsController {
     private prisma: PrismaService,
     private pdfs: DocumentPdfService,
     private revisions: RevisionService,
+    @Optional() private notifications?: NotificationsService,
   ) {}
+
+  /** Aviso al equipo del evento (canal Documentos). Nunca lanza ni detiene la petición. */
+  private tellTeam(
+    user: AuthUser,
+    event: { id: string; name: string; entity: string; organizationId: string | null },
+    type: string,
+    title: string,
+    docTitle: string,
+  ) {
+    void this.notifications?.notifyEventTeam(event.id, {
+      organizationId: event.organizationId,
+      actorId: user.id,
+      type,
+      title: `${user.fullName || 'Alguien del equipo'} ${title}`,
+      body: `${docTitle} · ${event.name}`,
+      linkUrl: `/events/${event.id}?tab=files`,
+      entity: event.entity as EntityKey,
+    });
+  }
 
   private async assertEvent(user: AuthUser, eventId: string) {
     const event = await this.prisma.event.findUnique({ where: { id: eventId } });
@@ -259,6 +281,7 @@ export class DocumentsController {
       note: 'Documento creado',
       actor: actorFrom(req as never),
     });
+    this.tellTeam(req.user, event, 'document.created', 'creó un documento', created.title);
     return created;
   }
 
@@ -325,6 +348,7 @@ export class DocumentsController {
       actor: actorFrom(req as never),
     });
 
+    this.tellTeam(req.user, event, 'document.created', 'importó un documento de Word', created.title);
     return created;
   }
 
@@ -436,6 +460,7 @@ export class DocumentsController {
       actor: actorFrom(req as never),
     });
 
+    this.tellTeam(req.user, doc.event, 'document.pdf', `sacó el PDF v${doc.version} de un documento`, doc.title);
     return { url, fileId: file.id, version: doc.version };
   }
 
@@ -445,6 +470,7 @@ export class DocumentsController {
     const doc = await this.load(req.user, id);
     this.assertOpen(doc.event.status);
     await this.prisma.eventDocument.delete({ where: { id } });
+    this.tellTeam(req.user, doc.event, 'document.deleted', 'eliminó un documento', doc.title);
     return { ok: true };
   }
 }

@@ -14,8 +14,10 @@ import {
   ForbiddenException,
   Body,
   Req,
+  Optional,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { NotificationsService } from '../notifications/notifications.service';
 import { extname, join, basename } from 'path';
 import { existsSync, readFileSync, writeFileSync } from 'fs';
 import { createHash, randomUUID } from 'crypto';
@@ -52,7 +54,34 @@ export class UploadsController {
     private xlsx: XlsxPatchService,
     private excelPdf: ExcelPdfService,
     private financeExtract: FinanceExtractService,
+    @Optional() private notifications?: NotificationsService,
   ) {}
+
+  /**
+   * Archivo nuevo, borrado o recuperado: al equipo del evento (canal Documentos).
+   * Guardar contenido no avisa: el panel guarda seguido y sería ruido.
+   */
+  private async tellTeam(user: AuthUser & { fullName?: string }, eventId: string | null, type: string, verb: string, fileName: string) {
+    if (!this.notifications || !eventId) return;
+    try {
+      const event = await this.prisma.event.findUnique({
+        where: { id: eventId },
+        select: { id: true, name: true, entity: true, organizationId: true },
+      });
+      if (!event) return;
+      await this.notifications.notifyEventTeam(event.id, {
+        organizationId: event.organizationId,
+        actorId: user.id,
+        type,
+        title: `${user.fullName || 'Alguien del equipo'} ${verb}`,
+        body: `${fileName} · ${event.name}`,
+        linkUrl: `/events/${event.id}?tab=files`,
+        entity: event.entity,
+      });
+    } catch {
+      /* un aviso que falla no tumba la operación */
+    }
+  }
 
   /**
    * Si el archivo es la corrida, se releen sus cifras para que los KPIs de
@@ -273,6 +302,10 @@ export class UploadsController {
     });
 
     await this.recordFileRevision(record, record.event, null, req, 'Archivo subido');
+    // Adjuntos dentro de un formato (fotos de un campo) no son archivos nuevos del evento.
+    if (!body.checklistId) {
+      void this.tellTeam(req.user, record.eventId, 'file.uploaded', 'subió un archivo', record.fileName);
+    }
     return record;
   }
 
@@ -767,6 +800,7 @@ export class UploadsController {
       },
     });
 
+    void this.tellTeam(req.user, file.eventId, 'file.deleted', 'eliminó un archivo', file.fileName);
     return { ok: true, restorable: true };
   }
 
@@ -838,6 +872,7 @@ export class UploadsController {
       },
     });
 
+    void this.tellTeam(req.user, file.eventId, 'file.restored', 'recuperó un archivo borrado', file.fileName);
     return restored;
   }
 }

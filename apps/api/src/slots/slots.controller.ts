@@ -1,5 +1,6 @@
-import { BadRequestException, Body, Controller, ForbiddenException, Get, Param, Post, Req, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, ForbiddenException, Get, Optional, Param, Post, Req, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { canAccessEventOps, isDirectionRole, type EntityKey, type RoleKey } from '../common/rbac/roles';
 import { assertSameTenant } from '../common/tenant';
@@ -8,10 +9,43 @@ import { DirectionService } from '../common/rbac/direction.service';
 
 type AuthUser = { id: string; roleKey: string; permissions: string[]; entities: string[]; organizationId?: string | null };
 
+const SLOT_LABEL: Record<string, string> = {
+  CHECKLIST: 'Formato',
+  CAMPAIGN: 'Campaña',
+  CORRIDA: 'Corrida financiera',
+  PENDONES: 'Pendones',
+  OC: 'Orden de compra',
+  BOLETERA: 'Boletera',
+};
+
 @Controller('slots')
 @UseGuards(JwtAuthGuard)
 export class SlotsController {
-  constructor(private prisma: PrismaService, private dirService: DirectionService) {}
+  constructor(
+    private prisma: PrismaService,
+    private dirService: DirectionService,
+    @Optional() private notifications?: NotificationsService,
+  ) {}
+
+  private tellTeam(
+    user: AuthUser & { fullName?: string },
+    event: { id: string; name: string; entity: EntityKey | string; organizationId: string | null },
+    type: 'slot.replaced' | 'slot.restored',
+    detail: string,
+  ) {
+    void this.notifications?.notifyEventTeam(event.id, {
+      organizationId: event.organizationId,
+      actorId: user.id,
+      type,
+      title:
+        type === 'slot.replaced'
+          ? `${user.fullName || 'Alguien del equipo'} reemplazó un documento por uno externo`
+          : `${user.fullName || 'Dirección'} volvió a la versión interna de un documento`,
+      body: `${detail} · ${event.name}`,
+      linkUrl: `/events/${event.id}?tab=files`,
+      entity: event.entity as EntityKey,
+    });
+  }
 
   private async assertEvent(user: AuthUser, eventId: string) {
     const event = await this.prisma.event.findUnique({ where: { id: eventId } });
@@ -94,6 +128,7 @@ export class SlotsController {
         userAgent: req.headers?.['user-agent']?.slice(0, 300),
       },
     });
+    this.tellTeam(req.user, event, 'slot.replaced', `${SLOT_LABEL[body.kind] ?? body.kind} · ${file.fileName}`);
     return slot;
   }
 
@@ -141,6 +176,7 @@ export class SlotsController {
         userAgent: req.headers?.['user-agent']?.slice(0, 300),
       },
     });
+    this.tellTeam(req.user, event, 'slot.restored', SLOT_LABEL[body.kind] ?? body.kind);
     return slot;
   }
 }

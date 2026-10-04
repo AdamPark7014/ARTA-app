@@ -5,9 +5,10 @@ import { ExcelPdfService } from './excel-pdf.service';
 import { FinanceModule } from '../finance/finance.module';
 import { PurchaseOrderExcelService } from '../purchase-orders/po-excel.service';
 import { PdfBrandingService } from './pdf-branding.service';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
-  imports: [FinanceModule],
+  imports: [FinanceModule, NotificationsModule],
   controllers: [UploadsController],
   providers: [XlsxPatchService, ExcelPdfService, PurchaseOrderExcelService, PdfBrandingService],
   exports: [XlsxPatchService, ExcelPdfService, PurchaseOrderExcelService, PdfBrandingService],
