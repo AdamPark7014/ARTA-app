@@ -446,7 +446,7 @@ export class UploadsController {
       updated.event,
       { url: current.url, sha256: current.sha256, sizeBytes: current.sizeBytes, fileName: current.fileName },
       req,
-      `${body.cells.length} celda${body.cells.length === 1 ? '' : 's'} editada${body.cells.length === 1 ? '' : 's'}`,
+      this.xlsx.describePatch(body),
     );
     await this.syncFinanceIfNeeded(updated);
 

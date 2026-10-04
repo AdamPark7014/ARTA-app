@@ -6,9 +6,10 @@
   (Adam es el único programador).
 - **Producción:** `4745dd4` desplegado desde `main` el 2026-09-27 22:39 UTC (lo de abajo NO está desplegado)
 
-## Turno claude-code (2026-10-04): «Correcciones Dashboard 30 de SEP 2026» (PDF del cliente) — EN CURSO
+## Turno claude-code (2026-10-04): «Correcciones Dashboard 30 de SEP 2026» (PDF del cliente)
 
-PDF `Downloads\Dashboard ARTA 30 de SEP 2026.pdf`, seis puntos. Hechos y con pruebas (sin desplegar):
+PDF `Downloads\Dashboard ARTA 30 de SEP 2026.pdf`, seis puntos. Los seis hechos, con pruebas, en `main`
+y **SIN desplegar** (commits `b3b9ca3` y el de cierre de este turno):
 
 1. **Crear evento · un horario por función**: `EventFields.tsx` pide «Función 1 · horario», «Función 2 ·
    horario»… según «Funciones» (tope 12). `Event.schedule` guarda `Función 1 — 16:00 · Función 2 — 20:00`
@@ -26,7 +27,50 @@ PDF `Downloads\Dashboard ARTA 30 de SEP 2026.pdf`, seis puntos. Hechos y con pru
    pueden entregar; si quien pidió también la tiene, no pide visto bueno. Web: `AssigneesPicker`
    (casillas + buscador; en filas guarda al cerrar). `AssigneeSelect` se borró (sin usos).
 
-Pendiente en este turno: punto 6 (Campañas: editor tipo Excel con filas/columnas que no desordenan).
+5. **Campañas · «no permite agregar columnas ni filas sin que mueva todo el orden; que se parezca a
+   Excel»**. Causa: insertar una fila solo movía VALORES en el panel; al guardar, el delta de celdas se
+   escribía en las posiciones nuevas pero el formato, las combinadas y las fórmulas se quedaban donde
+   estaban (la banda negra del TOTAL acababa sobre un concepto y la suma apuntaba mal).
+   - Regla única `sheet-ops.ts`, **duplicada a propósito e idéntica** en `apps/api/src/uploads/` y
+     `apps/web/lib/` (`sheet-ops.spec.ts` falla si difieren): recorre índices, rangos, combinadas y
+     fórmulas (incluye otras hojas y `#REF!`) como Excel, más una regla propia: un concepto insertado
+     justo arriba del TOTAL o antes del primero ENTRA en la suma (Excel lo dejaría fuera).
+   - Servidor: `xlsx-structure.ts` (`applySheetOp`) hace foto de la hoja y la reescribe en su lugar
+     nuevo (valores, estilos, alto/ancho, combinadas, fórmulas, formato condicional, validaciones,
+     imágenes, nombres definidos). No usa `spliceRows` de ExcelJS (deja combinadas rotas). El parche
+     `PATCH /uploads/:id/cells` ahora es `{ sheets?, ops?, cells }`: primero hojas agregadas/renombradas
+     (antes «+ Hoja» y «Renombrar» daban 400 al guardar), luego filas/columnas, luego celdas ya en su
+     posición final. Lo insertado copia el formato de la vecina que elige el panel (`styleFrom`).
+     Probado con los Excel reales del cliente (campaña, corrida, pendones): insertar y eliminar deja
+     la hoja idéntica (celdas, combinadas, fórmulas, imágenes).
+   - Panel (`SheetEditor.tsx` reescrito; helpers en `lib/sheet-grid.ts`): se usa como Excel — clic
+     selecciona y escribir reemplaza, doble clic/F2 edita dentro, flechas/Enter/Tab, Mayús+clic o
+     arrastre para rangos, clic en número de fila/letra de columna, **clic derecho** con insertar/
+     eliminar/duplicar/vaciar, Ctrl+C/V con Excel (TSV; dentro de la hoja las fórmulas se trasladan),
+     Ctrl+Z/Y (también deshace filas/columnas), Ctrl+D, ancho de columna arrastrable (doble clic
+     autoajusta), barra de estado con Suma/Promedio/Cuenta del rango. Cinta simple: Filas / Columnas /
+     «+ Concepto» (renglón debajo con las MISMAS fórmulas recorridas, sirve para cualquier plantilla).
+     Quitados: «Vista con formato», «Calcular fila», «Σ COSTO TOTAL», «Sumar columna» (la barra de estado
+     suma lo seleccionado). Cada celda sigue siendo un `<input aria-label="Celda A1">` (las e2e lo usan).
+     También se arregló: «1,000» se leía como 1 y una celda vaciada seguía mostrando el valor viejo.
+
+Verificación: Jest API 46 suites / 348 pruebas en verde (nuevas: `sheet-ops.spec`, `xlsx-structure.spec`,
+tareas, avisos, catálogo, horario). `tsc` web y API limpios, `next build` en verde. E2E nuevas
+`correcciones-0930.spec.ts` (crear evento con 2 funciones; insertar fila en campaña, escribir, Ctrl+Z) y
+`tasks.spec.ts` (asignar a 1 y a 2 personas): 5/5 en verde contra el build en el puerto 3101.
+**E2E viejas que fallan y NO son de este turno** (buscan UI que ya no existía en `9fd0ed3`: «Empieza»,
+`.event-facts`, «Editar aquí», «Archivos (1)», «Mostrar tabla simple», fondo oscuro en la cuadrícula):
+`app-shell` (2), `editors` (3), `event-edit` (5), `excel-hf`, `hotfix-sheet-editor` (los valores sí
+pasan; falla su guarda de «fondo oscuro»), `hub-critical` (5). Pendiente para Cursor: actualizarlas.
+
+### Para desplegar (no se hizo: hay migración y un script que toca datos de producción)
+
+1. Bundle + `update.sh --no-pull` como siempre (respalda la base). Aplica la migración
+   `20261004120000_task_co_assignees` (solo tabla nueva).
+2. En `arta-api`: `scripts/upgrade-format-templates.ts --dry`, revisar, y luego `--confirm-produccion`
+   (Rueda de Prensa v3: Convocatoria + Timeline).
+3. Probar en producción con un Excel de campaña real: insertar fila arriba del TOTAL → Guardar → que el
+   TOTAL baje con su banda y su suma, y «Salir en PDF».
 
 ## Regla de ramas (pedido de Adam, 2026-09-27)
 

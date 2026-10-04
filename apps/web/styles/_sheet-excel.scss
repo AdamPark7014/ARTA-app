@@ -1,0 +1,242 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   Editor de hoja tipo Excel (correcciones 30-09-2026, Campañas):
+   cinta de herramientas, rango seleccionado, encabezados que seleccionan,
+   ancho de columna arrastrable, menú contextual y barra de estado.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.sheet-ribbon {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.9rem;
+  padding: 0.4rem 0.7rem;
+  border-top: 1px solid var(--line);
+  background: var(--bg-elev);
+}
+
+.sheet-ribbon__group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.sheet-ribbon__group + .sheet-ribbon__group {
+  padding-left: 0.9rem;
+  border-left: 1px solid var(--line);
+}
+
+.sheet-ribbon__label {
+  margin-right: 0.15rem;
+  color: var(--muted);
+  font-size: 0.66rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.sheet-ribbon__btn {
+  padding: 0.28rem 0.55rem;
+  border: 1px solid #b8c2ce;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #1a2330;
+  font: inherit;
+  font-size: 0.78rem;
+  line-height: 1.2;
+  cursor: pointer;
+}
+
+.sheet-ribbon__btn:hover:not(:disabled) {
+  background: #eef6f1;
+  border-color: #217346;
+}
+
+.sheet-ribbon__btn:focus-visible {
+  outline: 2px solid #217346;
+  outline-offset: 1px;
+}
+
+.sheet-ribbon__btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.sheet-ribbon__btn--danger:hover:not(:disabled) {
+  background: #fdecec;
+  border-color: #b42318;
+  color: #8a1c13;
+}
+
+.sheet-ribbon__btn--primary {
+  border-color: #217346;
+  background: #217346;
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.sheet-ribbon__btn--primary:hover:not(:disabled) {
+  background: #1a5c38;
+  color: #ffffff;
+}
+
+/* Encabezados: clic selecciona la columna o la fila entera */
+.sheet--excel .sheet__colhead,
+.sheet--excel .sheet__rownum,
+.sheet--excel .sheet__corner {
+  cursor: pointer;
+  user-select: none;
+}
+
+.sheet--excel .sheet__colhead:hover,
+.sheet--excel .sheet__rownum:hover {
+  background: #dfe7ee;
+}
+
+/* Encima del tinte del rango al desplazarse */
+.sheet--excel thead th {
+  z-index: 4;
+}
+
+.sheet--excel .sheet__rownum {
+  z-index: 3;
+}
+
+.sheet--excel .sheet__corner {
+  z-index: 5;
+}
+
+.sheet__colresize {
+  position: absolute;
+  top: 0;
+  right: -4px;
+  bottom: 0;
+  z-index: 5;
+  width: 8px;
+  cursor: col-resize;
+}
+
+.sheet__colresize:hover {
+  background: rgba(33, 115, 70, 0.35);
+}
+
+/* Celdas: el rango se tiñe sin tapar el relleno real de la celda */
+.sheet--excel td.sheet__td {
+  position: relative;
+}
+
+.sheet--excel td.sheet__td--range::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: rgba(33, 115, 70, 0.13);
+  box-shadow: inset 0 0 0 1px rgba(33, 115, 70, 0.25);
+  pointer-events: none;
+}
+
+.sheet--excel .sheet__cell {
+  cursor: cell;
+}
+
+.sheet--excel .sheet__cell:focus {
+  cursor: text;
+}
+
+/* Menú contextual (clic derecho) */
+.sheet-menu {
+  position: fixed;
+  z-index: 300;
+  display: grid;
+  min-width: 15rem;
+  max-width: 17rem;
+  padding: 0.3rem;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  background: var(--bg-elev);
+  color: var(--text);
+  box-shadow: var(--shadow-md);
+}
+
+.sheet-menu__item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.42rem 0.6rem;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 0.84rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.sheet-menu__item:hover,
+.sheet-menu__item:focus-visible {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  outline: none;
+}
+
+.sheet-menu__item.is-danger {
+  color: #f19a92;
+}
+
+.sheet-menu__item.is-danger:hover {
+  background: rgba(180, 35, 24, 0.22);
+}
+
+.sheet-menu__hint {
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.sheet-menu__sep {
+  height: 1px;
+  margin: 0.25rem 0.3rem;
+  background: var(--line);
+}
+
+/* Barra de estado: celda/rango, suma de lo seleccionado y ampliar la hoja */
+.sheet-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 1rem;
+  padding: 0.35rem 0.2rem 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.sheet-status__ref {
+  min-width: 4.5rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.sheet-status__stats strong {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.sheet-status__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin-left: auto;
+}
+
+@media (max-width: 640px) {
+  .sheet-ribbon__group + .sheet-ribbon__group {
+    padding-left: 0;
+    border-left: 0;
+  }
+
+  .sheet-status__actions {
+    margin-left: 0;
+  }
+}

@@ -54,10 +54,11 @@ export function createEventFile(opts: {
  *
  * Manda solo el delta; el servidor lo aplica con ExcelJS sobre el archivo real.
  * Es lo que evita que cada guardado destruya estilos, formato condicional y
- * validaciones del libro entero.
+ * validaciones del libro entero. `ops` y `sheets`: filas/columnas insertadas o
+ * eliminadas y hojas nuevas o renombradas, que el servidor aplica antes.
  */
 export function patchEventFileCells(fileId: string) {
-  return async (patch: { cells: Array<Record<string, unknown>> }) => {
+  return async (patch: { cells: Array<Record<string, unknown>>; ops?: unknown[]; sheets?: unknown[] }) => {
     await api(`/uploads/${fileId}/cells`, {
       method: 'PATCH',
       body: JSON.stringify(patch),

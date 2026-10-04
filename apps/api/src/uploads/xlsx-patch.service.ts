@@ -1,5 +1,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import * as ExcelJS from 'exceljs';
+import type { SheetOp } from './sheet-ops';
+import { applySheetOp, describeSheetOp } from './xlsx-structure';
 
 /**
  * Parcheo de celdas del lado del servidor.
@@ -29,10 +31,19 @@ export type CellChange = {
   value?: string | number | boolean | null;
 };
 
-export type CellPatch = { cells: CellChange[] };
+/**
+ * `ops` (correcciones 30-09-2026): filas/columnas insertadas o eliminadas, en
+ * el orden en que se hicieron. Se aplican ANTES que `cells`, cuyas
+ * referencias ya vienen con las posiciones finales.
+ */
+export type SheetStructChange = { add: string } | { rename: { from: string; to: string } };
+
+/** `sheets`: hojas agregadas o renombradas en el panel; van antes que todo. */
+export type CellPatch = { cells?: CellChange[]; ops?: SheetOp[]; sheets?: SheetStructChange[] };
 
 /** Tope defensivo: un guardado normal toca decenas de celdas, no miles. */
 const MAX_CELLS = 5000;
+const MAX_OPS = 200;
 const REF = /^[A-Z]{1,3}[1-9]\d{0,6}$/;
 
 /**
@@ -87,16 +98,29 @@ export class XlsxPatchService {
    * ExcelJS al leer, incluidos estilos, anchos y las fórmulas que nadie tocó.
    */
   async applyCellPatch(buffer: Buffer, patch: CellPatch): Promise<Buffer> {
-    const cells = patch?.cells;
-    if (!Array.isArray(cells) || !cells.length) {
+    const cells = patch?.cells ?? [];
+    const ops = patch?.ops ?? [];
+    const sheets = patch?.sheets ?? [];
+    if (
+      !Array.isArray(cells) ||
+      !Array.isArray(ops) ||
+      !Array.isArray(sheets) ||
+      (!cells.length && !ops.length && !sheets.length)
+    ) {
       throw new BadRequestException('El parche no trae celdas');
     }
     if (cells.length > MAX_CELLS) {
       throw new BadRequestException(`Demasiadas celdas en un solo guardado (${cells.length})`);
     }
+    if (ops.length > MAX_OPS) {
+      throw new BadRequestException(`Demasiados cambios de filas o columnas en un solo guardado (${ops.length})`);
+    }
 
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.load(buffer as unknown as ExcelJS.Buffer);
+
+    for (const change of sheets) this.applySheetChange(workbook, change);
+    for (const op of ops) applySheetOp(workbook, op);
 
     for (const change of cells) {
       if (!change || typeof change.sheet !== 'string' || typeof change.ref !== 'string') {
@@ -126,5 +150,37 @@ export class XlsxPatchService {
     // Mantener el comportamiento existente: no forzar recálculo en apertura aquí.
     const out = await workbook.xlsx.writeBuffer();
     return Buffer.from(out);
+  }
+
+  /** Hoja nueva o renombrada desde el panel («+ Hoja», doble clic en la pestaña). */
+  private applySheetChange(workbook: ExcelJS.Workbook, change: SheetStructChange) {
+    const valid = (name: unknown): name is string =>
+      typeof name === 'string' && !!name.trim() && name.length <= 31 && !/[\\/?*[\]:]/.test(name);
+    if (change && 'add' in change) {
+      if (!valid(change.add)) throw new BadRequestException('Nombre de hoja inválido');
+      if (!workbook.getWorksheet(change.add)) workbook.addWorksheet(change.add);
+      return;
+    }
+    if (change && 'rename' in change) {
+      const { from, to } = change.rename ?? ({} as { from?: string; to?: string });
+      if (!valid(from) || !valid(to)) throw new BadRequestException('Nombre de hoja inválido');
+      const ws = workbook.getWorksheet(from);
+      if (!ws) throw new BadRequestException(`La hoja «${from}» no existe en el libro`);
+      if (workbook.getWorksheet(to)) throw new BadRequestException(`Ya existe una hoja «${to}»`);
+      ws.name = to;
+      return;
+    }
+    throw new BadRequestException('Cambio de hoja mal formado');
+  }
+
+  /** Nota del historial: «1 fila insertada · 3 celdas editadas». */
+  describePatch(patch: CellPatch): string {
+    const parts = (patch?.sheets ?? []).map((s) =>
+      'add' in s ? `hoja «${s.add}» agregada` : `hoja «${s.rename.from}» → «${s.rename.to}»`,
+    );
+    parts.push(...(patch?.ops ?? []).map((op) => describeSheetOp(op)));
+    const n = patch?.cells?.length ?? 0;
+    if (n) parts.push(`${n} celda${n === 1 ? '' : 's'} editada${n === 1 ? '' : 's'}`);
+    return parts.join(' · ') || 'Sin cambios';
   }
 }

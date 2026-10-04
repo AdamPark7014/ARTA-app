@@ -4544,17 +4544,14 @@ body.site-nav-open {
   border-bottom: 1px solid var(--line);
 }
 /* Ensure enabled toolbar buttons have strong contrast in dark theme */
-.sheet-toolbar .btn,
-.sheet-tools .btn {
+.sheet-toolbar .btn {
   color: #1a2330 !important; /* dark text */
 }
-.sheet-toolbar .btn.ghost,
-.sheet-tools .btn.ghost {
+.sheet-toolbar .btn.ghost {
   background-color: #ffffff !important; /* light background behind text */
   border-color: #b8c2ce !important;
 }
-.sheet-toolbar .btn.ghost:hover,
-.sheet-tools .btn.ghost:hover {
+.sheet-toolbar .btn.ghost:hover {
   background-color: #f0f3f6 !important;
 }
 
@@ -4845,46 +4842,8 @@ body.site-nav-open {
   color: #8a2b2b;
 }
 
-.sheet-tools {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.55rem 0.85rem;
-  padding: 0.5rem 0.7rem;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--bg-elev);
-}
-
-/* Vive dentro de `.sheet-chrome` (que ya queda fijo arriba al hacer scroll:
-   Adam, 27-09-2026, «no puedo agregar columnas y filas» — los botones antes
-   quedaban fuera de esa cabecera fija y se perdian de vista en una hoja
-   larga). Se ve como otra fila del mismo panel, no como una tarjeta aparte. */
-.sheet-chrome > .sheet-tools {
-  border: 0;
-  border-top: 1px solid var(--line);
-  border-radius: 0;
-}
-
-.sheet-tools__group {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.3rem;
-  min-width: 0;
-}
-
-.sheet-tools__group--campaign {
-  padding-left: 0.55rem;
-  border-left: 2px solid #217346;
-}
-
-.sheet-tools__label {
-  font-size: 0.68rem;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: #5b6b7c;
-  margin-right: 0.2rem;
-}
+/* La cinta de herramientas, el rango, el menú contextual y la barra de estado
+   del editor tipo Excel viven en `_sheet-excel.scss` (correcciones 30-09-2026). */
 
 @media (max-width: 640px) {
   .sheet-toolbar {
@@ -4910,14 +4869,6 @@ body.site-nav-open {
   .sheet-fxbar__ref {
     font-size: 0.74rem;
     padding: 0 0.3rem;
-  }
-
-  .sheet-tools__group--campaign {
-    padding-left: 0;
-    border-left: 0;
-    padding-top: 0.4rem;
-    border-top: 2px solid #217346;
-    width: 100%;
   }
 
   .editor-coach {
@@ -6373,3 +6324,4 @@ textarea.pdffield__input--text {
 @import "./formats";
 @import "./sheet";
 @import "./tasks";
+@import "./sheet-excel";
