@@ -69,6 +69,86 @@ jobs:
         with:
           xcode-version: latest-stable
 
+      # App Store Connect rechaza binarios compilados con un SDK anterior a
+      # iOS 26. Se corta aquí, en el primer minuto, y no tras archivar y subir.
+      # Si la Xcode elegida trae un SDK menor se busca otra instalada en el
+      # runner, nunca una beta: Apple tampoco acepta lo compilado con betas.
+      # (NEXARA solo avisa; aquí se falla.)
+      - name: Exigir SDK de iOS 26 o mayor
+        run: |
+          set -euo pipefail
+          sdk_ok() {
+            case "${1:-}" in ''|*[!0-9.]*) return 1 ;; esac
+            [ "${1%%.*}" -ge 26 ]
+          }
+          SDK="$(xcrun --sdk iphoneos --show-sdk-version 2>/dev/null || true)"
+          echo "Xcode elegida: $(xcode-select -p) · SDK iPhoneOS ${SDK:-<ninguno>}"
+          if ! sdk_ok "$SDK"; then
+            for X in /Applications/Xcode*.app; do
+              case "$X" in *[Bb]eta*) continue ;; esac
+              [ -d "$X/Contents/Developer" ] || continue
+              V="$(DEVELOPER_DIR="$X/Contents/Developer" xcrun --sdk iphoneos --show-sdk-version 2>/dev/null || true)"
+              echo "  $X: SDK ${V:-<ninguno>}"
+              if sdk_ok "$V"; then
+                sudo xcode-select -s "$X/Contents/Developer"
+                SDK="$V"
+                break
+              fi
+            done
+          fi
+          if ! sdk_ok "$SDK"; then
+            echo "::error::No hay Xcode estable con SDK de iOS 26 o mayor en el runner (hay ${SDK:-ninguno}). App Store Connect rechazaría la subida."
+            exit 1
+          fi
+          echo "OK: SDK iPhoneOS $SDK con $(xcode-select -p)"
+
+      # Apple rechaza el icono de 1024 con canal alfa (ITMS-90717, «Invalid App
+      # Store Icon»). NEXARA lo aplana en el runner; aquí el PNG versionado ya
+      # es RGB, así que solo se comprueba, antes de firmar ni archivar nada.
+      - name: Icono de App Store sin transparencia
+        run: |
+          set -euo pipefail
+          ICONSET="$IOS_DIR/Resources/Assets.xcassets/AppIcon.appiconset"
+          ICON="$ICONSET/AppIcon-1024.png"
+          test -f "$ICON" || { echo "::error::Falta $ICON"; exit 1; }
+          W="$(sips -g pixelWidth "$ICON" | awk -F': ' '/pixelWidth/ {print $2}')"
+          H="$(sips -g pixelHeight "$ICON" | awk -F': ' '/pixelHeight/ {print $2}')"
+          echo "AppIcon-1024.png: ${W}x${H}"
+          if [ "$W" != "1024" ] || [ "$H" != "1024" ]; then
+            echo "::error::AppIcon-1024.png debe medir 1024x1024 (mide ${W}x${H})."; exit 1
+          fi
+          fail=0
+          for f in "$ICONSET"/*.png; do
+            a="$(sips -g hasAlpha "$f" | awk -F': ' '/hasAlpha/ {print $2}')"
+            echo "$(basename "$f") hasAlpha: ${a:-desconocido}"
+            if [ "$a" != "no" ]; then fail=1; fi
+          done
+          if [ $fail -ne 0 ]; then
+            echo "::error::El icono tiene canal alfa: App Store lo rechaza (ITMS-90717). Expórtalo como PNG RGB sin transparencia."
+            exit 1
+          fi
+
+      # El manifiesto de privacidad lo exige Apple desde mayo de 2024. Un plist
+      # mal formado o con rastreo activado se descubre aquí y no en el correo de
+      # rechazo. Se valida también Info.plist de la app y de la extensión.
+      - name: Plists y manifiesto de privacidad válidos
+        working-directory: apps/mobile-native/ios
+        run: |
+          set -euo pipefail
+          MANIFEST=Resources/PrivacyInfo.xcprivacy
+          /usr/bin/plutil -lint Resources/Info.plist NotificationService/Info.plist "$MANIFEST"
+          /usr/libexec/PlistBuddy -c 'Print :NSPrivacyAccessedAPITypes' "$MANIFEST" >/dev/null || { echo "::error::Falta NSPrivacyAccessedAPITypes en $MANIFEST"; exit 1; }
+          /usr/libexec/PlistBuddy -c 'Print :NSPrivacyCollectedDataTypes:0' "$MANIFEST" >/dev/null || { echo "::error::NSPrivacyCollectedDataTypes vacío en $MANIFEST"; exit 1; }
+          TRACKING="$(/usr/libexec/PlistBuddy -c 'Print :NSPrivacyTracking' "$MANIFEST")"
+          if [ "$TRACKING" != "false" ]; then
+            echo "::error::NSPrivacyTracking debe ser false (ARTA no rastrea): vale «$TRACKING»."; exit 1
+          fi
+          if /usr/libexec/PlistBuddy -c 'Print :NSPrivacyTrackingDomains:0' "$MANIFEST" >/dev/null 2>&1; then
+            echo "::error::NSPrivacyTrackingDomains debe ir vacío si NSPrivacyTracking es false."; exit 1
+          fi
+          echo "Datos declarados:"
+          /usr/bin/plutil -p "$MANIFEST" | grep '"NSPrivacyCollectedDataType" =>' || true
+
       - name: Versiones
         run: |
           xcodebuild -version
@@ -177,13 +257,28 @@ jobs:
             OTHER_CODE_SIGN_FLAGS="--keychain $KEYCHAIN" \
             2>&1 | tee "$RUNNER_TEMP/archive.log" | grep -E "error:|warning: .*[Ss]ign|ARCHIVE (SUCCEEDED|FAILED)"
 
+      # Además del manifiesto de la app (raíz del .app), Apple pide el de cada
+      # SDK de terceros (ITMS-91061): Firebase, GoogleUtilities, nanopb,
+      # Starscream… viajan en sus .bundle de SPM; se listan para el registro.
       - name: Comprobar el archivo
         run: |
           set -euo pipefail
           APP="$ARCHIVE_PATH/Products/Applications/ArtaApp.app"
           test -f "$APP/PrivacyInfo.xcprivacy" || { echo "Falta PrivacyInfo.xcprivacy en la app"; exit 1; }
+          /usr/bin/plutil -lint "$APP/PrivacyInfo.xcprivacy"
+          echo "::group::Manifiestos de privacidad en el archivo"
+          /usr/bin/find "$APP" -name PrivacyInfo.xcprivacy -print
+          echo "::endgroup::"
           test -d "$APP/PlugIns/NotificationService.appex" || { echo "Falta la extensión NotificationService"; exit 1; }
           echo "Versión: $(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' "$APP/Info.plist") ($(/usr/libexec/PlistBuddy -c 'Print CFBundleVersion' "$APP/Info.plist"))"
+          # Solo iPhone (TARGETED_DEVICE_FAMILY "1" en project.yml): si el
+          # binario vuelve a declarar iPad (2), Apple lo revisa en iPad.
+          FAMILY="$(/usr/libexec/PlistBuddy -c 'Print :UIDeviceFamily' "$APP/Info.plist" || true)"
+          echo "UIDeviceFamily: $(echo "$FAMILY" | tr -s ' \n' ' ')"
+          if grep -qw 2 <<<"$FAMILY"; then
+            echo "::error::El binario declara iPad (UIDeviceFamily 2). ARTA es solo iPhone: revisa TARGETED_DEVICE_FAMILY en project.yml."
+            exit 1
+          fi
           codesign -d --entitlements :- "$APP" 2>/dev/null | head -n 40
 
       - name: Opciones de exportación

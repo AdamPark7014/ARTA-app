@@ -7,9 +7,12 @@ struct MoreView: View {
     let user: UserDto
 
     @EnvironmentObject private var session: Session
+    @Environment(\.openURL) private var openURL
     @State private var access: WebAccess
     @State private var confirmLogout = false
+    @State private var confirmDeleteAccount = false
     @State private var busy = false
+    @State private var legalPage: SafariPage?
 
     init(user: UserDto) {
         self.user = user
@@ -70,6 +73,15 @@ struct MoreView: View {
             }
             .listRowBackground(ArtaColor.bgElev)
 
+            // Apple (5.1.1) exige que privacidad, términos y soporte se abran
+            // desde dentro de la app; se leen en hoja sin perder la pestaña.
+            Section("Legal y soporte") {
+                legalRow("Aviso de privacidad", systemImage: "hand.raised", url: ArtaAppMeta.privacidadURL, id: "more-privacy")
+                legalRow("Términos de uso", systemImage: "doc.text", url: ArtaAppMeta.terminosURL, id: "more-terms")
+                legalRow("Soporte", systemImage: "questionmark.circle", url: ArtaAppMeta.soporteURL, id: "more-support")
+            }
+            .listRowBackground(ArtaColor.bgElev)
+
             Section {
                 Button(role: .destructive) {
                     confirmLogout = true
@@ -77,10 +89,28 @@ struct MoreView: View {
                     Text(busy ? "Cerrando sesión…" : "Cerrar sesión").frame(maxWidth: .infinity)
                 }
                 .disabled(busy)
+                // Eliminación de cuenta (guideline 5.1.1(v)): se pide desde la app
+                // y se completa en la web, porque las cuentas las crea quien
+                // administra la organización. En Safari y no en hoja: ahí la
+                // persona puede tener ya su sesión del panel.
+                Button(role: .destructive) {
+                    confirmDeleteAccount = true
+                } label: {
+                    Text("Eliminar mi cuenta").frame(maxWidth: .infinity)
+                }
+                .disabled(busy)
+                .accessibilityIdentifier("more-delete-account")
+                .confirmationDialog("¿Eliminar tu cuenta?", isPresented: $confirmDeleteAccount, titleVisibility: .visible) {
+                    Button("Continuar en la web", role: .destructive) { openURL(ArtaAppMeta.eliminarCuentaURL) }
+                    Button("Cancelar", role: .cancel) {}
+                } message: {
+                    Text("La solicitud para eliminar tu cuenta y tus datos se hace en la web de ARTA. Se abrirá en tu navegador para que la completes ahí.")
+                }
             } footer: {
-                Text("ARTA \(ApiConfig.appVersion) (\(Self.build))")
+                Text("ARTA \(ArtaAppMeta.versionLabel)")
                     .frame(maxWidth: .infinity)
                     .padding(.top, 8)
+                    .accessibilityIdentifier("more-version")
             }
             .listRowBackground(ArtaColor.bgElev)
         }
@@ -96,6 +126,10 @@ struct MoreView: View {
             Button("Cancelar", role: .cancel) {}
         } message: {
             Text("Dejarás de recibir avisos de ARTA aquí hasta que vuelvas a entrar.")
+        }
+        .sheet(item: $legalPage) { page in
+            SafariView(url: page.url, onFinish: { legalPage = nil })
+                .ignoresSafeArea()
         }
         .task { await loadAccess() }
         .refreshable { await loadAccess() }
@@ -125,8 +159,13 @@ struct MoreView: View {
         .padding(.vertical, 8)
     }
 
-    private static var build: String {
-        (Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String) ?? "1"
+    private func legalRow(_ title: String, systemImage: String, url: URL, id: String) -> some View {
+        Button {
+            legalPage = SafariPage(url: url)
+        } label: {
+            Label(title, systemImage: systemImage)
+        }
+        .accessibilityIdentifier(id)
     }
 
     /// `UserDto` no trae permisos extra ni entidades; `/auth/me` sí.

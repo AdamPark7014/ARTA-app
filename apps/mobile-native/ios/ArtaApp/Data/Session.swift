@@ -53,7 +53,9 @@ final class Session: ObservableObject {
     }
 
     func login(email: String, password: String) async -> LoginResult {
-        await handle { try await ApiClient.shared.login(LoginBody(email: email.trimmingCharacters(in: .whitespaces), password: password)) }
+        // `.whitespacesAndNewlines`: el autollenado y el pegado a veces traen un
+        // salto de línea al final, y el API compara el correo tal cual.
+        await handle { try await ApiClient.shared.login(LoginBody(email: email.trimmingCharacters(in: .whitespacesAndNewlines), password: password)) }
     }
 
     func verifyCode(challengeId: String, code: String) async -> LoginResult {

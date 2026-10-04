@@ -19,7 +19,10 @@ struct HomeView: View {
                 InicioView(user: user)
                     .navigationDestination(for: AppRoute.self) { destination($0) }
             }
-            .tabItem { Label("Inicio", systemImage: "house") }
+            // Identificadores en la etiqueta de cada pestaña para la prueba de
+            // interfaz de las capturas. Solo en la etiqueta: puestos sobre la
+            // pila de navegación pisarían los de todas las pantallas de dentro.
+            .tabItem { Label("Inicio", systemImage: "house").accessibilityIdentifier("tab-inicio") }
             .tag(AppRouter.Tab.inicio)
 
             NavigationStack(path: $router.chatPath) {
@@ -37,7 +40,7 @@ struct HomeView: View {
                         }
                     }
             }
-            .tabItem { Label("Chats", systemImage: "bubble.left.and.bubble.right") }
+            .tabItem { Label("Chats", systemImage: "bubble.left.and.bubble.right").accessibilityIdentifier("tab-chats") }
             .badge(chatUnread)
             .tag(AppRouter.Tab.chats)
 
@@ -45,14 +48,14 @@ struct HomeView: View {
                 TasksView()
                     .navigationDestination(for: AppRoute.self) { destination($0) }
             }
-            .tabItem { Label("Tareas", systemImage: "checklist") }
+            .tabItem { Label("Tareas", systemImage: "checklist").accessibilityIdentifier("tab-tareas") }
             .tag(AppRouter.Tab.tareas)
 
             NavigationStack(path: $router.avisosPath) {
                 NotificationsView(onUnreadChange: { noticeUnread = $0 })
                     .navigationDestination(for: AppRoute.self) { destination($0) }
             }
-            .tabItem { Label("Avisos", systemImage: "bell") }
+            .tabItem { Label("Avisos", systemImage: "bell").accessibilityIdentifier("tab-avisos") }
             .badge(noticeUnread)
             .tag(AppRouter.Tab.avisos)
 
@@ -60,7 +63,7 @@ struct HomeView: View {
                 MoreView(user: user)
                     .navigationDestination(for: AppRoute.self) { destination($0) }
             }
-            .tabItem { Label("Más", systemImage: "square.grid.2x2") }
+            .tabItem { Label("Más", systemImage: "square.grid.2x2").accessibilityIdentifier("tab-mas") }
             .tag(AppRouter.Tab.mas)
         }
         .task { await loadCounts() }

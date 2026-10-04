@@ -39,13 +39,6 @@
     <array>
         <string>UIInterfaceOrientationPortrait</string>
     </array>
-    <key>UISupportedInterfaceOrientations~ipad</key>
-    <array>
-        <string>UIInterfaceOrientationPortrait</string>
-        <string>UIInterfaceOrientationPortraitUpsideDown</string>
-        <string>UIInterfaceOrientationLandscapeLeft</string>
-        <string>UIInterfaceOrientationLandscapeRight</string>
-    </array>
     <key>NSCameraUsageDescription</key>
     <string>La cámara se usa para mandar fotos y videos en el chat y para subir archivos al panel.</string>
     <key>NSMicrophoneUsageDescription</key>

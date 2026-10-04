@@ -43,6 +43,8 @@ struct LoginView: View {
                         .foregroundStyle(ArtaColor.danger)
                         .multilineTextAlignment(.center)
                 }
+
+                legalLinks
             }
             .padding(24)
             .frame(maxWidth: 440)
@@ -63,6 +65,9 @@ struct LoginView: View {
                     .focused($focus, equals: .email)
                     .submitLabel(.next)
                     .onSubmit { focus = .password }
+                    // Identificadores estables para la prueba de interfaz que
+                    // sacará las capturas de la ficha (no dependen del texto).
+                    .accessibilityIdentifier("login-email")
             }
             field {
                 SecureField("Contraseña", text: $password)
@@ -70,8 +75,10 @@ struct LoginView: View {
                     .focused($focus, equals: .password)
                     .submitLabel(.go)
                     .onSubmit(submit)
+                    .accessibilityIdentifier("login-password")
             }
             primaryButton(busy ? "Entrando…" : "Entrar", disabled: email.isEmpty || password.isEmpty, action: submit)
+                .accessibilityIdentifier("login-submit")
         }
     }
 
@@ -93,8 +100,10 @@ struct LoginView: View {
                         if digits != value { code = digits }
                         if digits.count == 6 { verify() }
                     }
+                    .accessibilityIdentifier("login-code")
             }
             primaryButton(busy ? "Verificando…" : "Verificar", disabled: code.count < 6, action: verify)
+                .accessibilityIdentifier("login-verify")
             Button("Usar otra cuenta") {
                 challengeId = nil
                 code = ""
@@ -119,6 +128,20 @@ struct LoginView: View {
             }
             .foregroundStyle(ArtaColor.muted)
         }
+    }
+
+    /// Aviso de privacidad y términos alcanzables antes de entrar (Apple 5.1.1(i)):
+    /// al pie y en gris, para no competir con el formulario.
+    private var legalLinks: some View {
+        HStack(spacing: 16) {
+            Link("Aviso de privacidad", destination: ArtaAppMeta.privacidadURL)
+                .accessibilityIdentifier("login-privacy")
+            Link("Términos", destination: ArtaAppMeta.terminosURL)
+                .accessibilityIdentifier("login-terms")
+        }
+        .font(.caption)
+        .foregroundStyle(ArtaColor.muted)
+        .padding(.top, 24)
     }
 
     private func field<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
