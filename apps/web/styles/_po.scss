@@ -537,3 +537,128 @@
   opacity: 0.45;
   cursor: default;
 }
+
+/* ── Anticipos ──────────────────────────────────────────────────────────── */
+
+.adv-summary {
+  margin: 0;
+}
+
+.adv-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr));
+  gap: 0.75rem;
+}
+
+.adv-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  width: 100%;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--bg-soft);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.adv-card:hover {
+  border-color: var(--line-strong);
+}
+
+.adv-card:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.adv-card__top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.6rem;
+}
+
+.adv-card__title {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.adv-card__amount {
+  font-family: var(--font-display);
+  font-size: 1.2rem;
+}
+
+.adv-card__meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.adv-card__note {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-size: 0.84rem;
+}
+
+.adv-form {
+  max-width: 44rem;
+}
+
+.adv-detail__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  margin-bottom: 0.85rem;
+}
+
+.adv-detail__facts {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.45rem 1rem;
+  margin: 0 0 0.9rem;
+  font-size: 0.88rem;
+}
+
+.adv-detail__facts dt {
+  color: var(--muted);
+}
+
+.adv-detail__facts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.adv-detail__note,
+.adv-detail__reason {
+  white-space: pre-wrap;
+}
+
+.adv-detail__reason {
+  color: var(--danger);
+}
+
+.adv-detail__files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.adv-detail__field {
+  display: grid;
+  gap: 0.35rem;
+  margin-bottom: 0.75rem;
+}
+
+.adv-detail__actions {
+  margin-top: 0.5rem;
+}

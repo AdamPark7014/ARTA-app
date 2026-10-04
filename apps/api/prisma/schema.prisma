@@ -205,6 +205,8 @@ model User {
   purchaseOrders       PurchaseOrder[]            @relation("PoCreator")
   poAuthorizations     PurchaseOrder[]            @relation("PoAuthorizer")
   paymentsUploaded     PaymentProof[]
+  advancesDecided      PaymentProof[]             @relation("AdvanceDecider")
+  advancesPaid         PaymentProof[]             @relation("AdvancePayer")
   taskEvidences        TaskEvidence[]
   taskActivities       TaskActivity[]
   checklistsCreated    ChecklistInstance[]        @relation("ChecklistCreator")
@@ -477,20 +479,43 @@ model PurchaseOrderLine {
   @@index([orderId])
 }
 
+/// Flujo de un anticipo (PaymentProof sin OC). Los comprobantes de OC quedan en null.
+enum AdvanceStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  PAID
+}
+
 model PaymentProof {
   id              String         @id @default(cuid())
   purchaseOrderId String?
   purchaseOrder   PurchaseOrder? @relation(fields: [purchaseOrderId], references: [id])
   eventId         String?
   label           String?
-  fileUrl         String
+  /// Un anticipo se puede solicitar sin archivo; los comprobantes de OC siempre lo traen.
+  fileUrl         String?
   amount          Decimal?       @db.Decimal(14, 2)
   uploadedById    String?
   uploadedBy      User?          @relation(fields: [uploadedById], references: [id])
   createdAt       DateTime       @default(now())
 
+  advanceStatus AdvanceStatus?
+  /// Para qué es el anticipo.
+  note          String?
+  decidedById   String?
+  decidedBy     User?          @relation("AdvanceDecider", fields: [decidedById], references: [id])
+  decidedAt     DateTime?
+  rejectReason  String?
+  paidById      String?
+  paidBy        User?          @relation("AdvancePayer", fields: [paidById], references: [id])
+  paidAt        DateTime?
+  /// Comprobante de pago, si el de la solicitud era otra cosa.
+  paidProofUrl  String?
+
   @@index([eventId])
   @@index([purchaseOrderId])
+  @@index([advanceStatus])
 }
 
 // ─── Corrida financiera ──────────────────────────────────────────────────────

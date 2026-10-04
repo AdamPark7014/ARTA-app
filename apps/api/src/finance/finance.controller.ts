@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   Body,
+  ConflictException,
   Controller,
   ForbiddenException,
   Get,
@@ -11,11 +12,11 @@ import {
   Req,
   UseGuards,
 } from '@nestjs/common';
-import { DocType, Prisma } from '@prisma/client';
+import { AdvanceStatus, DocType, Prisma } from '@prisma/client';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { hasPermission, canAccessEventOps, isDirectionRole, PERMISSIONS, type EntityKey, type RoleKey } from '../common/rbac/roles';
-import { assertSameTenant } from '../common/tenant';
+import { assertSameTenant, tenantIdOf } from '../common/tenant';
 import { assertEventNotClosed } from '../common/event-guards';
 import { calcProgress } from '../common/checklist-progress';
 import { diffFinanceRows } from '../common/doc-diff';
@@ -30,7 +31,57 @@ type AuthUser = {
   permissions: string[];
   entities: string[];
   organizationId?: string | null;
+  fullName?: string;
 };
+
+type AuditReq = { user: AuthUser; ip?: string; headers?: Record<string, string> };
+
+type Person = { id: string; roleKey: string; entities: string[]; permissions: string[] };
+
+/**
+ * Misma forma en todas las rutas de anticipos (web y apps leen una sola).
+ * `PaymentProof.eventId` no es relación en Prisma: `event` se pega con `withEvents`.
+ */
+const ADVANCE_INCLUDE = {
+  uploadedBy: { select: { id: true, fullName: true } },
+  decidedBy: { select: { id: true, fullName: true } },
+  paidBy: { select: { id: true, fullName: true } },
+} satisfies Prisma.PaymentProofInclude;
+
+const ADVANCE_STATUS_LABEL: Record<AdvanceStatus, string> = {
+  PENDING: 'pendiente',
+  APPROVED: 'aprobado',
+  REJECTED: 'rechazado',
+  PAID: 'pagado',
+};
+
+/** Quien autoriza OC en la entidad del evento (mismas reglas que en órdenes de compra). */
+export function canApproveAdvance(p: Person, entity: string): boolean {
+  const role = p.roleKey as RoleKey;
+  if (!hasPermission(role, p.permissions, PERMISSIONS.PO_AUTHORIZE)) return false;
+  if (!canAccessEventOps(p.entities as EntityKey[], role, entity as EntityKey)) return false;
+  if (role === 'gerente_arta' && entity !== 'ARTA') return false;
+  if (role === 'dir_auditorio' && entity !== 'EXPLANADA') return false;
+  return true;
+}
+
+/** Quien marca OC pagadas o edita finanzas en la entidad del evento. */
+export function canPayAdvance(p: Person, entity: string): boolean {
+  const role = p.roleKey as RoleKey;
+  if (
+    !hasPermission(role, p.permissions, PERMISSIONS.PO_MARK_PAID) &&
+    !hasPermission(role, p.permissions, PERMISSIONS.FINANCE_EDIT)
+  ) {
+    return false;
+  }
+  return canAccessEventOps(p.entities as EntityKey[], role, entity as EntityKey);
+}
+
+function mxn(amount: Prisma.Decimal | number | null | undefined) {
+  return amount != null
+    ? Number(amount).toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })
+    : 'Sin monto';
+}
 
 @Controller('finance')
 @UseGuards(JwtAuthGuard)
@@ -97,6 +148,127 @@ export class FinanceController {
     ) {
       throw new ForbiddenException('Sin permiso para ver finanzas');
     }
+  }
+
+  private async orgPeople(organizationId: string | null): Promise<Person[]> {
+    return this.prisma.user.findMany({
+      where: { active: true, ...(organizationId ? { organizationId } : {}) },
+      select: { id: true, roleKey: true, entities: true, permissions: true },
+    });
+  }
+
+  /** Un anticipo (PaymentProof sin OC y con estado) que el usuario puede ver. */
+  private async loadAdvance(user: AuthUser, id: string) {
+    const proof = await this.prisma.paymentProof.findUnique({ where: { id } });
+    if (!proof || proof.purchaseOrderId || !proof.advanceStatus || !proof.eventId) {
+      throw new NotFoundException('Anticipo no encontrado');
+    }
+    const event = await this.prisma.event.findUnique({
+      where: { id: proof.eventId },
+      select: { id: true, name: true, entity: true, status: true, organizationId: true },
+    });
+    if (!event) throw new NotFoundException('Anticipo no encontrado');
+    assertSameTenant(user, event.organizationId);
+    if (!canAccessEventOps(user.entities as EntityKey[], user.roleKey as RoleKey, event.entity as EntityKey)) {
+      throw new ForbiddenException();
+    }
+    return { ...proof, event, advanceStatus: proof.advanceStatus };
+  }
+
+  /** Pega `event { id, name, entity }` a cada anticipo (null si el evento ya no existe). */
+  private async withEvents<T extends { eventId: string | null }>(rows: T[]) {
+    const ids = [...new Set(rows.map((r) => r.eventId).filter((id): id is string => !!id))];
+    const events = ids.length
+      ? await this.prisma.event.findMany({ where: { id: { in: ids } }, select: { id: true, name: true, entity: true } })
+      : [];
+    const byId = new Map(events.map((e) => [e.id, e]));
+    return rows.map((r) => ({ ...r, event: (r.eventId && byId.get(r.eventId)) || null }));
+  }
+
+  private async withAdvanceInclude(id: string) {
+    const row = await this.prisma.paymentProof.findUnique({ where: { id }, include: ADVANCE_INCLUDE });
+    if (!row) throw new NotFoundException('Anticipo no encontrado');
+    return (await this.withEvents([row]))[0];
+  }
+
+  private async auditAdvance(
+    req: AuditReq,
+    organizationId: string | null,
+    action: string,
+    id: string,
+    metaJson: Prisma.InputJsonObject,
+  ) {
+    await this.prisma.auditLog.create({
+      data: {
+        userId: req.user.id,
+        organizationId,
+        action,
+        resource: 'PaymentProof',
+        resourceId: id,
+        metaJson,
+        ip: req.ip,
+        userAgent: req.headers?.['user-agent']?.slice(0, 300),
+      },
+    });
+  }
+
+  /** Avisos de anticipos: siempre llevan a la tarjeta en `/advances`. Uno que falla no tumba la operación. */
+  private async notifyAdvance(
+    actor: AuthUser,
+    event: { name: string; entity: string; organizationId: string | null },
+    advanceId: string,
+    items: Array<{ userIds: string[]; type: string; title: string; body: string }>,
+  ) {
+    try {
+      const seen = new Set<string>([actor.id]);
+      const inputs: Parameters<NotificationsService['notifyMany']>[0] = [];
+      for (const item of items) {
+        for (const userId of item.userIds) {
+          if (!userId || seen.has(userId)) continue;
+          seen.add(userId);
+          inputs.push({
+            userId,
+            organizationId: event.organizationId,
+            actorId: actor.id,
+            type: item.type,
+            title: item.title,
+            body: item.body,
+            linkUrl: `/advances?advance=${advanceId}`,
+            entity: event.entity as EntityKey,
+          });
+        }
+      }
+      if (inputs.length) await this.notifications.notifyMany(inputs);
+    } catch {
+      /* un aviso que falla no tumba la operación */
+    }
+  }
+
+  private assertAdvanceStatus(current: AdvanceStatus, expected: AdvanceStatus, verb: string) {
+    if (current !== expected) {
+      throw new ConflictException(
+        `Este anticipo ya está ${ADVANCE_STATUS_LABEL[current]}; solo se puede ${verb} uno ${ADVANCE_STATUS_LABEL[expected]}`,
+      );
+    }
+  }
+
+  /**
+   * Mueve el estado solo si sigue en `from`: dos personas resolviendo a la vez
+   * no pueden aprobar y rechazar el mismo anticipo.
+   */
+  private async moveAdvance(
+    id: string,
+    from: AdvanceStatus,
+    verb: string,
+    data: Prisma.PaymentProofUncheckedUpdateManyInput,
+  ) {
+    const { count } = await this.prisma.paymentProof.updateMany({ where: { id, advanceStatus: from }, data });
+    if (count === 0) {
+      const now = await this.prisma.paymentProof.findUnique({ where: { id }, select: { advanceStatus: true } });
+      this.assertAdvanceStatus(now?.advanceStatus ?? from, from, verb);
+      throw new ConflictException('El anticipo cambió mientras lo resolvías; vuelve a cargarlo');
+    }
+    return this.withAdvanceInclude(id);
   }
 
   /** Mirror FinanceRun into CORRIDA_FINANCIERA checklist checks */
@@ -169,50 +341,231 @@ export class FinanceController {
     return this.prisma.financeRun.findMany({ where: { eventId } });
   }
 
+  /** Solicitar un anticipo: nace `PENDING` y le avisa a quien lo puede aprobar. */
   @Post('advances')
   async createAdvance(
-    @Req() req: { user: AuthUser },
-    @Body() body: { eventId: string; label?: string; amount?: number; fileUrl: string },
+    @Req() req: AuditReq,
+    @Body() body: { eventId: string; label?: string; amount?: number | string; note?: string; fileUrl?: string },
   ) {
+    const role = req.user.roleKey as RoleKey;
     if (
-      !hasPermission(req.user.roleKey as RoleKey, req.user.permissions, PERMISSIONS.FINANCE_EDIT) &&
-      !hasPermission(req.user.roleKey as RoleKey, req.user.permissions, PERMISSIONS.FINANCE_VIEW)
+      (!hasPermission(role, req.user.permissions, PERMISSIONS.FINANCE_EDIT) &&
+        !hasPermission(role, req.user.permissions, PERMISSIONS.FINANCE_VIEW)) ||
+      !hasPermission(role, req.user.permissions, PERMISSIONS.CHECKLIST_EDIT)
     ) {
-      throw new ForbiddenException('Sin permiso para registrar anticipos');
+      throw new ForbiddenException('Sin permiso para solicitar anticipos');
     }
+    const amount = Number(body?.amount);
+    if (body?.amount == null || body.amount === '' || !Number.isFinite(amount) || amount <= 0) {
+      throw new BadRequestException('Escribe el monto del anticipo (mayor a cero)');
+    }
+    if (!body.eventId) throw new BadRequestException('Elige el evento del anticipo');
     const event = await this.assertEventOps(req.user, body.eventId);
     assertEventNotClosed(event.status);
-    const proof = await this.prisma.paymentProof.create({
+
+    const row = await this.prisma.paymentProof.create({
       data: {
         eventId: body.eventId,
-        label: body.label || 'Anticipo',
-        amount: body.amount,
-        fileUrl: body.fileUrl,
+        label: body.label?.trim() || 'Anticipo',
+        amount,
+        note: body.note?.trim() || null,
+        fileUrl: body.fileUrl?.trim() || null,
         uploadedById: req.user.id,
+        advanceStatus: 'PENDING',
       },
+      include: ADVANCE_INCLUDE,
     });
-    const amount = body.amount != null
-      ? ` · ${Number(body.amount).toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })}`
-      : '';
-    await this.notifyFinance(
-      req.user,
-      event,
-      'finance.advance',
-      `${shortName((req.user as { fullName?: string }).fullName) || 'Alguien del equipo'} registró un anticipo`,
-      `${proof.label}${amount} · ${event.name}`,
-    );
-    return proof;
+    const created = { ...row, event: { id: event.id, name: event.name, entity: event.entity } };
+    await this.auditAdvance(req, event.organizationId, 'advance.request', created.id, {
+      eventId: event.id,
+      label: created.label,
+      amount,
+      hasFile: !!created.fileUrl,
+    });
+
+    const approvers = (await this.orgPeople(event.organizationId))
+      .filter((p) => canApproveAdvance(p, event.entity))
+      .map((p) => p.id);
+    await this.notifyAdvance(req.user, event, created.id, [
+      {
+        userIds: approvers,
+        type: 'advance.requested',
+        title: `${shortName(req.user.fullName) || 'Alguien del equipo'} pidió un anticipo`,
+        body: `${created.label} · ${mxn(amount)} · ${event.name}`,
+      },
+    ]);
+    return created;
   }
 
   @Get('advances/event/:eventId')
   async advances(@Req() req: { user: AuthUser }, @Param('eventId') eventId: string) {
     this.assertFinanceView(req.user);
-    await this.assertEventOps(req.user, eventId);
-    return this.prisma.paymentProof.findMany({
+    const event = await this.assertEventOps(req.user, eventId);
+    const rows = await this.prisma.paymentProof.findMany({
       where: { eventId, purchaseOrderId: null },
       orderBy: { createdAt: 'desc' },
-      include: { uploadedBy: { select: { fullName: true } } },
+      include: ADVANCE_INCLUDE,
     });
+    return rows.map((r) => ({ ...r, event: { id: event.id, name: event.name, entity: event.entity } }));
+  }
+
+  /**
+   * Lo que yo puedo resolver: `PENDING` donde apruebo (nunca lo que pedí yo) y
+   * `APPROVED` donde pago. Solo eventos abiertos de mi organización.
+   */
+  @Get('advances/pending')
+  async pendingAdvances(@Req() req: { user: AuthUser }) {
+    const me = req.user;
+    const events = await this.prisma.event.findMany({
+      where: {
+        status: { notIn: ['CLOSED', 'CANCELLED'] },
+        ...(me.roleKey === 'super_admin' ? {} : { organizationId: tenantIdOf(me) }),
+      },
+      select: { id: true, name: true, entity: true },
+    });
+    const byId = new Map(events.map((e) => [e.id, e]));
+    if (!byId.size) return [];
+    const rows = await this.prisma.paymentProof.findMany({
+      where: {
+        purchaseOrderId: null,
+        advanceStatus: { in: ['PENDING', 'APPROVED'] },
+        eventId: { in: [...byId.keys()] },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 300,
+      include: ADVANCE_INCLUDE,
+    });
+    return rows
+      .map((r) => ({ ...r, event: byId.get(r.eventId || '') || null }))
+      .filter((r) => {
+        if (!r.event) return false;
+        if (r.advanceStatus === 'PENDING') return r.uploadedById !== me.id && canApproveAdvance(me, r.event.entity);
+        return canPayAdvance(me, r.event.entity);
+      });
+  }
+
+  /** Mis solicitudes, todas, más recientes primero. */
+  @Get('advances/mine')
+  async myAdvances(@Req() req: { user: AuthUser }) {
+    const rows = await this.prisma.paymentProof.findMany({
+      where: { uploadedById: req.user.id, purchaseOrderId: null, advanceStatus: { not: null } },
+      orderBy: { createdAt: 'desc' },
+      take: 200,
+      include: ADVANCE_INCLUDE,
+    });
+    return this.withEvents(rows);
+  }
+
+  @Patch('advances/:id/approve')
+  async approveAdvance(@Req() req: AuditReq, @Param('id') id: string) {
+    const advance = await this.loadAdvance(req.user, id);
+    if (!canApproveAdvance(req.user, advance.event.entity)) {
+      throw new ForbiddenException('No puedes aprobar anticipos de esta entidad');
+    }
+    if (advance.uploadedById === req.user.id) {
+      throw new ForbiddenException('No puedes aprobar tu propia solicitud');
+    }
+    assertEventNotClosed(advance.event.status);
+    this.assertAdvanceStatus(advance.advanceStatus, 'PENDING', 'aprobar');
+
+    const updated = await this.moveAdvance(id, 'PENDING', 'aprobar', {
+      advanceStatus: 'APPROVED',
+      decidedById: req.user.id,
+      decidedAt: new Date(),
+      rejectReason: null,
+    });
+    await this.auditAdvance(req, advance.event.organizationId, 'advance.approve', id, {
+      eventId: advance.event.id,
+      amount: Number(advance.amount ?? 0),
+      requestedBy: advance.uploadedById,
+    });
+
+    const who = shortName(req.user.fullName) || 'Dirección';
+    const detail = `${advance.label || 'Anticipo'} · ${mxn(advance.amount)} · ${advance.event.name}`;
+    const payers = (await this.orgPeople(advance.event.organizationId))
+      .filter((p) => canPayAdvance(p, advance.event.entity))
+      .map((p) => p.id);
+    await this.notifyAdvance(req.user, advance.event, id, [
+      { userIds: [advance.uploadedById || ''], type: 'advance.approved', title: `${who} aprobó tu anticipo`, body: detail },
+      { userIds: payers, type: 'advance.to_pay', title: `Anticipo aprobado por pagar · ${who}`, body: detail },
+    ]);
+    return updated;
+  }
+
+  @Patch('advances/:id/reject')
+  async rejectAdvance(@Req() req: AuditReq, @Param('id') id: string, @Body() body: { reason?: string }) {
+    const reason = (body?.reason || '').trim();
+    if (reason.length < 3) {
+      throw new BadRequestException('Escribe el motivo del rechazo (mínimo 3 caracteres)');
+    }
+    const advance = await this.loadAdvance(req.user, id);
+    if (!canApproveAdvance(req.user, advance.event.entity)) {
+      throw new ForbiddenException('No puedes rechazar anticipos de esta entidad');
+    }
+    if (advance.uploadedById === req.user.id) {
+      throw new ForbiddenException('No puedes resolver tu propia solicitud');
+    }
+    assertEventNotClosed(advance.event.status);
+    this.assertAdvanceStatus(advance.advanceStatus, 'PENDING', 'rechazar');
+
+    const updated = await this.moveAdvance(id, 'PENDING', 'rechazar', {
+      advanceStatus: 'REJECTED',
+      decidedById: req.user.id,
+      decidedAt: new Date(),
+      rejectReason: reason,
+    });
+    await this.auditAdvance(req, advance.event.organizationId, 'advance.reject', id, {
+      eventId: advance.event.id,
+      amount: Number(advance.amount ?? 0),
+      requestedBy: advance.uploadedById,
+      reason,
+    });
+
+    const who = shortName(req.user.fullName) || 'Dirección';
+    await this.notifyAdvance(req.user, advance.event, id, [
+      {
+        userIds: [advance.uploadedById || ''],
+        type: 'advance.rejected',
+        title: `${who} rechazó tu anticipo`,
+        body: `${advance.label || 'Anticipo'} · ${mxn(advance.amount)} · ${advance.event.name} · Motivo: ${reason}`,
+      },
+    ]);
+    return updated;
+  }
+
+  @Patch('advances/:id/paid')
+  async markAdvancePaid(@Req() req: AuditReq, @Param('id') id: string, @Body() body: { proofUrl?: string }) {
+    const advance = await this.loadAdvance(req.user, id);
+    if (!canPayAdvance(req.user, advance.event.entity)) {
+      throw new ForbiddenException('No puedes marcar anticipos como pagados');
+    }
+    assertEventNotClosed(advance.event.status);
+    this.assertAdvanceStatus(advance.advanceStatus, 'APPROVED', 'marcar pagado');
+
+    const proofUrl = body?.proofUrl?.trim() || null;
+    const updated = await this.moveAdvance(id, 'APPROVED', 'marcar pagado', {
+      advanceStatus: 'PAID',
+      paidById: req.user.id,
+      paidAt: new Date(),
+      paidProofUrl: proofUrl,
+    });
+    await this.auditAdvance(req, advance.event.organizationId, 'advance.pay', id, {
+      eventId: advance.event.id,
+      amount: Number(advance.amount ?? 0),
+      requestedBy: advance.uploadedById,
+      hasProof: !!proofUrl,
+    });
+
+    const who = shortName(req.user.fullName) || 'Finanzas';
+    await this.notifyAdvance(req.user, advance.event, id, [
+      {
+        userIds: [advance.uploadedById || ''],
+        type: 'advance.paid',
+        title: 'Tu anticipo ya se pagó',
+        body: `${advance.label || 'Anticipo'} · ${mxn(advance.amount)} · ${advance.event.name} · ${who}`,
+      },
+    ]);
+    return updated;
   }
 
   @Patch(':id')

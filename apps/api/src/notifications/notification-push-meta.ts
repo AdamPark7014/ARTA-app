@@ -10,6 +10,7 @@ export type PushMeta = { channel: PushChannel; priority: 'high' | 'normal' };
 
 /** Lo que pide una decisión de alguien (autorizar, revisar, firmar) suena aunque esté en segundo plano. */
 const APPROVAL_TYPES = new Set([
+  'advance.requested',
   'po.requested',
   'po.updated',
   'task.submitted',
@@ -28,6 +29,8 @@ const URGENT_TASK_TYPES = new Set([
   'task.overdue',
 ]);
 const URGENT_EVENT_TYPES = new Set(['event.cancelled', 'event.rescheduled', 'event.deleted', 'event.risk']);
+/** Anticipo por pagar o rechazado: alguien tiene que moverse. Aprobado y pagado, solo para enterarse. */
+const URGENT_FINANCE_TYPES = new Set(['advance.to_pay', 'advance.rejected']);
 
 export function pushMetaFor(type: string): PushMeta {
   const t = (type || '').toLowerCase();
@@ -37,8 +40,8 @@ export function pushMetaFor(type: string): PushMeta {
   if (t.startsWith('task.')) {
     return { channel: 'tasks', priority: URGENT_TASK_TYPES.has(t) ? 'high' : 'normal' };
   }
-  if (t.startsWith('po.') || t.startsWith('finance.') || t.endsWith('.paid')) {
-    return { channel: 'finance', priority: 'normal' };
+  if (t.startsWith('po.') || t.startsWith('finance.') || t.startsWith('advance.') || t.endsWith('.paid')) {
+    return { channel: 'finance', priority: URGENT_FINANCE_TYPES.has(t) ? 'high' : 'normal' };
   }
   if (t.startsWith('campaign.') || t.startsWith('convenios.')) {
     return { channel: 'approvals', priority: 'normal' };

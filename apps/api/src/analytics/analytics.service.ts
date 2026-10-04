@@ -85,7 +85,8 @@ export class AnalyticsService {
     const eventIds = events.map((e) => e.id);
     const advances = eventIds.length
       ? await this.prisma.paymentProof.findMany({
-          where: { eventId: { in: eventIds }, purchaseOrderId: null },
+          // Solo lo que ya se entregó: una solicitud pendiente o rechazada no es dinero dado.
+          where: { eventId: { in: eventIds }, purchaseOrderId: null, advanceStatus: 'PAID' },
           select: { amount: true },
         })
       : [];
