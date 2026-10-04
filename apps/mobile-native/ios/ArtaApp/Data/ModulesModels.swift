@@ -384,7 +384,8 @@ struct PurchaseOrderRow: Codable, Equatable, Identifiable {
     /// La pone la app: de qué entidad se pidió la lista.
     var entity: String? = nil
 
-    var isPending: Bool { status == "PENDING_AUTH" || status == "DRAFT" }
+    /// DRAFT es una orden regresada a borrador: no espera autorización.
+    var isPending: Bool { status == "PENDING_AUTH" }
     var isEventClosed: Bool { eventStatus == "CLOSED" || eventStatus == "CANCELLED" }
 }
 
@@ -429,7 +430,7 @@ struct PurchaseOrderDetail: Codable, Equatable, Identifiable {
     var lines: [PurchaseOrderLine]?
     var proofs: [PurchaseOrderProof]?
 
-    var isPending: Bool { status == "PENDING_AUTH" || status == "DRAFT" }
+    var isPending: Bool { status == "PENDING_AUTH" }
     var isEventClosed: Bool { event?.status == "CLOSED" || event?.status == "CANCELLED" }
 }
 
