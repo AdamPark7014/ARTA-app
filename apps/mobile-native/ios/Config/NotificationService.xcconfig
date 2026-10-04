@@ -1,0 +1,5 @@
+// Firma de la extensión NotificationService. Ver ArtaApp.xcconfig.
+CODE_SIGN_STYLE = Automatic
+DEVELOPMENT_TEAM =
+
+#include? "NotificationService.signing.xcconfig"

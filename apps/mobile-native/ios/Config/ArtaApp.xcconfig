@@ -1,0 +1,7 @@
+// Firma del target ArtaApp. Por defecto, automática y sin equipo (sirve para
+// compilar en simulador). El flujo de TestFlight escribe
+// ArtaApp.signing.xcconfig (ignorado por git) con firma manual y su perfil.
+CODE_SIGN_STYLE = Automatic
+DEVELOPMENT_TEAM =
+
+#include? "ArtaApp.signing.xcconfig"

@@ -6,5 +6,7 @@ build/
 build.log
 .spm-cache/
 .swiftpm/
+# Firma de publicación: la escribe el flujo de TestFlight en el runner.
+Config/*.signing.xcconfig
 # `Resources/GoogleService-Info.plist` SÍ se versiona (proyecto arta-app-fde07, igual que NEXARA):
 # es configuración de cliente que va dentro de la app, no una llave.
