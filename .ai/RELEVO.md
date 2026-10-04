@@ -6,6 +6,23 @@
   (Adam es el único programador).
 - **Producción:** `4745dd4` desplegado desde `main` el 2026-09-27 22:39 UTC (lo de abajo NO está desplegado)
 
+## Turno claude-code (2026-10-04, 11:50): Firebase de ARTA y apps móviles
+
+- **Proyecto Firebase `arta-app-fde07`** (cuenta de Adam), sin Gemini ni Analytics; Cloud Messaging V1
+  habilitado. Apps registradas: Android e iOS, las dos `com.artaproducciones.ops`.
+- `android/app/google-services.json` e `ios/Resources/GoogleService-Info.plist` **ahora se versionan**
+  (como NEXARA; son config de cliente). Con eso el CI de iOS deja de fallar por el plist.
+- Primera corrida de «iOS · compilar» (run 37221297263): falló SOLO porque faltaba el plist; no llegó a
+  compilar Swift. Hay que relanzarla después de este commit.
+- **Pendiente de Adam**: (1) la clave de la cuenta de servicio se pegó en el chat → generar una nueva,
+  subirla con `pwsh -File deploy/firebase-cuenta-servicio.ps1` y borrar la vieja (`73faf0e2…`) en Google
+  Cloud; hoy el API sigue con «Push FCM apagado». (2) Clave APNs `.p8` en Firebase → Cloud Messaging.
+- **Cursor está haciendo la paridad web ↔ app (Android e iOS)**. Después: compilar y publicar con las
+  cuentas de NEXARA (App Store Connect / Play Console). Falta para publicar: App ID y perfil de
+  `com.artaproducciones.ops` en el equipo de Apple de NEXARA, flujo `ios-testflight.yml` de ARTA con sus
+  secretos, ficha en Play Console y llave de firma de Android (`key.properties` no existe: hoy el
+  release sale firmado con la de debug).
+
 ## Turno claude-code (2026-10-04): «Correcciones Dashboard 30 de SEP 2026» (PDF del cliente)
 
 PDF `Downloads\Dashboard ARTA 30 de SEP 2026.pdf`, seis puntos. Los seis hechos, con pruebas, en `main`
