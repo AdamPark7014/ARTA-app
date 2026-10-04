@@ -4,54 +4,59 @@
 - **Fecha:** 2026-10-04
 - **Rama:** main
   (Adam es el único programador).
-- **Producción:** `4745dd4` desplegado desde `main` el 2026-09-27 22:39 UTC (lo de abajo NO está desplegado)
+- **Producción:** `4745dd4` desplegado desde `main` el 2026-09-27 22:39 UTC (todo lo de abajo NO está desplegado)
 
-## Turno cursor (2026-10-04): chat Android v2 según `docs/CHAT-V2-CONTRATO.md` (sin push ni release)
+## Turno cursor (2026-10-04, 11:45–13:00): paridad web ↔ app, push de cada acción y chat v2
 
-- Commits: `4677826` (conversación), `a030df9` (búsqueda, guardados, nueva conversación), `e2bf445` (lista,
-  info del canal, rutas, imágenes), `03c8600` (vistas previas y avatar de grupo). Solo se tocó
-  `ui/chat/**`, `data/api/ArtaApi.kt`, `data/realtime/RealtimeClient.kt` y rutas en `ui/ArtaApp.kt`.
-  `4677826` arrastró sin querer los campos `entities`/`permissions` de `UserDto` que otro agente tenía sin
-  commitear en `ArtaApi.kt` (aditivos, se dejaron).
-- **No se corrió `relevo cerrar`** (hace `git add -A` y metería el Swift sin commitear del agente de iOS).
-- Pantallas nuevas: `ChatSearchScreen`, `SavedMessagesScreen`, `NewConversationScreen` (DM, grupo 2–8,
-  canal), `ChannelInfoScreen`. Rutas literales `chat/buscar`, `chat/guardados`, `chat/nueva`,
-  `chat/{id}/info` declaradas antes de `chat/{channelId}?msg=`: así `HomeScreen` no cambia (sigue usando
-  `openChat(id)`); las constantes están en `ChatRoutes` (`ConversationScreen.kt`).
-- Hecho: secciones Canales / Eventos / Mensajes directos / Explorar canales, No molestar, presencia,
-  markdown §7, chips de mención, citas con deslizar, guardados, vista previa de enlaces, emojis completos,
-  borradores por canal (8000), visor con zoom y paginado, «Visto / Visto por N», «Mensaje eliminado»,
-  divisor de no leídos y «↓ N nuevos», esqueleto / vacío / error con «Reintentar», imágenes sin recorte.
-- Verificación: `gradlew :app:compileDebugKotlin` limpio (con `--rerun-tasks`). **No se probó en
-  dispositivo ni contra el API v2 real.** Pendiente: abrir un canal de «Explorar canales» del que no se es
-  miembro (depende de cómo responda el API), y revisar a ojo todo lo anterior.
+Pedido de Adam: «paridad total de la app móvil, UI/UX perfecta, push de cada cosa (tareas, solicitudes,
+mensajes…), chat más profesional que Slack; manda varios agentes; **avísame antes de compilar** (iOS y
+Android se publican con las cuentas de NEXARA)». Decisión de Adam: **híbrido** (lo diario nativo, el resto
+en vista web dentro de la app con la misma sesión) y chat «todo, en orden».
 
-## Turno cursor (2026-10-04): chat web v2 según `docs/CHAT-V2-CONTRATO.md` (commit `93a78bd`, sin push ni deploy)
+Contratos (léelos antes de tocar móvil o chat):
+- `docs/CHAT-V2-CONTRATO.md` — chat v2 (API, web, Android, iOS).
+- `docs/PARIDAD-MOVIL-CONTRATO.md` — pestañas, rutas nativas, vista web con handoff, enlaces de avisos.
 
-- Varios agentes trabajan a la vez en este checkout (API del chat, Android, iOS). Este turno solo tocó
-  `apps/web/app/(app)/chat/page.tsx`, `apps/web/components/chat/**` y `apps/web/styles/_chat.scss`.
-  **No se corrió `relevo cerrar`** porque hace `git add -A` y metería el trabajo sin commitear de los otros.
-- `page.tsx` queda como orquestador. Componentes nuevos: `Composer`, `MessageList`, `ChatPanels`
-  (fijados, guardados, info del canal), `ChatDialogs` (nueva conversación, Ctrl+K), `EmojiPicker` +
-  `emoji-data` (local, sin CDN), `chat-markdown` (parser puro, sin `dangerouslySetInnerHTML`), `chat-ui`.
-- Hecho:
-  - Menciones `[@Nombre](user:id)` como chips dorados, autocompletado con teclado y `@canal` para moderadores.
-  - Markdown del §7; 8 reacciones rápidas más el picker completo; quién reaccionó al pasar el cursor.
-  - Responder citando (`replyToId`); guardados (`GET /chat/saved`).
-  - Nuevas conversaciones: DM, grupo de 2 a 8 personas (`POST /chat/group-dm`) y canal con `memberIds`.
-  - Info del canal: editar, miembros con presencia, agregar o quitar, salir, archivar, silenciar 8 h, 1 semana o siempre.
-  - Presencia (`GET /chat/presence` + `chat:presence`); divisor «Mensajes nuevos» y botón «↓ N nuevos».
-  - Vista previa de enlaces (`GET /chat/link-preview`) y borradores por canal.
-  - Visor con zoom, arrastre y deslizar; reintento de subidas; «Mensaje eliminado».
-  - No molestar (`/chat/prefs`); esqueleto, vacío y error con «Reintentar».
-  - Atajos: Ctrl+K, Esc y flecha arriba para editar. A 390 px se ve como lista y conversación, con hojas a pantalla completa.
-- Todo campo nuevo del contrato se trata como opcional: la página funciona con el API actual.
-- Verificación: `npx -w apps/web tsc --noEmit -p tsconfig.json` limpio; `_chat.scss` compila con sass.
-  `apps/web` no tiene script de lint; no hay e2e de chat. **No se revisó en navegador.**
-- A medias o dependiente del API: presencia con `online` (hoy el servidor manda `status`; la web ignora el
-  socket hasta que responda `GET /chat/presence`), `deleted: true` en `chat:message-updated`, `isGroupDm`,
-  `replyTo` en la respuesta, `saved`, `/chat/prefs` y `/chat/link-preview`. Falta una e2e del chat y
-  revisarlo a ojo en escritorio y a 390 px.
+Trabajo de 11 agentes en paralelo, ~36 commits en `main` (de `9250f5a` a este cierre):
+- **API chat v2** (`56ac02f`): responder citando (`replyToId`), guardados (`ChatSavedMessage`), grupos de
+  directos (`isGroupDm`, `POST /chat/group-dm`), presencia (`GET /chat/presence` + socket), vista previa de
+  enlaces con anti-SSRF (`GET /chat/link-preview`), No molestar (`User.chatDndUntil`, `/chat/prefs`; corta
+  todo push en `push-dispatch.service.ts`), «Mensaje eliminado» si tiene hilo, avisos `chat.added`,
+  `chat.removed`, `chat.reaction`, `chat.thread_reply`. **Migración nueva `20261004150000_chat_v2`**
+  (solo aditiva).
+- **Avisos de cada acción** (`8995091`, `af1e35f`, `97c2899`, `fdaab4e`, `8bb2f69`): ~50 tipos nuevos
+  (tareas: quitar, reabrir, cambios, evidencia, borrar; recordatorio diario 8:00 CDMX `task.due_soon` /
+  `task.overdue`; eventos; OC; firmas de formatos; documentos, archivos, carpetas; calendario; patrocinios;
+  boletera con hitos 50/75/90 % y agotado; usuarios; invitaciones; proveedores; alertas horarias en
+  campana). Canal push nuevo `documents`. `linkUrl` con las formas del contrato. Helpers
+  `notifyUsers` / `notifyOncePerDay` / `whoCan` en `NotificationsService`. Menciones con
+  `channel_id`/`message_id` y categoría `ARTA_CHAT` en iOS (`d58b1b0`).
+- **Web chat v2** (`93a78bd`): menciones como chips (antes salía el token crudo), autocompletado, markdown,
+  emojis locales, citas, guardados, nueva conversación (DM/grupo/canal), info del canal y miembros,
+  presencia, no leídos, vistas previas, borradores, visor, No molestar, Ctrl+K; 390 px como app.
+- **Web modo app y teléfono** (`fbca247`, `4a762f5`, `49045b2`): User-Agent `ArtaApp/` → `data-shell="app"`
+  sin barra lateral ni superior, safe-area; en el teléfono la hamburguesa **no aparecía** (corregido);
+  pasada responsive global. `e2e/mobile-shell.spec.ts` 30/30.
+- **Push en navegador** (`c3a6e4d`): FCM web con SW propio, tarjeta en Configuración, PWA instalable
+  (`start_url /dashboard`, íconos), build args `NEXT_PUBLIC_FIREBASE_*`. **Apagado hasta que Adam registre
+  la app web en Firebase y ponga las variables** (ver Siguiente paso).
+- **Android** (`da5bd83`, `795f0f8`, `4fa4254`, `4438993`, `4677826`, `a030df9`, `e2bf445`, `03c8600`):
+  pestañas Inicio · Chats · Tareas · Avisos · Más; vista web con handoff `/auth/handoff` → `?_nxt=` (respaldo:
+  copiar cookies); «Más» con los módulos del rol; avisos con enlace nativo y canal `arta_documents`;
+  módulos nativos Inicio, Tareas, detalle de tarea, Aprobaciones (tareas por revisar y OC), Eventos con mes,
+  detalle de evento; chat v2 completo. `gradlew :app:assembleDebug` **verde**.
+- **iOS** (`ec3aec4`, `8f41f67`, `f2fc455`, `19cedb1`, `be903d4`, `0bde357`, `c1c3b77`, `dcb4019`, `a51e120`):
+  lo mismo que Android en SwiftUI. **Nunca compilado** (Windows): primer chequeo real = `ios-build.yml`.
+  Puntos frágiles anotados por los agentes: atributos de `AttributedString`, gestos dentro de `TabView`
+  paginado, aislamiento de main actor con SDK iOS 18, `case ..<(-1)`, doble opcional en `UpdateTaskBody`.
+
+Verificación de este cierre:
+- API: `prisma validate` ok, `tsc` limpio, jest **420 en verde** (1 omitido).
+- Web: `tsc` limpio, `next build` ok. Playwright: 53 en verde, **27 fallan desde antes** (selectores
+  viejos: «Editar aquí», «Ventana de OC abierta», «Calendario de eventos», `.event-facts`, «Lista para
+  pagar»; `public-site` necesita el API en :4000; editores de Excel del PR #5). Ninguna toca código de hoy.
+  `app-shell.spec` corregido (reloj fijo, 7/7).
+- Android: `assembleDebug` verde. iOS: sin compilar.
 
 ## Turno claude-code (2026-10-04, 11:50): Firebase de ARTA y apps móviles
 
@@ -317,24 +322,32 @@ Pedido: «todo mergeado y fusionado, canónico en `main`; no quiero ramas sobree
 - El servidor solo tiene `main`; se borró la referencia vieja `remotes/bundle/main`.
 - Rollback: `bash deploy/rollback.sh` (añadir `--dump 20260927-1454.sql.gz` para restaurar también la base).
 
+
 ## A medias
 
-1. **Push apagado en producción**: `FIREBASE_SERVICE_ACCOUNT_JSON` no está en `deploy/.env.arta` del
-   servidor. Adam lo añade (no el agente) y reinicia el API:
-   `docker compose --env-file deploy/.env.arta -f deploy/docker-compose.arta.yml up -d api`.
-2. **iOS nunca se ha compilado**: lanzar `ios-build.yml` (workflow_dispatch) y corregir.
-3. Web Push con el navegador cerrado (VAPID y service worker): no está hecho.
-4. Android y iOS sin probar en dispositivo real.
-5. Las e2e del PR #5 están sin revisar contra el editor de Excel de producción.
+1. **Push apagado en producción** hasta que Adam suba la cuenta de servicio NUEVA con
+   `pwsh -File deploy/firebase-cuenta-servicio.ps1` (la vieja `73faf0e2…` se pegó en un chat: borrarla).
+2. **iOS nunca compilado**: lanzar «iOS · compilar» (`ios-build.yml`) **solo cuando Adam dé luz verde**, y
+   corregir lo que salga. Luego TestFlight con el equipo de Apple de NEXARA.
+3. Nada de hoy está desplegado. Al desplegar: migraciones `20261004120000_task_co_assignees` y
+   `20261004150000_chat_v2`, y `scripts/upgrade-format-templates.ts --dry` / `--confirm-produccion`
+   (Rueda de prensa v3).
+4. Huecos que la API no tiene (la app no los inventa): aprobar/rechazar/pagar **anticipos** (solo se
+   registran), motivo al rechazar una OC, comentarios y prioridad en tareas. Preguntado a Adam si se hace
+   el flujo de anticipos.
+5. Nada probado en teléfono real ni el chat v2 visto en navegador.
+6. 27 e2e viejas de la web por actualizar (lista arriba).
 
 ## Siguiente paso
 
-1. Adam: Firebase de ARTA (Android e iOS, clave APNs `.p8`) y la cuenta de servicio en `.env.arta`.
-   Pasos en `apps/mobile-native/README.md`.
-2. Correr «iOS · compilar» en GitHub Actions hasta verde.
-3. Probar en teléfonos: adjuntos en ambos sentidos, responder desde la notificación y leído sincronizado.
-4. Revisar visualmente en producción las tablas de Word y el visor de Excel (Campaña y Corrida).
-5. Pendientes de antes: deploy key de ARTA en GitHub, quitar `[SEED_DEMO]` con visto bueno.
+1. Adam: luz verde para compilar; cuenta de servicio nueva; clave APNs `.p8` en Firebase → Cloud
+   Messaging; para push en navegador: registrar app **Web** en Firebase (`arta-app-fde07`), sacar la clave
+   VAPID (Cloud Messaging → Certificados push web) y poner `NEXT_PUBLIC_FIREBASE_*` en el build de la web.
+2. «iOS · compilar» hasta verde; Android release firmado (falta `key.properties`; hoy firma con debug).
+3. Publicar con las cuentas de NEXARA: App ID/perfil `com.artaproducciones.ops`, `ios-testflight.yml` de
+   ARTA con secretos, ficha en Play Console.
+4. Deploy de API y web desde `main` (bundle + `update.sh --no-pull`) con las migraciones de arriba.
+5. Probar en teléfonos: tareas, aprobaciones, vista web con sesión, avisos que abren su pantalla, chat.
 
 ## No tocar
 
@@ -343,7 +356,7 @@ Pedido: «todo mergeado y fusionado, canónico en `main`; no quiero ramas sobree
 - No volver a symlinkar `/opt/traefik/config` a un repo de app.
 - No mover Traefik de puerto.
 - Conceptos de campaña: no romper al tocar Excel. El editor y el evaluador de Excel son los del PR #6.
-- Credenciales de Firebase: nunca en git.
-  - `google-services.json` y `GoogleService-Info.plist` están en `.gitignore`.
-  - La cuenta de servicio solo va por variable de entorno.
+- Firebase: `google-services.json` y `GoogleService-Info.plist` **sí se versionan** (config de cliente).
+  La cuenta de servicio nunca: solo por variable de entorno con el script.
+- No renombrar canales push existentes (`arta_<channel>` ya instalados en teléfonos).
 - No crear ramas: todo va a `main`.
