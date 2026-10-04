@@ -162,10 +162,16 @@ test.describe('Navegador de teléfono', () => {
     expect(await horizontalOverflow(page)).toBe(0);
     await page.screenshot({ path: path.join(SHOTS, 'web-dashboard.png'), fullPage: true });
 
-    const burger = page.getByRole('button', { name: 'Menú' });
+    const bell = page.locator('.notif-btn');
+    await bell.tap();
+    await expect(page.locator('.notif-panel')).toBeInViewport({ ratio: 1 });
+    await bell.tap();
+    await expect(page.locator('.notif-panel')).toHaveCount(0);
+
+    const burger = page.locator('button.nav-toggle');
     await expect(burger).toBeVisible();
     await burger.tap();
-    await expect(sidebar).toBeInViewport();
+    await expect(sidebar).toBeInViewport({ ratio: 1 });
     await page.screenshot({ path: path.join(SHOTS, 'web-drawer.png') });
 
     await sidebar

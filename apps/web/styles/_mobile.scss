@@ -42,6 +42,22 @@ body[data-shell='app'] {
 
 /* ── Teléfono ─────────────────────────────────────────────────────────────── */
 
+/* `.tab-bar` (más abajo en globals) pisaba el `display: none` del selector
+   móvil de pestañas del evento y salían las dos navegaciones a la vez. */
+@media (max-width: 768px) {
+  .tab-bar.event-tabs__desktop {
+    display: none;
+  }
+}
+
+/* Igual con la hamburguesa: el `.nav-toggle { display: none }` base va
+   después de su media query y el cajón quedaba sin forma de abrirse. */
+@media (max-width: 900px) {
+  .nav-toggle {
+    display: inline-flex;
+  }
+}
+
 @media (max-width: 640px) {
   .topbar {
     padding: 0.5rem 0.75rem;
@@ -68,8 +84,32 @@ body[data-shell='app'] {
     gap: 0.4rem;
   }
 
+  /* Anclado a la campana se salía por la izquierda: en teléfono va de lado a lado. */
+  .notif-panel {
+    position: fixed;
+    top: calc(3.5rem + env(safe-area-inset-top));
+    left: 0.5rem;
+    right: 0.5rem;
+    width: auto;
+    max-height: calc(100dvh - 5rem);
+    overflow-y: auto;
+  }
+
+  .oc-mini {
+    display: block;
+    overflow-x: auto;
+  }
+
   .content {
     padding: 0.85rem 0.75rem 2rem;
+  }
+
+  /* Rejillas de una columna: sin esto la columna implícita crece hasta el
+     min-content de su hijo más ancho (p. ej. la tira de pestañas del evento). */
+  .stack,
+  .sx-stack,
+  .ev-hero {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   /* Tablas: se desplazan dentro de su caja, nunca empujan la página. */
