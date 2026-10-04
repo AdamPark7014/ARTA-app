@@ -42,9 +42,8 @@ targets:
     sources:
       - path: ArtaApp
       - path: Resources/Assets.xcassets
-      # Configuración de cliente de Firebase. NO se versiona (.gitignore): CI la
-      # escribe desde un secreto antes de `xcodegen generate`. Sin ella la app
-      # compila y arranca, pero no recibe push.
+      # Configuración de cliente de Firebase (proyecto arta-app-fde07), versionada
+      # como en NEXARA. Sin ella la app compila y arranca, pero no recibe push.
       - path: Resources/GoogleService-Info.plist
         optional: true
         buildPhase: resources

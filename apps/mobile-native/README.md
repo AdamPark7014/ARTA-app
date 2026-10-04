@@ -31,20 +31,16 @@ Socket.IO en `/api/socket.io` con la misma cookie y push por FCM.
     (push silencioso `chat.read`).
   - Al cerrar sesión se da de baja el token del teléfono.
 
-## Puesta en marcha de Firebase (una sola vez, la hace Adam)
+## Firebase (proyecto `arta-app-fde07`, creado el 04-10-2026)
 
-1. En la consola de Firebase, crear (o usar) el proyecto de ARTA.
-2. Registrar la app **Android** `com.artaproducciones.ops` y bajar
-   `google-services.json` → `android/app/google-services.json` (no se versiona).
-3. Registrar la app **iOS** `com.artaproducciones.ops`, bajar
-   `GoogleService-Info.plist` → `ios/Resources/GoogleService-Info.plist` (no se
-   versiona; en CI se escribe desde un secreto) y subir la clave APNs `.p8`
-   del equipo de Apple en *Project settings → Cloud Messaging*.
-4. Crear una cuenta de servicio (*Project settings → Service accounts →
-   Generate new private key*) y poner su JSON (una línea o base64) en
-   `FIREBASE_SERVICE_ACCOUNT_JSON` del `.env.arta` del servidor; reiniciar `arta-api`.
-
-Sin estos archivos las dos apps compilan y funcionan, solo que sin push.
+- Apps registradas: **Android** y **iOS**, las dos `com.artaproducciones.ops`.
+- `android/app/google-services.json` e `ios/Resources/GoogleService-Info.plist`
+  **se versionan** (como en NEXARA): son configuración de cliente, no llaves.
+- **Clave APNs `.p8`** (pendiente, la sube Adam): *Configuración → Cloud Messaging →
+  App de Apple → Clave de autenticación de APNs*. Sin ella el iPhone no recibe push.
+- **Cuenta de servicio del servidor**: Adam la genera en *Configuración → Cuentas de
+  servicio* y la sube con `pwsh -File deploy/firebase-cuenta-servicio.ps1` (va a
+  `FIREBASE_SERVICE_ACCOUNT_JSON` del `.env.arta` y reinicia `arta-api`). Nunca al repo.
 
 ## Compilar
 

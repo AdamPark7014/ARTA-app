@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "363584055081",
+    "project_id": "arta-app-fde07",
+    "storage_bucket": "arta-app-fde07.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:363584055081:android:10698b671573ba20b9f938",
+        "android_client_info": {
+          "package_name": "com.artaproducciones.ops"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCu8wf2K6NhNxpGD278SW8srf8-Y83KoB4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

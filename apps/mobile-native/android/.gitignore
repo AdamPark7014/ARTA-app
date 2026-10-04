@@ -7,7 +7,8 @@ local.properties
 key.properties
 *.jks
 *.keystore
-# Credenciales de Firebase: se descargan de la consola, no van al repo.
-app/google-services.json
+# `app/google-services.json` SÍ se versiona (proyecto Firebase arta-app-fde07, igual que NEXARA):
+# es la configuración de cliente que va dentro del APK, no una llave. La llave del servidor
+# (cuenta de servicio) nunca entra al repo: ver deploy/firebase-cuenta-servicio.ps1.
 captures/
 *.iml
