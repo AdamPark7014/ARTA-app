@@ -223,7 +223,10 @@ model User {
   chatReads            ChatReadMarker[]
   chatMemberships      ChatChannelMember[]
   chatReactions        ChatMessageReaction[]
+  chatSaved            ChatSavedMessage[]
   pushEndpoints        UserPushEndpoint[]
+  /// No molestar: mientras sea futuro no sale push (el aviso en la app sí se guarda).
+  chatDndUntil         DateTime?
 
   @@index([organizationId])
 }
@@ -1088,8 +1091,10 @@ model ChatChannel {
   topic              String?
   description        String?
   isArchived         Boolean             @default(false)
-  /// Directos: ids de las dos personas ordenados, «a:b».
+  /// Directos: ids de las dos personas ordenados, «a:b». Grupos: «g:» + ids ordenados.
   dmKey              String?
+  /// Directo de grupo (kind PRIVATE): se lista con los directos.
+  isGroupDm          Boolean             @default(false)
   /// Canal del evento (uno por evento).
   eventId            String?             @unique
   /// Solo dirección publica (anuncios).
@@ -1138,6 +1143,10 @@ model ChatMessage {
   parentId       String?
   parent         ChatMessage?          @relation("ChatThread", fields: [parentId], references: [id], onDelete: Cascade)
   replies        ChatMessage[]         @relation("ChatThread")
+  /// Mensaje citado (responder citando); del mismo canal.
+  replyToId      String?
+  replyTo        ChatMessage?          @relation("ChatReplyTo", fields: [replyToId], references: [id], onDelete: SetNull)
+  quotedBy       ChatMessage[]         @relation("ChatReplyTo")
   kind           ChatMessageKind       @default(TEXT)
   body           String
   attachmentUrl  String?
@@ -1151,9 +1160,11 @@ model ChatMessage {
   createdAt      DateTime              @default(now())
   updatedAt      DateTime              @default(now()) @updatedAt
   reactions      ChatMessageReaction[]
+  savedBy        ChatSavedMessage[]
 
   @@index([channelId, createdAt])
   @@index([parentId, createdAt])
+  @@index([replyToId])
   @@index([channelId, pinnedAt])
   @@index([organizationId, recipientId, createdAt])
   @@index([senderId, recipientId, createdAt])
@@ -1170,6 +1181,20 @@ model ChatMessageReaction {
   createdAt DateTime    @default(now())
 
   @@unique([messageId, userId, emoji])
+}
+
+/// Mensajes guardados por cada persona (marcador personal).
+model ChatSavedMessage {
+  id        String      @id @default(cuid())
+  userId    String
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messageId String
+  message   ChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  createdAt DateTime    @default(now())
+
+  @@unique([userId, messageId])
+  @@index([userId, createdAt])
+  @@index([messageId])
 }
 
 /// Teléfonos (FCM Android / iOS) que reciben avisos push de la persona.

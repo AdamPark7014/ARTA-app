@@ -127,6 +127,11 @@ export class PushDispatchService {
   /** `badge` sin definir = total de la app; `null` = no tocar el globo. */
   async sendToUser(userId: string, payload: PushPayload): Promise<number> {
     if (!this.init()) return 0;
+    // No molestar: sin alerta al teléfono; los silenciosos (sincronizar leídos) sí salen.
+    if (!payload.silent) {
+      const prefs = await this.prisma.user.findUnique({ where: { id: userId }, select: { chatDndUntil: true } });
+      if (prefs?.chatDndUntil && prefs.chatDndUntil.getTime() > Date.now()) return 0;
+    }
     const rows = await this.prisma.userPushEndpoint.findMany({
       where: { userId, fcmToken: { not: null } },
       select: { id: true, fcmToken: true },

@@ -1,5 +1,5 @@
 import { BadRequestException, ForbiddenException } from '@nestjs/common';
-import { ChatService, type ChatUser } from './chat.service';
+import { ChatService, serializeMessage, type ChatUser } from './chat.service';
 import type { NotificationsService } from '../notifications/notifications.service';
 import type { RealtimeGateway } from '../realtime/realtime.gateway';
 import type { PrismaService } from '../common/prisma/prisma.service';
@@ -57,19 +57,36 @@ function messageRow(over: Record<string, unknown> = {}) {
 
 function setup() {
   const prisma = {
-    chatChannel: { findFirst: jest.fn(), update: jest.fn(), upsert: jest.fn(), findUnique: jest.fn() },
+    chatChannel: {
+      findFirst: jest.fn(),
+      update: jest.fn(),
+      upsert: jest.fn(),
+      findUnique: jest.fn(),
+      create: jest.fn(),
+      findUniqueOrThrow: jest.fn(),
+    },
     chatChannelMember: {
       upsert: jest.fn(),
       updateMany: jest.fn(),
       findMany: jest.fn().mockResolvedValue([]),
       createMany: jest.fn(),
       update: jest.fn(),
+      count: jest.fn().mockResolvedValue(0),
+      deleteMany: jest.fn().mockResolvedValue({ count: 1 }),
     },
+    chatSavedMessage: {
+      findUnique: jest.fn(),
+      findMany: jest.fn().mockResolvedValue([]),
+      upsert: jest.fn(),
+      deleteMany: jest.fn(),
+    },
+    chatMessageReaction: { findUnique: jest.fn(), create: jest.fn(), delete: jest.fn() },
     chatMessage: {
       create: jest.fn(),
       findFirst: jest.fn(),
       findMany: jest.fn().mockResolvedValue([]),
       findUnique: jest.fn(),
+      findUniqueOrThrow: jest.fn(),
       update: jest.fn(),
     },
     user: { findMany: jest.fn().mockResolvedValue([]), findFirst: jest.fn() },
@@ -78,6 +95,7 @@ function setup() {
   const notifications = {
     pushOnly: jest.fn().mockResolvedValue(1),
     notifyMany: jest.fn().mockResolvedValue([]),
+    notify: jest.fn().mockResolvedValue(null),
   };
   const realtime = { emitToChannel: jest.fn(), emitToUsers: jest.fn(), emitToUser: jest.fn() };
   const service = new ChatService(
@@ -214,5 +232,200 @@ describe('ChatService', () => {
     await expect(
       service.postMessage(ana, 'c1', { attachmentUrl: 'https://evil.example/x.jpg' }),
     ).rejects.toBeInstanceOf(BadRequestException);
+  });
+});
+
+describe('Chat v2', () => {
+  const quote = (over: Record<string, unknown> = {}) => ({
+    id: 'q1',
+    senderId: 'u4',
+    kind: 'TEXT',
+    body: 'Ve con [@Luis Pérez](user:u4) al foro',
+    attachmentUrl: null,
+    attachmentName: null,
+    deletedAt: null,
+    sender: { id: 'u4', fullName: 'Luis Pérez' },
+    ...over,
+  });
+
+  it('la cita lleva el extracto con menciones como @Nombre y ≤140 caracteres', () => {
+    const dto = serializeMessage(messageRow({ replyTo: quote() }) as never);
+    expect(dto.replyTo).toEqual({
+      id: 'q1',
+      authorId: 'u4',
+      authorName: 'Luis Pérez',
+      excerpt: 'Ve con @Luis Pérez al foro',
+      kind: 'TEXT',
+      attachmentName: null,
+      deleted: false,
+    });
+    const long = serializeMessage(messageRow({ replyTo: quote({ body: 'x'.repeat(500) }) }) as never);
+    expect(long.replyTo!.excerpt.length).toBeLessThanOrEqual(140);
+    const gone = serializeMessage(messageRow({ replyTo: quote({ deletedAt: new Date() }) }) as never);
+    expect(gone.replyTo).toEqual(expect.objectContaining({ excerpt: '', deleted: true }));
+    expect(serializeMessage(messageRow() as never).replyTo).toBeNull();
+  });
+
+  it('responder citando exige un mensaje del mismo canal', async () => {
+    const { service, prisma } = setup();
+    prisma.chatChannel.findFirst.mockResolvedValue(channel());
+    prisma.chatMessage.findFirst.mockResolvedValue(null);
+    await expect(service.postMessage(ana, 'c1', { body: 'va', replyToId: 'de-otro-canal' })).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+    expect(prisma.chatMessage.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ id: 'de-otro-canal', channelId: 'c1' }) }),
+    );
+    expect(prisma.chatMessage.create).not.toHaveBeenCalled();
+  });
+
+  it('guardar alterna el marcador personal', async () => {
+    const { service, prisma, realtime } = setup();
+    prisma.chatMessage.findFirst.mockResolvedValue(messageRow());
+    prisma.chatChannel.findFirst.mockResolvedValue(channel());
+    prisma.chatSavedMessage.findUnique.mockResolvedValueOnce(null);
+    await expect(service.toggleSaved(ana, 'msg1')).resolves.toEqual({ saved: true });
+    expect(prisma.chatSavedMessage.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({ create: { userId: 'u1', messageId: 'msg1' } }),
+    );
+    prisma.chatSavedMessage.findUnique.mockResolvedValueOnce({ id: 's1' });
+    await expect(service.toggleSaved(ana, 'msg1')).resolves.toEqual({ saved: false });
+    expect(prisma.chatSavedMessage.deleteMany).toHaveBeenCalledWith({ where: { userId: 'u1', messageId: 'msg1' } });
+    expect(realtime.emitToUser).toHaveBeenLastCalledWith('u1', 'chat:saved', { messageId: 'msg1', saved: false });
+  });
+
+  it('un mensaje borrado con hilo se queda vacío y marcado como eliminado', async () => {
+    const dto = serializeMessage(messageRow({ deletedAt: new Date(), _count: { replies: 2 } }) as never);
+    expect(dto).toEqual(expect.objectContaining({ body: '', deleted: true, replyCount: 2, attachment: null }));
+
+    const { service, prisma } = setup();
+    prisma.chatChannel.findFirst.mockResolvedValue(channel());
+    await service.listMessages(ana, 'c1');
+    expect(prisma.chatMessage.findMany.mock.calls[0][0].where).toEqual(
+      expect.objectContaining({ OR: [{ deletedAt: null }, { replies: { some: { deletedAt: null } } }] }),
+    );
+  });
+
+  it('el grupo usa la llave g:<ids ordenados> con quien crea y no se duplica', async () => {
+    const { service, prisma } = setup();
+    prisma.user.findMany.mockResolvedValue([
+      { id: 'u3', fullName: 'Pepe Gómez' },
+      { id: 'u2', fullName: 'Luis Pérez' },
+    ]);
+    prisma.chatChannel.findUnique.mockResolvedValue({ id: 'g1' });
+    prisma.chatChannel.findFirst.mockResolvedValue(
+      channel({ id: 'g1', kind: 'PRIVATE', slug: null, isGroupDm: true, name: 'Ana, Pepe, Luis' }),
+    );
+    const dto = await service.openGroupDm(ana, ['u3', 'u2', 'u3']);
+    expect(prisma.chatChannel.findUnique).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { organizationId_dmKey: { organizationId: ORG, dmKey: 'g:u1:u2:u3' } } }),
+    );
+    expect(prisma.chatChannel.create).not.toHaveBeenCalled();
+    expect(dto.isGroupDm).toBe(true);
+    await expect(service.openGroupDm(ana, ['u2'])).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('grupo nuevo: nombres de pila y aviso «Nuevo grupo» a los demás', async () => {
+    const { service, prisma, notifications } = setup();
+    prisma.user.findMany.mockResolvedValue([
+      { id: 'u2', fullName: 'Luis Pérez' },
+      { id: 'u3', fullName: 'Pepe Gómez' },
+    ]);
+    prisma.chatChannel.findUnique.mockResolvedValue(null);
+    prisma.chatChannel.create.mockResolvedValue({ id: 'g2' });
+    prisma.chatChannel.findFirst.mockResolvedValue(channel({ id: 'g2', kind: 'PRIVATE', slug: null, isGroupDm: true }));
+    await service.openGroupDm(ana, ['u2', 'u3']);
+    expect(prisma.chatChannel.create.mock.calls[0][0].data).toEqual(
+      expect.objectContaining({ kind: 'PRIVATE', isGroupDm: true, dmKey: 'g:u1:u2:u3', name: 'Ana, Luis, Pepe' }),
+    );
+    expect(notifications.notifyMany).toHaveBeenCalledWith([
+      expect.objectContaining({ userId: 'u2', type: 'chat.added', title: 'Nuevo grupo', linkUrl: '/chat?channel=g2' }),
+      expect.objectContaining({ userId: 'u3', type: 'chat.added' }),
+    ]);
+  });
+
+  it('agregar a un grupo funciona y avisa solo a quien entra', async () => {
+    const { service, prisma, notifications } = setup();
+    prisma.chatChannel.findFirst.mockResolvedValue(channel({ kind: 'PRIVATE', slug: null, isGroupDm: true, name: 'Ana, Luis' }));
+    prisma.user.findMany.mockResolvedValue([{ id: 'u5' }, { id: 'u2' }]);
+    prisma.chatChannelMember.findMany.mockResolvedValueOnce([{ userId: 'u2' }]);
+    prisma.chatChannelMember.count.mockResolvedValue(3);
+    await service.addMembers(ana, 'c1', ['u5', 'u2']);
+    expect(prisma.chatChannelMember.createMany).toHaveBeenCalledWith({
+      data: [{ channelId: 'c1', userId: 'u5' }],
+      skipDuplicates: true,
+    });
+    expect(notifications.notifyMany).toHaveBeenCalledWith([
+      expect.objectContaining({ userId: 'u5', type: 'chat.added', title: 'Nuevo grupo' }),
+    ]);
+  });
+
+  it('las menciones en un grupo avisan con enlace al mensaje', async () => {
+    const { service, prisma, notifications } = setup();
+    prisma.chatChannel.findFirst.mockResolvedValue(
+      channel({ kind: 'PRIVATE', slug: null, isGroupDm: true, name: 'Ana, Luis, Pepe' }),
+    );
+    const body = 'Revisa esto [@Luis](user:u4)';
+    prisma.chatMessage.create.mockResolvedValue(messageRow({ body }));
+    prisma.chatChannelMember.findMany.mockResolvedValue([
+      { userId: 'u1', mutedUntil: null },
+      { userId: 'u4', mutedUntil: null },
+      { userId: 'u5', mutedUntil: null },
+    ]);
+    await service.postMessage(ana, 'c1', { body });
+    await flush();
+    expect(notifications.notifyMany).toHaveBeenCalledWith([
+      expect.objectContaining({
+        userId: 'u4',
+        type: 'chat.mention',
+        title: 'Ana R. te mencionó en Ana, Luis, Pepe',
+        linkUrl: '/chat?channel=c1&msg=msg1',
+      }),
+    ]);
+    expect(notifications.pushOnly.mock.calls.map((c) => c[0])).toEqual(['u5']);
+    expect(notifications.pushOnly.mock.calls[0][1].title).toBe('Ana R. en Ana, Luis, Pepe');
+  });
+
+  it('la respuesta en hilo llega al autor del mensaje raíz aunque no haya respondido', async () => {
+    const { service, prisma, notifications } = setup();
+    prisma.chatChannel.findFirst.mockResolvedValue(channel());
+    prisma.chatMessage.findFirst.mockResolvedValue({ id: 'root', parentId: null });
+    prisma.chatMessage.create.mockResolvedValue(messageRow({ parentId: 'root' }));
+    prisma.chatMessage.findUnique.mockResolvedValue(messageRow({ id: 'root', senderId: 'u7' }));
+    prisma.chatChannelMember.findMany.mockResolvedValue([
+      { userId: 'u1', mutedUntil: null },
+      { userId: 'u7', mutedUntil: null },
+      { userId: 'u5', mutedUntil: null },
+    ]);
+    prisma.chatMessage.findMany.mockResolvedValue([{ senderId: 'u1' }]);
+    await service.postMessage(ana, 'c1', { body: 'va', parentId: 'root' });
+    await flush();
+    expect(notifications.pushOnly.mock.calls.map((c) => c[0])).toEqual(['u7']);
+    expect(notifications.pushOnly.mock.calls[0][1].type).toBe('chat.thread_reply');
+  });
+
+  it('una reacción avisa al autor con push etiquetado por mensaje (sin campana)', async () => {
+    const { service, prisma, notifications } = setup();
+    prisma.chatMessage.findFirst.mockResolvedValue(messageRow({ senderId: 'u2' }));
+    prisma.chatChannel.findFirst.mockResolvedValue(channel());
+    prisma.chatMessageReaction.findUnique.mockResolvedValue(null);
+    prisma.chatMessage.findUniqueOrThrow.mockResolvedValue(messageRow({ senderId: 'u2' }));
+    await service.toggleReaction(ana, 'msg1', '🔥');
+    expect(notifications.pushOnly).toHaveBeenCalledWith(
+      'u2',
+      expect.objectContaining({ type: 'chat.reaction', kind: 'event', tag: 'chat-reaction-msg1' }),
+    );
+    expect(notifications.notify).not.toHaveBeenCalled();
+  });
+
+  it('quitar a alguien le avisa sin enlace al canal', async () => {
+    const { service, prisma, notifications } = setup();
+    prisma.chatChannel.findFirst.mockResolvedValue(
+      channel({ kind: 'PRIVATE', slug: null, name: 'produccion', members: [{ id: 'm', userId: 'u9', role: 'owner', mutedUntil: null, lastReadAt: null }] }),
+    );
+    await service.removeMember(director, 'c1', 'u2');
+    expect(notifications.notify).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: 'u2', type: 'chat.removed', title: 'Te quitaron de #produccion', linkUrl: '/chat' }),
+    );
   });
 });

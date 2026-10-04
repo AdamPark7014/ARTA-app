@@ -4,6 +4,7 @@ import {
   ConnectedSocket,
   MessageBody,
   OnGatewayConnection,
+  OnGatewayDisconnect,
   OnGatewayInit,
   SubscribeMessage,
   WebSocketGateway,
@@ -20,6 +21,8 @@ type SocketData = {
   orgId?: string;
   fullName?: string;
 };
+
+const PRESENCE_GRACE_MS = 20_000;
 
 function allowedOrigins(): string[] {
   return (process.env.WEB_ORIGIN || '')
@@ -69,8 +72,11 @@ export function readCookie(header: string | undefined, name: string): string | n
     credentials: true,
   },
 })
-export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection {
+export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect {
   private readonly logger = new Logger(RealtimeGateway.name);
+  /** Presencia en memoria: sockets vivos por persona (un solo proceso del API). */
+  private readonly presence = new Map<string, { orgId: string | null; sockets: Set<string> }>();
+  private readonly offlineTimers = new Map<string, NodeJS.Timeout>();
 
   @WebSocketServer()
   server?: Server;
@@ -102,6 +108,50 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection {
     }
     client.join(this.userRoom(data.userId));
     if (data.orgId) client.join(this.orgRoom(data.orgId));
+    this.markConnected(data.userId, data.orgId ?? null, client.id);
+  }
+
+  handleDisconnect(client: Socket) {
+    const data = client.data as SocketData;
+    if (data.userId) this.markDisconnected(data.userId, client.id);
+  }
+
+  /** Primer socket = en línea. Si venía de cerrar (dentro de la gracia) no se vuelve a anunciar. */
+  markConnected(userId: string, orgId: string | null, socketId: string) {
+    const pending = this.offlineTimers.get(userId);
+    if (pending) {
+      clearTimeout(pending);
+      this.offlineTimers.delete(userId);
+    }
+    const entry = this.presence.get(userId);
+    if (entry) {
+      entry.sockets.add(socketId);
+      return;
+    }
+    this.presence.set(userId, { orgId, sockets: new Set([socketId]) });
+    if (orgId) this.emitToOrg(orgId, 'chat:presence', { userId, online: true });
+  }
+
+  /** Último socket cerrado: 20 s de gracia (recargas, cambio de red) antes de marcar desconectado. */
+  markDisconnected(userId: string, socketId: string) {
+    const entry = this.presence.get(userId);
+    if (!entry) return;
+    entry.sockets.delete(socketId);
+    if (entry.sockets.size > 0 || this.offlineTimers.has(userId)) return;
+    const timer = setTimeout(() => {
+      this.offlineTimers.delete(userId);
+      const current = this.presence.get(userId);
+      if (!current || current.sockets.size > 0) return;
+      this.presence.delete(userId);
+      if (current.orgId) this.emitToOrg(current.orgId, 'chat:presence', { userId, online: false });
+    }, PRESENCE_GRACE_MS);
+    timer.unref?.();
+    this.offlineTimers.set(userId, timer);
+  }
+
+  /** Personas de la organización con al menos un socket (o dentro de la gracia). */
+  onlineUserIds(orgId: string): string[] {
+    return [...this.presence.entries()].filter(([, e]) => e.orgId === orgId).map(([id]) => id);
   }
 
   @SubscribeMessage('chat:join')

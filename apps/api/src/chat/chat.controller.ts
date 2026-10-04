@@ -10,16 +10,20 @@ import {
   Post,
   Query,
   Req,
+  Res,
   UploadedFile,
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { Type } from 'class-transformer';
+import type { Response } from 'express';
 import {
   ArrayMaxSize,
+  ArrayMinSize,
   IsArray,
   IsBoolean,
+  IsDateString,
   IsIn,
   IsInt,
   IsOptional,
@@ -30,7 +34,8 @@ import {
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { discardUpload } from '../uploads/upload-storage';
 import { attachmentKind, CHAT_MULTER_OPTIONS, chatContentMatches, chatMimeFor, utf8FileName } from './chat-attachments';
-import { ChatService, MAX_BODY, type ChatUser } from './chat.service';
+import { fetchLinkPreview } from './chat-link-preview';
+import { ChatService, GROUP_DM_MAX, MAX_BODY, type ChatUser } from './chat.service';
 
 type AuthUser = ChatUser & { entities: string[]; permissions: string[] };
 type Req_ = { user: AuthUser };
@@ -75,6 +80,7 @@ class DirectDto {
 class PostMessageDto {
   @IsOptional() @IsString() @MaxLength(MAX_BODY) body?: string;
   @IsOptional() @IsString() parentId?: string;
+  @IsOptional() @IsString() @MaxLength(64) replyToId?: string;
   @IsOptional() @IsString() @MaxLength(300) attachmentUrl?: string;
   @IsOptional() @IsString() @MaxLength(200) attachmentName?: string;
   @IsOptional() @IsString() @MaxLength(100) attachmentMime?: string;
@@ -90,10 +96,59 @@ class ReactionDto {
   @IsString() @MaxLength(32) emoji!: string;
 }
 
+class GroupDmDto {
+  @IsArray() @ArrayMinSize(2) @ArrayMaxSize(GROUP_DM_MAX) @IsString({ each: true }) userIds!: string[];
+}
+
+class PrefsDto {
+  /** `null` apaga «No molestar». */
+  @IsOptional() @IsDateString() dndUntil?: string | null;
+}
+
 @Controller('chat')
 @UseGuards(JwtAuthGuard)
 export class ChatController {
   constructor(private readonly chat: ChatService) {}
+
+  // ─── Chat v2: grupos, guardados, presencia, vista previa y preferencias ───
+
+  @Post('group-dm')
+  @HttpCode(200)
+  openGroupDm(@Req() req: Req_, @Body() dto: GroupDmDto) {
+    return this.chat.openGroupDm(req.user, dto.userIds);
+  }
+
+  @Post('messages/:id/save')
+  @HttpCode(200)
+  save(@Req() req: Req_, @Param('id') id: string) {
+    return this.chat.toggleSaved(req.user, id);
+  }
+
+  @Get('saved')
+  saved(@Req() req: Req_, @Query('limit') limit?: string, @Query('before') before?: string) {
+    return this.chat.listSaved(req.user, { limit: limit ? Number(limit) : undefined, before: before || undefined });
+  }
+
+  @Get('presence')
+  presence(@Req() req: Req_) {
+    return this.chat.presence(req.user);
+  }
+
+  /** Responde `null` (JSON) cuando no hay tarjeta: URL insegura, caída, sin metadatos… */
+  @Get('link-preview')
+  async linkPreview(@Query('url') url: string | undefined, @Res() res: Response) {
+    res.json(await fetchLinkPreview(url ?? ''));
+  }
+
+  @Get('prefs')
+  prefs(@Req() req: Req_) {
+    return this.chat.getPrefs(req.user);
+  }
+
+  @Patch('prefs')
+  updatePrefs(@Req() req: Req_, @Body() dto: PrefsDto) {
+    return this.chat.setPrefs(req.user, dto);
+  }
 
   // ─── Canales ─────────────────────────────────────────────────────────────
 

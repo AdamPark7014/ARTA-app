@@ -64,3 +64,8 @@ export function pushText(message: {
 export function dmKeyOf(a: string, b: string): string {
   return [a, b].sort().join(':');
 }
+
+/** Directo de grupo: «g:» + ids ordenados (incluye a quien crea); mismo grupo = misma llave. */
+export function groupDmKeyOf(ids: string[]): string {
+  return `g:${[...new Set(ids.filter(Boolean))].sort().join(':')}`;
+}

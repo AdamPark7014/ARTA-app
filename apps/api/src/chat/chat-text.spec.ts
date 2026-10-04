@@ -1,4 +1,4 @@
-import { chatPreview, dmKeyOf, mentionedUserIds, mentionsChannel, pushText, slugify } from './chat-text';
+import { chatPreview, dmKeyOf, groupDmKeyOf, mentionedUserIds, mentionsChannel, pushText, slugify } from './chat-text';
 
 describe('chat-text', () => {
   it('muestra menciones y enlaces por su etiqueta', () => {
@@ -36,6 +36,11 @@ describe('chat-text', () => {
   it('la llave del directo no depende del orden', () => {
     expect(dmKeyOf('b2', 'a1')).toBe('a1:b2');
     expect(dmKeyOf('a1', 'b2')).toBe('a1:b2');
+  });
+
+  it('la llave del grupo ordena, quita repetidos y lleva prefijo g:', () => {
+    expect(groupDmKeyOf(['u3', 'u1', 'u2', 'u1'])).toBe('g:u1:u2:u3');
+    expect(groupDmKeyOf(['u2', 'u3', 'u1'])).toBe(groupDmKeyOf(['u1', 'u2', 'u3']));
   });
 
   it('describe adjuntos en el aviso', () => {

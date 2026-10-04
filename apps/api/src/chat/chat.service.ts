@@ -14,8 +14,10 @@ import { RealtimeGateway } from '../realtime/realtime.gateway';
 import {
   chatPreview,
   dmKeyOf,
+  groupDmKeyOf,
   mentionedUserIds,
   mentionsChannel,
+  PREVIEW_MAX,
   pushText,
   slugify,
 } from './chat-text';
@@ -23,8 +25,9 @@ import { chatMimeFor } from './chat-attachments';
 
 /**
  * Chat tipo Slack (portado de NEXARA y ajustado a ARTA):
- * canales públicos y privados, directos 1:1, canal por evento, hilos, reacciones,
- * fijados, edición, borrado, búsqueda, menciones, silenciar y adjuntos.
+ * canales públicos y privados, directos 1:1 y de grupo, canal por evento, hilos,
+ * reacciones, fijados, edición, borrado, búsqueda, menciones, silenciar, adjuntos,
+ * responder citando y mensajes guardados.
  *
  * Cada mensaje sale en tiempo real (socket) y como push tipo WhatsApp a quien no
  * lo silenció. Las menciones y `@canal` avisan aunque la conversación esté silenciada.
@@ -48,6 +51,8 @@ const PAGE_MAX = 200;
 /** Silenciado «siempre» (como WhatsApp). */
 const MUTE_FOREVER = new Date('2099-12-31T00:00:00.000Z');
 const DEFAULTS_TTL_MS = 60_000;
+/** Directo de grupo: de 2 a 8 personas además de quien lo crea. */
+export const GROUP_DM_MAX = 8;
 
 const authorSelect = { id: true, fullName: true, title: true } as const;
 
@@ -57,10 +62,33 @@ const messageInclude = {
     orderBy: { createdAt: 'asc' },
     include: { user: { select: { id: true, fullName: true } } },
   },
+  replyTo: {
+    select: {
+      id: true,
+      senderId: true,
+      kind: true,
+      body: true,
+      attachmentUrl: true,
+      attachmentName: true,
+      deletedAt: true,
+      sender: { select: { id: true, fullName: true } },
+    },
+  },
   _count: { select: { replies: { where: { deletedAt: null } } } },
 } satisfies Prisma.ChatMessageInclude;
 
 type MessageRow = Prisma.ChatMessageGetPayload<{ include: typeof messageInclude }>;
+
+export type ChatQuoteDto = {
+  id: string;
+  authorId: string;
+  authorName: string;
+  /** Cuerpo a ≤140 caracteres, menciones ya como `@Nombre`. */
+  excerpt: string;
+  kind: ChatMessageKind;
+  attachmentName: string | null;
+  deleted: boolean;
+};
 
 export type ChatMessageDto = {
   id: string;
@@ -75,11 +103,17 @@ export type ChatMessageDto = {
   author: { id: string; fullName: string; title: string | null };
   replyCount: number;
   reactions: Array<{ emoji: string; count: number; userIds: string[]; users: Array<{ id: string; fullName: string }> }>;
+  replyTo: ChatQuoteDto | null;
+  /** Borrado que se conserva porque tiene hilo: el cliente pinta «Mensaje eliminado». */
+  deleted: boolean;
+  /** Guardado por quien pide; no viaja en los eventos del canal (es personal). */
+  saved?: boolean;
 };
 
 export type PostMessageInput = {
   body?: string | null;
   parentId?: string | null;
+  replyToId?: string | null;
   attachmentUrl?: string | null;
   attachmentName?: string | null;
   attachmentMime?: string | null;
@@ -97,13 +131,27 @@ type ChannelRow = {
   topic: string | null;
   description: string | null;
   isArchived: boolean;
+  isGroupDm: boolean;
   eventId: string | null;
   postingRestricted: boolean;
   lastMessageAt: Date | null;
   lastMessagePreview: string | null;
 };
 
-export function serializeMessage(m: MessageRow): ChatMessageDto {
+function serializeQuote(q: NonNullable<MessageRow['replyTo']>): ChatQuoteDto {
+  const deleted = Boolean(q.deletedAt);
+  return {
+    id: q.id,
+    authorId: q.senderId,
+    authorName: q.sender.fullName,
+    excerpt: deleted ? '' : chatPreview(q.body, PREVIEW_MAX),
+    kind: q.kind,
+    attachmentName: deleted || !q.attachmentUrl ? null : q.attachmentName,
+    deleted,
+  };
+}
+
+export function serializeMessage(m: MessageRow, savedIds?: Set<string>): ChatMessageDto {
   const reactions = new Map<string, ChatMessageDto['reactions'][number]>();
   for (const r of m.reactions) {
     const cur = reactions.get(r.emoji) ?? { emoji: r.emoji, count: 0, userIds: [], users: [] };
@@ -112,14 +160,15 @@ export function serializeMessage(m: MessageRow): ChatMessageDto {
     cur.users.push({ id: r.user.id, fullName: r.user.fullName });
     reactions.set(r.emoji, cur);
   }
+  const deleted = Boolean(m.deletedAt);
   return {
     id: m.id,
     channelId: m.channelId,
     parentId: m.parentId,
     kind: m.kind,
-    body: m.deletedAt ? '' : m.body,
+    body: deleted ? '' : m.body,
     attachment:
-      m.attachmentUrl && !m.deletedAt
+      m.attachmentUrl && !deleted
         ? { url: m.attachmentUrl, name: m.attachmentName, mime: m.attachmentMime, size: m.attachmentSize }
         : null,
     pinnedAt: m.pinnedAt?.toISOString() ?? null,
@@ -128,7 +177,17 @@ export function serializeMessage(m: MessageRow): ChatMessageDto {
     author: { id: m.sender.id, fullName: m.sender.fullName, title: m.sender.title ?? null },
     replyCount: m._count.replies,
     reactions: [...reactions.values()],
+    replyTo: m.replyTo ? serializeQuote(m.replyTo) : null,
+    deleted,
+    ...(savedIds ? { saved: savedIds.has(m.id) } : {}),
   };
+}
+
+/** Nombre de un grupo: nombres de pila de quienes lo forman. */
+export function groupDmName(people: Array<{ fullName: string }>): string {
+  const names = people.map((p) => p.fullName.trim().split(/\s+/)[0]).filter(Boolean);
+  const name = names.join(', ');
+  return (name.length > 80 ? `${name.slice(0, 79)}…` : name) || 'Grupo';
 }
 
 @Injectable()
@@ -298,6 +357,7 @@ export class ChatService {
           topic: ch.topic,
           eventId: ch.eventId,
           peer,
+          isGroupDm: ch.isGroupDm,
           isMember: Boolean(membership),
           memberCount: ch.members.length,
           postingRestricted: ch.postingRestricted,
@@ -332,6 +392,7 @@ export class ChatService {
       description: channel.description,
       eventId: channel.eventId,
       peer,
+      isGroupDm: channel.isGroupDm,
       postingRestricted: channel.postingRestricted,
       canPost: !channel.postingRestricted || this.canModerate(user, membership.role),
       canManage: this.canModerate(user, membership.role),
@@ -381,6 +442,7 @@ export class ChatService {
     });
     await this.systemMessage(channel.id, user, `${user.fullName ?? 'Alguien'} creó el canal #${name}`);
     this.realtime.emitToUsers(extra, 'chat:members-changed', { channelId: channel.id });
+    await this.notifyAdded(user, { id: channel.id, name, isGroupDm: false, organizationId: orgId }, extra);
     return this.getChannel(user, channel.id);
   }
 
@@ -392,6 +454,27 @@ export class ChatService {
       select: { id: true },
     });
     return rows.map((r) => r.id);
+  }
+
+  /** Campana + push a quien entra a un canal o grupo (no a quien lo agregó). */
+  private async notifyAdded(
+    user: ChatUser,
+    channel: { id: string; name: string; isGroupDm: boolean; organizationId: string },
+    userIds: string[],
+  ) {
+    if (!userIds.length) return;
+    const author = user.fullName || 'Alguien';
+    await this.notifications.notifyMany(
+      userIds.map((uid) => ({
+        userId: uid,
+        organizationId: channel.organizationId,
+        actorId: user.id,
+        type: 'chat.added',
+        title: channel.isGroupDm ? 'Nuevo grupo' : `Te agregaron a #${channel.name}`,
+        body: channel.isGroupDm ? `${author} te agregó a ${channel.name}` : `${author} te agregó al canal`,
+        linkUrl: `/chat?channel=${channel.id}`,
+      })),
+    );
   }
 
   async openDirect(user: ChatUser, otherId: string) {
@@ -422,6 +505,73 @@ export class ChatService {
       skipDuplicates: true,
     });
     return this.getChannel(user, channel.id);
+  }
+
+  /**
+   * Directo de grupo (canal privado con `isGroupDm`). La llave `g:<ids ordenados>`
+   * evita duplicados: con las mismas personas se devuelve el grupo que ya existe.
+   */
+  async openGroupDm(user: ChatUser, userIds: string[]) {
+    const wanted = [...new Set((userIds ?? []).filter((id) => typeof id === 'string' && id && id !== user.id))];
+    if (wanted.length < 2 || wanted.length > GROUP_DM_MAX) {
+      throw new BadRequestException(`Un grupo es de 2 a ${GROUP_DM_MAX} personas además de ti`);
+    }
+    const orgId = tenantIdOf(user);
+    const people = await this.prisma.user.findMany({
+      where: { id: { in: wanted }, active: true, ...this.orgUserWhere(orgId) },
+      select: { id: true, fullName: true },
+    });
+    if (people.length !== wanted.length) throw new BadRequestException('Elige solo personas activas de tu organización');
+    const dmKey = groupDmKeyOf([user.id, ...wanted]);
+    const where = { organizationId_dmKey: { organizationId: orgId, dmKey } };
+    const reopen = async (id: string) => {
+      await this.prisma.chatChannel.update({ where: { id }, data: { isArchived: false } });
+      await this.prisma.chatChannelMember.createMany({
+        data: [user.id, ...wanted].map((uid) => ({ channelId: id, userId: uid })),
+        skipDuplicates: true,
+      });
+      return this.getChannel(user, id);
+    };
+
+    const existing = await this.prisma.chatChannel.findUnique({ where, select: { id: true } });
+    if (existing) return reopen(existing.id);
+
+    const name = groupDmName([{ fullName: user.fullName || '' }, ...people].filter((p) => p.fullName));
+    let channelId: string;
+    try {
+      const created = await this.prisma.chatChannel.create({
+        data: {
+          organizationId: orgId,
+          kind: ChatChannelKind.PRIVATE,
+          isGroupDm: true,
+          dmKey,
+          name,
+          createdById: user.id,
+          members: { create: [{ userId: user.id, role: 'owner' }, ...wanted.map((id) => ({ userId: id }))] },
+        },
+        select: { id: true },
+      });
+      channelId = created.id;
+    } catch (e) {
+      // Dos clics a la vez: el otro ya lo creó.
+      if (!(e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002')) throw e;
+      const raced = await this.prisma.chatChannel.findUniqueOrThrow({ where, select: { id: true } });
+      return reopen(raced.id);
+    }
+    this.realtime.emitToUsers(wanted, 'chat:members-changed', { channelId });
+    await this.notifyAdded(user, { id: channelId, name, isGroupDm: true, organizationId: orgId }, wanted);
+    return this.getChannel(user, channelId);
+  }
+
+  /** Al cambiar quién está en un grupo, la llave sigue a las personas (o se suelta si ya hay otro igual). */
+  private async syncGroupKey(channelId: string, orgId: string) {
+    const members = await this.prisma.chatChannelMember.findMany({ where: { channelId }, select: { userId: true } });
+    const dmKey = groupDmKeyOf(members.map((m) => m.userId));
+    const taken = await this.prisma.chatChannel.findFirst({
+      where: { organizationId: orgId, dmKey, id: { not: channelId } },
+      select: { id: true },
+    });
+    await this.prisma.chatChannel.update({ where: { id: channelId }, data: { dmKey: taken ? null : dmKey } });
   }
 
   /** Canal del evento: la conversación de producción vive junto al show. */
@@ -481,12 +631,28 @@ export class ChatService {
     }
     const ids = await this.validColleagueIds(user, userIds);
     if (!ids.length) throw new BadRequestException('Elige al menos a una persona de tu organización');
+    const already = await this.prisma.chatChannelMember.findMany({
+      where: { channelId, userId: { in: ids } },
+      select: { userId: true },
+    });
+    const inside = new Set(already.map((m) => m.userId));
+    const added = ids.filter((id) => !inside.has(id));
+    if (channel.isGroupDm && added.length) {
+      const count = await this.prisma.chatChannelMember.count({ where: { channelId } });
+      if (count + added.length > GROUP_DM_MAX + 1) {
+        throw new BadRequestException(`Un grupo admite hasta ${GROUP_DM_MAX + 1} personas; crea un canal privado`);
+      }
+    }
     await this.prisma.chatChannelMember.createMany({
-      data: ids.map((id) => ({ channelId, userId: id })),
+      data: added.map((id) => ({ channelId, userId: id })),
       skipDuplicates: true,
     });
+    if (channel.isGroupDm && added.length) {
+      await this.syncGroupKey(channelId, channel.organizationId).catch(() => undefined);
+    }
     this.realtime.emitToChannel(channelId, 'chat:members-changed', { channelId });
     this.realtime.emitToUsers(ids, 'chat:members-changed', { channelId });
+    await this.notifyAdded(user, channel, added);
     return this.getChannel(user, channelId);
   }
 
@@ -499,9 +665,24 @@ export class ChatService {
     if (channel.slug === GENERAL_SLUG || channel.slug === ANNOUNCEMENTS_SLUG) {
       throw new BadRequestException('Los canales de la organización incluyen a todo el equipo');
     }
-    await this.prisma.chatChannelMember.deleteMany({ where: { channelId, userId: targetId } });
+    const removed = await this.prisma.chatChannelMember.deleteMany({ where: { channelId, userId: targetId } });
+    if (channel.isGroupDm && removed.count) {
+      await this.syncGroupKey(channelId, channel.organizationId).catch(() => undefined);
+    }
     this.realtime.emitToChannel(channelId, 'chat:members-changed', { channelId });
     this.realtime.emitToUser(targetId, 'chat:members-changed', { channelId, removed: true });
+    if (targetId !== user.id && removed.count) {
+      // Sin enlace al canal: ya no tiene acceso.
+      await this.notifications.notify({
+        userId: targetId,
+        organizationId: channel.organizationId,
+        actorId: user.id,
+        type: 'chat.removed',
+        title: channel.isGroupDm ? `Te quitaron del grupo ${channel.name}` : `Te quitaron de #${channel.name}`,
+        body: `${user.fullName || 'Alguien'} te quitó de la conversación`,
+        linkUrl: '/chat',
+      });
+    }
     return { ok: true };
   }
 
@@ -534,6 +715,20 @@ export class ChatService {
 
   // ─── Mensajes ────────────────────────────────────────────────────────────
 
+  private async savedIdsOf(userId: string, messageIds: string[]): Promise<Set<string>> {
+    if (!messageIds.length) return new Set();
+    const rows = await this.prisma.chatSavedMessage.findMany({
+      where: { userId, messageId: { in: messageIds } },
+      select: { messageId: true },
+    });
+    return new Set(rows.map((r) => r.messageId));
+  }
+
+  private async serializeFor(userId: string, rows: MessageRow[]): Promise<ChatMessageDto[]> {
+    const saved = await this.savedIdsOf(userId, rows.map((r) => r.id));
+    return rows.map((r) => serializeMessage(r, saved));
+  }
+
   /**
    * Página de mensajes (ascendente). Cursores por mensaje: `before` (más viejos),
    * `after` (lo nuevo tras reconectar) o `around` (saltar a un mensaje de búsqueda o aviso).
@@ -545,7 +740,12 @@ export class ChatService {
   ) {
     await this.access(user, channelId);
     const limit = Math.min(Math.max(Number(opts.limit) || PAGE_DEFAULT, 1), PAGE_MAX);
-    const base: Prisma.ChatMessageWhereInput = { channelId, deletedAt: null, parentId: opts.parentId ?? null };
+    const base: Prisma.ChatMessageWhereInput = {
+      channelId,
+      parentId: opts.parentId ?? null,
+      // Un borrado con hilo vivo se queda como «Mensaje eliminado» para no perder las respuestas.
+      OR: [{ deletedAt: null }, { replies: { some: { deletedAt: null } } }],
+    };
 
     const cursorOf = async (id?: string) => {
       if (!id) return null;
@@ -573,7 +773,7 @@ export class ChatService {
         this.prisma.chatMessage.findMany({ where: { AND: [base, newerThan(c!)] }, include: messageInclude, orderBy: asc, take: half }),
       ]);
       return {
-        messages: [...older.reverse(), ...newer].map(serializeMessage),
+        messages: await this.serializeFor(user.id, [...older.reverse(), ...newer]),
         hasMore: older.length === half + 1,
         hasNewer: newer.length === half,
       };
@@ -587,7 +787,7 @@ export class ChatService {
         orderBy: asc,
         take: limit,
       });
-      return { messages: rows.map(serializeMessage), hasMore: false, hasNewer: rows.length === limit };
+      return { messages: await this.serializeFor(user.id, rows), hasMore: false, hasNewer: rows.length === limit };
     }
 
     const c = await cursorOf(opts.before);
@@ -597,25 +797,30 @@ export class ChatService {
       orderBy: desc,
       take: limit,
     });
-    return { messages: rows.reverse().map(serializeMessage), hasMore: rows.length === limit, hasNewer: false };
+    return { messages: await this.serializeFor(user.id, rows.reverse()), hasMore: rows.length === limit, hasNewer: false };
   }
 
-  /** Un hilo completo: mensaje raíz + respuestas. */
+  /** Un hilo completo: mensaje raíz (aunque se haya borrado) + respuestas. */
   async getThread(user: ChatUser, messageId: string): Promise<{ root: ChatMessageDto; replies: ChatMessageDto[] }> {
-    const found = await this.findMessage(user, messageId);
-    const root = found.parentId ? await this.findMessage(user, found.parentId) : found;
+    const found = await this.findMessage(user, messageId, { includeDeleted: true });
+    const root = found.parentId ? await this.findMessage(user, found.parentId, { includeDeleted: true }) : found;
     const replies = await this.prisma.chatMessage.findMany({
       where: { parentId: root.id, deletedAt: null },
       include: messageInclude,
       orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
       take: PAGE_MAX,
     });
-    return { root: serializeMessage(root), replies: replies.map(serializeMessage) };
+    const [rootDto, ...replyDtos] = await this.serializeFor(user.id, [root, ...replies]);
+    return { root: rootDto, replies: replyDtos };
   }
 
-  private async findMessage(user: ChatUser, messageId: string) {
+  private async findMessage(user: ChatUser, messageId: string, opts: { includeDeleted?: boolean } = {}) {
     const message = await this.prisma.chatMessage.findFirst({
-      where: { id: messageId, deletedAt: null, channel: { organizationId: tenantIdOf(user) } },
+      where: {
+        id: messageId,
+        ...(opts.includeDeleted ? {} : { deletedAt: null }),
+        channel: { organizationId: tenantIdOf(user) },
+      },
       include: messageInclude,
     });
     if (!message) throw new NotFoundException('Mensaje no encontrado');
@@ -643,12 +848,22 @@ export class ChatService {
       parentId = parent.parentId ?? parent.id;
     }
 
+    const replyToId: string | null = input.replyToId || null;
+    if (replyToId) {
+      const quoted = await this.prisma.chatMessage.findFirst({
+        where: { id: replyToId, channelId, deletedAt: null },
+        select: { id: true },
+      });
+      if (!quoted) throw new BadRequestException('El mensaje que citas no existe en esta conversación');
+    }
+
     const message = await this.prisma.chatMessage.create({
       data: {
         channelId,
         organizationId: channel.organizationId,
         senderId: user.id,
         parentId,
+        replyToId,
         kind: attachmentUrl && !body ? ChatMessageKind.FILE : ChatMessageKind.TEXT,
         body,
         attachmentUrl,
@@ -668,7 +883,8 @@ export class ChatService {
     }
     await this.prisma.chatChannelMember.updateMany({ where: { channelId, userId: user.id }, data: { lastReadAt: now } });
 
-    const payload = { ...serializeMessage(message), clientId: input.clientId ?? null };
+    // Recién creado: nadie lo ha guardado todavía.
+    const payload = { ...serializeMessage(message, new Set()), clientId: input.clientId ?? null };
     this.realtime.emitToChannel(channelId, parentId ? 'chat:thread-reply' : 'chat:message', payload);
     if (parentId) {
       const parent = await this.prisma.chatMessage.findUnique({ where: { id: parentId }, include: messageInclude });
@@ -682,7 +898,8 @@ export class ChatService {
   /**
    * Avisos del mensaje:
    * - lista de conversaciones de todos los miembros (socket `chat:channel-activity`);
-   * - push tipo WhatsApp a miembros que no silenciaron (en hilos, solo a quienes participan);
+   * - push tipo WhatsApp a miembros que no silenciaron (en hilos, a quienes participan
+   *   y a quien escribió el mensaje raíz);
    * - aviso en la campana + push a mencionados y, con `@canal`, a todos (aunque silenciaron).
    */
   private async fanOut(user: ChatUser, channel: ChannelRow, message: MessageRow) {
@@ -702,6 +919,9 @@ export class ChatService {
       : [];
     for (const id of everyone) mentioned.add(id);
 
+    const direct = channel.kind === ChatChannelKind.DIRECT;
+    const channelLabel = direct ? '' : channel.isGroupDm ? channel.name : `#${channel.name}`;
+
     // `notify`: el navegador con la pestaña oculta muestra aviso de escritorio. No a quien
     // silenció, ni en hilos, ni a mencionados (a ellos ya les llega por la campana).
     const activity = {
@@ -711,7 +931,7 @@ export class ChatService {
       preview,
       senderId: user.id,
       senderName: user.fullName || message.sender.fullName || null,
-      channelName: channel.kind === ChatChannelKind.DIRECT ? null : channel.name,
+      channelName: direct ? null : channel.name,
       at: message.createdAt.toISOString(),
     };
     const loud = new Set(
@@ -724,19 +944,21 @@ export class ChatService {
 
     let audience = members.filter((m) => m.userId !== user.id && !isMuted(m)).map((m) => m.userId);
     if (message.parentId) {
-      const participants = await this.prisma.chatMessage.findMany({
-        where: { OR: [{ id: message.parentId }, { parentId: message.parentId }], deletedAt: null },
-        select: { senderId: true },
-        distinct: ['senderId'],
-      });
+      const [root, participants] = await Promise.all([
+        this.prisma.chatMessage.findUnique({ where: { id: message.parentId }, select: { senderId: true } }),
+        this.prisma.chatMessage.findMany({
+          where: { parentId: message.parentId, deletedAt: null },
+          select: { senderId: true },
+          distinct: ['senderId'],
+        }),
+      ]);
       const inThread = new Set(participants.map((p) => p.senderId));
+      if (root) inThread.add(root.senderId);
       audience = audience.filter((id) => inThread.has(id));
     }
     audience = audience.filter((id) => !mentioned.has(id));
 
     const author = user.fullName || message.sender.fullName || 'Alguien';
-    const direct = channel.kind === ChatChannelKind.DIRECT;
-    const channelLabel = direct ? '' : `#${channel.name}`;
     const url = `/chat?channel=${channel.id}&msg=${message.id}`;
     const body = message.parentId ? `Respuesta en hilo: ${preview}` : preview;
 
@@ -746,7 +968,7 @@ export class ChatService {
           title: direct ? shortName(author) || author : `${shortName(author) || author} en ${channelLabel}`,
           body,
           url,
-          type: 'chat.message',
+          type: message.parentId ? 'chat.thread_reply' : 'chat.message',
           kind: 'chat',
           channel: 'chat',
           priority: 'high',
@@ -804,26 +1026,31 @@ export class ChatService {
       include: messageInclude,
     });
     await this.refreshPreview(updated.channelId);
-    const payload = serializeMessage(updated);
-    this.realtime.emitToChannel(updated.channelId, 'chat:message-updated', payload);
-    return payload;
+    this.realtime.emitToChannel(updated.channelId, 'chat:message-updated', serializeMessage(updated));
+    return (await this.serializeFor(user.id, [updated]))[0];
   }
 
-  /** Borrado suave: autor o dirección. Queda el hueco «Mensaje eliminado» en el cliente. */
+  /**
+   * Borrado suave: autor o dirección. Si tiene hilo, el evento lleva el mensaje ya
+   * vacío (`deleted: true`) para que el cliente deje «Mensaje eliminado» en su lugar.
+   */
   async deleteMessage(user: ChatUser, messageId: string) {
     const message = await this.findMessage(user, messageId);
     if (message.senderId !== user.id && !isDirectionRole(user.roleKey)) {
       throw new ForbiddenException('Solo puedes borrar tus mensajes');
     }
-    await this.prisma.chatMessage.update({
+    const updated = await this.prisma.chatMessage.update({
       where: { id: messageId },
       data: { deletedAt: new Date(), pinnedAt: null, pinnedById: null },
+      include: messageInclude,
     });
     await this.refreshPreview(message.channelId);
+    const keep = (updated?._count?.replies ?? 0) > 0;
     this.realtime.emitToChannel(message.channelId, 'chat:message-deleted', {
       channelId: message.channelId,
       messageId,
       parentId: message.parentId,
+      ...(keep ? { message: serializeMessage(updated) } : {}),
     });
     return { ok: true };
   }
@@ -855,9 +1082,28 @@ export class ChatService {
       await this.prisma.chatMessageReaction.create({ data: { messageId, userId: user.id, emoji } });
     }
     const refreshed = await this.prisma.chatMessage.findUniqueOrThrow({ where: { id: messageId }, include: messageInclude });
-    const payload = serializeMessage(refreshed);
-    this.realtime.emitToChannel(message.channelId, 'chat:message-updated', payload);
-    return payload;
+    this.realtime.emitToChannel(message.channelId, 'chat:message-updated', serializeMessage(refreshed));
+    if (!existing && message.senderId !== user.id && message.kind !== ChatMessageKind.SYSTEM) {
+      const author = user.fullName || 'Alguien';
+      // Solo push con etiqueta por mensaje: varias reacciones reemplazan la misma tarjeta (sin fila en la campana).
+      void this.notifications
+        .pushOnly(message.senderId, {
+          title: `${shortName(author) || author} reaccionó ${emoji}`,
+          body: pushText(message),
+          url: `/chat?channel=${message.channelId}&msg=${messageId}`,
+          type: 'chat.reaction',
+          kind: 'event',
+          channel: 'chat',
+          priority: 'normal',
+          tag: `chat-reaction-${messageId}`,
+          senderId: user.id,
+          senderName: author,
+          channelId: message.channelId,
+          messageId,
+        })
+        .catch(() => undefined);
+    }
+    return (await this.serializeFor(user.id, [refreshed]))[0];
   }
 
   async togglePin(user: ChatUser, messageId: string) {
@@ -868,9 +1114,8 @@ export class ChatService {
       data: message.pinnedAt ? { pinnedAt: null, pinnedById: null } : { pinnedAt: new Date(), pinnedById: user.id },
       include: messageInclude,
     });
-    const payload = serializeMessage(updated);
-    this.realtime.emitToChannel(message.channelId, 'chat:message-updated', payload);
-    return payload;
+    this.realtime.emitToChannel(message.channelId, 'chat:message-updated', serializeMessage(updated));
+    return (await this.serializeFor(user.id, [updated]))[0];
   }
 
   async listPins(user: ChatUser, channelId: string) {
@@ -881,7 +1126,108 @@ export class ChatService {
       orderBy: { pinnedAt: 'desc' },
       take: 50,
     });
-    return { messages: rows.map(serializeMessage) };
+    return { messages: await this.serializeFor(user.id, rows) };
+  }
+
+  // ─── Guardados ───────────────────────────────────────────────────────────
+
+  /** Alterna el marcador personal; mis otros dispositivos se enteran por socket. */
+  async toggleSaved(user: ChatUser, messageId: string): Promise<{ saved: boolean }> {
+    await this.findMessage(user, messageId);
+    const key = { userId_messageId: { userId: user.id, messageId } };
+    const existing = await this.prisma.chatSavedMessage.findUnique({ where: key, select: { id: true } });
+    if (existing) {
+      await this.prisma.chatSavedMessage.deleteMany({ where: { userId: user.id, messageId } });
+    } else {
+      await this.prisma.chatSavedMessage.upsert({ where: key, create: { userId: user.id, messageId }, update: {} });
+    }
+    const saved = !existing;
+    this.realtime.emitToUser(user.id, 'chat:saved', { messageId, saved });
+    return { saved };
+  }
+
+  async listSaved(user: ChatUser, opts: { limit?: number; before?: string } = {}) {
+    const limit = Math.min(Math.max(Number(opts.limit) || PAGE_DEFAULT, 1), PAGE_MAX);
+    const before = opts.before ? new Date(opts.before) : null;
+    const rows = await this.prisma.chatSavedMessage.findMany({
+      where: {
+        userId: user.id,
+        ...(before && !Number.isNaN(before.getTime()) ? { createdAt: { lt: before } } : {}),
+        message: {
+          deletedAt: null,
+          channel: {
+            organizationId: tenantIdOf(user),
+            isArchived: false,
+            OR: [{ kind: ChatChannelKind.PUBLIC }, { members: { some: { userId: user.id } } }],
+          },
+        },
+      },
+      include: {
+        message: {
+          include: {
+            ...messageInclude,
+            channel: {
+              select: {
+                id: true,
+                name: true,
+                kind: true,
+                isGroupDm: true,
+                members: {
+                  where: { userId: { not: user.id } },
+                  select: { user: { select: { fullName: true } } },
+                  take: 1,
+                },
+              },
+            },
+          },
+        },
+      },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: limit,
+    });
+    const savedIds = new Set(rows.map((r) => r.messageId));
+    return {
+      items: rows.map((r) => {
+        const ch = r.message.channel;
+        return {
+          savedAt: r.createdAt.toISOString(),
+          message: serializeMessage(r.message, savedIds),
+          channel: {
+            id: ch.id,
+            name: ch.kind === ChatChannelKind.DIRECT ? (ch.members[0]?.user.fullName ?? ch.name) : ch.name,
+            kind: ch.kind,
+            isGroupDm: ch.isGroupDm,
+          },
+        };
+      }),
+    };
+  }
+
+  // ─── Presencia y preferencias ────────────────────────────────────────────
+
+  presence(user: ChatUser): { online: string[] } {
+    return { online: this.realtime.onlineUserIds(tenantIdOf(user)) };
+  }
+
+  async getPrefs(user: ChatUser): Promise<{ dndUntil: string | null }> {
+    const row = await this.prisma.user.findUnique({ where: { id: user.id }, select: { chatDndUntil: true } });
+    const until = row?.chatDndUntil ?? null;
+    return { dndUntil: until && until.getTime() > Date.now() ? until.toISOString() : null };
+  }
+
+  /** No molestar hasta una fecha; `null` (o una fecha pasada) lo apaga. */
+  async setPrefs(user: ChatUser, input: { dndUntil?: string | null }): Promise<{ dndUntil: string | null }> {
+    let until: Date | null = null;
+    if (input.dndUntil) {
+      until = new Date(input.dndUntil);
+      if (Number.isNaN(until.getTime())) throw new BadRequestException('Fecha de «No molestar» inválida');
+      if (until.getTime() <= Date.now()) until = null;
+      else if (until > MUTE_FOREVER) until = MUTE_FOREVER;
+    }
+    await this.prisma.user.update({ where: { id: user.id }, data: { chatDndUntil: until } });
+    const result = { dndUntil: until?.toISOString() ?? null };
+    this.realtime.emitToUser(user.id, 'chat:prefs', result);
+    return result;
   }
 
   /** Leído: guarda el marcador, avisa ✓✓ al canal y limpia el globo en mis otros dispositivos. */
@@ -936,11 +1282,12 @@ export class ChatService {
               OR: [{ kind: ChatChannelKind.PUBLIC }, { members: { some: { userId: user.id } } }],
             },
       },
-      include: { ...messageInclude, channel: { select: { id: true, name: true, kind: true } } },
+      include: { ...messageInclude, channel: { select: { id: true, name: true, kind: true, isGroupDm: true } } },
       orderBy: { createdAt: 'desc' },
       take: 40,
     });
-    return { messages: rows.map((m) => ({ ...serializeMessage(m), channel: m.channel })) };
+    const saved = await this.savedIdsOf(user.id, rows.map((m) => m.id));
+    return { messages: rows.map((m) => ({ ...serializeMessage(m, saved), channel: m.channel })) };
   }
 
   /** Gente de mi organización para directos, menciones e invitaciones. */
