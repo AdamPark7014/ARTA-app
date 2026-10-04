@@ -1,5 +1,39 @@
-import { NotificationsService } from './notifications.service';
+import { NotificationsService, chatLinkParts } from './notifications.service';
 import { pushMetaFor } from './notification-push-meta';
+
+describe('NotificationsService · push de un aviso que apunta a un mensaje', () => {
+  it('extrae conversación y mensaje solo de /chat?channel=…', () => {
+    expect(chatLinkParts('/chat?channel=c1&msg=m9')).toEqual({ channelId: 'c1', messageId: 'm9' });
+    expect(chatLinkParts('/chat?channel=c1')).toEqual({ channelId: 'c1', messageId: null });
+    expect(chatLinkParts('/events/e1?tab=tasks')).toBeNull();
+    expect(chatLinkParts(null)).toBeNull();
+  });
+
+  it('manda channelId, messageId y thread chat-<id> para que se apile con la conversación', async () => {
+    const created = {
+      id: 'n1',
+      userId: 'ana',
+      type: 'chat.mention',
+      title: 'Te mencionaron',
+      body: 'hola',
+      linkUrl: '/chat?channel=c1&msg=m9',
+      actorId: 'beto',
+      createdAt: new Date(),
+      actor: { id: 'beto', fullName: 'Beto' },
+    };
+    const prisma = {
+      notification: { create: jest.fn().mockResolvedValue(created), count: jest.fn().mockResolvedValue(1) },
+    };
+    const push = { sendToUser: jest.fn().mockResolvedValue(1) };
+    const service = new NotificationsService(prisma as never, push as never);
+    await service.notify({ userId: 'ana', actorId: 'beto', type: 'chat.mention', title: 'x', linkUrl: created.linkUrl });
+    await new Promise((r) => setImmediate(r));
+    expect(push.sendToUser).toHaveBeenCalledWith(
+      'ana',
+      expect.objectContaining({ channelId: 'c1', messageId: 'm9', threadId: 'chat-c1', channel: 'chat' }),
+    );
+  });
+});
 
 describe('NotificationsService · equipo del evento', () => {
   const prisma = {

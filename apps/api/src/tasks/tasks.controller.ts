@@ -83,8 +83,32 @@ function dueLabel(dueAt?: Date | null) {
   return ` · vence ${dueAt.toLocaleDateString('es-MX')}`;
 }
 
-function taskLink(eventId?: string | null) {
-  return eventId ? `/events/${eventId}?tab=tasks` : '/tasks';
+/** Forma del contrato móvil: la app abre la tarea nativa con estos enlaces. */
+export function taskLink(eventId?: string | null, taskId?: string | null) {
+  if (!taskId) return eventId ? `/events/${eventId}?tab=tasks` : '/tasks';
+  return eventId ? `/events/${eventId}?tab=tasks&task=${taskId}` : `/tasks?task=${taskId}`;
+}
+
+const TASK_STATUS_LABEL: Partial<Record<TaskStatus, string>> = {
+  OPEN: 'Pendiente',
+  IN_PROGRESS: 'En curso',
+  BLOCKED: 'Bloqueada',
+  DONE: 'Terminada',
+};
+
+/** Lo que cambió de una tarea, en palabras: «fecha de entrega, título». */
+function taskChanges(
+  before: { title: string; dueAt: Date | null; detail: string | null },
+  body: { title?: string; dueAt?: string | null; detail?: string },
+) {
+  const out: string[] = [];
+  if (body.title !== undefined && body.title !== before.title) out.push('título');
+  if (body.detail !== undefined && body.detail !== (before.detail ?? '')) out.push('detalle');
+  if (body.dueAt !== undefined) {
+    const next = body.dueAt ? new Date(body.dueAt).getTime() : null;
+    if (next !== (before.dueAt?.getTime() ?? null)) out.push('fecha de entrega');
+  }
+  return out;
 }
 
 @Controller('tasks')
@@ -150,7 +174,7 @@ export class TasksController {
   private async notifyAssigned(
     actor: AuthUser,
     people: Array<{ id: string }>,
-    task: { title: string; organizationId: string | null; dueAt: Date | null },
+    task: { id: string; title: string; organizationId: string | null; dueAt: Date | null },
     event: { id: string; name: string; entity: NotifyInput['entity'] } | null | undefined,
     kind: 'task.assigned' | 'task.reassigned',
   ) {
@@ -162,7 +186,7 @@ export class TasksController {
         type: kind,
         title: kind === 'task.assigned' ? `${actor.fullName} te asignó una tarea` : `${actor.fullName} te pasó una tarea`,
         body: `${task.title}${event ? ` · ${event.name}` : ''}${dueLabel(task.dueAt)}`,
-        linkUrl: taskLink(event?.id),
+        linkUrl: taskLink(event?.id, task.id),
         entity: event?.entity,
       });
     }
@@ -392,6 +416,18 @@ export class TasksController {
       fileUrl,
     });
 
+    // Quien pidió la tarea se entera del avance; si lo subió quien la pidió, lo ven sus responsables.
+    const evidenceFor = isRequester ? taskAssigneeIds(task) : [task.createdById];
+    void this.notifications.notifyUsers(evidenceFor, {
+      organizationId: task.organizationId,
+      actorId: req.user.id,
+      type: 'task.evidence',
+      title: `${req.user.fullName} subió evidencia a una tarea`,
+      body: `${task.title} · ${evidence.label || file.originalname}`,
+      linkUrl: taskLink(task.eventId, task.id),
+      entity: task.event?.entity,
+    });
+
     return evidence;
   }
 
@@ -455,12 +491,23 @@ export class TasksController {
     );
 
     const updated = await this.fetchTask(id);
-    const link = taskLink(updated?.eventId);
+    const link = taskLink(updated?.eventId, id);
     const eventName = updated?.event?.name;
 
-    if (needsReview && task.createdById) {
-      await this.notifications.notify({
-        userId: task.createdById,
+    if (needsReview) {
+      // Si quien la pidió ya no está activo, la revisa dirección o la gerencia de la entidad.
+      const requester = task.createdById
+        ? await this.prisma.user.findUnique({ where: { id: task.createdById }, select: { active: true } })
+        : null;
+      const reviewers = requester?.active
+        ? [task.createdById]
+        : await this.notifications.whoCan({
+            organizationId: task.organizationId,
+            entity: task.event?.entity ?? null,
+            directionOnly: true,
+            exclude: req.user.id,
+          });
+      await this.notifications.notifyUsers(reviewers, {
         organizationId: task.organizationId,
         actorId: req.user.id,
         type: 'task.submitted',
@@ -518,7 +565,7 @@ export class TasksController {
         type: 'task.approved',
         title: `${req.user.fullName} aprobó tu entrega`,
         body: task.title,
-        linkUrl: taskLink(task.eventId),
+        linkUrl: taskLink(task.eventId, task.id),
         entity: task.event?.entity,
       });
     }
@@ -569,7 +616,7 @@ export class TasksController {
         type: 'task.rejected',
         title: `${req.user.fullName} pidió corrección en tu entrega`,
         body: `${task.title}: ${note}`,
-        linkUrl: taskLink(task.eventId),
+        linkUrl: taskLink(task.eventId, task.id),
         entity: task.event?.entity,
       });
     }
@@ -654,12 +701,54 @@ export class TasksController {
     });
     const updated = withAssignees(saved);
 
-    const link = taskLink(updated.eventId);
+    const link = taskLink(updated.eventId, id);
     const eventName = updated.event?.name;
+    const where = `${updated.title}${eventName ? ` · ${eventName}` : ''}`;
+    const base = {
+      organizationId: updated.organizationId,
+      actorId: req.user.id,
+      linkUrl: link,
+      entity: updated.event?.entity,
+    };
+    const addedIds = new Set(added.map((p) => p.id));
+    const stayed = updated.assigneeIds.filter((uid) => !addedIds.has(uid));
 
     if (reassigned) {
       // Solo avisa a quien se suma: los que ya la tenían no necesitan otro aviso.
       await this.notifyAssigned(req.user, added, updated, updated.event, 'task.reassigned');
+      const removed = before.filter((uid) => !updated.assigneeIds.includes(uid));
+      await this.notifications.notifyUsers(removed, {
+        ...base,
+        linkUrl: '/tasks',
+        type: 'task.unassigned',
+        title: `${req.user.fullName} te quitó de una tarea`,
+        body: where,
+      });
+    }
+
+    if (reopening) {
+      await this.notifications.notifyUsers(stayed, {
+        ...base,
+        type: 'task.reopened',
+        title: `${req.user.fullName} reabrió una tarea`,
+        body: where,
+      });
+    } else {
+      const changes = taskChanges(task, body);
+      if (changes.length) {
+        const dueOnly = changes.length === 1 && changes[0] === 'fecha de entrega';
+        await this.notifications.notifyUsers(stayed, {
+          ...base,
+          type: dueOnly ? 'task.due_changed' : 'task.updated',
+          title: dueOnly
+            ? `${req.user.fullName} cambió la fecha de una tarea`
+            : `${req.user.fullName} actualizó una tarea`,
+          body: dueOnly ? `${where}${dueLabel(updated.dueAt) || ' · sin fecha'}` : `${where} · ${changes.join(', ')}`,
+        });
+      }
+    }
+
+    if (reassigned) {
       await logTaskActivity(
         this.prisma,
         id,
@@ -701,6 +790,16 @@ export class TasksController {
           entity: updated.event?.entity,
         });
       }
+
+      // Si lo movió alguien que no la tiene (quien la pidió, dirección), sus responsables se enteran.
+      if (!reopening && !isTaskAssignee(req.user.id, task)) {
+        await this.notifications.notifyUsers(stayed, {
+          ...base,
+          type: 'task.status_changed',
+          title: `${req.user.fullName} cambió el estado de una tarea`,
+          body: `${where} · ${TASK_STATUS_LABEL[body.status] ?? body.status}`,
+        });
+      }
     }
 
     return updated;
@@ -713,6 +812,15 @@ export class TasksController {
     if (task.event) assertEventNotClosed(task.event.status);
     await logTaskActivity(this.prisma, id, req.user.id, 'deleted', task.title);
     await this.prisma.taskAssignment.delete({ where: { id } });
+    await this.notifications.notifyUsers([...taskAssigneeIds(task), task.createdById], {
+      organizationId: task.organizationId,
+      actorId: req.user.id,
+      type: 'task.deleted',
+      title: `${req.user.fullName} eliminó una tarea`,
+      body: `${task.title}${task.event ? ` · ${task.event.name}` : ''}`,
+      linkUrl: taskLink(task.eventId),
+      entity: task.event?.entity,
+    });
     return { ok: true };
   }
 }

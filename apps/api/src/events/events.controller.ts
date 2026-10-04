@@ -86,6 +86,28 @@ type AuthUser = {
   organizationId?: string | null;
 };
 
+type EventKeyFields = {
+  name: string;
+  venue: string | null;
+  city: string | null;
+  artist: string | null;
+  schedule: string | null;
+  endsAt: Date | null;
+  functions?: unknown;
+};
+
+/** Cambios que le importan al equipo (no notas ni descripción): «nombre, lugar, horario». */
+export function eventKeyChanges(before: EventKeyFields, after: EventKeyFields): string[] {
+  const out: string[] = [];
+  if (before.name !== after.name) out.push('nombre');
+  if ((before.artist ?? '') !== (after.artist ?? '')) out.push('artista');
+  if ((before.venue ?? '') !== (after.venue ?? '') || (before.city ?? '') !== (after.city ?? '')) out.push('lugar');
+  if ((before.schedule ?? '') !== (after.schedule ?? '')) out.push('horario');
+  if ((before.endsAt?.getTime() ?? null) !== (after.endsAt?.getTime() ?? null)) out.push('fecha de fin');
+  if (JSON.stringify(before.functions ?? null) !== JSON.stringify(after.functions ?? null)) out.push('funciones');
+  return out;
+}
+
 @Controller('events')
 @UseGuards(JwtAuthGuard)
 export class EventsController {
@@ -116,6 +138,10 @@ export class EventsController {
 
   private who(user: { fullName?: string }) {
     return shortName(user.fullName) || 'Dirección';
+  }
+
+  private when(date: Date) {
+    return date.toLocaleString('es-MX', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'America/Mexico_City' });
   }
 
   private assertEntity(user: AuthUser, entity: EntityKey) {
@@ -441,6 +467,22 @@ export class EventsController {
       },
     });
 
+    // Dirección y la gerencia de la entidad se enteran de cada evento nuevo.
+    const leaders = await this.notifications.whoCan({
+      organizationId,
+      entity: event.entity,
+      exclude: req.user.id,
+    });
+    await this.notifications.notifyUsers(leaders, {
+      organizationId,
+      actorId: req.user.id,
+      type: 'event.created',
+      title: `${this.who(req.user)} creó un evento`,
+      body: `${event.name}${event.startsAt ? ` · ${this.when(event.startsAt)}` : ''}`,
+      linkUrl: `/events/${event.id}`,
+      entity: event.entity,
+    });
+
     return this.get(req, event.id);
   }
 
@@ -523,9 +565,20 @@ export class EventsController {
     if (!isDirectionRole(req.user.roleKey)) {
       throw new ForbiddenException('Solo dirección puede eliminar eventos');
     }
+    // El equipo se calcula antes de borrar: después ya no hay tareas ni canal de dónde sacarlo.
+    const team = await this.notifications.eventAudience(id, req.user.id).catch(() => [] as string[]);
     await this.prisma.event.delete({ where: { id } });
     await this.prisma.auditLog.create({
       data: { userId: req.user.id, action: 'event.delete', resource: 'Event', resourceId: id },
+    });
+    await this.notifications.notifyUsers(team, {
+      organizationId: existing.organizationId,
+      actorId: req.user.id,
+      type: 'event.deleted',
+      title: `${this.who(req.user)} eliminó un evento`,
+      body: existing.name,
+      linkUrl: '/events',
+      entity: existing.entity,
     });
     return { ok: true };
   }
@@ -586,6 +639,17 @@ export class EventsController {
         `${this.who(req.user)} cambió la fecha del evento`,
         `${event.name} · ${when}`,
       );
+    } else {
+      const changed = eventKeyChanges(existing, event);
+      if (changed.length) {
+        await this.notifyTeam(
+          req.user,
+          event,
+          'event.updated',
+          `${this.who(req.user)} actualizó el evento`,
+          `${event.name} · ${changed.join(', ')}`,
+        );
+      }
     }
 
     return event;

@@ -4,6 +4,17 @@ import { PrismaService } from '../common/prisma/prisma.service';
 import { PushDispatchService, type PushPayload } from '../devices/push-dispatch.service';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { pushMetaFor } from './notification-push-meta';
+import {
+  canAccessEventOps,
+  hasPermission,
+  isDirectionRole,
+  type EntityKey as RbacEntity,
+  type Permission,
+  type RoleKey,
+} from '../common/rbac/roles';
+
+/** Recordatorios repetitivos: una vez por persona y enlace en esta ventana (cron diario u horario). */
+const ONCE_PER_DAY_MS = 20 * 60 * 60 * 1000;
 
 export type NotifyInput = {
   /** Destinatario. Si es el propio actor, no se crea nada. */
@@ -68,6 +79,69 @@ export class NotificationsService {
 
   async notifyMany(inputs: NotifyInput[]) {
     return Promise.all(inputs.map((i) => this.notify(i)));
+  }
+
+  /** El mismo aviso a varias personas (sin repetidos ni el actor). Nunca lanza. */
+  async notifyUsers(userIds: Array<string | null | undefined>, input: Omit<NotifyInput, 'userId'>) {
+    const ids = [...new Set(userIds.filter((id): id is string => !!id && id !== input.actorId))];
+    return this.notifyMany(ids.map((userId) => ({ ...input, userId })));
+  }
+
+  /**
+   * Recordatorios de cron: si esa persona ya tiene hoy un aviso del mismo tipo y
+   * enlace, no se repite (sin tabla extra: la campana es el registro).
+   */
+  async notifyOncePerDay(input: NotifyInput) {
+    if (!input.userId) return null;
+    try {
+      const since = new Date(Date.now() - ONCE_PER_DAY_MS);
+      const existing = await this.prisma.notification.findFirst({
+        where: { userId: input.userId, type: input.type, linkUrl: input.linkUrl ?? null, createdAt: { gte: since } },
+        select: { id: true },
+      });
+      if (existing) return null;
+    } catch (err) {
+      this.logger.warn(`No se pudo revisar avisos previos ${input.type}: ${String(err)}`);
+      return null;
+    }
+    return this.notify(input);
+  }
+
+  /**
+   * Personas activas de la organización que pueden actuar en una entidad: con el
+   * permiso pedido o, sin permiso, dirección y la gerencia de esa entidad.
+   */
+  async whoCan(opts: {
+    organizationId?: string | null;
+    entity?: EntityKey | RbacEntity | null;
+    permission?: Permission;
+    /** Solo dirección (super_admin, dir_general, dir_adjunta), sin gerencias. */
+    directionOnly?: boolean;
+    exclude?: string | null;
+  }): Promise<string[]> {
+    try {
+      const people = await this.prisma.user.findMany({
+        where: { active: true, ...(opts.organizationId ? { organizationId: opts.organizationId } : {}) },
+        select: { id: true, roleKey: true, entities: true, permissions: true },
+      });
+      const entity = (opts.entity ?? null) as RbacEntity | null;
+      return people
+        .filter((p) => {
+          if (p.id === opts.exclude) return false;
+          const role = p.roleKey as RoleKey;
+          if (entity && !canAccessEventOps(p.entities as RbacEntity[], role, entity)) return false;
+          if (opts.permission) return hasPermission(role, p.permissions ?? [], opts.permission);
+          if (isDirectionRole(role)) return true;
+          if (opts.directionOnly) return false;
+          if (role === 'gerente_arta') return entity !== 'EXPLANADA';
+          if (role === 'dir_auditorio') return entity === 'EXPLANADA';
+          return false;
+        })
+        .map((p) => p.id);
+    } catch (err) {
+      this.logger.warn(`No se pudo resolver a quién avisar: ${String(err)}`);
+      return [];
+    }
   }
 
   /**
@@ -166,6 +240,7 @@ export class NotificationsService {
     this.realtime?.emitToUser(row.userId, 'notification:new', { notification: row, unread });
     if (!this.push) return;
     const meta = pushMetaFor(row.type);
+    const chat = chatLinkParts(row.linkUrl);
     await this.push.sendToUser(row.userId, {
       title: row.title,
       body: row.body || '',
@@ -178,7 +253,19 @@ export class NotificationsService {
       notificationId: row.id,
       senderId: row.actorId,
       senderName: row.actor?.fullName ?? null,
-      threadId: row.linkUrl ? `link:${row.linkUrl.split('?')[0]}` : null,
+      // Un aviso que apunta a un mensaje se apila con su conversación y deja responder.
+      threadId: chat ? `chat-${chat.channelId}` : row.linkUrl ? `link:${row.linkUrl.split('?')[0]}` : null,
+      channelId: chat?.channelId ?? null,
+      messageId: chat?.messageId ?? null,
     });
   }
+}
+
+/** `/chat?channel=<id>&msg=<id>` → ids de conversación y mensaje; cualquier otra ruta → null. */
+export function chatLinkParts(linkUrl?: string | null): { channelId: string; messageId: string | null } | null {
+  if (!linkUrl || !linkUrl.startsWith('/chat?')) return null;
+  const params = new URLSearchParams(linkUrl.slice('/chat?'.length));
+  const channelId = params.get('channel');
+  if (!channelId) return null;
+  return { channelId, messageId: params.get('msg') };
 }
