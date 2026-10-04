@@ -57,6 +57,9 @@ import com.artaproducciones.ops.ui.theme.ArtaColors
 import com.artaproducciones.ops.ui.web.ArtaWebScreen
 import kotlinx.coroutines.flow.StateFlow
 
+/** `navigate("approvals")` sigue valiendo: el argumento es opcional. */
+private const val APPROVALS_ROUTE = "approvals?advance={advance}"
+
 /** Pestañas del cascarón, en el orden del contrato de paridad. */
 enum class Tab { Inicio, Chats, Tareas, Avisos, Mas }
 
@@ -69,6 +72,8 @@ sealed interface DeepLink {
     data class Task(val taskId: String) : DeepLink
     data class Event(val eventId: String) : DeepLink
     data object Approvals : DeepLink
+    /** Aprobaciones con la tarjeta de ese anticipo enfocada (`/advances?advance=<id>`). */
+    data class Advance(val advanceId: String) : DeepLink
     data object Events : DeepLink
     data class Section(val tab: Tab) : DeepLink
     data class Web(val path: String, val title: String? = null) : DeepLink
@@ -88,7 +93,7 @@ sealed interface DeepLink {
         ): DeepLink? {
             if (!channelId.isNullOrBlank()) return Chat(channelId, messageId?.takeIf { it.isNotBlank() })
             val link = url?.takeIf { it.isNotBlank() }?.let { parse(it, type) }
-            if (forceApprovals) return link as? Task ?: Approvals
+            if (forceApprovals) return link as? Task ?: link as? Advance ?: Approvals
             return link
         }
 
@@ -124,14 +129,18 @@ sealed interface DeepLink {
                         else -> Web(relative)
                     }
                 }
-                "purchase-orders", "advances" -> if (isPendingApproval(type)) Approvals else Web(relative)
+                "purchase-orders", "advances" -> when {
+                    !isPendingApproval(type) -> Web(relative)
+                    segments.first() == "advances" -> q("advance")?.let(::Advance) ?: Approvals
+                    else -> Approvals
+                }
                 else -> Web(relative)
             }
         }
 
         private fun isPendingApproval(type: String?): Boolean {
             val t = type?.trim()?.lowercase().orEmpty()
-            return t == "po.requested" || t.endsWith(".review") || t.endsWith(".requested")
+            return t == "po.requested" || t == "advance.to_pay" || t.endsWith(".review") || t.endsWith(".requested")
         }
     }
 }
@@ -158,6 +167,7 @@ private fun SignedInNav(user: UserDto, pendingLink: StateFlow<DeepLink?>, onLink
             is DeepLink.Task -> nav.navigate("task/${Uri.encode(target.taskId)}")
             is DeepLink.Event -> nav.navigate("event/${Uri.encode(target.eventId)}")
             DeepLink.Approvals -> nav.navigate("approvals") { launchSingleTop = true }
+            is DeepLink.Advance -> nav.navigate("approvals?advance=${Uri.encode(target.advanceId)}")
             DeepLink.Events -> nav.navigate("events") { launchSingleTop = true }
             is DeepLink.Section -> {
                 nav.popBackStack("home", inclusive = false)
@@ -174,7 +184,8 @@ private fun SignedInNav(user: UserDto, pendingLink: StateFlow<DeepLink?>, onLink
         return when (target) {
             is DeepLink.Task -> entry.destination.route == "task/{id}" && args?.getString("id") == target.taskId
             is DeepLink.Event -> entry.destination.route == "event/{id}" && args?.getString("id") == target.eventId
-            DeepLink.Approvals -> entry.destination.route == "approvals"
+            DeepLink.Approvals -> entry.destination.route == APPROVALS_ROUTE
+            is DeepLink.Advance -> entry.destination.route == APPROVALS_ROUTE && args?.getString("advance") == target.advanceId
             DeepLink.Events -> entry.destination.route == "events"
             else -> false
         }
@@ -228,7 +239,12 @@ private fun SignedInNav(user: UserDto, pendingLink: StateFlow<DeepLink?>, onLink
         ) { entry ->
             EventDetailScreen(eventId = entry.arguments?.getString("id").orEmpty(), nav = moduleNav)
         }
-        composable("approvals") { ApprovalsScreen(nav = moduleNav) }
+        composable(
+            route = APPROVALS_ROUTE,
+            arguments = listOf(navArgument("advance") { type = NavType.StringType; nullable = true; defaultValue = null }),
+        ) { entry ->
+            ApprovalsScreen(nav = moduleNav, focusAdvanceId = entry.arguments?.getString("advance"))
+        }
         composable("events") { EventsScreen(nav = moduleNav) }
         composable(
             route = "web?path={path}&title={title}",

@@ -39,7 +39,9 @@ data class PushPayload(
     val isApproval: Boolean get() = isApprovalType(type)
 
     companion object {
-        private val APPROVAL_TYPES = setOf("po.requested", "task.submitted", "checklist.submitted")
+        private val APPROVAL_TYPES = setOf(
+            "po.requested", "task.submitted", "checklist.submitted", "advance.requested", "advance.to_pay",
+        )
 
         /** Mismo criterio que `notification-push-meta.ts` del API. */
         fun isApprovalType(type: String?): Boolean {

@@ -14,7 +14,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -28,6 +30,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
@@ -49,6 +53,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.artaproducciones.ops.data.api.AdvanceDto
 import com.artaproducciones.ops.data.api.ModulesClient
 import com.artaproducciones.ops.data.api.ModulesSession
 import com.artaproducciones.ops.data.api.PoDetailDto
@@ -59,7 +64,9 @@ import com.artaproducciones.ops.ui.theme.ArtaColors
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import retrofit2.HttpException
 
 /** Una OC con la entidad de la que se pidió (la autorización depende de ella). */
 internal data class PoItem(val row: PoRowDto, val entity: String)
@@ -69,6 +76,7 @@ internal data class ApprovalsData(
     val requested: List<TaskDto>,
     val orders: List<PoItem>,
     val canPayNow: Boolean,
+    val advances: List<AdvanceDto> = emptyList(),
 ) {
     fun toAuthorize(p: ModulesPerms) = orders.filter {
         poIsPending(it.row.status) && it.row.eventStatus !in CLOSED_EVENT && p.canAuthorizePoFor(it.entity)
@@ -78,8 +86,16 @@ internal data class ApprovalsData(
         p.canMarkPaid && it.row.status == "AUTHORIZED" && it.row.eventStatus !in CLOSED_EVENT
     }
 
-    fun pendingCount(p: ModulesPerms) = tasksToReview.size + toAuthorize(p).size + toPay(p).size
+    /** Por aprobar primero, luego por pagar; las más viejas arriba. */
+    val actionableAdvances: List<AdvanceDto>
+        get() = advances.filter { it.isActionable() }.sortedWith(compareBy({ it.advanceStatus != "PENDING" }, { it.createdAt ?: "" }))
+
+    fun pendingCount(p: ModulesPerms) = tasksToReview.size + toAuthorize(p).size + toPay(p).size + actionableAdvances.size
 }
+
+/** El API filtra por permisos; si la ruta aún no existe (404) o falla, la sección no aparece. */
+internal suspend fun loadPendingAdvances(p: ModulesPerms): List<AdvanceDto> =
+    if (p.approvesMoney || p.has("finance.edit")) runCatching { ModulesClient.api.pendingAdvances() }.getOrDefault(emptyList()) else emptyList()
 
 /**
  * Lo que espera mi decisión. Tareas: las que pedí (dirección ve todas las de su
@@ -98,6 +114,7 @@ internal suspend fun loadApprovals(p: ModulesPerms): ApprovalsData = coroutineSc
         emptyList()
     }
     val window = async { if (p.canMarkPaid) runCatching { ModulesClient.api.poWindow().canPayNow }.getOrDefault(false) else false }
+    val advances = async { loadPendingAdvances(p) }
     val mine = requested.await()
     ApprovalsData(
         tasksToReview = (review.await() ?: mine.filter { it.status == "PENDING_APPROVAL" })
@@ -106,12 +123,13 @@ internal suspend fun loadApprovals(p: ModulesPerms): ApprovalsData = coroutineSc
         requested = mine,
         orders = orders.awaitAll().flatten(),
         canPayNow = window.await(),
+        advances = advances.await(),
     )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ApprovalsScreen(nav: ModuleNav) {
+fun ApprovalsScreen(nav: ModuleNav, focusAdvanceId: String? = null) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val haptics = rememberHaptics()
@@ -124,6 +142,12 @@ fun ApprovalsScreen(nav: ModuleNav) {
     var openPo by remember { mutableStateOf<PoItem?>(null) }
     var rejectTask by remember { mutableStateOf<TaskDto?>(null) }
     var busyId by remember { mutableStateOf<String?>(null) }
+    var rejectAdvance by remember { mutableStateOf<AdvanceDto?>(null) }
+    var confirmPaid by remember { mutableStateOf<AdvanceDto?>(null) }
+    var highlightAdvance by remember { mutableStateOf<String?>(null) }
+    var focusHandled by rememberSaveable { mutableStateOf(false) }
+    val snackbar = remember { SnackbarHostState() }
+    val listState = rememberLazyListState()
 
     LaunchedEffect(tick) {
         loading = true
@@ -157,8 +181,72 @@ fun ApprovalsScreen(nav: ModuleNav) {
         }
     }
 
+    fun notify(message: String) {
+        scope.launch { snackbar.showSnackbar(message) }
+    }
+
+    /** Optimista: la tarjeta sale de la lista y vuelve a su lugar si el API falla; un 409 recarga lo del servidor. */
+    fun resolveAdvance(a: AdvanceDto, action: String, reason: String? = null) {
+        val before = data ?: return
+        val index = before.advances.indexOfFirst { it.id == a.id }
+        if (index < 0) return
+        data = before.copy(advances = before.advances.filterNot { it.id == a.id })
+        scope.launch {
+            try {
+                when (action) {
+                    "approve" -> ModulesClient.api.approveAdvance(a.id)
+                    "reject" -> ModulesClient.api.rejectAdvance(a.id, mapOf("reason" to reason))
+                    else -> ModulesClient.api.markAdvancePaid(a.id)
+                }
+                haptics.confirm()
+                notify(
+                    when (action) {
+                        "approve" -> "Anticipo aprobado"
+                        "reject" -> "Anticipo rechazado"
+                        else -> "Anticipo marcado como pagado"
+                    },
+                )
+                // Quien aprueba también puede pagar: el mismo anticipo vuelve como «Por pagar».
+                runCatching { ModulesClient.api.pendingAdvances() }.getOrNull()?.let { list -> data = data?.copy(advances = list) }
+            } catch (e: Exception) {
+                haptics.reject()
+                notify(e.userMessage())
+                val fresh = if (e is HttpException && e.code() == 409) {
+                    runCatching { ModulesClient.api.pendingAdvances() }.getOrNull()
+                } else {
+                    null
+                }
+                data = data?.let { d ->
+                    when {
+                        fresh != null -> d.copy(advances = fresh)
+                        d.advances.any { it.id == a.id } -> d
+                        else -> d.copy(advances = d.advances.toMutableList().apply { add(index.coerceAtMost(size), a) })
+                    }
+                }
+            }
+        }
+    }
+
     val p = perms
     val d = data
+
+    LaunchedEffect(d != null, focusAdvanceId) {
+        val id = focusAdvanceId ?: return@LaunchedEffect
+        val loaded = data ?: return@LaunchedEffect
+        val pp = perms ?: return@LaunchedEffect
+        if (focusHandled) return@LaunchedEffect
+        focusHandled = true
+        tab = 0
+        val index = loaded.advanceListIndex(pp, id, hasError = error != null)
+        if (index == null) {
+            notify("Ese anticipo ya no está pendiente de tu parte.")
+            return@LaunchedEffect
+        }
+        highlightAdvance = id
+        runCatching { listState.animateScrollToItem(index) }
+        delay(4_000)
+        highlightAdvance = null
+    }
 
     Column(Modifier.fillMaxSize()) {
         DetailTopBar("Aprobaciones", onBack = { nav.back() })
@@ -186,6 +274,12 @@ fun ApprovalsScreen(nav: ModuleNav) {
                     onReject = { rejectTask = it },
                     onOpenPo = { openPo = it },
                     onOpenAdvances = { nav.openWeb("/advances", "Anticipos") },
+                    listState = listState,
+                    highlightAdvance = highlightAdvance,
+                    onOpenFile = { a, url -> openRemoteFile(context, scope, url, a.label) },
+                    onApproveAdvance = { resolveAdvance(it, "approve") },
+                    onRejectAdvance = { rejectAdvance = it },
+                    onPaidAdvance = { confirmPaid = it },
                 )
                 else -> HistoryList(
                     data = d,
@@ -194,7 +288,29 @@ fun ApprovalsScreen(nav: ModuleNav) {
                     onOpenPo = { openPo = it },
                 )
             }
+            SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).navigationBarsPadding())
         }
+    }
+
+    rejectAdvance?.let { a ->
+        AdvanceRejectSheet(
+            advance = a,
+            onConfirm = { reason ->
+                rejectAdvance = null
+                resolveAdvance(a, "reject", reason)
+            },
+            onDismiss = { rejectAdvance = null },
+        )
+    }
+
+    confirmPaid?.let { a ->
+        ConfirmDialog(
+            title = "¿Marcar pagado?",
+            text = listOfNotNull(a.conceptLabel(), advanceAmountLabel(a.amount), a.event?.name?.takeIf { it.isNotBlank() }).joinToString(" · "),
+            confirmLabel = "Marcar pagado",
+            onConfirm = { resolveAdvance(a, "paid") },
+            onDismiss = { confirmPaid = null },
+        )
     }
 
     rejectTask?.let { t ->
@@ -242,17 +358,24 @@ private fun PendingList(
     onReject: (TaskDto) -> Unit,
     onOpenPo: (PoItem) -> Unit,
     onOpenAdvances: () -> Unit,
+    listState: LazyListState,
+    highlightAdvance: String?,
+    onOpenFile: (AdvanceDto, String) -> Unit,
+    onApproveAdvance: (AdvanceDto) -> Unit,
+    onRejectAdvance: (AdvanceDto) -> Unit,
+    onPaidAdvance: (AdvanceDto) -> Unit,
 ) {
     val toAuthorize = data.toAuthorize(perms).sortedByDescending { it.row.ageDays }
     val toPay = data.toPay(perms).sortedByDescending { it.row.ageDays }
-    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 32.dp)) {
+    val advances = data.actionableAdvances
+    LazyColumn(Modifier.fillMaxSize(), state = listState, contentPadding = PaddingValues(bottom = 32.dp)) {
         error?.let { msg -> item { InlineError(msg, onRetry) } }
-        if (data.tasksToReview.isEmpty() && toAuthorize.isEmpty() && toPay.isEmpty()) {
+        if (data.tasksToReview.isEmpty() && toAuthorize.isEmpty() && toPay.isEmpty() && advances.isEmpty()) {
             item {
                 EmptyState(
                     "Nada pendiente",
                     "Cuando alguien te entregue una tarea" +
-                        (if (perms.approvesMoney) " o pidan una orden de compra" else "") + ", aparecerá aquí.",
+                        (if (perms.approvesMoney) ", pidan una orden de compra o un anticipo" else "") + ", aparecerá aquí.",
                 )
             }
         }
@@ -288,12 +411,29 @@ private fun PendingList(
             }
             items(toPay, key = { "p-${it.row.id}" }) { PoCard(it, onClick = { onOpenPo(it) }) }
         }
+        if (advances.isNotEmpty()) {
+            item {
+                SectionTitle("Anticipos", count = advances.size) {
+                    Text(money(advances.sumOf { advanceAmount(it.amount) ?: 0.0 }), style = MaterialTheme.typography.labelMedium, color = ArtaColors.Muted)
+                }
+            }
+            items(advances, key = { "adv-${it.id}" }) { a ->
+                AdvanceCard(
+                    advance = a,
+                    highlighted = a.id == highlightAdvance,
+                    onOpenFile = { url -> onOpenFile(a, url) },
+                    onApprove = { onApproveAdvance(a) },
+                    onReject = { onRejectAdvance(a) },
+                    onPaid = { onPaidAdvance(a) },
+                )
+            }
+        }
         if (perms.canSeeFinance) {
             item {
                 ModuleCard(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), onClick = onOpenAdvances) {
                     Text("Anticipos", fontWeight = FontWeight.SemiBold)
                     Text(
-                        "Se registran con su comprobante en cada evento y no pasan por autorización. Toca para verlos.",
+                        "Solicitudes, historial y anticipos de cada evento. Toca para verlos.",
                         style = MaterialTheme.typography.bodySmall,
                         color = ArtaColors.Muted,
                     )
@@ -301,6 +441,20 @@ private fun PendingList(
             }
         }
     }
+}
+
+/** Posición de la tarjeta del anticipo en [PendingList]; tiene que contar los mismos `item` en el mismo orden. */
+internal fun ApprovalsData.advanceListIndex(p: ModulesPerms, advanceId: String, hasError: Boolean): Int? {
+    val advances = actionableAdvances
+    val at = advances.indexOfFirst { it.id == advanceId }
+    if (at < 0) return null
+    val toAuthorize = toAuthorize(p)
+    val toPay = toPay(p)
+    var index = if (hasError) 1 else 0
+    if (tasksToReview.isNotEmpty()) index += 1 + tasksToReview.size
+    if (toAuthorize.isNotEmpty()) index += 1 + toAuthorize.size
+    if (toPay.isNotEmpty()) index += 1 + toPay.size + (if (canPayNow) 0 else 1)
+    return index + 1 + at
 }
 
 @Composable

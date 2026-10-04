@@ -227,6 +227,30 @@ data class PoWindowDto(
     val bypass: Boolean = false,
 )
 
+// ─── Anticipos (docs/ANTICIPOS-CONTRATO.md) ────────────────────────────────
+
+data class AdvanceEventRef(val id: String = "", val name: String = "", val entity: String? = null)
+
+/** `PaymentProof` sin OC. `amount` es un Decimal de Prisma (texto); `advanceStatus` null en los viejos. */
+data class AdvanceDto(
+    val id: String,
+    val eventId: String? = null,
+    val label: String? = null,
+    val amount: String? = null,
+    val fileUrl: String? = null,
+    val note: String? = null,
+    val advanceStatus: String? = null,
+    val createdAt: String? = null,
+    val decidedAt: String? = null,
+    val rejectReason: String? = null,
+    val paidAt: String? = null,
+    val paidProofUrl: String? = null,
+    val uploadedBy: PersonRef? = null,
+    val decidedBy: PersonRef? = null,
+    val paidBy: PersonRef? = null,
+    val event: AdvanceEventRef? = null,
+)
+
 /** Cuerpo libre: solo viajan las llaves presentes (y `null` explícito para borrar, p. ej. `dueAt`). */
 typealias JsonBody = Map<String, @JvmSuppressWildcards Any?>
 
@@ -302,6 +326,20 @@ interface ArtaModulesApi {
 
     @PATCH("purchase-orders/{id}/status")
     suspend fun setPoStatus(@Path("id") id: String, @Body body: JsonBody)
+
+    // Anticipos: lo que yo puedo resolver (PENDING si apruebo, APPROVED si pago)
+    @GET("finance/advances/pending")
+    suspend fun pendingAdvances(): List<AdvanceDto>
+
+    @PATCH("finance/advances/{id}/approve")
+    suspend fun approveAdvance(@Path("id") id: String)
+
+    /** `{ reason }` obligatorio, ≥3 caracteres. */
+    @PATCH("finance/advances/{id}/reject")
+    suspend fun rejectAdvance(@Path("id") id: String, @Body body: JsonBody)
+
+    @PATCH("finance/advances/{id}/paid")
+    suspend fun markAdvancePaid(@Path("id") id: String, @Body body: JsonBody = emptyMap())
 
     // Chat del evento (crea el canal la primera vez)
     @POST("chat/event/{eventId}")

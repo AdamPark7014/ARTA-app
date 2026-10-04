@@ -130,7 +130,7 @@ fun InicioScreen(user: UserDto, nav: ModuleNav) {
                     item { QuickActions(p, d.approvals, onNewTask = { creating = true }, nav = nav) }
                     todayTasks(d.myTasks, today, nav)
                     val approvals = d.approvals
-                    if (approvals != null && (p.approvesMoney || approvals.tasksToReview.isNotEmpty())) {
+                    if (approvals != null && (p.approvesMoney || approvals.tasksToReview.isNotEmpty() || approvals.actionableAdvances.isNotEmpty())) {
                         item { ApprovalsSummary(approvals, p, onOpen = { nav.openApprovals() }) }
                     }
                     if (p.eventOpsEntities.isNotEmpty()) upcomingEvents(d.events, today, nav)
@@ -221,7 +221,9 @@ private fun androidx.compose.foundation.lazy.LazyListScope.todayTasks(tasks: Lis
 private fun ApprovalsSummary(a: ApprovalsData, p: ModulesPerms, onOpen: () -> Unit) {
     val toAuthorize = a.toAuthorize(p)
     val toPay = a.toPay(p)
-    val total = a.tasksToReview.size + toAuthorize.size + toPay.size
+    val advancesToApprove = a.actionableAdvances.filter { it.advanceStatus == "PENDING" }
+    val advancesToPay = a.actionableAdvances.filter { it.advanceStatus == "APPROVED" }
+    val total = a.tasksToReview.size + toAuthorize.size + toPay.size + advancesToApprove.size + advancesToPay.size
     SectionTitle("Por aprobar", count = total.takeIf { it > 0 })
     ModuleCard(Modifier.padding(horizontal = 16.dp, vertical = 4.dp), onClick = onOpen) {
         if (total == 0) {
@@ -235,6 +237,12 @@ private fun ApprovalsSummary(a: ApprovalsData, p: ModulesPerms, onOpen: () -> Un
             }
             if (toPay.isNotEmpty()) {
                 SummaryLine("Órdenes por pagar", "${toPay.size} · ${money(toPay.sumOf { it.row.amount })}")
+            }
+            if (advancesToApprove.isNotEmpty()) {
+                SummaryLine("Anticipos por aprobar", "${advancesToApprove.size} · ${money(advancesToApprove.sumOf { advanceAmount(it.amount) ?: 0.0 })}")
+            }
+            if (advancesToPay.isNotEmpty()) {
+                SummaryLine("Anticipos por pagar", "${advancesToPay.size} · ${money(advancesToPay.sumOf { advanceAmount(it.amount) ?: 0.0 })}")
             }
         }
     }
