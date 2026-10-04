@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { extOf, formatBytes, isVoiceNote, kindOf, mmss, type ChatAttachment } from './chat-model';
 
 export function Icon({ d, size = 18 }: { d: string; size?: number }) {
@@ -25,6 +25,7 @@ export const ICONS = {
   search: 'M11 18a7 7 0 1 1 0-14 7 7 0 0 1 0 14Zm9 2-4.35-4.35',
   send: 'M12 19V5m-6 6 6-6 6 6',
   back: 'M15 18l-6-6 6-6',
+  next: 'M9 18l6-6-6-6',
   down: 'M6 9l6 6 6-6',
   bubble: 'M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12Z',
   clip: 'M21.4 11.6 12.2 20.8a5.5 5.5 0 0 1-7.8-7.8l9.2-9.2a3.7 3.7 0 0 1 5.2 5.2l-9.2 9.2a1.8 1.8 0 0 1-2.6-2.6l8.5-8.5',
@@ -46,6 +47,20 @@ export const ICONS = {
   plus: 'M12 5v14M5 12h14',
   users: 'M16 20v-1a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v1m7-9a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm13 9v-1a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8',
   check: 'M5 12l5 5L20 7',
+  reply: 'M9 14 4 9l5-5M4 9h10a6 6 0 0 1 6 6v5',
+  bookmark: 'M6 3h12v18l-6-4-6 4V3Z',
+  more: 'M5 12h.01M12 12h.01M19 12h.01',
+  info: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Zm0-5v-5m0-3h.01',
+  moon: 'M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5Z',
+  at: 'M16 12a4 4 0 1 1-8 0 4 4 0 0 1 8 0Zm0 0v1.5a2.5 2.5 0 0 0 5 0V12a9 9 0 1 0-3.5 7.1',
+  hash: 'M5 9h14M5 15h14M10 3 8 21M16 3l-2 18',
+  zoomIn: 'M11 18a7 7 0 1 1 0-14 7 7 0 0 1 0 14Zm9 2-4.35-4.35M11 8v6M8 11h6',
+  zoomOut: 'M11 18a7 7 0 1 1 0-14 7 7 0 0 1 0 14Zm9 2-4.35-4.35M8 11h6',
+  logout: 'M15 4h4a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-4M10 17l5-5-5-5M15 12H3',
+  archive: 'M3 4h18v4H3zM5 8v12h14V8M10 12h4',
+  link: 'M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1',
+  refresh: 'M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7',
+  compose: 'M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5Z',
 };
 
 /** Una sola reproducción a la vez, como en WhatsApp. */
@@ -171,18 +186,88 @@ export function AttachmentView({ a, onImage }: { a: ChatAttachment; onImage: (a:
   return <DocumentRow a={a} />;
 }
 
-export function MediaViewer({ a, onClose }: { a: ChatAttachment; onClose: () => void }) {
+const MAX_ZOOM = 5;
+
+/**
+ * Visor de fotos del canal: zoom (rueda, botones, doble clic, + / −), arrastrar
+ * para desplazar con zoom, flechas o deslizar entre fotos, deslizar abajo o Esc cierra.
+ */
+export function MediaViewer({ items, start, onClose }: { items: ChatAttachment[]; start: number; onClose: () => void }) {
+  const [index, setIndex] = useState(() => Math.min(Math.max(0, start), Math.max(0, items.length - 1)));
+  const [scale, setScale] = useState(1);
+  const [offset, setOffset] = useState({ x: 0, y: 0 });
+  const stageRef = useRef<HTMLDivElement>(null);
+  const drag = useRef<{ x: number; y: number; ox: number; oy: number; moved: boolean } | null>(null);
+  const count = items.length;
+  const a = items[index] ?? items[0];
+
+  const go = useCallback(
+    (d: number) => {
+      if (count < 2) return;
+      setIndex((i) => (i + d + count) % count);
+    },
+    [count],
+  );
+
+  const zoomTo = useCallback((next: number) => {
+    const s = Math.min(MAX_ZOOM, Math.max(1, next));
+    setScale(s);
+    if (s === 1) setOffset({ x: 0, y: 0 });
+  }, []);
+
+  useEffect(() => {
+    setScale(1);
+    setOffset({ x: 0, y: 0 });
+  }, [index]);
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        onClose();
+      } else if (e.key === 'ArrowLeft') go(-1);
+      else if (e.key === 'ArrowRight') go(1);
+      else if (e.key === '+' || e.key === '=') setScale((s) => Math.min(MAX_ZOOM, s * 1.25));
+      else if (e.key === '-') zoomTo(scale / 1.25);
+      else if (e.key === '0') zoomTo(1);
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  }, [onClose, go, zoomTo, scale]);
+
+  // La rueda necesita `passive: false` para no desplazar la página detrás.
+  useEffect(() => {
+    const el = stageRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      setScale((s) => {
+        const next = Math.min(MAX_ZOOM, Math.max(1, e.deltaY < 0 ? s * 1.15 : s / 1.15));
+        if (next === 1) setOffset({ x: 0, y: 0 });
+        return next;
+      });
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, []);
+
+  if (!a) return null;
+
   return (
-    <div className="chat-viewer" role="dialog" aria-label={a.name || 'Foto'} onClick={onClose}>
-      <div className="chat-viewer__bar" onClick={(e) => e.stopPropagation()}>
+    <div className="chat-viewer" role="dialog" aria-modal="true" aria-label={a.name || 'Foto'}>
+      <div className="chat-viewer__bar">
         <span className="chat-viewer__name">{a.name || 'Foto'}</span>
+        {count > 1 ? (
+          <span className="chat-viewer__count">
+            {index + 1} / {count}
+          </span>
+        ) : null}
+        <button type="button" className="chat-viewer__btn" onClick={() => zoomTo(scale / 1.25)} aria-label="Alejar" disabled={scale <= 1}>
+          <Icon d={ICONS.zoomOut} size={18} />
+        </button>
+        <button type="button" className="chat-viewer__btn" onClick={() => zoomTo(scale * 1.25)} aria-label="Acercar" disabled={scale >= MAX_ZOOM}>
+          <Icon d={ICONS.zoomIn} size={18} />
+        </button>
         <a className="chat-viewer__btn" href={a.url} download={a.name || true} aria-label="Descargar">
           <Icon d={ICONS.download} size={18} />
         </a>
@@ -190,8 +275,60 @@ export function MediaViewer({ a, onClose }: { a: ChatAttachment; onClose: () => 
           <Icon d={ICONS.close} size={18} />
         </button>
       </div>
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img className="chat-viewer__img" src={a.url} alt={a.name || 'Foto'} onClick={(e) => e.stopPropagation()} />
+      <div
+        ref={stageRef}
+        className={`chat-viewer__stage${scale > 1 ? ' is-zoomed' : ''}`}
+        onPointerDown={(e) => {
+          if ((e.target as HTMLElement).closest('button')) return;
+          e.currentTarget.setPointerCapture(e.pointerId);
+          drag.current = { x: e.clientX, y: e.clientY, ox: offset.x, oy: offset.y, moved: false };
+        }}
+        onPointerMove={(e) => {
+          const d = drag.current;
+          if (!d) return;
+          const dx = e.clientX - d.x;
+          const dy = e.clientY - d.y;
+          if (Math.abs(dx) + Math.abs(dy) > 6) d.moved = true;
+          if (scale > 1) setOffset({ x: d.ox + dx, y: d.oy + dy });
+        }}
+        onPointerUp={(e) => {
+          const d = drag.current;
+          drag.current = null;
+          if (!d) return;
+          const dx = e.clientX - d.x;
+          const dy = e.clientY - d.y;
+          if (scale === 1 && d.moved) {
+            if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy)) go(dx < 0 ? 1 : -1);
+            else if (dy > 100) onClose();
+            return;
+          }
+          if (!d.moved && e.target === e.currentTarget) onClose();
+        }}
+        onPointerCancel={() => {
+          drag.current = null;
+        }}
+        onDoubleClick={() => zoomTo(scale > 1 ? 1 : 2.5)}
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          key={a.url}
+          className="chat-viewer__img"
+          src={a.url}
+          alt={a.name || 'Foto'}
+          draggable={false}
+          style={{ transform: `translate(${offset.x}px, ${offset.y}px) scale(${scale})` }}
+        />
+        {count > 1 ? (
+          <>
+            <button type="button" className="chat-viewer__nav chat-viewer__nav--prev" onClick={() => go(-1)} aria-label="Foto anterior">
+              <Icon d={ICONS.back} size={22} />
+            </button>
+            <button type="button" className="chat-viewer__nav chat-viewer__nav--next" onClick={() => go(1)} aria-label="Foto siguiente">
+              <Icon d={ICONS.next} size={22} />
+            </button>
+          </>
+        ) : null}
+      </div>
     </div>
   );
 }

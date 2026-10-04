@@ -25,6 +25,8 @@ export type ChannelSummary = {
   unreadCount: number;
   muted: boolean;
   mutedUntil?: string | null;
+  /** Chat v2: directo de grupo (2 a 8 personas). Falta en API viejo. */
+  isGroupDm?: boolean;
 };
 
 export type ChannelMember = {
@@ -52,6 +54,7 @@ export type ChannelDetail = {
   lastReadAt?: string | null;
   memberCount: number;
   members: ChannelMember[];
+  isGroupDm?: boolean;
 };
 
 export type ChatAttachment = { url: string; name?: string | null; mime?: string | null; size?: number | null };
@@ -77,6 +80,11 @@ export type ChatMessage = {
   replyCount: number;
   reactions: ChatReaction[];
   clientId?: string | null;
+  /** Chat v2 (opcionales: el API viejo no los manda). */
+  replyToId?: string | null;
+  replyTo?: ReplyRef | null;
+  saved?: boolean;
+  deleted?: boolean;
   /** Solo en el cliente: optimista mientras responde el API. */
   pending?: boolean;
   failed?: boolean;
@@ -84,14 +92,139 @@ export type ChatMessage = {
   channel?: { id: string; name: string; kind: ChannelKind };
 };
 
+export type ReplyRef = {
+  id: string;
+  authorId: string;
+  authorName: string;
+  excerpt: string;
+  kind?: string | null;
+  attachmentName?: string | null;
+  deleted?: boolean;
+};
+
+export type SavedItem = {
+  savedAt: string;
+  message: ChatMessage;
+  channel: { id: string; name: string; kind: ChannelKind; isGroupDm?: boolean };
+};
+
+export type LinkPreview = {
+  url: string;
+  title?: string | null;
+  description?: string | null;
+  image?: string | null;
+  siteName?: string | null;
+};
+
 export type MessagePage = { messages: ChatMessage[]; hasMore: boolean; hasNewer?: boolean };
 export type Colleague = { id: string; fullName: string; title?: string | null; email?: string | null };
 export type UploadResult = { url: string; name?: string | null; mime?: string | null; size?: number | null };
 
-export const MAX_LEN = 4000;
+export const MAX_LEN = 8000;
 export const MAX_BYTES = 100 * 1024 * 1024;
 export const EDIT_WINDOW_MS = 60 * 60_000;
-export const QUICK_REACTIONS = ['👍', '❤️', '😂', '🎉', '🙏', '✅', '👀', '🔥'];
+/** Mismo orden en web, Android e iOS (contrato chat v2 §8). */
+export const QUICK_REACTIONS = ['👍', '❤️', '😂', '🎉', '👀', '🔥', '✅', '🙏'];
+
+/* ── menciones: `[@Nombre](user:<id>)` en el cuerpo, `@Nombre` en pantalla ── */
+
+export const MENTION_RE = /\[@([^\]\n]{1,80})\]\(user:([A-Za-z0-9_-]{1,64})\)/g;
+
+export function mentionToken(name: string, id: string) {
+  return `[@${name.replace(/[[\]\n]/g, '').trim()}](user:${id})`;
+}
+
+/** Texto legible: menciones como `@Nombre` (copiar, vistas previas, editar). */
+export function plainText(body: string | null | undefined) {
+  return (body ?? '').replace(MENTION_RE, '@$1');
+}
+
+const CODE_SPAN_RE = /```[\s\S]*?```|`[^`\n]+`/g;
+
+function escapeRe(s: string) {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * Convierte `@Nombre Completo` escrito en el redactor en el token de mención,
+ * solo para personas conocidas y nunca dentro de código.
+ */
+export function encodeMentions(text: string, people: { id: string; fullName: string }[]) {
+  const known = people.filter((p) => p.fullName.trim().length > 1).sort((a, b) => b.fullName.length - a.fullName.length);
+  if (!known.length || !text.includes('@')) return text;
+  const byName = new Map(known.map((p) => [p.fullName.trim().toLowerCase(), p]));
+  const re = new RegExp(`(^|[^\\p{L}\\p{N}\\[])@(${known.map((p) => escapeRe(p.fullName.trim())).join('|')})(?![\\p{L}\\p{N}])`, 'giu');
+  const swap = (chunk: string) =>
+    chunk.replace(re, (all, pre: string, name: string) => {
+      const p = byName.get(name.toLowerCase());
+      return p ? `${pre}${mentionToken(p.fullName.trim(), p.id)}` : all;
+    });
+  let out = '';
+  let last = 0;
+  for (const m of text.matchAll(CODE_SPAN_RE)) {
+    out += swap(text.slice(last, m.index)) + m[0];
+    last = (m.index ?? 0) + m[0].length;
+  }
+  return out + swap(text.slice(last));
+}
+
+/** Ids mencionados en un cuerpo (para resaltar «te mencionaron»). */
+export function mentionedIds(body: string) {
+  return Array.from(body.matchAll(MENTION_RE), (m) => m[2]);
+}
+
+/* ── borradores por canal (localStorage) ────────────────────────────────── */
+
+const DRAFTS_KEY = 'arta.chat.drafts.v1';
+
+export function loadDrafts(): Record<string, string> {
+  try {
+    const raw = window.localStorage.getItem(DRAFTS_KEY);
+    const parsed = raw ? (JSON.parse(raw) as unknown) : null;
+    return parsed && typeof parsed === 'object' ? (parsed as Record<string, string>) : {};
+  } catch {
+    return {};
+  }
+}
+
+export function saveDrafts(drafts: Record<string, string>) {
+  try {
+    const clean = Object.fromEntries(Object.entries(drafts).filter(([, v]) => v && v.trim()));
+    window.localStorage.setItem(DRAFTS_KEY, JSON.stringify(clean));
+  } catch {
+    /* modo privado o cuota llena: el borrador vive solo en memoria */
+  }
+}
+
+/* ── vista previa de enlaces: una petición por URL por pestaña ──────────── */
+
+const previews = new Map<string, Promise<LinkPreview | null>>();
+
+export function fetchLinkPreview(url: string, load: (url: string) => Promise<LinkPreview | null>) {
+  let p = previews.get(url);
+  if (!p) {
+    p = load(url).catch(() => null);
+    previews.set(url, p);
+  }
+  return p;
+}
+
+/** Archivo o mensaje borrado: «Mensaje eliminado» en gris. */
+export function isDeleted(m: Pick<ChatMessage, 'deleted' | 'body' | 'attachment' | 'kind'>) {
+  return Boolean(m.deleted) || (m.kind !== 'SYSTEM' && !m.body && !m.attachment);
+}
+
+export function replyExcerpt(m: ChatMessage): ReplyRef {
+  return {
+    id: m.id,
+    authorId: m.author.id,
+    authorName: m.author.fullName,
+    excerpt: plainText(m.body).slice(0, 140),
+    kind: m.kind,
+    attachmentName: m.attachment?.name ?? null,
+    deleted: isDeleted(m),
+  };
+}
 
 /* ── texto y fechas ─────────────────────────────────────────────────────── */
 

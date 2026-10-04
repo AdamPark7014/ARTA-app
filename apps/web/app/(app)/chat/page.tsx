@@ -9,9 +9,7 @@ import {
   useRef,
   useState,
   type ClipboardEvent,
-  type CSSProperties,
   type DragEvent,
-  type KeyboardEvent,
   type ReactNode,
 } from 'react';
 import Link from 'next/link';
@@ -21,23 +19,23 @@ import { EmptyLite } from '@/components/ui/Lite';
 import { api } from '@/lib/api';
 import { joinChannel, leaveChannel, sendTyping, useRealtime, useRealtimeStatus } from '@/lib/realtime';
 import { useUser } from '@/lib/user-context';
-import { AttachmentView, Icon, ICONS, MediaViewer } from '@/components/chat/ChatAttachment';
+import { Icon, ICONS, MediaViewer } from '@/components/chat/ChatAttachment';
 import {
   ACCEPT,
-  attachmentLabel,
-  buildBlocks,
-  clock,
   EDIT_WINDOW_MS,
+  encodeMentions,
   fold,
   fullStamp,
-  hueOf,
-  initials,
+  isDeleted,
+  kindOf,
   listTime,
+  loadDrafts,
   MAX_LEN,
   mmss,
-  patchMessage,
+  plainText,
   prepareFile,
-  QUICK_REACTIONS,
+  replyExcerpt,
+  saveDrafts,
   uploadFile,
   upsertMessages,
   VOICE_MAX_MS,
@@ -49,16 +47,35 @@ import {
   type Colleague,
   type MessagePage,
   type PreparedUpload,
+  type SavedItem,
 } from '@/components/chat/chat-model';
+import {
+  ChannelGlyph,
+  errorText,
+  ICON_EVENT,
+  isDirectLike,
+  isEvent,
+  Menu,
+  PanelHead,
+  prefersReducedMotion,
+  untilLabel,
+  useNarrow,
+  type MenuItem,
+} from '@/components/chat/chat-ui';
+import { Composer, type MentionPerson } from '@/components/chat/Composer';
+import { MessageStream, type MessageActions } from '@/components/chat/MessageList';
+import { ChannelInfo, MessageResult, PinsList, SavedList } from '@/components/chat/ChatPanels';
+import { NewConversation, QuickSwitcher } from '@/components/chat/ChatDialogs';
 
 /*
  * Chat en canales, el mismo que las apps de Android e iPhone: #general, #anuncios,
- * canales de evento, privados y directos; hilos, reacciones, fijados, fotos,
- * video, notas de voz y documentos; todo en vivo por socket.
+ * canales de evento, privados, directos y directos de grupo; hilos, citas,
+ * reacciones, fijados, guardados, fotos, video, notas de voz y documentos;
+ * todo en vivo por socket. Contrato: docs/CHAT-V2-CONTRATO.md.
  */
 
 type Thread = { root: ChatMessage; replies: ChatMessage[] };
-type Panel = { kind: 'thread'; rootId: string } | { kind: 'pins' } | null;
+type Panel = { kind: 'thread'; rootId: string } | { kind: 'pins' } | { kind: 'saved' } | { kind: 'info' } | null;
 type Store = Record<string, { list: ChatMessage[]; hasMore: boolean }>;
 type TypingMap = Record<string, Record<string, { name: string; at: number }>>;
 type UploadItem = {
@@ -69,100 +86,32 @@ type UploadItem = {
   parentId: string | null;
 };
 type UploadState = { label: string; index: number; total: number; fraction: number | null };
+type FailedUpload = { id: string; item: UploadItem; error: string };
+type Prefs = { dndUntil: string | null };
+type MenuState = { kind: 'dnd' | 'mute'; anchor: DOMRect } | null;
 
 const PAGE = 50;
 const TYPING_TTL = 5_000;
 const TYPING_EVERY = 2_500;
-const ICON_LOCK = 'M6 11h12v9H6zM8 11V8a4 4 0 0 1 8 0v3';
-const ICON_EVENT = 'M4 6h16v14H4zM4 10h16M8 3v4M16 3v4';
-const URL_RE = /(https?:\/\/[^\s<]+[^\s<.,;:!?)\]'"])/g;
-
-/* ── utilidades ─────────────────────────────────────────────────────────── */
-
-function useNarrow(query = '(max-width: 759px)') {
-  const [narrow, setNarrow] = useState(false);
-  useEffect(() => {
-    const mq = window.matchMedia(query);
-    const sync = () => setNarrow(mq.matches);
-    sync();
-    mq.addEventListener('change', sync);
-    return () => mq.removeEventListener('change', sync);
-  }, [query]);
-  return narrow;
-}
-
-function prefersReducedMotion() {
-  return typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-}
-
-function errorText(e: unknown, fallback = 'No se pudo completar') {
-  return e instanceof Error && e.message ? e.message : fallback;
-}
-
-function isEvent(c: { eventId?: string | null }) {
-  return Boolean(c.eventId);
-}
-
-function RichText({ text }: { text: string }) {
-  const parts = text.split(URL_RE);
-  return (
-    <>
-      {parts.map((p, i) =>
-        i % 2 ? (
-          <a key={i} href={p} target="_blank" rel="noopener noreferrer">
-            {p}
-          </a>
-        ) : (
-          p
-        ),
-      )}
-    </>
-  );
-}
+const HOUR = 3_600_000;
 
 /* ── piezas ─────────────────────────────────────────────────────────────── */
-
-function Avatar({ id, name, size = 'md' }: { id: string; name: string; size?: 'sm' | 'md' | 'lg' }) {
-  const h = hueOf(id);
-  const style = {
-    '--chat-tint': `hsl(${h} 30% 56% / 0.15)`,
-    '--chat-ink': `hsl(${h} 42% 76%)`,
-    '--chat-ring': `hsl(${h} 34% 62% / 0.22)`,
-  } as CSSProperties;
-  return (
-    <span className={`chat-avatar chat-avatar--${size}`} style={style} aria-hidden>
-      {initials(name)}
-    </span>
-  );
-}
-
-function ChannelGlyph({
-  c,
-  size = 'md',
-}: {
-  c: Pick<ChannelSummary, 'id' | 'kind' | 'name' | 'eventId' | 'peer'>;
-  size?: 'sm' | 'md' | 'lg';
-}) {
-  if (c.kind === 'DIRECT') return <Avatar id={c.peer?.id ?? c.id} name={c.name} size={size} />;
-  return (
-    <span className={`chat-avatar chat-avatar--general chat-avatar--${size}`} aria-hidden>
-      {isEvent(c) ? <Icon d={ICON_EVENT} size={16} /> : c.kind === 'PRIVATE' ? <Icon d={ICON_LOCK} size={15} /> : '#'}
-    </span>
-  );
-}
 
 function ChannelRow({
   c,
   active,
   now,
+  online,
   onSelect,
 }: {
   c: ChannelSummary;
   active: boolean;
   now: Date;
+  online?: boolean;
   onSelect: (id: string) => void;
 }) {
   const unread = active ? 0 : c.unreadCount;
+  const preview = plainText(c.lastMessagePreview) || c.topic || '';
   return (
     <button
       type="button"
@@ -170,14 +119,14 @@ function ChannelRow({
       aria-current={active ? 'true' : undefined}
       onClick={() => onSelect(c.id)}
     >
-      <ChannelGlyph c={c} />
+      <ChannelGlyph c={c} online={online} />
       <span className="chat-row__main">
         <span className="chat-row__top">
           <span className="chat-row__name">{c.name}</span>
           {c.lastMessageAt ? <span className="chat-row__time">{listTime(c.lastMessageAt, now)}</span> : null}
         </span>
         <span className="chat-row__bottom">
-          <span className="chat-row__preview">{c.lastMessagePreview || c.topic || ''}</span>
+          <span className="chat-row__preview">{preview}</span>
           {c.muted ? (
             <span className="chat-row__muted" aria-label="Silenciado">
               <Icon d={ICONS.bellOff} size={13} />
@@ -194,362 +143,31 @@ function ChannelRow({
   );
 }
 
-function Section({ title, children }: { title: string; children: ReactNode }) {
+function Section({ title, action, children }: { title: string; action?: ReactNode; children: ReactNode }) {
   return (
     <div className="chat-section">
-      <div className="chat-section__title">{title}</div>
+      <div className="chat-section__title">
+        <span>{title}</span>
+        {action}
+      </div>
       {children}
     </div>
   );
 }
 
-type MessageActions = {
-  meId: string | null;
-  canManage: boolean;
-  canPost: boolean;
-  inThread: boolean;
-  editing: { id: string; body: string } | null;
-  setEditing: (e: { id: string; body: string } | null) => void;
-  saveEdit: () => void;
-  react: (m: ChatMessage, emoji: string) => void;
-  openThread: (m: ChatMessage) => void;
-  pin: (m: ChatMessage) => void;
-  remove: (m: ChatMessage) => void;
-  retry: (m: ChatMessage) => void;
-  discard: (m: ChatMessage) => void;
-  onImage: (a: ChatAttachment) => void;
-  highlight: string | null;
-  touched: string | null;
-  setTouched: (id: string | null) => void;
-};
-
-function MessageItem({ m, x }: { m: ChatMessage; x: MessageActions }) {
-  const [picking, setPicking] = useState(false);
-  const mine = m.author.id === x.meId;
-  const isEditing = x.editing?.id === m.id;
-  const canEdit = mine && !m.pending && Date.now() - new Date(m.createdAt).getTime() < EDIT_WINDOW_MS;
-  const deleted = !m.body && !m.attachment;
-  const local = m.pending || m.failed;
-
+function StreamGhost() {
   return (
-    <div
-      id={`m-${m.id}`}
-      className={`chat-msg${x.highlight === m.id ? ' is-highlight' : ''}${x.touched === m.id ? ' is-open' : ''}`}
-      onClick={() => x.setTouched(x.touched === m.id ? null : m.id)}
-    >
-      <div
-        className={`chat-bubble${m.pending ? ' chat-bubble--sending' : ''}${m.failed ? ' chat-bubble--failed' : ''}${
-          m.attachment && !m.body ? ' chat-bubble--media' : ''
-        }`}
-        title={local ? undefined : fullStamp(m.createdAt)}
-      >
-        {m.pinnedAt ? (
-          <span className="chat-bubble__pin" title="Fijado">
-            <Icon d={ICONS.pin} size={11} /> Fijado
+    <div className="chat-stream chat-stream--ghost" aria-busy="true" aria-label="Cargando mensajes">
+      {[0, 1, 2, 3, 4].map((i) => (
+        <div key={i} className="chat-ghost-row">
+          <span className="skeleton chat-ghost-row__avatar" />
+          <span className="chat-ghost-row__lines">
+            <span className="skeleton skeleton--row" style={{ width: `${18 + ((i * 7) % 16)}%` }} />
+            <span className="skeleton skeleton--row" style={{ width: `${44 + ((i * 17) % 40)}%` }} />
           </span>
-        ) : null}
-        {m.attachment ? <AttachmentView a={m.attachment} onImage={x.onImage} /> : null}
-        {isEditing ? (
-          <div className="chat-edit" onClick={(e) => e.stopPropagation()}>
-            <textarea
-              autoFocus
-              value={x.editing?.body ?? ''}
-              maxLength={MAX_LEN}
-              rows={Math.min(8, (x.editing?.body ?? '').split('\n').length + 1)}
-              onChange={(e) => x.setEditing({ id: m.id, body: e.target.value })}
-              onKeyDown={(e) => {
-                if (e.key === 'Escape') x.setEditing(null);
-                if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
-                  e.preventDefault();
-                  x.saveEdit();
-                }
-              }}
-            />
-            <div className="chat-edit__row">
-              <button type="button" className="btn ghost btn-sm" onClick={() => x.setEditing(null)}>
-                Cancelar
-              </button>
-              <button type="button" className="btn btn-sm" onClick={x.saveEdit}>
-                Guardar
-              </button>
-            </div>
-          </div>
-        ) : m.body ? (
-          <span className="chat-bubble__text">
-            <RichText text={m.body} />
-            {m.editedAt ? <span className="chat-bubble__edited"> (editado)</span> : null}
-          </span>
-        ) : deleted ? (
-          <span className="chat-bubble__deleted">Mensaje eliminado</span>
-        ) : null}
-      </div>
-
-      {m.reactions.length ? (
-        <div className="chat-reactions">
-          {m.reactions.map((r) => {
-            const me = x.meId ? r.userIds.includes(x.meId) : false;
-            return (
-              <button
-                key={r.emoji}
-                type="button"
-                className={`chat-reaction${me ? ' is-mine' : ''}`}
-                title={r.users.map((u) => u.fullName).join(', ')}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  x.react(m, r.emoji);
-                }}
-              >
-                {r.emoji} <span>{r.count}</span>
-              </button>
-            );
-          })}
         </div>
-      ) : null}
-
-      {!x.inThread && m.replyCount > 0 ? (
-        <button
-          type="button"
-          className="chat-replies"
-          onClick={(e) => {
-            e.stopPropagation();
-            x.openThread(m);
-          }}
-        >
-          {m.replyCount === 1 ? '1 respuesta' : `${m.replyCount} respuestas`}
-        </button>
-      ) : null}
-
-      {m.failed ? (
-        <div className="chat-failed" onClick={(e) => e.stopPropagation()}>
-          No se envió ·{' '}
-          {m.attachment ? null : (
-            <button type="button" className="chat-retry" onClick={() => x.retry(m)}>
-              Reintentar
-            </button>
-          )}{' '}
-          <button type="button" className="chat-retry" onClick={() => x.discard(m)}>
-            Descartar
-          </button>
-        </div>
-      ) : null}
-
-      {!local && !isEditing && !deleted ? (
-        <div className="chat-actions" onClick={(e) => e.stopPropagation()}>
-          <button type="button" aria-label="Reaccionar" title="Reaccionar" onClick={() => setPicking((v) => !v)}>
-            <Icon d={ICONS.smile} size={15} />
-          </button>
-          {!x.inThread ? (
-            <button type="button" aria-label="Responder en hilo" title="Responder en hilo" onClick={() => x.openThread(m)}>
-              <Icon d={ICONS.thread} size={15} />
-            </button>
-          ) : null}
-          {m.body ? (
-            <button
-              type="button"
-              aria-label="Copiar"
-              title="Copiar"
-              onClick={() => void navigator.clipboard?.writeText(m.body).catch(() => undefined)}
-            >
-              <Icon d={ICONS.copy} size={15} />
-            </button>
-          ) : null}
-          {x.canPost && !m.parentId ? (
-            <button type="button" aria-label={m.pinnedAt ? 'Desfijar' : 'Fijar'} title={m.pinnedAt ? 'Desfijar' : 'Fijar'} onClick={() => x.pin(m)}>
-              <Icon d={ICONS.pin} size={15} />
-            </button>
-          ) : null}
-          {canEdit && m.kind === 'TEXT' ? (
-            <button type="button" aria-label="Editar" title="Editar" onClick={() => x.setEditing({ id: m.id, body: m.body })}>
-              <Icon d={ICONS.edit} size={15} />
-            </button>
-          ) : null}
-          {mine || x.canManage ? (
-            <button type="button" aria-label="Eliminar" title="Eliminar" onClick={() => x.remove(m)}>
-              <Icon d={ICONS.trash} size={15} />
-            </button>
-          ) : null}
-          {picking ? (
-            <div className="chat-picker">
-              {QUICK_REACTIONS.map((e) => (
-                <button
-                  key={e}
-                  type="button"
-                  onClick={() => {
-                    setPicking(false);
-                    x.react(m, e);
-                  }}
-                >
-                  {e}
-                </button>
-              ))}
-            </div>
-          ) : null}
-        </div>
-      ) : null}
+      ))}
     </div>
-  );
-}
-
-function MessageStream({
-  list,
-  x,
-  showNames,
-  receipt,
-}: {
-  list: ChatMessage[];
-  x: MessageActions;
-  showNames: boolean;
-  receipt?: (last: ChatMessage) => { text: string; title: string } | null;
-}) {
-  const blocks = useMemo(() => buildBlocks(list, x.meId, new Date()), [list, x.meId]);
-  const lastMineId = useMemo(() => {
-    for (let i = list.length - 1; i >= 0; i--) if (list[i].author.id === x.meId && !list[i].pending) return list[i].id;
-    return null;
-  }, [list, x.meId]);
-
-  return (
-    <>
-      {blocks.map((b) => {
-        if (b.kind === 'day') {
-          return (
-            <div key={b.key} className="chat-day" role="separator">
-              <span>{b.label}</span>
-            </div>
-          );
-        }
-        if (b.kind === 'system') {
-          return (
-            <div key={b.key} className="chat-system">
-              {b.message.body}
-            </div>
-          );
-        }
-        const last = b.items[b.items.length - 1];
-        const showPeer = showNames && !b.mine;
-        const r = receipt && b.mine && last.id === lastMineId ? receipt(last) : null;
-        return (
-          <div
-            key={b.key}
-            className={`chat-group ${b.mine ? 'chat-group--mine' : 'chat-group--theirs'}${showPeer ? ' chat-group--named' : ''}`}
-          >
-            {showPeer ? <Avatar id={b.authorId} name={b.authorName} size="sm" /> : null}
-            <div className="chat-group__body">
-              {showPeer ? <div className="chat-group__name">{b.authorName}</div> : null}
-              <div className="chat-group__stack">
-                {b.items.map((m) => (
-                  <MessageItem key={m.id} m={m} x={x} />
-                ))}
-              </div>
-              <div className="chat-group__meta">
-                {last.pending ? (
-                  <span className="chat-group__sending" aria-label="Enviando">
-                    •••
-                  </span>
-                ) : last.failed ? null : (
-                  <time dateTime={last.createdAt}>{clock(new Date(last.createdAt))}</time>
-                )}
-                {r ? (
-                  <span className="chat-group__receipt" title={r.title}>
-                    {' '}
-                    · {r.text}
-                  </span>
-                ) : null}
-              </div>
-            </div>
-          </div>
-        );
-      })}
-    </>
-  );
-}
-
-function Composer({
-  value,
-  onChange,
-  onSend,
-  onFiles,
-  onMic,
-  onPaste,
-  disabled,
-  disabledText,
-  placeholder,
-  inputRef,
-  compact,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  onSend: () => void;
-  onFiles: () => void;
-  onMic?: () => void;
-  onPaste: (e: ClipboardEvent<HTMLTextAreaElement>) => void;
-  disabled?: boolean;
-  disabledText?: string;
-  placeholder: string;
-  inputRef?: React.RefObject<HTMLTextAreaElement>;
-  compact?: boolean;
-}) {
-  const localRef = useRef<HTMLTextAreaElement>(null);
-  const ref = inputRef ?? localRef;
-  useLayoutEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    el.style.height = 'auto';
-    el.style.height = `${el.scrollHeight}px`;
-  }, [value, ref]);
-
-  if (disabled) {
-    return (
-      <div className={`chat-composer${compact ? ' chat-composer--compact' : ''}`}>
-        <p className="chat-composer__locked">{disabledText}</p>
-      </div>
-    );
-  }
-
-  const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
-      e.preventDefault();
-      onSend();
-    }
-  };
-  const canSend = value.trim().length > 0;
-
-  return (
-    <form
-      className={`chat-composer${compact ? ' chat-composer--compact' : ''}`}
-      onSubmit={(e) => {
-        e.preventDefault();
-        onSend();
-      }}
-    >
-      <div className="chat-composer__inner">
-        <button type="button" className="chat-tool" aria-label="Adjuntar foto, video o documento" title="Adjuntar" onClick={onFiles}>
-          <Icon d={ICONS.clip} size={18} />
-        </button>
-        <div className="chat-composer__field">
-          <textarea
-            ref={ref}
-            className="chat-composer__input"
-            rows={1}
-            value={value}
-            maxLength={MAX_LEN}
-            placeholder={placeholder}
-            aria-label="Mensaje"
-            onChange={(e) => onChange(e.target.value)}
-            onKeyDown={onKeyDown}
-            onPaste={onPaste}
-          />
-        </div>
-        {!canSend && onMic ? (
-          <button type="button" className="chat-send chat-send--mic" aria-label="Grabar nota de voz" title="Nota de voz" onClick={onMic}>
-            <Icon d={ICONS.mic} size={18} />
-          </button>
-        ) : (
-          <button type="submit" className="chat-send" disabled={!canSend} aria-label="Enviar">
-            <Icon d={ICONS.send} size={18} />
-          </button>
-        )}
-      </div>
-    </form>
   );
 }
 
@@ -587,33 +205,46 @@ function ChatInner() {
   const [detail, setDetail] = useState<ChannelDetail | null>(null);
   const [store, setStore] = useState<Store>({});
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<ChatMessage[] | null>(null);
   const [searching, setSearching] = useState(false);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [replyTo, setReplyTo] = useState<Record<string, ChatMessage>>({});
   const [panel, setPanel] = useState<Panel>(null);
   const [thread, setThread] = useState<Thread | null>(null);
   const [threadDraft, setThreadDraft] = useState('');
+  const [threadReply, setThreadReply] = useState<ChatMessage | null>(null);
   const [pins, setPins] = useState<ChatMessage[] | null>(null);
+  const [saved, setSaved] = useState<SavedItem[] | null>(null);
+  const [savedError, setSavedError] = useState(false);
   const [typing, setTyping] = useState<TypingMap>({});
   const [editing, setEditing] = useState<{ id: string; body: string } | null>(null);
-  const [viewer, setViewer] = useState<ChatAttachment | null>(null);
+  const [viewer, setViewer] = useState<{ items: ChatAttachment[]; index: number } | null>(null);
   const [upload, setUpload] = useState<UploadState | null>(null);
+  const [failedUploads, setFailedUploads] = useState<FailedUpload[]>([]);
   const [recordingSince, setRecordingSince] = useState<number | null>(null);
   const [, setTick] = useState(0);
   const [toast, setToast] = useState<string | null>(null);
   const [picker, setPicker] = useState<null | 'dm' | 'channel'>(null);
+  const [switcher, setSwitcher] = useState(false);
+  const [menu, setMenu] = useState<MenuState>(null);
   const [highlight, setHighlight] = useState<string | null>(null);
   const [touched, setTouched] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [atBottom, setAtBottom] = useState(true);
-  const [newBelow, setNewBelow] = useState(false);
+  const [newCount, setNewCount] = useState(0);
+  const [dividerAbove, setDividerAbove] = useState(false);
+  const [unreadMark, setUnreadMark] = useState<{ channelId: string; messageId: string } | null>(null);
   const [loadingOlder, setLoadingOlder] = useState(false);
+  const [online, setOnline] = useState<Set<string>>(() => new Set());
+  const [prefs, setPrefs] = useState<Prefs | null>(null);
 
   const storeRef = useRef(store);
   storeRef.current = store;
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const threadInputRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const fileTarget = useRef<'main' | 'thread'>('main');
   const stickRef = useRef(true);
@@ -621,6 +252,7 @@ function ChatInner() {
   const shownLastIdRef = useRef<string | null>(null);
   const prependRef = useRef<{ height: number; top: number } | null>(null);
   const jumpRef = useRef<string | null>(null);
+  const markTaken = useRef<string | null>(null);
   const seq = useRef(0);
   const readTimer = useRef<number>();
   const channelsTimer = useRef<number>();
@@ -629,6 +261,10 @@ function ChatInner() {
   const draining = useRef(false);
   const recorder = useRef<VoiceRecorder | null>(null);
   const toastTimer = useRef<number>();
+  const highlightTimer = useRef<number>();
+  const draftsReady = useRef(false);
+  const presenceReady = useRef(false);
+  const picked = useRef(new Map<string, MentionPerson>());
 
   /** En móvil la conversación solo cuenta como «abierta» si está en pantalla. */
   const open = !narrow || view === 'convo';
@@ -638,6 +274,25 @@ function ChatInner() {
     window.clearTimeout(toastTimer.current);
     toastTimer.current = window.setTimeout(() => setToast(null), 4_500);
   }, []);
+
+  const flash = useCallback((id: string) => {
+    setHighlight(id);
+    window.clearTimeout(highlightTimer.current);
+    highlightTimer.current = window.setTimeout(() => setHighlight((h) => (h === id ? null : h)), 2_600);
+  }, []);
+
+  /* borradores por canal: sobreviven a recargar la página */
+
+  useEffect(() => {
+    setDrafts((cur) => ({ ...loadDrafts(), ...cur }));
+    draftsReady.current = true;
+  }, []);
+
+  useEffect(() => {
+    if (!draftsReady.current) return;
+    const id = window.setTimeout(() => saveDrafts(drafts), 400);
+    return () => window.clearTimeout(id);
+  }, [drafts]);
 
   /* canales */
 
@@ -659,17 +314,63 @@ function ChatInner() {
     if (meId) void loadChannels();
   }, [meId, loadChannels]);
 
+  /* presencia y «No molestar» (chat v2; con el API viejo simplemente no aparecen) */
+
+  const loadPresence = useCallback(() => {
+    api<{ online?: string[] }>('/chat/presence')
+      .then((r) => {
+        presenceReady.current = true;
+        setOnline(new Set(r?.online ?? []));
+      })
+      .catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    if (!meId) return;
+    loadPresence();
+    api<Prefs>('/chat/prefs')
+      .then((p) => setPrefs({ dndUntil: p?.dndUntil ?? null }))
+      .catch(() => setPrefs({ dndUntil: null }));
+  }, [meId, loadPresence]);
+
+  useRealtime<{ userId?: string; online?: boolean }>('chat:presence', (p) => {
+    if (!p?.userId || !presenceReady.current) return;
+    const on = p.online !== false;
+    setOnline((s) => {
+      if (s.has(p.userId!) === on) return s;
+      const next = new Set(s);
+      if (on) next.add(p.userId!);
+      else next.delete(p.userId!);
+      return next;
+    });
+  });
+
+  const isOnline = useCallback((id: string) => online.has(id), [online]);
+
   const selectChannel = useCallback(
     (id: string, opts: { msg?: string } = {}) => {
       setActiveId(id);
       setView('convo');
-      setPanel(null);
+      setPanel((p) => (p?.kind === 'saved' && !narrow ? p : null));
       setTouched(null);
       router.replace(`/chat?channel=${encodeURIComponent(id)}${opts.msg ? `&msg=${encodeURIComponent(opts.msg)}` : ''}`, {
         scroll: false,
       });
     },
-    [router],
+    [router, narrow],
+  );
+
+  const openDm = useCallback(
+    (userId: string) => {
+      if (userId === meId) return;
+      api<ChannelDetail>('/chat/dm', { method: 'POST', body: JSON.stringify({ userId }) })
+        .then((c) => {
+          selectChannel(c.id);
+          scheduleChannels();
+        })
+        .catch((e) => showToast(errorText(e, 'No se pudo abrir la conversación')));
+    },
+    [meId, selectChannel, scheduleChannels, showToast],
   );
 
   // Enlaces externos: aviso (?channel=&msg=), persona (?with=dm:<id>) o evento (?event=<id>).
@@ -714,18 +415,23 @@ function ChatInner() {
 
   /* conversación abierta */
 
-  const loadLatest = useCallback(
-    async (channelId: string, around?: string | null) => {
-      const qs = around ? `around=${encodeURIComponent(around)}&limit=${PAGE}` : `limit=${PAGE}`;
-      const page = await api<MessagePage>(`/chat/channels/${channelId}/messages?${qs}`);
-      setStore((s) => {
-        const cur = s[channelId];
-        const list = around || !cur ? page.messages : upsertMessages(cur.list, page.messages);
-        return { ...s, [channelId]: { list, hasMore: around || !cur ? page.hasMore : cur.hasMore } };
-      });
-    },
-    [],
-  );
+  const loadLatest = useCallback(async (channelId: string, around?: string | null) => {
+    const qs = around ? `around=${encodeURIComponent(around)}&limit=${PAGE}` : `limit=${PAGE}`;
+    const page = await api<MessagePage>(`/chat/channels/${channelId}/messages?${qs}`);
+    setStore((s) => {
+      const cur = s[channelId];
+      const list = around || !cur ? page.messages : upsertMessages(cur.list, page.messages);
+      return { ...s, [channelId]: { list, hasMore: around || !cur ? page.hasMore : cur.hasMore } };
+    });
+  }, []);
+
+  useEffect(() => {
+    markTaken.current = null;
+    setUnreadMark(null);
+    setNewCount(0);
+    setDividerAbove(false);
+    setEditing(null);
+  }, [activeId]);
 
   useEffect(() => {
     if (!meId || !activeId) return;
@@ -744,8 +450,7 @@ function ChatInner() {
     const around = msgParam;
     if (around) {
       jumpRef.current = around;
-      setHighlight(around);
-      window.setTimeout(() => setHighlight((h) => (h === around ? null : h)), 3_000);
+      flash(around);
     }
     loadLatest(channelId, around)
       .then(() => {
@@ -758,13 +463,30 @@ function ChatInner() {
       cancelled = true;
       leaveChannel(channelId);
     };
-  }, [meId, activeId, msgParam, loadLatest, showToast]);
+  }, [meId, activeId, msgParam, loadLatest, showToast, flash, reloadKey]);
+
+  const head = detail?.id === activeId ? detail : null;
+  const entry = activeId ? store[activeId] : undefined;
+  const messages = entry?.list;
+
+  // «Mensajes nuevos»: se fija una vez al abrir, con el lastReadAt de antes de marcar leído.
+  useEffect(() => {
+    if (!activeId || markTaken.current === activeId || !head || !messages) return;
+    markTaken.current = activeId;
+    const since = head.lastReadAt;
+    const first = since
+      ? messages.find((m) => !m.pending && m.kind !== 'SYSTEM' && m.author.id !== meId && m.createdAt > since)
+      : undefined;
+    setUnreadMark(first ? { channelId: activeId, messageId: first.id } : null);
+  }, [activeId, head, messages, meId]);
+
+  const unreadFrom = unreadMark && unreadMark.channelId === activeId ? unreadMark.messageId : null;
 
   useEffect(() => {
-    if (activeId && open && store[activeId]) markRead(activeId);
-    // Solo al abrir o al cargar la conversación.
+    if (activeId && open && store[activeId] && head) markRead(activeId);
+    // Solo al abrir o al cargar la conversación (después de fijar «Mensajes nuevos»).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeId, open, Boolean(activeId && store[activeId])]);
+  }, [activeId, open, Boolean(activeId && store[activeId]), Boolean(head)]);
 
   useEffect(() => {
     const onVisible = () => {
@@ -795,20 +517,24 @@ function ChatInner() {
     }
   }, [activeId, loadingOlder]);
 
-  /* hilo y fijados */
+  /* hilo, fijados, guardados */
 
-  const openThread = useCallback((m: ChatMessage) => {
-    const rootId = m.parentId || m.id;
-    setPanel({ kind: 'thread', rootId });
-    setThread((t) => (t?.root.id === rootId ? t : null));
-    setThreadDraft('');
-    api<Thread>(`/chat/messages/${rootId}/thread`)
-      .then((t) => setThread(t))
-      .catch((e) => {
-        showToast(errorText(e, 'No se pudo abrir el hilo'));
-        setPanel(null);
-      });
-  }, [showToast]);
+  const openThread = useCallback(
+    (m: ChatMessage) => {
+      const rootId = m.parentId || m.id;
+      setPanel({ kind: 'thread', rootId });
+      setThread((t) => (t?.root.id === rootId ? t : null));
+      setThreadDraft('');
+      setThreadReply(null);
+      api<Thread>(`/chat/messages/${rootId}/thread`)
+        .then((t) => setThread(t))
+        .catch((e) => {
+          showToast(errorText(e, 'No se pudo abrir el hilo'));
+          setPanel(null);
+        });
+    },
+    [showToast],
+  );
 
   const openPins = useCallback(() => {
     if (!activeId) return;
@@ -819,7 +545,20 @@ function ChatInner() {
       .catch(() => setPins([]));
   }, [activeId]);
 
-  /* aplicar cambios de mensajes en lista, hilo y fijados */
+  const loadSaved = useCallback(() => {
+    setSavedError(false);
+    api<{ items: SavedItem[] }>('/chat/saved?limit=50')
+      .then((r) => setSaved(r?.items ?? []))
+      .catch(() => setSavedError(true));
+  }, []);
+
+  const openSaved = useCallback(() => {
+    setPanel({ kind: 'saved' });
+    setSaved(null);
+    loadSaved();
+  }, [loadSaved]);
+
+  /* aplicar cambios de mensajes en lista, hilo, fijados y guardados */
 
   const applyMessage = useCallback((m: ChatMessage) => {
     if (m.parentId) {
@@ -833,33 +572,56 @@ function ChatInner() {
     });
   }, []);
 
-  const applyUpdate = useCallback((m: ChatMessage) => {
+  /** `saved` es por persona: un evento del socket no lo pisa. */
+  const applyUpdate = useCallback((m: ChatMessage, fromSocket = false) => {
+    const merge = (prev: ChatMessage): ChatMessage => ({
+      ...m,
+      saved: fromSocket || m.saved === undefined ? prev.saved : m.saved,
+      clientId: prev.clientId ?? m.clientId,
+    });
+    const patch = (list: ChatMessage[]) => (list.some((x) => x.id === m.id) ? list.map((x) => (x.id === m.id ? merge(x) : x)) : list);
     setStore((s) => {
       const cur = s[m.channelId];
       if (!cur) return s;
-      return { ...s, [m.channelId]: { ...cur, list: patchMessage(cur.list, m) } };
+      return { ...s, [m.channelId]: { ...cur, list: patch(cur.list) } };
     });
     setThread((t) => {
       if (!t) return t;
-      if (t.root.id === m.id) return { ...t, root: m };
-      return { ...t, replies: patchMessage(t.replies, m) };
+      if (t.root.id === m.id) return { ...t, root: merge(t.root) };
+      return { ...t, replies: patch(t.replies) };
     });
     setPins((p) => {
       if (!p) return p;
       if (!m.pinnedAt) return p.filter((x) => x.id !== m.id);
-      return p.some((x) => x.id === m.id) ? patchMessage(p, m) : [m, ...p];
+      return p.some((x) => x.id === m.id) ? patch(p) : [m, ...p];
     });
   }, []);
 
-  const applyDelete = useCallback((channelId: string, messageId: string) => {
+  const patchLocal = useCallback((channelId: string, id: string, fields: Partial<ChatMessage>) => {
+    const patch = (list: ChatMessage[]) => (list.some((x) => x.id === id) ? list.map((x) => (x.id === id ? { ...x, ...fields } : x)) : list);
     setStore((s) => {
       const cur = s[channelId];
       if (!cur) return s;
-      return { ...s, [channelId]: { ...cur, list: cur.list.filter((m) => m.id !== messageId) } };
+      return { ...s, [channelId]: { ...cur, list: patch(cur.list) } };
     });
-    setThread((t) => (t ? { ...t, replies: t.replies.filter((m) => m.id !== messageId) } : t));
+    setThread((t) => (t ? { root: t.root.id === id ? { ...t.root, ...fields } : t.root, replies: patch(t.replies) } : t));
+    setPins((p) => (p ? patch(p) : p));
+  }, []);
+
+  /** Con hilo queda «Mensaje eliminado»; sin hilo desaparece. Las citas a él también se apagan. */
+  const applyDelete = useCallback((channelId: string, messageId: string) => {
+    const tomb = (m: ChatMessage): ChatMessage => ({ ...m, body: '', attachment: null, deleted: true, reactions: [], pinnedAt: null, saved: false });
+    const quotes = (list: ChatMessage[]) =>
+      list.map((m) => (m.replyTo?.id === messageId ? { ...m, replyTo: { ...m.replyTo, deleted: true, excerpt: '' } } : m));
+    setStore((s) => {
+      const cur = s[channelId];
+      if (!cur) return s;
+      const list = cur.list.flatMap((m) => (m.id !== messageId ? [m] : m.replyCount > 0 ? [tomb(m)] : []));
+      return { ...s, [channelId]: { ...cur, list: quotes(list) } };
+    });
+    setThread((t) => (t ? { root: t.root.id === messageId ? tomb(t.root) : t.root, replies: quotes(t.replies.filter((m) => m.id !== messageId)) } : t));
     setPins((p) => (p ? p.filter((m) => m.id !== messageId) : p));
-    setPanel((p) => (p?.kind === 'thread' && p.rootId === messageId ? null : p));
+    setSaved((s) => (s ? s.filter((x) => x.message.id !== messageId) : s));
   }, []);
 
   /* socket */
@@ -876,7 +638,7 @@ function ChatInner() {
     }
   });
   useRealtime<ChatMessage>('chat:thread-reply', applyMessage);
-  useRealtime<ChatMessage>('chat:message-updated', applyUpdate);
+  useRealtime<ChatMessage>('chat:message-updated', (m) => (m.deleted ? applyDelete(m.channelId, m.id) : applyUpdate(m, true)));
   useRealtime<{ channelId: string; messageId: string }>('chat:message-deleted', (p) => applyDelete(p.channelId, p.messageId));
   useRealtime<{ channelId: string; userId: string; fullName: string; at: number }>('chat:typing', (p) => {
     if (!p?.channelId || p.userId === meId) return;
@@ -884,9 +646,7 @@ function ChatInner() {
   });
   useRealtime<{ channelId: string; userId: string; at: string }>('chat:read', (p) => {
     setDetail((d) =>
-      d && d.id === p.channelId
-        ? { ...d, members: d.members.map((mm) => (mm.id === p.userId ? { ...mm, lastReadAt: p.at } : mm)) }
-        : d,
+      d && d.id === p.channelId ? { ...d, members: d.members.map((mm) => (mm.id === p.userId ? { ...mm, lastReadAt: p.at } : mm)) } : d,
     );
   });
   useRealtime('chat:channel-activity', scheduleChannels);
@@ -907,6 +667,7 @@ function ChatInner() {
 
   const connected = useRealtimeStatus(() => {
     void loadChannels();
+    loadPresence();
     if (activeId) void loadLatest(activeId).catch(() => undefined);
   });
 
@@ -937,10 +698,23 @@ function ChatInner() {
     return () => window.clearInterval(id);
   }, [typingNames.length, recording]);
 
+  /* menciones: miembros del canal + quien se eligió del directorio */
+
+  const people = useMemo<MentionPerson[]>(
+    () => (head?.members ?? []).filter((m) => m.id !== meId).map((m) => ({ id: m.id, fullName: m.fullName, title: m.title })),
+    [head, meId],
+  );
+  const searchPeople = useCallback(
+    (q: string) => api<Colleague[]>(`/chat/colleagues${q.trim() ? `?q=${encodeURIComponent(q.trim())}` : ''}`),
+    [],
+  );
+  const onPicked = useCallback((p: MentionPerson) => picked.current.set(p.id, p), []);
+  const encode = (text: string) => encodeMentions(text, [...(head?.members ?? []), ...picked.current.values()]);
+
   /* enviar */
 
   const localMessage = useCallback(
-    (channelId: string, body: string, parentId: string | null): ChatMessage => {
+    (channelId: string, body: string, parentId: string | null, quoted: ChatMessage | null): ChatMessage => {
       seq.current += 1;
       const clientId = `c-${Date.now()}-${seq.current}`;
       return {
@@ -955,6 +729,8 @@ function ChatInner() {
         author: { id: user?.id ?? '', fullName: user?.fullName ?? '' },
         replyCount: 0,
         reactions: [],
+        replyToId: quoted?.id ?? null,
+        replyTo: quoted ? replyExcerpt(quoted) : null,
         pending: true,
       };
     },
@@ -965,11 +741,16 @@ function ChatInner() {
     async (tmp: ChatMessage) => {
       applyMessage(tmp);
       try {
-        const saved = await api<ChatMessage>(`/chat/channels/${tmp.channelId}/messages`, {
+        const res = await api<ChatMessage>(`/chat/channels/${tmp.channelId}/messages`, {
           method: 'POST',
-          body: JSON.stringify({ body: tmp.body, parentId: tmp.parentId ?? undefined, clientId: tmp.clientId }),
+          body: JSON.stringify({
+            body: tmp.body,
+            parentId: tmp.parentId ?? undefined,
+            clientId: tmp.clientId,
+            replyToId: tmp.replyToId ?? undefined,
+          }),
         });
-        applyMessage({ ...saved, clientId: tmp.clientId });
+        applyMessage({ ...res, clientId: tmp.clientId });
       } catch (e) {
         applyMessage({ ...tmp, pending: false, failed: true });
         showToast(errorText(e, 'No se envió el mensaje'));
@@ -978,21 +759,39 @@ function ChatInner() {
     [applyMessage, showToast],
   );
 
+  const tooLong = (body: string) => {
+    if (body.length <= MAX_LEN) return false;
+    showToast(`El mensaje pasa de ${MAX_LEN.toLocaleString('es-MX')} caracteres`);
+    return true;
+  };
+
   const sendMain = () => {
     if (!activeId || !user) return;
-    const body = (drafts[activeId] ?? '').trim().slice(0, MAX_LEN);
-    if (!body) return;
+    const text = (drafts[activeId] ?? '').trim();
+    if (!text) return;
+    const body = encode(text);
+    if (tooLong(body)) return;
+    const quoted = replyTo[activeId] ?? null;
     stickRef.current = true;
     setDrafts((d) => ({ ...d, [activeId]: '' }));
-    void deliver(localMessage(activeId, body, null));
+    setReplyTo((r) => {
+      const next = { ...r };
+      delete next[activeId];
+      return next;
+    });
+    void deliver(localMessage(activeId, body, null, quoted));
   };
 
   const sendThread = () => {
     if (!thread || !user) return;
-    const body = threadDraft.trim().slice(0, MAX_LEN);
-    if (!body) return;
+    const text = threadDraft.trim();
+    if (!text) return;
+    const body = encode(text);
+    if (tooLong(body)) return;
     setThreadDraft('');
-    void deliver(localMessage(thread.root.channelId, body, thread.root.id));
+    const quoted = threadReply;
+    setThreadReply(null);
+    void deliver(localMessage(thread.root.channelId, body, thread.root.id, quoted));
   };
 
   const onDraft = (value: string) => {
@@ -1005,7 +804,7 @@ function ChatInner() {
     }
   };
 
-  /* adjuntos: cola con avance, un mensaje por archivo */
+  /* adjuntos: cola con avance, un mensaje por archivo; los fallidos se reintentan */
 
   const drain = useCallback(async () => {
     if (draining.current) return;
@@ -1026,7 +825,7 @@ function ChatInner() {
           shown = pct;
           setUpload({ label: prepared.name, index, total, fraction: f });
         });
-        const saved = await api<ChatMessage>(`/chat/channels/${item.channelId}/messages`, {
+        const msg = await api<ChatMessage>(`/chat/channels/${item.channelId}/messages`, {
           method: 'POST',
           body: JSON.stringify({
             body: item.caption || undefined,
@@ -1038,14 +837,23 @@ function ChatInner() {
           }),
         });
         stickRef.current = true;
-        applyMessage(saved);
+        applyMessage(msg);
       } catch (e) {
-        showToast(errorText(e, 'No se pudo enviar el archivo'));
+        const error = errorText(e, 'No se pudo enviar el archivo');
+        seq.current += 1;
+        setFailedUploads((f) => [...f, { id: `u-${Date.now()}-${seq.current}`, item, error }]);
+        showToast(error);
       }
     }
     draining.current = false;
     setUpload(null);
   }, [applyMessage, showToast]);
+
+  const retryUpload = (f: FailedUpload) => {
+    setFailedUploads((all) => all.filter((x) => x.id !== f.id));
+    queue.current.push(f.item);
+    void drain();
+  };
 
   const enqueueFiles = useCallback(
     (files: File[], target: 'main' | 'thread') => {
@@ -1053,7 +861,8 @@ function ChatInner() {
       const channelId = target === 'thread' ? thread?.root.channelId : activeId;
       if (!channelId) return;
       const parentId = target === 'thread' ? (thread?.root.id ?? null) : null;
-      const caption = (target === 'thread' ? threadDraft : (drafts[channelId] ?? '')).trim().slice(0, MAX_LEN);
+      const raw = (target === 'thread' ? threadDraft : (drafts[channelId] ?? '')).trim();
+      const caption = raw ? encodeMentions(raw, [...(head?.members ?? []), ...picked.current.values()]).slice(0, MAX_LEN) : '';
       if (caption) {
         if (target === 'thread') setThreadDraft('');
         else setDrafts((d) => ({ ...d, [channelId]: '' }));
@@ -1069,7 +878,7 @@ function ChatInner() {
       queue.current.push(...items);
       void drain();
     },
-    [activeId, thread, threadDraft, drafts, drain, showToast],
+    [activeId, thread, threadDraft, drafts, drain, showToast, head],
   );
 
   const pickFiles = (target: 'main' | 'thread') => {
@@ -1140,8 +949,9 @@ function ChatInner() {
 
   const saveEdit = async () => {
     if (!editing) return;
-    const body = editing.body.trim();
+    const body = encode(editing.body.trim());
     const { id } = editing;
+    if (!body || tooLong(body)) return;
     setEditing(null);
     try {
       applyUpdate(await api<ChatMessage>(`/chat/messages/${id}`, { method: 'PATCH', body: JSON.stringify({ body }) }));
@@ -1150,23 +960,89 @@ function ChatInner() {
     }
   };
 
+  /** ↑ con el redactor vacío: editar tu último mensaje si sigue en la ventana de edición. */
+  const editLast = () => {
+    const list = messages ?? [];
+    for (let i = list.length - 1; i >= 0; i--) {
+      const m = list[i];
+      if (m.author.id !== meId) continue;
+      if (m.pending || m.failed || isDeleted(m) || m.kind !== 'TEXT' || !m.body) return;
+      if (Date.now() - new Date(m.createdAt).getTime() >= EDIT_WINDOW_MS) return;
+      setEditing({ id: m.id, body: plainText(m.body) });
+      document.getElementById(`m-${m.id}`)?.scrollIntoView({ block: 'nearest' });
+      return;
+    }
+  };
+
+  const openImage = (a: ChatAttachment) => {
+    const collect = (list: ChatMessage[]) => {
+      const seen = new Set<string>();
+      const out: ChatAttachment[] = [];
+      for (const m of list) {
+        if (!m.attachment || isDeleted(m) || kindOf(m.attachment) !== 'image' || seen.has(m.attachment.url)) continue;
+        seen.add(m.attachment.url);
+        out.push(m.attachment);
+      }
+      return out;
+    };
+    for (const pool of [messages ?? [], thread ? [thread.root, ...thread.replies] : []]) {
+      const items = collect(pool);
+      const index = items.findIndex((x) => x.url === a.url);
+      if (index >= 0) {
+        setViewer({ items, index });
+        return;
+      }
+    }
+    setViewer({ items: [a], index: 0 });
+  };
+
+  const jumpTo = (id: string) => {
+    const el = document.getElementById(`m-${id}`);
+    if (el) {
+      el.scrollIntoView({ block: 'center', behavior: prefersReducedMotion() ? 'auto' : 'smooth' });
+      flash(id);
+      return;
+    }
+    if (activeId) selectChannel(activeId, { msg: id });
+  };
+
   const actions: MessageActions = {
     meId,
-    canManage: Boolean(detail?.canManage),
-    canPost: detail?.canPost ?? true,
+    canManage: Boolean(head?.canManage),
+    canPost: head?.canPost ?? true,
     inThread: false,
     editing,
     setEditing,
     saveEdit: () => void saveEdit(),
     react: (m, emoji) => {
       api<ChatMessage>(`/chat/messages/${m.id}/reactions`, { method: 'POST', body: JSON.stringify({ emoji }) })
-        .then(applyUpdate)
+        .then((r) => applyUpdate(r))
         .catch((e) => showToast(errorText(e)));
     },
     openThread,
+    reply: (m) => {
+      setReplyTo((r) => ({ ...r, [m.channelId]: m }));
+      window.requestAnimationFrame(() => inputRef.current?.focus());
+    },
+    save: (m) => {
+      const was = Boolean(m.saved);
+      patchLocal(m.channelId, m.id, { saved: !was });
+      api<{ saved: boolean }>(`/chat/messages/${m.id}/save`, { method: 'POST' })
+        .then((r) => {
+          const now = Boolean(r?.saved);
+          patchLocal(m.channelId, m.id, { saved: now });
+          if (!now) setSaved((s) => (s ? s.filter((x) => x.message.id !== m.id) : s));
+          else if (panel?.kind === 'saved') loadSaved();
+          if (now) showToast('Guardado · encuéntralo en «Guardados»');
+        })
+        .catch((e) => {
+          patchLocal(m.channelId, m.id, { saved: was });
+          showToast(errorText(e, 'No se pudo guardar'));
+        });
+    },
     pin: (m) => {
       api<ChatMessage>(`/chat/messages/${m.id}/pin`, { method: 'POST' })
-        .then(applyUpdate)
+        .then((r) => applyUpdate(r))
         .catch((e) => showToast(errorText(e)));
     },
     remove: (m) => {
@@ -1180,24 +1056,141 @@ function ChatInner() {
       void deliver({ ...m, failed: false, pending: true });
     },
     discard: (m) => applyDelete(m.channelId, m.id),
-    onImage: setViewer,
+    copyLink: (m) => {
+      const url = `${window.location.origin}/chat?channel=${encodeURIComponent(m.channelId)}&msg=${encodeURIComponent(m.parentId ?? m.id)}`;
+      void navigator.clipboard
+        ?.writeText(url)
+        .then(() => showToast('Enlace copiado'))
+        .catch(() => showToast('No se pudo copiar'));
+    },
+    copied: showToast,
+    onImage: openImage,
+    jumpTo,
+    onMention: openDm,
+    isOnline,
     highlight,
     touched,
     setTouched,
   };
-  const threadActions: MessageActions = { ...actions, inThread: true };
+  const threadActions: MessageActions = {
+    ...actions,
+    inThread: true,
+    reply: (m) => {
+      setThreadReply(m);
+      window.requestAnimationFrame(() => threadInputRef.current?.focus());
+    },
+  };
 
-  const toggleMute = async () => {
-    if (!detail) return;
-    const muted = !detail.muted;
+  /* canal: avisos, edición, miembros */
+
+  const refreshDetail = useCallback(
+    (id: string) =>
+      api<ChannelDetail>(`/chat/channels/${id}`)
+        .then(setDetail)
+        .catch(() => undefined),
+    [],
+  );
+
+  const setMute = async (hours: number | null | false) => {
+    if (!head) return;
+    const muted = hours !== false;
     try {
-      await api(`/chat/channels/${detail.id}/mute`, { method: 'PATCH', body: JSON.stringify({ muted }) });
-      setDetail((d) => (d ? { ...d, muted } : d));
-      setChannels((cs) => cs?.map((c) => (c.id === detail.id ? { ...c, muted } : c)) ?? cs);
+      await api(`/chat/channels/${head.id}/mute`, { method: 'PATCH', body: JSON.stringify(muted && hours ? { muted, hours } : { muted }) });
+      const mutedUntil = muted && hours ? new Date(Date.now() + hours * HOUR).toISOString() : null;
+      setDetail((d) => (d ? { ...d, muted, mutedUntil } : d));
+      setChannels((cs) => cs?.map((c) => (c.id === head.id ? { ...c, muted, mutedUntil } : c)) ?? cs);
+      showToast(muted ? (mutedUntil ? `Silenciado ${untilLabel(mutedUntil)}` : 'Silenciado') : 'Avisos activados');
     } catch (e) {
       showToast(errorText(e));
     }
   };
+
+  const closeChannel = () => {
+    setActiveId(null);
+    setPanel(null);
+    setView('list');
+    router.replace('/chat', { scroll: false });
+    scheduleChannels();
+  };
+
+  const channelInfo = head ? (
+    <ChannelInfo
+      detail={head}
+      meId={meId}
+      isOnline={isOnline}
+      onSave={async (patch) => {
+        await api(`/chat/channels/${head.id}`, { method: 'PATCH', body: JSON.stringify(patch) });
+        await refreshDetail(head.id);
+        scheduleChannels();
+      }}
+      onMute={(h) => void setMute(h)}
+      onLeave={() => {
+        if (!window.confirm(`¿Salir de ${head.isGroupDm ? head.name : `#${head.name}`}?`)) return;
+        api(`/chat/channels/${head.id}/leave`, { method: 'POST' })
+          .then(closeChannel)
+          .catch((e) => showToast(errorText(e)));
+      }}
+      onArchive={() => {
+        if (!window.confirm(`¿Archivar #${head.name}? Nadie podrá escribir en él.`)) return;
+        api(`/chat/channels/${head.id}/archive`, { method: 'POST' })
+          .then(closeChannel)
+          .catch((e) => showToast(errorText(e)));
+      }}
+      onAdd={async (ids) => {
+        await api(`/chat/channels/${head.id}/members`, { method: 'POST', body: JSON.stringify({ userIds: ids }) });
+        await refreshDetail(head.id);
+      }}
+      onRemove={(userId) => {
+        const who = head.members.find((m) => m.id === userId)?.fullName ?? 'esta persona';
+        if (!window.confirm(`¿Quitar a ${who} del canal?`)) return;
+        api(`/chat/channels/${head.id}/members/${encodeURIComponent(userId)}`, { method: 'DELETE' })
+          .then(() => refreshDetail(head.id))
+          .catch((e) => showToast(errorText(e)));
+      }}
+      onOpenPins={openPins}
+      onOpenDm={openDm}
+      onError={showToast}
+    />
+  ) : null;
+
+  /* No molestar */
+
+  const dndActive = Boolean(prefs?.dndUntil && new Date(prefs.dndUntil).getTime() > Date.now());
+  const setDnd = async (until: Date | null) => {
+    const dndUntil = until ? until.toISOString() : null;
+    const prev = prefs;
+    setPrefs({ dndUntil });
+    try {
+      const r = await api<Prefs>('/chat/prefs', { method: 'PATCH', body: JSON.stringify({ dndUntil }) });
+      const value = r && 'dndUntil' in r ? r.dndUntil : dndUntil;
+      setPrefs({ dndUntil: value });
+      showToast(value ? `No molestar ${untilLabel(value)}` : 'No molestar desactivado');
+    } catch (e) {
+      setPrefs(prev);
+      showToast(errorText(e, 'No se pudo cambiar «No molestar»'));
+    }
+  };
+  const dndItems: (MenuItem | null)[] = [
+    { label: 'Por 1 hora', onSelect: () => void setDnd(new Date(Date.now() + HOUR)) },
+    { label: 'Por 8 horas', onSelect: () => void setDnd(new Date(Date.now() + 8 * HOUR)) },
+    {
+      label: 'Hasta mañana',
+      hint: '08:00',
+      onSelect: () => {
+        const d = new Date();
+        d.setDate(d.getDate() + 1);
+        d.setHours(8, 0, 0, 0);
+        void setDnd(d);
+      },
+    },
+    dndActive ? { label: 'Desactivar', icon: ICONS.bell, onSelect: () => void setDnd(null) } : null,
+  ];
+  const muteItems: (MenuItem | null)[] = [
+    { label: 'Silenciar 8 horas', icon: ICONS.bellOff, onSelect: () => void setMute(8) },
+    { label: 'Silenciar 1 semana', icon: ICONS.bellOff, onSelect: () => void setMute(168) },
+    { label: 'Silenciar siempre', icon: ICONS.bellOff, onSelect: () => void setMute(null) },
+    head?.muted ? { label: 'Activar avisos', icon: ICONS.bell, onSelect: () => void setMute(false) } : null,
+  ];
 
   const runSearch = async () => {
     const q = query.trim();
@@ -1212,6 +1205,25 @@ function ChatInner() {
     }
   };
 
+  /* atajos: Ctrl/Cmd+K cambia de conversación, Esc cierra el panel */
+
+  useEffect(() => {
+    const onKey = (e: globalThis.KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setSwitcher(true);
+        return;
+      }
+      if (e.key !== 'Escape' || e.defaultPrevented || viewer || editing) return;
+      if (panel) {
+        e.preventDefault();
+        setPanel(null);
+      }
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [viewer, editing, panel]);
+
   /* lista derivada */
 
   const now = new Date();
@@ -1220,25 +1232,30 @@ function ChatInner() {
   const sections = useMemo(() => {
     if (!visible) return null;
     const order = (c: ChannelSummary) => (c.slug === 'general' ? 0 : c.slug === 'anuncios' ? 1 : 2);
-    const teams = visible.filter((c) => c.kind !== 'DIRECT' && !isEvent(c)).sort((a, b) => order(a) - order(b));
-    const events = visible.filter((c) => c.kind !== 'DIRECT' && isEvent(c));
-    const directs = visible.filter((c) => c.kind === 'DIRECT');
+    const teams = visible.filter((c) => !isDirectLike(c) && !isEvent(c)).sort((a, b) => order(a) - order(b));
+    const events = visible.filter((c) => !isDirectLike(c) && isEvent(c));
+    const directs = visible.filter((c) => isDirectLike(c));
     return { teams, events, directs };
   }, [visible]);
 
   const summary = channels?.find((c) => c.id === activeId) ?? null;
-  const head = detail?.id === activeId ? detail : null;
   const title = head?.name ?? summary?.name ?? '';
-  const isDirect = (head?.kind ?? summary?.kind) === 'DIRECT';
+  const kind = head?.kind ?? summary?.kind;
+  const isDirect = kind === 'DIRECT';
+  const isGroup = Boolean(head?.isGroupDm ?? summary?.isGroupDm);
+  const directLike = isDirect || isGroup;
   const canPost = head?.canPost ?? summary?.canPost ?? true;
-  const entry = activeId ? store[activeId] : undefined;
-  const messages = entry?.list;
   const draft = activeId ? (drafts[activeId] ?? '') : '';
+  const peerId = head?.peer?.id ?? summary?.peer?.id ?? null;
+  const peerOnline = isDirect && peerId ? online.has(peerId) : false;
+  const muted = head?.muted ?? summary?.muted ?? false;
 
   const subtitle = typingNames.length
     ? `${typingNames.slice(0, 2).join(' y ')}${typingNames.length > 2 ? ' y más' : ''} ${typingNames.length > 1 ? 'están' : 'está'} escribiendo…`
     : isDirect
-      ? (head?.peer?.title ?? summary?.peer?.title ?? 'Mensaje directo')
+      ? peerOnline
+        ? 'En línea'
+        : (head?.peer?.title ?? summary?.peer?.title ?? 'Mensaje directo')
       : head?.topic || summary?.topic || (head ? `${head.memberCount} ${head.memberCount === 1 ? 'miembro' : 'miembros'}` : '');
 
   const receipt = useCallback(
@@ -1260,7 +1277,9 @@ function ChatInner() {
     const near = el.scrollHeight - el.scrollTop - el.clientHeight < 96;
     stickRef.current = near;
     setAtBottom(near);
-    if (near) setNewBelow(false);
+    if (near) setNewCount(0);
+    const divider = el.querySelector<HTMLElement>('[data-unread]');
+    setDividerAbove(Boolean(divider && divider.offsetTop < el.scrollTop));
     if (el.scrollTop < 120) void loadOlder();
   };
 
@@ -1291,7 +1310,7 @@ function ChatInner() {
       shownLastIdRef.current = lastId;
       stickRef.current = true;
       setAtBottom(true);
-      setNewBelow(false);
+      setNewCount(0);
       el.scrollTop = el.scrollHeight;
       return;
     }
@@ -1301,9 +1320,22 @@ function ChatInner() {
       stickRef.current = true;
       el.scrollTo({ top: el.scrollHeight, behavior: prefersReducedMotion() ? 'auto' : 'smooth' });
     } else if (last && last.author.id !== meId) {
-      setNewBelow(true);
+      setNewCount((n) => n + 1);
     }
   }, [messages, activeId, meId]);
+
+  // Al fijar «Mensajes nuevos», si quedó arriba de la vista, se abre ahí (como Slack).
+  useLayoutEffect(() => {
+    if (!unreadFrom || msgParam) return;
+    const el = scrollRef.current;
+    const divider = el?.querySelector<HTMLElement>('[data-unread]');
+    if (!el || !divider) return;
+    if (divider.offsetTop < el.scrollTop) {
+      stickRef.current = false;
+      setAtBottom(false);
+      el.scrollTop = Math.max(0, divider.offsetTop - 48);
+    }
+  }, [unreadFrom, msgParam]);
 
   // Fotos y videos cargan después del primer pintado: si estaba abajo, sigue abajo.
   const hasStream = Boolean(messages?.length);
@@ -1323,7 +1355,14 @@ function ChatInner() {
     const el = scrollRef.current;
     if (!el) return;
     el.scrollTo({ top: el.scrollHeight, behavior: prefersReducedMotion() ? 'auto' : 'smooth' });
-    setNewBelow(false);
+    setNewCount(0);
+  };
+
+  const jumpToUnread = () => {
+    const el = scrollRef.current;
+    const divider = el?.querySelector<HTMLElement>('[data-unread]');
+    if (!el || !divider) return;
+    el.scrollTo({ top: Math.max(0, divider.offsetTop - 48), behavior: prefersReducedMotion() ? 'auto' : 'smooth' });
   };
 
   useEffect(() => {
@@ -1333,12 +1372,64 @@ function ChatInner() {
   /* render */
 
   const renderRows = (list: ChannelSummary[]) =>
-    list.map((c) => <ChannelRow key={c.id} c={c} active={c.id === activeId} now={now} onSelect={(id) => selectChannel(id)} />);
+    list.map((c) => (
+      <ChannelRow
+        key={c.id}
+        c={c}
+        active={c.id === activeId}
+        now={now}
+        online={c.kind === 'DIRECT' && c.peer ? online.has(c.peer.id) : undefined}
+        onSelect={(id) => selectChannel(id)}
+      />
+    ));
+
+  const panelTitle =
+    panel?.kind === 'thread' ? 'Hilo' : panel?.kind === 'pins' ? 'Mensajes fijados' : panel?.kind === 'saved' ? 'Guardados' : 'Detalles';
+
+  const intro = (
+    <div className="chat-intro">
+      {head || summary ? <ChannelGlyph c={(head ?? summary)!} size="lg" online={isDirect ? peerOnline : undefined} /> : null}
+      <h3 className="chat-intro__title">
+        {isDirect ? `Tu conversación con ${title}` : isGroup ? title : `Este es el inicio de #${title}`}
+      </h3>
+      <p className="chat-intro__text">
+        {head?.description ||
+          head?.topic ||
+          (isDirect
+            ? 'Lo que escriban aquí solo lo ven ustedes dos.'
+            : isGroup
+              ? 'Solo las personas de este grupo ven estos mensajes.'
+              : 'Comparte avisos, archivos y decisiones con el equipo.')}
+      </p>
+    </div>
+  );
+
+  const failedHere = failedUploads.filter((f) => f.item.channelId === activeId);
 
   return (
     <AppShell title="Chat">
       <div className={`chat ${view === 'convo' ? 'chat--thread' : 'chat--list'}${panel ? ' has-panel' : ''}`}>
         <aside className="chat__side" aria-label="Conversaciones">
+          <div className="chat-side-head">
+            <strong className="chat-side-head__title">Chat</strong>
+            <button
+              type="button"
+              className={`chat-tool${dndActive ? ' is-on' : ''}`}
+              title={dndActive && prefs?.dndUntil ? `No molestar ${untilLabel(prefs.dndUntil)}` : 'No molestar'}
+              aria-label="No molestar"
+              onClick={(e) => setMenu({ kind: 'dnd', anchor: e.currentTarget.getBoundingClientRect() })}
+            >
+              <Icon d={ICONS.moon} size={17} />
+            </button>
+            <button type="button" className="chat-tool" title="Nueva conversación" aria-label="Nueva conversación" onClick={() => setPicker('dm')}>
+              <Icon d={ICONS.compose} size={17} />
+            </button>
+          </div>
+          {dndActive && prefs?.dndUntil ? (
+            <button type="button" className="chat-dnd" onClick={(e) => setMenu({ kind: 'dnd', anchor: e.currentTarget.getBoundingClientRect() })}>
+              <Icon d={ICONS.moon} size={14} /> No molestar {untilLabel(prefs.dndUntil)}
+            </button>
+          ) : null}
           <div className="chat-search">
             <span className="chat-search__icon">
               <Icon d={ICONS.search} size={15} />
@@ -1356,6 +1447,7 @@ function ChatInner() {
               }}
               onKeyDown={(e) => {
                 if (e.key === 'Escape') {
+                  e.preventDefault();
                   setQuery('');
                   setResults(null);
                 }
@@ -1363,38 +1455,33 @@ function ChatInner() {
               }}
             />
           </div>
-          <div className="chat-side-actions">
-            <button type="button" className="btn ghost btn-sm" onClick={() => setPicker('dm')}>
-              <Icon d={ICONS.plus} size={14} /> Mensaje
-            </button>
-            <button type="button" className="btn ghost btn-sm" onClick={() => setPicker('channel')}>
-              <Icon d={ICONS.plus} size={14} /> Canal
-            </button>
-          </div>
 
           <div className="chat-list">
+            <div className="chat-nav">
+              <button type="button" className={`chat-nav__item${panel?.kind === 'saved' ? ' is-active' : ''}`} onClick={() => (panel?.kind === 'saved' ? setPanel(null) : openSaved())}>
+                <Icon d={ICONS.bookmark} size={15} /> Guardados
+              </button>
+              <button type="button" className="chat-nav__item" onClick={() => setSwitcher(true)}>
+                <Icon d={ICONS.search} size={15} /> Ir a…
+                <kbd className="chat-nav__kbd">Ctrl K</kbd>
+              </button>
+            </div>
             {results ? (
               <div className="chat-results">
                 <div className="chat-section__title">
-                  {results.length ? `${results.length} mensajes` : 'Sin mensajes'}
+                  <span>{results.length ? `${results.length} mensajes` : 'Sin mensajes'}</span>
                   <button type="button" className="chat-link" onClick={() => setResults(null)}>
                     Cerrar
                   </button>
                 </div>
                 {results.map((m) => (
-                  <button
+                  <MessageResult
                     key={m.id}
-                    type="button"
-                    className="chat-result"
+                    m={m}
+                    now={now}
+                    where={m.channel?.kind === 'DIRECT' ? m.author.fullName : `#${m.channel?.name ?? ''}`}
                     onClick={() => selectChannel(m.channelId, { msg: m.parentId ?? m.id })}
-                  >
-                    <span className="chat-result__where">
-                      {m.channel?.kind === 'DIRECT' ? m.author.fullName : `#${m.channel?.name ?? ''}`} · {listTime(m.createdAt, now)}
-                    </span>
-                    <span className="chat-result__body">
-                      <strong>{m.author.fullName.split(/\s+/)[0]}:</strong> {m.body || (m.attachment ? attachmentLabel(m.attachment) : '')}
-                    </span>
-                  </button>
+                  />
                 ))}
               </div>
             ) : sections === null ? (
@@ -1419,15 +1506,37 @@ function ChatInner() {
               )
             ) : (
               <>
-                {sections.teams.length ? <Section title="Canales">{renderRows(sections.teams)}</Section> : null}
+                {sections.teams.length || !q ? (
+                  <Section
+                    title="Canales"
+                    action={
+                      <button type="button" className="chat-section__add" aria-label="Nuevo canal" title="Nuevo canal" onClick={() => setPicker('channel')}>
+                        <Icon d={ICONS.plus} size={14} />
+                      </button>
+                    }
+                  >
+                    {renderRows(sections.teams)}
+                  </Section>
+                ) : null}
                 {sections.events.length ? <Section title="Eventos">{renderRows(sections.events)}</Section> : null}
-                {sections.directs.length ? <Section title="Mensajes directos">{renderRows(sections.directs)}</Section> : null}
+                {sections.directs.length || !q ? (
+                  <Section
+                    title="Mensajes directos"
+                    action={
+                      <button type="button" className="chat-section__add" aria-label="Nuevo mensaje" title="Nuevo mensaje" onClick={() => setPicker('dm')}>
+                        <Icon d={ICONS.plus} size={14} />
+                      </button>
+                    }
+                  >
+                    {sections.directs.length ? renderRows(sections.directs) : <p className="chat-list__hint">Escribe a alguien del equipo con +</p>}
+                  </Section>
+                ) : null}
                 {q.length >= 2 ? (
                   <button type="button" className="chat-search-more" onClick={() => void runSearch()} disabled={searching}>
                     {searching ? 'Buscando…' : `Buscar «${query.trim()}» en mensajes`}
                   </button>
                 ) : null}
-                {!sections.teams.length && !sections.events.length && !sections.directs.length && q.length < 2 ? (
+                {!sections.teams.length && !sections.events.length && !sections.directs.length && q.length < 2 && q ? (
                   <p className="chat-list__none">Sin resultados</p>
                 ) : null}
               </>
@@ -1450,7 +1559,11 @@ function ChatInner() {
         >
           {!activeId ? (
             <div className="chat-empty">
-              <EmptyLite icon={<Icon d={ICONS.bubble} size={20} />} title="Elige una conversación" />
+              <EmptyLite icon={<Icon d={ICONS.bubble} size={20} />} title="Elige una conversación">
+                <button type="button" className="btn ghost btn-sm" onClick={() => setSwitcher(true)}>
+                  Ir a… (Ctrl K)
+                </button>
+              </EmptyLite>
             </div>
           ) : (
             <>
@@ -1458,20 +1571,40 @@ function ChatInner() {
                 <button type="button" className="chat-back" aria-label="Conversaciones" onClick={() => setView('list')}>
                   <Icon d={ICONS.back} size={20} />
                 </button>
-                {head || summary ? (
-                  <ChannelGlyph c={(head ?? summary)!} size="lg" />
-                ) : (
-                  <span className="chat-avatar chat-avatar--lg skeleton" aria-hidden />
-                )}
-                <div className="chat-head__copy">
-                  <h2 className="chat-head__title">{title}</h2>
-                  {subtitle ? <p className={`chat-head__sub${typingNames.length ? ' is-typing' : ''}`}>{subtitle}</p> : null}
-                </div>
+                <button
+                  type="button"
+                  className="chat-head__id"
+                  title="Ver detalles"
+                  onClick={() => setPanel((p) => (p?.kind === 'info' ? null : { kind: 'info' }))}
+                  disabled={!head}
+                >
+                  {head || summary ? (
+                    <ChannelGlyph c={(head ?? summary)!} size="lg" online={isDirect ? peerOnline : undefined} />
+                  ) : (
+                    <span className="chat-avatar chat-avatar--lg skeleton" aria-hidden />
+                  )}
+                  <span className="chat-head__copy">
+                    <span className="chat-head__title">
+                      {title}
+                      {muted ? (
+                        <span className="chat-head__muted" aria-label="Silenciado">
+                          <Icon d={ICONS.bellOff} size={13} />
+                        </span>
+                      ) : null}
+                    </span>
+                    {subtitle ? <span className={`chat-head__sub${typingNames.length ? ' is-typing' : ''}${peerOnline && !typingNames.length ? ' is-online' : ''}`}>{subtitle}</span> : null}
+                  </span>
+                </button>
                 <div className="chat-head__tools">
                   {head?.eventId ? (
                     <Link className="chat-tool" href={`/events/${head.eventId}`} title="Ver evento" aria-label="Ver evento">
                       <Icon d={ICON_EVENT} size={17} />
                     </Link>
+                  ) : null}
+                  {head && !directLike ? (
+                    <button type="button" className="chat-head__members" title="Miembros" onClick={() => setPanel({ kind: 'info' })}>
+                      <Icon d={ICONS.users} size={15} /> {head.memberCount}
+                    </button>
                   ) : null}
                   <button
                     type="button"
@@ -1486,49 +1619,74 @@ function ChatInner() {
                     <button
                       type="button"
                       className={`chat-tool${head.muted ? ' is-on' : ''}`}
-                      title={head.muted ? 'Activar avisos' : 'Silenciar'}
-                      aria-label={head.muted ? 'Activar avisos' : 'Silenciar conversación'}
-                      onClick={() => void toggleMute()}
+                      title={head.muted ? 'Silenciado' : 'Avisos'}
+                      aria-label="Avisos de la conversación"
+                      onClick={(e) => setMenu({ kind: 'mute', anchor: e.currentTarget.getBoundingClientRect() })}
                     >
                       <Icon d={head.muted ? ICONS.bellOff : ICONS.bell} size={17} />
                     </button>
                   ) : null}
+                  <button
+                    type="button"
+                    className={`chat-tool${panel?.kind === 'info' ? ' is-on' : ''}`}
+                    title="Detalles"
+                    aria-label="Detalles de la conversación"
+                    onClick={() => setPanel((p) => (p?.kind === 'info' ? null : { kind: 'info' }))}
+                  >
+                    <Icon d={ICONS.info} size={17} />
+                  </button>
                 </div>
               </header>
 
               <div className="chat-viewport">
+                {dividerAbove && unreadFrom ? (
+                  <div className="chat-pill chat-pill--top" role="status">
+                    <button type="button" onClick={jumpToUnread}>
+                      <Icon d={ICONS.send} size={13} /> Mensajes nuevos
+                    </button>
+                    <button type="button" aria-label="Marcar como leído" title="Marcar como leído" onClick={() => setUnreadMark(null)}>
+                      <Icon d={ICONS.close} size={13} />
+                    </button>
+                  </div>
+                ) : null}
                 <div className="chat-scroll" ref={scrollRef} onScroll={onScroll}>
                   {messages === undefined ? (
                     loadError === activeId ? (
                       <div className="chat-empty">
-                        <EmptyLite icon="!" title="No se pudo cargar la conversación" />
+                        <EmptyLite icon="!" title="No se pudo cargar la conversación">
+                          <button type="button" className="btn ghost btn-sm" onClick={() => setReloadKey((k) => k + 1)}>
+                            Reintentar
+                          </button>
+                        </EmptyLite>
                       </div>
                     ) : (
-                      <div className="chat-stream chat-stream--ghost" aria-busy="true">
-                        {[48, 32, 56, 40].map((w, i) => (
-                          <span key={i} className={`skeleton chat-ghost${i % 2 ? ' chat-ghost--mine' : ''}`} style={{ width: `${w}%` }} />
-                        ))}
-                      </div>
+                      <StreamGhost />
                     )
                   ) : messages.length === 0 ? (
-                    <div className="chat-empty">
-                      <EmptyLite icon={<Icon d={ICONS.bubble} size={20} />} title="Empieza la conversación" />
-                    </div>
+                    <div className="chat-stream">{intro}</div>
                   ) : (
                     <div className="chat-stream">
                       {entry?.hasMore ? (
                         <button type="button" className="chat-older" onClick={() => void loadOlder()} disabled={loadingOlder}>
                           {loadingOlder ? 'Cargando…' : 'Mensajes anteriores'}
                         </button>
-                      ) : null}
-                      <MessageStream list={messages} x={actions} showNames={!isDirect} receipt={receipt} />
+                      ) : (
+                        intro
+                      )}
+                      <MessageStream list={messages} x={actions} unreadFrom={unreadFrom} receipt={receipt} />
                     </div>
                   )}
                 </div>
 
                 {!atBottom && messages && messages.length > 0 ? (
-                  <button type="button" className={`chat-jump${newBelow ? ' has-new' : ''}`} aria-label="Ir al último mensaje" onClick={jumpToBottom}>
-                    <Icon d={ICONS.down} size={18} />
+                  <button
+                    type="button"
+                    className={`chat-pill chat-pill--bottom${newCount ? ' has-new' : ''}`}
+                    aria-label={newCount ? `${newCount} mensajes nuevos, ir al último` : 'Ir al último mensaje'}
+                    onClick={jumpToBottom}
+                  >
+                    <Icon d={ICONS.down} size={16} />
+                    {newCount ? <span>{newCount === 1 ? '1 nuevo' : `${newCount} nuevos`}</span> : null}
                   </button>
                 ) : null}
                 {dragOver ? <div className="chat-dropzone">Suelta para enviar</div> : null}
@@ -1543,6 +1701,24 @@ function ChatInner() {
                   <span className="chat-upload__bar">
                     <span style={{ width: `${Math.round((upload.fraction ?? 0) * 100)}%` }} />
                   </span>
+                </div>
+              ) : null}
+
+              {failedHere.length ? (
+                <div className="chat-upfail" role="alert">
+                  {failedHere.map((f) => (
+                    <div key={f.id} className="chat-upfail__row">
+                      <span className="chat-upfail__text">
+                        No se envió «{f.item.label}» · {f.error}
+                      </span>
+                      <button type="button" className="chat-retry" onClick={() => retryUpload(f)}>
+                        Reintentar
+                      </button>
+                      <button type="button" className="chat-retry" onClick={() => setFailedUploads((all) => all.filter((x) => x.id !== f.id))}>
+                        Descartar
+                      </button>
+                    </div>
+                  ))}
                 </div>
               ) : null}
 
@@ -1568,8 +1744,22 @@ function ChatInner() {
                   onPaste={onPaste('main')}
                   disabled={!canPost}
                   disabledText="Solo dirección publica en este canal"
-                  placeholder={isDirect ? `Mensaje a ${title.split(/\s+/)[0] || ''}…` : `Mensaje en #${title}`}
+                  placeholder={isDirect ? `Mensaje a ${title.split(/\s+/)[0] || ''}` : isGroup ? `Mensaje a ${title}` : `Mensaje en #${title}`}
                   inputRef={inputRef}
+                  replyTo={activeId ? (replyTo[activeId] ?? null) : null}
+                  onCancelReply={() =>
+                    setReplyTo((r) => {
+                      const next = { ...r };
+                      if (activeId) delete next[activeId];
+                      return next;
+                    })
+                  }
+                  people={people}
+                  searchPeople={searchPeople}
+                  canMentionChannel={Boolean(head?.canManage) && !directLike}
+                  isOnline={isOnline}
+                  onPicked={onPicked}
+                  onEditLast={editLast}
                 />
               )}
             </>
@@ -1577,26 +1767,23 @@ function ChatInner() {
         </section>
 
         {panel ? (
-          <aside className="chat-panel" aria-label={panel.kind === 'thread' ? 'Hilo' : 'Fijados'}>
-            <header className="chat-panel__head">
-              <strong>{panel.kind === 'thread' ? 'Hilo' : 'Mensajes fijados'}</strong>
-              <button type="button" className="chat-tool" aria-label="Cerrar" onClick={() => setPanel(null)}>
-                <Icon d={ICONS.close} size={18} />
-              </button>
-            </header>
+          <aside className="chat-panel" aria-label={panelTitle}>
+            <PanelHead title={panelTitle} onClose={() => setPanel(null)}>
+              {panel.kind === 'thread' && title ? <span className="chat-panel__sub">{directLike ? title : `#${title}`}</span> : null}
+            </PanelHead>
             {panel.kind === 'thread' ? (
               <>
                 <div className="chat-panel__body">
                   {thread ? (
                     <>
-                      <MessageStream list={[thread.root]} x={threadActions} showNames />
+                      <MessageStream list={[thread.root]} x={threadActions} />
                       <div className="chat-panel__divider">
                         {thread.replies.length === 1 ? '1 respuesta' : `${thread.replies.length} respuestas`}
                       </div>
-                      <MessageStream list={thread.replies} x={threadActions} showNames />
+                      <MessageStream list={thread.replies} x={threadActions} />
                     </>
                   ) : (
-                    <p className="chat-list__none">Cargando…</p>
+                    <StreamGhost />
                   )}
                 </div>
                 {thread ? (
@@ -1610,33 +1797,45 @@ function ChatInner() {
                     disabled={!canPost}
                     disabledText="Solo dirección publica en este canal"
                     placeholder="Responder en el hilo…"
+                    inputRef={threadInputRef}
+                    replyTo={threadReply}
+                    onCancelReply={() => setThreadReply(null)}
+                    people={people}
+                    searchPeople={searchPeople}
+                    canMentionChannel={false}
+                    isOnline={isOnline}
+                    onPicked={onPicked}
                   />
                 ) : null}
               </>
-            ) : (
+            ) : panel.kind === 'pins' ? (
               <div className="chat-panel__body">
-                {pins === null ? (
-                  <p className="chat-list__none">Cargando…</p>
-                ) : pins.length === 0 ? (
-                  <p className="chat-list__none">Nada fijado todavía</p>
-                ) : (
-                  pins.map((m) => (
-                    <button
-                      key={m.id}
-                      type="button"
-                      className="chat-result"
-                      onClick={() => {
-                        if (activeId) selectChannel(activeId, { msg: m.id });
-                      }}
-                    >
-                      <span className="chat-result__where">
-                        {m.author.fullName} · {listTime(m.createdAt, now)}
-                      </span>
-                      <span className="chat-result__body">{m.body || (m.attachment ? attachmentLabel(m.attachment) : '')}</span>
-                    </button>
-                  ))
-                )}
+                <PinsList
+                  pins={pins}
+                  now={now}
+                  onJump={(m) => {
+                    if (narrow) setPanel(null);
+                    jumpTo(m.id);
+                  }}
+                />
               </div>
+            ) : panel.kind === 'saved' ? (
+              <div className="chat-panel__body">
+                <SavedList
+                  items={saved}
+                  error={savedError}
+                  now={now}
+                  onRetry={loadSaved}
+                  onJump={(it) => {
+                    if (narrow) setPanel(null);
+                    if (it.channel.id === activeId && document.getElementById(`m-${it.message.parentId ?? it.message.id}`)) jumpTo(it.message.parentId ?? it.message.id);
+                    else selectChannel(it.channel.id, { msg: it.message.parentId ?? it.message.id });
+                  }}
+                  onUnsave={(it) => actions.save({ ...it.message, saved: true })}
+                />
+              </div>
+            ) : (
+              <div className="chat-panel__body chat-panel__body--flush">{channelInfo ?? <StreamGhost />}</div>
             )}
           </aside>
         ) : null}
@@ -1655,10 +1854,11 @@ function ChatInner() {
         }}
       />
 
-      {viewer ? <MediaViewer a={viewer} onClose={() => setViewer(null)} /> : null}
+      {viewer ? <MediaViewer items={viewer.items} start={viewer.index} onClose={() => setViewer(null)} /> : null}
       {picker ? (
         <NewConversation
-          mode={picker}
+          initialMode={picker}
+          meId={meId}
           onClose={() => setPicker(null)}
           onOpen={(id) => {
             setPicker(null);
@@ -1668,128 +1868,29 @@ function ChatInner() {
           onError={showToast}
         />
       ) : null}
+      {switcher && channels ? (
+        <QuickSwitcher
+          channels={channels}
+          meId={meId}
+          isOnline={isOnline}
+          onSelect={(id) => selectChannel(id)}
+          onOpenDm={openDm}
+          onClose={() => setSwitcher(false)}
+        />
+      ) : null}
+      {menu ? (
+        <Menu
+          anchor={menu.anchor}
+          title={menu.kind === 'dnd' ? (dndActive && prefs?.dndUntil ? `No molestar ${untilLabel(prefs.dndUntil)}` : 'No molestar') : 'Avisos'}
+          items={menu.kind === 'dnd' ? dndItems : muteItems}
+          onClose={() => setMenu(null)}
+        />
+      ) : null}
       {toast ? (
         <div className="chat-toast" role="alert" onClick={() => setToast(null)}>
           {toast}
         </div>
       ) : null}
     </AppShell>
-  );
-}
-
-function NewConversation({
-  mode,
-  onClose,
-  onOpen,
-  onError,
-}: {
-  mode: 'dm' | 'channel';
-  onClose: () => void;
-  onOpen: (id: string) => void;
-  onError: (text: string) => void;
-}) {
-  const [q, setQ] = useState('');
-  const [people, setPeople] = useState<Colleague[] | null>(null);
-  const [name, setName] = useState('');
-  const [privateChannel, setPrivateChannel] = useState(false);
-  const [busy, setBusy] = useState(false);
-
-  useEffect(() => {
-    if (mode !== 'dm') return;
-    const id = window.setTimeout(() => {
-      api<Colleague[]>(`/chat/colleagues${q.trim() ? `?q=${encodeURIComponent(q.trim())}` : ''}`)
-        .then(setPeople)
-        .catch(() => setPeople([]));
-    }, 220);
-    return () => window.clearTimeout(id);
-  }, [q, mode]);
-
-  useEffect(() => {
-    const onKey = (e: globalThis.KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [onClose]);
-
-  const openDm = async (userId: string) => {
-    setBusy(true);
-    try {
-      const c = await api<ChannelDetail>('/chat/dm', { method: 'POST', body: JSON.stringify({ userId }) });
-      onOpen(c.id);
-    } catch (e) {
-      onError(errorText(e, 'No se pudo abrir la conversación'));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const createChannel = async () => {
-    const clean = name.trim().replace(/^#/, '');
-    if (clean.length < 2) return;
-    setBusy(true);
-    try {
-      const c = await api<{ id: string }>('/chat/channels', {
-        method: 'POST',
-        body: JSON.stringify({ name: clean, kind: privateChannel ? 'PRIVATE' : 'PUBLIC' }),
-      });
-      onOpen(c.id);
-    } catch (e) {
-      onError(errorText(e, 'No se pudo crear el canal'));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <div className="chat-modal" role="dialog" aria-label={mode === 'dm' ? 'Nuevo mensaje' : 'Nuevo canal'} onClick={onClose}>
-      <div className="chat-modal__card" onClick={(e) => e.stopPropagation()}>
-        <header className="chat-panel__head">
-          <strong>{mode === 'dm' ? 'Nuevo mensaje' : 'Nuevo canal'}</strong>
-          <button type="button" className="chat-tool" aria-label="Cerrar" onClick={onClose}>
-            <Icon d={ICONS.close} size={18} />
-          </button>
-        </header>
-        {mode === 'dm' ? (
-          <>
-            <input autoFocus type="text" placeholder="Buscar persona" value={q} onChange={(e) => setQ(e.target.value)} />
-            <div className="chat-modal__list">
-              {people === null ? (
-                <p className="chat-list__none">Cargando…</p>
-              ) : people.length === 0 ? (
-                <p className="chat-list__none">Sin resultados</p>
-              ) : (
-                people.map((p) => (
-                  <button key={p.id} type="button" className="chat-row" disabled={busy} onClick={() => void openDm(p.id)}>
-                    <Avatar id={p.id} name={p.fullName} />
-                    <span className="chat-row__main">
-                      <span className="chat-row__name">{p.fullName}</span>
-                      {p.title ? <span className="chat-row__preview">{p.title}</span> : null}
-                    </span>
-                  </button>
-                ))
-              )}
-            </div>
-          </>
-        ) : (
-          <form
-            className="chat-modal__form"
-            onSubmit={(e) => {
-              e.preventDefault();
-              void createChannel();
-            }}
-          >
-            <input autoFocus type="text" placeholder="Nombre del canal" maxLength={80} value={name} onChange={(e) => setName(e.target.value)} />
-            <label className="chat-modal__check">
-              <input type="checkbox" checked={privateChannel} onChange={(e) => setPrivateChannel(e.target.checked)} />
-              Privado (solo quien invites)
-            </label>
-            <button type="submit" className="btn" disabled={busy || name.trim().replace(/^#/, '').length < 2}>
-              Crear canal
-            </button>
-          </form>
-        )}
-      </div>
-    </div>
   );
 }
