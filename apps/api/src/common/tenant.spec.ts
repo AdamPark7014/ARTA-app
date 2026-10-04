@@ -4,6 +4,7 @@ import {
   tenantIdOf,
   assertSameTenant,
   assertTenantAdminAccess,
+  assertSharedCatalogWrite,
   isPlatformAdmin,
   orgWhere,
 } from './tenant';
@@ -87,6 +88,33 @@ describe('common/tenant', () => {
     it('lets only super_admin manage foreign orgs', () => {
       expect(() =>
         assertTenantAdminAccess({ roleKey: 'super_admin', organizationId: 'org_a' }, 'org_b'),
+      ).not.toThrow();
+    });
+  });
+
+  describe('assertSharedCatalogWrite', () => {
+    it('allows Arta’s own org', () => {
+      expect(() =>
+        assertSharedCatalogWrite({ roleKey: 'dir_general', organizationId: DEFAULT_ORG_ID }),
+      ).not.toThrow();
+    });
+
+    it('treats legacy users with no organizationId as Arta (same fallback as tenantIdOf)', () => {
+      expect(() => assertSharedCatalogWrite({ roleKey: 'gerente_arta', organizationId: null })).not.toThrow();
+    });
+
+    it('blocks dir_general of any other org, including the store-review demo org', () => {
+      expect(() =>
+        assertSharedCatalogWrite({ roleKey: 'dir_general', organizationId: 'org_cliente_x' }),
+      ).toThrow(ForbiddenException);
+      expect(() =>
+        assertSharedCatalogWrite({ roleKey: 'dir_general', organizationId: 'org_arta_store_review' }),
+      ).toThrow(ForbiddenException);
+    });
+
+    it('lets super_admin write from any org', () => {
+      expect(() =>
+        assertSharedCatalogWrite({ roleKey: 'super_admin', organizationId: 'org_cliente_x' }),
       ).not.toThrow();
     });
   });

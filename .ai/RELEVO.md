@@ -4,7 +4,32 @@
 - **Fecha:** 2026-10-04
 - **Rama:** main
   (Adam es el único programador).
-- **Producción:** `e9b4764` desplegado desde `main` el 2026-10-04 22:51 UTC (respaldo `/root/arta-backups/20261004-2249.sql.gz`); todo lo de este día ya está arriba y `/legal/*` responde 200 en los tres dominios
+- **Producción:** `e9b4764` desplegado desde `main` el 2026-10-04 22:51 UTC (respaldo `/root/arta-backups/20261004-2249.sql.gz`); `/legal/*` responde 200 en los tres dominios. **Falta desplegar** el candado de Studio y plantillas (turno de abajo; solo API, sin migración)
+
+## Turno claude-code (2026-10-04, 17:05): Studio y plantillas de formatos solo desde la organización de Arta
+
+Hallazgo del turno anterior. `PageContent`/`HeroSlide`/`NewsPost` (sitio público artaproducciones.com) y
+`ChecklistTemplate` no tienen `organizationId`; cualquier org con `studio.edit` o rol de dirección (alta
+self-serve, invitación, Stripe, la org de revisión `org_arta_store_review`) podía reescribirlos.
+
+- `common/tenant.ts`: `assertSharedCatalogWrite(user)` → pasa si `tenantIdOf(user) === DEFAULT_ORG_ID`
+  (`org_arta_internal`; usuarios sin org caen ahí, igual que en el resto) o `roleKey === 'super_admin'`;
+  si no, 403 «Solo la organización de Arta puede modificar este contenido». Va **después** del chequeo de rol.
+- `studio.controller.ts`: `assertStudioWrite` en PUT pages, POST/PUT/DELETE slides y news. Lecturas igual.
+- `checklists.controller.ts`: `assertTemplateWrite` en POST templates, import-docx, import-xlsx,
+  templates/:id/excel, PATCH templates/:id y restore; si llegó archivo (multer ya lo guardó) lo borra.
+  Lecturas igual (las demás orgs siguen usando el catálogo para crear formatos en sus eventos).
+- Sin cambios en `schema.prisma` ni migraciones.
+- Pruebas: `studio/studio.controller.spec.ts`, `checklists/checklists.templates.spec.ts`, casos nuevos en
+  `common/tenant.spec.ts`. Quitando el candado fallan 13 (las 7 escrituras de Studio y las 6 de plantillas).
+  API: `tsc` limpio, jest 54 suites / 464 en verde (1 omitida, como antes).
+- **Pendiente**: (1) desplegar (bundle + `update.sh --no-pull`; no hay migración). (2) La web sigue mostrando
+  Studio y el editor de plantillas a dirección de otras orgs (`lib/access-matrix.ts` solo mira permisos);
+  ahora al guardar ven el 403. (3) Las lecturas autenticadas de Studio (`GET studio/pages|slides|news`)
+  muestran borradores no publicados de Arta a otras orgs con `studio.edit`; se dejaron como estaban por
+  pedido. (4) Si los carga multer y el rol no alcanza, el archivo ya quedaba huérfano antes de este cambio
+  (import-docx/xlsx, templates/:id/excel); no se tocó. (5) Siguen abiertos: avisos de eventos sin
+  organización llegan a todas; `docs/ACCESS.md` trae contraseñas de semilla en texto.
 
 ## Turno claude-code (2026-10-04, 16:15–17:10): revisión, despliegue y pulido para tiendas «como NEXARA»
 
@@ -36,7 +61,7 @@ para cumplir con toda la documentación al subirla».
   - **Docs de tienda** `docs/store/` (README con la decisión de distribución, IOS-APP-STORE, PLAY-STORE,
     CUENTA-REVISION), gráficos de Play `apps/mobile-native/play-assets/` y `scripts/subir-secretos-ios.ps1`.
 - **Hallazgos de seguridad (no tocados, para otro turno)**: Studio (sitio público) y las plantillas de formatos
-  no están separadas por organización; los avisos de eventos sin organización llegan a todas; `docs/ACCESS.md`
+  no están separadas por organización (escrituras ya cerradas en el turno de arriba); los avisos de eventos sin organización llegan a todas; `docs/ACCESS.md`
   trae contraseñas de semilla en texto.
 
 ## Turno cursor (2026-10-04, 14:20–16:15): anticipos con aprobación, iOS en verde, firma de publicación

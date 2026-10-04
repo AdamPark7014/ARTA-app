@@ -24,7 +24,7 @@ import {
   RevisionService,
 } from '../common/revisions/revision.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { assertSameTenant } from '../common/tenant';
+import { assertSameTenant, assertSharedCatalogWrite } from '../common/tenant';
 import { assertEventNotClosed } from '../common/event-guards';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { UploadedFile, UseInterceptors } from '@nestjs/common';
@@ -94,6 +94,19 @@ export class ChecklistsController {
     }
   }
 
+  /**
+   * Las plantillas son un catálogo compartido (sin organizationId): solo Arta o super_admin las
+   * escriben. Si llegó un archivo, multer ya lo guardó; se borra para no dejarlo huérfano.
+   */
+  private assertTemplateWrite(user: AuthUser, file?: Express.Multer.File) {
+    try {
+      assertSharedCatalogWrite(user);
+    } catch (err) {
+      if (file) discardUpload(file.path);
+      throw err;
+    }
+  }
+
   private async regeneratePdf(id: string, options?: { force?: boolean }) {
     return this.pdfs.regenerateInstance(id, options);
   }
@@ -140,6 +153,7 @@ export class ChecklistsController {
       req.user.roleKey === 'gerente_arta' ||
       req.user.roleKey === 'dir_auditorio';
     if (!canManage) throw new ForbiddenException('Sin permiso para crear plantillas');
+    this.assertTemplateWrite(req.user);
     const name = (body?.name || '').trim();
     if (!name) throw new BadRequestException('Nombre requerido');
     const created = await this.prisma.checklistTemplate.create({
@@ -173,6 +187,7 @@ export class ChecklistsController {
       req.user.roleKey === 'gerente_arta' ||
       req.user.roleKey === 'dir_auditorio';
     if (!canManage) throw new ForbiddenException('Sin permiso para crear plantillas');
+    this.assertTemplateWrite(req.user, file);
     if (!file) throw new BadRequestException('Archivo .docx requerido');
     if (!/\.docx$/i.test(file.originalname) || !contentMatchesExtension(file.path, file.originalname)) {
       discardUpload(file.path);
@@ -225,6 +240,7 @@ export class ChecklistsController {
       req.user.roleKey === 'gerente_arta' ||
       req.user.roleKey === 'dir_auditorio';
     if (!canManage) throw new ForbiddenException('Sin permiso para crear plantillas');
+    this.assertTemplateWrite(req.user, file);
     if (!file) throw new BadRequestException('Archivo .xlsx requerido');
     if (!/\.xlsx$/i.test(file.originalname) || !contentMatchesExtension(file.path, file.originalname)) {
       discardUpload(file.path);
@@ -271,6 +287,7 @@ export class ChecklistsController {
       req.user.roleKey === 'gerente_arta' ||
       req.user.roleKey === 'dir_auditorio';
     if (!canManage) throw new ForbiddenException('Sin permiso para editar plantillas');
+    this.assertTemplateWrite(req.user, file);
     const existing = await this.prisma.checklistTemplate.findUnique({ where: { id } });
     if (!existing) {
       if (file) discardUpload(file.path);
@@ -327,6 +344,7 @@ export class ChecklistsController {
       req.user.roleKey === 'gerente_arta' ||
       req.user.roleKey === 'dir_auditorio';
     if (!canManage) throw new ForbiddenException('Sin permiso para editar plantillas');
+    this.assertTemplateWrite(req.user);
 
     const existing = await this.prisma.checklistTemplate.findUnique({ where: { id } });
     if (!existing) throw new BadRequestException('Plantilla no encontrada');
@@ -381,6 +399,7 @@ export class ChecklistsController {
       req.user.roleKey === 'gerente_arta' ||
       req.user.roleKey === 'dir_auditorio';
     if (!canManage) throw new ForbiddenException('Sin permiso para restaurar plantillas');
+    this.assertTemplateWrite(req.user);
 
     const existing = await this.prisma.checklistTemplate.findUnique({ where: { id } });
     if (!existing) throw new BadRequestException('Plantilla no encontrada');

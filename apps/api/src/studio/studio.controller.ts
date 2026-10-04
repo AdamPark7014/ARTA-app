@@ -17,6 +17,9 @@ import { IsBoolean, IsInt, IsOptional, IsString } from 'class-validator';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { hasPermission, PERMISSIONS, type RoleKey } from '../common/rbac/roles';
+import { assertSharedCatalogWrite } from '../common/tenant';
+
+type StudioUser = { id?: string; roleKey: string; permissions: string[]; organizationId?: string | null };
 
 class UpsertPageDto {
   @IsString()
@@ -59,6 +62,12 @@ export class StudioController {
     ) {
       throw new ForbiddenException('Sin permiso de Studio');
     }
+  }
+
+  /** El sitio público es uno solo (sin organizationId): solo Arta o super_admin lo modifican. */
+  private assertStudioWrite(user: StudioUser) {
+    this.assertStudio(user);
+    assertSharedCatalogWrite(user);
   }
 
   /** Público — índice de noticias publicadas (sitemap) */
@@ -115,10 +124,10 @@ export class StudioController {
   @UseGuards(JwtAuthGuard)
   @Put('pages')
   async upsert(
-    @Req() req: { user: { id: string; roleKey: string; permissions: string[] } },
+    @Req() req: { user: StudioUser },
     @Body() dto: UpsertPageDto,
   ) {
-    this.assertStudio(req.user);
+    this.assertStudioWrite(req.user);
     const page = await this.prisma.pageContent.upsert({
       where: { entity_sectionKey: { entity: 'ARTA', sectionKey: dto.sectionKey } },
       create: {
@@ -159,10 +168,10 @@ export class StudioController {
   @UseGuards(JwtAuthGuard)
   @Post('slides')
   createSlide(
-    @Req() req: { user: { roleKey: string; permissions: string[] } },
+    @Req() req: { user: StudioUser },
     @Body() dto: SlideDto,
   ) {
-    this.assertStudio(req.user);
+    this.assertStudioWrite(req.user);
     return this.prisma.heroSlide.create({
       data: {
         entity: 'ARTA',
@@ -180,11 +189,11 @@ export class StudioController {
   @UseGuards(JwtAuthGuard)
   @Put('slides/:id')
   updateSlide(
-    @Req() req: { user: { roleKey: string; permissions: string[] } },
+    @Req() req: { user: StudioUser },
     @Param('id') id: string,
     @Body() dto: SlideDto,
   ) {
-    this.assertStudio(req.user);
+    this.assertStudioWrite(req.user);
     return this.prisma.heroSlide.update({
       where: { id },
       data: {
@@ -202,10 +211,10 @@ export class StudioController {
   @UseGuards(JwtAuthGuard)
   @Delete('slides/:id')
   deleteSlide(
-    @Req() req: { user: { roleKey: string; permissions: string[] } },
+    @Req() req: { user: StudioUser },
     @Param('id') id: string,
   ) {
-    this.assertStudio(req.user);
+    this.assertStudioWrite(req.user);
     return this.prisma.heroSlide.delete({ where: { id } });
   }
 
@@ -225,10 +234,10 @@ export class StudioController {
   @UseGuards(JwtAuthGuard)
   @Post('news')
   createNews(
-    @Req() req: { user: { roleKey: string; permissions: string[] } },
+    @Req() req: { user: StudioUser },
     @Body() dto: NewsDto,
   ) {
-    this.assertStudio(req.user);
+    this.assertStudioWrite(req.user);
     return this.prisma.newsPost.create({
       data: {
         entity: 'ARTA',
@@ -246,11 +255,11 @@ export class StudioController {
   @UseGuards(JwtAuthGuard)
   @Put('news/:id')
   updateNews(
-    @Req() req: { user: { roleKey: string; permissions: string[] } },
+    @Req() req: { user: StudioUser },
     @Param('id') id: string,
     @Body() dto: NewsDto,
   ) {
-    this.assertStudio(req.user);
+    this.assertStudioWrite(req.user);
     return this.prisma.newsPost.update({
       where: { id },
       data: {
@@ -268,10 +277,10 @@ export class StudioController {
   @UseGuards(JwtAuthGuard)
   @Delete('news/:id')
   deleteNews(
-    @Req() req: { user: { roleKey: string; permissions: string[] } },
+    @Req() req: { user: StudioUser },
     @Param('id') id: string,
   ) {
-    this.assertStudio(req.user);
+    this.assertStudioWrite(req.user);
     return this.prisma.newsPost.delete({ where: { id } });
   }
 }

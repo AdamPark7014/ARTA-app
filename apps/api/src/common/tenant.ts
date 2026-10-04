@@ -36,6 +36,18 @@ export function assertTenantAdminAccess(user: TenantUser, targetOrgId: string) {
   }
 }
 
+/**
+ * Shared catalogs with no organizationId (Studio public site, checklist templates):
+ * only Arta's own org (DEFAULT_ORG_ID) or `super_admin` may write them.
+ * Role checks stay with each caller; this is the tenant boundary on top.
+ */
+export function assertSharedCatalogWrite(user: TenantUser) {
+  if (user.roleKey === 'super_admin') return;
+  if (tenantIdOf(user) !== DEFAULT_ORG_ID) {
+    throw new ForbiddenException('Solo la organización de Arta puede modificar este contenido');
+  }
+}
+
 /** Whether the caller may list/manage every organization (platform ops). */
 export function isPlatformAdmin(user: TenantUser): boolean {
   return user.roleKey === 'super_admin';
