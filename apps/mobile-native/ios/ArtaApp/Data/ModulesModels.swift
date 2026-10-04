@@ -437,3 +437,34 @@ struct PurchaseOrderDetail: Codable, Equatable, Identifiable {
 struct PurchaseOrderStatusBody: Encodable {
     let status: String
 }
+
+// MARK: - Anticipos (docs/ANTICIPOS-CONTRATO.md)
+
+/// Fila de `GET finance/advances/pending`: un `PaymentProof` sin orden de compra.
+/// `event` trae `{ id, name, entity }` (sin `status`).
+struct AdvanceRow: Codable, Equatable, Identifiable {
+    let id: String
+    var eventId: String?
+    var label: String?
+    var amount: FlexDouble?
+    var fileUrl: String?
+    var note: String?
+    /// PENDING | APPROVED | REJECTED | PAID (null en comprobantes de OC).
+    var advanceStatus: String?
+    var createdAt: String?
+    var decidedAt: String?
+    var rejectReason: String?
+    var paidAt: String?
+    var paidProofUrl: String?
+    var uploadedBy: PersonRef?
+    var decidedBy: PersonRef?
+    var paidBy: PersonRef?
+    var event: TaskEventRef?
+
+    var isPending: Bool { advanceStatus == "PENDING" }
+    var isApproved: Bool { advanceStatus == "APPROVED" }
+}
+
+struct AdvanceRejectBody: Encodable {
+    let reason: String
+}

@@ -10,6 +10,7 @@ struct InicioView: View {
     @State private var upcoming: [ArtaEvent] = []
     @State private var taskApprovals = 0
     @State private var poApprovals = 0
+    @State private var advanceApprovals = 0
     @State private var loading = true
     @State private var loaded = false
     @State private var error: String?
@@ -33,8 +34,10 @@ struct InicioView: View {
     private var overdueCount: Int { openTasks.filter { DueBucket.of($0) == .overdue }.count }
 
     private var showsApprovals: Bool {
-        profile?.canAuthorizePO == true || profile?.isDirection == true || taskApprovals > 0
+        profile?.canAuthorizePO == true || profile?.isDirection == true || taskApprovals > 0 || advanceApprovals > 0
     }
+
+    private var totalApprovals: Int { taskApprovals + poApprovals + advanceApprovals }
 
     private var seesPurchaseOrders: Bool {
         profile?.can("po.authorize") == true || profile?.can("po.mark_paid") == true
@@ -105,7 +108,7 @@ struct InicioView: View {
         var parts: [String] = []
         if today > 0 { parts.append(today == 1 ? "1 tarea vence hoy" : "\(today) tareas vencen hoy") }
         if overdueCount > 0 { parts.append(overdueCount == 1 ? "1 vencida" : "\(overdueCount) vencidas") }
-        let approvals = taskApprovals + poApprovals
+        let approvals = totalApprovals
         if approvals > 0 { parts.append(approvals == 1 ? "1 aprobación pendiente" : "\(approvals) aprobaciones pendientes") }
         return parts.isEmpty ? "Todo al día por hoy." : parts.joined(separator: " · ")
     }
@@ -115,7 +118,7 @@ struct InicioView: View {
             tile("Nueva tarea", icon: "plus.circle.fill") { showNewTask = true }
             tile("Mis tareas", icon: "checklist") { router.select(.tareas) }
             if showsApprovals {
-                tile("Aprobaciones", icon: "checkmark.seal", badge: taskApprovals + poApprovals) {
+                tile("Aprobaciones", icon: "checkmark.seal", badge: totalApprovals) {
                     router.open(AppRoute.approvals)
                 }
             }
@@ -201,6 +204,9 @@ struct InicioView: View {
                     stat(taskApprovals, label: taskApprovals == 1 ? "entrega" : "entregas")
                     if profile?.canAuthorizePO == true {
                         stat(poApprovals, label: poApprovals == 1 ? "orden de compra" : "órdenes de compra")
+                    }
+                    if advanceApprovals > 0 {
+                        stat(advanceApprovals, label: advanceApprovals == 1 ? "anticipo" : "anticipos")
                     }
                     Spacer(minLength: 0)
                     Image(systemName: "chevron.right").foregroundStyle(ArtaColor.muted)
@@ -289,6 +295,10 @@ struct InicioView: View {
             }
         }
         poApprovals = orders
+
+        // 404 mientras el API no tenga la ruta: cuenta 0.
+        let advances = (try? await ApiClient.shared.pendingAdvances()) ?? []
+        advanceApprovals = advances.filter { $0.isPending || $0.isApproved }.count
     }
 
     /// En curso o que empiezan entre hoy y dentro de 7 días.

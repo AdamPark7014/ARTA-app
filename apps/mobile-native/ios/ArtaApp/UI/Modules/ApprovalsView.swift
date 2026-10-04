@@ -24,6 +24,13 @@ struct ApprovalsView: View {
     @State private var rejecting: ArtaTask?
     @State private var selectedOrder: PurchaseOrderRow?
     @State private var flash: String?
+    /// `GET finance/advances/pending`; vacío si el API aún no tiene la ruta (404).
+    @State private var advances: [AdvanceRow] = []
+    @State private var advancesError: String?
+    @State private var rejectingAdvance: AdvanceRow?
+    @State private var payingAdvance: AdvanceRow?
+    @State private var confirmPay = false
+    @State private var previewURL: URL?
 
     private var pendingOrders: [PurchaseOrderRow] {
         orders
@@ -103,19 +110,42 @@ struct ApprovalsView: View {
                 }
             )
         }
+        .sheet(item: $rejectingAdvance) { advance in
+            RejectAdvanceSheet(advance: advance) { reason in
+                Task {
+                    await resolveAdvance(advance, done: "Anticipo rechazado.", warn: true) {
+                        try await ApiClient.shared.rejectAdvance(advance.id, reason: reason)
+                    }
+                }
+            }
+        }
+        .confirmationDialog("¿Marcar como pagado?", isPresented: $confirmPay, titleVisibility: .visible, presenting: payingAdvance) { advance in
+            Button("Marcar pagado") {
+                Task {
+                    await resolveAdvance(advance, done: "Anticipo marcado como pagado.") {
+                        try await ApiClient.shared.markAdvancePaid(advance.id)
+                    }
+                }
+            }
+            Button("Cancelar", role: .cancel) {}
+        } message: { advance in
+            Text("\(AdvanceInfo.title(advance)) · \(Money.mxn(advance.amount?.value)). A quien lo pidió le llega el aviso.")
+        }
+        .quickLookPreview($previewURL)
     }
 
     // MARK: Pendientes
 
     @ViewBuilder
     private var pendingList: some View {
-        if tasks.isEmpty && pendingOrders.isEmpty {
+        if tasks.isEmpty && pendingOrders.isEmpty && advances.isEmpty {
             emptyScroll(icon: "checkmark.seal",
                         title: "Nada por aprobar",
-                        message: "Cuando alguien entregue una tarea que pediste o haya una orden de compra por autorizar, aparecerá aquí.")
+                        message: "Cuando alguien entregue una tarea que pediste, haya una orden de compra por autorizar o un anticipo por resolver, aparecerá aquí.")
         } else {
             List {
                 if let refreshError { errorRow(refreshError) }
+                if let advancesError { errorRow("Anticipos: \(advancesError)") }
                 if !tasks.isEmpty {
                     Section("Entregas por revisar (\(tasks.count))") {
                         ForEach(tasks) { task in
@@ -128,6 +158,14 @@ struct ApprovalsView: View {
                     Section("Órdenes de compra por autorizar (\(pendingOrders.count))") {
                         ForEach(pendingOrders) { row in
                             orderRow(row)
+                        }
+                    }
+                    .listRowBackground(ArtaColor.bgElev)
+                }
+                if !advances.isEmpty {
+                    Section("Anticipos (\(advances.count))") {
+                        ForEach(advances) { advance in
+                            advanceRow(advance)
                         }
                     }
                     .listRowBackground(ArtaColor.bgElev)
@@ -230,6 +268,94 @@ struct ApprovalsView: View {
         return parts.joined(separator: " · ")
     }
 
+    private func advanceRow(_ advance: AdvanceRow) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .top, spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(AdvanceInfo.title(advance))
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(ArtaColor.text)
+                        .lineLimit(2)
+                    Text(advanceEventLine(advance))
+                        .font(.caption)
+                        .foregroundStyle(ArtaColor.muted)
+                        .lineLimit(1)
+                    Text(advanceMeta(advance))
+                        .font(.caption)
+                        .foregroundStyle(ArtaColor.muted)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 8)
+                VStack(alignment: .trailing, spacing: 4) {
+                    Text(Money.mxn(advance.amount?.value))
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(ArtaColor.text)
+                    StatusPill(text: AdvanceInfo.statusLabel(advance.advanceStatus),
+                               tone: AdvanceInfo.statusTone(advance.advanceStatus))
+                }
+            }
+            if let note = advance.note?.moduleTrimmed, !note.isEmpty {
+                Text("«\(note)»")
+                    .font(.footnote)
+                    .foregroundStyle(ArtaColor.text)
+                    .lineLimit(3)
+            }
+            HStack(spacing: 8) {
+                if let fileUrl = advance.fileUrl, !fileUrl.isEmpty {
+                    Button {
+                        openAdvanceFile(fileUrl, name: advance.label)
+                    } label: {
+                        Label("Ver archivo", systemImage: "paperclip")
+                            .font(.caption.weight(.semibold))
+                    }
+                    .buttonStyle(.borderless)
+                    .tint(ArtaColor.gold)
+                }
+                Spacer(minLength: 4)
+                if advance.isPending {
+                    Button("Rechazar") { rejectingAdvance = advance }
+                        .buttonStyle(.bordered)
+                        .tint(ArtaColor.danger)
+                    Button("Aprobar") {
+                        Task {
+                            await resolveAdvance(advance, done: "Anticipo aprobado.") {
+                                try await ApiClient.shared.approveAdvance(advance.id)
+                            }
+                        }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(ArtaColor.gold)
+                    .foregroundStyle(ArtaColor.bg)
+                } else if advance.isApproved {
+                    Button("Marcar pagado") {
+                        payingAdvance = advance
+                        confirmPay = true
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(ArtaColor.gold)
+                    .foregroundStyle(ArtaColor.bg)
+                }
+            }
+            .controlSize(.small)
+        }
+        .padding(.vertical, 4)
+    }
+
+    private func advanceEventLine(_ advance: AdvanceRow) -> String {
+        var parts: [String] = []
+        if let name = advance.event?.name, !name.isEmpty { parts.append(name) } else { parts.append("Sin evento") }
+        if let entity = advance.event?.entity, !entity.isEmpty { parts.append(EntityInfo.label(entity)) }
+        return parts.joined(separator: " · ")
+    }
+
+    private func advanceMeta(_ advance: AdvanceRow) -> String {
+        var parts: [String] = []
+        if let by = advance.uploadedBy?.fullName, !by.isEmpty { parts.append("Pidió \(by)") }
+        let when = relativeTime(advance.createdAt)
+        if !when.isEmpty { parts.append(when) }
+        return parts.isEmpty ? "Solicitud de anticipo" : parts.joined(separator: " · ")
+    }
+
     // MARK: Historial
 
     @ViewBuilder
@@ -328,6 +454,7 @@ struct ApprovalsView: View {
                 .filter { $0.isDone && $0.approvedAt != nil }
                 .sorted { ($0.approvedAt ?? "") > ($1.approvedAt ?? "") }
             orders = rows
+            await loadAdvances()
             loaded = true
             error = nil
             refreshError = nil
@@ -352,6 +479,62 @@ struct ApprovalsView: View {
             refreshError = error.userMessage
         }
         busyTaskId = nil
+    }
+
+    /// Aparte de tareas y órdenes: si falla (o el API aún no tiene la ruta) el resto de la pantalla sigue.
+    private func loadAdvances() async {
+        do {
+            let list = try await ApiClient.shared.pendingAdvances()
+            advances = list
+                .filter { $0.isPending || $0.isApproved }
+                .sorted { a, b in
+                    if a.isPending != b.isPending { return a.isPending }
+                    return (a.createdAt ?? "") < (b.createdAt ?? "")
+                }
+            advancesError = nil
+        } catch {
+            if error.isModuleCancellation { return }
+            if let api = error as? ApiError, api.status == 404 || api.status == 403 {
+                advances = []
+                advancesError = nil
+            } else {
+                advancesError = error.userMessage
+            }
+        }
+    }
+
+    /// Optimista: la tarjeta sale al instante y vuelve a su lugar si el API falla.
+    /// Un 409 trae el motivo en español: se muestra y se recarga la lista.
+    private func resolveAdvance(_ advance: AdvanceRow, done: String, warn: Bool = false, call: () async throws -> Void) async {
+        let index = advances.firstIndex(where: { $0.id == advance.id }) ?? 0
+        advances.removeAll { $0.id == advance.id }
+        do {
+            try await call()
+            if warn { Haptics.warning() } else { Haptics.success() }
+            show(done)
+            // Quien aprueba también puede pagar: entonces regresa como «Por pagar».
+            await loadAdvances()
+        } catch {
+            if !advances.contains(where: { $0.id == advance.id }) {
+                advances.insert(advance, at: min(index, advances.count))
+            }
+            if error.isModuleCancellation { return }
+            Haptics.error()
+            refreshError = error.userMessage
+            if let api = error as? ApiError, api.status == 409 {
+                await loadAdvances()
+            }
+        }
+    }
+
+    private func openAdvanceFile(_ path: String, name: String?) {
+        Task {
+            do {
+                previewURL = try await ModuleFiles.download(path, name: name)
+            } catch {
+                if !error.isModuleCancellation { refreshError = error.userMessage }
+            }
+        }
     }
 
     private func applyDecision(_ orderId: String, status: String) {

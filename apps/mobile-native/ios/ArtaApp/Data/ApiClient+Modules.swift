@@ -119,4 +119,23 @@ extension ApiClient {
     func setPurchaseOrderStatus(_ id: String, status: String) async throws {
         try await send("PATCH", "purchase-orders/\(id)/status", body: PurchaseOrderStatusBody(status: status))
     }
+
+    // MARK: Anticipos (docs/ANTICIPOS-CONTRATO.md)
+
+    /// Lo que yo puedo resolver: `PENDING` si apruebo, `APPROVED` si pago. 404 = API aún sin la ruta.
+    func pendingAdvances() async throws -> [AdvanceRow] { try await get("finance/advances/pending") }
+
+    func approveAdvance(_ id: String) async throws {
+        try await send("PATCH", "finance/advances/\(id)/approve")
+    }
+
+    /// `reason` obligatorio (≥3 caracteres).
+    func rejectAdvance(_ id: String, reason: String) async throws {
+        try await send("PATCH", "finance/advances/\(id)/reject", body: AdvanceRejectBody(reason: reason))
+    }
+
+    /// Sin comprobante de pago en esta versión: cuerpo `{}`.
+    func markAdvancePaid(_ id: String) async throws {
+        try await send("PATCH", "finance/advances/\(id)/paid", body: [String: String]())
+    }
 }

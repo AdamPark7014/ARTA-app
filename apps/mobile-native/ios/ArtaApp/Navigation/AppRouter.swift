@@ -24,6 +24,7 @@ enum PanelLink {
         "po.requested", "po.updated", "po.aging", "po.to_pay",
         "task.submitted", "checklist.submitted", "checklist.signature_needed",
         "checklist.returned", "checklist.signature_backlog",
+        "advance.requested", "advance.to_pay",
     ]
 
     /// Push o campana: con `channel_id` es de una conversación (mensajes y menciones).
