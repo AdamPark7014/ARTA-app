@@ -1,10 +1,43 @@
 # RELEVO
 
-- **Último turno:** cursor
+- **Último turno:** claude-code
 - **Fecha:** 2026-10-04
 - **Rama:** main
   (Adam es el único programador).
-- **Producción:** `4745dd4` desplegado desde `main` el 2026-09-27 22:39 UTC (todo lo de abajo NO está desplegado)
+- **Producción:** `e9b4764` desplegado desde `main` el 2026-10-04 22:51 UTC (respaldo `/root/arta-backups/20261004-2249.sql.gz`); todo lo de este día ya está arriba y `/legal/*` responde 200 en los tres dominios
+
+## Turno claude-code (2026-10-04, 16:15–17:10): revisión, despliegue y pulido para tiendas «como NEXARA»
+
+Pedido de Adam: «checa, púlelo y deploya todo; básate mucho en cómo está la app de NEXARA (ya en producción)
+para cumplir con toda la documentación al subirla».
+
+- **Verificado antes de desplegar**: API `tsc` limpio, jest 430 en verde (52 suites); web `tsc` y `next build`
+  ok; Android `testDebugUnitTest assembleDebug lintDebug` verde; las 3 migraciones nuevas son solo aditivas.
+- **Despliegue 1** (`a59b5e4`, 22:18 UTC): respaldo `/root/arta-backups/20261004-2218.sql.gz`; migraciones
+  `task_co_assignees`, `chat_v2`, `advance_approval` aplicadas; `/api/ready` 200. `upgrade-format-templates`
+  `--dry` y luego `--confirm-produccion`: 1 plantilla actualizada (Evento General v3), 79 formatos migrados
+  conservando respuestas, 11 aprobados/sellados intactos. La plantilla de Rueda de prensa ya traía
+  Convocatoria y Timeline (la escribió el seed al arrancar).
+- **Comparación con NEXARA** (agente de solo lectura) → brechas de tienda y lo que se hizo (3 agentes + yo):
+  - **Páginas legales públicas** `apps/web/app/legal/{privacidad,terminos,eliminar-cuenta,soporte}` (públicas en
+    `lib/domains.ts`), con NEXARA como desarrollador/publicador para Arta Producciones.
+  - **iOS** (`f814b8d`): solo iPhone (`TARGETED_DEVICE_FAMILY "1"`), enlaces legales en login y «Más»,
+    «Eliminar mi cuenta» (abre la web), `PrivacyInfo.xcprivacy` con los datos reales, candados de NEXARA en
+    `ios-testflight.yml` (SDK ≥ 26, ícono sin alfa, plists, binario sin iPad), identificadores de accesibilidad.
+    «iOS · compilar» #5 verde sobre ese commit.
+  - **Android** (`934884d`): reglas R8 de NEXARA (Tink/security-crypto, Moshi, Retrofit, Coil, Socket.IO,
+    Firebase); el release minificado llega al login sin crash en el emulador `nexara_phone`. Release falla si no
+    hay `key.properties` o `VERSION_CODE` (ya no cae a la llave de debug). `scripts/build-play-aab.ps1`. Red solo
+    HTTPS en release (excepción local en `src/debug`). AAB regenerado: `Documents\ARTA-builds\arta-1.0.0-1.aab`
+    (huella de firma `CB:BA:EA:…:38:50`, llave de subida; mapping al lado).
+  - **Cuenta de revisión** (`e9b4764`): `prisma/seed-store-reviewer.ts` (org «ARTA Demo · Revisión de tiendas»
+    sin 2FA, datos ficticios, rol `enlace_gobierno` + `po.authorize`), `scripts/resembrar-cuenta-revision.ps1` y
+    `verificar-cuenta-revision.ps1` (los corre Adam; la contraseña nunca pasa por un agente).
+  - **Docs de tienda** `docs/store/` (README con la decisión de distribución, IOS-APP-STORE, PLAY-STORE,
+    CUENTA-REVISION), gráficos de Play `apps/mobile-native/play-assets/` y `scripts/subir-secretos-ios.ps1`.
+- **Hallazgos de seguridad (no tocados, para otro turno)**: Studio (sitio público) y las plantillas de formatos
+  no están separadas por organización; los avisos de eventos sin organización llegan a todas; `docs/ACCESS.md`
+  trae contraseñas de semilla en texto.
 
 ## Turno cursor (2026-10-04, 14:20–16:15): anticipos con aprobación, iOS en verde, firma de publicación
 
@@ -349,28 +382,31 @@ Pedido: «todo mergeado y fusionado, canónico en `main`; no quiero ramas sobree
 
 1. **Push apagado en producción** hasta que Adam suba la cuenta de servicio NUEVA con
    `pwsh -File deploy/firebase-cuenta-servicio.ps1` (la vieja `73faf0e2…` se pegó en un chat: borrarla).
-2. **TestFlight sin ejecutar**: faltan secretos en el repo ARTA-app (`APP_STORE_CONNECT_KEY_ID`,
-   `APP_STORE_CONNECT_ISSUER_ID`, `APP_STORE_CONNECT_PRIVATE_KEY` y el certificado de distribución:
-   `CERTIFICATE_PRIVATE_KEY` + `DISTRIBUTION_CERT_CER_BASE64`, o `BUILD_CERTIFICATE_BASE64` + `P12_PASSWORD`)
-   y la app «ARTA» (`com.artaproducciones.ops`) creada a mano en App Store Connect. Si la API no activa
-   «Communication Notifications», el flujo quita ese permiso de la build y avisa.
-3. Nada de hoy está desplegado. Al desplegar: migraciones `20261004120000_task_co_assignees`,
-   `20261004150000_chat_v2` y `20261004170000_advance_approval`, y
-   `scripts/upgrade-format-templates.ts --dry` / `--confirm-produccion` (Rueda de prensa v3).
-   Las apps publicadas necesitan este API desplegado (anticipos, chat v2).
-4. Huecos que la API no tiene (la app no los inventa): motivo al rechazar una OC, comentarios y prioridad
-   en tareas. iOS: `?advance=<id>` abre Aprobaciones pero no resalta la tarjeta (Android sí).
-5. Nada probado en teléfono real ni el chat v2 / `/advances` vistos en navegador.
-6. 27 e2e viejas de la web por actualizar (lista arriba) + 2 specs jest de Excel con timeout.
+   Clave APNs `.p8` pendiente en Firebase → Cloud Messaging (sin ella no hay push en iPhone).
+2. **TestFlight sin ejecutar**: faltan los secretos (`pwsh -File scripts\subir-secretos-ios.ps1`, reusa el
+   certificado y la llave de NEXARA) y crear la app en App Store Connect (`docs/store/IOS-APP-STORE.md`).
+3. **Play sin subir**: crear la app en Play Console (cuenta NEXARA) y subir a mano
+   `Documents\ARTA-builds\arta-1.0.0-1.aab` a **prueba interna** (`docs/store/PLAY-STORE.md`).
+4. **Cuenta de revisión sin sembrar**: Adam corre `apps/api/scripts/resembrar-cuenta-revision.ps1 -SoloDry`,
+   luego sin `-SoloDry`, y `verificar-cuenta-revision.ps1` (`docs/store/CUENTA-REVISION.md`).
+5. **Decisión de Adam**: distribución sin listar (iOS) + prueba interna (Play), y carta de Arta autorizando a
+   NEXARA a publicar con su nombre y logo (5.2.1). Ver `docs/store/README.md`.
+6. Sin capturas de tienda: no hay flujo de capturas como el de NEXARA (`ios-screenshots.yml` + UITests + modo
+   demo). Los identificadores de accesibilidad ya están; mientras, capturas a mano con la cuenta de revisión.
+7. Huecos que la API no tiene (la app no los inventa): motivo al rechazar una OC, comentarios y prioridad
+   en tareas. iOS: `?advance=<id>` abre Aprobaciones pero no resalta la tarjeta (Android sí). Android pide dos
+   permisos a la vez al arrancar (aviso en logcat).
+8. Push web (navegador) apagado: falta app Web en Firebase + VAPID → `NEXT_PUBLIC_FIREBASE_*` en `.env.arta`.
+9. Nada probado en teléfono real. 27 e2e viejas de la web por actualizar + 2 specs jest de Excel con timeout.
+10. Seguridad (ver hallazgos de este turno): Studio y plantillas sin separar por organización.
 
 ## Siguiente paso
 
-1. Adam: cuenta de servicio nueva; clave APNs `.p8` en Firebase → Cloud Messaging; app Web en Firebase +
-   VAPID → `NEXT_PUBLIC_FIREBASE_*`; secretos de TestFlight y app en App Store Connect; app en Play Console
-   (cuenta NEXARA) y subir a mano `Documents\ARTA-builds\arta-1.0.0-1.aab` (prueba interna primero).
-2. Deploy de API y web desde `main` (bundle + `update.sh --no-pull`) con las migraciones de arriba.
-3. Lanzar «iOS · TestFlight» (versión 1.0.0) y corregir hasta que suba.
-4. Probar en teléfonos: tareas, aprobaciones y anticipos, vista web con sesión, avisos, chat.
+1. Adam: puntos 1–5 de «A medias» (en ese orden conviene: cuenta de servicio → cuenta de revisión → Play
+   prueba interna → secretos iOS + app en ASC → «iOS · TestFlight»).
+2. Con los secretos puestos: lanzar «iOS · TestFlight» (Actions → Run workflow, `main`) y corregir hasta que suba.
+3. Probar en teléfonos del equipo: tareas, aprobaciones y anticipos, vista web con sesión, avisos, chat.
+4. Capturas de tienda y, si se va a revisión, pedir distribución sin listar.
 
 ## No tocar
 
