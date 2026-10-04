@@ -5,6 +5,7 @@ import {
   ForbiddenException,
   Get,
   NotFoundException,
+  Optional,
   Param,
   Post,
   Req,
@@ -12,6 +13,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
+import { NotificationsService } from '../notifications/notifications.service';
 import { Throttle } from '@nestjs/throttler';
 import { IsArray, IsOptional, IsString, MinLength } from 'class-validator';
 import { JwtService } from '@nestjs/jwt';
@@ -70,6 +72,7 @@ export class VendorController {
   constructor(
     private prisma: PrismaService,
     private jwt: JwtService,
+    @Optional() private notifications?: NotificationsService,
   ) {}
 
   private setVendorCookie(res: Response, token: string) {
@@ -280,6 +283,15 @@ export class VendorController {
         createdById: req.user.id,
       },
     });
+    void this.notifications?.notifyEventTeam(event.id, {
+      organizationId: event.organizationId,
+      actorId: req.user.id,
+      type: 'vendor.pin_created',
+      title: `${(req.user as { fullName?: string }).fullName || 'Alguien del equipo'} dio acceso al portal de proveedores`,
+      body: `${created.label} · ${event.name}`,
+      linkUrl: `/events/${event.id}`,
+      entity: event.entity,
+    });
     return {
       id: created.id,
       label: created.label,
@@ -375,6 +387,17 @@ export class VendorController {
     if (!ok) throw new ForbiddenException('PIN incorrecto');
 
     await this.prisma.vendorPin.update({ where: { id: pin.id }, data: { lastUsedAt: new Date() } });
+    // A quien generó el PIN, una vez al día: sabe que el proveedor ya entró.
+    if (pin.createdById) {
+      void this.notifications?.notifyOncePerDay({
+        userId: pin.createdById,
+        type: 'vendor.login',
+        title: `${pin.label} entró al portal de proveedores`,
+        body: pin.event.name,
+        linkUrl: `/events/${pin.eventId}`,
+        entity: pin.event.entity,
+      });
+    }
 
     const token = await this.jwt.signAsync(
       {
