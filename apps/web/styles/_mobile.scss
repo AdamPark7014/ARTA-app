@@ -143,6 +143,29 @@ body[data-shell='app'] {
     padding-bottom: calc(1rem + env(safe-area-inset-bottom));
   }
 
+  /* Barra de filtros compartida (FilterBar): un control por renglón y el
+     contador debajo. `!important` vence el `maxWidth` en línea de FieldSearch. */
+  .filter-bar {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 0.75rem;
+  }
+
+  .filter-bar__controls {
+    flex: none;
+    width: 100%;
+  }
+
+  .filter-bar__controls > .field {
+    flex: 1 1 100%;
+    width: 100%;
+    max-width: none !important;
+  }
+
+  .filter-bar__meta {
+    white-space: normal;
+  }
+
   .page-intro,
   .panel-head,
   .panel-head-actions,
