@@ -10,8 +10,10 @@ import {
   Post,
   Req,
   UseGuards,
+  Optional,
 } from '@nestjs/common';
 import { IsNumber, IsOptional, IsString } from 'class-validator';
+import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { assertSameTenant } from '../common/tenant';
@@ -57,10 +59,41 @@ function dateOrUndef(v?: string | null) {
   return Number.isNaN(d.getTime()) ? undefined : d;
 }
 
+const SPONSOR_STATUS_LABEL: Record<string, string> = {
+  PROPOSED: 'Propuesta',
+  NEGOTIATING: 'En negociación',
+  SIGNED: 'Firmado',
+  ACTIVE: 'Vigente',
+  CLOSED: 'Cerrado',
+  CANCELLED: 'Cancelado',
+};
+
 @Controller('sponsors')
 @UseGuards(JwtAuthGuard)
 export class SponsorsController {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    @Optional() private notifications?: NotificationsService,
+  ) {}
+
+  /** Alta, cambio de estatus o baja de un patrocinio: al equipo del evento. Nunca lanza. */
+  private tellTeam(
+    user: AuthUser & { fullName?: string },
+    event: { id: string; name: string; entity: string; organizationId: string | null },
+    type: string,
+    verb: string,
+    detail: string,
+  ) {
+    void this.notifications?.notifyEventTeam(event.id, {
+      organizationId: event.organizationId,
+      actorId: user.id,
+      type,
+      title: `${user.fullName || 'Alguien del equipo'} ${verb}`,
+      body: `${detail} · ${event.name}`,
+      linkUrl: `/events/${event.id}?tab=sponsors`,
+      entity: event.entity as EntityKey,
+    });
+  }
 
   private assertSponsorEdit(user: AuthUser) {
     if (
@@ -119,7 +152,7 @@ export class SponsorsController {
     assertSameTenant(req.user, event.organizationId);
     assertEventNotClosed(event.status);
     const data = this.sponsorData(dto);
-    return this.prisma.sponsor.create({
+    const created = await this.prisma.sponsor.create({
       data: {
         eventId: dto.eventId,
         name: dto.name,
@@ -140,6 +173,8 @@ export class SponsorsController {
         createdById: req.user.id,
       },
     });
+    this.tellTeam(req.user, event, 'sponsor.created', 'agregó un patrocinador', created.name);
+    return created;
   }
 
   @Patch(':id')
@@ -166,7 +201,7 @@ export class SponsorsController {
     assertSameTenant(req.user, existing.event.organizationId);
     assertEventNotClosed(existing.event.status);
     const data = this.sponsorData(body);
-    return this.prisma.sponsor.update({
+    const updated = await this.prisma.sponsor.update({
       where: { id },
       data: {
         ...(body.name !== undefined ? { name: body.name } : {}),
@@ -186,6 +221,17 @@ export class SponsorsController {
         ...(body.notes !== undefined ? { notes: body.notes } : {}),
       },
     });
+    // Solo el estatus (firmado, cancelado…) le importa al equipo; editar datos de contacto no avisa.
+    if (body.status !== undefined && body.status !== existing.status) {
+      this.tellTeam(
+        req.user,
+        existing.event,
+        'sponsor.status',
+        'cambió el estatus de un patrocinador',
+        `${updated.name} · ${SPONSOR_STATUS_LABEL[updated.status ?? ''] ?? updated.status}`,
+      );
+    }
+    return updated;
   }
 
   @Delete(':id')
@@ -208,6 +254,7 @@ export class SponsorsController {
     assertSameTenant(req.user, existing.event.organizationId);
     assertEventNotClosed(existing.event.status);
     await this.prisma.sponsor.delete({ where: { id } });
+    this.tellTeam(req.user, existing.event, 'sponsor.deleted', 'eliminó un patrocinador', existing.name);
     return { ok: true };
   }
 }

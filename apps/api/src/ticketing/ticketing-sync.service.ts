@@ -1,14 +1,60 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
-import { Prisma } from '@prisma/client';
+import { EntityKey, Prisma } from '@prisma/client';
 import { PrismaService } from '../common/prisma/prisma.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { resolveProvider, type ZoneSold } from './providers/arema.provider';
+
+const SOLD_MILESTONES = [50, 75, 90, 100];
+
+/** Porcentaje vendido de todas las zonas con aforo (0 si no hay aforo capturado). */
+export function soldPct(zones: Array<{ aforo?: unknown; sold?: unknown }>): number {
+  let cap = 0;
+  let sold = 0;
+  for (const z of zones) {
+    const a = Number(z.aforo) || 0;
+    if (a <= 0) continue;
+    cap += a;
+    sold += Math.min(Number(z.sold) || 0, a);
+  }
+  return cap > 0 ? (sold / cap) * 100 : 0;
+}
+
+/** El hito más alto que se cruzó entre antes y después (o null si no cruzó ninguno). */
+export function crossedMilestone(before: number, after: number): number | null {
+  const crossed = SOLD_MILESTONES.filter((m) => before < m && after >= m);
+  return crossed.length ? crossed[crossed.length - 1] : null;
+}
 
 @Injectable()
 export class TicketingSyncService {
   private readonly log = new Logger(TicketingSyncService.name);
 
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    @Optional() private notifications?: NotificationsService,
+  ) {}
+
+  /** Venta que cruza 50/75/90 % o se agota: al equipo del evento, una vez por hito y día. */
+  async notifyMilestone(
+    event: { id: string; name: string; organizationId: string | null; entity: EntityKey },
+    milestone: number,
+  ) {
+    if (!this.notifications) return;
+    const soldOut = milestone >= 100;
+    const audience = await this.notifications.eventAudience(event.id);
+    for (const userId of audience) {
+      await this.notifications.notifyOncePerDay({
+        userId,
+        organizationId: event.organizationId,
+        type: soldOut ? 'ticketing.sold_out' : 'ticketing.milestone',
+        title: soldOut ? '¡Boletos agotados!' : `Boletera al ${milestone}% vendido`,
+        body: event.name,
+        linkUrl: `/events/${event.id}?tab=ticketing&hito=${milestone}`,
+        entity: event.entity,
+      });
+    }
+  }
 
   /** Every 6 hours — sync sold from boletera provider (stub or live URL). */
   @Cron('0 */6 * * *')
@@ -41,7 +87,7 @@ export class TicketingSyncService {
     try {
       const setups = await this.prisma.ticketingSetup.findMany({
         where: organizationId ? { event: { organizationId } } : undefined,
-        include: { event: { select: { id: true, name: true, organizationId: true } } },
+        include: { event: { select: { id: true, name: true, organizationId: true, entity: true } } },
       });
 
       let updated = 0;
@@ -74,6 +120,12 @@ export class TicketingSyncService {
                 data: { zonesJson: next as unknown as Prisma.InputJsonValue },
               });
               updated += 1;
+              const milestone = crossedMilestone(soldPct(zones), soldPct(next));
+              if (milestone) {
+                await this.notifyMilestone(s.event, milestone).catch((err) =>
+                  this.log.warn(`Ticketing milestone notify setup=${s.id}: ${String(err)}`),
+                );
+              }
             } catch (e) {
               failed += 1;
               const msg = e instanceof Error ? e.message : String(e);

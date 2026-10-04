@@ -6,6 +6,7 @@ import {
   ForbiddenException,
   Get,
   NotFoundException,
+  Optional,
   Param,
   Post,
   Req,
@@ -14,6 +15,7 @@ import {
 } from '@nestjs/common';
 import { IsArray, IsEmail, IsOptional, IsString, MinLength } from 'class-validator';
 import { createHash, randomBytes } from 'crypto';
+import { NotificationsService } from '../notifications/notifications.service';
 import { EntityKey } from '@prisma/client';
 import { Throttle } from '@nestjs/throttler';
 import { Response } from 'express';
@@ -59,6 +61,7 @@ export class OrgInvitesController {
     private prisma: PrismaService,
     private auth: AuthService,
     private digests: DigestsService,
+    @Optional() private notifications?: NotificationsService,
   ) {}
 
   private assertAdmin(user: { roleKey: string; permissions: string[] }) {
@@ -212,6 +215,18 @@ export class OrgInvitesController {
         metaJson: { email, organizationId: id, roleKey: body.roleKey },
       },
     });
+
+    // Si ya tiene cuenta (en otra organización), también le llega a la app; el token solo va por correo.
+    if (existingUser?.active) {
+      void this.notifications?.notify({
+        userId: existingUser.id,
+        organizationId: existingUser.organizationId,
+        actorId: req.user.id,
+        type: 'org.invited',
+        title: `Te invitaron a ${org.name}`,
+        body: 'Revisa tu correo para aceptar la invitación (vence en 7 días)',
+      });
+    }
 
     let emailFlushed = false;
     try {
@@ -367,6 +382,18 @@ export class OrgInvitesController {
         metaJson: { organizationId: invite.organizationId, email },
       },
     });
+
+    if (invite.invitedById) {
+      void this.notifications?.notify({
+        userId: invite.invitedById,
+        organizationId: invite.organizationId,
+        actorId: user.id,
+        type: 'org.invite_accepted',
+        title: `${user.fullName || email} aceptó tu invitación`,
+        body: `Ya entró a ARTA · ${email}`,
+        linkUrl: '/users',
+      });
+    }
 
     const ip = req.ip || req.socket?.remoteAddress;
     return this.auth.issueSessionForUserId(

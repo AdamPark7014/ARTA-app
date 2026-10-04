@@ -11,8 +11,10 @@ import {
   Post,
   Req,
   UseGuards,
+  Optional,
 } from '@nestjs/common';
 import { IsInt, IsOptional, IsString, MaxLength, Min } from 'class-validator';
+import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { assertSameTenant, tenantIdOf } from '../common/tenant';
@@ -25,7 +27,7 @@ import {
   type EntityKey,
   type RoleKey,
 } from '../common/rbac/roles';
-import { TicketingSyncService } from './ticketing-sync.service';
+import { TicketingSyncService, crossedMilestone, soldPct } from './ticketing-sync.service';
 import { ChecklistPdfService } from '../checklists/checklist-pdf.service';
 import { TicketingPdfService } from './ticketing-pdf.service';
 
@@ -122,7 +124,25 @@ export class TicketingController {
     private sync: TicketingSyncService,
     private checklistPdfs: ChecklistPdfService,
     private ticketingPdf: TicketingPdfService,
+    @Optional() private notifications?: NotificationsService,
   ) {}
+
+  private tellTeam(
+    user: AuthUser & { fullName?: string },
+    event: { id: string; name: string; entity: string; organizationId: string | null },
+    type: 'ticketing.created' | 'ticketing.deleted',
+    boletera: string,
+  ) {
+    void this.notifications?.notifyEventTeam(event.id, {
+      organizationId: event.organizationId,
+      actorId: user.id,
+      type,
+      title: `${user.fullName || 'Alguien del equipo'} ${type === 'ticketing.created' ? 'dio de alta la boletera' : 'eliminó la boletera'}`,
+      body: `${boletera} · ${event.name}`,
+      linkUrl: `/events/${event.id}?tab=ticketing`,
+      entity: event.entity as EntityKey,
+    });
+  }
 
   private assertEdit(user: AuthUser) {
     if (!hasPermission(user.roleKey as RoleKey, user.permissions, PERMISSIONS.TICKETING_EDIT)) {
@@ -231,6 +251,7 @@ export class TicketingController {
       },
     });
     await this.checklistPdfs.regenerateForEvent(eventId);
+    this.tellTeam(req.user, event, 'ticketing.created', boletera);
     return created;
   }
 
@@ -289,6 +310,13 @@ export class TicketingController {
       },
     });
     await this.checklistPdfs.regenerateForEvent(existing.eventId);
+    // Venta capturada a mano que cruza un hito avisa igual que la sincronización.
+    if (dto.zonesJson !== undefined && dto.zonesJson !== null) {
+      const before = Array.isArray(existing.zonesJson) ? (existing.zonesJson as ZoneRow[]) : [];
+      const after = Array.isArray(updated.zonesJson) ? (updated.zonesJson as ZoneRow[]) : [];
+      const milestone = crossedMilestone(soldPct(before), soldPct(after));
+      if (milestone) void this.sync.notifyMilestone(existing.event, milestone).catch(() => undefined);
+    }
     return updated;
   }
 
@@ -312,6 +340,7 @@ export class TicketingController {
     }
     assertEventNotClosed(existing.event.status);
     await this.prisma.ticketingSetup.delete({ where: { id } });
+    this.tellTeam(req.user, existing.event, 'ticketing.deleted', existing.boletera);
     return { ok: true };
   }
 

@@ -12,8 +12,10 @@ import {
   Post,
   Req,
   UseGuards,
+  Optional,
 } from '@nestjs/common';
 import { IsArray, IsEmail, IsOptional, IsString, MinLength } from 'class-validator';
+import { NotificationsService } from '../notifications/notifications.service';
 import * as bcrypt from 'bcryptjs';
 import { EntityKey } from '@prisma/client';
 import { PrismaService } from '../common/prisma/prisma.service';
@@ -46,7 +48,30 @@ class CreateUserDto {
 @Controller('users')
 @UseGuards(JwtAuthGuard)
 export class UsersController {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    @Optional() private notifications?: NotificationsService,
+  ) {}
+
+  /** Aviso a la persona cuyo acceso cambió. Nunca lanza. */
+  private tellUser(
+    actor: { id: string; fullName?: string },
+    userId: string,
+    organizationId: string | null | undefined,
+    type: string,
+    title: string,
+    body: string,
+  ) {
+    void this.notifications?.notify({
+      userId,
+      organizationId,
+      actorId: actor.id,
+      type,
+      title: title.replace('{who}', actor.fullName || 'Dirección'),
+      body,
+      linkUrl: '/dashboard',
+    });
+  }
 
   private assertUsersManage(user: { roleKey: string; permissions?: string[] }) {
     if (!hasPermission(user.roleKey as RoleKey, user.permissions || [], PERMISSIONS.USERS_MANAGE)) {
@@ -182,6 +207,14 @@ export class UsersController {
         where: { userId: existing.id, revokedAt: null },
         data: { revokedAt: new Date() },
       });
+      this.tellUser(
+        req.user,
+        existing.id,
+        orgId,
+        'user.welcome',
+        '{who} reactivó tu acceso a ARTA',
+        `Tu rol: ${ROLE_LABELS[dto.roleKey as RoleKey] ?? dto.roleKey}`,
+      );
       return {
         ...revived,
         roleLabel: ROLE_LABELS[revived.roleKey as RoleKey] ?? revived.roleKey,
@@ -217,6 +250,15 @@ export class UsersController {
         organizationId: true,
       },
     });
+    // Queda en su campana para cuando entre por primera vez.
+    this.tellUser(
+      req.user,
+      created.id,
+      orgId,
+      'user.welcome',
+      '{who} te dio acceso a ARTA',
+      `Tu rol: ${ROLE_LABELS[created.roleKey as RoleKey] ?? created.roleKey}`,
+    );
     return {
       ...created,
       roleLabel: ROLE_LABELS[created.roleKey as RoleKey] ?? created.roleKey,
@@ -271,7 +313,7 @@ export class UsersController {
     this.assertUsersManage(req.user);
     const target = await this.prisma.user.findUnique({
       where: { id },
-      select: { organizationId: true, roleKey: true, email: true },
+      select: { organizationId: true, roleKey: true, email: true, entities: true, permissions: true },
     });
     if (!target) throw new NotFoundException('Usuario no encontrado');
     assertSameTenant(req.user, target.organizationId);
@@ -339,7 +381,27 @@ export class UsersController {
         data: { revokedAt: new Date() },
       });
     }
-    return { ...updated, roleLabel: ROLE_LABELS[updated.roleKey as RoleKey] ?? updated.roleKey };
+    const label = ROLE_LABELS[updated.roleKey as RoleKey] ?? updated.roleKey;
+    const sameList = (a: string[] = [], b: string[] = []) => [...a].sort().join('|') === [...b].sort().join('|');
+    if (body.roleKey && body.roleKey !== target.roleKey) {
+      this.tellUser(req.user, id, target.organizationId, 'user.role_changed', '{who} cambió tu rol', `Ahora eres ${label}`);
+    } else if (
+      (body.entities && !sameList(body.entities, target.entities)) ||
+      (body.permissions && !sameList(updated.permissions, target.permissions))
+    ) {
+      this.tellUser(req.user, id, target.organizationId, 'user.access_changed', '{who} cambió tus accesos', label);
+    }
+    if (body.password && body.password.length >= 6 && id !== req.user.id) {
+      this.tellUser(
+        req.user,
+        id,
+        target.organizationId,
+        'user.password_reset',
+        '{who} restableció tu contraseña',
+        'Vuelve a iniciar sesión con la contraseña nueva',
+      );
+    }
+    return { ...updated, roleLabel: label };
   }
 
   /**
@@ -384,6 +446,14 @@ export class UsersController {
         metaJson: { fullName: target.fullName },
       },
     });
+    this.tellUser(
+      req.user,
+      id,
+      target.organizationId,
+      'user.deactivated',
+      '{who} desactivó tu acceso a ARTA',
+      'Si es un error, habla con dirección',
+    );
     return { ok: true, id, active: false };
   }
 
