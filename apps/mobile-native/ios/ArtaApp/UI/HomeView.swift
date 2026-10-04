@@ -8,8 +8,20 @@ struct HomeView: View {
     @State private var chatUnread = 0
     @State private var noticeUnread = 0
 
+    /// Tocar la pestaña ya activa vuelve a su raíz (`AppRouter.select`).
+    private var tabSelection: Binding<AppRouter.Tab> {
+        Binding(get: { router.tab }, set: { router.select($0) })
+    }
+
     var body: some View {
-        TabView(selection: $router.tab) {
+        TabView(selection: tabSelection) {
+            NavigationStack(path: $router.inicioPath) {
+                InicioView(user: user)
+                    .navigationDestination(for: AppRoute.self) { destination($0) }
+            }
+            .tabItem { Label("Inicio", systemImage: "house") }
+            .tag(AppRouter.Tab.inicio)
+
             NavigationStack(path: $router.chatPath) {
                 ChatListView()
                     .navigationDestination(for: ChatRoute.self) { route in
@@ -25,18 +37,27 @@ struct HomeView: View {
             .badge(chatUnread)
             .tag(AppRouter.Tab.chats)
 
-            NavigationStack {
+            NavigationStack(path: $router.tareasPath) {
+                TasksView()
+                    .navigationDestination(for: AppRoute.self) { destination($0) }
+            }
+            .tabItem { Label("Tareas", systemImage: "checklist") }
+            .tag(AppRouter.Tab.tareas)
+
+            NavigationStack(path: $router.avisosPath) {
                 NotificationsView(onUnreadChange: { noticeUnread = $0 })
+                    .navigationDestination(for: AppRoute.self) { destination($0) }
             }
             .tabItem { Label("Avisos", systemImage: "bell") }
             .badge(noticeUnread)
-            .tag(AppRouter.Tab.notices)
+            .tag(AppRouter.Tab.avisos)
 
-            NavigationStack {
-                ProfileView(user: user)
+            NavigationStack(path: $router.masPath) {
+                MoreView(user: user)
+                    .navigationDestination(for: AppRoute.self) { destination($0) }
             }
-            .tabItem { Label("Perfil", systemImage: "person.crop.circle") }
-            .tag(AppRouter.Tab.profile)
+            .tabItem { Label("Más", systemImage: "square.grid.2x2") }
+            .tag(AppRouter.Tab.mas)
         }
         .task { await loadCounts() }
         .onReceive(RealtimeClient.shared.chatUnread) { chatUnread = $0 }
@@ -49,66 +70,21 @@ struct HomeView: View {
         if let n = try? await ApiClient.shared.chatUnread() { chatUnread = n }
         if let n = try? await ApiClient.shared.notificationsUnread() { noticeUnread = n }
     }
-}
 
-struct ProfileView: View {
-    let user: UserDto
-    @EnvironmentObject private var session: Session
-    @State private var busy = false
-
-    var body: some View {
-        List {
-            Section {
-                HStack(spacing: 16) {
-                    Avatar(name: user.name, size: 64)
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(user.name).font(.title3.weight(.semibold))
-                        if let email = user.email { Text(email).font(.subheadline).foregroundStyle(ArtaColor.muted) }
-                        if let title = user.title, !title.isEmpty { Text(title).font(.footnote).foregroundStyle(ArtaColor.muted) }
-                    }
-                }
-                .padding(.vertical, 8)
-            }
-            .listRowBackground(ArtaColor.bgElev)
-
-            if !PushManager.shared.firebaseEnabled {
-                Section {
-                    Label("Esta compilación no tiene Firebase configurado: no llegarán avisos push.", systemImage: "bell.slash")
-                        .font(.footnote)
-                        .foregroundStyle(ArtaColor.muted)
-                }
-                .listRowBackground(ArtaColor.bgElev)
-            }
-
-            Section {
-                Link(destination: ApiConfig.origin) {
-                    Label("Abrir el panel web", systemImage: "safari")
-                }
-                Button {
-                    if let url = URL(string: UIApplication.openNotificationSettingsURLString) {
-                        UIApplication.shared.open(url)
-                    }
-                } label: {
-                    Label("Ajustes de avisos", systemImage: "bell.badge")
-                }
-            }
-            .listRowBackground(ArtaColor.bgElev)
-
-            Section {
-                Button(role: .destructive) {
-                    busy = true
-                    Task { await session.logout() }
-                } label: {
-                    Text(busy ? "Cerrando sesión…" : "Cerrar sesión").frame(maxWidth: .infinity)
-                }
-                .disabled(busy)
-            } footer: {
-                Text("ARTA \(ApiConfig.appVersion)").frame(maxWidth: .infinity)
-            }
-            .listRowBackground(ArtaColor.bgElev)
+    /// Mismas pantallas en cualquier pestaña que no sea Chats (su pila es de `ChatRoute`).
+    @ViewBuilder
+    private func destination(_ route: AppRoute) -> some View {
+        switch route {
+        case .task(let taskId):
+            TaskDetailView(taskId: taskId)
+        case .event(let eventId):
+            EventDetailView(eventId: eventId)
+        case .approvals:
+            ApprovalsView()
+        case let .web(path, title):
+            ArtaWebView(path: path, title: title)
+        case let .chat(channelId, messageId):
+            ConversationView(channelId: channelId, parentId: nil, focusMessageId: messageId)
         }
-        .scrollContentBackground(.hidden)
-        .background(ArtaColor.bg)
-        .navigationTitle("Perfil")
     }
 }

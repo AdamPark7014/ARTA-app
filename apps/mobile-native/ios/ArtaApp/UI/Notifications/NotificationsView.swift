@@ -5,7 +5,6 @@ struct NotificationsView: View {
     let onUnreadChange: (Int) -> Void
 
     @EnvironmentObject private var router: AppRouter
-    @Environment(\.openURL) private var openURL
     @State private var items: [NotificationDto] = []
     @State private var loading = true
     @State private var error: String?
@@ -69,12 +68,9 @@ struct NotificationsView: View {
             onUnreadChange(unread)
             Task { try? await ApiClient.shared.notificationRead(item.id) }
         }
-        switch DeepLink.from(channelId: nil, messageId: nil, url: item.linkUrl) {
-        case .chat(let channelId, let messageId)?:
-            router.open(.chat(channelId: channelId, messageId: messageId))
-        default:
-            // Procesos que aún no tienen pantalla nativa: se abren en el panel web.
-            if let link = item.linkUrl, let url = ApiConfig.resolve(link) { openURL(url) }
+        // Lo que no tiene pantalla nativa se abre en la vista web dentro de la app.
+        if let target = PanelLink.target(channelId: nil, messageId: nil, url: item.linkUrl, type: item.type) {
+            router.follow(target)
         }
     }
 }

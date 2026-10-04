@@ -16,7 +16,7 @@ struct ArtaApp: App {
                 .tint(ArtaColor.gold)
                 .task { await session.restore() }
                 .onOpenURL { url in
-                    if let link = DeepLink.from(url: url) { router.open(link) }
+                    if let target = PanelLink.target(url: url) { router.follow(target, fromLink: true) }
                 }
                 .onChange(of: scenePhase) { _, phase in
                     guard session.currentUser != nil else { return }

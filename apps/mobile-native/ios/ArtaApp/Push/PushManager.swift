@@ -16,7 +16,13 @@ import FirebaseMessaging
 ///   (`thread-id` = `chat-<canal>`), trae «Responder» y «Marcar como leído», y no
 ///   suena si esa conversación está abierta en pantalla. La extensión
 ///   `NotificationService` le pone la cara (iniciales) de quien escribe.
-/// - Procesos (`ARTA_EVENT`): OC, formatos, tareas… con «Marcar como leído».
+/// - Procesos (`ARTA_EVENT`): OC, formatos, tareas… con «Marcar como leído». El
+///   servidor elige la categoría por `kind` y apila por entidad (`thread-id` = `tag`
+///   o `link:<ruta>`); `channel` (tasks, approvals, finance, events, documents,
+///   general) solo ordena los canales de Android.
+/// - Tocar un aviso abre su pantalla nativa (`PanelLink`, contrato §4): con
+///   `channel_id` la conversación; si no, según `url` y `type`. Nunca se aprueba
+///   desde la notificación.
 /// - Silenciosos (`silent=1`: `chat.read`, `notification.read`): quitan los avisos
 ///   de lo que ya se leyó en otro dispositivo y ajustan el globo del ícono.
 final class PushManager: NSObject, UNUserNotificationCenterDelegate {
@@ -211,8 +217,8 @@ final class PushManager: NSObject, UNUserNotificationCenterDelegate {
             completionHandler([])
             return
         }
-        if Self.text(info, "kind") == "chat",
-           let channel = Self.text(info, "channel_id"),
+        // Mensajes y menciones traen `channel_id` (las menciones con kind=event).
+        if let channel = Self.text(info, "channel_id"),
            ActiveConversation.shared.isOpen(channel) {
             completionHandler([])
             return
@@ -255,9 +261,18 @@ final class PushManager: NSObject, UNUserNotificationCenterDelegate {
 
         default:
             if let notificationId { Task { try? await ApiClient.shared.notificationRead(notificationId) } }
-            let link = DeepLink.from(channelId: channelId, messageId: Self.text(info, "message_id"), url: Self.text(info, "url"))
+            let target = PanelLink.target(
+                channelId: channelId,
+                messageId: Self.text(info, "message_id"),
+                url: Self.text(info, "url"),
+                type: Self.text(info, "type")
+            )
             Task { @MainActor in
-                if let link { AppRouter.shared.open(link) }
+                if let target {
+                    AppRouter.shared.follow(target, fromLink: true)
+                } else {
+                    AppRouter.shared.select(.avisos)
+                }
                 completionHandler()
             }
         }
