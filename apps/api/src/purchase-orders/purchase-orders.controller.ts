@@ -102,15 +102,42 @@ export class PurchaseOrdersController {
   private async notifyAuthorizers(
     user: { id: string; fullName?: string },
     event: { id: string; name: string; entity: string; organizationId: string | null },
-    order: { vendorName: string | null; amount: Prisma.Decimal | number },
+    order: { id: string; vendorName: string | null; amount: Prisma.Decimal | number },
+    kind: 'po.requested' | 'po.updated' | 'po.deleted' = 'po.requested',
   ) {
+    const organizationId = event.organizationId ?? null;
+    const recipients = await this.authorizersOf(event);
+    const amount = Number(order.amount).toLocaleString('es-MX', { style: 'currency', currency: 'MXN' });
+    const who = user.fullName || 'Alguien del equipo';
+    const title = {
+      'po.requested': `${who} pidió una orden de compra`,
+      'po.updated': `${who} cambió una orden de compra por autorizar`,
+      'po.deleted': `${who} eliminó una orden de compra por autorizar`,
+    }[kind];
+    await this.notifications.notifyMany(
+      recipients.map((p) => ({
+        userId: p.id,
+        organizationId,
+        actorId: user.id,
+        type: kind,
+        title,
+        body: `${order.vendorName || 'Sin proveedor'} · ${amount} · ${event.name}`,
+        // Con acción pendiente, la app abre Aprobaciones nativas.
+        linkUrl: kind === 'po.deleted' ? `/events/${event.id}?tab=ocs` : `/purchase-orders?po=${order.id}`,
+        entity: event.entity as EntityKey,
+      })),
+    );
+  }
+
+  /** Quien puede autorizar OC en la entidad del evento (mismas reglas que `setStatus`). */
+  private async authorizersOf(event: { entity: string; organizationId: string | null }) {
     const organizationId = event.organizationId ?? null;
     const people = await this.prisma.user.findMany({
       where: { active: true, ...(organizationId ? { organizationId } : {}) },
       select: { id: true, roleKey: true, entities: true, permissions: true },
     });
     const entity = event.entity as EntityKey;
-    const recipients = people.filter((p) => {
+    return people.filter((p) => {
       const role = p.roleKey as RoleKey;
       if (!hasPermission(role, p.permissions, PERMISSIONS.PO_AUTHORIZE)) return false;
       if (!canAccessEventOps(p.entities as EntityKey[], role, entity)) return false;
@@ -118,19 +145,6 @@ export class PurchaseOrdersController {
       if (role === 'dir_auditorio' && entity !== 'EXPLANADA') return false;
       return true;
     });
-    const amount = Number(order.amount).toLocaleString('es-MX', { style: 'currency', currency: 'MXN' });
-    await this.notifications.notifyMany(
-      recipients.map((p) => ({
-        userId: p.id,
-        organizationId,
-        actorId: user.id,
-        type: 'po.requested',
-        title: `${user.fullName || 'Alguien del equipo'} pidió una orden de compra`,
-        body: `${order.vendorName || 'Sin proveedor'} · ${amount} · ${event.name}`,
-        linkUrl: `/events/${event.id}?tab=ocs`,
-        entity: event.entity as EntityKey,
-      })),
-    );
   }
 
   /**
@@ -154,6 +168,8 @@ export class PurchaseOrdersController {
       PAID: { type: 'po.paid', title: 'Tu orden de compra ya se pagó' },
       REJECTED: { type: 'po.rejected', title: `${who} rechazó tu orden de compra` },
       CANCELLED: { type: 'po.cancelled', title: `${who} canceló tu orden de compra` },
+      PENDING_AUTH: { type: 'po.reverted', title: `${who} regresó tu orden de compra a «Por autorizar»` },
+      DRAFT: { type: 'po.reverted', title: `${who} regresó tu orden de compra a borrador` },
     };
     const msg = copy[status];
     if (!msg) return;
@@ -541,6 +557,14 @@ export class PurchaseOrdersController {
         : {}),
       linesReplaced: !!body.lines,
     });
+    // Lo que autorizan ya no es lo que pidieron: quien autoriza debe volver a verla.
+    const relevant =
+      Number(order.amount) !== Number(updated.amount) ||
+      (body.vendorName !== undefined && body.vendorName !== order.vendorName) ||
+      (body.paymentMethod !== undefined && body.paymentMethod !== order.paymentMethod);
+    if (order.status === 'PENDING_AUTH' && relevant) {
+      await this.notifyAuthorizers(req.user, event, updated, 'po.updated').catch(() => undefined);
+    }
     return updated;
   }
 
@@ -797,6 +821,20 @@ export class PurchaseOrdersController {
       withIva: !!order.withIva,
       status: order.status,
     });
+    const who = (req.user as { fullName?: string }).fullName || 'Alguien del equipo';
+    const amount = Number(order.amount).toLocaleString('es-MX', { style: 'currency', currency: 'MXN' });
+    await this.notifications.notifyUsers([order.createdById], {
+      organizationId: event.organizationId,
+      actorId: req.user.id,
+      type: 'po.deleted',
+      title: `${who} eliminó tu orden de compra`,
+      body: `${order.vendorName || 'Sin proveedor'} · ${amount} · ${event.name}`,
+      linkUrl: `/events/${event.id}?tab=ocs`,
+      entity: event.entity as EntityKey,
+    });
+    if (order.status === 'PENDING_AUTH') {
+      await this.notifyAuthorizers(req.user, event, order, 'po.deleted').catch(() => undefined);
+    }
     return { ok: true };
   }
 

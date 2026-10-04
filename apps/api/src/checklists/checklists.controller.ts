@@ -690,6 +690,8 @@ export class ChecklistsController {
       },
     });
 
+    await this.notifySignature(req.user, existing, body.kind).catch(() => undefined);
+
     // Único caso que fuerza la reimpresión de un formato autorizado: la firma
     // que acaba de registrarse tiene que quedar dentro del PDF.
     return this.regeneratePdf(id, { force: true });
@@ -879,6 +881,52 @@ export class ChecklistsController {
     });
   }
 
+  /**
+   * Firma de entrega → a quien firma «Autorizado» en esa entidad (le toca a él).
+   * Firma de autorización → a quien entregó y a quien lo mandó a revisión.
+   */
+  private async notifySignature(
+    actor: AuthUser,
+    doc: {
+      id: string;
+      title: string;
+      eventId: string;
+      submittedById: string | null;
+      deliveredById: string | null;
+      authorizedAt: Date | null;
+      event: { name: string; entity: string; organizationId: string | null };
+    },
+    kind: 'ENTREGADO' | 'AUTORIZADO',
+  ) {
+    if (!this.notifications) return;
+    const organizationId = doc.event.organizationId ?? null;
+    const entity = doc.event.entity as EntityKey;
+    const base = {
+      organizationId,
+      actorId: actor.id,
+      linkUrl: `/events/${doc.eventId}?tab=checklists&checklist=${doc.id}`,
+      entity,
+    };
+    const who = actor.fullName || 'Alguien del equipo';
+    if (kind === 'ENTREGADO') {
+      if (doc.authorizedAt) return;
+      const signers = await this.notifications.whoCan({ organizationId, entity, exclude: actor.id });
+      await this.notifications.notifyUsers(signers, {
+        ...base,
+        type: 'checklist.signature_needed',
+        title: `${who} firmó la entrega de un formato`,
+        body: `${doc.title} · ${doc.event.name} · falta la firma de autorización`,
+      });
+      return;
+    }
+    await this.notifications.notifyUsers([doc.deliveredById, doc.submittedById], {
+      ...base,
+      type: 'checklist.signed',
+      title: `${who} firmó como Autorizado tu formato`,
+      body: `${doc.title} · ${doc.event.name}`,
+    });
+  }
+
   @Post(':id/restore/:versionId')
   async restoreVersion(
     @Req() req: { user: AuthUser },
@@ -930,6 +978,18 @@ export class ChecklistsController {
         metaJson: { versionId },
       },
     });
+
+    await this.notifications
+      ?.notifyUsers([existing.submittedById, existing.deliveredById, existing.lastEditedById], {
+        organizationId: existing.event.organizationId,
+        actorId: req.user.id,
+        type: 'checklist.restored',
+        title: `${req.user.fullName || 'Alguien del equipo'} restauró una versión anterior de un formato`,
+        body: `${existing.title} · ${existing.event.name}`,
+        linkUrl: `/events/${existing.eventId}?tab=checklists&checklist=${id}`,
+        entity: existing.event.entity as EntityKey,
+      })
+      .catch(() => undefined);
 
     return this.regeneratePdf(id);
   }
@@ -999,6 +1059,16 @@ export class ChecklistsController {
         lastEditedById: req.user.id,
         lastEditedAt: new Date(),
       },
+    });
+
+    void this.notifications?.notifyEventTeam(event.id, {
+      organizationId: event.organizationId,
+      actorId: req.user.id,
+      type: 'checklist.created',
+      title: `${req.user.fullName || 'Alguien del equipo'} agregó un formato al evento`,
+      body: `${created.title} · ${event.name}`,
+      linkUrl: `/events/${event.id}?tab=checklists&checklist=${created.id}`,
+      entity: event.entity as EntityKey,
     });
 
     // Generar PDF base al crear desde plantilla

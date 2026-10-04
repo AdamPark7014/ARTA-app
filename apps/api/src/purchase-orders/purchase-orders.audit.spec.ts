@@ -96,7 +96,7 @@ describe('PurchaseOrdersController · comprobante, días de cobro y auditoría',
       user: { findMany: async () => [] },
     };
     // Los avisos no son lo que se prueba aquí: se aceptan y no hacen nada.
-    const notifications = { notify: async () => null, notifyMany: async () => [] };
+    const notifications = { notify: async () => null, notifyMany: async () => [], notifyUsers: async () => [] };
     controller = new PurchaseOrdersController(prisma as never, notifications as never);
   });
 
