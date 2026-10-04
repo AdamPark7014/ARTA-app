@@ -18,6 +18,7 @@ data class TypingEvent(val channelId: String, val userId: String, val fullName: 
 data class ReadEvent(val channelId: String, val userId: String, val at: String)
 data class DeletedEvent(val channelId: String, val messageId: String, val parentId: String?)
 data class ActivityEvent(val channelId: String, val messageId: String, val parentId: String?, val preview: String, val senderId: String)
+data class PresenceEvent(val userId: String, val online: Boolean)
 
 /**
  * Socket.IO del API con la misma sesión que HTTP: el handshake manda la cookie
@@ -96,6 +97,15 @@ object RealtimeClient {
             ),
         )
     }
+    private val _presence = MutableSharedFlow<PresenceEvent>(extraBufferCapacity = 64)
+    /** Alguien de mi organización se conectó o se desconectó (chat v2). */
+    val presence: SharedFlow<PresenceEvent> = _presence
+
+    private val onPresence = Emitter.Listener { args ->
+        val o = obj(args) ?: return@Listener
+        val userId = o.optString("userId")
+        if (userId.isNotBlank() && o.has("online")) _presence.tryEmit(PresenceEvent(userId, o.optBoolean("online")))
+    }
     private val onChannelChanged = Emitter.Listener { args -> obj(args)?.optString("channelId")?.let { _channelsChanged.tryEmit(it) } }
     private val onChatUnread = Emitter.Listener { args -> obj(args)?.let { _chatUnread.tryEmit(it.optInt("total")) } }
     private val onNotification = Emitter.Listener { args -> obj(args)?.let { _notificationsUnread.tryEmit(it.optInt("unread")) } }
@@ -140,6 +150,7 @@ object RealtimeClient {
         s.on("chat:channel-updated", onChannelChanged)
         s.on("chat:members-changed", onChannelChanged)
         s.on("chat:unread", onChatUnread)
+        s.on("chat:presence", onPresence)
         s.on("notification:new", onNotification)
         socket = s
         s.connect()

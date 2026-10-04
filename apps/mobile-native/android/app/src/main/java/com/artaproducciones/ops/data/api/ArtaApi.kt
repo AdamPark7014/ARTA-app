@@ -1,6 +1,7 @@
 package com.artaproducciones.ops.data.api
 
 import okhttp3.MultipartBody
+import okhttp3.RequestBody
 import retrofit2.http.Body
 import retrofit2.http.GET
 import retrofit2.http.HTTP
@@ -20,6 +21,10 @@ data class UserDto(
     val title: String? = null,
     val roleKey: String? = null,
     val organizationId: String? = null,
+    /** `ARTA` / `EXPLANADA`: decide qué módulos web ve (igual que el menú lateral). */
+    val entities: List<String> = emptyList(),
+    /** Permisos extra sobre los del rol. */
+    val permissions: List<String> = emptyList(),
 )
 
 data class LoginBody(val email: String, val password: String)
@@ -56,6 +61,7 @@ data class ChannelSummary(
     val unreadCount: Int = 0,
     val muted: Boolean = false,
     val mutedUntil: String? = null,
+    val isGroupDm: Boolean = false,
 )
 
 data class ChannelMember(
@@ -83,6 +89,7 @@ data class ChannelDetail(
     val lastReadAt: String? = null,
     val memberCount: Int = 0,
     val members: List<ChannelMember> = emptyList(),
+    val isGroupDm: Boolean = false,
 )
 
 data class ChatAttachment(val url: String, val name: String? = null, val mime: String? = null, val size: Long? = null) {
@@ -105,6 +112,20 @@ data class ReactionUser(val id: String, val fullName: String)
 data class ChatReaction(val emoji: String, val count: Int, val userIds: List<String> = emptyList(), val users: List<ReactionUser> = emptyList())
 data class ChatAuthor(val id: String, val fullName: String, val title: String? = null)
 
+/** Mensaje citado (chat v2). `excerpt` ya viene en texto plano. */
+data class ChatReplyRef(
+    val id: String,
+    val authorId: String? = null,
+    val authorName: String? = null,
+    val excerpt: String? = null,
+    val kind: String? = null,
+    val attachmentName: String? = null,
+    val deleted: Boolean = false,
+)
+
+/** Canal de un resultado de búsqueda o de un guardado. */
+data class ChatChannelRef(val id: String, val name: String = "", val kind: String = "PUBLIC", val isGroupDm: Boolean = false)
+
 data class ChatMessage(
     val id: String,
     val channelId: String,
@@ -118,6 +139,10 @@ data class ChatMessage(
     val author: ChatAuthor,
     val replyCount: Int = 0,
     val reactions: List<ChatReaction> = emptyList(),
+    val replyTo: ChatReplyRef? = null,
+    val saved: Boolean = false,
+    val deleted: Boolean = false,
+    val channel: ChatChannelRef? = null,
     /** Solo en mensajes optimistas locales mientras el API responde. */
     val clientId: String? = null,
     val pending: Boolean = false,
@@ -136,6 +161,7 @@ data class PostMessageBody(
     val attachmentMime: String? = null,
     val attachmentSize: Long? = null,
     val clientId: String? = null,
+    val replyToId: String? = null,
 )
 
 data class EditBody(val body: String)
@@ -145,6 +171,23 @@ data class DirectBody(val userId: String)
 data class Colleague(val id: String, val fullName: String, val title: String? = null, val email: String? = null)
 data class UploadResult(val url: String, val name: String? = null, val mime: String? = null, val size: Long? = null, val kind: String? = null)
 data class UnreadTotal(val total: Int = 0)
+
+data class CreateChannelBody(
+    val name: String,
+    val kind: String = "PUBLIC",
+    val topic: String? = null,
+    val description: String? = null,
+    val memberIds: List<String> = emptyList(),
+)
+data class UpdateChannelBody(val name: String? = null, val topic: String? = null, val description: String? = null)
+data class MembersBody(val userIds: List<String>)
+data class GroupDmBody(val userIds: List<String>)
+data class SaveResult(val saved: Boolean = false)
+data class SavedItem(val savedAt: String? = null, val message: ChatMessage, val channel: ChatChannelRef? = null)
+data class SavedPage(val items: List<SavedItem> = emptyList())
+data class LinkPreview(val url: String, val title: String? = null, val description: String? = null, val image: String? = null, val siteName: String? = null)
+data class PresenceList(val online: List<String> = emptyList())
+data class ChatPrefs(val dndUntil: String? = null)
 
 // ─── Avisos y dispositivos ──────────────────────────────────────────────────
 
@@ -243,6 +286,47 @@ interface ArtaApi {
 
     @GET("chat/unread")
     suspend fun chatUnread(): UnreadTotal
+
+    @POST("chat/channels")
+    suspend fun createChannel(@Body body: CreateChannelBody): ChannelDetail
+
+    @PATCH("chat/channels/{id}")
+    suspend fun updateChannel(@Path("id") channelId: String, @Body body: UpdateChannelBody): ChannelDetail
+
+    @POST("chat/channels/{id}/archive")
+    suspend fun archiveChannel(@Path("id") channelId: String): OkResponse
+
+    @POST("chat/channels/{id}/members")
+    suspend fun addMembers(@Path("id") channelId: String, @Body body: MembersBody): ChannelDetail
+
+    @HTTP(method = "DELETE", path = "chat/channels/{id}/members/{userId}")
+    suspend fun removeMember(@Path("id") channelId: String, @Path("userId") userId: String): OkResponse
+
+    @POST("chat/channels/{id}/leave")
+    suspend fun leaveChannel(@Path("id") channelId: String): OkResponse
+
+    @POST("chat/group-dm")
+    suspend fun groupDm(@Body body: GroupDmBody): ChannelDetail
+
+    @POST("chat/messages/{id}/save")
+    suspend fun toggleSave(@Path("id") messageId: String): SaveResult
+
+    @GET("chat/saved")
+    suspend fun saved(@Query("limit") limit: Int = 50, @Query("before") before: String? = null): SavedPage
+
+    /** El API responde `null` (o vacío) si no hay vista previa: quien llama atrapa la excepción. */
+    @GET("chat/link-preview")
+    suspend fun linkPreview(@Query("url") url: String): LinkPreview
+
+    @GET("chat/presence")
+    suspend fun presence(): PresenceList
+
+    @GET("chat/prefs")
+    suspend fun chatPrefs(): ChatPrefs
+
+    /** JSON crudo: Moshi omite los null y `dndUntil: null` tiene que viajar para apagar No molestar. */
+    @PATCH("chat/prefs")
+    suspend fun setChatPrefs(@Body body: RequestBody): ChatPrefs
 
     @GET("notifications")
     suspend fun notifications(@Query("take") take: Int = 50): List<NotificationDto>
