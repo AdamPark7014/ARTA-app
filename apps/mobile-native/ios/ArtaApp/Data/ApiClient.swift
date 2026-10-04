@@ -128,7 +128,7 @@ final class ApiClient {
         return c.url!
     }
 
-    private func request(_ method: String, _ path: String, query: [String: String?] = [:]) -> URLRequest {
+    func request(_ method: String, _ path: String, query: [String: String?] = [:]) -> URLRequest {
         var req = URLRequest(url: url(path, query: query))
         req.httpMethod = method
         req.setValue("application/json", forHTTPHeaderField: "Accept")
@@ -139,7 +139,7 @@ final class ApiClient {
         return req
     }
 
-    private func perform(_ req: URLRequest) async throws -> Data {
+    func perform(_ req: URLRequest) async throws -> Data {
         let (data, response) = try await session.data(for: req)
         guard let http = response as? HTTPURLResponse else { throw ApiError(status: nil, message: "Respuesta inválida") }
         guard (200..<300).contains(http.statusCode) else {
