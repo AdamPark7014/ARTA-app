@@ -436,10 +436,11 @@ Pedido: «todo mergeado y fusionado, canónico en `main`; no quiero ramas sobree
 2. **TestFlight sin ejecutar**: faltan los secretos (`pwsh -File scripts\subir-secretos-ios.ps1`, reusa el
    certificado y la llave de NEXARA). La app en App Store Connect ya existe y está llena (id `6819117925`);
    falta pegar la contraseña de revisión en la versión y en TestFlight (`docs/store/IOS-APP-STORE.md`).
-3. **Play sin subir**: la app ya existe en Play Console (cuenta NEXARA, id `4974517947869940332`) con sus
-   declaraciones casi completas (ver el turno de las 17:40). Falta: «Datos de inicio de sesión» (Adam escribe la
-   contraseña), «Contenido y audiencia objetivo» (18+), enviar «Seguridad de los datos» (borrador listo) y
-   arrastrar `Documents\ARTA-builds\arta-1.0.0-1.aab` a **prueba interna** (`docs/store/PLAY-STORE.md`).
+3. **Play sin subir**: la app (cuenta NEXARA, id `4974517947869940332`) tiene **todas** las declaraciones de
+   «Contenido de la aplicación» enviadas (04-10, 18:40: datos de inicio de sesión, público 18+, seguridad de
+   los datos, salud: ninguna). Solo falta arrastrar `Documents\ARTA-builds\arta-1.0.0-1.aab` a **prueba
+   interna** y añadir testers (`docs/store/PLAY-STORE.md`). En ASC falta la contraseña de revisión (versión y
+   TestFlight), que la pega Adam.
 4. ~~Cuenta de revisión sin sembrar~~: sembrada el 04-10 (ver turno de las 18:10). Resembrar justo antes de
    cada envío a revisión (`docs/store/CUENTA-REVISION.md`).
 5. **Decisión de Adam**: distribución sin listar (iOS) + prueba interna (Play), y carta de Arta autorizando a
