@@ -239,6 +239,7 @@ def main() -> None:
                     "CODE_SIGN_STYLE = Manual",
                     f"DEVELOPMENT_TEAM = {env['TEAM_ID']}",
                     "CODE_SIGN_IDENTITY = Apple Distribution",
+                    "ARTA_CODE_SIGN_IDENTITY = Apple Distribution",
                     f"PROVISIONING_PROFILE_SPECIFIER = {profile_name}",
                     "",
                 ]

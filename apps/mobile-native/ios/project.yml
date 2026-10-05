@@ -80,6 +80,11 @@ targets:
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         INFOPLIST_FILE: Resources/Info.plist
         GENERATE_INFOPLIST_FILE: false
+        # XcodeGen deja «iPhone Developer» a nivel de target y eso le gana al xcconfig: la
+        # identidad sale de una variable que define Config/ArtaApp.xcconfig (o el
+        # *.signing.xcconfig del flujo de TestFlight). Solo este target y la extensión.
+        CODE_SIGN_IDENTITY: $(ARTA_CODE_SIGN_IDENTITY)
+        "CODE_SIGN_IDENTITY[sdk=iphoneos*]": $(ARTA_CODE_SIGN_IDENTITY)
       configs:
         # APNs distingue entornos: TestFlight y App Store usan SIEMPRE production.
         Debug:
@@ -129,6 +134,8 @@ targets:
         TARGETED_DEVICE_FAMILY: "1"
         INFOPLIST_FILE: NotificationService/Info.plist
         GENERATE_INFOPLIST_FILE: false
+        CODE_SIGN_IDENTITY: $(ARTA_CODE_SIGN_IDENTITY)
+        "CODE_SIGN_IDENTITY[sdk=iphoneos*]": $(ARTA_CODE_SIGN_IDENTITY)
 
 # XcodeGen no crea esquemas compartidos por su cuenta, y `xcodebuild -scheme`
 # solo ve los compartidos.

@@ -254,11 +254,8 @@ jobs:
             -clonedSourcePackagesDirPath .spm-cache \
             MARKETING_VERSION="$MARKETING_VERSION" \
             CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
-            CODE_SIGN_IDENTITY="Apple Distribution" \
             OTHER_CODE_SIGN_FLAGS="--keychain $KEYCHAIN" \
             2>&1 | tee "$RUNNER_TEMP/archive.log" | grep -E "error:|warning: .*[Ss]ign|ARCHIVE (SUCCEEDED|FAILED)"
-          # CODE_SIGN_IDENTITY por línea de órdenes: XcodeGen deja «iPhone Developer» a nivel de
-          # target y eso le gana al *.signing.xcconfig («No signing certificate "iOS Development"»).
 
       # Además del manifiesto de la app (raíz del .app), Apple pide el de cada
       # SDK de terceros (ITMS-91061): Firebase, GoogleUtilities, nanopb,

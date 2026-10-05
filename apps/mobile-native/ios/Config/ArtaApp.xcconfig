@@ -3,5 +3,7 @@
 // ArtaApp.signing.xcconfig (ignorado por git) con firma manual y su perfil.
 CODE_SIGN_STYLE = Automatic
 DEVELOPMENT_TEAM =
+// Identidad de firma (project.yml la usa en el target). TestFlight la cambia a Apple Distribution.
+ARTA_CODE_SIGN_IDENTITY = Apple Development
 
 #include? "ArtaApp.signing.xcconfig"

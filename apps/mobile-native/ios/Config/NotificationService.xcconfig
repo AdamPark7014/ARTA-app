@@ -1,5 +1,7 @@
 // Firma de la extensión NotificationService. Ver ArtaApp.xcconfig.
 CODE_SIGN_STYLE = Automatic
 DEVELOPMENT_TEAM =
+// Identidad de firma (project.yml la usa en el target). TestFlight la cambia a Apple Distribution.
+ARTA_CODE_SIGN_IDENTITY = Apple Development
 
 #include? "NotificationService.signing.xcconfig"
