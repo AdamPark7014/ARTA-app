@@ -137,7 +137,8 @@ def ensure_capabilities(asc: Asc, bundle_pk: str, wanted: list[str]) -> list[str
     """Devuelve las capacidades que NO se pudieron activar."""
     if not wanted:
         return []
-    current = asc.call("GET", f"/bundleIds/{bundle_pk}/bundleIdCapabilities", query={"limit": "50"})
+    # Esta relación no acepta `limit` (HTTP 400 PARAMETER_ERROR.ILLEGAL); trae todas de una vez.
+    current = asc.call("GET", f"/bundleIds/{bundle_pk}/bundleIdCapabilities")
     have = {(c.get("attributes") or {}).get("capabilityType") for c in current.get("data") or []}
     failed = []
     for cap in wanted:
