@@ -36,9 +36,10 @@ Sin cambios de código. En Play Console (app `4974517947869940332`, cuenta NEXAR
 - **Arreglos Android de cara al usuario**: texto casi negro en detalle de tarea/evento, aprobaciones y eventos
   (`LocalContentColor` en `ArtaTheme`) y barra de estado ilegible en modo claro (`SystemBarStyle.dark`).
   `arta-1.0.0-2.aab` (código 2) listo en `Documents\ARTA-builds` para producción en Play.
-- **Pendiente Play**: idioma de la ficha a es-419, textos, ícono, gráfico, 8 capturas, versión de **producción**
-  (sin testers, por pedido de Adam) con `arta-1.0.0-2.aab` (Adam lo arrastra: >10 MB). Play Console no
-  responde con Chrome oculto.
+- **Android 1.0.0 (código 2) enviado a revisión de Google en producción** el 05-10 ~14:10, sin testers (pedido
+  de Adam). Ficha es-419 (se quitó en-US), ícono, gráfico, 8 capturas, categoría Productividad, contacto
+  gerencia@nexara.com.mx, 177 países + resto del mundo. Publicación gestionada desactivada: sale sola al
+  aprobarse. Play Console no responde con Chrome oculto (los diálogos no abren).
 
 ## Turno claude-code (2026-10-04, 18:10–18:30): cuenta de revisión sembrada y App Store Connect lleno
 
