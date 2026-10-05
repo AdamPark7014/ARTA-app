@@ -6,6 +6,17 @@
   (Adam es el único programador).
 - **Producción:** `e9b4764` desplegado desde `main` el 2026-10-04 22:51 UTC (respaldo `/root/arta-backups/20261004-2249.sql.gz`); `/legal/*` responde 200 en los tres dominios. **Falta desplegar** el candado de Studio y plantillas (turno de abajo; solo API, sin migración)
 
+## Turno claude-code (2026-10-04, 17:40): declaraciones de Play Console desde el Chrome de Adam
+
+Sin cambios de código. En Play Console (app `4974517947869940332`, cuenta NEXARA `6272333329478326909`):
+- Enviadas: política de privacidad, anuncios No, ID de publicidad No, app gubernamental No, funciones
+  financieras «no proporciona», **clasificación IARC** (3+; Adam autorizó aceptar los términos de IARC).
+- **Seguridad de los datos**: capturada completa y guardada como borrador (detalle en
+  `docs/store/PLAY-STORE.md` §5.3 y §5.5). Play no deja enviarla hasta que esté «Contenido y audiencia objetivo»,
+  y esa exige antes «Datos de inicio de sesión», que lleva la contraseña de la cuenta de revisión.
+- Se cortó porque Chrome quedó minimizado: Play Console no abre diálogos en una pestaña oculta.
+- App Store Connect: hay una app con id `6814597698` en la pestaña de Adam; no se llenó nada de iOS.
+
 ## Turno claude-code (2026-10-04, 17:05): Studio y plantillas de formatos solo desde la organización de Arta
 
 Hallazgo del turno anterior. `PageContent`/`HeroSlide`/`NewsPost` (sitio público artaproducciones.com) y
@@ -410,8 +421,10 @@ Pedido: «todo mergeado y fusionado, canónico en `main`; no quiero ramas sobree
    Clave APNs `.p8` pendiente en Firebase → Cloud Messaging (sin ella no hay push en iPhone).
 2. **TestFlight sin ejecutar**: faltan los secretos (`pwsh -File scripts\subir-secretos-ios.ps1`, reusa el
    certificado y la llave de NEXARA) y crear la app en App Store Connect (`docs/store/IOS-APP-STORE.md`).
-3. **Play sin subir**: crear la app en Play Console (cuenta NEXARA) y subir a mano
-   `Documents\ARTA-builds\arta-1.0.0-1.aab` a **prueba interna** (`docs/store/PLAY-STORE.md`).
+3. **Play sin subir**: la app ya existe en Play Console (cuenta NEXARA, id `4974517947869940332`) con sus
+   declaraciones casi completas (ver el turno de las 17:40). Falta: «Datos de inicio de sesión» (Adam escribe la
+   contraseña), «Contenido y audiencia objetivo» (18+), enviar «Seguridad de los datos» (borrador listo) y
+   arrastrar `Documents\ARTA-builds\arta-1.0.0-1.aab` a **prueba interna** (`docs/store/PLAY-STORE.md`).
 4. **Cuenta de revisión sin sembrar**: Adam corre `apps/api/scripts/resembrar-cuenta-revision.ps1 -SoloDry`,
    luego sin `-SoloDry`, y `verificar-cuenta-revision.ps1` (`docs/store/CUENTA-REVISION.md`).
 5. **Decisión de Adam**: distribución sin listar (iOS) + prueba interna (Play), y carta de Arta autorizando a

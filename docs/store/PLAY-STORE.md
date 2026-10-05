@@ -59,9 +59,14 @@ Los gráficos se regeneran con `python apps/mobile-native/play-assets/generar.py
 No contiene anuncios.
 
 ### 5.3 Clasificación de contenido (IARC)
-Categoría «Utilidades, productividad, comunicación u otra». Violencia, sexo, lenguaje, drogas, apuestas: **No**.
-¿Los usuarios pueden interactuar o intercambiar contenido? **Sí** (chat del equipo). ¿Comparte la ubicación?
-**No**. ¿Compras digitales? **No**.
+Enviada el 04-10-2026 (correo de contacto `gerencia@nexara.com.mx`; resultado: 3+ / Apto para todos en todas las
+autoridades). Categoría «Todos los demás tipos de aplicaciones». Contenido descargado sujeto a clasificación,
+violencia, sexo, lenguaje, drogas, apuestas, ubicación compartida, compras digitales, recompensas, navegador:
+**No**. Usuarios interactúan o intercambian contenido: **Sí** (chat del equipo) → contenido de usuarios no es el
+principal, sin desnudos ni violencia pública, **sin** bloqueo ni reporte dentro de la app (hoy solo se silencian
+canales), **con** moderación (dirección borra mensajes ajenos, quien administra un canal saca miembros y restringe
+quién publica) y solo entre miembros invitados de la organización. Contenido en línea: **Sí** (los datos del
+panel). Si se agrega bloquear o reportar usuarios en el chat, rehacer el cuestionario.
 
 ### 5.4 Público objetivo
 **18 años o más**. No está dirigida a niños.
@@ -80,10 +85,19 @@ cuenta como «compartir»). Datos cifrados en tránsito: **Sí**. Los usuarios p
 | Fotos y videos | Sí | Opcional | Funcionalidad de la app |
 | Archivos de audio → Grabaciones de voz | Sí | Opcional | Funcionalidad de la app |
 | Archivos y documentos | Sí | Opcional | Funcionalidad de la app |
+| Actividad en la app → Otro contenido generado por el usuario (tareas, comentarios, entregas) | Sí | Opcional | Funcionalidad de la app |
 | ID del dispositivo u otros IDs (token de notificaciones) | Sí | Obligatorio | Funcionalidad de la app |
+
+Ninguno se procesa «de forma temporal». Métodos de cuenta: «Mi aplicación no permite que los usuarios creen una
+cuenta» + «Sí, inician sesión con cuentas creadas fuera de la app → En el trabajo o mediante cuentas de empresa».
+URL de eliminación de datos: la misma de eliminar cuenta.
 
 **No** se recopila: ubicación, información financiera, salud, contactos, calendario, actividad en la app con fines
 de analítica, historial web, registros de fallos ni diagnósticos.
+
+Estado al 04-10-2026: todo capturado y **guardado como borrador**; Play no deja enviarlo hasta que «Contenido y
+audiencia objetivo» esté enviado, y esa declaración exige antes «Datos de inicio de sesión» (§5.1), que lleva la
+contraseña de la cuenta de revisión (la escribe Adam).
 
 ### 5.6 Declaraciones que no aplican
 Funciones financieras: «Mi app no ofrece funciones financieras» (los anticipos son control interno de gastos del
