@@ -16,7 +16,7 @@ enseñaría eventos, proveedores, montos y conversaciones reales de Arta. Por es
 | Campo | Valor |
 | --- | --- |
 | Usuario (correo) | `revision.tiendas@artaproducciones.com` (se cambia con `-Email` / `STORE_REVIEWER_EMAIL`) |
-| Contraseña | **No va en el repo ni en este documento.** La eliges tú al sembrar; guárdala en tu gestor de contraseñas o en `C:\dev\secrets\arta-store\` (fuera de git). |
+| Contraseña | **No va en el repo ni en este documento.** Primera línea de `C:\dev\secrets\arta-store\cuenta-revision.txt` (fuera de git; generada al azar el 04-10-2026). Es la misma para App Store Connect y Play Console. |
 | Nombre que ve en la app | «Demo Revisor» |
 | Organización | «ARTA Demo · Revisión de tiendas» — slug `arta-demo-revision-tiendas`, id `org_arta_store_review` |
 | Rol | `enlace_gobierno` (Enlace gobierno y pagos) + permiso fino `po.authorize` |
@@ -84,6 +84,8 @@ pwsh -File apps\api\scripts\resembrar-cuenta-revision.ps1
 5. Corre la verificación.
 
 Opciones: `-SoloDry` (solo simula), `-SinVerificar`, `-Email otro@correo`, `-Servidor/-Puerto/-Llave/-Contenedor`.
+Sin preguntas: `-ArchivoContrasena C:\dev\secrets\arta-store\cuenta-revision.txt -Confirmar` (así se sembró en
+producción el 04-10-2026: 88 registros creados, verificación OK).
 
 La contraseña viaja por la entrada estándar de SSH, el servidor la lee con `read` y la pasa al contenedor con
 `docker exec -e STORE_REVIEWER_PASSWORD` sin valor; el sembrador la borra de su entorno al leerla y nunca la

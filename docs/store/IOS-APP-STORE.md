@@ -3,6 +3,18 @@
 Equipo de Apple: **NEXARA** (`AHNW9K8745`). Mismo esquema que NEXARA: sin Mac, se compila y sube desde GitHub
 Actions (`.github/workflows/ios-testflight.yml`). Lee primero la decisión de distribución en [`README.md`](README.md).
 
+**Estado al 04-10-2026.** Ya están hechos los §1, §2, §5 y §6, y la versión 1.0.0 del §7 (sin capturas):
+App IDs `com.artaproducciones.ops` (Push + Communication Notifications) y `.NotificationService` (Push)
+registrados; app **ARTA Producciones** creada en App Store Connect (id `6819117925`, es-MX, SKU `ARTA-OPS-IOS`,
+acceso completo). Información de la app, categorías, derechos de contenido, clasificación por edad (igual que
+NEXARA: chat y contenido de usuarios Sí, lo demás No), precio gratis (base México), disponible en los 175
+países, etiqueta de privacidad publicada (8 tipos, vinculados, sin rastreo), descripción, palabras clave, URLs,
+copyright, información de revisión (contacto igual que NEXARA, usuario demo y notas) e información de prueba de
+TestFlight. Faltan: la **contraseña** de la cuenta de revisión en «Información de la revisión» y en TestFlight →
+«Información de prueba» (la escribe Adam; está en `C:\dev\secrets\arta-store\cuenta-revision.txt`), los
+secretos (§3), la primera build (§4), capturas, la carta de Arta (5.2.1) y, si se decide, la solicitud de
+distribución sin listar (§8). La app con id `6814597698` es la de **NEXARA**: no tocarla.
+
 ## 1. Identificadores (los crea el flujo, o a mano)
 
 `scripts/asc_signing.py` (lo corre «iOS · TestFlight») registra `com.artaproducciones.ops` y
@@ -47,7 +59,7 @@ Connect → TestFlight en ~15 min.
 
 | Campo | Valor |
 | --- | --- |
-| Subtítulo (≤30) | `Producción de eventos en equipo` |
+| Subtítulo (≤30) | `Operación de eventos en equipo` (el anterior, «Producción de eventos en equipo», tiene 31 y Apple lo rechaza) |
 | Categoría principal | Negocios |
 | Categoría secundaria | Productividad |
 | Derechos de contenido | No contiene contenido de terceros |
