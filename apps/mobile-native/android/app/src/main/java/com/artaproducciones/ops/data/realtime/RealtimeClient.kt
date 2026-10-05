@@ -2,6 +2,7 @@ package com.artaproducciones.ops.data.realtime
 
 import android.util.Log
 import com.artaproducciones.ops.data.api.ApiClient
+import com.artaproducciones.ops.data.api.ApiDebugHooks
 import com.artaproducciones.ops.data.api.ChatMessage
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
@@ -124,6 +125,8 @@ object RealtimeClient {
 
     @Synchronized
     fun connect() {
+        // Modo demo (solo debug): sin red; los datos salen de las fixtures.
+        if (ApiDebugHooks.demo) return
         if (socket?.connected() == true) return
         disconnectInternal(keepRooms = true)
         val cookie = ApiClient.cookies.cookieHeader(ApiClient.originUrl)

@@ -2,6 +2,7 @@ package com.artaproducciones.ops.data
 
 import android.content.Context
 import com.artaproducciones.ops.data.api.ApiClient
+import com.artaproducciones.ops.data.api.ApiDebugHooks
 import com.artaproducciones.ops.data.api.LoginBody
 import com.artaproducciones.ops.data.api.LoginResponse
 import com.artaproducciones.ops.data.api.UserDto
@@ -49,6 +50,13 @@ object Session {
 
     /** Al abrir la app: con cookie guardada se confirma con `/auth/me`; sin red se usa el último usuario. */
     suspend fun restore() {
+        // Solo debug: el modo demo entra directo con el usuario de las fixtures (sin cookie ni login).
+        if (ApiDebugHooks.demo) {
+            runCatching { ApiClient.api.me().user }
+                .onSuccess { signedIn(it) }
+                .onFailure { _state.value = State.SignedOut }
+            return
+        }
         if (!ApiClient.hasSession()) {
             _state.value = State.SignedOut
             return
@@ -88,6 +96,11 @@ object Session {
     }
 
     private fun signedIn(user: UserDto) {
+        // Modo demo: la sesión ficticia vive solo en memoria; no pisa la guardada ni abre socket/push.
+        if (ApiDebugHooks.demo) {
+            _state.value = State.SignedIn(user)
+            return
+        }
         app.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
             .putString(
                 KEY_USER,
@@ -120,6 +133,11 @@ object Session {
     }
 
     private fun clearLocal() {
+        // Modo demo: «Cerrar sesión» no borra la sesión real que hubiera guardada en el teléfono.
+        if (ApiDebugHooks.demo) {
+            _state.value = State.SignedOut
+            return
+        }
         RealtimeClient.disconnect()
         ApiClient.cookies.clear()
         WebSessionBridge.clear()

@@ -83,6 +83,10 @@ android {
         }
     }
 
+    // Solo debug: las fixtures del modo demo (capturas de tienda, ver src/debug/.../demo) van
+    // como assets `fixtures/…`. Release no las lleva.
+    sourceSets["debug"].assets.srcDir("../../demo")
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -104,6 +108,13 @@ android {
         resources {
             excludes += setOf("/META-INF/{AL2.0,LGPL2.1}")
         }
+    }
+}
+
+androidComponents {
+    onVariants(selector().withBuildType("debug")) { variant ->
+        // De `demo/` solo hacen falta los JSON: el script que los graba no entra al APK.
+        variant.androidResources.ignoreAssetsPatterns.add("!*.mjs")
     }
 }
 

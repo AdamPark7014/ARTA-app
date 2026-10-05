@@ -3,10 +3,12 @@ package com.artaproducciones.ops
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Color
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
@@ -16,6 +18,7 @@ import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.lifecycleScope
 import com.artaproducciones.ops.data.Session
 import com.artaproducciones.ops.data.api.ApiClient
+import com.artaproducciones.ops.data.api.ApiDebugHooks
 import com.artaproducciones.ops.push.ArtaPushRenderer
 import com.artaproducciones.ops.ui.ArtaApp
 import com.artaproducciones.ops.ui.DeepLink
@@ -32,25 +35,33 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         val splash = installSplashScreen()
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
+        // La app siempre es oscura: íconos claros en las barras aunque el teléfono esté en modo claro
+        // (con el estilo automático salían negros sobre negro).
+        enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),
+            navigationBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),
+        )
         splash.setKeepOnScreenCondition { Session.state.value is Session.State.Loading }
+        // Solo debug: `--ez arta_demo true` enciende el modo demo; tiene que ir antes de restaurar la sesión.
+        val demoLink = ApiDebugHooks.launch?.invoke(intent)
         lifecycleScope.launch { Session.restore() }
         // Al recrear (rotación) el sistema vuelve a entregar el mismo intent: no se reabre el aviso.
-        if (savedInstanceState == null) handle(intent)
+        if (savedInstanceState == null) handle(intent, demoLink)
         setContent {
             ArtaTheme {
                 ArtaApp(pendingLink = pendingLink, onLinkConsumed = { pendingLink.value = null })
             }
         }
-        requestNotificationPermission()
+        // Capturas de tienda: sin el diálogo de permisos encima.
+        if (!ApiDebugHooks.demo) requestNotificationPermission()
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        handle(intent)
+        handle(intent, ApiDebugHooks.launch?.invoke(intent))
     }
 
-    private fun handle(intent: Intent?) {
+    private fun handle(intent: Intent?, demoLink: DeepLink? = null) {
         intent ?: return
         val notificationId = intent.getStringExtra(ArtaPushRenderer.EXTRA_NOTIFICATION_ID)
         if (!notificationId.isNullOrBlank()) {
@@ -58,7 +69,7 @@ class MainActivity : ComponentActivity() {
         }
         val dismissId = intent.getIntExtra(ArtaPushRenderer.EXTRA_DISMISS_ID, 0)
         if (dismissId != 0) NotificationManagerCompat.from(this).cancel(dismissId)
-        val link = DeepLink.from(
+        val link = demoLink ?: DeepLink.from(
             channelId = intent.getStringExtra(ArtaPushRenderer.EXTRA_CHANNEL_ID),
             messageId = intent.getStringExtra(ArtaPushRenderer.EXTRA_MESSAGE_ID),
             url = intent.getStringExtra(ArtaPushRenderer.EXTRA_URL) ?: intent.data?.let(::fromUri),

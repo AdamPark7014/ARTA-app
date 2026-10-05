@@ -1,9 +1,11 @@
 package com.artaproducciones.ops.ui.theme
 
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.graphics.Color
 
 object ArtaColors {
@@ -37,5 +39,10 @@ private val scheme = darkColorScheme(
 
 @Composable
 fun ArtaTheme(content: @Composable () -> Unit) {
-    MaterialTheme(colorScheme = scheme, typography = Typography(), content = content)
+    MaterialTheme(colorScheme = scheme, typography = Typography()) {
+        // Las pantallas que no viven dentro de un Scaffold/Surface (detalle de tarea y de evento,
+        // aprobaciones, eventos) heredaban el color de contenido por omisión de Material3, que es
+        // negro: texto e íconos casi invisibles sobre el fondo oscuro.
+        CompositionLocalProvider(LocalContentColor provides ArtaColors.Text, content = content)
+    }
 }

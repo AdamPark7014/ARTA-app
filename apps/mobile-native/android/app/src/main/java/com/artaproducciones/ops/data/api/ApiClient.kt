@@ -65,6 +65,8 @@ object ApiClient {
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
             .writeTimeout(60, TimeUnit.SECONDS)
+            // Solo debug (modo demo); en release la lista está vacía.
+            .apply { ApiDebugHooks.interceptors.forEach { addInterceptor(it) } }
             .addInterceptor { chain ->
                 val req = chain.request()
                 val builder = req.newBuilder().header("User-Agent", userAgent)
