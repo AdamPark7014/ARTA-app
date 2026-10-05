@@ -1,7 +1,7 @@
 # RELEVO
 
 - **Último turno:** claude-code
-- **Fecha:** 2026-10-04
+- **Fecha:** 2026-10-05
 - **Rama:** main
   (Adam es el único programador).
 - **Producción:** `e9b4764` desplegado desde `main` el 2026-10-04 22:51 UTC (respaldo `/root/arta-backups/20261004-2249.sql.gz`); `/legal/*` responde 200 en los tres dominios. **Falta desplegar** el candado de Studio y plantillas (turno de abajo; solo API, sin migración)
@@ -15,6 +15,30 @@ Sin cambios de código. En Play Console (app `4974517947869940332`, cuenta NEXAR
   `docs/store/PLAY-STORE.md` §5.3 y §5.5). Play no deja enviarla hasta que esté «Contenido y audiencia objetivo»,
   y esa exige antes «Datos de inicio de sesión», que lleva la contraseña de la cuenta de revisión.
 - Se cortó porque Chrome quedó minimizado: Play Console no abre diálogos en una pestaña oculta.
+
+## Turno claude-code (2026-10-05): iOS enviado a revisión, push encendido, ícono nuevo y modo demo
+
+- **iOS 1.0.0 (build 4) en «Esperando revisión»** desde el 05-10 ~13:35 (ASC app `6819117925`, envío
+  `ee2a8741…`, se publica sola al aprobarse). Carta de autorización firmada por José Luis Arista Camarena
+  (representante legal de Arta) adjunta en la revisión; copia en `Documents\ARTA-builds\…-firmada.pdf`.
+  Notas para Apple: plataforma multiempresa para productoras, Arta primer cliente (riesgo 3.2 al ser pública).
+- **Firma de iOS**: llave de API nueva «GitHub Actions ARTA» (`H7VXTV487C`, Gestor de apps) y certificado
+  Apple Distribution nuevo (`GWNXGSWCBH`, vence 2027-10-05) con llave propia; todo en `C:\dev\secrets\arta-ios`
+  (fuera de git) y en los secretos del repo. Tres arreglos para que archivara: `asc_signing.py` (sin `limit` en
+  capacidades), identidad por `$(ARTA_CODE_SIGN_IDENTITY)` solo en app y extensión (XcodeGen deja
+  «iPhone Developer» en el target; por línea de órdenes alcanzaba a los paquetes SPM).
+- **Push**: cuenta de servicio de Firebase subida (la vieja `73faf0e2…`, por decisión de Adam) y llave APNs
+  `3U672539N2` (la misma del equipo, ya usada por NEXARA) en Firebase de ARTA (producción).
+- **Ícono nuevo** (la «a» del logo de Arta) en iOS, Android y Play; `play-assets/generar.py` lo regenera.
+- **Modo demo de capturas** en las dos apps (solo debug): fixtures grabadas de la cuenta demo
+  (`demo/grabar-fixtures.mjs`). iOS: flujo «iOS · capturas de App Store» (7 PNG 1320×2868, ya en ASC).
+  Android: `--ez arta_demo true` + `arta_demo_tab/channel/task/event` (8 capturas 1080×1920 del emulador).
+- **Arreglos Android de cara al usuario**: texto casi negro en detalle de tarea/evento, aprobaciones y eventos
+  (`LocalContentColor` en `ArtaTheme`) y barra de estado ilegible en modo claro (`SystemBarStyle.dark`).
+  `arta-1.0.0-2.aab` (código 2) listo en `Documents\ARTA-builds` para producción en Play.
+- **Pendiente Play**: idioma de la ficha a es-419, textos, ícono, gráfico, 8 capturas, versión de **producción**
+  (sin testers, por pedido de Adam) con `arta-1.0.0-2.aab` (Adam lo arrastra: >10 MB). Play Console no
+  responde con Chrome oculto.
 
 ## Turno claude-code (2026-10-04, 18:10–18:30): cuenta de revisión sembrada y App Store Connect lleno
 
