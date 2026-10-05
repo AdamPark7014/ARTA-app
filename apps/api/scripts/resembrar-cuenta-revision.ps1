@@ -30,6 +30,10 @@
 
 .EXAMPLE
     pwsh -File apps\api\scripts\resembrar-cuenta-revision.ps1 -SoloDry
+
+.EXAMPLE
+    # Sin preguntas (lo usa un agente): la contraseña sale de la primera línea de un archivo fuera de git.
+    pwsh -File apps\api\scripts\resembrar-cuenta-revision.ps1 -ArchivoContrasena C:\dev\secrets\arta-store\cuenta-revision.txt -Confirmar
 #>
 [CmdletBinding()]
 param(
@@ -42,7 +46,11 @@ param(
     # Solo muestra lo que haría (--dry); no pregunta ni aplica.
     [switch]$SoloDry,
     # No corre verificar-cuenta-revision.ps1 al final.
-    [switch]$SinVerificar
+    [switch]$SinVerificar,
+    # Toma la contraseña de la primera línea de este archivo (fuera de git) en vez de pedirla.
+    [string]$ArchivoContrasena,
+    # Aplica sin preguntar «SI» después de la simulación.
+    [switch]$Confirmar
 )
 
 $ErrorActionPreference = 'Stop'
@@ -83,13 +91,21 @@ if ($Email -notmatch '^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$') { Salir "Correo 
 Write-Host ''
 Write-Host "Cuenta de revisión: $Email" -ForegroundColor Cyan
 Write-Host 'Usa la MISMA contraseña que pegaste (o vas a pegar) en App Store Connect y Play Console.' -ForegroundColor DarkGray
-$secreto = Read-Host 'Contraseña (mínimo 12 caracteres)' -AsSecureString
-$repetida = Read-Host 'Repítela' -AsSecureString
-$plano = ConvertTo-Plano $secreto
-$plano2 = ConvertTo-Plano $repetida
-$repetida.Dispose()
-if ($plano -cne $plano2) { $plano = $null; $plano2 = $null; Salir 'Las contraseñas no coinciden. No se hizo nada.' }
-$plano2 = $null
+if ($ArchivoContrasena) {
+    if (-not (Test-Path -LiteralPath $ArchivoContrasena)) { Salir "No existe el archivo de contraseña: $ArchivoContrasena" }
+    $plano = Get-Content -LiteralPath $ArchivoContrasena -TotalCount 1 -Encoding utf8
+    if (-not $plano) { Salir 'El archivo de contraseña está vacío. No se hizo nada.' }
+    $secreto = ConvertTo-SecureString -String $plano -AsPlainText -Force
+    Write-Host "  contraseña tomada de $ArchivoContrasena" -ForegroundColor DarkGray
+} else {
+    $secreto = Read-Host 'Contraseña (mínimo 12 caracteres)' -AsSecureString
+    $repetida = Read-Host 'Repítela' -AsSecureString
+    $plano = ConvertTo-Plano $secreto
+    $plano2 = ConvertTo-Plano $repetida
+    $repetida.Dispose()
+    if ($plano -cne $plano2) { $plano = $null; $plano2 = $null; Salir 'Las contraseñas no coinciden. No se hizo nada.' }
+    $plano2 = $null
+}
 if ($plano.Length -lt 12) { $plano = $null; Salir 'La contraseña debe tener al menos 12 caracteres. No se hizo nada.' }
 if ($plano -ne $plano.Trim() -or $plano -match '[\r\n]') { $plano = $null; Salir 'La contraseña no puede empezar/terminar con espacios ni llevar saltos de línea.' }
 
@@ -97,7 +113,11 @@ $ssh = @('-i', $Llave, '-p', "$Puerto", '-o', 'ConnectTimeout=20')
 
 function Invoke-Sembrador([string]$Bandera) {
     # Primera línea de stdin = contraseña. `docker exec -e VAR` sin valor la toma del entorno del shell remoto.
-    $remoto = "IFS= read -r STORE_REVIEWER_PASSWORD && export STORE_REVIEWER_PASSWORD && " +
+    # PowerShell en Windows manda la línea con CRLF: `read` corta en \n y deja el \r, que se quita aquí
+    # (printf es interno del shell y tr la recibe por stdin: no queda en la línea de comandos de nadie).
+    $remoto = "IFS= read -r STORE_REVIEWER_PASSWORD && " +
+        "STORE_REVIEWER_PASSWORD=`$(printf '%s' `"`$STORE_REVIEWER_PASSWORD`" | tr -d '\r') && " +
+        "export STORE_REVIEWER_PASSWORD && " +
         "docker exec -e STORE_REVIEWER_PASSWORD -e STORE_REVIEWER_EMAIL='$Email' -w /app/apps/api $Contenedor " +
         "npx ts-node --transpile-only prisma/seed-store-reviewer.ts $Bandera"
     # Out-Host: que el informe se vea y no se mezcle con el código de salida que devuelve la función.
@@ -128,8 +148,10 @@ try {
 
     # ── 3. Confirmar y aplicar ──────────────────────────────────────────────
     Write-Host ''
-    $respuesta = Read-Host 'Aplicar en PRODUCCIÓN? Escribe SI para continuar'
-    if ($respuesta -cne 'SI') { Salir 'Cancelado. No se aplicó nada.' 0 }
+    if (-not $Confirmar) {
+        $respuesta = Read-Host 'Aplicar en PRODUCCIÓN? Escribe SI para continuar'
+        if ($respuesta -cne 'SI') { Salir 'Cancelado. No se aplicó nada.' 0 }
+    }
 
     Write-Host ''
     Write-Host '── Aplicando (--confirm-produccion) ──' -ForegroundColor Cyan
