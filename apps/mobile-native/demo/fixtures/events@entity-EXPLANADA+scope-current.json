@@ -1,0 +1,32 @@
+[
+ {
+  "id": "c159b2f535555db3effcb05ba",
+  "organizationId": "org_arta_store_review",
+  "entity": "EXPLANADA",
+  "name": "Eco de Volcanes · Gira 2026",
+  "artist": "Eco de Volcanes",
+  "promoter": "Producciones Sierra Norte (demo)",
+  "venue": "Auditorio Bosque Azul",
+  "city": "Puebla, Puebla",
+  "startsAt": "2026-10-31T03:00:00.000Z",
+  "endsAt": "2026-10-31T05:30:00.000Z",
+  "status": "ACTIVE",
+  "campaignType": "NONE",
+  "notes": "Rueda de prensa una semana antes en el lobby del auditorio.",
+  "description": "Concierto de rock en español; aforo de 3,500 personas.",
+  "schedule": "19:00 a 23:30",
+  "functions": 1,
+  "createdById": "c56ea4d06e6e4b57237532cd4",
+  "createdAt": "2026-10-02T01:08:40.463Z",
+  "updatedAt": "2026-10-05T01:08:41.887Z",
+  "createdBy": {
+   "id": "c56ea4d06e6e4b57237532cd4",
+   "fullName": "Lucía Méndez Arriaga"
+  },
+  "_count": {
+   "checklists": 0,
+   "purchaseOrders": 0,
+   "tasks": 1
+  }
+ }
+]

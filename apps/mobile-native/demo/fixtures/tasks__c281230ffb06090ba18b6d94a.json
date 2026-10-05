@@ -1,0 +1,80 @@
+{
+ "id": "c281230ffb06090ba18b6d94a",
+ "eventId": null,
+ "organizationId": "org_arta_store_review",
+ "assigneeId": "cff66a001f339cdbbe0796ce0",
+ "createdById": "c56ea4d06e6e4b57237532cd4",
+ "title": "Revisar los pendientes de la semana con producción",
+ "module": null,
+ "detail": "Repasar fechas de montaje y proveedores de los tres eventos.",
+ "status": "OPEN",
+ "dueAt": "2026-10-05T16:00:00.000Z",
+ "seenAt": "2026-10-05T01:08:44.291Z",
+ "submittedAt": null,
+ "completionNote": null,
+ "approvedById": null,
+ "approvedAt": null,
+ "rejectedById": null,
+ "rejectedAt": null,
+ "rejectionNote": null,
+ "createdAt": "2026-10-04T05:08:40.463Z",
+ "updatedAt": "2026-10-05T01:08:44.292Z",
+ "assignee": {
+  "id": "cff66a001f339cdbbe0796ce0",
+  "fullName": "Demo Revisor",
+  "email": "revision.tiendas@artaproducciones.com"
+ },
+ "coAssignees": [],
+ "createdBy": {
+  "id": "c56ea4d06e6e4b57237532cd4",
+  "fullName": "Lucía Méndez Arriaga"
+ },
+ "approvedBy": null,
+ "rejectedBy": null,
+ "event": null,
+ "evidences": [],
+ "activities": [
+  {
+   "id": "c59ed140ce0a329605880d1f1",
+   "taskId": "c281230ffb06090ba18b6d94a",
+   "actorId": "c56ea4d06e6e4b57237532cd4",
+   "action": "created",
+   "detail": "Revisar los pendientes de la semana con producción",
+   "metaJson": {
+    "eventId": null,
+    "assigneeId": "cff66a001f339cdbbe0796ce0",
+    "assigneeIds": [
+     "cff66a001f339cdbbe0796ce0"
+    ]
+   },
+   "createdAt": "2026-10-04T05:08:40.463Z",
+   "actor": {
+    "id": "c56ea4d06e6e4b57237532cd4",
+    "fullName": "Lucía Méndez Arriaga"
+   }
+  },
+  {
+   "id": "c72b4be854f9195482fb94607",
+   "taskId": "c281230ffb06090ba18b6d94a",
+   "actorId": "c56ea4d06e6e4b57237532cd4",
+   "action": "assigned",
+   "detail": "Demo Revisor",
+   "metaJson": null,
+   "createdAt": "2026-10-04T05:08:41.463Z",
+   "actor": {
+    "id": "c56ea4d06e6e4b57237532cd4",
+    "fullName": "Lucía Méndez Arriaga"
+   }
+  }
+ ],
+ "assigneeIds": [
+  "cff66a001f339cdbbe0796ce0"
+ ],
+ "assignees": [
+  {
+   "id": "cff66a001f339cdbbe0796ce0",
+   "fullName": "Demo Revisor",
+   "email": "revision.tiendas@artaproducciones.com"
+  }
+ ]
+}

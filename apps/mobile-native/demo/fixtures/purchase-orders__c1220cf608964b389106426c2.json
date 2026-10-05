@@ -1,0 +1,50 @@
+{
+ "id": "c1220cf608964b389106426c2",
+ "eventId": "c72e8945a29563ab6a5da1ece",
+ "rubro": "catering",
+ "vendorName": "Banquetes La Cazuela Azul",
+ "description": "Comidas del staff y artistas durante el montaje y el festival.",
+ "amount": "12800",
+ "currency": "MXN",
+ "status": "AUTHORIZED",
+ "paymentMethod": "TRANSFERENCIA",
+ "payeeType": "PROVEEDOR",
+ "withIva": false,
+ "createdById": "c7c0ae50aaa46fda9060d0947",
+ "authorizedById": "cff66a001f339cdbbe0796ce0",
+ "authorizedAt": "2026-10-03T23:08:40.463Z",
+ "paidAt": null,
+ "createdAt": "2026-10-03T01:08:40.463Z",
+ "updatedAt": "2026-10-05T01:08:41.955Z",
+ "event": {
+  "id": "c72e8945a29563ab6a5da1ece",
+  "name": "Festival Sabores del Valle",
+  "entity": "ARTA",
+  "status": "ACTIVE"
+ },
+ "createdBy": {
+  "fullName": "Mateo Ríos Calderón"
+ },
+ "authorizedBy": {
+  "fullName": "Demo Revisor"
+ },
+ "lines": [
+  {
+   "id": "cb473cf3c1f38da1bb49a05ff",
+   "orderId": "c1220cf608964b389106426c2",
+   "concept": "Comida para staff y artistas (60 personas)",
+   "qty": "60",
+   "unitPrice": "180",
+   "total": "10800"
+  },
+  {
+   "id": "c1a63e2b3f61d28f5c7d53d6d",
+   "orderId": "c1220cf608964b389106426c2",
+   "concept": "Coffee break de montaje",
+   "qty": "1",
+   "unitPrice": "2000",
+   "total": "2000"
+  }
+ ],
+ "proofs": []
+}

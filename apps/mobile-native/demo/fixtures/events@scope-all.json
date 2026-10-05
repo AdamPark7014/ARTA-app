@@ -1,0 +1,92 @@
+[
+ {
+  "id": "c159b2f535555db3effcb05ba",
+  "organizationId": "org_arta_store_review",
+  "entity": "EXPLANADA",
+  "name": "Eco de Volcanes · Gira 2026",
+  "artist": "Eco de Volcanes",
+  "promoter": "Producciones Sierra Norte (demo)",
+  "venue": "Auditorio Bosque Azul",
+  "city": "Puebla, Puebla",
+  "startsAt": "2026-10-31T03:00:00.000Z",
+  "endsAt": "2026-10-31T05:30:00.000Z",
+  "status": "ACTIVE",
+  "campaignType": "NONE",
+  "notes": "Rueda de prensa una semana antes en el lobby del auditorio.",
+  "description": "Concierto de rock en español; aforo de 3,500 personas.",
+  "schedule": "19:00 a 23:30",
+  "functions": 1,
+  "createdById": "c56ea4d06e6e4b57237532cd4",
+  "createdAt": "2026-10-02T01:08:40.463Z",
+  "updatedAt": "2026-10-05T01:08:41.887Z",
+  "createdBy": {
+   "id": "c56ea4d06e6e4b57237532cd4",
+   "fullName": "Lucía Méndez Arriaga"
+  },
+  "_count": {
+   "checklists": 0,
+   "purchaseOrders": 0,
+   "tasks": 1
+  }
+ },
+ {
+  "id": "c72e8945a29563ab6a5da1ece",
+  "organizationId": "org_arta_store_review",
+  "entity": "ARTA",
+  "name": "Festival Sabores del Valle",
+  "artist": "Varios artistas",
+  "promoter": "Arta Demo",
+  "venue": "Explanada Jardines del Alba",
+  "city": "Puebla, Puebla",
+  "startsAt": "2026-10-16T18:00:00.000Z",
+  "endsAt": "2026-10-17T04:00:00.000Z",
+  "status": "ACTIVE",
+  "campaignType": "NONE",
+  "notes": "Montaje de carpas el día anterior desde las 8:00.",
+  "description": "Festival gastronómico con escenario de música en vivo y 30 expositores.",
+  "schedule": "12:00 a 22:00",
+  "functions": 2,
+  "createdById": "c56ea4d06e6e4b57237532cd4",
+  "createdAt": "2026-10-02T01:08:40.463Z",
+  "updatedAt": "2026-10-05T01:08:41.875Z",
+  "createdBy": {
+   "id": "c56ea4d06e6e4b57237532cd4",
+   "fullName": "Lucía Méndez Arriaga"
+  },
+  "_count": {
+   "checklists": 0,
+   "purchaseOrders": 1,
+   "tasks": 1
+  }
+ },
+ {
+  "id": "cbf9b2784b0797342c1629b09",
+  "organizationId": "org_arta_store_review",
+  "entity": "ARTA",
+  "name": "Noche de Boleros",
+  "artist": "Trío Luna de Plata",
+  "promoter": "Promotora Angelópolis (demo)",
+  "venue": "Foro Jardín Quetzal",
+  "city": "San Andrés Cholula, Puebla",
+  "startsAt": "2026-10-10T02:30:00.000Z",
+  "endsAt": "2026-10-10T05:30:00.000Z",
+  "status": "ACTIVE",
+  "campaignType": "NONE",
+  "notes": "Prueba de sonido a las 16:00. Acceso de proveedores por la calle lateral.",
+  "description": "Concierto íntimo de boleros clásicos con mesas para 400 personas.",
+  "schedule": "18:00 a 23:30",
+  "functions": 1,
+  "createdById": "c56ea4d06e6e4b57237532cd4",
+  "createdAt": "2026-10-02T01:08:40.463Z",
+  "updatedAt": "2026-10-05T01:08:41.851Z",
+  "createdBy": {
+   "id": "c56ea4d06e6e4b57237532cd4",
+   "fullName": "Lucía Méndez Arriaga"
+  },
+  "_count": {
+   "checklists": 0,
+   "purchaseOrders": 1,
+   "tasks": 3
+  }
+ }
+]

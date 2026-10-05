@@ -1,0 +1,48 @@
+{
+ "id": "ca625d70ab73b719c3aff04fb",
+ "kind": "PUBLIC",
+ "slug": "anuncios",
+ "name": "anuncios",
+ "topic": "Avisos importantes de dirección",
+ "description": "Comunicados oficiales; solo dirección publica",
+ "eventId": null,
+ "peer": null,
+ "isGroupDm": false,
+ "postingRestricted": true,
+ "canPost": false,
+ "canManage": false,
+ "muted": false,
+ "mutedUntil": null,
+ "lastReadAt": "2026-10-05T01:08:40.463Z",
+ "memberCount": 4,
+ "members": [
+  {
+   "id": "cff66a001f339cdbbe0796ce0",
+   "fullName": "Demo Revisor",
+   "title": "Cuenta de demostración · App Store y Google Play",
+   "role": "member",
+   "lastReadAt": "2026-10-05T01:08:40.463Z"
+  },
+  {
+   "id": "c56ea4d06e6e4b57237532cd4",
+   "fullName": "Lucía Méndez Arriaga",
+   "title": "Producción ejecutiva",
+   "role": "owner",
+   "lastReadAt": "2026-10-05T01:08:40.463Z"
+  },
+  {
+   "id": "c7c0ae50aaa46fda9060d0947",
+   "fullName": "Mateo Ríos Calderón",
+   "title": "Coordinación técnica",
+   "role": "member",
+   "lastReadAt": "2026-10-05T01:08:40.463Z"
+  },
+  {
+   "id": "ce08d1dd4a18c703877519be3",
+   "fullName": "Valeria Ortega Luna",
+   "title": "Convenios y patrocinios",
+   "role": "member",
+   "lastReadAt": "2026-10-05T01:08:40.463Z"
+  }
+ ]
+}

@@ -1,0 +1,101 @@
+{
+ "id": "c3b2a1069f3d808b124c49e08",
+ "eventId": "cbf9b2784b0797342c1629b09",
+ "organizationId": "org_arta_store_review",
+ "assigneeId": "cff66a001f339cdbbe0796ce0",
+ "createdById": "c56ea4d06e6e4b57237532cd4",
+ "title": "Enviar el plano de escenario al recinto",
+ "module": null,
+ "detail": "El recinto necesita el plano con medidas y tomas de corriente antes del montaje.",
+ "status": "PENDING_APPROVAL",
+ "dueAt": "2026-10-05T18:00:00.000Z",
+ "seenAt": "2026-10-05T01:08:44.291Z",
+ "submittedAt": "2026-10-04T22:08:40.463Z",
+ "completionNote": "Plano revisado con el recinto; queda la versión final.",
+ "approvedById": null,
+ "approvedAt": null,
+ "rejectedById": null,
+ "rejectedAt": null,
+ "rejectionNote": null,
+ "createdAt": "2026-10-03T19:08:40.463Z",
+ "updatedAt": "2026-10-05T01:08:44.292Z",
+ "assignee": {
+  "id": "cff66a001f339cdbbe0796ce0",
+  "fullName": "Demo Revisor",
+  "email": "revision.tiendas@artaproducciones.com"
+ },
+ "coAssignees": [],
+ "createdBy": {
+  "id": "c56ea4d06e6e4b57237532cd4",
+  "fullName": "Lucía Méndez Arriaga"
+ },
+ "approvedBy": null,
+ "rejectedBy": null,
+ "event": {
+  "id": "cbf9b2784b0797342c1629b09",
+  "name": "Noche de Boleros",
+  "entity": "ARTA",
+  "status": "ACTIVE"
+ },
+ "evidences": [],
+ "activities": [
+  {
+   "id": "ce4ae4b7c8301f7d56c4dce7c",
+   "taskId": "c3b2a1069f3d808b124c49e08",
+   "actorId": "c56ea4d06e6e4b57237532cd4",
+   "action": "created",
+   "detail": "Enviar el plano de escenario al recinto",
+   "metaJson": {
+    "eventId": "cbf9b2784b0797342c1629b09",
+    "assigneeId": "cff66a001f339cdbbe0796ce0",
+    "assigneeIds": [
+     "cff66a001f339cdbbe0796ce0"
+    ]
+   },
+   "createdAt": "2026-10-03T19:08:40.463Z",
+   "actor": {
+    "id": "c56ea4d06e6e4b57237532cd4",
+    "fullName": "Lucía Méndez Arriaga"
+   }
+  },
+  {
+   "id": "ccec458b58eb5d75cac6cf628",
+   "taskId": "c3b2a1069f3d808b124c49e08",
+   "actorId": "c56ea4d06e6e4b57237532cd4",
+   "action": "assigned",
+   "detail": "Demo Revisor",
+   "metaJson": null,
+   "createdAt": "2026-10-03T19:08:41.463Z",
+   "actor": {
+    "id": "c56ea4d06e6e4b57237532cd4",
+    "fullName": "Lucía Méndez Arriaga"
+   }
+  },
+  {
+   "id": "c305c27bd69ff3df6a7210bc7",
+   "taskId": "c3b2a1069f3d808b124c49e08",
+   "actorId": "cff66a001f339cdbbe0796ce0",
+   "action": "submitted",
+   "detail": "Plano revisado con el recinto; queda la versión final.",
+   "metaJson": {
+    "status": "PENDING_APPROVAL",
+    "evidenceCount": 0
+   },
+   "createdAt": "2026-10-04T22:08:40.463Z",
+   "actor": {
+    "id": "cff66a001f339cdbbe0796ce0",
+    "fullName": "Demo Revisor"
+   }
+  }
+ ],
+ "assigneeIds": [
+  "cff66a001f339cdbbe0796ce0"
+ ],
+ "assignees": [
+  {
+   "id": "cff66a001f339cdbbe0796ce0",
+   "fullName": "Demo Revisor",
+   "email": "revision.tiendas@artaproducciones.com"
+  }
+ ]
+}

@@ -1,0 +1,21 @@
+[
+ {
+  "id": "c4103f9648e959c9bb4c294e9",
+  "organizationId": "org_arta_store_review",
+  "entity": "EXPLANADA",
+  "date": "2026-10-29",
+  "text": "Montaje desde las 9:00; carga por la puerta norte.",
+  "createdById": "c7c0ae50aaa46fda9060d0947",
+  "updatedById": "c7c0ae50aaa46fda9060d0947",
+  "createdAt": "2026-10-05T01:08:42.097Z",
+  "updatedAt": "2026-10-05T01:08:42.097Z",
+  "createdBy": {
+   "id": "c7c0ae50aaa46fda9060d0947",
+   "fullName": "Mateo Ríos Calderón"
+  },
+  "updatedBy": {
+   "id": "c7c0ae50aaa46fda9060d0947",
+   "fullName": "Mateo Ríos Calderón"
+  }
+ }
+]

@@ -1,0 +1,17 @@
+{
+ "user": {
+  "id": "cff66a001f339cdbbe0796ce0",
+  "email": "revision.tiendas@artaproducciones.com",
+  "fullName": "Demo Revisor",
+  "title": "Cuenta de demostración · App Store y Google Play",
+  "roleKey": "enlace_gobierno",
+  "entities": [
+   "ARTA",
+   "EXPLANADA"
+  ],
+  "permissions": [
+   "po.authorize"
+  ],
+  "organizationId": "org_arta_store_review"
+ }
+}

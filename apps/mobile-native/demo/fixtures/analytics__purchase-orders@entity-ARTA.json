@@ -1,0 +1,135 @@
+{
+ "entity": "ARTA",
+ "kpis": {
+  "total": 2,
+  "pipeline": 50500,
+  "paid": 0,
+  "authRate": 50,
+  "avgAgingDays": 1,
+  "agingOver7": 0
+ },
+ "byStatus": {
+  "AUTHORIZED": {
+   "count": 1,
+   "amount": 12800
+  },
+  "PENDING_AUTH": {
+   "count": 1,
+   "amount": 37700
+  }
+ },
+ "byRubro": [
+  {
+   "rubro": "audio",
+   "count": 1,
+   "amount": 37700
+  },
+  {
+   "rubro": "catering",
+   "count": 1,
+   "amount": 12800
+  }
+ ],
+ "byVendor": [
+  {
+   "vendor": "Sonido Quetzal Pro",
+   "count": 1,
+   "amount": 37700,
+   "paid": 0
+  },
+  {
+   "vendor": "Banquetes La Cazuela Azul",
+   "count": 1,
+   "amount": 12800,
+   "paid": 0
+  }
+ ],
+ "agingBuckets": {
+  "d0_3": 2,
+  "d4_7": 0,
+  "d8_14": 0,
+  "d15plus": 0
+ },
+ "agingQueue": [
+  {
+   "id": "c1220cf608964b389106426c2",
+   "eventId": "c72e8945a29563ab6a5da1ece",
+   "eventName": "Festival Sabores del Valle",
+   "eventStatus": "ACTIVE",
+   "rubro": "catering",
+   "vendorName": "Banquetes La Cazuela Azul",
+   "paymentMethod": "TRANSFERENCIA",
+   "payeeType": "PROVEEDOR",
+   "withIva": false,
+   "proofCount": 0,
+   "status": "AUTHORIZED",
+   "amount": 12800,
+   "ageDays": 2,
+   "createdBy": "Mateo Ríos Calderón",
+   "authorizedBy": "Demo Revisor",
+   "createdAt": "2026-10-03T01:08:40.463Z",
+   "authorizedAt": "2026-10-03T23:08:40.463Z",
+   "paidAt": null
+  },
+  {
+   "id": "c19814ce6acbddb0c891d376a",
+   "eventId": "cbf9b2784b0797342c1629b09",
+   "eventName": "Noche de Boleros",
+   "eventStatus": "ACTIVE",
+   "rubro": "audio",
+   "vendorName": "Sonido Quetzal Pro",
+   "paymentMethod": "TRANSFERENCIA",
+   "payeeType": "PROVEEDOR",
+   "withIva": true,
+   "proofCount": 0,
+   "status": "PENDING_AUTH",
+   "amount": 37700,
+   "ageDays": 0,
+   "createdBy": "Mateo Ríos Calderón",
+   "createdAt": "2026-10-04T20:08:40.463Z",
+   "authorizedAt": null,
+   "paidAt": null
+  }
+ ],
+ "orders": [
+  {
+   "id": "c1220cf608964b389106426c2",
+   "eventId": "c72e8945a29563ab6a5da1ece",
+   "eventName": "Festival Sabores del Valle",
+   "eventStatus": "ACTIVE",
+   "rubro": "catering",
+   "vendorName": "Banquetes La Cazuela Azul",
+   "paymentMethod": "TRANSFERENCIA",
+   "payeeType": "PROVEEDOR",
+   "withIva": false,
+   "proofCount": 0,
+   "status": "AUTHORIZED",
+   "amount": 12800,
+   "ageDays": 2,
+   "createdBy": "Mateo Ríos Calderón",
+   "authorizedBy": "Demo Revisor",
+   "createdAt": "2026-10-03T01:08:40.463Z",
+   "authorizedAt": "2026-10-03T23:08:40.463Z",
+   "paidAt": null
+  },
+  {
+   "id": "c19814ce6acbddb0c891d376a",
+   "eventId": "cbf9b2784b0797342c1629b09",
+   "eventName": "Noche de Boleros",
+   "eventStatus": "ACTIVE",
+   "rubro": "audio",
+   "vendorName": "Sonido Quetzal Pro",
+   "paymentMethod": "TRANSFERENCIA",
+   "payeeType": "PROVEEDOR",
+   "withIva": true,
+   "proofCount": 0,
+   "status": "PENDING_AUTH",
+   "amount": 37700,
+   "ageDays": 0,
+   "createdBy": "Mateo Ríos Calderón",
+   "createdAt": "2026-10-04T20:08:40.463Z",
+   "authorizedAt": null,
+   "paidAt": null
+  }
+ ]
+}

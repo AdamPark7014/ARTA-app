@@ -1,0 +1,31 @@
+[
+ {
+  "id": "c85cddb60c1a554c364379e5b",
+  "purchaseOrderId": null,
+  "eventId": "cbf9b2784b0797342c1629b09",
+  "label": "Anticipo de hospedaje",
+  "fileUrl": null,
+  "amount": "8400",
+  "uploadedById": "ce08d1dd4a18c703877519be3",
+  "createdAt": "2026-10-05T00:33:40.463Z",
+  "advanceStatus": "PENDING",
+  "note": "Reservar 4 habitaciones para el trío y su staff (2 noches).",
+  "decidedById": null,
+  "decidedAt": null,
+  "rejectReason": null,
+  "paidById": null,
+  "paidAt": null,
+  "paidProofUrl": null,
+  "uploadedBy": {
+   "id": "ce08d1dd4a18c703877519be3",
+   "fullName": "Valeria Ortega Luna"
+  },
+  "decidedBy": null,
+  "paidBy": null,
+  "event": {
+   "id": "cbf9b2784b0797342c1629b09",
+   "name": "Noche de Boleros",
+   "entity": "ARTA"
+  }
+ }
+]

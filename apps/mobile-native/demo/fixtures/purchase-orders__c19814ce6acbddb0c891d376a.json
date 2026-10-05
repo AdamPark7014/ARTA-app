@@ -1,0 +1,56 @@
+{
+ "id": "c19814ce6acbddb0c891d376a",
+ "eventId": "cbf9b2784b0797342c1629b09",
+ "rubro": "audio",
+ "vendorName": "Sonido Quetzal Pro",
+ "description": "Audio para la Noche de Boleros: consola, sistema principal y técnicos.",
+ "amount": "37700",
+ "currency": "MXN",
+ "status": "PENDING_AUTH",
+ "paymentMethod": "TRANSFERENCIA",
+ "payeeType": "PROVEEDOR",
+ "withIva": true,
+ "createdById": "c7c0ae50aaa46fda9060d0947",
+ "authorizedById": null,
+ "authorizedAt": null,
+ "paidAt": null,
+ "createdAt": "2026-10-04T20:08:40.463Z",
+ "updatedAt": "2026-10-05T01:08:41.916Z",
+ "event": {
+  "id": "cbf9b2784b0797342c1629b09",
+  "name": "Noche de Boleros",
+  "entity": "ARTA",
+  "status": "ACTIVE"
+ },
+ "createdBy": {
+  "fullName": "Mateo Ríos Calderón"
+ },
+ "authorizedBy": null,
+ "lines": [
+  {
+   "id": "c30316c2cb826fc7888c3989c",
+   "orderId": "c19814ce6acbddb0c891d376a",
+   "concept": "Renta de consola digital de 32 canales",
+   "qty": "1",
+   "unitPrice": "9500",
+   "total": "9500"
+  },
+  {
+   "id": "c85a427c4d85a7d012c3d62b7",
+   "orderId": "c19814ce6acbddb0c891d376a",
+   "concept": "Sistema de sonido principal (line array)",
+   "qty": "1",
+   "unitPrice": "18000",
+   "total": "18000"
+  },
+  {
+   "id": "cdaa1bef6ed76b1ca4df9a395",
+   "orderId": "c19814ce6acbddb0c891d376a",
+   "concept": "Técnico de audio (jornada)",
+   "qty": "2",
+   "unitPrice": "2500",
+   "total": "5000"
+  }
+ ],
+ "proofs": []
+}

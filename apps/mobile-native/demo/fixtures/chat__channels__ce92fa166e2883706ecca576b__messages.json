@@ -1,0 +1,90 @@
+{
+ "messages": [
+  {
+   "id": "c42af84ea8eeaea8f5e573f6c",
+   "channelId": "ce92fa166e2883706ecca576b",
+   "parentId": null,
+   "kind": "TEXT",
+   "body": "Hola, ¿me ayudas a confirmar hoy el rider técnico del trío?",
+   "attachment": null,
+   "pinnedAt": null,
+   "editedAt": null,
+   "createdAt": "2026-10-04T23:08:40.463Z",
+   "author": {
+    "id": "c56ea4d06e6e4b57237532cd4",
+    "fullName": "Lucía Méndez Arriaga",
+    "title": "Producción ejecutiva"
+   },
+   "replyCount": 0,
+   "reactions": [],
+   "replyTo": null,
+   "deleted": false,
+   "saved": false
+  },
+  {
+   "id": "c855600c90343168663e57697",
+   "channelId": "ce92fa166e2883706ecca576b",
+   "parentId": null,
+   "kind": "TEXT",
+   "body": "Claro, le escribo al manager y te aviso.",
+   "attachment": null,
+   "pinnedAt": null,
+   "editedAt": null,
+   "createdAt": "2026-10-04T23:18:40.463Z",
+   "author": {
+    "id": "cff66a001f339cdbbe0796ce0",
+    "fullName": "Demo Revisor",
+    "title": "Cuenta de demostración · App Store y Google Play"
+   },
+   "replyCount": 0,
+   "reactions": [],
+   "replyTo": null,
+   "deleted": false,
+   "saved": false
+  },
+  {
+   "id": "cebf37e753306eb846e5241f5",
+   "channelId": "ce92fa166e2883706ecca576b",
+   "parentId": null,
+   "kind": "TEXT",
+   "body": "Gracias. Si cambia algo del audio, avísale a Mateo.",
+   "attachment": null,
+   "pinnedAt": null,
+   "editedAt": null,
+   "createdAt": "2026-10-04T23:28:40.463Z",
+   "author": {
+    "id": "c56ea4d06e6e4b57237532cd4",
+    "fullName": "Lucía Méndez Arriaga",
+    "title": "Producción ejecutiva"
+   },
+   "replyCount": 0,
+   "reactions": [],
+   "replyTo": null,
+   "deleted": false,
+   "saved": false
+  },
+  {
+   "id": "c81a385b19bd8a973249205a5",
+   "channelId": "ce92fa166e2883706ecca576b",
+   "parentId": null,
+   "kind": "TEXT",
+   "body": "¿Pudiste hablar con el manager?",
+   "attachment": null,
+   "pinnedAt": null,
+   "editedAt": null,
+   "createdAt": "2026-10-05T00:53:40.463Z",
+   "author": {
+    "id": "c56ea4d06e6e4b57237532cd4",
+    "fullName": "Lucía Méndez Arriaga",
+    "title": "Producción ejecutiva"
+   },
+   "replyCount": 0,
+   "reactions": [],
+   "replyTo": null,
+   "deleted": false,
+   "saved": false
+  }
+ ],
+ "hasMore": false,
+ "hasNewer": false
+}

@@ -1,0 +1,46 @@
+[
+ {
+  "id": "cff66a001f339cdbbe0796ce0",
+  "fullName": "Demo Revisor",
+  "email": "revision.tiendas@artaproducciones.com",
+  "title": "Cuenta de demostración · App Store y Google Play",
+  "roleKey": "enlace_gobierno",
+  "entities": [
+   "ARTA",
+   "EXPLANADA"
+  ]
+ },
+ {
+  "id": "c56ea4d06e6e4b57237532cd4",
+  "fullName": "Lucía Méndez Arriaga",
+  "email": "lucia.mendez@example.com",
+  "title": "Producción ejecutiva",
+  "roleKey": "logistica",
+  "entities": [
+   "ARTA",
+   "EXPLANADA"
+  ]
+ },
+ {
+  "id": "c7c0ae50aaa46fda9060d0947",
+  "fullName": "Mateo Ríos Calderón",
+  "email": "mateo.rios@example.com",
+  "title": "Coordinación técnica",
+  "roleKey": "logistica",
+  "entities": [
+   "ARTA",
+   "EXPLANADA"
+  ]
+ },
+ {
+  "id": "ce08d1dd4a18c703877519be3",
+  "fullName": "Valeria Ortega Luna",
+  "email": "valeria.ortega@example.com",
+  "title": "Convenios y patrocinios",
+  "roleKey": "convenios",
+  "entities": [
+   "ARTA",
+   "EXPLANADA"
+  ]
+ }
+]

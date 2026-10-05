@@ -1,0 +1,38 @@
+{
+ "id": "ce92fa166e2883706ecca576b",
+ "kind": "DIRECT",
+ "slug": null,
+ "name": "Lucía Méndez Arriaga",
+ "topic": "Mensaje directo",
+ "description": null,
+ "eventId": null,
+ "peer": {
+  "id": "c56ea4d06e6e4b57237532cd4",
+  "fullName": "Lucía Méndez Arriaga",
+  "title": "Producción ejecutiva"
+ },
+ "isGroupDm": false,
+ "postingRestricted": false,
+ "canPost": true,
+ "canManage": false,
+ "muted": false,
+ "mutedUntil": null,
+ "lastReadAt": "2026-10-04T23:28:40.463Z",
+ "memberCount": 2,
+ "members": [
+  {
+   "id": "c56ea4d06e6e4b57237532cd4",
+   "fullName": "Lucía Méndez Arriaga",
+   "title": "Producción ejecutiva",
+   "role": "member",
+   "lastReadAt": "2026-10-05T01:08:40.463Z"
+  },
+  {
+   "id": "cff66a001f339cdbbe0796ce0",
+   "fullName": "Demo Revisor",
+   "title": "Cuenta de demostración · App Store y Google Play",
+   "role": "member",
+   "lastReadAt": "2026-10-04T23:28:40.463Z"
+  }
+ ]
+}

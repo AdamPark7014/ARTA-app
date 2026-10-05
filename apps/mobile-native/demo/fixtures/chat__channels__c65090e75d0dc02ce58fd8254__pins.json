@@ -1,0 +1,25 @@
+{
+ "messages": [
+  {
+   "id": "c89ba7a85e82dbd2fe409e404",
+   "channelId": "c65090e75d0dc02ce58fd8254",
+   "parentId": null,
+   "kind": "TEXT",
+   "body": "Aquí coordinamos todo lo de la Noche de Boleros. El trío llega el jueves a mediodía.",
+   "attachment": null,
+   "pinnedAt": "2026-10-03T20:09:40.463Z",
+   "editedAt": null,
+   "createdAt": "2026-10-03T20:08:40.463Z",
+   "author": {
+    "id": "c56ea4d06e6e4b57237532cd4",
+    "fullName": "Lucía Méndez Arriaga",
+    "title": "Producción ejecutiva"
+   },
+   "replyCount": 0,
+   "reactions": [],
+   "replyTo": null,
+   "deleted": false,
+   "saved": false
+  }
+ ]
+}

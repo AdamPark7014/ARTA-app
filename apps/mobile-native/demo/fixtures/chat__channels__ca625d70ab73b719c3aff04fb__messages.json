@@ -1,0 +1,27 @@
+{
+ "messages": [
+  {
+   "id": "cecb706cbf3d41c0ad0d8cbd6",
+   "channelId": "ca625d70ab73b719c3aff04fb",
+   "parentId": null,
+   "kind": "TEXT",
+   "body": "Calendario de octubre publicado: revisen sus fechas de montaje en Eventos.",
+   "attachment": null,
+   "pinnedAt": "2026-10-03T01:09:40.463Z",
+   "editedAt": null,
+   "createdAt": "2026-10-03T01:08:40.463Z",
+   "author": {
+    "id": "c56ea4d06e6e4b57237532cd4",
+    "fullName": "Lucía Méndez Arriaga",
+    "title": "Producción ejecutiva"
+   },
+   "replyCount": 0,
+   "reactions": [],
+   "replyTo": null,
+   "deleted": false,
+   "saved": false
+  }
+ ],
+ "hasMore": false,
+ "hasNewer": false
+}

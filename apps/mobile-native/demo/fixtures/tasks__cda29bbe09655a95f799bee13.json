@@ -1,0 +1,85 @@
+{
+ "id": "cda29bbe09655a95f799bee13",
+ "eventId": "cbf9b2784b0797342c1629b09",
+ "organizationId": "org_arta_store_review",
+ "assigneeId": "cff66a001f339cdbbe0796ce0",
+ "createdById": "c56ea4d06e6e4b57237532cd4",
+ "title": "Confirmar el rider técnico con el Trío Luna de Plata",
+ "module": null,
+ "detail": "Pedir al manager la versión final del rider (audio y backline) y adjuntarla al evento.",
+ "status": "OPEN",
+ "dueAt": "2026-10-05T05:00:00.000Z",
+ "seenAt": "2026-10-05T01:08:44.291Z",
+ "submittedAt": null,
+ "completionNote": null,
+ "approvedById": null,
+ "approvedAt": null,
+ "rejectedById": null,
+ "rejectedAt": null,
+ "rejectionNote": null,
+ "createdAt": "2026-10-04T23:03:40.463Z",
+ "updatedAt": "2026-10-05T01:08:44.292Z",
+ "assignee": {
+  "id": "cff66a001f339cdbbe0796ce0",
+  "fullName": "Demo Revisor",
+  "email": "revision.tiendas@artaproducciones.com"
+ },
+ "coAssignees": [],
+ "createdBy": {
+  "id": "c56ea4d06e6e4b57237532cd4",
+  "fullName": "Lucía Méndez Arriaga"
+ },
+ "approvedBy": null,
+ "rejectedBy": null,
+ "event": {
+  "id": "cbf9b2784b0797342c1629b09",
+  "name": "Noche de Boleros",
+  "entity": "ARTA",
+  "status": "ACTIVE"
+ },
+ "evidences": [],
+ "activities": [
+  {
+   "id": "c29dd1ed2c3e68b78c6c36c32",
+   "taskId": "cda29bbe09655a95f799bee13",
+   "actorId": "c56ea4d06e6e4b57237532cd4",
+   "action": "created",
+   "detail": "Confirmar el rider técnico con el Trío Luna de Plata",
+   "metaJson": {
+    "eventId": "cbf9b2784b0797342c1629b09",
+    "assigneeId": "cff66a001f339cdbbe0796ce0",
+    "assigneeIds": [
+     "cff66a001f339cdbbe0796ce0"
+    ]
+   },
+   "createdAt": "2026-10-04T23:03:40.463Z",
+   "actor": {
+    "id": "c56ea4d06e6e4b57237532cd4",
+    "fullName": "Lucía Méndez Arriaga"
+   }
+  },
+  {
+   "id": "c04fcb25b3d904426693f4891",
+   "taskId": "cda29bbe09655a95f799bee13",
+   "actorId": "c56ea4d06e6e4b57237532cd4",
+   "action": "assigned",
+   "detail": "Demo Revisor",
+   "metaJson": null,
+   "createdAt": "2026-10-04T23:03:41.463Z",
+   "actor": {
+    "id": "c56ea4d06e6e4b57237532cd4",
+    "fullName": "Lucía Méndez Arriaga"
+   }
+  }
+ ],
+ "assigneeIds": [
+  "cff66a001f339cdbbe0796ce0"
+ ],
+ "assignees": [
+  {
+   "id": "cff66a001f339cdbbe0796ce0",
+   "fullName": "Demo Revisor",
+   "email": "revision.tiendas@artaproducciones.com"
+  }
+ ]
+}

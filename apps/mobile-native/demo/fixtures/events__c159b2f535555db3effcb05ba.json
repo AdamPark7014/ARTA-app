@@ -1,0 +1,150 @@
+{
+ "id": "c159b2f535555db3effcb05ba",
+ "organizationId": "org_arta_store_review",
+ "entity": "EXPLANADA",
+ "name": "Eco de Volcanes · Gira 2026",
+ "artist": "Eco de Volcanes",
+ "promoter": "Producciones Sierra Norte (demo)",
+ "venue": "Auditorio Bosque Azul",
+ "city": "Puebla, Puebla",
+ "startsAt": "2026-10-31T03:00:00.000Z",
+ "endsAt": "2026-10-31T05:30:00.000Z",
+ "status": "ACTIVE",
+ "campaignType": "NONE",
+ "notes": "Rueda de prensa una semana antes en el lobby del auditorio.",
+ "description": "Concierto de rock en español; aforo de 3,500 personas.",
+ "schedule": "19:00 a 23:30",
+ "functions": 1,
+ "createdById": "c56ea4d06e6e4b57237532cd4",
+ "createdAt": "2026-10-02T01:08:40.463Z",
+ "updatedAt": "2026-10-05T01:08:41.887Z",
+ "createdBy": {
+  "id": "c56ea4d06e6e4b57237532cd4",
+  "fullName": "Lucía Méndez Arriaga"
+ },
+ "checklists": [],
+ "purchaseOrders": [],
+ "financeRuns": [
+  {
+   "id": "c0effafd804da14f73669daa5",
+   "eventId": "c159b2f535555db3effcb05ba",
+   "title": "Corrida financiera",
+   "dataJson": {
+    "rows": [],
+    "totalIncome": 0,
+    "totalExpense": 0
+   },
+   "locked": false,
+   "status": "DRAFT",
+   "revision": 0,
+   "createdById": "c56ea4d06e6e4b57237532cd4",
+   "lastEditedById": null,
+   "lastEditedAt": null,
+   "sealedById": null,
+   "sealedAt": null,
+   "reopenReason": null,
+   "createdAt": "2026-10-05T01:08:41.898Z",
+   "updatedAt": "2026-10-05T01:08:41.898Z"
+  }
+ ],
+ "campaign": null,
+ "ticketingSetups": [],
+ "tasks": [
+  {
+   "id": "ced2acc3fbe422e89ea322ed0",
+   "eventId": "c159b2f535555db3effcb05ba",
+   "organizationId": "org_arta_store_review",
+   "assigneeId": "c7c0ae50aaa46fda9060d0947",
+   "createdById": "cff66a001f339cdbbe0796ce0",
+   "title": "Cerrar la lista de medios para la rueda de prensa",
+   "module": null,
+   "detail": "Confirmar asistencia de medios y mandar la lista a la gira.",
+   "status": "PENDING_APPROVAL",
+   "dueAt": "2026-10-07T00:00:00.000Z",
+   "seenAt": "2026-10-03T01:08:40.463Z",
+   "submittedAt": "2026-10-04T23:58:40.463Z",
+   "completionNote": "Lista cerrada: 35 medios confirmados.",
+   "approvedById": null,
+   "approvedAt": null,
+   "rejectedById": null,
+   "rejectedAt": null,
+   "rejectionNote": null,
+   "createdAt": "2026-10-03T01:08:40.463Z",
+   "updatedAt": "2026-10-05T01:08:42.050Z",
+   "assignee": {
+    "id": "c7c0ae50aaa46fda9060d0947",
+    "fullName": "Mateo Ríos Calderón"
+   },
+   "coAssignees": [],
+   "createdBy": {
+    "id": "cff66a001f339cdbbe0796ce0",
+    "fullName": "Demo Revisor"
+   },
+   "approvedBy": null,
+   "rejectedBy": null,
+   "evidences": [],
+   "activities": [
+    {
+     "id": "c01e130847b7f8324359487f1",
+     "taskId": "ced2acc3fbe422e89ea322ed0",
+     "actorId": "cff66a001f339cdbbe0796ce0",
+     "action": "created",
+     "detail": "Cerrar la lista de medios para la rueda de prensa",
+     "metaJson": {
+      "eventId": "c159b2f535555db3effcb05ba",
+      "assigneeId": "c7c0ae50aaa46fda9060d0947",
+      "assigneeIds": [
+       "c7c0ae50aaa46fda9060d0947"
+      ]
+     },
+     "createdAt": "2026-10-03T01:08:40.463Z",
+     "actor": {
+      "id": "cff66a001f339cdbbe0796ce0",
+      "fullName": "Demo Revisor"
+     }
+    },
+    {
+     "id": "cd5af944f2f107770df2da759",
+     "taskId": "ced2acc3fbe422e89ea322ed0",
+     "actorId": "cff66a001f339cdbbe0796ce0",
+     "action": "assigned",
+     "detail": "Mateo Ríos Calderón",
+     "metaJson": null,
+     "createdAt": "2026-10-03T01:08:41.463Z",
+     "actor": {
+      "id": "cff66a001f339cdbbe0796ce0",
+      "fullName": "Demo Revisor"
+     }
+    },
+    {
+     "id": "cf34060a4af9cde059a302b8e",
+     "taskId": "ced2acc3fbe422e89ea322ed0",
+     "actorId": "c7c0ae50aaa46fda9060d0947",
+     "action": "submitted",
+     "detail": "Lista cerrada: 35 medios confirmados.",
+     "metaJson": {
+      "status": "PENDING_APPROVAL",
+      "evidenceCount": 0
+     },
+     "createdAt": "2026-10-04T23:58:40.463Z",
+     "actor": {
+      "id": "c7c0ae50aaa46fda9060d0947",
+      "fullName": "Mateo Ríos Calderón"
+     }
+    }
+   ],
+   "assigneeIds": [
+    "c7c0ae50aaa46fda9060d0947"
+   ],
+   "assignees": [
+    {
+     "id": "c7c0ae50aaa46fda9060d0947",
+     "fullName": "Mateo Ríos Calderón"
+    }
+   ]
+  }
+ ],
+ "sponsors": [],
+ "slots": [],
+ "files": []
+}

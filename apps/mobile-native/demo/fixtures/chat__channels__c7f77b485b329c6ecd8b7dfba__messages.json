@@ -1,0 +1,104 @@
+{
+ "messages": [
+  {
+   "id": "c7674e94a41c769125402b3f5",
+   "channelId": "c7f77b485b329c6ecd8b7dfba",
+   "parentId": null,
+   "kind": "TEXT",
+   "body": "Buen día, equipo. Esta semana arrancamos el montaje de la Noche de Boleros; cualquier pendiente lo vemos por aquí.",
+   "attachment": null,
+   "pinnedAt": null,
+   "editedAt": null,
+   "createdAt": "2026-10-03T23:08:40.463Z",
+   "author": {
+    "id": "c56ea4d06e6e4b57237532cd4",
+    "fullName": "Lucía Méndez Arriaga",
+    "title": "Producción ejecutiva"
+   },
+   "replyCount": 0,
+   "reactions": [],
+   "replyTo": null,
+   "deleted": false,
+   "saved": false
+  },
+  {
+   "id": "c159603bee6a1b79b618ada82",
+   "channelId": "c7f77b485b329c6ecd8b7dfba",
+   "parentId": null,
+   "kind": "TEXT",
+   "body": "Listo. Hoy confirmo con el recinto el horario de carga y descarga.",
+   "attachment": null,
+   "pinnedAt": null,
+   "editedAt": null,
+   "createdAt": "2026-10-04T00:08:40.463Z",
+   "author": {
+    "id": "c7c0ae50aaa46fda9060d0947",
+    "fullName": "Mateo Ríos Calderón",
+    "title": "Coordinación técnica"
+   },
+   "replyCount": 0,
+   "reactions": [],
+   "replyTo": null,
+   "deleted": false,
+   "saved": false
+  },
+  {
+   "id": "c221433dfda895e3328c5102f",
+   "channelId": "c7f77b485b329c6ecd8b7dfba",
+   "parentId": null,
+   "kind": "TEXT",
+   "body": "Ya quedó el convenio con la cafetería para el área de staff ☕",
+   "attachment": null,
+   "pinnedAt": null,
+   "editedAt": null,
+   "createdAt": "2026-10-04T22:08:40.463Z",
+   "author": {
+    "id": "ce08d1dd4a18c703877519be3",
+    "fullName": "Valeria Ortega Luna",
+    "title": "Convenios y patrocinios"
+   },
+   "replyCount": 0,
+   "reactions": [
+    {
+     "emoji": "🙌",
+     "count": 1,
+     "userIds": [
+      "c7c0ae50aaa46fda9060d0947"
+     ],
+     "users": [
+      {
+       "id": "c7c0ae50aaa46fda9060d0947",
+       "fullName": "Mateo Ríos Calderón"
+      }
+     ]
+    }
+   ],
+   "replyTo": null,
+   "deleted": false,
+   "saved": false
+  },
+  {
+   "id": "c3b12e42adbff572176c30533",
+   "channelId": "c7f77b485b329c6ecd8b7dfba",
+   "parentId": null,
+   "kind": "TEXT",
+   "body": "Gracias, Valeria. Recuerden subir sus entregas a las tareas antes del viernes.",
+   "attachment": null,
+   "pinnedAt": null,
+   "editedAt": null,
+   "createdAt": "2026-10-05T00:28:40.463Z",
+   "author": {
+    "id": "c56ea4d06e6e4b57237532cd4",
+    "fullName": "Lucía Méndez Arriaga",
+    "title": "Producción ejecutiva"
+   },
+   "replyCount": 0,
+   "reactions": [],
+   "replyTo": null,
+   "deleted": false,
+   "saved": false
+  }
+ ],
+ "hasMore": false,
+ "hasNewer": false
+}

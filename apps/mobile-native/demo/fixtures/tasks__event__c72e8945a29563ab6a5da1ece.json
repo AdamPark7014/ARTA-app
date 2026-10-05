@@ -1,0 +1,103 @@
+[
+ {
+  "id": "c0ff94239b1abee4e0e69e430",
+  "eventId": "c72e8945a29563ab6a5da1ece",
+  "organizationId": "org_arta_store_review",
+  "assigneeId": "cff66a001f339cdbbe0796ce0",
+  "createdById": "c56ea4d06e6e4b57237532cd4",
+  "title": "Cotizar transporte para el equipo técnico",
+  "module": null,
+  "detail": "Dos camionetas para 12 personas, del hotel al recinto, ambos días del festival.",
+  "status": "IN_PROGRESS",
+  "dueAt": "2026-10-07T20:00:00.000Z",
+  "seenAt": "2026-10-05T01:08:44.291Z",
+  "submittedAt": null,
+  "completionNote": null,
+  "approvedById": null,
+  "approvedAt": null,
+  "rejectedById": null,
+  "rejectedAt": null,
+  "rejectionNote": null,
+  "createdAt": "2026-10-03T21:08:40.463Z",
+  "updatedAt": "2026-10-05T01:08:44.292Z",
+  "assignee": {
+   "id": "cff66a001f339cdbbe0796ce0",
+   "fullName": "Demo Revisor",
+   "email": "revision.tiendas@artaproducciones.com"
+  },
+  "coAssignees": [],
+  "createdBy": {
+   "id": "c56ea4d06e6e4b57237532cd4",
+   "fullName": "Lucía Méndez Arriaga"
+  },
+  "approvedBy": null,
+  "rejectedBy": null,
+  "event": {
+   "id": "c72e8945a29563ab6a5da1ece",
+   "name": "Festival Sabores del Valle",
+   "entity": "ARTA",
+   "status": "ACTIVE"
+  },
+  "evidences": [],
+  "activities": [
+   {
+    "id": "cf5eea243786a7f85b4170464",
+    "taskId": "c0ff94239b1abee4e0e69e430",
+    "actorId": "c56ea4d06e6e4b57237532cd4",
+    "action": "created",
+    "detail": "Cotizar transporte para el equipo técnico",
+    "metaJson": {
+     "eventId": "c72e8945a29563ab6a5da1ece",
+     "assigneeId": "cff66a001f339cdbbe0796ce0",
+     "assigneeIds": [
+      "cff66a001f339cdbbe0796ce0"
+     ]
+    },
+    "createdAt": "2026-10-03T21:08:40.463Z",
+    "actor": {
+     "id": "c56ea4d06e6e4b57237532cd4",
+     "fullName": "Lucía Méndez Arriaga"
+    }
+   },
+   {
+    "id": "cd9c3f603046bf04c6e275936",
+    "taskId": "c0ff94239b1abee4e0e69e430",
+    "actorId": "c56ea4d06e6e4b57237532cd4",
+    "action": "assigned",
+    "detail": "Demo Revisor",
+    "metaJson": null,
+    "createdAt": "2026-10-03T21:08:41.463Z",
+    "actor": {
+     "id": "c56ea4d06e6e4b57237532cd4",
+     "fullName": "Lucía Méndez Arriaga"
+    }
+   },
+   {
+    "id": "c55335b537b91ba7ea961c016",
+    "taskId": "c0ff94239b1abee4e0e69e430",
+    "actorId": "cff66a001f339cdbbe0796ce0",
+    "action": "status_changed",
+    "detail": "IN_PROGRESS",
+    "metaJson": {
+     "to": "IN_PROGRESS",
+     "from": "OPEN"
+    },
+    "createdAt": "2026-10-04T20:08:40.463Z",
+    "actor": {
+     "id": "cff66a001f339cdbbe0796ce0",
+     "fullName": "Demo Revisor"
+    }
+   }
+  ],
+  "assigneeIds": [
+   "cff66a001f339cdbbe0796ce0"
+  ],
+  "assignees": [
+   {
+    "id": "cff66a001f339cdbbe0796ce0",
+    "fullName": "Demo Revisor",
+    "email": "revision.tiendas@artaproducciones.com"
+   }
+  ]
+ }
+]

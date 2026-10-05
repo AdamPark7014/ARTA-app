@@ -1,0 +1,104 @@
+[
+ {
+  "id": "c41beeac0d55eaa41691f6358",
+  "userId": "cff66a001f339cdbbe0796ce0",
+  "organizationId": "org_arta_store_review",
+  "type": "advance.requested",
+  "title": "Valeria O. pidió un anticipo",
+  "body": "Anticipo de hospedaje · $8,400.00 · Noche de Boleros",
+  "linkUrl": "/advances?advance=c85cddb60c1a554c364379e5b",
+  "actorId": "ce08d1dd4a18c703877519be3",
+  "entity": "ARTA",
+  "readAt": null,
+  "createdAt": "2026-10-05T00:33:40.463Z",
+  "actor": {
+   "id": "ce08d1dd4a18c703877519be3",
+   "fullName": "Valeria Ortega Luna"
+  }
+ },
+ {
+  "id": "cc7663271e2bc92f01d757e24",
+  "userId": "cff66a001f339cdbbe0796ce0",
+  "organizationId": "org_arta_store_review",
+  "type": "task.submitted",
+  "title": "Mateo Ríos Calderón entregó una tarea para tu revisión",
+  "body": "Cerrar la lista de medios para la rueda de prensa · Eco de Volcanes · Gira 2026",
+  "linkUrl": "/events/c159b2f535555db3effcb05ba?tab=tasks&task=ced2acc3fbe422e89ea322ed0",
+  "actorId": "c7c0ae50aaa46fda9060d0947",
+  "entity": "EXPLANADA",
+  "readAt": null,
+  "createdAt": "2026-10-04T23:58:40.463Z",
+  "actor": {
+   "id": "c7c0ae50aaa46fda9060d0947",
+   "fullName": "Mateo Ríos Calderón"
+  }
+ },
+ {
+  "id": "c5eb7d2d20aaca6f023c4e3c4",
+  "userId": "cff66a001f339cdbbe0796ce0",
+  "organizationId": "org_arta_store_review",
+  "type": "task.assigned",
+  "title": "Lucía Méndez Arriaga te asignó una tarea",
+  "body": "Confirmar el rider técnico con el Trío Luna de Plata · Noche de Boleros",
+  "linkUrl": "/events/cbf9b2784b0797342c1629b09?tab=tasks&task=cda29bbe09655a95f799bee13",
+  "actorId": "c56ea4d06e6e4b57237532cd4",
+  "entity": "ARTA",
+  "readAt": null,
+  "createdAt": "2026-10-04T23:03:40.463Z",
+  "actor": {
+   "id": "c56ea4d06e6e4b57237532cd4",
+   "fullName": "Lucía Méndez Arriaga"
+  }
+ },
+ {
+  "id": "cc92f66226c462043355fa65f",
+  "userId": "cff66a001f339cdbbe0796ce0",
+  "organizationId": "org_arta_store_review",
+  "type": "po.requested",
+  "title": "Mateo Ríos Calderón pidió una orden de compra",
+  "body": "Sonido Quetzal Pro · $37,700.00 · Noche de Boleros",
+  "linkUrl": "/purchase-orders?po=c19814ce6acbddb0c891d376a",
+  "actorId": "c7c0ae50aaa46fda9060d0947",
+  "entity": "ARTA",
+  "readAt": null,
+  "createdAt": "2026-10-04T20:08:40.463Z",
+  "actor": {
+   "id": "c7c0ae50aaa46fda9060d0947",
+   "fullName": "Mateo Ríos Calderón"
+  }
+ },
+ {
+  "id": "c935a9f2f7f9ab375c8972ec5",
+  "userId": "cff66a001f339cdbbe0796ce0",
+  "organizationId": "org_arta_store_review",
+  "type": "task.assigned",
+  "title": "Lucía Méndez Arriaga te asignó una tarea",
+  "body": "Cotizar transporte para el equipo técnico · Festival Sabores del Valle",
+  "linkUrl": "/events/c72e8945a29563ab6a5da1ece?tab=tasks&task=c0ff94239b1abee4e0e69e430",
+  "actorId": "c56ea4d06e6e4b57237532cd4",
+  "entity": "ARTA",
+  "readAt": "2026-10-03T21:18:40.463Z",
+  "createdAt": "2026-10-03T21:08:40.463Z",
+  "actor": {
+   "id": "c56ea4d06e6e4b57237532cd4",
+   "fullName": "Lucía Méndez Arriaga"
+  }
+ },
+ {
+  "id": "c51744f5d4498f659652a0ed2",
+  "userId": "cff66a001f339cdbbe0796ce0",
+  "organizationId": "org_arta_store_review",
+  "type": "event.created",
+  "title": "Lucía M. creó un evento",
+  "body": "Eco de Volcanes · Gira 2026 · 30 oct 2026, 9:00 p.m.",
+  "linkUrl": "/events/c159b2f535555db3effcb05ba",
+  "actorId": "c56ea4d06e6e4b57237532cd4",
+  "entity": "EXPLANADA",
+  "readAt": "2026-10-02T01:18:40.463Z",
+  "createdAt": "2026-10-02T01:08:40.463Z",
+  "actor": {
+   "id": "c56ea4d06e6e4b57237532cd4",
+   "fullName": "Lucía Méndez Arriaga"
+  }
+ }
+]

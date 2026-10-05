@@ -1,0 +1,104 @@
+{
+ "messages": [
+  {
+   "id": "cc23afd78913f73c599820483",
+   "channelId": "c65090e75d0dc02ce58fd8254",
+   "parentId": null,
+   "kind": "SYSTEM",
+   "body": "Lucía Méndez Arriaga abrió el canal del evento",
+   "attachment": null,
+   "pinnedAt": null,
+   "editedAt": null,
+   "createdAt": "2026-10-03T19:08:40.463Z",
+   "author": {
+    "id": "c56ea4d06e6e4b57237532cd4",
+    "fullName": "Lucía Méndez Arriaga",
+    "title": "Producción ejecutiva"
+   },
+   "replyCount": 0,
+   "reactions": [],
+   "replyTo": null,
+   "deleted": false,
+   "saved": false
+  },
+  {
+   "id": "c89ba7a85e82dbd2fe409e404",
+   "channelId": "c65090e75d0dc02ce58fd8254",
+   "parentId": null,
+   "kind": "TEXT",
+   "body": "Aquí coordinamos todo lo de la Noche de Boleros. El trío llega el jueves a mediodía.",
+   "attachment": null,
+   "pinnedAt": "2026-10-03T20:09:40.463Z",
+   "editedAt": null,
+   "createdAt": "2026-10-03T20:08:40.463Z",
+   "author": {
+    "id": "c56ea4d06e6e4b57237532cd4",
+    "fullName": "Lucía Méndez Arriaga",
+    "title": "Producción ejecutiva"
+   },
+   "replyCount": 0,
+   "reactions": [],
+   "replyTo": null,
+   "deleted": false,
+   "saved": false
+  },
+  {
+   "id": "cf124f3f066ec86352ae22bfd",
+   "channelId": "c65090e75d0dc02ce58fd8254",
+   "parentId": null,
+   "kind": "TEXT",
+   "body": "Ya tengo la cotización de audio; la subí como orden de compra para autorización.",
+   "attachment": null,
+   "pinnedAt": null,
+   "editedAt": null,
+   "createdAt": "2026-10-04T20:08:40.463Z",
+   "author": {
+    "id": "c7c0ae50aaa46fda9060d0947",
+    "fullName": "Mateo Ríos Calderón",
+    "title": "Coordinación técnica"
+   },
+   "replyCount": 1,
+   "reactions": [
+    {
+     "emoji": "👍",
+     "count": 1,
+     "userIds": [
+      "c56ea4d06e6e4b57237532cd4"
+     ],
+     "users": [
+      {
+       "id": "c56ea4d06e6e4b57237532cd4",
+       "fullName": "Lucía Méndez Arriaga"
+      }
+     ]
+    }
+   ],
+   "replyTo": null,
+   "deleted": false,
+   "saved": false
+  },
+  {
+   "id": "cda49563f5761711a237613dd",
+   "channelId": "c65090e75d0dc02ce58fd8254",
+   "parentId": null,
+   "kind": "TEXT",
+   "body": "Pedí el anticipo del hospedaje; queda pendiente de aprobación.",
+   "attachment": null,
+   "pinnedAt": null,
+   "editedAt": null,
+   "createdAt": "2026-10-05T00:38:40.463Z",
+   "author": {
+    "id": "ce08d1dd4a18c703877519be3",
+    "fullName": "Valeria Ortega Luna",
+    "title": "Convenios y patrocinios"
+   },
+   "replyCount": 0,
+   "reactions": [],
+   "replyTo": null,
+   "deleted": false,
+   "saved": false
+  }
+ ],
+ "hasMore": false,
+ "hasNewer": false
+}

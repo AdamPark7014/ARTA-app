@@ -1,0 +1,22 @@
+{
+ "entity": "EXPLANADA",
+ "kpis": {
+  "total": 0,
+  "pipeline": 0,
+  "paid": 0,
+  "authRate": 0,
+  "avgAgingDays": 0,
+  "agingOver7": 0
+ },
+ "byStatus": {},
+ "byRubro": [],
+ "byVendor": [],
+ "agingBuckets": {
+  "d0_3": 0,
+  "d4_7": 0,
+  "d8_14": 0,
+  "d15plus": 0
+ },
+ "agingQueue": [],
+ "orders": []
+}

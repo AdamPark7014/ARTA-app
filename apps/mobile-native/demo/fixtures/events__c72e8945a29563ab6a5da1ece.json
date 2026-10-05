@@ -1,0 +1,195 @@
+{
+ "id": "c72e8945a29563ab6a5da1ece",
+ "organizationId": "org_arta_store_review",
+ "entity": "ARTA",
+ "name": "Festival Sabores del Valle",
+ "artist": "Varios artistas",
+ "promoter": "Arta Demo",
+ "venue": "Explanada Jardines del Alba",
+ "city": "Puebla, Puebla",
+ "startsAt": "2026-10-16T18:00:00.000Z",
+ "endsAt": "2026-10-17T04:00:00.000Z",
+ "status": "ACTIVE",
+ "campaignType": "NONE",
+ "notes": "Montaje de carpas el día anterior desde las 8:00.",
+ "description": "Festival gastronómico con escenario de música en vivo y 30 expositores.",
+ "schedule": "12:00 a 22:00",
+ "functions": 2,
+ "createdById": "c56ea4d06e6e4b57237532cd4",
+ "createdAt": "2026-10-02T01:08:40.463Z",
+ "updatedAt": "2026-10-05T01:08:41.875Z",
+ "createdBy": {
+  "id": "c56ea4d06e6e4b57237532cd4",
+  "fullName": "Lucía Méndez Arriaga"
+ },
+ "checklists": [],
+ "purchaseOrders": [
+  {
+   "id": "c1220cf608964b389106426c2",
+   "eventId": "c72e8945a29563ab6a5da1ece",
+   "rubro": "catering",
+   "vendorName": "Banquetes La Cazuela Azul",
+   "description": "Comidas del staff y artistas durante el montaje y el festival.",
+   "amount": "12800",
+   "currency": "MXN",
+   "status": "AUTHORIZED",
+   "paymentMethod": "TRANSFERENCIA",
+   "payeeType": "PROVEEDOR",
+   "withIva": false,
+   "createdById": "c7c0ae50aaa46fda9060d0947",
+   "authorizedById": "cff66a001f339cdbbe0796ce0",
+   "authorizedAt": "2026-10-03T23:08:40.463Z",
+   "paidAt": null,
+   "createdAt": "2026-10-03T01:08:40.463Z",
+   "updatedAt": "2026-10-05T01:08:41.955Z",
+   "lines": [
+    {
+     "id": "cb473cf3c1f38da1bb49a05ff",
+     "orderId": "c1220cf608964b389106426c2",
+     "concept": "Comida para staff y artistas (60 personas)",
+     "qty": "60",
+     "unitPrice": "180",
+     "total": "10800"
+    },
+    {
+     "id": "c1a63e2b3f61d28f5c7d53d6d",
+     "orderId": "c1220cf608964b389106426c2",
+     "concept": "Coffee break de montaje",
+     "qty": "1",
+     "unitPrice": "2000",
+     "total": "2000"
+    }
+   ],
+   "proofs": [],
+   "createdBy": {
+    "fullName": "Mateo Ríos Calderón"
+   },
+   "authorizedBy": {
+    "fullName": "Demo Revisor"
+   }
+  }
+ ],
+ "financeRuns": [
+  {
+   "id": "cab7148140f9c66c1b09d5654",
+   "eventId": "c72e8945a29563ab6a5da1ece",
+   "title": "Corrida financiera",
+   "dataJson": {
+    "rows": [],
+    "totalIncome": 0,
+    "totalExpense": 0
+   },
+   "locked": false,
+   "status": "DRAFT",
+   "revision": 0,
+   "createdById": "c56ea4d06e6e4b57237532cd4",
+   "lastEditedById": null,
+   "lastEditedAt": null,
+   "sealedById": null,
+   "sealedAt": null,
+   "reopenReason": null,
+   "createdAt": "2026-10-05T01:08:41.881Z",
+   "updatedAt": "2026-10-05T01:08:41.881Z"
+  }
+ ],
+ "campaign": null,
+ "ticketingSetups": [],
+ "tasks": [
+  {
+   "id": "c0ff94239b1abee4e0e69e430",
+   "eventId": "c72e8945a29563ab6a5da1ece",
+   "organizationId": "org_arta_store_review",
+   "assigneeId": "cff66a001f339cdbbe0796ce0",
+   "createdById": "c56ea4d06e6e4b57237532cd4",
+   "title": "Cotizar transporte para el equipo técnico",
+   "module": null,
+   "detail": "Dos camionetas para 12 personas, del hotel al recinto, ambos días del festival.",
+   "status": "IN_PROGRESS",
+   "dueAt": "2026-10-07T20:00:00.000Z",
+   "seenAt": "2026-10-05T01:08:44.291Z",
+   "submittedAt": null,
+   "completionNote": null,
+   "approvedById": null,
+   "approvedAt": null,
+   "rejectedById": null,
+   "rejectedAt": null,
+   "rejectionNote": null,
+   "createdAt": "2026-10-03T21:08:40.463Z",
+   "updatedAt": "2026-10-05T01:08:44.292Z",
+   "assignee": {
+    "id": "cff66a001f339cdbbe0796ce0",
+    "fullName": "Demo Revisor"
+   },
+   "coAssignees": [],
+   "createdBy": {
+    "id": "c56ea4d06e6e4b57237532cd4",
+    "fullName": "Lucía Méndez Arriaga"
+   },
+   "approvedBy": null,
+   "rejectedBy": null,
+   "evidences": [],
+   "activities": [
+    {
+     "id": "cf5eea243786a7f85b4170464",
+     "taskId": "c0ff94239b1abee4e0e69e430",
+     "actorId": "c56ea4d06e6e4b57237532cd4",
+     "action": "created",
+     "detail": "Cotizar transporte para el equipo técnico",
+     "metaJson": {
+      "eventId": "c72e8945a29563ab6a5da1ece",
+      "assigneeId": "cff66a001f339cdbbe0796ce0",
+      "assigneeIds": [
+       "cff66a001f339cdbbe0796ce0"
+      ]
+     },
+     "createdAt": "2026-10-03T21:08:40.463Z",
+     "actor": {
+      "id": "c56ea4d06e6e4b57237532cd4",
+      "fullName": "Lucía Méndez Arriaga"
+     }
+    },
+    {
+     "id": "cd9c3f603046bf04c6e275936",
+     "taskId": "c0ff94239b1abee4e0e69e430",
+     "actorId": "c56ea4d06e6e4b57237532cd4",
+     "action": "assigned",
+     "detail": "Demo Revisor",
+     "metaJson": null,
+     "createdAt": "2026-10-03T21:08:41.463Z",
+     "actor": {
+      "id": "c56ea4d06e6e4b57237532cd4",
+      "fullName": "Lucía Méndez Arriaga"
+     }
+    },
+    {
+     "id": "c55335b537b91ba7ea961c016",
+     "taskId": "c0ff94239b1abee4e0e69e430",
+     "actorId": "cff66a001f339cdbbe0796ce0",
+     "action": "status_changed",
+     "detail": "IN_PROGRESS",
+     "metaJson": {
+      "to": "IN_PROGRESS",
+      "from": "OPEN"
+     },
+     "createdAt": "2026-10-04T20:08:40.463Z",
+     "actor": {
+      "id": "cff66a001f339cdbbe0796ce0",
+      "fullName": "Demo Revisor"
+     }
+    }
+   ],
+   "assigneeIds": [
+    "cff66a001f339cdbbe0796ce0"
+   ],
+   "assignees": [
+    {
+     "id": "cff66a001f339cdbbe0796ce0",
+     "fullName": "Demo Revisor"
+    }
+   ]
+  }
+ ],
+ "sponsors": [],
+ "slots": [],
+ "files": []
+}

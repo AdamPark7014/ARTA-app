@@ -1,0 +1,23 @@
+{
+ "config": {
+  "kind": "payDays",
+  "enabled": false,
+  "days": [
+   1,
+   3,
+   5
+  ],
+  "start": "00:00",
+  "end": "24:00",
+  "timeZone": "America/Mexico_City",
+  "note": ""
+ },
+ "open": true,
+ "scheduleLabel": "cualquier día",
+ "nextOpenLabel": null,
+ "nowMinutes": 1334,
+ "canRequestNow": true,
+ "canPayNow": true,
+ "bypass": false,
+ "canEdit": false
+}

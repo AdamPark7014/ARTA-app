@@ -1,0 +1,21 @@
+[
+ {
+  "id": "c4ff0ecc6165b3cfaf06ffc4b",
+  "organizationId": "org_arta_store_review",
+  "entity": "ARTA",
+  "date": "2026-10-09",
+  "text": "Prueba de sonido 16:00 · llevar el plano de escenario impreso.",
+  "createdById": "c56ea4d06e6e4b57237532cd4",
+  "updatedById": "c56ea4d06e6e4b57237532cd4",
+  "createdAt": "2026-10-05T01:08:42.091Z",
+  "updatedAt": "2026-10-05T01:08:42.091Z",
+  "createdBy": {
+   "id": "c56ea4d06e6e4b57237532cd4",
+   "fullName": "Lucía Méndez Arriaga"
+  },
+  "updatedBy": {
+   "id": "c56ea4d06e6e4b57237532cd4",
+   "fullName": "Lucía Méndez Arriaga"
+  }
+ }
+]

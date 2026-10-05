@@ -1,0 +1,48 @@
+{
+ "id": "c65090e75d0dc02ce58fd8254",
+ "kind": "PUBLIC",
+ "slug": "evento-trio-luna-de-plata-noche-de-boleros-629b09",
+ "name": "Trío Luna de Plata · Noche de Boleros",
+ "topic": "Producción del evento",
+ "description": null,
+ "eventId": "cbf9b2784b0797342c1629b09",
+ "peer": null,
+ "isGroupDm": false,
+ "postingRestricted": false,
+ "canPost": true,
+ "canManage": false,
+ "muted": false,
+ "mutedUntil": null,
+ "lastReadAt": "2026-10-04T21:08:40.463Z",
+ "memberCount": 4,
+ "members": [
+  {
+   "id": "c56ea4d06e6e4b57237532cd4",
+   "fullName": "Lucía Méndez Arriaga",
+   "title": "Producción ejecutiva",
+   "role": "owner",
+   "lastReadAt": "2026-10-05T01:08:40.463Z"
+  },
+  {
+   "id": "c7c0ae50aaa46fda9060d0947",
+   "fullName": "Mateo Ríos Calderón",
+   "title": "Coordinación técnica",
+   "role": "member",
+   "lastReadAt": "2026-10-05T01:08:40.463Z"
+  },
+  {
+   "id": "ce08d1dd4a18c703877519be3",
+   "fullName": "Valeria Ortega Luna",
+   "title": "Convenios y patrocinios",
+   "role": "member",
+   "lastReadAt": "2026-10-05T01:08:40.463Z"
+  },
+  {
+   "id": "cff66a001f339cdbbe0796ce0",
+   "fullName": "Demo Revisor",
+   "title": "Cuenta de demostración · App Store y Google Play",
+   "role": "member",
+   "lastReadAt": "2026-10-04T21:08:40.463Z"
+  }
+ ]
+}
