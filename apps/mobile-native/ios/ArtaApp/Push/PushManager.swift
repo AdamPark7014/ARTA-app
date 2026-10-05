@@ -89,6 +89,10 @@ final class PushManager: NSObject, UNUserNotificationCenterDelegate {
 
     /// Tras iniciar sesión: pide permiso si aún no se decidió y registra el token vigente.
     func requestPermissionAndRegister() async {
+        #if DEBUG
+        // Modo demo: ni diálogo de permiso (bloquearía las pruebas de interfaz) ni registro.
+        if DemoMode.isActive { return }
+        #endif
         let center = UNUserNotificationCenter.current()
         let settings = await center.notificationSettings()
         if settings.authorizationStatus == .notDetermined {
@@ -120,6 +124,9 @@ final class PushManager: NSObject, UNUserNotificationCenterDelegate {
     }
 
     fileprivate func send(token: String) async {
+        #if DEBUG
+        if DemoMode.isActive { return }
+        #endif
         guard !token.isEmpty, ApiClient.shared.hasSession() else { return }
         let body = RegisterPushBody(
             token: token,

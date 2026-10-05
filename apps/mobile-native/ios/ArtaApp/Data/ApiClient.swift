@@ -85,6 +85,10 @@ final class ApiClient {
         config.timeoutIntervalForRequest = 30
         config.timeoutIntervalForResource = 120
         config.waitsForConnectivity = false
+        #if DEBUG
+        // Modo demo (`-ArtaDemo YES`): el API lo contestan las fixtures, sin red.
+        DemoMode.install(on: config)
+        #endif
         session = URLSession(configuration: config)
         let uploads = URLSessionConfiguration.default
         uploads.httpCookieStorage = jar
@@ -92,6 +96,9 @@ final class ApiClient {
         uploads.httpShouldSetCookies = true
         uploads.timeoutIntervalForRequest = 120
         uploads.timeoutIntervalForResource = 60 * 60
+        #if DEBUG
+        DemoMode.install(on: uploads)
+        #endif
         uploadSession = URLSession(configuration: uploads)
         cookies.cookieAcceptPolicy = .always
     }

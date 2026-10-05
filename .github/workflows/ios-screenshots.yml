@@ -1,0 +1,587 @@
+name: iOS · capturas de App Store (simulador)
+
+# Capturas de la ficha de App Store desde el simulador de iPhone de 6.9" (iPhone
+# Pro Max más nuevo del runner), SIN login, SIN red y SIN secretos: la app se
+# compila en Debug y arranca en MODO DEMO (`-ArtaDemo YES`), que sirve las
+# respuestas grabadas en apps/mobile-native/demo/fixtures (organización ficticia).
+# La recorre la prueba ArtaAppUITests/StoreScreenshotsUITests y deja los PNG en el
+# artefacto `ios-screenshots`. Basado en NEXARA-app/.github/workflows/ios-screenshots.yml.
+#
+# Cómo se lanza: pestaña Actions > «iOS · capturas de App Store (simulador)» > Run workflow.
+#
+# Qué deja:
+#   - Artefacto `ios-screenshots`: 01-inicio.png … 07-avisos.png (1320x2868 o 1290x2796,
+#     verticales, sin canal alfa) + LEEME.txt con dispositivo, runtime y Xcode.
+#   - Artefacto `ios-screenshots-logs`: logs de xcodebuild, el .xcresult y los
+#     árboles de accesibilidad (`dbg-*`) por si alguna pantalla no salió.
+# No commitea nada y no toca la firma: ios-testflight.yml sigue igual.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-screenshots
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  capturas:
+    name: Capturas en simulador 6.9"
+    runs-on: macos-15
+    timeout-minutes: 75
+    env:
+      IOS_DIR: ${{ github.workspace }}/apps/mobile-native/ios
+      OUT_DIR: ${{ github.workspace }}/build/ios-screenshots
+      LOGS_DIR: ${{ github.workspace }}/build/logs
+      RESULT: ${{ github.workspace }}/build/xcresult/capturas.xcresult
+      RAW_DIR: ${{ github.workspace }}/build/raw
+      DIRECT_DIR: ${{ github.workspace }}/build/direct
+      DERIVED: ${{ github.workspace }}/build/DerivedData
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Xcode estable más reciente
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      # Como NEXARA: quedarse con la Xcode estable que traiga el SDK de iOS más
+      # nuevo (sin betas); su runtime de simulador es el que trae los Pro Max nuevos.
+      - name: Elegir la Xcode con el SDK de iOS más nuevo
+        run: |
+          set -euo pipefail
+          best_path=""
+          best_ver=""
+          for X in /Applications/Xcode*.app; do
+            [ -d "$X/Contents/Developer" ] || continue
+            case "$X" in *[Bb]eta*|*_RC*|*[Cc]andidate*) continue ;; esac
+            SDK_VER="$(DEVELOPER_DIR="$X/Contents/Developer" xcrun --sdk iphoneos --show-sdk-version 2>/dev/null || true)"
+            [ -n "$SDK_VER" ] || continue
+            echo "$X: iPhoneOS SDK $SDK_VER"
+            if [ -z "$best_ver" ] || [ "$(printf '%s\n' "$best_ver" "$SDK_VER" | sort -V | tail -n1)" = "$SDK_VER" ]; then
+              best_ver="$SDK_VER"
+              best_path="$X/Contents/Developer"
+            fi
+          done
+          if [ -n "$best_path" ]; then
+            echo "Seleccionando $best_path (SDK $best_ver)"
+            sudo xcode-select -s "$best_path"
+          fi
+          xcodebuild -version
+          sw_vers
+
+      - name: Asegurar el runtime del simulador de iOS
+        run: |
+          set -uo pipefail
+          sudo xcodebuild -license accept || true
+          sudo xcodebuild -runFirstLaunch || true
+          RUNTIMES="$(xcrun simctl list runtimes available 2>&1 || true)"
+          echo "$RUNTIMES"
+          if ! grep -q '^iOS ' <<<"$RUNTIMES"; then
+            echo "No hay runtime de iOS: descargando la plataforma (hasta 3 intentos)..."
+            n=0
+            until [ $n -ge 3 ]; do
+              if xcodebuild -downloadPlatform iOS; then break; fi
+              n=$((n+1))
+              sleep 30
+            done
+            RUNTIMES="$(xcrun simctl list runtimes available 2>&1 || true)"
+            echo "$RUNTIMES"
+          fi
+          if ! grep -q '^iOS ' <<<"$RUNTIMES"; then
+            echo "::error::No hay ningún runtime de iOS para el simulador"
+            exit 1
+          fi
+          echo "::group::Tipos de iPhone disponibles"
+          xcrun simctl list devicetypes | grep 'iPhone' || true
+          echo "::endgroup::"
+
+      - name: Instalar XcodeGen
+        run: |
+          set -euo pipefail
+          brew install xcodegen
+          xcodegen --version
+
+      - name: Caché de paquetes Swift
+        uses: actions/cache@v4
+        with:
+          path: apps/mobile-native/ios/.spm-cache
+          key: spm-${{ runner.os }}-${{ hashFiles('apps/mobile-native/ios/project.yml') }}
+          restore-keys: spm-${{ runner.os }}-
+
+      - name: Generar ArtaApp.xcodeproj
+        working-directory: apps/mobile-native/ios
+        run: |
+          set -euo pipefail
+          xcodegen generate --spec project.yml
+          test -d ArtaApp.xcodeproj
+
+      # Si falta el target de UI tests, las fixtures o el esquema, se corta YA con un
+      # mensaje claro y no tras 15 minutos de compilación.
+      - name: Comprobar target de UI tests, fixtures y esquema
+        working-directory: apps/mobile-native/ios
+        run: |
+          set -euo pipefail
+          test -f ArtaAppUITests/StoreScreenshotsUITests.swift || { echo "::error::Falta ArtaAppUITests/StoreScreenshotsUITests.swift"; exit 1; }
+          test -f ../demo/fixtures/index.json || { echo "::error::Faltan las fixtures del modo demo (apps/mobile-native/demo/fixtures/index.json)"; exit 1; }
+          grep -q 'ArtaAppUITests' ArtaApp.xcodeproj/project.pbxproj || { echo "::error::project.yml no declara el target ArtaAppUITests"; exit 1; }
+          SCHEME=ArtaApp.xcodeproj/xcshareddata/xcschemes/ArtaApp.xcscheme
+          test -f "$SCHEME" || { echo "::error::No existe el esquema compartido ArtaApp"; exit 1; }
+          grep -q 'ArtaAppUITests' "$SCHEME" || { echo "::error::El esquema ArtaApp no incluye ArtaAppUITests en su acción de test"; exit 1; }
+          echo "Target, fixtures y esquema presentes."
+
+      - name: Escribir ayudantes
+        run: |
+          set -euo pipefail
+          HELPERS="$RUNNER_TEMP/shots-helpers"
+          mkdir -p "$HELPERS"
+          echo "HELPERS=$HELPERS" >> "$GITHUB_ENV"
+
+          cat > "$HELPERS/resolver.py" <<'PY'
+          #!/usr/bin/env python3
+          """Resuelve el runtime de iOS y los iPhone de 6.9" del runner.
+
+              resolver.py runtime     -> identificador del runtime de iOS más nuevo
+              resolver.py candidatos  -> líneas "nombre<TAB>identificador", del Pro Max más nuevo al más viejo
+          """
+          import json
+          import re
+          import subprocess
+          import sys
+
+
+          def simctl_json(*args):
+              salida = subprocess.check_output(["xcrun", "simctl", "list", "--json"] + list(args), text=True)
+              return json.loads(salida)
+
+
+          def runtime():
+              encontrados = []
+              for r in simctl_json("runtimes").get("runtimes", []):
+                  ident = r.get("identifier", "")
+                  if ".SimRuntime.iOS-" not in ident or r.get("isAvailable") is False:
+                      continue
+                  version = tuple(int(x) for x in re.findall(r"\d+", r.get("version", "0")))
+                  encontrados.append((version, ident))
+              encontrados.sort()
+              return encontrados[-1][1] if encontrados else ""
+
+
+          def candidatos():
+              # iPhone 15 Pro Max en adelante: 1290x2796 o 1320x2868, ambos de 6.9" para App Store.
+              pro = []
+              for t in simctl_json("devicetypes").get("devicetypes", []):
+                  nombre, ident = t.get("name", ""), t.get("identifier", "")
+                  m = re.fullmatch(r"iPhone (\d+) Pro Max", nombre)
+                  if m and ident and int(m.group(1)) >= 15:
+                      pro.append((int(m.group(1)), nombre, ident))
+              pro.sort(reverse=True)
+              return [(nombre, ident) for _, nombre, ident in pro]
+
+
+          if __name__ == "__main__":
+              modo = sys.argv[1] if len(sys.argv) > 1 else ""
+              if modo == "runtime":
+                  print(runtime())
+              elif modo == "candidatos":
+                  for nombre, ident in candidatos():
+                      print(nombre + "\t" + ident)
+              else:
+                  print(__doc__)
+                  sys.exit(2)
+          PY
+
+          cat > "$HELPERS/procesar.py" <<'PY'
+          #!/usr/bin/env python3
+          """Ordena las capturas del test:  procesar.py <crudo> <salida> <directo> <xcresult>
+
+          Fuentes, de más a menos fiable:
+            1. manifest.json de `xcresulttool export attachments` (nombre real del adjunto).
+            2. La carpeta que escribe el propio test (ARTA_SHOT_DIR).
+            3. Cualquier PNG grande dentro del .xcresult (sin nombres; último recurso).
+          Deja en <salida> los NN-nombre.png; lo demás (dbg-*, resumen) en <salida>/../debug.
+          """
+          import glob
+          import json
+          import os
+          import re
+          import shutil
+          import struct
+          import subprocess
+          import sys
+
+          IMAGEN = {".png", ".jpg", ".jpeg", ".heic"}
+          NOMBRE_TIENDA = re.compile(r"^\d{2}-[\w.-]+$")
+          # Xcode nombra el fichero exportado <nombre>_<índice>_<UUID>.<ext>
+          SUFIJO_XCODE = re.compile(r"_\d+_[0-9A-Fa-f]{8}(?:-[0-9A-Fa-f]{4}){3}-[0-9A-Fa-f]{12}$")
+
+
+          def limpiar(nombre):
+              return SUFIJO_XCODE.sub("", os.path.splitext(nombre)[0])
+
+
+          def es_png(ruta):
+              try:
+                  with open(ruta, "rb") as f:
+                      cab = f.read(24)
+              except OSError:
+                  return None
+              if cab[:8] != b"\x89PNG\r\n\x1a\n":
+                  return None
+              return struct.unpack(">II", cab[16:24])
+
+
+          def a_png(origen, destino):
+              if es_png(origen) is not None:
+                  shutil.copyfile(origen, destino)
+                  return True
+              r = subprocess.run(["sips", "-s", "format", "png", origen, "--out", destino],
+                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+              return r.returncode == 0 and os.path.isfile(destino)
+
+
+          def fuente_manifest(crudo):
+              ruta = os.path.join(crudo, "manifest.json")
+              if not os.path.isfile(ruta):
+                  return [], []
+              with open(ruta, encoding="utf-8") as f:
+                  datos = json.load(f)
+              capturas, otros = [], []
+              for prueba in (datos if isinstance(datos, list) else [datos]):
+                  for adj in prueba.get("attachments", []):
+                      fichero = adj.get("exportedFileName")
+                      if not fichero or not os.path.isfile(os.path.join(crudo, fichero)):
+                          continue
+                      origen = os.path.join(crudo, fichero)
+                      nombre = limpiar(adj.get("suggestedHumanReadableName") or fichero)
+                      item = (nombre, origen, adj.get("timestamp", 0))
+                      if os.path.splitext(origen)[1].lower() in IMAGEN and NOMBRE_TIENDA.match(nombre):
+                          capturas.append(item)
+                      else:
+                          otros.append(item)
+              return capturas, otros
+
+
+          def fuente_directa(directo):
+              salida = []
+              for ruta in sorted(glob.glob(os.path.join(directo, "*.png"))):
+                  nombre = os.path.splitext(os.path.basename(ruta))[0]
+                  if NOMBRE_TIENDA.match(nombre):
+                      salida.append((nombre, ruta, 0))
+              return salida
+
+
+          def fuente_xcresult(xcresult):
+              hallados = []
+              for raiz, _dirs, ficheros in os.walk(os.path.join(xcresult, "Data")):
+                  for fichero in ficheros:
+                      ruta = os.path.join(raiz, fichero)
+                      dim = es_png(ruta)
+                      if dim and min(dim) >= 1000:
+                          hallados.append((os.path.getmtime(ruta), ruta))
+              hallados.sort()
+              return [("%02d-captura" % (i + 1), ruta, 0) for i, (_t, ruta) in enumerate(hallados)]
+
+
+          def main():
+              if len(sys.argv) != 5:
+                  print(__doc__)
+                  return 2
+              crudo, salida, directo, xcresult = sys.argv[1:]
+              del_manifest, otros = fuente_manifest(crudo)
+              directas = fuente_directa(directo)
+              if del_manifest and len(del_manifest) >= len(directas):
+                  origen, elegidas = "manifest de xcresulttool", del_manifest
+              elif directas:
+                  origen, elegidas = "carpeta del test (ARTA_SHOT_DIR)", directas
+              else:
+                  origen, elegidas = "PNG sueltos del .xcresult (sin nombres)", fuente_xcresult(xcresult)
+              print("Fuente de las capturas: %s (%d)" % (origen, len(elegidas)))
+
+              por_nombre = {}
+              for nombre, ruta, _ts in sorted(elegidas, key=lambda x: x[2]):
+                  por_nombre[nombre] = ruta
+              os.makedirs(salida, exist_ok=True)
+              depurar = os.path.join(os.path.dirname(salida.rstrip("/")), "debug")
+              os.makedirs(depurar, exist_ok=True)
+
+              escritas = 0
+              for nombre in sorted(por_nombre):
+                  if a_png(por_nombre[nombre], os.path.join(salida, nombre + ".png")):
+                      escritas += 1
+                      print("  + %s.png" % nombre)
+                  else:
+                      print("  ! no se pudo convertir %s" % nombre)
+              for i, (nombre, ruta, _ts) in enumerate(otros):
+                  seguro = re.sub(r"[^\w.-]+", "_", nombre)
+                  shutil.copyfile(ruta, os.path.join(depurar, "%02d-%s%s" % (i, seguro, os.path.splitext(ruta)[1])))
+              print("Capturas escritas: %d" % escritas)
+              return 0 if escritas else 1
+
+
+          if __name__ == "__main__":
+              sys.exit(main())
+          PY
+
+          # App Store Connect rechaza PNG con transparencia: se redibujan en RGB sin alfa.
+          cat > "$HELPERS/aplanar.swift" <<'SWIFT'
+          import CoreGraphics
+          import Foundation
+          import ImageIO
+
+          func aplanar(_ url: URL) -> Bool {
+              guard let src = CGImageSourceCreateWithURL(url as CFURL, nil),
+                    let img = CGImageSourceCreateImageAtIndex(src, 0, nil) else { return false }
+              let info = CGBitmapInfo.byteOrder32Big.union(CGBitmapInfo(rawValue: CGImageAlphaInfo.noneSkipLast.rawValue))
+              guard let ctx = CGContext(data: nil, width: img.width, height: img.height, bitsPerComponent: 8,
+                                        bytesPerRow: 0, space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: info.rawValue) else { return false }
+              ctx.setFillColor(red: 0, green: 0, blue: 0, alpha: 1)
+              ctx.fill(CGRect(x: 0, y: 0, width: img.width, height: img.height))
+              ctx.draw(img, in: CGRect(x: 0, y: 0, width: img.width, height: img.height))
+              guard let out = ctx.makeImage(),
+                    let dest = CGImageDestinationCreateWithURL(url as CFURL, "public.png" as CFString, 1, nil) else { return false }
+              CGImageDestinationAddImage(dest, out, nil)
+              return CGImageDestinationFinalize(dest)
+          }
+
+          let dir = URL(fileURLWithPath: CommandLine.arguments[1])
+          let files = (try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)) ?? []
+          var fallos = 0
+          for url in files where url.pathExtension.lowercased() == "png" {
+              if aplanar(url) { print("Sin alfa: \(url.lastPathComponent)") } else { fallos += 1; print("WARN: no se pudo aplanar \(url.lastPathComponent)") }
+          }
+          exit(fallos == 0 ? 0 : 1)
+          SWIFT
+
+          python3 -m py_compile "$HELPERS/resolver.py" "$HELPERS/procesar.py"
+          echo "Ayudantes listos en $HELPERS"
+
+      # Crea y arranca el simulador, fija la barra de estado, corre el test y exporta
+      # los adjuntos. Nada de aquí aborta el job: si el test falla a medias, se sigue
+      # para subir lo que haya. El veredicto lo da el paso «Resultado».
+      - name: Capturar en el simulador
+        timeout-minutes: 60
+        run: |
+          set +e
+          set -uo pipefail
+          mkdir -p "$OUT_DIR" "$LOGS_DIR" "$(dirname "$RESULT")" "$RAW_DIR" "$DIRECT_DIR" "$DERIVED"
+          if command -v xcbeautify >/dev/null 2>&1; then PRETTY=xcbeautify; else PRETTY=cat; fi
+
+          RUNTIME_ID="$(python3 "$HELPERS/resolver.py" runtime)"
+          echo "Runtime de iOS: ${RUNTIME_ID:-<ninguno>}"
+          if [ -z "$RUNTIME_ID" ]; then
+            echo "::error::No se pudo resolver un runtime de iOS con simctl"
+            exit 1
+          fi
+
+          UDID=""
+          NOMBRE=""
+          while IFS="$(printf '\t')" read -r CAND TIPO; do
+            [ -n "$TIPO" ] || continue
+            if UDID="$(xcrun simctl create "ARTA-capturas" "$TIPO" "$RUNTIME_ID" 2>"$LOGS_DIR/create.err")"; then
+              NOMBRE="$CAND"
+              break
+            fi
+            UDID=""
+            echo "  $CAND no se pudo crear con $RUNTIME_ID: $(cat "$LOGS_DIR/create.err")"
+          done < <(python3 "$HELPERS/resolver.py" candidatos)
+          if [ -z "$UDID" ]; then
+            echo "::error::No hay ningún iPhone Pro Max (6.9\") disponible en esta imagen de macOS"
+            exit 1
+          fi
+          echo "Simulador: $NOMBRE ($UDID)"
+          echo "SIM_NAME=$NOMBRE" >> "$GITHUB_ENV"
+          echo "RUNTIME_ID=$RUNTIME_ID" >> "$GITHUB_ENV"
+
+          xcrun simctl boot "$UDID" || true
+          xcrun simctl bootstatus "$UDID" -b
+          # Barra de estado de anuncio: 9:41, batería llena, cobertura y WiFi completas.
+          xcrun simctl status_bar "$UDID" override \
+            --time 9:41 \
+            --dataNetwork wifi --wifiMode active --wifiBars 3 \
+            --cellularMode active --cellularBars 4 \
+            --batteryState charged --batteryLevel 100 || echo "::warning::status_bar override falló"
+          # La app fuerza el tema oscuro; el sistema igual, para que nada desentone.
+          xcrun simctl ui "$UDID" appearance dark || true
+
+          # Plan B del export: el test también escribe los PNG aquí.
+          export TEST_RUNNER_ARTA_SHOT_DIR="$DIRECT_DIR"
+
+          ejecutar_tests() {
+            local intento="$1"
+            shift
+            rm -rf "$RESULT"
+            (
+              cd "$IOS_DIR" || exit 99
+              xcodebuild test \
+                -project ArtaApp.xcodeproj \
+                -scheme ArtaApp \
+                -configuration Debug \
+                -destination "id=$UDID" \
+                -derivedDataPath "$DERIVED" \
+                -resultBundlePath "$RESULT" \
+                -clonedSourcePackagesDirPath .spm-cache \
+                -only-testing:ArtaAppUITests/StoreScreenshotsUITests \
+                -parallel-testing-enabled NO \
+                -enableCodeCoverage NO \
+                "$@"
+            ) 2>&1 | tee "$LOGS_DIR/xcodebuild-intento$intento.log" | $PRETTY
+            return "${PIPESTATUS[0]}"
+          }
+
+          exportar() {
+            rm -rf "$RAW_DIR" "$OUT_DIR"
+            mkdir -p "$RAW_DIR" "$OUT_DIR"
+            if [ -d "$RESULT" ]; then
+              xcrun xcresulttool export attachments --path "$RESULT" --output-path "$RAW_DIR" > "$LOGS_DIR/export.log" 2>&1 \
+                || { echo "::warning::xcresulttool export attachments falló; se usan las fuentes alternativas"; tail -n 20 "$LOGS_DIR/export.log"; }
+              xcrun xcresulttool get test-results summary --path "$RESULT" > "$LOGS_DIR/resumen-tests.json" 2>&1 || true
+            else
+              echo "::warning::No existe $RESULT (xcodebuild no llegó a ejecutar el test)"
+            fi
+            python3 "$HELPERS/procesar.py" "$RAW_DIR" "$OUT_DIR" "$DIRECT_DIR" "$RESULT"
+          }
+
+          contar() { ls "$OUT_DIR"/*.png 2>/dev/null | wc -l | tr -d ' '; }
+
+          echo "::group::xcodebuild test (Debug, simulador, sin firma)"
+          ejecutar_tests 1 CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY= DEVELOPMENT_TEAM=
+          ESTADO=$?
+          echo "::endgroup::"
+          echo "xcodebuild terminó con código $ESTADO"
+          exportar
+          N="$(contar)"
+
+          if [ "$N" -eq 0 ]; then
+            echo "::warning::Intento 1 sin capturas (xcodebuild=$ESTADO). Últimas líneas:"
+            tail -n 60 "$LOGS_DIR/xcodebuild-intento1.log"
+            echo "::group::xcodebuild test (intento 2: firma ad hoc)"
+            ejecutar_tests 2 CODE_SIGNING_ALLOWED=YES CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM=
+            ESTADO=$?
+            echo "::endgroup::"
+            echo "xcodebuild terminó con código $ESTADO"
+            exportar
+            N="$(contar)"
+          fi
+
+          if [ "$ESTADO" -ne 0 ]; then
+            echo "::warning::xcodebuild test devolvió $ESTADO (capturas: $N). Resumen:"
+            head -c 3000 "$LOGS_DIR/resumen-tests.json" 2>/dev/null || true
+            echo
+          fi
+
+          {
+            echo "Dispositivo: $NOMBRE"
+            echo "Runtime: $RUNTIME_ID"
+            echo "Xcode: $(xcodebuild -version | tr '\n' ' ')"
+            echo "Commit: $GITHUB_SHA"
+            echo "Fecha (UTC): $(date -u +%Y-%m-%d)"
+            echo "Código de xcodebuild test: $ESTADO"
+            echo "Capturas: $N"
+          } > "$OUT_DIR/LEEME.txt"
+
+          xcrun simctl shutdown "$UDID" || true
+          xcrun simctl delete "$UDID" || true
+          exit 0
+
+      - name: Quitar alfa y verificar medidas
+        id: verificar
+        if: ${{ always() }}
+        run: |
+          set +e
+          set -uo pipefail
+          shopt -s nullglob
+          FILES=("$OUT_DIR"/*.png)
+          {
+            echo "## Capturas de iOS (6.9\")"
+            echo ""
+            echo "Simulador: ${SIM_NAME:-?} · runtime ${RUNTIME_ID:-?}"
+            echo ""
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ ${#FILES[@]} -eq 0 ]; then
+            echo "::error::No salió ninguna captura. Revisa el paso «Capturar en el simulador» y el artefacto ios-screenshots-logs."
+            echo "**Sin capturas.** Revisa el artefacto \`ios-screenshots-logs\`." >> "$GITHUB_STEP_SUMMARY"
+            echo "validas=0" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          swift "$HELPERS/aplanar.swift" "$OUT_DIR" || echo "::warning::El aplanado de alfa devolvió error"
+
+          ACEPTADAS="1320x2868 1290x2796"
+          VALIDAS=0
+          {
+            echo "| Archivo | Medidas | Alfa | Estado |"
+            echo "|---|---|---|---|"
+          } >> "$GITHUB_STEP_SUMMARY"
+          for f in "${FILES[@]}"; do
+            W="$(sips -g pixelWidth "$f" | awk '/pixelWidth/ {print $2}')"
+            H="$(sips -g pixelHeight "$f" | awk '/pixelHeight/ {print $2}')"
+            A="$(sips -g hasAlpha "$f" | awk '/hasAlpha/ {print $2}')"
+            ESTADO="ok"
+            case " $ACEPTADAS " in
+              *" ${W}x${H} "*) ;;
+              *) ESTADO="medida no aceptada (App Store 6.9\": $ACEPTADAS, vertical)"; echo "::warning::$(basename "$f") mide ${W}x${H}" ;;
+            esac
+            if [ "$A" != "no" ]; then
+              ESTADO="$ESTADO; conserva alfa"
+              echo "::warning::$(basename "$f") conserva canal alfa (hasAlpha=$A)"
+            fi
+            [ "$ESTADO" = "ok" ] && VALIDAS=$((VALIDAS+1))
+            echo "$(basename "$f"): ${W}x${H} hasAlpha=$A -> $ESTADO"
+            echo "| $(basename "$f") | ${W}x${H} | ${A} | ${ESTADO} |" >> "$GITHUB_STEP_SUMMARY"
+          done
+
+          REPES="$(cd "$OUT_DIR" && shasum -a 256 *.png | awk '{c[$1]++; n[$1]=n[$1] " " $2} END {for (h in c) if (c[h] > 1) print n[h]}')"
+          if [ -n "$REPES" ]; then
+            echo "::warning::Capturas idénticas (¿falló una navegación?): $REPES"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "Capturas idénticas entre sí:$REPES" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          if [ ${#FILES[@]} -lt 7 ]; then
+            echo "::warning::Solo ${#FILES[@]} de las 7 capturas previstas; mira debug/ (dbg-*, resumen) en ios-screenshots-logs"
+          fi
+          {
+            echo ""
+            echo "Válidas: $VALIDAS de ${#FILES[@]} (previstas: 7). Artefacto: \`ios-screenshots\`."
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "Medidas aceptadas: $ACEPTADAS · válidas: $VALIDAS" >> "$OUT_DIR/LEEME.txt"
+          echo "validas=$VALIDAS" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Subir capturas
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-screenshots
+          path: build/ios-screenshots/
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Subir logs y resultados de xcodebuild
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-screenshots-logs
+          path: |
+            build/logs/
+            build/xcresult/
+            build/debug/
+            build/direct/
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Resultado
+        if: ${{ always() }}
+        run: |
+          if [ "${{ steps.verificar.outputs.validas || '0' }}" = "0" ]; then
+            echo "::error::Ninguna captura válida (1320x2868 o 1290x2796, sin alfa)."
+            exit 1
+          fi
+          echo "Capturas listas en el artefacto ios-screenshots."

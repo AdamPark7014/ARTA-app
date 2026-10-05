@@ -76,6 +76,10 @@ final class RealtimeClient {
     }
 
     func connect() {
+        #if DEBUG
+        // Modo demo: sin servidor al que conectarse.
+        if DemoMode.isActive { return }
+        #endif
         if let socket, socket.status == .connected || socket.status == .connecting { return }
         teardown()
         let cookie = ApiClient.shared.cookieHeader()

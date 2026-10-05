@@ -309,6 +309,8 @@ struct ChatListView: View {
         NavigationLink(value: ChatRoute.conversation(channelId: channel.id, focusMessageId: nil)) {
             ChannelRow(channel: channel, online: presence.isOnline(channel.peer?.id), draft: drafts[channel.id])
         }
+        // Para la prueba de interfaz de las capturas (abre el canal de un evento).
+        .accessibilityIdentifier(channel.isEvent ? "chat-event-\(channel.id)" : "chat-row-\(channel.id)")
         .listRowBackground(ArtaColor.bg)
         .listRowSeparatorTint(ArtaColor.line)
     }

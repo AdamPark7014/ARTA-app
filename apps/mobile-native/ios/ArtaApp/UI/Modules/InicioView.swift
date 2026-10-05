@@ -115,25 +115,26 @@ struct InicioView: View {
 
     private var quickActions: some View {
         LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
-            tile("Nueva tarea", icon: "plus.circle.fill") { showNewTask = true }
-            tile("Mis tareas", icon: "checklist") { router.select(.tareas) }
+            tile("Nueva tarea", icon: "plus.circle.fill", id: "inicio-new-task") { showNewTask = true }
+            tile("Mis tareas", icon: "checklist", id: "inicio-my-tasks") { router.select(.tareas) }
             if showsApprovals {
-                tile("Aprobaciones", icon: "checkmark.seal", badge: totalApprovals) {
+                tile("Aprobaciones", icon: "checkmark.seal", id: "inicio-approvals", badge: totalApprovals) {
                     router.open(AppRoute.approvals)
                 }
             }
-            tile("Calendario", icon: "calendar") {
+            tile("Calendario", icon: "calendar", id: "inicio-calendar") {
                 router.open(AppRoute.web(path: "/calendar", title: "Calendario"))
             }
             if seesPurchaseOrders {
-                tile("Órdenes de compra", icon: "doc.text") {
+                tile("Órdenes de compra", icon: "doc.text", id: "inicio-purchase-orders") {
                     router.open(AppRoute.web(path: "/purchase-orders", title: "Órdenes de compra"))
                 }
             }
         }
     }
 
-    private func tile(_ title: String, icon: String, badge: Int = 0, action: @escaping () -> Void) -> some View {
+    /// `id`: identificador de accesibilidad (lo usa la prueba de interfaz de las capturas).
+    private func tile(_ title: String, icon: String, id: String, badge: Int = 0, action: @escaping () -> Void) -> some View {
         Button {
             Haptics.tap()
             action()
@@ -155,6 +156,7 @@ struct InicioView: View {
             .background(RoundedRectangle(cornerRadius: 14).fill(ArtaColor.bgElev))
         }
         .buttonStyle(.plain)
+        .accessibilityIdentifier(id)
     }
 
     private var tasksCard: some View {
@@ -214,6 +216,7 @@ struct InicioView: View {
             }
         }
         .buttonStyle(.plain)
+        .accessibilityIdentifier("inicio-approvals-card")
     }
 
     private func stat(_ value: Int, label: String) -> some View {
@@ -242,6 +245,7 @@ struct InicioView: View {
                             EventRow(event: event)
                         }
                         .buttonStyle(.plain)
+                        .accessibilityIdentifier("inicio-event-\(event.id)")
                     }
                 }
             }

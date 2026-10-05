@@ -39,6 +39,18 @@ final class Session: ObservableObject {
 
     /// Al abrir la app: con cookie guardada se confirma con `/auth/me`; sin red se usa el último usuario.
     func restore() async {
+        #if DEBUG
+        // Modo demo (`-ArtaDemo YES`): dentro como la persona de las fixtures, solo
+        // en memoria. No pasa por `signedIn` para no guardar nada ni abrir socket/push.
+        if DemoMode.isActive {
+            if let user = DemoMode.sessionUser() {
+                state = .signedIn(user)
+            } else {
+                state = .signedOut
+            }
+            return
+        }
+        #endif
         guard ApiClient.shared.hasSession() else {
             state = .signedOut
             return
