@@ -1,0 +1,707 @@
+name: iOS · video para App Review (simulador)
+
+# Graba en video el recorrido típico de ARTA en el simulador de iPhone de 6.9" (el Pro Max
+# más nuevo del runner, runtime de iOS más nuevo) CONTRA PRODUCCIÓN, con la cuenta de revisión
+# de las tiendas (docs/store/CUENTA-REVISION.md). La prueba ArtaAppUITests/ReviewVideoUITests
+# entra con login real (sin -ArtaDemo) y recorre Inicio, Aprobaciones, Tareas, el canal del
+# evento (mensaje, reportar y bloquear a Mateo), Más › Usuarios bloqueados (desbloquear),
+# Eliminar mi cuenta (web en Safari) y Cerrar sesión. Graba `simctl io recordVideo` (h264).
+# Simulador, Xcode y XcodeGen como en ios-screenshots.yml.
+#
+# OJO, escribe en producción (solo en la organización aislada de la cuenta de revisión): cada
+# corrida deja un mensaje «Listo, reviso el rider hoy.» en el canal del evento, un reporte del
+# mensaje de Mateo (aviso a los moderadores de esa organización) y un bloquear/desbloquear.
+#
+# Credenciales: secretos REVIEW_ACCOUNT_EMAIL y REVIEW_ACCOUNT_PASSWORD. Llegan a la prueba
+# como TEST_RUNNER_REVIEW_EMAIL / TEST_RUNNER_REVIEW_PASSWORD (XCTest las ve como REVIEW_EMAIL /
+# REVIEW_PASSWORD) solo en el `xcodebuild test-without-building`. No se imprimen: la salida de
+# xcodebuild pasa en vivo por tachar.pl (tacha ambos valores y vacía las líneas «Type '…'» de
+# XCTest), los adjuntos de texto se tachan igual, los adjuntos de imagen se borran y el
+# .xcresult (sus actividades guardan lo que se escribió) NO se sube. El correo sí se ve escrito
+# en el video (pantalla de login); la contraseña sale con puntos.
+#
+# Cómo se lanza: Actions > «iOS · video para App Review (simulador)» > Run workflow.
+#
+# Qué deja:
+#   - Artefacto `ios-review-video`: arta-review.mp4 + LEEME.txt (dispositivo, runtime, Xcode,
+#     tamaño, duración y los capítulos «mm:ss paso» para las notas de App Review).
+#   - Artefacto `ios-review-video-logs`: logs de xcodebuild (tachados), pasos.txt, adjuntos de
+#     texto de la prueba (árboles `dbg-*` de los pasos omitidos), resumen de tests y el log de
+#     recordVideo.
+# El video se sube aunque la prueba falle. No commitea nada ni toca la firma de TestFlight.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-review-video
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  video:
+    name: Video de App Review en simulador 6.9"
+    runs-on: macos-15
+    timeout-minutes: 90
+    env:
+      IOS_DIR: ${{ github.workspace }}/apps/mobile-native/ios
+      OUT_DIR: ${{ github.workspace }}/build/ios-review-video
+      LOGS_DIR: ${{ github.workspace }}/build/logs
+      STEPS_DIR: ${{ github.workspace }}/build/logs/pasos
+      DERIVED: ${{ github.workspace }}/build/DerivedData
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Sin credenciales no hay video: se corta antes de 15 minutos de compilación.
+      - name: Comprobar los secretos de la cuenta de revisión
+        env:
+          REVIEW_EMAIL_SECRET: ${{ secrets.REVIEW_ACCOUNT_EMAIL }}
+          REVIEW_PASSWORD_SECRET: ${{ secrets.REVIEW_ACCOUNT_PASSWORD }}
+        run: |
+          if [ -z "${REVIEW_EMAIL_SECRET:-}" ] || [ -z "${REVIEW_PASSWORD_SECRET:-}" ]; then
+            echo "::error::Faltan los secretos REVIEW_ACCOUNT_EMAIL y/o REVIEW_ACCOUNT_PASSWORD del repositorio"
+            exit 1
+          fi
+          echo "Secretos presentes (no se imprimen)."
+
+      - name: Xcode estable más reciente
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      # Como ios-screenshots.yml: la Xcode estable con el SDK de iOS más nuevo (sin betas).
+      - name: Elegir la Xcode con el SDK de iOS más nuevo
+        run: |
+          set -euo pipefail
+          best_path=""
+          best_ver=""
+          for X in /Applications/Xcode*.app; do
+            [ -d "$X/Contents/Developer" ] || continue
+            case "$X" in *[Bb]eta*|*_RC*|*[Cc]andidate*) continue ;; esac
+            SDK_VER="$(DEVELOPER_DIR="$X/Contents/Developer" xcrun --sdk iphoneos --show-sdk-version 2>/dev/null || true)"
+            [ -n "$SDK_VER" ] || continue
+            echo "$X: iPhoneOS SDK $SDK_VER"
+            if [ -z "$best_ver" ] || [ "$(printf '%s\n' "$best_ver" "$SDK_VER" | sort -V | tail -n1)" = "$SDK_VER" ]; then
+              best_ver="$SDK_VER"
+              best_path="$X/Contents/Developer"
+            fi
+          done
+          if [ -n "$best_path" ]; then
+            echo "Seleccionando $best_path (SDK $best_ver)"
+            sudo xcode-select -s "$best_path"
+          fi
+          xcodebuild -version
+          sw_vers
+
+      - name: Asegurar el runtime del simulador de iOS
+        run: |
+          set -uo pipefail
+          sudo xcodebuild -license accept || true
+          sudo xcodebuild -runFirstLaunch || true
+          RUNTIMES="$(xcrun simctl list runtimes available 2>&1 || true)"
+          echo "$RUNTIMES"
+          if ! grep -q '^iOS ' <<<"$RUNTIMES"; then
+            echo "No hay runtime de iOS: descargando la plataforma (hasta 3 intentos)..."
+            n=0
+            until [ $n -ge 3 ]; do
+              if xcodebuild -downloadPlatform iOS; then break; fi
+              n=$((n+1))
+              sleep 30
+            done
+            RUNTIMES="$(xcrun simctl list runtimes available 2>&1 || true)"
+            echo "$RUNTIMES"
+          fi
+          if ! grep -q '^iOS ' <<<"$RUNTIMES"; then
+            echo "::error::No hay ningún runtime de iOS para el simulador"
+            exit 1
+          fi
+          echo "::group::Tipos de iPhone disponibles"
+          xcrun simctl list devicetypes | grep 'iPhone' || true
+          echo "::endgroup::"
+
+      - name: Instalar XcodeGen
+        run: |
+          set -euo pipefail
+          brew install xcodegen
+          xcodegen --version
+
+      # Misma clave que ios-screenshots.yml: comparten la caché.
+      - name: Caché de paquetes Swift
+        uses: actions/cache@v4
+        with:
+          path: apps/mobile-native/ios/.spm-cache
+          key: spm-${{ runner.os }}-${{ hashFiles('apps/mobile-native/ios/project.yml') }}
+          restore-keys: spm-${{ runner.os }}-
+
+      - name: Generar ArtaApp.xcodeproj
+        working-directory: apps/mobile-native/ios
+        run: |
+          set -euo pipefail
+          xcodegen generate --spec project.yml
+          test -d ArtaApp.xcodeproj
+
+      - name: Comprobar la prueba del video y el esquema
+        working-directory: apps/mobile-native/ios
+        run: |
+          set -euo pipefail
+          test -f ArtaAppUITests/ReviewVideoUITests.swift || { echo "::error::Falta ArtaAppUITests/ReviewVideoUITests.swift"; exit 1; }
+          grep -q 'ArtaAppUITests' ArtaApp.xcodeproj/project.pbxproj || { echo "::error::project.yml no declara el target ArtaAppUITests"; exit 1; }
+          SCHEME=ArtaApp.xcodeproj/xcshareddata/xcschemes/ArtaApp.xcscheme
+          test -f "$SCHEME" || { echo "::error::No existe el esquema compartido ArtaApp"; exit 1; }
+          grep -q 'ArtaAppUITests' "$SCHEME" || { echo "::error::El esquema ArtaApp no incluye ArtaAppUITests en su acción de test"; exit 1; }
+          echo "Prueba y esquema presentes."
+
+      - name: Escribir ayudantes
+        run: |
+          set -euo pipefail
+          HELPERS="$RUNNER_TEMP/video-helpers"
+          mkdir -p "$HELPERS" "$LOGS_DIR" "$OUT_DIR"
+          echo "HELPERS=$HELPERS" >> "$GITHUB_ENV"
+
+          cat > "$HELPERS/resolver.py" <<'PY'
+          #!/usr/bin/env python3
+          """Resuelve el runtime de iOS y los iPhone de 6.9" del runner (igual que ios-screenshots.yml).
+
+              resolver.py runtime     -> identificador del runtime de iOS más nuevo
+              resolver.py candidatos  -> líneas "nombre<TAB>identificador", del Pro Max más nuevo al más viejo
+          """
+          import json
+          import re
+          import subprocess
+          import sys
+
+
+          def simctl_json(*args):
+              salida = subprocess.check_output(["xcrun", "simctl", "list", "--json"] + list(args), text=True)
+              return json.loads(salida)
+
+
+          def runtime():
+              encontrados = []
+              for r in simctl_json("runtimes").get("runtimes", []):
+                  ident = r.get("identifier", "")
+                  if ".SimRuntime.iOS-" not in ident or r.get("isAvailable") is False:
+                      continue
+                  version = tuple(int(x) for x in re.findall(r"\d+", r.get("version", "0")))
+                  encontrados.append((version, ident))
+              encontrados.sort()
+              return encontrados[-1][1] if encontrados else ""
+
+
+          def candidatos():
+              pro = []
+              for t in simctl_json("devicetypes").get("devicetypes", []):
+                  nombre, ident = t.get("name", ""), t.get("identifier", "")
+                  m = re.fullmatch(r"iPhone (\d+) Pro Max", nombre)
+                  if m and ident and int(m.group(1)) >= 15:
+                      pro.append((int(m.group(1)), nombre, ident))
+              pro.sort(reverse=True)
+              return [(nombre, ident) for _, nombre, ident in pro]
+
+
+          if __name__ == "__main__":
+              modo = sys.argv[1] if len(sys.argv) > 1 else ""
+              if modo == "runtime":
+                  print(runtime())
+              elif modo == "candidatos":
+                  for nombre, ident in candidatos():
+                      print(nombre + "\t" + ident)
+              else:
+                  print(__doc__)
+                  sys.exit(2)
+          PY
+
+          # Tacha las credenciales. Filtro en vivo (salida de xcodebuild) o en sitio (-i archivos).
+          cat > "$HELPERS/tachar.pl" <<'PL'
+          #!/usr/bin/perl
+          # tachar.pl < entrada > salida     filtro
+          # tachar.pl -i archivo...          en sitio
+          # Valores: REVIEW_EMAIL_SECRET y REVIEW_PASSWORD_SECRET del entorno (y URL-codificados).
+          # Además vacía las actividades «Type '...' into ...» de XCTest: ahí va lo que la prueba
+          # escribe en el login, quizá escapado de otra forma.
+          use strict;
+          use warnings;
+
+          my @secretos;
+          for my $nombre ('REVIEW_EMAIL_SECRET', 'REVIEW_PASSWORD_SECRET') {
+              my $valor = $ENV{$nombre};
+              next unless defined $valor;
+              $valor =~ s/^\s+|\s+$//g;
+              next if length($valor) < 3;
+              push @secretos, $valor;
+              (my $codificado = $valor) =~ s/([^A-Za-z0-9._~-])/sprintf('%%%02X', ord($1))/ge;
+              push @secretos, $codificado if $codificado ne $valor;
+          }
+          @secretos = sort { length($b) <=> length($a) } @secretos;
+
+          if (@ARGV && $ARGV[0] eq '-i') {
+              shift @ARGV;
+              exit 0 unless @ARGV;
+              $^I = '';
+          }
+          $| = 1;
+
+          while (my $linea = <>) {
+              $linea =~ s/(\bTyp(?:e|ing))\s+(?:['"]|\xE2\x80\x9C).*$/$1 [texto omitido]/;
+              for my $secreto (@secretos) {
+                  $linea =~ s/\Q$secreto\E/[oculto]/g;
+              }
+              print $linea;
+          }
+          PL
+
+          # Duración y medidas del video con AVFoundation (último recurso si no hay ffprobe ni mdls).
+          cat > "$HELPERS/medir_video.swift" <<'SWIFT'
+          import AVFoundation
+          import Foundation
+
+          // medir_video.swift <archivo>  ->  "<segundos> <ancho>x<alto>"
+          let url = URL(fileURLWithPath: CommandLine.arguments[1])
+          let asset = AVURLAsset(url: url)
+          let segundos = CMTimeGetSeconds(asset.duration)
+          var medida = "?"
+          if let pista = asset.tracks(withMediaType: .video).first {
+              let tam = pista.naturalSize.applying(pista.preferredTransform)
+              medida = "\(Int(abs(tam.width)))x\(Int(abs(tam.height)))"
+          }
+          print(String(format: "%.1f", segundos.isFinite ? segundos : 0) + " " + medida)
+          SWIFT
+
+          # Funciones de los pasos «Compilar» y «Grabar».
+          cat > "$HELPERS/funciones.sh" <<'SH'
+          # shellcheck shell=bash
+          RESULT="$RUNNER_TEMP/review-video.xcresult"
+          VIDEO="$RUNNER_TEMP/arta-review.mp4"
+          REC_PID=""
+          if command -v xcbeautify >/dev/null 2>&1; then PRETTY=xcbeautify; else PRETTY=cat; fi
+          FIRMA_SIN=(CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY= DEVELOPMENT_TEAM=)
+          FIRMA_ADHOC=(CODE_SIGNING_ALLOWED=YES CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM=)
+
+          # compilar <intento> <ajustes de firma...>
+          compilar() {
+            local intento="$1"
+            shift
+            (
+              cd "$IOS_DIR" || exit 99
+              xcodebuild build-for-testing \
+                -project ArtaApp.xcodeproj \
+                -scheme ArtaApp \
+                -configuration Debug \
+                -destination "id=$UDID" \
+                -derivedDataPath "$DERIVED" \
+                -clonedSourcePackagesDirPath .spm-cache \
+                -enableCodeCoverage NO \
+                "$@"
+            ) 2>&1 | perl "$HELPERS/tachar.pl" | tee "$LOGS_DIR/xcodebuild-build-intento$intento.log" | $PRETTY
+            return "${PIPESTATUS[0]}"
+          }
+
+          # Arranca `recordVideo` (h264; si no arranca, hevc) y espera a que diga que ya graba.
+          # Un `&` de bash sin control de trabajos arranca con SIGINT ignorado y entonces el
+          # `kill -INT` que cierra el MP4 no llegaría: perl lo devuelve a DEFAULT y hace exec
+          # (mismo PID, que xcrun también conserva al ejecutar simctl).
+          iniciar_grabacion() {
+            rm -f "$VIDEO"
+            local codec i
+            for codec in h264 hevc; do
+              : > "$LOGS_DIR/recordVideo.log"
+              perl -e '$SIG{INT} = "DEFAULT"; exec @ARGV or die "exec: $!\n"' \
+                xcrun simctl io "$UDID" recordVideo --codec="$codec" --force "$VIDEO" >> "$LOGS_DIR/recordVideo.log" 2>&1 &
+              REC_PID=$!
+              for i in $(seq 1 30); do
+                grep -qi 'recording started' "$LOGS_DIR/recordVideo.log" && break
+                kill -0 "$REC_PID" 2>/dev/null || break
+                sleep 0.5
+              done
+              if kill -0 "$REC_PID" 2>/dev/null; then
+                echo "Grabando con recordVideo ($codec), PID $REC_PID"
+                echo "$codec" > "$LOGS_DIR/codec.txt"
+                return 0
+              fi
+              echo "::warning::recordVideo con $codec no arrancó: $(tail -n 5 "$LOGS_DIR/recordVideo.log" | tr '\n' ' ')"
+              REC_PID=""
+            done
+            return 1
+          }
+
+          # SIGINT para que recordVideo cierre el MP4 (sin eso queda ilegible); espera hasta 30 s.
+          detener_grabacion() {
+            [ -n "${REC_PID:-}" ] || return 0
+            local i
+            kill -INT "$REC_PID" 2>/dev/null || true
+            for i in $(seq 1 60); do
+              kill -0 "$REC_PID" 2>/dev/null || break
+              sleep 0.5
+            done
+            if kill -0 "$REC_PID" 2>/dev/null; then
+              echo "::warning::recordVideo no terminó en 30 s tras SIGINT; se fuerza (el video puede quedar dañado)"
+              kill -9 "$REC_PID" 2>/dev/null || true
+            fi
+            wait "$REC_PID" 2>/dev/null || true
+            REC_PID=""
+            echo "Grabación detenida: $(ls -l "$VIDEO" 2>/dev/null || echo 'sin archivo')"
+          }
+
+          # probar <intento>: corre la prueba y graba de «listo-para-grabar» a «fin». Deja el código
+          # de xcodebuild en ESTADO_PRUEBA (no se llama en $(...): la salida debe verse en vivo y
+          # REC_PID vivir en este shell). Las credenciales solo existen en el entorno de este xcodebuild.
+          ESTADO_PRUEBA=97
+          probar() {
+            local intento="$1"
+            local log="$LOGS_DIR/xcodebuild-test-intento$intento.log"
+            local salida="$RUNNER_TEMP/xcodebuild-test.exit"
+            local xctestrun tuberia
+            ESTADO_PRUEBA=97
+            xctestrun="$(find "$DERIVED/Build/Products" -maxdepth 1 -name '*.xctestrun' -print 2>/dev/null | head -n1)"
+            if [ -z "$xctestrun" ]; then
+              echo "::error::No hay .xctestrun en $DERIVED/Build/Products (¿falló build-for-testing?)"
+              ESTADO_PRUEBA=98
+              return 0
+            fi
+            echo "xctestrun: $xctestrun"
+            rm -rf "$RESULT" "$STEPS_DIR" "$salida"
+            mkdir -p "$STEPS_DIR"
+            (
+              TEST_RUNNER_REVIEW_EMAIL="$REVIEW_EMAIL_SECRET" \
+              TEST_RUNNER_REVIEW_PASSWORD="$REVIEW_PASSWORD_SECRET" \
+              TEST_RUNNER_ARTA_REVIEW_OUT="$STEPS_DIR" \
+              xcodebuild test-without-building \
+                -xctestrun "$xctestrun" \
+                -destination "id=$UDID" \
+                -resultBundlePath "$RESULT" \
+                -only-testing:ArtaAppUITests/ReviewVideoUITests/testVideoParaRevision \
+                -parallel-testing-enabled NO
+              echo $? > "$salida"
+            ) 2>&1 | perl "$HELPERS/tachar.pl" | tee "$log" | $PRETTY &
+            tuberia=$!
+
+            # La prueba avisa cuando ya está en la pantalla de inicio de iOS (tras instalar la app y
+            # arrancar el runner): así el video no empieza con un minuto de pantalla quieta.
+            while kill -0 "$tuberia" 2>/dev/null && [ ! -f "$STEPS_DIR/listo-para-grabar" ]; do sleep 0.5; done
+            if [ -f "$STEPS_DIR/listo-para-grabar" ]; then
+              iniciar_grabacion || echo "::warning::No se pudo grabar: la prueba sigue sin video"
+              # Aunque no grabe: la prueba espera esta señal (máx. 30 s).
+              touch "$STEPS_DIR/grabando"
+              # Se corta en cuanto la prueba dice «fin», antes de que XCTest cierre la app.
+              while kill -0 "$tuberia" 2>/dev/null && [ ! -f "$STEPS_DIR/fin" ]; do sleep 0.5; done
+              sleep 1
+              detener_grabacion
+            fi
+            wait "$tuberia" 2>/dev/null || true
+            detener_grabacion
+            if [ -s "$salida" ]; then ESTADO_PRUEBA="$(tr -dc '0-9' < "$salida")"; fi
+            [ -n "$ESTADO_PRUEBA" ] || ESTADO_PRUEBA=97
+          }
+
+          # ¿La prueba llegó a correr? (si no, suele ser la firma del runner de pruebas)
+          empezo_la_prueba() {
+            [ -f "$STEPS_DIR/listo-para-grabar" ] || grep -Eq 'testVideoParaRevision.*started' "$1" 2>/dev/null
+          }
+          SH
+
+          python3 -m py_compile "$HELPERS/resolver.py"
+          perl -c "$HELPERS/tachar.pl"
+          bash -n "$HELPERS/funciones.sh"
+          echo "Ayudantes listos en $HELPERS"
+
+      # Crea el iPhone, lo pone en español de México, sin autocorrector (para que el mensaje
+      # salga tal cual), con la barra de estado de anuncio y en tema oscuro.
+      - name: Crear y preparar el simulador
+        run: |
+          set -euo pipefail
+          RUNTIME_ID="$(python3 "$HELPERS/resolver.py" runtime)"
+          echo "Runtime de iOS: ${RUNTIME_ID:-<ninguno>}"
+          if [ -z "$RUNTIME_ID" ]; then
+            echo "::error::No se pudo resolver un runtime de iOS con simctl"
+            exit 1
+          fi
+
+          UDID=""
+          NOMBRE=""
+          while IFS="$(printf '\t')" read -r CAND TIPO; do
+            [ -n "$TIPO" ] || continue
+            if UDID="$(xcrun simctl create "ARTA-video" "$TIPO" "$RUNTIME_ID" 2>"$LOGS_DIR/create.err")"; then
+              NOMBRE="$CAND"
+              break
+            fi
+            UDID=""
+            echo "  $CAND no se pudo crear con $RUNTIME_ID: $(cat "$LOGS_DIR/create.err")"
+          done < <(python3 "$HELPERS/resolver.py" candidatos)
+          if [ -z "$UDID" ]; then
+            echo "::error::No hay ningún iPhone Pro Max (6.9\") disponible en esta imagen de macOS"
+            exit 1
+          fi
+          echo "Simulador: $NOMBRE ($UDID)"
+          {
+            echo "UDID=$UDID"
+            echo "SIM_NAME=$NOMBRE"
+            echo "RUNTIME_ID=$RUNTIME_ID"
+          } >> "$GITHUB_ENV"
+
+          # Idioma del sistema (alertas, Safari, pantalla de inicio) ANTES del primer arranque,
+          # como hace fastlane snapshot. Si falla, el sistema queda en inglés y la prueba lo tolera.
+          PREFS="$HOME/Library/Developer/CoreSimulator/Devices/$UDID/data/Library/Preferences"
+          GP="$PREFS/.GlobalPreferences.plist"
+          mkdir -p "$PREFS"
+          if [ ! -f "$GP" ]; then
+            printf '%s\n' \
+              '<?xml version="1.0" encoding="UTF-8"?>' \
+              '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">' \
+              '<plist version="1.0">' '<dict/>' '</plist>' > "$GP"
+          fi
+          plutil -replace AppleLanguages -json '["es-MX"]' "$GP" || echo "::warning::No se pudo fijar AppleLanguages"
+          plutil -replace AppleLocale -string es_MX "$GP" || echo "::warning::No se pudo fijar AppleLocale"
+
+          xcrun simctl boot "$UDID" || true
+          xcrun simctl bootstatus "$UDID" -b
+
+          # Teclado: sin autocorrección ni predicción (el mensaje en español no debe «corregirse»)
+          # y sin los tutoriales que tapan el teclado la primera vez.
+          for CLAVE in KeyboardAutocorrection KeyboardPrediction KeyboardCheckSpelling; do
+            xcrun simctl spawn "$UDID" defaults write com.apple.Preferences "$CLAVE" -bool NO || true
+          done
+          for CLAVE in DidShowContinuousPathIntroduction DidShowGestureKeyboardIntroduction KeyboardDidShowProductivityTutorial; do
+            xcrun simctl spawn "$UDID" defaults write com.apple.Preferences "$CLAVE" -bool YES || true
+          done
+
+          # Barra de estado de anuncio: 9:41, batería llena, cobertura y WiFi completas.
+          xcrun simctl status_bar "$UDID" override \
+            --time 9:41 \
+            --dataNetwork wifi --wifiMode active --wifiBars 3 \
+            --cellularMode active --cellularBars 4 \
+            --batteryState charged --batteryLevel 100 || echo "::warning::status_bar override falló"
+          # La app fuerza el tema oscuro; el sistema igual, para que nada desentone.
+          xcrun simctl ui "$UDID" appearance dark || true
+
+      - name: Compilar para pruebas (Debug, simulador)
+        timeout-minutes: 45
+        run: |
+          set +e
+          set -uo pipefail
+          # shellcheck source=/dev/null
+          source "$HELPERS/funciones.sh"
+          echo "::group::xcodebuild build-for-testing (sin firma)"
+          compilar 1 "${FIRMA_SIN[@]}"
+          ESTADO=$?
+          echo "::endgroup::"
+          FIRMA=sin-firma
+          if [ "$ESTADO" -ne 0 ]; then
+            echo "::warning::build-for-testing sin firma falló ($ESTADO). Últimas líneas:"
+            tail -n 60 "$LOGS_DIR/xcodebuild-build-intento1.log"
+            echo "::group::xcodebuild build-for-testing (firma ad hoc)"
+            compilar 2 "${FIRMA_ADHOC[@]}"
+            ESTADO=$?
+            echo "::endgroup::"
+            FIRMA=ad-hoc
+          fi
+          if [ "$ESTADO" -ne 0 ]; then
+            echo "::error::build-for-testing falló ($ESTADO). Revisa el artefacto ios-review-video-logs."
+            tail -n 80 "$LOGS_DIR/xcodebuild-build-intento2.log" 2>/dev/null || true
+            exit 1
+          fi
+          echo "FIRMA=$FIRMA" >> "$GITHUB_ENV"
+          echo "Compilado ($FIRMA)."
+
+      # Graba y corre la prueba. Nada de aquí aborta el job: el video y los logs se suben igual.
+      - name: Grabar el recorrido
+        id: grabar
+        timeout-minutes: 35
+        env:
+          REVIEW_EMAIL_SECRET: ${{ secrets.REVIEW_ACCOUNT_EMAIL }}
+          REVIEW_PASSWORD_SECRET: ${{ secrets.REVIEW_ACCOUNT_PASSWORD }}
+        run: |
+          set +e
+          set -uo pipefail
+          # shellcheck source=/dev/null
+          source "$HELPERS/funciones.sh"
+          trap 'detener_grabacion' EXIT
+          mkdir -p "$OUT_DIR" "$LOGS_DIR"
+
+          echo "::group::xcodebuild test-without-building + recordVideo (intento 1)"
+          probar 1
+          ESTADO="$ESTADO_PRUEBA"
+          echo "::endgroup::"
+          echo "xcodebuild terminó con código $ESTADO"
+
+          if ! empezo_la_prueba "$LOGS_DIR/xcodebuild-test-intento1.log" && [ "${FIRMA:-sin-firma}" = "sin-firma" ]; then
+            echo "::warning::La prueba no llegó a empezar con la compilación sin firma. Últimas líneas:"
+            tail -n 60 "$LOGS_DIR/xcodebuild-test-intento1.log"
+            echo "::group::Recompilar con firma ad hoc y repetir"
+            if compilar 3 "${FIRMA_ADHOC[@]}"; then
+              probar 2
+              ESTADO="$ESTADO_PRUEBA"
+              echo "xcodebuild (intento 2) terminó con código $ESTADO"
+            else
+              echo "::warning::La recompilación ad hoc también falló"
+            fi
+            echo "::endgroup::"
+          fi
+
+          if [ -s "$VIDEO" ]; then
+            cp "$VIDEO" "$OUT_DIR/arta-review.mp4"
+            echo "Video: $(ls -l "$OUT_DIR/arta-review.mp4")"
+          else
+            echo "::error::No hay video (recordVideo no grabó o la prueba no llegó a pedirlo)"
+          fi
+
+          # Adjuntos de la prueba: solo texto (los PNG que XCTest haga por su cuenta pueden mostrar
+          # el login), tachados. El .xcresult no se sube: sus actividades guardan lo escrito.
+          if [ -d "$RESULT" ]; then
+            mkdir -p "$LOGS_DIR/adjuntos"
+            xcrun xcresulttool export attachments --path "$RESULT" --output-path "$LOGS_DIR/adjuntos" > "$LOGS_DIR/export.log" 2>&1 \
+              || echo "::warning::xcresulttool export attachments falló (ver export.log)"
+            xcrun xcresulttool get test-results summary --path "$RESULT" > "$LOGS_DIR/resumen-tests.json" 2>&1 || true
+            find "$LOGS_DIR/adjuntos" -type f ! \( -name '*.txt' -o -name '*.json' \) -delete 2>/dev/null || true
+          fi
+          rm -rf "$RESULT"
+          find "$LOGS_DIR" -type f \( -name '*.txt' -o -name '*.json' -o -name '*.log' \) -exec perl "$HELPERS/tachar.pl" -i {} + || true
+
+          echo "estado=$ESTADO" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      # Red de seguridad por si el paso anterior se cortó a medias (timeout): se vuelve a tachar.
+      - name: Tachar credenciales de los logs
+        if: ${{ always() }}
+        env:
+          REVIEW_EMAIL_SECRET: ${{ secrets.REVIEW_ACCOUNT_EMAIL }}
+          REVIEW_PASSWORD_SECRET: ${{ secrets.REVIEW_ACCOUNT_PASSWORD }}
+        run: |
+          set +e
+          [ -n "${HELPERS:-}" ] && [ -f "$HELPERS/tachar.pl" ] || exit 0
+          [ -d "$LOGS_DIR" ] || exit 0
+          find "$LOGS_DIR" -type f \( -name '*.txt' -o -name '*.json' -o -name '*.log' \) -exec perl "$HELPERS/tachar.pl" -i {} +
+          find "$LOGS_DIR" -type f \( -name '*.png' -o -name '*.jpg' -o -name '*.jpeg' -o -name '*.heic' -o -name '*.mp4' -o -name '*.mov' \) -delete
+          rm -rf "$RUNNER_TEMP/review-video.xcresult"
+          exit 0
+
+      - name: Resumen del video
+        id: resumen
+        if: ${{ always() }}
+        run: |
+          set +e
+          set -uo pipefail
+          VIDEO_OUT="$OUT_DIR/arta-review.mp4"
+          PASOS="$STEPS_DIR/pasos.txt"
+          mkdir -p "$OUT_DIR"
+          {
+            echo "## Video para App Review (iOS)"
+            echo ""
+            echo "Simulador: ${SIM_NAME:-?} · runtime ${RUNTIME_ID:-?} · compilación ${FIRMA:-?} · código de la prueba: ${{ steps.grabar.outputs.estado || '?' }}"
+            echo ""
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ ! -s "$VIDEO_OUT" ]; then
+            echo "::error::No salió el video. Revisa «Grabar el recorrido» y el artefacto ios-review-video-logs."
+            echo "**Sin video.** Revisa el artefacto \`ios-review-video-logs\`." >> "$GITHUB_STEP_SUMMARY"
+            echo "video=0" >> "$GITHUB_OUTPUT"
+          else
+            BYTES="$(stat -f%z "$VIDEO_OUT")"
+            TAMANO="$(awk -v b="$BYTES" 'BEGIN { printf "%.1f MB", b / 1048576 }')"
+            DURACION=""
+            MEDIDA="?"
+            FUENTE=""
+            if command -v ffprobe >/dev/null 2>&1; then
+              DURACION="$(ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "$VIDEO_OUT" 2>/dev/null | head -n1)"
+              MEDIDA="$(ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=s=x:p=0 "$VIDEO_OUT" 2>/dev/null | head -n1)"
+              FUENTE="ffprobe"
+            fi
+            if [ -z "$DURACION" ] || [ "$DURACION" = "N/A" ]; then
+              DURACION="$(mdls -raw -name kMDItemDurationSeconds "$VIDEO_OUT" 2>/dev/null)"
+              FUENTE="mdls"
+            fi
+            if [ -z "$DURACION" ] || [ "$DURACION" = "(null)" ]; then
+              LEIDO="$(swift "$HELPERS/medir_video.swift" "$VIDEO_OUT" 2>/dev/null | tail -n1)"
+              DURACION="${LEIDO%% *}"
+              MEDIDA="${LEIDO#* }"
+              FUENTE="AVFoundation"
+            fi
+            MINSEG="$(awk -v s="${DURACION:-0}" 'BEGIN { s = int(s + 0.5); printf "%d:%02d", s / 60, s % 60 }')"
+            [ -n "$MEDIDA" ] || MEDIDA="?"
+            echo "Video: $TAMANO, $MINSEG ($DURACION s, $FUENTE), $MEDIDA, codec $(cat "$LOGS_DIR/codec.txt" 2>/dev/null || echo '?')"
+            {
+              echo "| Archivo | Tamaño | Duración | Medidas | Medido con |"
+              echo "|---|---|---|---|---|"
+              echo "| arta-review.mp4 | $TAMANO | $MINSEG | $MEDIDA | $FUENTE |"
+              echo ""
+            } >> "$GITHUB_STEP_SUMMARY"
+            if [ "$BYTES" -lt 100000 ] || [ "$MINSEG" = "0:00" ]; then
+              echo "::warning::El video pesa ${TAMANO} y dura ${MINSEG}: probablemente quedó vacío o dañado"
+            fi
+            echo "video=1" >> "$GITHUB_OUTPUT"
+
+            {
+              echo "Video para App Review de ARTA (iOS)"
+              echo "Dispositivo: ${SIM_NAME:-?}"
+              echo "Runtime: ${RUNTIME_ID:-?}"
+              echo "Xcode: $(xcodebuild -version | tr '\n' ' ')"
+              echo "Commit: $GITHUB_SHA"
+              echo "Fecha (UTC): $(date -u +%Y-%m-%d)"
+              echo "Tamaño: $TAMANO · duración: $MINSEG · medidas: $MEDIDA"
+              echo ""
+              echo "Capítulos (mm:ss desde que empieza el video, aprox.):"
+              cat "$PASOS" 2>/dev/null || echo "(sin pasos.txt)"
+            } > "$OUT_DIR/LEEME.txt"
+          fi
+
+          if [ -f "$PASOS" ]; then
+            OMITIDOS="$(grep -c 'OMITIDO' "$PASOS" || true)"
+            {
+              echo "### Recorrido (pasos omitidos: ${OMITIDOS:-0})"
+              echo ""
+              echo '```'
+              cat "$PASOS"
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+            if [ "${OMITIDOS:-0}" != "0" ]; then
+              echo "::warning::$OMITIDOS paso(s) omitidos; mira pasos.txt y los dbg-* en ios-review-video-logs"
+            fi
+          else
+            echo "Sin pasos.txt: la prueba no llegó a correr." >> "$GITHUB_STEP_SUMMARY"
+          fi
+          exit 0
+
+      - name: Subir el video
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-review-video
+          path: build/ios-review-video/
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Subir logs
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-review-video-logs
+          path: build/logs/
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Apagar y borrar el simulador
+        if: ${{ always() }}
+        run: |
+          if [ -n "${UDID:-}" ]; then
+            xcrun simctl shutdown "$UDID" || true
+            xcrun simctl delete "$UDID" || true
+          fi
+
+      - name: Resultado
+        if: ${{ always() }}
+        run: |
+          if [ "${{ steps.resumen.outputs.video || '0' }}" != "1" ]; then
+            echo "::error::No salió el video."
+            exit 1
+          fi
+          if [ "${{ steps.grabar.outputs.estado || '1' }}" != "0" ]; then
+            echo "::error::La prueba terminó con error (código ${{ steps.grabar.outputs.estado || '?' }}); el video se subió igual. Mira pasos.txt."
+            exit 1
+          fi
+          echo "Video listo en el artefacto ios-review-video."
