@@ -7,7 +7,7 @@ import {
 import { ChatChannelKind, ChatMessageKind, Prisma } from '@prisma/client';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { tenantIdOf } from '../common/tenant';
-import { isDirectionRole } from '../common/rbac/roles';
+import { ALL_ROLES, isDirectionRole } from '../common/rbac/roles';
 import { NotificationsService } from '../notifications/notifications.service';
 import { shortName } from '../notifications/notification-push-meta';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
@@ -53,6 +53,21 @@ const MUTE_FOREVER = new Date('2099-12-31T00:00:00.000Z');
 const DEFAULTS_TTL_MS = 60_000;
 /** Directo de grupo: de 2 a 8 personas además de quien lo crea. */
 export const GROUP_DM_MAX = 8;
+
+/** Reportes y bloqueos (docs/chat-reportar-bloquear.md, Apple guía 1.2). */
+export const REPORT_REASONS = ['SPAM', 'ACOSO', 'OFENSIVO', 'OTRO'] as const;
+export type ReportReason = (typeof REPORT_REASONS)[number];
+export const REPORT_STATUSES = ['OPEN', 'RESOLVED'] as const;
+export type ReportStatus = (typeof REPORT_STATUSES)[number];
+export const REPORT_DETAILS_MAX = 1000;
+export const BLOCKED_DM_MESSAGE = 'No puedes enviar mensajes a esta persona';
+const REPORT_REASON_LABELS: Record<ReportReason, string> = {
+  SPAM: 'Spam',
+  ACOSO: 'Acoso o intimidación',
+  OFENSIVO: 'Contenido ofensivo o inapropiado',
+  OTRO: 'Otro',
+};
+const DIRECTION_ROLES = ALL_ROLES.filter((r) => isDirectionRole(r));
 
 const authorSelect = { id: true, fullName: true, title: true } as const;
 
@@ -291,7 +306,7 @@ export class ChatService {
     return { channel: channel as ChannelRow, membership };
   }
 
-  /** No leídos por canal en una sola consulta (desde lastReadAt, o desde que entró). */
+  /** No leídos por canal en una sola consulta (desde lastReadAt, o desde que entró; sin bloqueados). */
   private async unreadByChannel(userId: string): Promise<Map<string, number>> {
     const rows = await this.prisma.$queryRaw<Array<{ channelId: string; n: number }>>`
       SELECT m."channelId" AS "channelId", COUNT(*)::int AS n
@@ -301,6 +316,9 @@ export class ChatService {
         AND m."parentId" IS NULL
         AND m."senderId" <> ${userId}
         AND m."createdAt" > COALESCE(mm."lastReadAt", mm."joinedAt")
+        AND NOT EXISTS (
+          SELECT 1 FROM "ChatUserBlock" b WHERE b."blockerId" = ${userId} AND b."blockedId" = m."senderId"
+        )
       GROUP BY m."channelId"`;
     return new Map(rows.map((r) => [r.channelId, Number(r.n)]));
   }
@@ -316,7 +334,10 @@ export class ChatService {
         AND m."parentId" IS NULL
         AND m."senderId" <> ${user.id}
         AND m."createdAt" > COALESCE(mm."lastReadAt", mm."joinedAt")
-        AND (mm."mutedUntil" IS NULL OR mm."mutedUntil" < now())`;
+        AND (mm."mutedUntil" IS NULL OR mm."mutedUntil" < now())
+        AND NOT EXISTS (
+          SELECT 1 FROM "ChatUserBlock" b WHERE b."blockerId" = ${user.id} AND b."blockedId" = m."senderId"
+        )`;
     return { total: Number(rows[0]?.n ?? 0) };
   }
 
@@ -480,6 +501,7 @@ export class ChatService {
   async openDirect(user: ChatUser, otherId: string) {
     if (!otherId || otherId === user.id) throw new BadRequestException('Elige a otra persona');
     const other = await this.assertColleague(user, otherId);
+    if (await this.blockedBetween(user.id, other.id)) throw new ForbiddenException(BLOCKED_DM_MESSAGE);
     const orgId = tenantIdOf(user);
     const dmKey = dmKeyOf(user.id, other.id);
     const channel = await this.prisma.chatChannel.upsert({
@@ -738,13 +760,14 @@ export class ChatService {
     channelId: string,
     opts: { before?: string; after?: string; around?: string; limit?: number; parentId?: string | null } = {},
   ) {
-    await this.access(user, channelId);
+    const [, blocked] = await Promise.all([this.access(user, channelId), this.blockedIdsOf(user.id)]);
     const limit = Math.min(Math.max(Number(opts.limit) || PAGE_DEFAULT, 1), PAGE_MAX);
     const base: Prisma.ChatMessageWhereInput = {
       channelId,
       parentId: opts.parentId ?? null,
       // Un borrado con hilo vivo se queda como «Mensaje eliminado» para no perder las respuestas.
       OR: [{ deletedAt: null }, { replies: { some: { deletedAt: null } } }],
+      ...this.notFromBlocked(blocked),
     };
 
     const cursorOf = async (id?: string) => {
@@ -802,10 +825,13 @@ export class ChatService {
 
   /** Un hilo completo: mensaje raíz (aunque se haya borrado) + respuestas. */
   async getThread(user: ChatUser, messageId: string): Promise<{ root: ChatMessageDto; replies: ChatMessageDto[] }> {
+    const blocked = await this.blockedIdsOf(user.id);
     const found = await this.findMessage(user, messageId, { includeDeleted: true });
     const root = found.parentId ? await this.findMessage(user, found.parentId, { includeDeleted: true }) : found;
+    // El hilo de alguien que bloqueé no se abre (su mensaje raíz tampoco aparece en el canal).
+    if (blocked.includes(root.senderId)) throw new NotFoundException('Mensaje no encontrado');
     const replies = await this.prisma.chatMessage.findMany({
-      where: { parentId: root.id, deletedAt: null },
+      where: { parentId: root.id, deletedAt: null, ...this.notFromBlocked(blocked) },
       include: messageInclude,
       orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
       take: PAGE_MAX,
@@ -815,6 +841,11 @@ export class ChatService {
   }
 
   private async findMessage(user: ChatUser, messageId: string, opts: { includeDeleted?: boolean } = {}) {
+    return (await this.findMessageIn(user, messageId, opts)).message;
+  }
+
+  /** Mensaje de un canal al que tengo acceso, junto con ese canal. */
+  private async findMessageIn(user: ChatUser, messageId: string, opts: { includeDeleted?: boolean } = {}) {
     const message = await this.prisma.chatMessage.findFirst({
       where: {
         id: messageId,
@@ -824,12 +855,13 @@ export class ChatService {
       include: messageInclude,
     });
     if (!message) throw new NotFoundException('Mensaje no encontrado');
-    await this.access(user, message.channelId);
-    return message;
+    const { channel } = await this.access(user, message.channelId);
+    return { message, channel };
   }
 
   async postMessage(user: ChatUser, channelId: string, input: PostMessageInput) {
     const { channel } = await this.access(user, channelId, { write: true });
+    if (channel.kind === ChatChannelKind.DIRECT) await this.assertDirectOpen(user, channelId);
     const body = (input.body ?? '').replace(/\r\n?/g, '\n').trim();
     const attachmentUrl = input.attachmentUrl?.trim() || null;
     if (!body && !attachmentUrl) throw new BadRequestException('Escribe un mensaje');
@@ -901,6 +933,7 @@ export class ChatService {
    * - push tipo WhatsApp a miembros que no silenciaron (en hilos, a quienes participan
    *   y a quien escribió el mensaje raíz);
    * - aviso en la campana + push a mencionados y, con `@canal`, a todos (aunque silenciaron).
+   * Quien bloqueó al autor no recibe nada de eso (solo el socket que actualiza su lista).
    */
   private async fanOut(user: ChatUser, channel: ChannelRow, message: MessageRow) {
     const members = await this.prisma.chatChannelMember.findMany({
@@ -910,12 +943,20 @@ export class ChatService {
     const memberIds = members.map((m) => m.userId);
     const preview = pushText(message);
 
+    const blockers = new Set(
+      (
+        await this.prisma.chatUserBlock.findMany({
+          where: { blockedId: user.id, blockerId: { in: memberIds } },
+          select: { blockerId: true },
+        })
+      ).map((b) => b.blockerId),
+    );
     const now = Date.now();
     const isMuted = (m: { mutedUntil: Date | null }) => Boolean(m.mutedUntil && m.mutedUntil.getTime() > now);
-    const memberSet = new Set(memberIds);
+    const memberSet = new Set(memberIds.filter((id) => !blockers.has(id)));
     const mentioned = new Set([...mentionedUserIds(message.body, user.id)].filter((id) => memberSet.has(id)));
     const everyone = mentionsChannel(message.body) && channel.kind !== ChatChannelKind.DIRECT && this.canModerate(user)
-      ? memberIds.filter((id) => id !== user.id)
+      ? [...memberSet].filter((id) => id !== user.id)
       : [];
     for (const id of everyone) mentioned.add(id);
 
@@ -934,15 +975,14 @@ export class ChatService {
       channelName: direct ? null : channel.name,
       at: message.createdAt.toISOString(),
     };
+    const reachable = members.filter((m) => m.userId !== user.id && !isMuted(m) && !blockers.has(m.userId));
     const loud = new Set(
-      message.parentId
-        ? []
-        : members.filter((m) => m.userId !== user.id && !isMuted(m) && !mentioned.has(m.userId)).map((m) => m.userId),
+      message.parentId ? [] : reachable.filter((m) => !mentioned.has(m.userId)).map((m) => m.userId),
     );
     this.realtime.emitToUsers(memberIds.filter((id) => loud.has(id)), 'chat:channel-activity', { ...activity, notify: true });
     this.realtime.emitToUsers(memberIds.filter((id) => !loud.has(id)), 'chat:channel-activity', { ...activity, notify: false });
 
-    let audience = members.filter((m) => m.userId !== user.id && !isMuted(m)).map((m) => m.userId);
+    let audience = reachable.map((m) => m.userId);
     if (message.parentId) {
       const [root, participants] = await Promise.all([
         this.prisma.chatMessage.findUnique({ where: { id: message.parentId }, select: { senderId: true } }),
@@ -1083,7 +1123,12 @@ export class ChatService {
     }
     const refreshed = await this.prisma.chatMessage.findUniqueOrThrow({ where: { id: messageId }, include: messageInclude });
     this.realtime.emitToChannel(message.channelId, 'chat:message-updated', serializeMessage(refreshed));
-    if (!existing && message.senderId !== user.id && message.kind !== ChatMessageKind.SYSTEM) {
+    if (
+      !existing &&
+      message.senderId !== user.id &&
+      message.kind !== ChatMessageKind.SYSTEM &&
+      !(await this.isBlockedBy(message.senderId, user.id))
+    ) {
       const author = user.fullName || 'Alguien';
       // Solo push con etiqueta por mensaje: varias reacciones reemplazan la misma tarjeta (sin fila en la campana).
       void this.notifications
@@ -1119,9 +1164,9 @@ export class ChatService {
   }
 
   async listPins(user: ChatUser, channelId: string) {
-    await this.access(user, channelId);
+    const [, blocked] = await Promise.all([this.access(user, channelId), this.blockedIdsOf(user.id)]);
     const rows = await this.prisma.chatMessage.findMany({
-      where: { channelId, deletedAt: null, pinnedAt: { not: null } },
+      where: { channelId, deletedAt: null, pinnedAt: { not: null }, ...this.notFromBlocked(blocked) },
       include: messageInclude,
       orderBy: { pinnedAt: 'desc' },
       take: 50,
@@ -1149,12 +1194,14 @@ export class ChatService {
   async listSaved(user: ChatUser, opts: { limit?: number; before?: string } = {}) {
     const limit = Math.min(Math.max(Number(opts.limit) || PAGE_DEFAULT, 1), PAGE_MAX);
     const before = opts.before ? new Date(opts.before) : null;
+    const blocked = await this.blockedIdsOf(user.id);
     const rows = await this.prisma.chatSavedMessage.findMany({
       where: {
         userId: user.id,
         ...(before && !Number.isNaN(before.getTime()) ? { createdAt: { lt: before } } : {}),
         message: {
           deletedAt: null,
+          ...this.notFromBlocked(blocked),
           channel: {
             organizationId: tenantIdOf(user),
             isArchived: false,
@@ -1269,11 +1316,13 @@ export class ChatService {
     const q = (rawQuery ?? '').trim().slice(0, 100);
     if (q.length < 2) return { messages: [] };
     if (channelId) await this.access(user, channelId);
+    const blocked = await this.blockedIdsOf(user.id);
     const rows = await this.prisma.chatMessage.findMany({
       where: {
         deletedAt: null,
         body: { contains: q, mode: 'insensitive' },
         kind: { not: ChatMessageKind.SYSTEM },
+        ...this.notFromBlocked(blocked),
         channel: channelId
           ? { id: channelId }
           : {
@@ -1306,6 +1355,208 @@ export class ChatService {
       orderBy: { fullName: 'asc' },
       take: 60,
     });
+  }
+
+  // ─── Bloqueos y reportes (Apple 1.2, docs/chat-reportar-bloquear.md) ─────
+
+  /** Personas que bloqueé: una consulta por petición, luego `senderId notIn`. */
+  private async blockedIdsOf(userId: string): Promise<string[]> {
+    const rows = await this.prisma.chatUserBlock.findMany({
+      where: { blockerId: userId },
+      select: { blockedId: true },
+    });
+    return rows.map((r) => r.blockedId);
+  }
+
+  private notFromBlocked(blocked: string[]): Prisma.ChatMessageWhereInput {
+    return blocked.length ? { senderId: { notIn: blocked } } : {};
+  }
+
+  private async isBlockedBy(blockerId: string, blockedId: string): Promise<boolean> {
+    const row = await this.prisma.chatUserBlock.findUnique({
+      where: { blockerId_blockedId: { blockerId, blockedId } },
+      select: { blockerId: true },
+    });
+    return Boolean(row);
+  }
+
+  /** Bloqueo en cualquier dirección entre dos personas. */
+  private async blockedBetween(a: string, b: string): Promise<boolean> {
+    const row = await this.prisma.chatUserBlock.findFirst({
+      where: { OR: [{ blockerId: a, blockedId: b }, { blockerId: b, blockedId: a }] },
+      select: { blockerId: true },
+    });
+    return Boolean(row);
+  }
+
+  /** En un directo nadie escribe si alguno de los dos bloqueó al otro. */
+  private async assertDirectOpen(user: ChatUser, channelId: string) {
+    const row = await this.prisma.chatUserBlock.findFirst({
+      where: {
+        OR: [
+          { blockerId: user.id, blocked: { chatMemberships: { some: { channelId } } } },
+          { blockedId: user.id, blocker: { chatMemberships: { some: { channelId } } } },
+        ],
+      },
+      select: { blockerId: true },
+    });
+    if (row) throw new ForbiddenException(BLOCKED_DM_MESSAGE);
+  }
+
+  /** Idempotente; solo gente de mi organización (aunque ya esté dada de baja). */
+  async blockUser(user: ChatUser, targetId: string) {
+    if (!targetId || targetId === user.id) throw new BadRequestException('No puedes bloquearte a ti mismo');
+    const target = await this.prisma.user.findFirst({
+      where: { id: targetId, ...this.orgUserWhere(tenantIdOf(user)) },
+      select: { id: true },
+    });
+    if (!target) throw new NotFoundException('Persona no encontrada');
+    await this.prisma.chatUserBlock.createMany({
+      data: [{ blockerId: user.id, blockedId: target.id }],
+      skipDuplicates: true,
+    });
+    return { ok: true as const };
+  }
+
+  async unblockUser(user: ChatUser, targetId: string) {
+    await this.prisma.chatUserBlock.deleteMany({ where: { blockerId: user.id, blockedId: targetId } });
+    return { ok: true as const };
+  }
+
+  /** Las personas que YO bloqueé (Más › Usuarios bloqueados). */
+  async listBlocks(user: ChatUser) {
+    const rows = await this.prisma.chatUserBlock.findMany({
+      where: { blockerId: user.id },
+      include: { blocked: { select: { id: true, fullName: true } } },
+      orderBy: { createdAt: 'desc' },
+    });
+    return rows.map((r) => ({ id: r.blocked.id, name: r.blocked.fullName, blockedAt: r.createdAt.toISOString() }));
+  }
+
+  /**
+   * Reporta un mensaje ajeno de un canal que puedo ver. Un mismo reporte abierto no
+   * se repite (no se vuelve a avisar); dirección y quien administra el canal reciben
+   * «Reporte en el chat».
+   */
+  async reportMessage(user: ChatUser, messageId: string, input: { reason?: string | null; details?: string | null }) {
+    const reason = String(input.reason ?? '').trim().toUpperCase() as ReportReason;
+    if (!REPORT_REASONS.includes(reason)) throw new BadRequestException('Motivo de reporte inválido');
+    const details = (input.details ?? '').trim();
+    if (details.length > REPORT_DETAILS_MAX) {
+      throw new BadRequestException(`Los detalles admiten hasta ${REPORT_DETAILS_MAX} caracteres`);
+    }
+    const { message, channel } = await this.findMessageIn(user, messageId);
+    if (message.senderId === user.id) throw new BadRequestException('No puedes reportar tu propio mensaje');
+
+    const open = await this.prisma.chatReport.findFirst({
+      where: { reporterId: user.id, messageId: message.id, status: 'OPEN' },
+      select: { id: true },
+    });
+    if (open) return { ok: true as const, reportId: open.id };
+
+    const report = await this.prisma.chatReport.create({
+      data: {
+        organizationId: channel.organizationId,
+        reporterId: user.id,
+        messageId: message.id,
+        reportedUserId: message.senderId,
+        reason,
+        details: details || null,
+      },
+      select: { id: true },
+    });
+    await this.notifyReport(user, channel, message, reason).catch(() => undefined);
+    return { ok: true as const, reportId: report.id };
+  }
+
+  private async notifyReport(user: ChatUser, channel: ChannelRow, message: MessageRow, reason: ReportReason) {
+    const direction = await this.prisma.user.findMany({
+      where: { active: true, roleKey: { in: DIRECTION_ROLES }, ...this.orgUserWhere(channel.organizationId) },
+      select: { id: true },
+    });
+    const directionIds = direction.map((d) => d.id);
+    // Dueños del canal + qué miembros de dirección están dentro (para saber a quién enlazar al mensaje).
+    const inside = await this.prisma.chatChannelMember.findMany({
+      where: {
+        channelId: channel.id,
+        user: { active: true },
+        OR: [{ role: 'owner' }, { userId: { in: directionIds } }],
+      },
+      select: { userId: true },
+    });
+    const members = new Set(inside.map((m) => m.userId));
+    // Ni quien reporta ni la persona reportada.
+    const recipients = [...new Set([...directionIds, ...members])].filter(
+      (id) => id !== user.id && id !== message.senderId,
+    );
+    if (!recipients.length) return;
+    const author = message.sender.fullName;
+    const body = `${REPORT_REASON_LABELS[reason]} · ${shortName(author) || author}: «${chatPreview(pushText(message), 100)}»`;
+    const messageUrl = `/chat?channel=${channel.id}&msg=${message.id}`;
+    await this.notifications.notifyMany(
+      recipients.map((uid) => ({
+        userId: uid,
+        organizationId: channel.organizationId,
+        actorId: user.id,
+        type: 'chat.report',
+        title: 'Reporte en el chat',
+        body,
+        // Un privado o directo ajeno no se abre: el enlace queda en el chat.
+        linkUrl: channel.kind === ChatChannelKind.PUBLIC || members.has(uid) ? messageUrl : '/chat',
+      })),
+    );
+  }
+
+  private assertModerator(user: ChatUser) {
+    if (!isDirectionRole(user.roleKey)) throw new ForbiddenException('Solo dirección atiende los reportes');
+  }
+
+  async listReports(user: ChatUser, rawStatus?: string | null) {
+    this.assertModerator(user);
+    const status = (rawStatus ?? '').trim().toUpperCase() as ReportStatus | '';
+    if (status && !REPORT_STATUSES.includes(status)) throw new BadRequestException('Estado de reporte inválido');
+    const rows = await this.prisma.chatReport.findMany({
+      where: { organizationId: tenantIdOf(user), ...(status ? { status } : {}) },
+      include: {
+        reporter: { select: { id: true, fullName: true } },
+        reportedUser: { select: { id: true, fullName: true } },
+        message: { select: { id: true, body: true, channelId: true, channel: { select: { name: true } } } },
+      },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: PAGE_MAX,
+    });
+    return rows.map((r) => ({
+      id: r.id,
+      reason: r.reason,
+      details: r.details,
+      status: r.status,
+      createdAt: r.createdAt.toISOString(),
+      reporter: { id: r.reporter.id, name: r.reporter.fullName },
+      reportedUser: r.reportedUser ? { id: r.reportedUser.id, name: r.reportedUser.fullName } : null,
+      message: r.message
+        ? { id: r.message.id, body: r.message.body, channelId: r.message.channelId, channelName: r.message.channel.name }
+        : null,
+    }));
+  }
+
+  /** `RESOLVED` lo cierra (quién y cuándo); `OPEN` lo reabre. */
+  async updateReport(user: ChatUser, reportId: string, input: { status?: string | null }) {
+    this.assertModerator(user);
+    const status = String(input.status ?? '').trim().toUpperCase() as ReportStatus;
+    if (!REPORT_STATUSES.includes(status)) throw new BadRequestException('Estado de reporte inválido');
+    const report = await this.prisma.chatReport.findFirst({
+      where: { id: reportId, organizationId: tenantIdOf(user) },
+      select: { id: true },
+    });
+    if (!report) throw new NotFoundException('Reporte no encontrado');
+    await this.prisma.chatReport.update({
+      where: { id: report.id },
+      data:
+        status === 'RESOLVED'
+          ? { status, resolvedAt: new Date(), resolvedById: user.id }
+          : { status, resolvedAt: null, resolvedById: null },
+    });
+    return { ok: true as const };
   }
 
   // ─── Compatibilidad: chat de la junta 11-09 (web actual) ─────────────────
@@ -1383,11 +1634,13 @@ export class ChatService {
   async legacyMessages(user: ChatUser, rawThread: unknown, rawAfter?: string) {
     const channelId = await this.legacyChannelId(user, rawThread);
     const after = rawAfter ? new Date(rawAfter) : null;
+    const blocked = await this.blockedIdsOf(user.id);
     const rows = await this.prisma.chatMessage.findMany({
       where: {
         channelId,
         deletedAt: null,
         parentId: null,
+        ...this.notFromBlocked(blocked),
         ...(after && !Number.isNaN(after.getTime()) ? { createdAt: { gt: after } } : {}),
       },
       orderBy: after ? [{ createdAt: 'asc' }, { id: 'asc' }] : [{ createdAt: 'desc' }, { id: 'desc' }],

@@ -61,7 +61,14 @@ export default function TerminosPage() {
           <li>La información de los eventos es confidencial de {ORGANIZATION}: no la divulgues fuera del equipo.</li>
         </ul>
         <p className={styles.p}>
-          Si algo en el chat o en un archivo te parece indebido, repórtalo al administrador de {ORGANIZATION} o a{' '}
+          Hay tolerancia cero con el contenido ofensivo y con el acoso: los administradores retiran el contenido y
+          pueden desactivar la cuenta de quien lo publique.
+        </p>
+        <p className={styles.p}>
+          En la aplicación puedes reportar cualquier mensaje (mantenlo presionado › «Reportar») y bloquear a una
+          persona para dejar de ver sus mensajes y que no pueda escribirte («Bloquear»; se deshace en Más › Usuarios
+          bloqueados). Los reportes llegan a los administradores de {ORGANIZATION}, que los revisan en menos de 24
+          horas. También puedes escribir a{' '}
           <a className={styles.link} href={`mailto:${PUBLISHER_EMAIL}`}>
             {PUBLISHER_EMAIL}
           </a>

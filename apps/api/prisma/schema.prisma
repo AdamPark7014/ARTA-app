@@ -226,6 +226,10 @@ model User {
   chatMemberships      ChatChannelMember[]
   chatReactions        ChatMessageReaction[]
   chatSaved            ChatSavedMessage[]
+  chatBlocks           ChatUserBlock[]            @relation("ChatBlocker")
+  chatBlockedBy        ChatUserBlock[]            @relation("ChatBlocked")
+  chatReportsMade      ChatReport[]               @relation("ChatReportsMade")
+  chatReportsReceived  ChatReport[]               @relation("ChatReportsReceived")
   pushEndpoints        UserPushEndpoint[]
   /// No molestar: mientras sea futuro no sale push (el aviso en la app sí se guarda).
   chatDndUntil         DateTime?
@@ -1186,6 +1190,7 @@ model ChatMessage {
   updatedAt      DateTime              @default(now()) @updatedAt
   reactions      ChatMessageReaction[]
   savedBy        ChatSavedMessage[]
+  reports        ChatReport[]
 
   @@index([channelId, createdAt])
   @@index([parentId, createdAt])
@@ -1219,6 +1224,43 @@ model ChatSavedMessage {
 
   @@unique([userId, messageId])
   @@index([userId, createdAt])
+  @@index([messageId])
+}
+
+/// Bloqueo personal (Apple 1.2, docs/chat-reportar-bloquear.md): quien bloquea deja de ver
+/// los mensajes de la otra persona y ninguna de las dos se escribe por directo.
+model ChatUserBlock {
+  blockerId String
+  blocker   User     @relation("ChatBlocker", fields: [blockerId], references: [id], onDelete: Cascade)
+  blockedId String
+  blocked   User     @relation("ChatBlocked", fields: [blockedId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@id([blockerId, blockedId])
+  @@index([blockedId])
+}
+
+/// Reporte de un mensaje del chat; dirección lo atiende (Apple pide actuar en menos de 24 h).
+model ChatReport {
+  id             String       @id @default(cuid())
+  organizationId String?
+  reporterId     String
+  reporter       User         @relation("ChatReportsMade", fields: [reporterId], references: [id], onDelete: Cascade)
+  messageId      String?
+  message        ChatMessage? @relation(fields: [messageId], references: [id], onDelete: SetNull)
+  reportedUserId String?
+  reportedUser   User?        @relation("ChatReportsReceived", fields: [reportedUserId], references: [id], onDelete: SetNull)
+  /// SPAM | ACOSO | OFENSIVO | OTRO
+  reason         String
+  /// Máx. 1000 caracteres.
+  details        String?
+  /// OPEN | RESOLVED
+  status         String       @default("OPEN")
+  createdAt      DateTime     @default(now())
+  resolvedAt     DateTime?
+  resolvedById   String?
+
+  @@index([organizationId, status, createdAt])
   @@index([messageId])
 }
 

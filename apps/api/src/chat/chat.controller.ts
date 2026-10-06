@@ -35,7 +35,17 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { discardUpload } from '../uploads/upload-storage';
 import { attachmentKind, CHAT_MULTER_OPTIONS, chatContentMatches, chatMimeFor, utf8FileName } from './chat-attachments';
 import { fetchLinkPreview } from './chat-link-preview';
-import { ChatService, GROUP_DM_MAX, MAX_BODY, type ChatUser } from './chat.service';
+import {
+  ChatService,
+  GROUP_DM_MAX,
+  MAX_BODY,
+  REPORT_DETAILS_MAX,
+  REPORT_REASONS,
+  REPORT_STATUSES,
+  type ChatUser,
+  type ReportReason,
+  type ReportStatus,
+} from './chat.service';
 
 type AuthUser = ChatUser & { entities: string[]; permissions: string[] };
 type Req_ = { user: AuthUser };
@@ -105,6 +115,15 @@ class PrefsDto {
   @IsOptional() @IsDateString() dndUntil?: string | null;
 }
 
+class ReportDto {
+  @IsIn([...REPORT_REASONS]) reason!: ReportReason;
+  @IsOptional() @IsString() @MaxLength(REPORT_DETAILS_MAX) details?: string;
+}
+
+class ReportStatusDto {
+  @IsIn([...REPORT_STATUSES]) status!: ReportStatus;
+}
+
 @Controller('chat')
 @UseGuards(JwtAuthGuard)
 export class ChatController {
@@ -148,6 +167,39 @@ export class ChatController {
   @Patch('prefs')
   updatePrefs(@Req() req: Req_, @Body() dto: PrefsDto) {
     return this.chat.setPrefs(req.user, dto);
+  }
+
+  // ─── Reportar y bloquear (docs/chat-reportar-bloquear.md) ─────────────────
+
+  @Post('messages/:id/report')
+  report(@Req() req: Req_, @Param('id') id: string, @Body() dto: ReportDto) {
+    return this.chat.reportMessage(req.user, id, dto);
+  }
+
+  @Post('users/:userId/block')
+  block(@Req() req: Req_, @Param('userId') userId: string) {
+    return this.chat.blockUser(req.user, userId);
+  }
+
+  @Delete('users/:userId/block')
+  unblock(@Req() req: Req_, @Param('userId') userId: string) {
+    return this.chat.unblockUser(req.user, userId);
+  }
+
+  @Get('blocks')
+  blocks(@Req() req: Req_) {
+    return this.chat.listBlocks(req.user);
+  }
+
+  /** Solo dirección (dir_general, dir_adjunta, super_admin), de su organización. */
+  @Get('reports')
+  reports(@Req() req: Req_, @Query('status') status?: string) {
+    return this.chat.listReports(req.user, status);
+  }
+
+  @Patch('reports/:id')
+  updateReport(@Req() req: Req_, @Param('id') id: string, @Body() dto: ReportStatusDto) {
+    return this.chat.updateReport(req.user, id, dto);
   }
 
   // ─── Canales ─────────────────────────────────────────────────────────────

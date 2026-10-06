@@ -1,5 +1,5 @@
 import { BadRequestException, ForbiddenException } from '@nestjs/common';
-import { ChatService, serializeMessage, type ChatUser } from './chat.service';
+import { BLOCKED_DM_MESSAGE, ChatService, serializeMessage, type ChatUser } from './chat.service';
 import type { NotificationsService } from '../notifications/notifications.service';
 import type { RealtimeGateway } from '../realtime/realtime.gateway';
 import type { PrismaService } from '../common/prisma/prisma.service';
@@ -90,6 +90,19 @@ function setup() {
       update: jest.fn(),
     },
     user: { findMany: jest.fn().mockResolvedValue([]), findFirst: jest.fn() },
+    chatUserBlock: {
+      findMany: jest.fn().mockResolvedValue([]),
+      findFirst: jest.fn().mockResolvedValue(null),
+      findUnique: jest.fn().mockResolvedValue(null),
+      createMany: jest.fn().mockResolvedValue({ count: 1 }),
+      deleteMany: jest.fn().mockResolvedValue({ count: 1 }),
+    },
+    chatReport: {
+      findFirst: jest.fn().mockResolvedValue(null),
+      findMany: jest.fn().mockResolvedValue([]),
+      create: jest.fn().mockResolvedValue({ id: 'r1' }),
+      update: jest.fn(),
+    },
     $queryRaw: jest.fn().mockResolvedValue([{ n: 3 }]),
   };
   const notifications = {
@@ -427,5 +440,204 @@ describe('Chat v2', () => {
     expect(notifications.notify).toHaveBeenCalledWith(
       expect.objectContaining({ userId: 'u2', type: 'chat.removed', title: 'Te quitaron de #produccion', linkUrl: '/chat' }),
     );
+  });
+});
+
+describe('Reportar y bloquear', () => {
+  const luis = { id: 'u2', fullName: 'Luis Pérez', title: null };
+
+  it('no se reporta un mensaje propio ni con un motivo fuera del catálogo', async () => {
+    const { service, prisma } = setup();
+    prisma.chatChannel.findFirst.mockResolvedValue(channel());
+    prisma.chatMessage.findFirst.mockResolvedValue(messageRow({ senderId: 'u1' }));
+    await expect(service.reportMessage(ana, 'msg1', { reason: 'SPAM' })).rejects.toBeInstanceOf(BadRequestException);
+    await expect(service.reportMessage(ana, 'msg1', { reason: 'FEO' })).rejects.toBeInstanceOf(BadRequestException);
+    await expect(
+      service.reportMessage(ana, 'msg1', { reason: 'OTRO', details: 'x'.repeat(1001) }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.chatReport.create).not.toHaveBeenCalled();
+  });
+
+  it('reportar guarda la organización y avisa a dirección y a quien administra el canal', async () => {
+    const { service, prisma, notifications } = setup();
+    prisma.chatChannel.findFirst.mockResolvedValue(channel({ kind: 'PRIVATE', slug: null, name: 'produccion' }));
+    prisma.chatMessage.findFirst.mockResolvedValue(messageRow({ senderId: 'u2', sender: luis, body: 'eres un inútil' }));
+    prisma.user.findMany.mockResolvedValue([{ id: 'u9' }, { id: 'u2' }]);
+    prisma.chatChannelMember.findMany.mockResolvedValueOnce([{ userId: 'u7' }]);
+
+    const res = await service.reportMessage(ana, 'msg1', { reason: 'acoso', details: '  me insulta  ' });
+
+    expect(res).toEqual({ ok: true, reportId: 'r1' });
+    expect(prisma.chatReport.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: {
+          organizationId: ORG,
+          reporterId: 'u1',
+          messageId: 'msg1',
+          reportedUserId: 'u2',
+          reason: 'ACOSO',
+          details: 'me insulta',
+        },
+      }),
+    );
+    const sent = notifications.notifyMany.mock.calls[0][0] as Array<Record<string, string>>;
+    // Ni quien reporta ni la persona reportada (aunque sea de dirección).
+    expect(sent.map((n) => n.userId)).toEqual(['u9', 'u7']);
+    expect(sent[0]).toEqual(
+      expect.objectContaining({ type: 'chat.report', title: 'Reporte en el chat', organizationId: ORG, linkUrl: '/chat' }),
+    );
+    expect(sent[0].body).toContain('Acoso o intimidación');
+    expect(sent[0].body).toContain('eres un inútil');
+    // Quien administra el canal sí entra: el aviso lleva al mensaje.
+    expect(sent[1].linkUrl).toBe('/chat?channel=c1&msg=msg1');
+  });
+
+  it('un reporte abierto del mismo mensaje no se repite', async () => {
+    const { service, prisma, notifications } = setup();
+    prisma.chatChannel.findFirst.mockResolvedValue(channel());
+    prisma.chatMessage.findFirst.mockResolvedValue(messageRow({ senderId: 'u2', sender: luis }));
+    prisma.chatReport.findFirst.mockResolvedValue({ id: 'r0' });
+    await expect(service.reportMessage(ana, 'msg1', { reason: 'SPAM' })).resolves.toEqual({ ok: true, reportId: 'r0' });
+    expect(prisma.chatReport.create).not.toHaveBeenCalled();
+    expect(notifications.notifyMany).not.toHaveBeenCalled();
+  });
+
+  it('bloquear oculta sus mensajes y desbloquear los regresa', async () => {
+    const { service, prisma } = setup();
+    prisma.chatChannel.findFirst.mockResolvedValue(channel());
+    prisma.chatUserBlock.findMany.mockResolvedValueOnce([{ blockedId: 'u2' }]);
+    await service.listMessages(ana, 'c1');
+    expect(prisma.chatUserBlock.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { blockerId: 'u1' } }));
+    expect(prisma.chatMessage.findMany.mock.calls[0][0].where).toEqual(
+      expect.objectContaining({ senderId: { notIn: ['u2'] } }),
+    );
+
+    await expect(service.unblockUser(ana, 'u2')).resolves.toEqual({ ok: true });
+    expect(prisma.chatUserBlock.deleteMany).toHaveBeenCalledWith({ where: { blockerId: 'u1', blockedId: 'u2' } });
+    await service.listMessages(ana, 'c1');
+    expect(prisma.chatMessage.findMany.mock.calls[1][0].where).not.toHaveProperty('senderId');
+  });
+
+  it('fijados, guardados y búsqueda tampoco muestran a quien bloqueé', async () => {
+    const { service, prisma } = setup();
+    prisma.chatChannel.findFirst.mockResolvedValue(channel());
+    prisma.chatUserBlock.findMany.mockResolvedValue([{ blockedId: 'u2' }]);
+    await service.listPins(ana, 'c1');
+    await service.searchMessages(ana, 'hola');
+    expect(prisma.chatMessage.findMany.mock.calls[0][0].where.senderId).toEqual({ notIn: ['u2'] });
+    expect(prisma.chatMessage.findMany.mock.calls[1][0].where.senderId).toEqual({ notIn: ['u2'] });
+    await service.listSaved(ana);
+    expect(prisma.chatSavedMessage.findMany.mock.calls[0][0].where.message.senderId).toEqual({ notIn: ['u2'] });
+  });
+
+  it('el hilo de alguien que bloqueé no se abre y sus respuestas se ocultan', async () => {
+    const { service, prisma } = setup();
+    prisma.chatChannel.findFirst.mockResolvedValue(channel());
+    prisma.chatUserBlock.findMany.mockResolvedValue([{ blockedId: 'u2' }]);
+    prisma.chatMessage.findFirst.mockResolvedValueOnce(messageRow({ senderId: 'u2', sender: luis }));
+    await expect(service.getThread(ana, 'msg1')).rejects.toThrow('Mensaje no encontrado');
+
+    prisma.chatMessage.findFirst.mockResolvedValueOnce(messageRow());
+    await service.getThread(ana, 'msg1');
+    expect(prisma.chatMessage.findMany.mock.calls[0][0].where).toEqual(
+      expect.objectContaining({ parentId: 'msg1', senderId: { notIn: ['u2'] } }),
+    );
+  });
+
+  it('con bloqueo en cualquier dirección no se abre ni se escribe un directo (403)', async () => {
+    const { service, prisma } = setup();
+    prisma.user.findFirst.mockResolvedValue(luis);
+    prisma.chatUserBlock.findFirst.mockResolvedValue({ blockerId: 'u2' });
+    await expect(service.openDirect(ana, 'u2')).rejects.toThrow(new ForbiddenException(BLOCKED_DM_MESSAGE));
+    expect(prisma.chatUserBlock.findFirst.mock.calls[0][0].where).toEqual({
+      OR: [
+        { blockerId: 'u1', blockedId: 'u2' },
+        { blockerId: 'u2', blockedId: 'u1' },
+      ],
+    });
+    expect(prisma.chatChannel.upsert).not.toHaveBeenCalled();
+
+    prisma.chatChannel.findFirst.mockResolvedValue(channel({ kind: 'DIRECT', slug: null, name: 'Mensaje directo' }));
+    const err = await service.postMessage(ana, 'c1', { body: 'hola' }).catch((e) => e);
+    expect(err).toBeInstanceOf(ForbiddenException);
+    expect(err.message).toBe(BLOCKED_DM_MESSAGE);
+    expect(prisma.chatMessage.create).not.toHaveBeenCalled();
+  });
+
+  it('quien bloqueó al autor no recibe push ni mención', async () => {
+    const { service, prisma, notifications, realtime } = setup();
+    prisma.chatChannel.findFirst.mockResolvedValue(channel());
+    const body = 'Ojo [@Pepe](user:u3)';
+    prisma.chatMessage.create.mockResolvedValue(messageRow({ body }));
+    prisma.chatChannelMember.findMany.mockResolvedValue([
+      { userId: 'u1', mutedUntil: null },
+      { userId: 'u2', mutedUntil: null },
+      { userId: 'u3', mutedUntil: null },
+    ]);
+    prisma.chatUserBlock.findMany.mockResolvedValue([{ blockerId: 'u3' }]);
+    await service.postMessage(ana, 'c1', { body });
+    await flush();
+    expect(prisma.chatUserBlock.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { blockedId: 'u1', blockerId: { in: ['u1', 'u2', 'u3'] } } }),
+    );
+    expect(notifications.pushOnly.mock.calls.map((c) => c[0])).toEqual(['u2']);
+    expect(notifications.notifyMany).toHaveBeenCalledWith([]);
+    expect(realtime.emitToUsers).toHaveBeenCalledWith(['u2'], 'chat:channel-activity', expect.objectContaining({ notify: true }));
+  });
+
+  it('bloquear: no a sí mismo, solo de la organización e idempotente', async () => {
+    const { service, prisma } = setup();
+    await expect(service.blockUser(ana, 'u1')).rejects.toBeInstanceOf(BadRequestException);
+    prisma.user.findFirst.mockResolvedValueOnce(null);
+    await expect(service.blockUser(ana, 'u-otra-org')).rejects.toThrow('Persona no encontrada');
+    prisma.user.findFirst.mockResolvedValue({ id: 'u2' });
+    await expect(service.blockUser(ana, 'u2')).resolves.toEqual({ ok: true });
+    expect(prisma.chatUserBlock.createMany).toHaveBeenCalledWith({
+      data: [{ blockerId: 'u1', blockedId: 'u2' }],
+      skipDuplicates: true,
+    });
+  });
+
+  it('los reportes solo los ven y cierran dirección, de su organización', async () => {
+    const { service, prisma } = setup();
+    await expect(service.listReports(ana, 'OPEN')).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(service.updateReport(ana, 'r1', { status: 'RESOLVED' })).rejects.toBeInstanceOf(ForbiddenException);
+    expect(prisma.chatReport.findMany).not.toHaveBeenCalled();
+
+    prisma.chatReport.findMany.mockResolvedValue([
+      {
+        id: 'r1',
+        reason: 'SPAM',
+        details: null,
+        status: 'OPEN',
+        createdAt: new Date('2026-10-06T12:00:00Z'),
+        reporter: { id: 'u1', fullName: 'Ana Ruiz' },
+        reportedUser: { id: 'u2', fullName: 'Luis Pérez' },
+        message: { id: 'msg1', body: 'compra ya', channelId: 'c1', channel: { name: 'general' } },
+      },
+    ]);
+    await expect(service.listReports(director, 'open')).resolves.toEqual([
+      {
+        id: 'r1',
+        reason: 'SPAM',
+        details: null,
+        status: 'OPEN',
+        createdAt: '2026-10-06T12:00:00.000Z',
+        reporter: { id: 'u1', name: 'Ana Ruiz' },
+        reportedUser: { id: 'u2', name: 'Luis Pérez' },
+        message: { id: 'msg1', body: 'compra ya', channelId: 'c1', channelName: 'general' },
+      },
+    ]);
+    expect(prisma.chatReport.findMany.mock.calls[0][0].where).toEqual({ organizationId: ORG, status: 'OPEN' });
+
+    prisma.chatReport.findFirst.mockResolvedValue({ id: 'r1' });
+    await expect(service.updateReport(director, 'r1', { status: 'RESOLVED' })).resolves.toEqual({ ok: true });
+    expect(prisma.chatReport.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: 'r1', organizationId: ORG } }),
+    );
+    expect(prisma.chatReport.update).toHaveBeenCalledWith({
+      where: { id: 'r1' },
+      data: expect.objectContaining({ status: 'RESOLVED', resolvedById: 'u9', resolvedAt: expect.any(Date) }),
+    });
   });
 });
