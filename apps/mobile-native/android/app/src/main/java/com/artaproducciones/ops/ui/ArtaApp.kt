@@ -51,6 +51,7 @@ import com.artaproducciones.ops.ui.modules.InicioScreen
 import com.artaproducciones.ops.ui.modules.ModuleNav
 import com.artaproducciones.ops.ui.modules.TaskDetailScreen
 import com.artaproducciones.ops.ui.modules.TasksScreen
+import com.artaproducciones.ops.ui.more.BlockedUsersScreen
 import com.artaproducciones.ops.ui.more.MoreScreen
 import com.artaproducciones.ops.ui.notifications.NotificationsScreen
 import com.artaproducciones.ops.ui.theme.ArtaColors
@@ -59,6 +60,9 @@ import kotlinx.coroutines.flow.StateFlow
 
 /** `navigate("approvals")` sigue valiendo: el argumento es opcional. */
 private const val APPROVALS_ROUTE = "approvals?advance={advance}"
+
+/** Más › Usuarios bloqueados (chat). */
+private const val BLOCKED_USERS_ROUTE = "blocked-users"
 
 /** Pestañas del cascarón, en el orden del contrato de paridad. */
 enum class Tab { Inicio, Chats, Tareas, Avisos, Mas }
@@ -197,6 +201,9 @@ private fun SignedInNav(user: UserDto, pendingLink: StateFlow<DeepLink?>, onLink
             override fun openEvent(id: String) = go(DeepLink.Event(id))
             override fun openApprovals() = go(DeepLink.Approvals)
             override fun openChat(channelId: String) = go(DeepLink.Chat(channelId, null))
+            override fun openBlockedUsers() {
+                nav.navigate(BLOCKED_USERS_ROUTE) { launchSingleTop = true }
+            }
             override fun back() {
                 if (nav.previousBackStackEntry != null) nav.popBackStack() else tab = Tab.Inicio
             }
@@ -246,6 +253,7 @@ private fun SignedInNav(user: UserDto, pendingLink: StateFlow<DeepLink?>, onLink
             ApprovalsScreen(nav = moduleNav, focusAdvanceId = entry.arguments?.getString("advance"))
         }
         composable("events") { EventsScreen(nav = moduleNav) }
+        composable(BLOCKED_USERS_ROUTE) { BlockedUsersScreen(onBack = { nav.popBackStack() }) }
         composable(
             route = "web?path={path}&title={title}",
             arguments = listOf(

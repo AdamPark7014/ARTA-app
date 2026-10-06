@@ -21,6 +21,7 @@ import androidx.compose.material.icons.automirrored.outlined.Logout
 import androidx.compose.material.icons.automirrored.outlined.OpenInNew
 import androidx.compose.material.icons.outlined.AccountBalance
 import androidx.compose.material.icons.outlined.AddCircleOutline
+import androidx.compose.material.icons.outlined.Block
 import androidx.compose.material.icons.outlined.Brush
 import androidx.compose.material.icons.outlined.Build
 import androidx.compose.material.icons.outlined.Business
@@ -83,6 +84,7 @@ import com.artaproducciones.ops.data.Session
 import com.artaproducciones.ops.data.api.ApiClient
 import com.artaproducciones.ops.data.api.UserDto
 import com.artaproducciones.ops.push.PushRegistration
+import com.artaproducciones.ops.ui.chat.ModerationText
 import com.artaproducciones.ops.ui.common.Avatar
 import com.artaproducciones.ops.ui.common.LegalLinks
 import com.artaproducciones.ops.ui.modules.ModuleNav
@@ -376,6 +378,14 @@ fun MoreScreen(user: UserDto, nav: ModuleNav) {
                 label = "No molestar",
                 supporting = dndLabel(dndUntil),
                 onClick = { dndDialog = true },
+            )
+        }
+        item(key = "blocked") {
+            MoreRow(
+                icon = Icons.Outlined.Block,
+                label = ModerationText.BLOCKED_USERS,
+                supporting = "Personas cuyos mensajes no ves en el chat",
+                onClick = { nav.openBlockedUsers() },
             )
         }
         item(key = "browser") {

@@ -53,6 +53,7 @@ import androidx.compose.material.icons.automirrored.outlined.Reply
 import androidx.compose.material.icons.automirrored.outlined.VolumeOff
 import androidx.compose.material.icons.outlined.AddReaction
 import androidx.compose.material.icons.outlined.AttachFile
+import androidx.compose.material.icons.outlined.Block
 import androidx.compose.material.icons.outlined.Bookmark
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.BookmarkRemove
@@ -65,6 +66,7 @@ import androidx.compose.material.icons.outlined.DoneAll
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.EmojiEmotions
 import androidx.compose.material.icons.outlined.ErrorOutline
+import androidx.compose.material.icons.outlined.Flag
 import androidx.compose.material.icons.outlined.Forum
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
@@ -148,6 +150,8 @@ import com.artaproducciones.ops.data.api.ChatMessage
 import com.artaproducciones.ops.data.api.ChatReaction
 import com.artaproducciones.ops.data.api.ChatReplyRef
 import com.artaproducciones.ops.data.api.userMessage
+import com.artaproducciones.ops.data.realtime.ChatBlocks
+import com.artaproducciones.ops.data.realtime.withoutBlocked
 import com.artaproducciones.ops.ui.common.Avatar
 import com.artaproducciones.ops.ui.common.dayKey
 import com.artaproducciones.ops.ui.common.dayLabel
@@ -220,7 +224,14 @@ fun ConversationScreen(
     var menuOpen by remember { mutableStateOf(false) }
     var pinsOpen by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf<ChatMessage?>(null) }
+    var reportFor by remember { mutableStateOf<ChatMessage?>(null) }
+    var confirmBlock by remember { mutableStateOf<BlockTarget?>(null) }
     val focusRequester = remember { FocusRequester() }
+
+    // Personas que bloqueé: sus mensajes no se pintan aunque ya estuvieran cargados.
+    val blockedUsers by ChatBlocks.users.collectAsState()
+    val blockedIds = remember(blockedUsers) { blockedUsers.mapTo(HashSet()) { it.id } }
+    val messages = remember(state.messages, blockedIds) { state.messages.withoutBlocked(blockedIds) }
 
     // Borrador por conversación: se guarda al escribir (con pausa) y al salir.
     LaunchedEffect(draft.text, editing) {
@@ -343,7 +354,7 @@ fun ConversationScreen(
     fun openAttachment(a: ChatAttachment) {
         when {
             a.isImage -> {
-                val images = state.messages.mapNotNull { it.attachment?.takeIf { att -> att.isImage && !it.deleted } }
+                val images = messages.mapNotNull { it.attachment?.takeIf { att -> att.isImage && !it.deleted } }
                 gallery = images to images.indexOfFirst { it.url == a.url }.coerceAtLeast(0)
             }
             a.isVideo -> videoViewer = a
@@ -355,8 +366,8 @@ fun ConversationScreen(
     }
 
     // Lista invertida: índice 0 = mensaje más nuevo, así el teclado y lo nuevo quedan abajo.
-    val rows = remember(state.messages, state.firstUnreadId) { buildRows(state.messages, parentId, state.firstUnreadId) }
-    val newest = state.messages.lastOrNull()
+    val rows = remember(messages, state.firstUnreadId) { buildRows(messages, parentId, state.firstUnreadId) }
+    val newest = messages.lastOrNull()
     var unseen by remember { mutableIntStateOf(0) }
     var positioned by rememberSaveable { mutableStateOf(false) }
     val atBottom by remember { derivedStateOf { listState.firstVisibleItemIndex <= 1 } }
@@ -418,9 +429,32 @@ fun ConversationScreen(
         channel != null -> channel.topic?.takeIf { it.isNotBlank() } ?: "${channel.memberCount} miembros"
         else -> ""
     }
-    val lastMineId = state.messages.lastOrNull { it.author.id == vm.myId && !it.pending && !it.failed && !it.deleted }?.id
+    val lastMineId = messages.lastOrNull { it.author.id == vm.myId && !it.pending && !it.failed && !it.deleted }?.id
     fun openInfo() {
         if (parentId == null && channel != null) openChat(ChatRoutes.info(channelId))
+    }
+
+    // Hilo cuya raíz es de alguien que bloqueé: sin raíz no hay hilo, se vuelve al canal.
+    val threadRootAuthor = if (parentId != null) state.messages.firstOrNull { it.id == parentId }?.author?.id else null
+    LaunchedEffect(threadRootAuthor, blockedIds) {
+        if (threadRootAuthor != null && threadRootAuthor in blockedIds) onBack()
+    }
+
+    fun block(target: BlockTarget) {
+        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+        scope.launch {
+            vm.block(target.id, target.name)
+                .onSuccess { snackbar.showSnackbar(ModerationText.blocked(target.name)) }
+                .onFailure { snackbar.showSnackbar(it.userMessage()) }
+        }
+    }
+
+    fun unblock(target: BlockTarget) {
+        scope.launch {
+            vm.unblock(target.id)
+                .onSuccess { snackbar.showSnackbar(ModerationText.unblocked(target.name)) }
+                .onFailure { snackbar.showSnackbar(it.userMessage()) }
+        }
     }
 
     Scaffold(
@@ -496,6 +530,25 @@ fun ConversationScreen(
                                 DropdownMenuItem(text = { Text("Silenciar 1 semana") }, onClick = { menuOpen = false; vm.mute(true, 24 * 7) })
                                 DropdownMenuItem(text = { Text("Silenciar siempre") }, onClick = { menuOpen = false; vm.mute(true, null) })
                             }
+                            // Directo uno a uno: bloquear o desbloquear a la otra persona.
+                            val peer = channel.peer
+                            if (isDirect && !isGroupDm && peer != null && peer.id.isNotBlank() && peer.id != vm.myId) {
+                                val target = BlockTarget(peer.id, peer.fullName.ifBlank { channel.name })
+                                HorizontalDivider(color = ArtaColors.Line)
+                                if (peer.id in blockedIds) {
+                                    DropdownMenuItem(
+                                        text = { Text(ModerationText.UNBLOCK) },
+                                        leadingIcon = { Icon(Icons.Outlined.Block, null) },
+                                        onClick = { menuOpen = false; unblock(target) },
+                                    )
+                                } else {
+                                    DropdownMenuItem(
+                                        text = { Text(ModerationText.BLOCK, color = ArtaColors.Danger) },
+                                        leadingIcon = { Icon(Icons.Outlined.Block, null, tint = ArtaColors.Danger) },
+                                        onClick = { menuOpen = false; confirmBlock = target },
+                                    )
+                                }
+                            }
                         }
                     }
                 },
@@ -505,10 +558,10 @@ fun ConversationScreen(
         Column(Modifier.fillMaxSize().padding(padding).imePadding()) {
             Box(Modifier.weight(1f)) {
                 when {
-                    state.loading && state.messages.isEmpty() -> ConversationSkeleton()
-                    state.loadError != null && state.messages.isEmpty() ->
+                    state.loading && messages.isEmpty() -> ConversationSkeleton()
+                    state.loadError != null && messages.isEmpty() ->
                         ErrorState(state.loadError, onRetry = vm::retry, modifier = Modifier.align(Alignment.Center))
-                    state.messages.isEmpty() -> EmptyState(
+                    messages.isEmpty() -> EmptyState(
                         Icons.Outlined.ChatBubbleOutline,
                         title = if (parentId != null) "Sin respuestas todavía" else "Aún no hay mensajes",
                         subtitle = when {
@@ -590,7 +643,7 @@ fun ConversationScreen(
                         }
                     }
                 }
-                val showJump = state.messages.isNotEmpty() && (listState.firstVisibleItemIndex > 3 || state.hasNewer)
+                val showJump = messages.isNotEmpty() && (listState.firstVisibleItemIndex > 3 || state.hasNewer)
                 if (showJump) {
                     Surface(
                         color = ArtaColors.Surface2,
@@ -755,6 +808,31 @@ fun ConversationScreen(
                         .onFailure { Toast.makeText(context, it.userMessage(), Toast.LENGTH_LONG).show() }
                 }
             },
+            onReport = { reportFor = m },
+            onBlock = { confirmBlock = BlockTarget(m.author.id, m.author.fullName) },
+        )
+    }
+
+    reportFor?.let { m ->
+        ReportMessageSheet(
+            authorName = m.author.fullName,
+            onSubmit = { reason, details -> vm.report(m, reason, details) },
+            onSent = {
+                reportFor = null
+                scope.launch { snackbar.showSnackbar(ModerationText.REPORT_THANKS) }
+            },
+            onDismiss = { reportFor = null },
+        )
+    }
+
+    confirmBlock?.let { t ->
+        BlockUserDialog(
+            target = t,
+            onConfirm = {
+                confirmBlock = null
+                block(t)
+            },
+            onDismiss = { confirmBlock = null },
         )
     }
 
@@ -1433,7 +1511,11 @@ private fun MessageActions(
     onEdit: () -> Unit,
     onDelete: () -> Unit,
     onShare: () -> Unit,
+    onReport: () -> Unit,
+    onBlock: () -> Unit,
 ) {
+    // Reportar y bloquear: solo en mensajes de otra persona (no de sistema ni sin autor).
+    val moderable = !mine && m.kind != "SYSTEM" && m.author.id.isNotBlank()
     val editable = mine && m.attachment == null &&
         (parseInstant(m.createdAt)?.let { Instant.now().toEpochMilli() - it.toEpochMilli() < ConversationViewModel.EDIT_WINDOW_MS } == true)
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = ArtaColors.BgElev) {
@@ -1450,6 +1532,11 @@ private fun MessageActions(
         SheetItem(Icons.Outlined.PushPin, if (m.pinnedAt != null) "Desfijar" else "Fijar en la conversación") { onPin(); onDismiss() }
         if (editable) SheetItem(Icons.Outlined.Edit, "Editar") { onEdit(); onDismiss() }
         if (mine || canManage) SheetItem(Icons.Outlined.DeleteOutline, "Eliminar", danger = true) { onDelete(); onDismiss() }
+        if (moderable) {
+            HorizontalDivider(color = ArtaColors.Line, modifier = Modifier.padding(vertical = Space.XS))
+            SheetItem(Icons.Outlined.Flag, ModerationText.REPORT, danger = true) { onReport(); onDismiss() }
+            SheetItem(Icons.Outlined.Block, ModerationText.blockUser(m.author.fullName), danger = true) { onBlock(); onDismiss() }
+        }
         Spacer(Modifier.navigationBarsPadding().padding(bottom = Space.M))
     }
 }

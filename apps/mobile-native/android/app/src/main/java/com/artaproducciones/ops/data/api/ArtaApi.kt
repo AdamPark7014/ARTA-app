@@ -189,6 +189,13 @@ data class LinkPreview(val url: String, val title: String? = null, val descripti
 data class PresenceList(val online: List<String> = emptyList())
 data class ChatPrefs(val dndUntil: String? = null)
 
+/** `reason`: `SPAM` | `ACOSO` | `OFENSIVO` | `OTRO` (docs/chat-reportar-bloquear.md). `details` hasta 1000. */
+data class ReportBody(val reason: String, val details: String? = null)
+data class ReportResult(val ok: Boolean = true, val reportId: String? = null)
+
+/** Persona que YO bloqueé (`GET /chat/blocks`). */
+data class BlockedUser(val id: String, val name: String = "", val avatarUrl: String? = null, val blockedAt: String? = null)
+
 // ─── Avisos y dispositivos ──────────────────────────────────────────────────
 
 data class NotificationActor(val id: String, val fullName: String)
@@ -327,6 +334,20 @@ interface ArtaApi {
     /** JSON crudo: Moshi omite los null y `dndUntil: null` tiene que viajar para apagar No molestar. */
     @PATCH("chat/prefs")
     suspend fun setChatPrefs(@Body body: RequestBody): ChatPrefs
+
+    // Reportar y bloquear (guía 1.2 de Apple): contrato en docs/chat-reportar-bloquear.md.
+
+    @POST("chat/messages/{id}/report")
+    suspend fun reportMessage(@Path("id") messageId: String, @Body body: ReportBody): ReportResult
+
+    @POST("chat/users/{userId}/block")
+    suspend fun blockUser(@Path("userId") userId: String): OkResponse
+
+    @HTTP(method = "DELETE", path = "chat/users/{userId}/block")
+    suspend fun unblockUser(@Path("userId") userId: String): OkResponse
+
+    @GET("chat/blocks")
+    suspend fun blocks(): List<BlockedUser>
 
     @GET("notifications")
     suspend fun notifications(@Query("take") take: Int = 50): List<NotificationDto>

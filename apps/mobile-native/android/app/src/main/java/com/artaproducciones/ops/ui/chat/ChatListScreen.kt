@@ -65,6 +65,7 @@ import androidx.compose.ui.unit.dp
 import com.artaproducciones.ops.data.api.ApiClient
 import com.artaproducciones.ops.data.api.ChannelSummary
 import com.artaproducciones.ops.data.api.userMessage
+import com.artaproducciones.ops.data.realtime.ChatBlocks
 import com.artaproducciones.ops.data.realtime.RealtimeClient
 import com.artaproducciones.ops.ui.common.messageTime
 import com.artaproducciones.ops.ui.common.parseInstant
@@ -131,6 +132,8 @@ fun ChatListScreen(openChat: (String) -> Unit) {
     var menu by remember { mutableStateOf(false) }
     var dndUntil by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(Unit) { ChatPresence.ensureStarted() }
+    // Al entrar al chat: quién está bloqueado (pudo cambiar desde la web), para ignorar lo suyo en tiempo real.
+    LaunchedEffect(Unit) { ChatBlocks.ensureLoaded(refresh = true) }
     val online by ChatPresence.online.collectAsState()
 
     suspend fun load() {

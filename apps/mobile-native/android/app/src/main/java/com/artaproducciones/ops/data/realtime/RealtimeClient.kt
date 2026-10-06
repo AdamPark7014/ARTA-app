@@ -71,14 +71,18 @@ object RealtimeClient {
         .onFailure { Log.w(TAG, "Mensaje ilegible: ${it.message}") }
         .getOrNull()
 
-    private val onMessage = Emitter.Listener { args -> obj(args)?.let(::message)?.let { _messages.tryEmit(it) } }
-    private val onUpdated = Emitter.Listener { args -> obj(args)?.let(::message)?.let { _updated.tryEmit(it) } }
+    /** Personas que bloqueé: lo suyo que llegue por el socket se ignora ([ChatBlocks]). */
+    private fun fromBlocked(m: ChatMessage): Boolean = ChatBlocks.isBlocked(m.author.id)
+
+    private val onMessage = Emitter.Listener { args -> obj(args)?.let(::message)?.takeUnless(::fromBlocked)?.let { _messages.tryEmit(it) } }
+    private val onUpdated = Emitter.Listener { args -> obj(args)?.let(::message)?.takeUnless(::fromBlocked)?.let { _updated.tryEmit(it) } }
     private val onDeleted = Emitter.Listener { args ->
         val o = obj(args) ?: return@Listener
         _deleted.tryEmit(DeletedEvent(o.optString("channelId"), o.optString("messageId"), o.optString("parentId").ifBlank { null }?.takeIf { it != "null" }))
     }
     private val onTyping = Emitter.Listener { args ->
         val o = obj(args) ?: return@Listener
+        if (ChatBlocks.isBlocked(o.optString("userId"))) return@Listener
         _typing.tryEmit(TypingEvent(o.optString("channelId"), o.optString("userId"), o.optString("fullName", "Alguien"), o.optLong("at", System.currentTimeMillis())))
     }
     private val onRead = Emitter.Listener { args ->
@@ -88,6 +92,7 @@ object RealtimeClient {
     }
     private val onActivity = Emitter.Listener { args ->
         val o = obj(args) ?: return@Listener
+        if (ChatBlocks.isBlocked(o.optString("senderId"))) return@Listener
         _activity.tryEmit(
             ActivityEvent(
                 channelId = o.optString("channelId"),

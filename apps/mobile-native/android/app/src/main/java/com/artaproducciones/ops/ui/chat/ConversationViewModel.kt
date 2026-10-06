@@ -15,9 +15,12 @@ import com.artaproducciones.ops.data.api.EditBody
 import com.artaproducciones.ops.data.api.MuteBody
 import com.artaproducciones.ops.data.api.PostMessageBody
 import com.artaproducciones.ops.data.api.ReactionBody
+import com.artaproducciones.ops.data.api.ReportBody
 import com.artaproducciones.ops.data.api.UploadResult
 import com.artaproducciones.ops.data.api.userMessage
+import com.artaproducciones.ops.data.realtime.ChatBlocks
 import com.artaproducciones.ops.data.realtime.RealtimeClient
+import com.artaproducciones.ops.data.realtime.withoutBlocked
 import com.artaproducciones.ops.push.ActiveConversation
 import com.artaproducciones.ops.ui.common.parseInstant
 import com.artaproducciones.ops.ui.common.plainText
@@ -82,6 +85,8 @@ class ConversationViewModel(
     private var unreadComputed = false
 
     init {
+        // Antes de unirse a la sala: lo que llegue de personas bloqueadas se ignora.
+        ChatBlocks.ensureLoaded()
         RealtimeClient.join(channelId)
         viewModelScope.launch { loadInitial() }
         collectRealtime()
@@ -538,7 +543,24 @@ class ConversationViewModel(
         }
     }
 
-    suspend fun pins(): List<ChatMessage> = runCatching { ApiClient.api.pins(channelId).messages }.getOrDefault(emptyList())
+    suspend fun pins(): List<ChatMessage> =
+        runCatching { ApiClient.api.pins(channelId).messages.withoutBlocked(ChatBlocks.ids) }.getOrDefault(emptyList())
+
+    // ─── Reportar y bloquear (docs/chat-reportar-bloquear.md) ──────────────────
+
+    suspend fun report(m: ChatMessage, reason: ReportReason, details: String): Result<Unit> = runCatching {
+        val extra = details.trim().take(ReportReason.MAX_DETAILS).ifBlank { null }
+        ApiClient.api.reportMessage(m.id, ReportBody(reason.api, extra))
+        Unit
+    }
+
+    /** Sus mensajes desaparecen de esta pantalla en cuanto el API confirma. */
+    suspend fun block(userId: String, name: String): Result<Unit> = runCatching { ChatBlocks.block(userId, name) }
+        .onSuccess { _state.update { s -> s.copy(messages = s.messages.withoutBlocked(setOf(userId))) } }
+
+    /** Se recarga la conversación para que vuelvan sus mensajes. */
+    suspend fun unblock(userId: String): Result<Unit> = runCatching { ChatBlocks.unblock(userId) }
+        .onSuccess { viewModelScope.launch { loadInitial() } }
 
     fun clearError() = _state.update { it.copy(error = null) }
 

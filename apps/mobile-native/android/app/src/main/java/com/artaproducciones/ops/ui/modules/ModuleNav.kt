@@ -7,5 +7,7 @@ interface ModuleNav {
     fun openApprovals()
     fun openWeb(path: String, title: String? = null)
     fun openChat(channelId: String)
+    /** «Más › Usuarios bloqueados» del chat. */
+    fun openBlockedUsers()
     fun back()
 }

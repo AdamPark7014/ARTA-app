@@ -122,6 +122,12 @@ internal class DemoInterceptor(context: Context) : Interceptor {
                 changeChannel(s[2]) { it.put("muted", body.optBoolean("muted")) }
                 OK
             }
+            // Bloquear / desbloquear: se recuerda en memoria para que «Usuarios bloqueados» lo muestre.
+            // Reportar (`chat/messages/:id/report`) cae en messageAction → OK.
+            s.size == 4 && s[0] == "chat" && s[1] == "users" && s[3] == "block" -> {
+                setBlocked(s[2], blocked = method != "DELETE")
+                OK
+            }
             // Crear canal o grupo: sin pantalla de destino en las fixtures.
             path == "chat/channels" || path == "chat/group-dm" -> null
             // Avisos
@@ -335,6 +341,17 @@ internal class DemoInterceptor(context: Context) : Interceptor {
         m.put("reactions", out)
     }
 
+    private fun setBlocked(userId: String, blocked: Boolean) {
+        val current = store.arr(BLOCKS).objects().filterNot { it.optString("id") == userId }
+        val next = if (!blocked) current else {
+            val name = person(userId).optString("fullName").ifBlank {
+                channels().firstNotNullOfOrNull { c -> c.optJSONObject("peer")?.takeIf { it.optString("id") == userId }?.optString("fullName") }.orEmpty()
+            }
+            listOf(JSONObject().put("id", userId).put("name", name).put("blockedAt", now())) + current
+        }
+        store.put(BLOCKS, JSONArray(next))
+    }
+
     /** El archivo se queda en memoria y se sirve desde su URL: la foto enviada se ve en la conversación. */
     private fun upload(request: Request): JSONObject? {
         val part = (request.body as? MultipartBody)?.parts?.firstOrNull() ?: return null
@@ -518,10 +535,11 @@ internal class DemoInterceptor(context: Context) : Interceptor {
         private const val MAX_UPLOAD = 32 * 1024 * 1024
         private val JSON = "application/json; charset=utf-8".toMediaType()
         private val MESSAGES = Regex("^chat/channels/[^/]+/messages$")
+        private const val BLOCKS = "chat/blocks"
 
         /** Endpoints cuyo DTO es una lista: sin fixture contestan `[]` en vez de 404. */
         private val LISTS = setOf(
-            "chat/channels", "chat/colleagues", "users/directory", "notifications", "events", "calendar/notes",
+            "chat/channels", "chat/colleagues", BLOCKS, "users/directory", "notifications", "events", "calendar/notes",
             "tasks/mine", "tasks/requested", "tasks/workload", "finance/advances/pending",
         )
     }
