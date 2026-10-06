@@ -10,6 +10,9 @@ enum MessageAction {
     case share
     case edit
     case delete
+    /// Mensaje de otra persona (docs/chat-reportar-bloquear.md).
+    case report
+    case block
 }
 
 /// Hoja al mantener presionado un mensaje (como Slack): las 8 reacciones rápidas,
@@ -20,6 +23,9 @@ struct MessageActionsSheet: View {
     let canThread: Bool
     let canEdit: Bool
     let canDelete: Bool
+    /// «Reportar» y «Bloquear a {nombre}»: solo en mensajes de otras personas.
+    var canReport = false
+    var canBlock = false
     var onAction: (MessageAction) -> Void
 
     @State private var showPicker = false
@@ -33,26 +39,32 @@ struct MessageActionsSheet: View {
                 if usable { reactionBar }
                 VStack(spacing: 0) {
                     if usable {
-                        row("Responder citando", icon: "arrowshape.turn.up.left") { onAction(.reply) }
+                        row("Responder citando", icon: "arrowshape.turn.up.left", id: "msg-action-reply") { onAction(.reply) }
                         if canThread {
-                            row("Responder en hilo", icon: "bubble.left.and.bubble.right") { onAction(.thread) }
+                            row("Responder en hilo", icon: "bubble.left.and.bubble.right", id: "msg-action-thread") { onAction(.thread) }
                         }
                     }
                     if !message.text.isEmpty && !message.isDeleted {
-                        row("Copiar texto", icon: "doc.on.doc") { onAction(.copy) }
+                        row("Copiar texto", icon: "doc.on.doc", id: "msg-action-copy") { onAction(.copy) }
                     }
                     if usable {
-                        row(message.isSaved ? "Quitar de guardados" : "Guardar", icon: message.isSaved ? "bookmark.slash" : "bookmark") { onAction(.save) }
-                        row(message.pinnedAt != nil ? "Desfijar" : "Fijar en la conversación", icon: message.pinnedAt != nil ? "pin.slash" : "pin") { onAction(.pin) }
+                        row(message.isSaved ? "Quitar de guardados" : "Guardar", icon: message.isSaved ? "bookmark.slash" : "bookmark", id: "msg-action-save") { onAction(.save) }
+                        row(message.pinnedAt != nil ? "Desfijar" : "Fijar en la conversación", icon: message.pinnedAt != nil ? "pin.slash" : "pin", id: "msg-action-pin") { onAction(.pin) }
                     }
                     if message.attachment != nil && usable {
-                        row("Compartir o guardar archivo", icon: "square.and.arrow.up") { onAction(.share) }
+                        row("Compartir o guardar archivo", icon: "square.and.arrow.up", id: "msg-action-share") { onAction(.share) }
                     }
                     if canEdit {
-                        row("Editar", icon: "pencil") { onAction(.edit) }
+                        row("Editar", icon: "pencil", id: "msg-action-edit") { onAction(.edit) }
                     }
                     if canDelete {
-                        row("Eliminar", icon: "trash", destructive: true) { onAction(.delete) }
+                        row("Eliminar", icon: "trash", destructive: true, id: "msg-action-delete") { onAction(.delete) }
+                    }
+                    if canReport {
+                        row("Reportar", icon: "exclamationmark.bubble", id: "msg-action-report") { onAction(.report) }
+                    }
+                    if canBlock {
+                        row(blockTitle, icon: "hand.raised", destructive: true, id: "msg-action-block") { onAction(.block) }
                     }
                 }
                 .background(RoundedRectangle(cornerRadius: 14).fill(ArtaColor.surface2))
@@ -128,7 +140,12 @@ struct MessageActionsSheet: View {
         }
     }
 
-    private func row(_ title: String, icon: String, destructive: Bool = false, action: @escaping () -> Void) -> some View {
+    private var blockTitle: String {
+        let name = message.author.fullName.trimmingCharacters(in: .whitespacesAndNewlines)
+        return name.isEmpty ? "Bloquear a esta persona" : "Bloquear a \(name)"
+    }
+
+    private func row(_ title: String, icon: String, destructive: Bool = false, id: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack(spacing: 14) {
                 Image(systemName: icon)
@@ -143,6 +160,7 @@ struct MessageActionsSheet: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .accessibilityIdentifier(id)
     }
 
     private var whoReacted: some View {

@@ -346,6 +346,22 @@ extension ApiClient {
     func chatPrefs() async throws -> ChatPrefs { try await get("chat/prefs") }
     func setDnd(until: String?) async throws { try await send("PATCH", "chat/prefs", body: ChatPrefsBody(dndUntil: until)) }
 
+    // Reportar y bloquear (docs/chat-reportar-bloquear.md).
+    func reportMessage(_ messageId: String, reason: ChatReportReason, details: String?) async throws {
+        try await send("POST", "chat/messages/\(messageId)/report", body: ChatReportBody(reason: reason.rawValue, details: details))
+    }
+    func blockUser(_ userId: String) async throws { try await send("POST", "chat/users/\(userId)/block") }
+    func unblockUser(_ userId: String) async throws { try await send("DELETE", "chat/users/\(userId)/block") }
+    /// 404 (API aún sin la ruta, o modo demo sin fixture) = nadie bloqueado.
+    func chatBlocks() async throws -> [BlockedUser] {
+        do {
+            let list: [BlockedUser] = try await get("chat/blocks")
+            return list
+        } catch let error as ApiError where error.status == 404 {
+            return []
+        }
+    }
+
     func notifications(take: Int = 50) async throws -> [NotificationDto] { try await get("notifications", query: ["take": String(take)]) }
     func notificationsUnread() async throws -> Int {
         let res: UnreadCount = try await get("notifications/unread-count")

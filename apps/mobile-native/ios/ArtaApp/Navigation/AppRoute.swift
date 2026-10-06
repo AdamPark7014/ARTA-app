@@ -8,4 +8,6 @@ enum AppRoute: Hashable {
     case approvals
     case web(path: String, title: String?)
     case chat(channelId: String, messageId: String?)
+    /// Más › Usuarios bloqueados (docs/chat-reportar-bloquear.md).
+    case blockedUsers
 }

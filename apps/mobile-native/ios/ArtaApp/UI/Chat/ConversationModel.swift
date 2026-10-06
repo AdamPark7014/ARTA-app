@@ -137,6 +137,8 @@ final class ConversationModel: ObservableObject {
     private func subscribe() {
         let rt = RealtimeClient.shared
         rt.messages.sink { [weak self] m in
+            // Persona bloqueada: lo que manda no se muestra ni cuenta (docs/chat-reportar-bloquear.md).
+            if let self, m.author.id != self.myId, ChatBlocks.shared.isBlocked(m.author.id) { return }
             guard let self, self.belongsHere(m) else {
                 // Respuesta de hilo: sube el contador del mensaje raíz en la vista del canal.
                 if let self, self.parentId == nil, m.channelId == self.channelId, let root = m.parentId {
@@ -169,7 +171,8 @@ final class ConversationModel: ObservableObject {
         }.store(in: &bag)
 
         rt.typing.sink { [weak self] t in
-            guard let self, t.channelId == self.channelId, t.userId != self.myId else { return }
+            guard let self, t.channelId == self.channelId, t.userId != self.myId,
+                  !ChatBlocks.shared.isBlocked(t.userId) else { return }
             self.typingUntil[t.userId] = (t.fullName, Date().addingTimeInterval(5))
             self.publishTyping()
             self.scheduleTypingExpiry()
@@ -194,6 +197,23 @@ final class ConversationModel: ObservableObject {
             guard let self else { return }
             Task { await self.catchUp() }
         }.store(in: &bag)
+
+        // Bloqueo hecho aquí o en otra pantalla: sus mensajes salen de la vista abierta.
+        ChatBlocks.shared.$ids.sink { [weak self] ids in
+            self?.hideAuthors(ids)
+        }.store(in: &bag)
+    }
+
+    /// Quita de la pantalla los mensajes (y el «escribiendo…») de personas bloqueadas.
+    private func hideAuthors(_ blocked: Set<String>) {
+        guard !blocked.isEmpty else { return }
+        let me = myId
+        let visible = messages.filter { $0.author.id == me || !blocked.contains($0.author.id) }
+        if visible.count != messages.count { messages = visible }
+        if typingUntil.keys.contains(where: { blocked.contains($0) }) {
+            typingUntil = typingUntil.filter { !blocked.contains($0.key) }
+            publishTyping()
+        }
     }
 
     func reloadChannel() async {
@@ -539,6 +559,47 @@ final class ConversationModel: ObservableObject {
     }
 
     func pins() async -> [ChatMessage] { (try? await ApiClient.shared.pins(channelId)) ?? [] }
+
+    // MARK: Reportar y bloquear (docs/chat-reportar-bloquear.md)
+
+    /// Mensaje ya enviado de otra persona (no del sistema).
+    func canReport(_ m: ChatMessage) -> Bool {
+        !m.pending && !m.failed && !m.isDeleted && !m.isSystem && !m.author.id.isEmpty && m.author.id != myId
+    }
+
+    func canBlock(_ m: ChatMessage) -> Bool {
+        !m.pending && !m.failed && !m.isSystem && !m.author.id.isEmpty && m.author.id != myId
+    }
+
+    /// La otra persona de un directo 1:1 (no de grupo): «Bloquear» / «Desbloquear» del encabezado.
+    var directPeer: ChatPeer? {
+        guard parentId == nil, let ch = channel, ch.isDirect, !ch.isGroup, let peer = ch.peer,
+              !peer.id.isEmpty, peer.id != myId else { return nil }
+        return peer
+    }
+
+    /// `true` si se bloqueó. Sus mensajes los quita `hideAuthors` al cambiar `ChatBlocks.ids`.
+    func block(_ userId: String, name: String) async -> Bool {
+        do {
+            try await ChatBlocks.shared.block(userId, name: name)
+            return true
+        } catch {
+            self.error = error.userMessage
+            return false
+        }
+    }
+
+    /// `true` si se desbloqueó; en el canal se vuelve a cargar lo último para que reaparezcan sus mensajes.
+    func unblock(_ userId: String) async -> Bool {
+        do {
+            try await ChatBlocks.shared.unblock(userId)
+            if parentId == nil { await loadLatest() }
+            return true
+        } catch {
+            self.error = error.userMessage
+            return false
+        }
+    }
 
     func canEdit(_ m: ChatMessage) -> Bool {
         guard m.author.id == myId, m.attachment == nil, !m.pending, !m.failed, !m.isDeleted,

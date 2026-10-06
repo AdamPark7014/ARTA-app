@@ -9,6 +9,7 @@ struct ConversationView: View {
     @EnvironmentObject private var router: AppRouter
     @Environment(\.scenePhase) private var scenePhase
     @ObservedObject private var presence = PresenceStore.shared
+    @ObservedObject private var blocks = ChatBlocks.shared
 
     @State private var draft = ""
     /// «@Nombre» visible en el borrador → id, para mandar el token `[@Nombre](user:id)`.
@@ -17,6 +18,11 @@ struct ConversationView: View {
     @State private var replyingTo: ChatMessage?
     @State private var actionTarget: ChatMessage?
     @State private var confirmDelete: ChatMessage?
+    /// Reportar y bloquear (docs/chat-reportar-bloquear.md).
+    @State private var reportTarget: ChatMessage?
+    @State private var blockTarget: BlockTarget?
+    /// Aviso breve arriba de los mensajes («Gracias. Un administrador…»).
+    @State private var flash: String?
     @State private var showPins = false
     @State private var pinned: [ChatMessage] = []
     @State private var showPhotos = false
@@ -61,7 +67,9 @@ struct ConversationView: View {
                         myId: model.myId,
                         canThread: !inThread,
                         canEdit: model.canEdit(m),
-                        canDelete: model.canDelete(m)
+                        canDelete: model.canDelete(m),
+                        canReport: model.canReport(m),
+                        canBlock: model.canBlock(m)
                     ) { action in
                         actionTarget = nil
                         if case .react(let emoji) = action {
@@ -72,6 +80,19 @@ struct ConversationView: View {
                             later(0.35) { perform(action, on: m) }
                         }
                     }
+                }
+                .overlay(alignment: .top) { flashBanner }
+                .animation(.easeInOut(duration: 0.2), value: flash)
+                .confirmationDialog(
+                    blockTitle,
+                    isPresented: Binding(get: { blockTarget != nil }, set: { if !$0 { blockTarget = nil } }),
+                    titleVisibility: .visible,
+                    presenting: blockTarget
+                ) { target in
+                    Button("Bloquear", role: .destructive) { confirmBlock(target) }
+                    Button("Cancelar", role: .cancel) {}
+                } message: { _ in
+                    Text("No verás sus mensajes y no podrá escribirte por mensaje directo. Puedes desbloquearlo en Más › Usuarios bloqueados.")
                 }
             composerArea
                 .fullScreenCover(isPresented: $showCamera) {
@@ -95,6 +116,7 @@ struct ConversationView: View {
             model.onVisible(scenePhase == .active)
             loadDraft()
             presence.refresh()
+            blocks.refresh()
         }
         .onDisappear {
             onScreen = false
@@ -117,6 +139,11 @@ struct ConversationView: View {
             }
         }
         .sheet(isPresented: $showPins) { pinsSheet }
+        .sheet(item: $reportTarget) { m in
+            ReportMessageSheet(message: m) {
+                show("Gracias. Un administrador lo revisará en menos de 24 horas.")
+            }
+        }
         .fullScreenCover(item: $gallery) { request in
             ImageGallery(request: request)
         }
@@ -190,6 +217,22 @@ struct ConversationView: View {
                             Button("1 semana") { model.mute(true, hours: 24 * 7) }
                             Button("Siempre") { model.mute(true, hours: nil) }
                         } label: { Label("Silenciar", systemImage: "bell.slash") }
+                    }
+                    // Directo 1:1: bloquear o desbloquear a la otra persona.
+                    if let peer = model.directPeer {
+                        if blocks.isBlocked(peer.id) {
+                            Button { unblockPeer(peer) } label: {
+                                Label("Desbloquear", systemImage: "person.crop.circle.badge.checkmark")
+                            }
+                            .accessibilityIdentifier("chat-header-unblock")
+                        } else {
+                            Button(role: .destructive) {
+                                blockTarget = BlockTarget(id: peer.id, name: peer.fullName)
+                            } label: {
+                                Label("Bloquear", systemImage: "hand.raised")
+                            }
+                            .accessibilityIdentifier("chat-header-block")
+                        }
                     }
                 } label: {
                     Image(systemName: "ellipsis.circle")
@@ -294,7 +337,8 @@ struct ConversationView: View {
             }
             let seen = m.id == lastMine ? model.seenLabel(m) : nil
             out.append(Row(id: m.id, kind: .message(m, showAuthor: !grouped, seen: seen)))
-            if inThread && index == 0 {
+            // Solo si la raíz sigue en la lista (puede salir si se bloqueó a quien la escribió).
+            if inThread && index == 0 && m.id == model.parentId {
                 out.append(Row(id: "thread-divider", kind: .threadDivider(model.messages.count - 1)))
                 prev = nil
             } else {
@@ -538,6 +582,62 @@ struct ConversationView: View {
             startEditing(m)
         case .delete:
             confirmDelete = m
+        case .report:
+            reportTarget = m
+        case .block:
+            blockTarget = BlockTarget(id: m.author.id, name: m.author.fullName)
+        }
+    }
+
+    // MARK: Reportar y bloquear (docs/chat-reportar-bloquear.md)
+
+    private var blockTitle: String {
+        guard let target = blockTarget else { return "¿Bloquear?" }
+        return "¿Bloquear a \(target.displayName)?"
+    }
+
+    /// Sus mensajes desaparecen de esta pantalla en cuanto el API confirma (`ChatBlocks.ids`).
+    private func confirmBlock(_ target: BlockTarget) {
+        Task {
+            if await model.block(target.id, name: target.name) {
+                Haptics.success()
+                show("Bloqueaste a \(target.displayName)")
+            }
+        }
+    }
+
+    private func unblockPeer(_ peer: ChatPeer) {
+        Task {
+            if await model.unblock(peer.id) {
+                Haptics.success()
+                show("Desbloqueaste a \(peer.fullName)")
+            }
+        }
+    }
+
+    private func show(_ text: String) {
+        flash = text
+        later(3) {
+            if flash == text { flash = nil }
+        }
+    }
+
+    @ViewBuilder
+    private var flashBanner: some View {
+        if let flash {
+            Text(flash)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(ArtaColor.bg)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .background(RoundedRectangle(cornerRadius: 14).fill(ArtaColor.gold))
+                .shadow(color: .black.opacity(0.35), radius: 6, y: 2)
+                .padding(.horizontal, 16)
+                .padding(.top, 10)
+                .transition(.move(edge: .top).combined(with: .opacity))
+                .onTapGesture { self.flash = nil }
+                .accessibilityIdentifier("chat-flash")
         }
     }
 
@@ -926,6 +1026,19 @@ struct ConversationView: View {
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Listo") { showPins = false } } }
         }
         .presentationDetents([.medium, .large])
+    }
+}
+
+// MARK: - Bloquear
+
+/// A quién se va a bloquear (menú de un mensaje o encabezado de un directo).
+private struct BlockTarget: Identifiable, Equatable {
+    let id: String
+    let name: String
+
+    var displayName: String {
+        let n = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        return n.isEmpty ? "esta persona" : n
     }
 }
 

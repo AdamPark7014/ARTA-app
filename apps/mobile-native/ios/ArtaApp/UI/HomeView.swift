@@ -66,7 +66,11 @@ struct HomeView: View {
             .tabItem { Label("Más", systemImage: "square.grid.2x2").accessibilityIdentifier("tab-mas") }
             .tag(AppRouter.Tab.mas)
         }
-        .task { await loadCounts() }
+        .task {
+            // Personas bloqueadas en el chat: el socket ignora lo que manden (docs/chat-reportar-bloquear.md).
+            ChatBlocks.shared.refresh(force: true)
+            await loadCounts()
+        }
         .onReceive(RealtimeClient.shared.chatUnread) { chatUnread = $0 }
         .onReceive(RealtimeClient.shared.notificationsUnread) { noticeUnread = $0 }
         .onReceive(RealtimeClient.shared.connected.filter { $0 }) { _ in Task { await loadCounts() } }
@@ -92,6 +96,8 @@ struct HomeView: View {
             ArtaWebView(path: path, title: title)
         case let .chat(channelId, messageId):
             ConversationView(channelId: channelId, parentId: nil, focusMessageId: messageId)
+        case .blockedUsers:
+            BlockedUsersView()
         }
     }
 }

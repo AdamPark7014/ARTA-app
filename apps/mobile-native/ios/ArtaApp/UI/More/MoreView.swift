@@ -54,6 +54,19 @@ struct MoreView: View {
                 .listRowBackground(ArtaColor.bgElev)
             }
 
+            // Apple (1.2): quien bloquea en el chat puede revisar y deshacer el bloqueo.
+            Section("Chat") {
+                NavigationLink(value: AppRoute.blockedUsers) {
+                    Label {
+                        Text("Usuarios bloqueados").foregroundStyle(ArtaColor.text)
+                    } icon: {
+                        Image(systemName: "person.crop.circle.badge.xmark").foregroundStyle(ArtaColor.gold)
+                    }
+                }
+                .accessibilityIdentifier("more-blocked-users")
+            }
+            .listRowBackground(ArtaColor.bgElev)
+
             Section("App") {
                 Button {
                     if let url = URL(string: UIApplication.openNotificationSettingsURLString) {

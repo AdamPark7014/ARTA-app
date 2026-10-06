@@ -198,6 +198,7 @@ struct ChatListView: View {
         }
         .task {
             presence.refresh()
+            ChatBlocks.shared.refresh()
             await model.load()
             await model.loadPrefs()
         }

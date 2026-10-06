@@ -326,6 +326,46 @@ struct ChatPrefsBody: Encodable {
     }
 }
 
+// MARK: - Reportar y bloquear (docs/chat-reportar-bloquear.md)
+
+/// Motivos de `POST chat/messages/:id/report`, en el orden en que se muestran (iOS, Android y web).
+enum ChatReportReason: String, CaseIterable, Identifiable {
+    case spam = "SPAM"
+    case acoso = "ACOSO"
+    case ofensivo = "OFENSIVO"
+    case otro = "OTRO"
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .spam: return "Spam"
+        case .acoso: return "Acoso o intimidación"
+        case .ofensivo: return "Contenido ofensivo o inapropiado"
+        case .otro: return "Otro"
+        }
+    }
+}
+
+/// `details` se omite si va vacío (máx. 1000 caracteres en el API).
+struct ChatReportBody: Encodable {
+    let reason: String
+    var details: String?
+}
+
+/// Persona que yo bloqueé (`GET chat/blocks`): `id` es el de la persona.
+struct BlockedUser: Decodable, Identifiable, Equatable {
+    let id: String
+    var name: String?
+    var avatarUrl: String?
+    var blockedAt: String?
+
+    var displayName: String {
+        let n = (name ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        return n.isEmpty ? "Usuario" : n
+    }
+}
+
 // MARK: - Avisos y dispositivos
 
 struct NotificationActor: Decodable, Equatable {

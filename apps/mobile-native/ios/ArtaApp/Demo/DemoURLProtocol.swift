@@ -62,6 +62,10 @@ enum DemoBackend {
         if let data = DemoFixtures.data(forKey: key) ?? DemoFixtures.data(forKey: path) {
             return Reply(status: 200, data: DemoClock.shift(data))
         }
+        // Reportar y bloquear (docs/chat-reportar-bloquear.md): sin fixture, nadie bloqueado.
+        if path == "chat/blocks" {
+            return json(200, "[]")
+        }
         return json(404, #"{"statusCode":404,"message":"Sin datos de muestra para esta pantalla."}"#)
     }
 
@@ -79,6 +83,11 @@ enum DemoBackend {
 
     private static func mutation(path: String) -> Reply {
         let parts = path.split(separator: "/").map(String.init)
+        // Reportar un mensaje y bloquear/desbloquear: nada que grabar, solo `ok`.
+        if parts.count == 4, parts[0] == "chat",
+           (parts[1] == "messages" && parts[3] == "report") || (parts[1] == "users" && parts[3] == "block") {
+            return json(200, #"{"ok":true}"#)
+        }
         if parts.count == 3, parts[0] == "chat", parts[1] == "event", let channelId = eventChannelId(parts[2]) {
             return json(200, "{\"id\":\"\(channelId)\"}")
         }

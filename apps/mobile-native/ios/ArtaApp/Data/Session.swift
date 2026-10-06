@@ -118,6 +118,7 @@ final class Session: ObservableObject {
         ApiClient.shared.clearCookies()
         Task { await WebSession.clearCookies() }
         PushManager.shared.clearDelivered()
+        ChatBlocks.shared.reset()
         UserDefaults.standard.removeObject(forKey: Self.userKey)
         AppRouter.shared.reset()
         state = .signedOut
