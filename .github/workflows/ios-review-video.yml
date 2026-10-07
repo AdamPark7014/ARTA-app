@@ -349,6 +349,32 @@ jobs:
             echo "Grabación detenida: $(ls -l "$VIDEO" 2>/dev/null || echo 'sin archivo')"
           }
 
+          # vigilar_cuelgues <pid de la prueba>: si pasos.txt / diagnostico.txt no cambian en 40 s,
+          # toma `sample` de ARTA en el simulador (hasta 3) para ver en qué se quedó el hilo principal.
+          vigilar_cuelgues() {
+            local prueba="$1" n=0 previo="" actual pid quieto_desde
+            quieto_desde=$(date +%s)
+            while kill -0 "$prueba" 2>/dev/null; do
+              sleep 5
+              actual="$(stat -f %m "$STEPS_DIR/pasos.txt" "$STEPS_DIR/diagnostico.txt" 2>/dev/null | sort -n | tail -n1)"
+              if [ "$actual" != "$previo" ]; then previo="$actual"; quieto_desde=$(date +%s); continue; fi
+              [ $(( $(date +%s) - quieto_desde )) -ge 40 ] || continue
+              [ "$n" -lt 3 ] || continue
+              pid="$(xcrun simctl spawn "$UDID" launchctl list 2>/dev/null | awk '/UIKitApplication:com\.artaproducciones\.ops/ {print $1; exit}')"
+              quieto_desde=$(date +%s)
+              case "$pid" in ''|-|*[!0-9]*) continue ;; esac
+              n=$((n + 1))
+              {
+                echo "== $(date -u +%H:%M:%S) UTC · ARTA pid $pid · pasos quietos 40 s"
+                ps -o pid,%cpu,state,time,command -p "$pid" || true
+                tail -n 3 "$STEPS_DIR/pasos.txt" "$STEPS_DIR/diagnostico.txt" 2>/dev/null || true
+              } > "$LOGS_DIR/cuelgue-$n.txt" 2>&1
+              sample "$pid" 3 -mayDie >> "$LOGS_DIR/cuelgue-$n.txt" 2>&1 \
+                || sudo -n sample "$pid" 3 -mayDie >> "$LOGS_DIR/cuelgue-$n.txt" 2>&1 || true
+              echo "::warning::ARTA quieta 40 s: sample en cuelgue-$n.txt"
+            done
+          }
+
           # probar <intento>: corre la prueba y graba de «listo-para-grabar» a «fin». Deja el código
           # de xcodebuild en ESTADO_PRUEBA (no se llama en $(...): la salida debe verse en vivo y
           # REC_PID vivir en este shell). Las credenciales solo existen en el entorno de este xcodebuild.
@@ -377,10 +403,12 @@ jobs:
                 -destination "id=$UDID" \
                 -resultBundlePath "$RESULT" \
                 -only-testing:ArtaAppUITests/ReviewVideoUITests/testVideoParaRevision \
+                -only-testing:ArtaAppUITests/ReviewVideoUITests/testZDiagnosticoArrastre \
                 -parallel-testing-enabled NO
               echo $? > "$salida"
             ) 2>&1 | perl "$HELPERS/tachar.pl" | tee "$log" | $PRETTY &
             tuberia=$!
+            vigilar_cuelgues "$tuberia" &
 
             # La prueba avisa cuando ya está en la pantalla de inicio de iOS (tras instalar la app y
             # arrancar el runner): así el video no empieza con un minuto de pantalla quieta.

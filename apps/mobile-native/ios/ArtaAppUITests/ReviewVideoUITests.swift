@@ -57,6 +57,8 @@ final class ReviewVideoUITests: XCTestCase {
         static let trozosDelMensajeDeMateo = ["orden de compra para", "cotización de audio"]
         static let motivoDelReporte = "Contenido ofensivo o inapropiado"
         static let idMotivoDelReporte = "report-reason-ofensivo"
+        /// Tarea que se abre en el video (vence hoy, de la cuenta demo).
+        static let tareaDelVideo = "Confirmar el rider"
     }
 
     /// Una pestaña del `TabView`: identificador que pone la app, etiqueta visible y título de su raíz.
@@ -98,6 +100,8 @@ final class ReviewVideoUITests: XCTestCase {
     /// Cero de los tiempos de pasos.txt: se reinicia cuando el flujo avisa que ya graba.
     private var ceroDelVideo = Date()
     private var pasos: [String] = []
+    /// testZDiagnosticoArrastre escribe aparte para no pisar los capítulos del video.
+    private var archivoDePasos = "pasos.txt"
     private var omitidos: [String] = []
     /// Ya no estamos en el login: a partir de aquí se pueden adjuntar árboles de accesibilidad
     /// (en el login el árbol trae el correo escrito en el campo).
@@ -161,6 +165,64 @@ final class ReviewVideoUITests: XCTestCase {
         mostrarEliminarCuenta()
         cerrarSesion()
         terminar()
+    }
+
+    /// Fuera del video (corre después y no se graba): ¿arrastrar la conversación con el teclado
+    /// abierto cuelga la app? En la corrida 37508712069 el hilo principal dejó de contestar justo
+    /// tras ese arrastre. El flujo toma `sample` del proceso si los pasos se quedan quietos.
+    func testZDiagnosticoArrastre() throws {
+        archivoDePasos = "diagnostico.txt"
+        ceroDelVideo = Date()
+        app.launch()
+        guard iniciarSesion() else {
+            XCTFail("Diagnóstico: no se pudo iniciar sesión")
+            return
+        }
+        fueraDelLogin = true
+        responderPermisoDeAvisos()
+        guard irAPestana(.chats) else { return omitir("diagnóstico: sin pestaña Chats") }
+        asegurarRaiz(.chats)
+        esperarSinCarga(10)
+        guard let canal = buscarDesplazando(candidatosDelCanal(), pasos: 4, espera: 3) else {
+            return omitir("diagnóstico: no se encontró el canal")
+        }
+        tocar(canal)
+        guard let campo = buscar(candidatosDelComposer(), timeout: 15) else {
+            return omitir("diagnóstico: no se abrió la conversación")
+        }
+        esperarSinCarga(8)
+        pausa(1.5)
+
+        // A: teclado abierto, sin escribir nada.
+        tocar(campo)
+        pausa(1.5)
+        anotar("A: teclado abierto (\(app.keyboards.firstMatch.exists ? "sí" : "no")), arrastre")
+        arrastrarConversacionHaciaElTeclado()
+        pausa(3.0)
+        guard appResponde("A tras el arrastre") else { return }
+        anotar("A: teclado tras el arrastre: \(app.keyboards.firstMatch.exists ? "sigue arriba" : "se ocultó")")
+
+        // B: como en el video: escribir, enviar y arrastrar.
+        if let campo = buscar(candidatosDelComposer(), timeout: 3) {
+            tocar(campo)
+            pausa(1.0)
+            campo.typeText("Recibido.")
+            pausa(1.0)
+            if let enviar = buscar([porId("chat-send"), botonExacto("Enviar")], timeout: 4) {
+                tocar(enviar)
+                pausa(3.0)
+                anotar("B: mensaje enviado, arrastre")
+                arrastrarConversacionHaciaElTeclado()
+                pausa(3.0)
+                guard appResponde("B tras el arrastre") else { return }
+                anotar("B: teclado tras el arrastre: \(app.keyboards.firstMatch.exists ? "sigue arriba" : "se ocultó")")
+            }
+        }
+
+        // C: arrastre lento con el dedo (deslizar la lista hacia abajo, sin teclado de por medio).
+        app.scrollViews.firstMatch.swipeDown(velocity: .slow)
+        pausa(3.0)
+        _ = appResponde("C tras deslizar la lista")
     }
 
     // MARK: - Pasos
@@ -300,7 +362,14 @@ final class ReviewVideoUITests: XCTestCase {
         esperarSinCarga(12)
         anotar("Tareas")
         pausa(2.0)
-        guard let fila = primeraFilaTocable(timeout: 10) else {
+        // La primera «celda» de la lista es la fila de filtros (Pendientes, Vencidas…): se busca la tarea.
+        let tarea = NSPredicate(format: "label CONTAINS %@", Dato.tareaDelVideo)
+        let candidatas = [
+            app.buttons.matching(tarea).firstMatch,
+            app.cells.containing(tarea).firstMatch,
+            app.staticTexts.matching(tarea).firstMatch
+        ]
+        guard let fila = buscarTocable(candidatas, timeout: 8) ?? primeraFilaTocable(timeout: 4, altoMinimo: 56) else {
             omitir("tareas: la lista no mostró ninguna tarea")
             adjuntarJerarquia("dbg-tareas")
             return
@@ -374,7 +443,6 @@ final class ReviewVideoUITests: XCTestCase {
         ], timeout: 4) else {
             omitir("mensaje: no apareció el botón «Enviar»")
             adjuntarJerarquia("dbg-composer")
-            ocultarTeclado()
             return
         }
         tocar(enviar)
@@ -384,9 +452,10 @@ final class ReviewVideoUITests: XCTestCase {
         } else {
             anotar("Mensaje enviado, pero no se vio en la conversación a tiempo")
         }
-        pausa(2.0)
-        ocultarTeclado()
-        pausa(1.0)
+        // El teclado se queda arriba: el mensaje de Mateo se ve encima de él y la hoja de acciones
+        // lo tapa. Arrastrar la conversación para bajarlo colgó la app en el simulador
+        // (corrida 37508712069); eso lo revisa aparte testZDiagnosticoArrastre.
+        pausa(2.5)
     }
 
     private func reportarMensajeDeMateo() {
@@ -680,7 +749,6 @@ final class ReviewVideoUITests: XCTestCase {
 
     /// Mantiene presionado un mensaje de Mateo hasta que sale el menú del mensaje.
     private func abrirMenuDeMensajeDeMateo() -> Bool {
-        ocultarTeclado()
         let menu = [
             porId("msg-action-report"),
             porId("msg-action-block"),
@@ -710,16 +778,22 @@ final class ReviewVideoUITests: XCTestCase {
         return false
     }
 
-    /// Esconde el teclado arrastrando la conversación hacia el teclado
-    /// (`scrollDismissesKeyboard(.interactively)`).
-    private func ocultarTeclado() {
-        for _ in 0..<2 {
-            guard app.keyboards.firstMatch.exists else { return }
-            let desde = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.30))
-            let hasta = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.92))
-            desde.press(forDuration: 0.05, thenDragTo: hasta)
-            pausa(0.8)
-        }
+    /// Arrastra la conversación hacia el teclado (`scrollDismissesKeyboard(.interactively)`),
+    /// como quien baja el teclado con el dedo. Solo lo usa testZDiagnosticoArrastre.
+    private func arrastrarConversacionHaciaElTeclado() {
+        let desde = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.30))
+        let hasta = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.92))
+        desde.press(forDuration: 0.05, thenDragTo: hasta)
+    }
+
+    /// ¿La app sigue contestando? Una consulta barata con reloj: si el hilo principal está
+    /// colgado, XCTest tarda ~30 s por intento en rendirse.
+    private func appResponde(_ contexto: String) -> Bool {
+        let inicio = Date()
+        let vivo = app.navigationBars.firstMatch.waitForExistence(timeout: 5)
+        let segundos = Date().timeIntervalSince(inicio)
+        anotar(String(format: "%@: %@ (%.1f s)", contexto, vivo ? "la app responde" : "LA APP NO RESPONDE", segundos))
+        return vivo && segundos < 10
     }
 
     // MARK: - Avisos y diálogos
@@ -1003,14 +1077,14 @@ final class ReviewVideoUITests: XCTestCase {
     }
 
     /// La primera fila de lista que se pueda tocar (las de otras pestañas no lo son).
-    private func primeraFilaTocable(timeout: TimeInterval) -> XCUIElement? {
+    private func primeraFilaTocable(timeout: TimeInterval, altoMinimo: CGFloat = 30) -> XCUIElement? {
         let limite = Date().addingTimeInterval(timeout)
         repeat {
             let celdas = app.cells
             let total = min(celdas.count, 12)
             for i in 0..<total {
                 let celda = celdas.element(boundBy: i)
-                if celda.exists && celda.isHittable && celda.frame.height > 30 {
+                if celda.exists && celda.isHittable && celda.frame.height > altoMinimo {
                     return celda
                 }
             }
@@ -1077,7 +1151,7 @@ final class ReviewVideoUITests: XCTestCase {
         print("[ARTA-VIDEO] \(linea)")
         guard let carpeta = carpetaDeSalida() else { return }
         try? (pasos.joined(separator: "\n") + "\n").write(
-            to: carpeta.appendingPathComponent("pasos.txt"),
+            to: carpeta.appendingPathComponent(archivoDePasos),
             atomically: true,
             encoding: .utf8
         )
