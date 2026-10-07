@@ -643,8 +643,19 @@ final class ReviewVideoUITests: XCTestCase {
 
         let safari = XCUIApplication(bundleIdentifier: "com.apple.mobilesafari")
         if safari.wait(for: .runningForeground, timeout: 10) {
-            _ = safari.webViews.firstMatch.waitForExistence(timeout: 10)
-            anotar("Página «Eliminar cuenta» en Safari")
+            // Safari recién estrenado tarda en pintar: sin esperar el texto de la página, el video
+            // mostraba la página de inicio de Safari (corrida 37653966259).
+            let textoDeLaPagina = safari.webViews.staticTexts.matching(
+                NSPredicate(format: "label CONTAINS[c] %@ OR label CONTAINS[c] %@", "eliminar", "cuenta")
+            ).firstMatch
+            if textoDeLaPagina.waitForExistence(timeout: 30) {
+                anotar("Página «Eliminar cuenta» en Safari")
+            } else {
+                anotar("Safari abierto, pero la página «Eliminar cuenta» no cargó en 30 s")
+            }
+            pausa(5.0)
+            // Lo de abajo del formulario (correo, motivo, enviar), sin tocar nada.
+            safari.swipeUp(velocity: .slow)
             pausa(3.0)
             // Más lento que el «◀︎ ARTA» de la barra de estado, pero no depende de su posición.
             app.activate()

@@ -1137,6 +1137,24 @@ async function ensureMessages(channel: ChannelSeed, messages: MessageSeed[]): Pr
   return out;
 }
 
+/**
+ * Lo que se escribió después en el canal (el video de App Review manda «Listo, reviso el rider hoy.» en
+ * cada corrida; un revisor, lo que pruebe) se borra: cada revisión empieza con la misma conversación.
+ * Reacciones, lecturas y reportes de esos mensajes caen en cascada; las citas quedan en null.
+ */
+async function purgeUnseededMessages(channel: ChannelSeed, seeded: Record<string, { id: string; at: Date }>) {
+  const where = { organizationId: DEMO_ORG_ID, channelId: channel.id, id: { notIn: Object.values(seeded).map((m) => m.id) } };
+  const extra = await db.chatMessage.count({ where });
+  if (!extra) return;
+  counts.borrar += extra;
+  if (DRY) {
+    console.log(`  [dry] - borrar ${extra} mensaje(s) fuera de la demo en ${channel.label}`);
+    return;
+  }
+  await db.chatMessage.deleteMany({ where });
+  console.log(`  - mensajes: ${extra} fuera de la demo en ${channel.label}`);
+}
+
 /** Vista previa del canal: solo si el último mensaje es de la demo (si el revisor escribió después, ya está bien). */
 async function refreshChannelPreview(channel: ChannelSeed, seeded: Record<string, { id: string; at: Date }>, bodies: Record<string, string>) {
   if (DRY) return;
@@ -1241,6 +1259,10 @@ async function ensureChat(people: Record<PersonKey, Person>, events: Record<Even
   const a = await ensureMessages(announcements, announcementMsgs);
   const e = await ensureMessages(eventChannel, eventMsgs);
   const d = await ensureMessages(direct, directMsgs);
+  await purgeUnseededMessages(general, g);
+  await purgeUnseededMessages(announcements, a);
+  await purgeUnseededMessages(eventChannel, e);
+  await purgeUnseededMessages(direct, d);
 
   // Leído hasta cierto punto: el revisor ve globos de no leídos en la lista de chats.
   for (const p of everyone) {
