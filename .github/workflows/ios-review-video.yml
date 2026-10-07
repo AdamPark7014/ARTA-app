@@ -32,6 +32,13 @@ name: iOS · video para App Review (simulador)
 
 on:
   workflow_dispatch:
+    inputs:
+      version:
+        description: Versión que muestra la app en Más (la de la tienda)
+        default: "1.0.0"
+      build:
+        description: Número de compilación que muestra la app (el de TestFlight que se envía); vacío = el del proyecto
+        default: ""
 
 permissions:
   contents: read
@@ -55,6 +62,8 @@ jobs:
       LOGS_DIR: ${{ github.workspace }}/build/logs
       STEPS_DIR: ${{ github.workspace }}/build/logs/pasos
       DERIVED: ${{ github.workspace }}/build/DerivedData
+      APP_VERSION: ${{ inputs.version || '1.0.0' }}
+      APP_BUILD: ${{ inputs.build }}
 
     steps:
       - uses: actions/checkout@v4
@@ -288,6 +297,9 @@ jobs:
           compilar() {
             local intento="$1"
             shift
+            # Versión y compilación como las de TestFlight: el video muestra «ARTA 1.0.0 (N)» en Más.
+            local version=("MARKETING_VERSION=$APP_VERSION")
+            [ -z "${APP_BUILD:-}" ] || version+=("CURRENT_PROJECT_VERSION=$APP_BUILD")
             (
               cd "$IOS_DIR" || exit 99
               xcodebuild build-for-testing \
@@ -298,6 +310,7 @@ jobs:
                 -derivedDataPath "$DERIVED" \
                 -clonedSourcePackagesDirPath .spm-cache \
                 -enableCodeCoverage NO \
+                "${version[@]}" \
                 "$@"
             ) 2>&1 | perl "$HELPERS/tachar.pl" | tee "$LOGS_DIR/xcodebuild-build-intento$intento.log" | $PRETTY
             return "${PIPESTATUS[0]}"
@@ -496,8 +509,12 @@ jobs:
           for CLAVE in KeyboardAutocorrection KeyboardPrediction KeyboardCheckSpelling; do
             xcrun simctl spawn "$UDID" defaults write com.apple.Preferences "$CLAVE" -bool NO || true
           done
+          # (En la corrida 37651715359 igual salió «Speed up your typing…»: la clave vive en
+          # com.apple.keyboard.preferences; se escribe en ambos dominios.)
           for CLAVE in DidShowContinuousPathIntroduction DidShowGestureKeyboardIntroduction KeyboardDidShowProductivityTutorial; do
-            xcrun simctl spawn "$UDID" defaults write com.apple.Preferences "$CLAVE" -bool YES || true
+            for DOMINIO in com.apple.Preferences com.apple.keyboard.preferences; do
+              xcrun simctl spawn "$UDID" defaults write "$DOMINIO" "$CLAVE" -bool YES || true
+            done
           done
 
           # Barra de estado de anuncio: 9:41, batería llena, cobertura y WiFi completas.
