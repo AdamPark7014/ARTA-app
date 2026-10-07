@@ -360,7 +360,8 @@ jobs:
               if [ "$actual" != "$previo" ]; then previo="$actual"; quieto_desde=$(date +%s); continue; fi
               [ $(( $(date +%s) - quieto_desde )) -ge 40 ] || continue
               [ "$n" -lt 3 ] || continue
-              pid="$(xcrun simctl spawn "$UDID" launchctl list 2>/dev/null | awk '/UIKitApplication:com\.artaproducciones\.ops/ {print $1; exit}')"
+              # «UIKitApplication:com.artaproducciones.ops[…]»; sin el «[» también entra el runner de XCTest.
+              pid="$(xcrun simctl spawn "$UDID" launchctl list 2>/dev/null | awk '/UIKitApplication:com\.artaproducciones\.ops\[/ {print $1; exit}')"
               quieto_desde=$(date +%s)
               case "$pid" in ''|-|*[!0-9]*) continue ;; esac
               n=$((n + 1))

@@ -385,7 +385,10 @@ struct ConversationView: View {
                     .padding(.vertical, 8)
                 }
                 .defaultScrollAnchor(.bottom)
-                .scrollDismissesKeyboard(.interactively)
+                // `.interactively` + el ancla abajo colgaba la app al arrastrar la conversación con el
+                // teclado abierto (el teclado sigue al dedo, el ancla corrige el desplazamiento, y así
+                // sin fin; iOS 26, corrida 37651715359). Al empezar a desplazar se baja de una vez.
+                .scrollDismissesKeyboard(.immediately)
                 .overlay {
                     if model.messages.isEmpty && !model.loading && model.loadError == nil {
                         EmptyState(icon: "hand.wave", title: "Aún no hay mensajes", message: "Escribe el primero.")
