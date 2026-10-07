@@ -125,7 +125,7 @@ export default function PrivacidadPage() {
           solicitas. Respondemos en los plazos que fija la ley.
         </p>
         <p className={styles.p}>
-          Para eliminar tu cuenta y sus datos, sigue los pasos en{' '}
+          Para dar de baja tu cuenta (se desactiva y lo que creaste se queda en la organización), sigue los pasos en{' '}
           <Link className={styles.link} href="/legal/eliminar-cuenta">
             Eliminar cuenta
           </Link>
