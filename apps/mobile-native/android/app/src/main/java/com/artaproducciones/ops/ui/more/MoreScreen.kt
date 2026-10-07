@@ -436,11 +436,12 @@ fun MoreScreen(user: UserDto, nav: ModuleNav) {
         }
         item(key = "delete-account") {
             // No hay alta desde la app: las cuentas las crea el administrador de
-            // la organización, así que el borrado también se solicita, no se ejecuta aquí.
+            // la organización, así que la baja también se solicita, no se ejecuta aquí.
+            // Baja = cuenta desactivada; lo que creó se queda en la organización.
             MoreRow(
                 icon = Icons.Outlined.PersonRemove,
                 label = "Eliminar mi cuenta",
-                supporting = "Solicita el borrado de tu cuenta y tus datos",
+                supporting = "Solicita la baja; lo que creaste se queda en tu equipo",
                 onClick = { LegalLinks.open(context, LegalLinks.DELETE_ACCOUNT) },
             )
         }

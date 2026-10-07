@@ -117,7 +117,8 @@ struct MoreView: View {
                     Button("Continuar en la web", role: .destructive) { openURL(ArtaAppMeta.eliminarCuentaURL) }
                     Button("Cancelar", role: .cancel) {}
                 } message: {
-                    Text("La solicitud para eliminar tu cuenta y tus datos se hace en la web de ARTA. Se abrirá en tu navegador para que la completes ahí.")
+                    // Baja = cuenta desactivada; lo que creó se queda en la organización (regla de Adam, 07-10-2026).
+                    Text("La baja de tu cuenta se solicita en la web de ARTA: tu acceso se desactiva y lo que creaste se queda en tu equipo. Se abrirá en tu navegador.")
                 }
             } footer: {
                 Text("ARTA \(ArtaAppMeta.versionLabel)")
