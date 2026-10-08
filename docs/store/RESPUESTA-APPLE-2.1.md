@@ -27,20 +27,22 @@ Fotos › descargar) y dejarlo en `Descargas`. Claude lo adjunta en la respuesta
 
 ## Texto de la respuesta (inglés)
 
+Va en el hilo de App Review con la carta firmada adjunta (App Review Information solo admite un adjunto, y ahí va el video `ARTA-app-review-1.0.0-build6.mp4`, corrida `37653966259`). Las Notas llevan lo mismo resumido.
+
 ```text
-Thank you for the review. Here is the information requested. The screen recording is attached (iPhone, latest iOS, starting from launching the app).
+Thank you for the review. Here is the information requested; the same text is now in the Notes field of the App Review Information section, and the submitted build adds in-app reporting and blocking in the chat.
 
-1. Screen recording: attached. It shows launching the app, signing in with the demo account, the main flows (home, approvals, tasks, team chat), reporting a message and blocking/unblocking a user in the chat, the account deletion entry point (More > "Eliminar mi cuenta") and signing out. There is no in-app account registration and no paid content.
+1. Screen recording: attached in the App Review Information section (ARTA-app-review-1.0.0-build6.mp4). It was captured on the iOS Simulator (iPhone 17 Pro Max, iOS 26.2) with a simulator build of the same source code as the submitted build 1.0.0 (6), connected to the production server with the demo account. It starts by launching the app from the Home Screen and shows sign-in, Inicio (home), Aprobaciones (approvals), Tareas (tasks), the event chat (sending a message, reporting a message, blocking and unblocking a user), Más > "Eliminar mi cuenta" (the account deletion request, which opens https://artaproducciones.com/legal/eliminar-cuenta) and sign-out. There is no account registration in the app and no paid content.
 
-2. Purpose and audience: ARTA is a work app for live-event production teams (concerts, festivals and shows) in Mexico. It is used by the staff and vendors of production companies on the ARTA platform; Arta Producciones (Puebla, Mexico) is the launch customer. It solves the coordination of each event: tasks with evidence and deadlines, team chat per event, and approval of tasks, purchase orders and cash advances from the phone, instead of scattered WhatsApp groups and spreadsheets.
+2. Purpose and audience: ARTA is a work app for live-event production teams (concerts, festivals and shows) in Mexico, used by the staff and vendors of production companies; Arta Producciones (Puebla, Mexico) is the launch customer. It replaces scattered WhatsApp groups and spreadsheets to coordinate each event: tasks with evidence and deadlines, team chat per event, and approval of tasks, purchase orders and cash advances from the phone.
 
-3. Setup and access: no setup is needed. Sign in with the demo account in the App Review Information (revision.tiendas@artaproducciones.com). It belongs to an isolated demo organization with fictional data and has no two-factor authentication. Main features: Inicio (Home), Chats, Tareas (Tasks), Avisos (Notifications) and Más (More); approvals are under Inicio > Aprobaciones. Accounts are created by each organization's administrators; there is no public sign-up.
+3. Setup and access: no setup or sample files are needed. Sign in with the demo account in Sign-in Information (revision.tiendas@artaproducciones.com). It belongs to an isolated demo organization with fictional data and has no two-factor authentication. Main sections: Inicio (Home), Chats, Tareas (Tasks), Avisos (Notifications) and Más (More); approvals are under Inicio > Aprobaciones. Accounts are created by each organization's administrators; there is no public sign-up.
 
-4. External services: the ARTA API operated by NEXARA (https://arta.artaproducciones.com) for authentication and data; Firebase Cloud Messaging and Apple Push Notification service for notifications. No payment processors, no advertising, no analytics or tracking SDKs, no AI services.
+4. External services: the ARTA API operated by NEXARA (https://arta.artaproducciones.com) for authentication and data; Firebase Cloud Messaging and Apple Push Notification service for notifications. No payment processors, advertising, analytics, tracking or AI services.
 
 5. Regional differences: none. The app works the same in all regions; the interface is in Spanish.
 
-6. Authorization: NEXARA (NEW ENGINEERING EXPERTISE AND RESOURCE ADVANCEMENT S.A. DE C.V.) develops and publishes the app for Arta Producciones S.A. de C.V. The signed authorization letter from Arta Producciones' legal representative is attached to the App Review Information. The app is not in a regulated industry.
+6. Authorization: NEXARA (NEW ENGINEERING EXPERTISE AND RESOURCE ADVANCEMENT S.A. DE C.V.) develops and publishes the app for Arta Producciones S.A. de C.V. The authorization letter signed by Arta Producciones' legal representative is attached to this message. The app is not in a regulated industry.
 
-User-generated content (Guideline 1.2): the chat is a closed workplace chat between members of the same organization. Users can report any message (long-press > "Reportar") and block a person (long-press > "Bloquear"; unblock in Más > Usuarios bloqueados). Reports reach the organization's administrators, who act within 24 hours and can delete messages and deactivate accounts. The terms of use (https://artaproducciones.com/legal/terminos) state zero tolerance for objectionable content.
+User-generated content (Guideline 1.2): the chat is a closed workplace chat between members of the same organization. Users can report any message from another person (long-press > "Reportar") and block a person (long-press > "Bloquear a …"; unblock in Más > Usuarios bloqueados). Reports reach the organization's administrators, who act within 24 hours and can delete messages and deactivate accounts. The terms of use (https://artaproducciones.com/legal/terminos) state zero tolerance for objectionable content.
 ```

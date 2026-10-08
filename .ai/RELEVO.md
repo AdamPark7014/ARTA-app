@@ -1,10 +1,43 @@
 # RELEVO
 
 - **Último turno:** claude-code
-- **Fecha:** 2026-10-05
+- **Fecha:** 2026-10-07
 - **Rama:** main
   (Adam es el único programador).
-- **Producción:** `e9b4764` desplegado desde `main` el 2026-10-04 22:51 UTC (respaldo `/root/arta-backups/20261004-2249.sql.gz`); `/legal/*` responde 200 en los tres dominios. **Falta desplegar** el candado de Studio y plantillas (turno de abajo; solo API, sin migración)
+- **Producción:** `7cabc06` desplegado desde `main` el 2026-10-07 ~17:05 UTC (bundle + `update.sh --no-pull`,
+  log `/root/arta-deploy-.log`). Incluye reportar/bloquear en el chat (migración `20261006120000`), el candado
+  de Studio/plantillas y la página nueva de «Eliminar cuenta».
+
+## Turno claude-code (2026-10-06 → 07): rechazo 2.1 de Apple, reportar/bloquear, baja de cuenta
+
+- **Apple rechazó la 1.0.0 (build 4)** el 06-10 con 2.1 «Information Needed» (cuenta con poco historial):
+  pide video en iPhone desde que se abre la app (login, eliminar cuenta, **reportar y bloquear** contenido
+  de usuarios) y 6 respuestas, también en las Notas. Hilo `cac88353-72f7-3530-8580-d96429ac21f5`, envío
+  `ee2a8741…` en UNRESOLVED_ISSUES. Texto de respuesta: `docs/store/RESPUESTA-APPLE-2.1.md`.
+- **Reportar y bloquear** (API `b461e6d`, Android `636c2ba`, iOS `7377b25`; contrato
+  `docs/chat-reportar-bloquear.md`). Términos con tolerancia cero.
+- **Cuelgue real del chat iOS**: con el teclado abierto, arrastrar la conversación dejaba el hilo principal
+  sin contestar (`.scrollDismissesKeyboard(.interactively)` + `.defaultScrollAnchor(.bottom)`, iOS 26).
+  Pasó a `.immediately` (`4f89818`); `testZDiagnosticoArrastre` lo comprueba (3 escenarios responden).
+- **Video para Apple en simulador**: flujo `ios-review-video.yml` (inputs `version`/`build` para que Más muestre
+  la de TestFlight; `sample` automático si la app se queda quieta 40 s). La prueba ya no arrastra con teclado,
+  abre la tarea correcta y espera a que Safari pinte la página de eliminar cuenta. Corrida buena con build 6:
+  `37653966259` (pero Safari no alcanzó a cargar → se cambió la prueba en `79801c4`).
+- **Resembrado de la cuenta demo** borra los mensajes que no son de la siembra (el video deja uno por corrida).
+- **Baja de cuenta = desactivar** (regla de Adam 07-10): `DELETE /users/:id` ya hace `active=false`, revoca
+  sesiones y notifications filtra `active`; lo creado se queda con su autor. La página `/legal/eliminar-cuenta`,
+  privacidad y los textos de las apps (iOS diálogo, Android subtítulo, `1abad39`) ahora lo dicen así.
+- **ASC**: build 6 (`bfb83052…`, con reportar/bloquear y el arreglo del chat) VALID y ligada a la 1.0.0;
+  notas de revisión reescritas con las 6 respuestas (API pública, `appStoreReviewDetails/9ed9de8a…`).
+- **BLOQUEO**: GitHub Actions dejó de arrancar trabajos el 07-10 ~17:06 UTC («recent account payments have
+  failed or your spending limit needs to be increased»). Adam tiene abierta github.com/settings/billing.
+- **Pendiente, en orden**: (1) que Adam arregle la facturación de Actions; (2) `ios-testflight.yml` → build 7
+  (textos de la baja); (3) resembrar y `ios-review-video.yml -f version=1.0.0 -f build=7`; (4) subir
+  `arta-review.mp4` como adjunto de App Review (script de scratchpad con `/appStoreReviewAttachments`, la API
+  pública; `asc_signing.Asc` ya antepone `/v1`, no repetirlo), ligar build 7, responder en el hilo con
+  `docs/store/RESPUESTA-APPLE-2.1.md` (aclarando que es simulador) y reenviar; (5) Play: arrastrar
+  `Documents\ARTA-builds\arta-1.0.0-3.aab` (código 3, reportar/bloquear y texto de baja) a Producción para
+  reemplazar la versión 2 en revisión, y cambiar en IARC «los usuarios pueden interactuar» si hace falta.
 
 ## Turno claude-code (2026-10-04, 17:40): declaraciones de Play Console desde el Chrome de Adam
 
