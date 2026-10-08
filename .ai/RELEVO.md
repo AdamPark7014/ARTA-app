@@ -37,10 +37,12 @@
 - **GitHub Actions BLOQUEADO** desde el 07-10 ~17:06 UTC: se acabaron los 2,000 min incluidos (NEXARA-app
   $41, ARTA-app $12 brutos en octubre) y GitHub no logra cobrar el excedente a la tarjeta («recent account
   payments have failed…»). Sin presupuestos configurados. Nada de macOS corre hasta que Adam lo arregle.
-- **Pendiente**: (1) Play: arrastrar `Documents\ARTA-builds\arta-1.0.0-3.aab` (código 3, reportar/bloquear y
-  texto de baja) a Producción para reemplazar la versión 2 en revisión, y en IARC marcar que los usuarios
-  interactúan si hace falta. (2) Con Actions de vuelta: build iOS con el texto nuevo de baja (`1abad39`) como
-  1.0.1. (3) `asc_signing.Asc` ya antepone `/v1`: en scripts nuevos usar rutas sin `/v1`.
+- **Android 1.0.0 (código 3) EN REVISIÓN** el 08-10 ~15:35 UTC en Producción (178 países), con reportar/
+  bloquear y el texto nuevo de la baja; reemplazó a la versión 2 (Adam aceptó reiniciar la revisión que
+  llevaba desde el 05-10). Notas es-419 de primera versión.
+- **Pendiente**: (1) Con Actions de vuelta: build iOS con el texto nuevo de baja (`1abad39`) como 1.0.1.
+  (2) Si Google pide actualizar el cuestionario IARC por la interacción entre usuarios, contestarlo.
+  (3) `asc_signing.Asc` ya antepone `/v1`: en scripts nuevos usar rutas sin `/v1`.
 
 ## Turno claude-code (2026-10-04, 17:40): declaraciones de Play Console desde el Chrome de Adam
 
