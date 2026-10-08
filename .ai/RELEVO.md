@@ -29,15 +29,18 @@
   privacidad y los textos de las apps (iOS diálogo, Android subtítulo, `1abad39`) ahora lo dicen así.
 - **ASC**: build 6 (`bfb83052…`, con reportar/bloquear y el arreglo del chat) VALID y ligada a la 1.0.0;
   notas de revisión reescritas con las 6 respuestas (API pública, `appStoreReviewDetails/9ed9de8a…`).
-- **BLOQUEO**: GitHub Actions dejó de arrancar trabajos el 07-10 ~17:06 UTC («recent account payments have
-  failed or your spending limit needs to be increased»). Adam tiene abierta github.com/settings/billing.
-- **Pendiente, en orden**: (1) que Adam arregle la facturación de Actions; (2) `ios-testflight.yml` → build 7
-  (textos de la baja); (3) resembrar y `ios-review-video.yml -f version=1.0.0 -f build=7`; (4) subir
-  `arta-review.mp4` como adjunto de App Review (script de scratchpad con `/appStoreReviewAttachments`, la API
-  pública; `asc_signing.Asc` ya antepone `/v1`, no repetirlo), ligar build 7, responder en el hilo con
-  `docs/store/RESPUESTA-APPLE-2.1.md` (aclarando que es simulador) y reenviar; (5) Play: arrastrar
-  `Documents\ARTA-builds\arta-1.0.0-3.aab` (código 3, reportar/bloquear y texto de baja) a Producción para
-  reemplazar la versión 2 en revisión, y cambiar en IARC «los usuarios pueden interactuar» si hace falta.
+- **iOS 1.0.0 (build 6) REENVIADO** el 08-10 15:25 UTC → WAITING_FOR_REVIEW (envío `ee2a8741…`). Video
+  `ARTA-app-review-1.0.0-build6.mp4` (corrida `37653966259`) como único adjunto de App Review (ASC solo admite
+  uno; la carta firmada salió de ahí y va adjunta en la respuesta del hilo). Respuesta = la de
+  `docs/store/RESPUESTA-APPLE-2.1.md` + párrafo de baja de cuenta. Para reenviar: «Actualizar revisión» en la
+  versión y luego «Volver a enviar a revisión de apps» en el envío (antes de actualizar, ese botón está gris).
+- **GitHub Actions BLOQUEADO** desde el 07-10 ~17:06 UTC: se acabaron los 2,000 min incluidos (NEXARA-app
+  $41, ARTA-app $12 brutos en octubre) y GitHub no logra cobrar el excedente a la tarjeta («recent account
+  payments have failed…»). Sin presupuestos configurados. Nada de macOS corre hasta que Adam lo arregle.
+- **Pendiente**: (1) Play: arrastrar `Documents\ARTA-builds\arta-1.0.0-3.aab` (código 3, reportar/bloquear y
+  texto de baja) a Producción para reemplazar la versión 2 en revisión, y en IARC marcar que los usuarios
+  interactúan si hace falta. (2) Con Actions de vuelta: build iOS con el texto nuevo de baja (`1abad39`) como
+  1.0.1. (3) `asc_signing.Asc` ya antepone `/v1`: en scripts nuevos usar rutas sin `/v1`.
 
 ## Turno claude-code (2026-10-04, 17:40): declaraciones de Play Console desde el Chrome de Adam
 
