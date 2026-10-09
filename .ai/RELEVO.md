@@ -1,12 +1,32 @@
 # RELEVO
 
 - **Último turno:** claude-code
-- **Fecha:** 2026-10-07
+- **Fecha:** 2026-10-09
 - **Rama:** main
   (Adam es el único programador).
 - **Producción:** `7cabc06` desplegado desde `main` el 2026-10-07 ~17:05 UTC (bundle + `update.sh --no-pull`,
   log `/root/arta-deploy-.log`). Incluye reportar/bloquear en el chat (migración `20261006120000`), el candado
   de Studio/plantillas y la página nueva de «Eliminar cuenta».
+
+## Turno claude-code (2026-10-09): repo público con historial sin contraseñas
+
+GitHub no cobraba los minutos de Actions de la cuenta (banco de Adam bloqueado) y NEXARA-app ya corre gratis por
+ser público. Adam pidió hacer público ARTA-app sacando antes las contraseñas del historial.
+- **Repo nuevo con el mismo nombre** `AdamPark7014/ARTA-app` (historial reescrito con git-filter-repo, mismos 290
+  commits con SHAs nuevos: los SHAs viejos citados abajo ya no existen en GitHub). El repo viejo quedó como
+  **`ARTA-app-privado`** (privado, con el historial original). Respaldo completo local:
+  `C:\dev\secrets\arta-store\ARTA-app-historial-completo-2026-10-09.bundle`.
+- Se reemplazaron en todo el historial las 11 contraseñas del sembrador (la general y las de Arturo, Chacho,
+  Melissa, Rodrigo, Williams, Leida, JP, Monse, Marisol y Kika) por `CambiaEsto-<Nombre>`; la de desarrollo
+  pasó a `ArtaDevLocal-1` (sembrador, CI, e2e, `.env.example`). Comprobado: 0 coincidencias en GitHub.
+- `docs/ACCESS.md` salió de todo el historial y ahora es **solo local** (`.gitignore`); copia en
+  `C:\dev\secrets\arta-store\ACCESS.md`. Ya no aplica la regla «No tocar docs/ACCESS.md» en git.
+- Secretos de Actions recreados en el repo nuevo (los 7, desde `C:\dev\secrets\arta-ios` y `arta-store`).
+- **Servidor**: `/var/www/arta-app` tiene el historial viejo. El próximo deploy por bundle no hace
+  fast-forward: tras `git fetch /root/arta-main.bundle main`, usar `git checkout -B main FETCH_HEAD`
+  (árbol limpio salvo `deploy/.env.arta`, que no está versionado) y luego `update.sh --no-pull`.
+- **Pendiente de Adam**: si alguna de esas 11 contraseñas sigue sirviendo en producción, cambiarla (estuvieron en
+  un repo privado); decidir si se borra `ARTA-app-privado`.
 
 ## Turno claude-code (2026-10-06 → 07): rechazo 2.1 de Apple, reportar/bloquear, baja de cuenta
 
