@@ -27,6 +27,13 @@ ser público. Adam pidió hacer público ARTA-app sacando antes las contraseñas
   (árbol limpio salvo `deploy/.env.arta`, que no está versionado) y luego `update.sh --no-pull`.
 - **Pendiente de Adam**: si alguna de esas 11 contraseñas sigue sirviendo en producción, cambiarla (estuvieron en
   un repo privado); decidir si se borra `ARTA-app-privado`.
+- **iOS 1.0.0 (build 11) en revisión** desde el 09-10 ~18:45 UTC (envío nuevo `c1da1a8a…`; el `ee2a8741…` con la
+  build 6 se canceló por la API para cambiar la build). Build 11 = texto nuevo del diálogo «Eliminar mi cuenta».
+  Video `ARTA-app-review-1.0.0-build11.mp4` (corrida `37971415326`, 6:01, versión «1.0.0 (11)» en Más, página
+  de baja cargada en Safari) como adjunto único; notas al día (la carta firmada quedó en la respuesta del 08-10).
+  En el repo nuevo `run_number` reinició: TestFlight y video se lanzan con `-f build=N` (siguiente: 12).
+  Scripts de la API pública usados (scratchpad, no versionados): cancelar envío = PATCH `reviewSubmissions/{id}`
+  `canceled:true`; reenviar = POST `reviewSubmissions` + POST `reviewSubmissionItems` + PATCH `submitted:true`.
 
 ## Turno claude-code (2026-10-06 → 07): rechazo 2.1 de Apple, reportar/bloquear, baja de cuenta
 
