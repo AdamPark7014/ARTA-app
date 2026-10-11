@@ -141,6 +141,25 @@ function entityLabel(e: string) {
   return e === 'ARTA' ? 'Arta' : e === 'EXPLANADA' ? 'Auditorio' : e;
 }
 
+const ALL_ENTITIES = ['ARTA', 'EXPLANADA'] as const;
+
+/** Roles que solo reparte dirección general (el API tampoco los ofrece a quien solo da de alta). */
+const MANAGER_ONLY_ROLES = new Set(['dir_general', 'super_admin']);
+
+/** `GET /users` (lo que ve quien solo da de alta) no trae métricas de acceso: valores neutros. */
+function asGovUser(u: UserRow): GovUser {
+  return {
+    ...u,
+    activity30d: 0,
+    checklistEdits30d: 0,
+    inactive30: false,
+    locked: false,
+    risk: 'low',
+    riskScore: 0,
+    failedLoginCount: 0,
+  };
+}
+
 /**
  * Permisos que la persona tiene además de los de su rol. Al asignar rol se
  * guardan también los del rol, así que contarlos todos («13 permisos extra»)
@@ -154,9 +173,22 @@ function extraPermissions(u: { roleKey: string; permissions: string[] }) {
 
 export default function UsersPage() {
   const { user: me } = useUser();
+  /** Editar, cambiar rol, dar de baja o reactivar a alguien que ya existe: solo dirección general. */
   const canManage = userHasPermission(me?.roleKey || '', me?.permissions || [], ['users.manage']);
+  /** Dar de alta gente nueva: también dirección adjunta (11-10-2026, docs/entidades-arta-auditorio.md). */
+  const canCreate =
+    canManage || userHasPermission(me?.roleKey || '', me?.permissions || [], ['users.create']);
+  /** Entidades que puede repartir: dirección general las dos; quien solo da de alta, las suyas. */
+  const grantableKey = !me
+    ? ''
+    : canManage || me.roleKey === 'dir_general' || me.roleKey === 'super_admin'
+      ? ALL_ENTITIES.join('|')
+      : ALL_ENTITIES.filter((e) => me.entities.includes(e)).join('|');
+  const grantable = useMemo(() => (grantableKey ? grantableKey.split('|') : []), [grantableKey]);
 
   const [gov, setGov] = useState<UsersGov | null>(null);
+  /** Equipo sin métricas, para quien solo da de alta (no lee `/analytics/users`). */
+  const [team, setTeam] = useState<GovUser[]>([]);
   const [roles, setRoles] = useState<RoleOpt[]>([]);
   const [permCatalog, setPermCatalog] = useState<PermOpt[]>([]);
   const [invites, setInvites] = useState<InviteRow[]>([]);
@@ -181,6 +213,22 @@ export default function UsersPage() {
   const [showInactive, setShowInactive] = useState(true);
 
   async function load() {
+    if (!canManage) {
+      // Quien solo da de alta: equipo de sus entidades, roles y permisos. Sin métricas ni invitaciones.
+      const [list, r, p] = await Promise.all([
+        api<UserRow[]>('/users'),
+        api<RoleOpt[]>('/users/roles'),
+        api<PermOpt[]>('/users/permissions/catalog'),
+      ]);
+      setTeam(
+        list
+          .filter((u) => !u.entities.length || u.entities.some((e) => grantable.includes(e)))
+          .map(asGovUser),
+      );
+      setRoles(r.filter((x) => !MANAGER_ONLY_ROLES.has(x.key)));
+      setPermCatalog(p);
+      return;
+    }
     const [g, r, p, meOrg] = await Promise.all([
       api<UsersGov>('/analytics/users'),
       api<RoleOpt[]>('/users/roles'),
@@ -200,7 +248,7 @@ export default function UsersPage() {
   }
 
   useEffect(() => {
-    if (!canManage) {
+    if (!canCreate) {
       setLoading(false);
       return;
     }
@@ -208,9 +256,20 @@ export default function UsersPage() {
     load()
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
-  }, [canManage]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canManage, canCreate, grantableKey]);
 
-  const users = gov?.users || [];
+  // El alta solo ofrece las entidades que la persona puede repartir.
+  useEffect(() => {
+    if (!grantable.length) return;
+    setForm((f) => {
+      const kept = f.entities.filter((e) => grantable.includes(e));
+      const next = kept.length ? kept : [...grantable];
+      return next.join('|') === f.entities.join('|') ? f : { ...f, entities: next };
+    });
+  }, [grantable]);
+
+  const users = canManage ? gov?.users || [] : team;
   const pendingInvites = useMemo(
     () =>
       invites.filter(
@@ -248,15 +307,17 @@ export default function UsersPage() {
       meta?.defaultEntities ||
       ROLE_DEFAULT_ENTITIES[roleKey as RoleKey] ||
       (['ARTA'] as string[]);
+    const allowed = defaults.filter((e) => grantable.includes(e));
     setForm((f) => ({
       ...f,
       roleKey,
-      entities: [...defaults],
+      entities: allowed.length ? allowed : [...grantable],
       title: f.title.trim() ? f.title : meta?.label || f.title,
     }));
   }
 
   function toggleEntityCreate(ent: string) {
+    if (!grantable.includes(ent)) return;
     setForm((f) => ({
       ...f,
       entities: f.entities.includes(ent) ? f.entities.filter((e) => e !== ent) : [...f.entities, ent],
@@ -504,7 +565,7 @@ export default function UsersPage() {
 
   const loginUrl = panelLoginUrl('ARTA');
 
-  if (!canManage) {
+  if (!canCreate) {
     return (
       <AppShell title="Usuarios">
         <div className="page-workspace">
@@ -520,10 +581,22 @@ export default function UsersPage() {
   return (
     <AppShell title="Usuarios">
       <div className="page-workspace stack">
-        <PageHeader
-          description="Alta, roles, entidades, permisos y bajas. Solo Directores Generales (Arturo y José Luis)."
-          hint="Alta inmediata: les das correo y contraseña. Invitar: eligen su contraseña con un enlace que dura 7 días."
-        />
+        {canManage ? (
+          <PageHeader
+            description="Alta, roles, entidades, permisos y bajas. Solo Directores Generales (Arturo y José Luis)."
+            hint="Alta inmediata: les das correo y contraseña. Invitar: eligen su contraseña con un enlace que dura 7 días."
+          />
+        ) : (
+          <>
+            <PageHeader
+              description={`Alta de gente nueva en ${grantable.map(entityLabel).join(' y ') || 'tus entidades'}: les das correo y contraseña.`}
+            />
+            {/* `.page-intro__hint` está oculto en todo el panel: este aviso tiene que verse. */}
+            <FlashMessage variant="info">
+              Puedes dar de alta gente nueva; para editar o dar de baja a alguien, pídeselo a dirección general.
+            </FlashMessage>
+          </>
+        )}
 
         {error ? (
           <FlashMessage variant="error" onDismiss={() => setError('')}>
@@ -604,29 +677,32 @@ export default function UsersPage() {
               <h2>Nuevo integrante</h2>
             </div>
             <div className="panel-body">
-              <div className="row row--tight" style={{ marginBottom: '0.85rem' }}>
-                <button
-                  className={`btn btn-sm ${!inviteMode ? '' : 'ghost'}`}
-                  type="button"
-                  onClick={() => {
-                    setInviteMode(false);
-                    setInviteUrl('');
-                    if (!form.password) setForm((f) => ({ ...f, password: genPassword() }));
-                  }}
-                >
-                  Alta inmediata
-                </button>
-                <button
-                  className={`btn btn-sm ${inviteMode ? '' : 'ghost'}`}
-                  type="button"
-                  onClick={() => {
-                    setInviteMode(true);
-                    setCreds(null);
-                  }}
-                >
-                  Invitar por correo
-                </button>
-              </div>
+              {/* Las invitaciones por correo son de dirección general (el API las pide con users.manage). */}
+              {canManage ? (
+                <div className="row row--tight" style={{ marginBottom: '0.85rem' }}>
+                  <button
+                    className={`btn btn-sm ${!inviteMode ? '' : 'ghost'}`}
+                    type="button"
+                    onClick={() => {
+                      setInviteMode(false);
+                      setInviteUrl('');
+                      if (!form.password) setForm((f) => ({ ...f, password: genPassword() }));
+                    }}
+                  >
+                    Alta inmediata
+                  </button>
+                  <button
+                    className={`btn btn-sm ${inviteMode ? '' : 'ghost'}`}
+                    type="button"
+                    onClick={() => {
+                      setInviteMode(true);
+                      setCreds(null);
+                    }}
+                  >
+                    Invitar por correo
+                  </button>
+                </div>
+              ) : null}
 
               <form className="form" onSubmit={onCreate}>
                 {!inviteMode ? (
@@ -674,7 +750,9 @@ export default function UsersPage() {
                     value={form.roleKey}
                     onChange={applyRole}
                     label="Rol del usuario"
-                    options={roles.map((r) => ({ value: r.key, label: r.label }))}
+                    options={roles
+                      .filter((r) => canManage || !MANAGER_ONLY_ROLES.has(r.key))
+                      .map((r) => ({ value: r.key, label: r.label }))}
                   />
                 </label>
                 {roleHint ? (
@@ -685,7 +763,7 @@ export default function UsersPage() {
 
                 <div className="label">Acceso a</div>
                 <div className="row">
-                  {(['ARTA', 'EXPLANADA'] as const).map((ent) => (
+                  {grantable.map((ent) => (
                     <FieldCheck
                       key={ent}
                       checked={form.entities.includes(ent)}
@@ -842,17 +920,19 @@ Contraseña: ${creds.password}`}</pre>
                     ...roles.map((r) => ({ value: r.key, label: r.label })),
                   ]}
                 />
-                <FieldSelect
-                  value={riskFilter}
-                  onChange={(v) => setRiskFilter(v as typeof riskFilter)}
-                  label="Riesgo"
-                  options={[
-                    { value: 'all', label: 'Cualquier riesgo' },
-                    { value: 'high', label: 'Alto' },
-                    { value: 'medium', label: 'Medio' },
-                    { value: 'low', label: 'Bajo' },
-                  ]}
-                />
+                {canManage ? (
+                  <FieldSelect
+                    value={riskFilter}
+                    onChange={(v) => setRiskFilter(v as typeof riskFilter)}
+                    label="Riesgo"
+                    options={[
+                      { value: 'all', label: 'Cualquier riesgo' },
+                      { value: 'high', label: 'Alto' },
+                      { value: 'medium', label: 'Medio' },
+                      { value: 'low', label: 'Bajo' },
+                    ]}
+                  />
+                ) : null}
                 <FieldCheck
                   checked={showInactive}
                   onChange={setShowInactive}
@@ -878,7 +958,7 @@ Contraseña: ${creds.password}`}</pre>
                         <th>Entidades</th>
                         <th>Estado</th>
                         <th>Último acceso</th>
-                        <th></th>
+                        {canManage ? <th></th> : null}
                       </tr>
                     </thead>
                     <tbody>
@@ -913,47 +993,50 @@ Contraseña: ${creds.password}`}</pre>
                               ? new Date(u.lastLoginAt).toLocaleString('es-MX')
                               : 'Nunca'}
                           </td>
-                          <td>
-                            <div className="row row--tight" style={{ flexWrap: 'wrap' }}>
-                              <button
-                                className="btn btn-sm"
-                                type="button"
-                                onClick={() => openEdit(u)}
-                              >
-                                Editar
-                              </button>
-                              {!u.active ? (
+                          {/* Editar, reactivar, desbloquear o dar de baja: solo dirección general (users.manage). */}
+                          {canManage ? (
+                            <td>
+                              <div className="row row--tight" style={{ flexWrap: 'wrap' }}>
                                 <button
-                                  className="btn ghost btn-sm"
+                                  className="btn btn-sm"
                                   type="button"
-                                  disabled={saving}
-                                  onClick={() => void reactivateUser(u)}
+                                  onClick={() => openEdit(u)}
                                 >
-                                  Reactivar
+                                  Editar
                                 </button>
-                              ) : null}
-                              {u.locked ? (
-                                <button
-                                  className="btn ghost btn-sm"
-                                  type="button"
-                                  disabled={saving}
-                                  onClick={() => void unlockUser(u)}
-                                >
-                                  Desbloquear
-                                </button>
-                              ) : null}
-                              {u.active ? (
-                                <button
-                                  className="btn ghost btn-sm btn-danger"
-                                  type="button"
-                                  disabled={saving || u.id === me?.id}
-                                  onClick={() => void deleteUser(u)}
-                                >
-                                  Eliminar
-                                </button>
-                              ) : null}
-                            </div>
-                          </td>
+                                {!u.active ? (
+                                  <button
+                                    className="btn ghost btn-sm"
+                                    type="button"
+                                    disabled={saving}
+                                    onClick={() => void reactivateUser(u)}
+                                  >
+                                    Reactivar
+                                  </button>
+                                ) : null}
+                                {u.locked ? (
+                                  <button
+                                    className="btn ghost btn-sm"
+                                    type="button"
+                                    disabled={saving}
+                                    onClick={() => void unlockUser(u)}
+                                  >
+                                    Desbloquear
+                                  </button>
+                                ) : null}
+                                {u.active ? (
+                                  <button
+                                    className="btn ghost btn-sm btn-danger"
+                                    type="button"
+                                    disabled={saving || u.id === me?.id}
+                                    onClick={() => void deleteUser(u)}
+                                  >
+                                    Eliminar
+                                  </button>
+                                ) : null}
+                              </div>
+                            </td>
+                          ) : null}
                         </tr>
                       ))}
                     </tbody>
@@ -964,7 +1047,7 @@ Contraseña: ${creds.password}`}</pre>
           </div>
         </div>
 
-        {pendingInvites.length ? (
+        {canManage && pendingInvites.length ? (
           <div className="panel">
             <div className="panel-head">
               <h2>Invitaciones pendientes · {pendingInvites.length}</h2>
@@ -1013,7 +1096,7 @@ Contraseña: ${creds.password}`}</pre>
           </div>
         ) : null}
 
-        {edit ? (
+        {edit && canManage ? (
           <div className="panel">
             <div className="panel-head">
               <h2>Editar usuario · {edit.fullName}</h2>

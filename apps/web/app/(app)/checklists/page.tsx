@@ -94,19 +94,22 @@ export default function ChecklistsTemplatesPage() {
   async function load() {
     setLoading(true);
     try {
-      const list = await api<Template[]>(`/checklists/templates${canManage ? '?all=1' : ''}`);
-      setTemplates(
-        list.filter((t) => !t.entities.length || t.entities.includes(entity) || canManage),
-      );
+      // Plantillas generales + las de la entidad activa (Arta o Auditorio); el API filtra.
+      const qs = new URLSearchParams({ entity });
+      if (canManage) qs.set('all', '1');
+      const list = await api<Template[]>(`/checklists/templates?${qs.toString()}`);
+      setTemplates(list.filter((t) => !t.entities.length || t.entities.includes(entity)));
     } finally {
       setLoading(false);
     }
   }
 
   useEffect(() => {
+    // Sin sesión resuelta la entidad aún es la de por defecto.
+    if (!user) return;
     load().catch(console.error);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [entity, canManage]);
+  }, [entity, canManage, user?.id]);
 
   const filtered = useMemo(() => {
     let list = templates;

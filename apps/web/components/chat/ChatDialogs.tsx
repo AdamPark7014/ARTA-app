@@ -31,12 +31,15 @@ function useColleagues(q: string, enabled = true, minLength = 0) {
 export function NewConversation({
   initialMode,
   meId,
+  entity,
   onClose,
   onOpen,
   onError,
 }: {
   initialMode: 'dm' | 'channel';
   meId: string | null;
+  /** Entidad activa: el canal nuevo es de Arta o de Auditorio (los directos no llevan entidad). */
+  entity: 'ARTA' | 'EXPLANADA';
   onClose: () => void;
   onOpen: (id: string) => void;
   onError: (text: string) => void;
@@ -100,6 +103,7 @@ export function NewConversation({
           kind: privateChannel ? 'PRIVATE' : 'PUBLIC',
           topic: topic.trim() || undefined,
           memberIds: picked.length ? picked.map((p) => p.id) : undefined,
+          entity,
         }),
       });
       onOpen(c.id);
@@ -143,7 +147,7 @@ export function NewConversation({
       {mode === 'channel' ? (
         <div className="chat-modal__form">
           <label className="chat-field">
-            <span>Nombre</span>
+            <span>Nombre · canal de {entity === 'EXPLANADA' ? 'Auditorio' : 'Arta'}</span>
             <span className="chat-field__prefix">
               <b>#</b>
               <input autoFocus type="text" placeholder="produccion-gira" maxLength={80} value={name} onChange={(e) => setName(e.target.value)} />

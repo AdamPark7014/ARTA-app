@@ -14,11 +14,16 @@ import { mockAuthenticatedApi, seedSession, TEST_DIRECTORY } from './support/moc
 test.describe('Tareas y avisos', () => {
   test('se le asigna una tarea a otro integrante del equipo', async ({ page, baseURL }) => {
     const posted: Array<Record<string, unknown>> = [];
+    const asked: string[] = [];
+    const recorded = (body: unknown) => (route: Route) => {
+      asked.push(route.request().url());
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+    };
 
     await seedSession(page, baseURL!);
     await mockAuthenticatedApi(page, {
-      '/users/directory': TEST_DIRECTORY,
-      '/tasks/mine': [],
+      '/users/directory': recorded(TEST_DIRECTORY),
+      '/tasks/mine': recorded([]),
       '/tasks': (route: Route) => {
         if (route.request().method() === 'POST') {
           posted.push(JSON.parse(route.request().postData() || '{}'));
@@ -30,7 +35,7 @@ test.describe('Tareas y avisos', () => {
         }
         return route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
       },
-      '/tasks/requested': [],
+      '/tasks/requested': recorded([]),
     });
 
     await page.goto('/tasks');
@@ -47,8 +52,17 @@ test.describe('Tareas y avisos', () => {
       title: 'Cotizar transporte del staff',
       assigneeIds: ['usr-e2e-logi'],
     });
-    // Sin evento: es una petición de apoyo entre compañeros.
+    // Sin evento: es una petición de apoyo entre compañeros, de la entidad activa (arta.* → ARTA).
     expect(posted[0].eventId).toBeUndefined();
+    expect(posted[0].entity).toBe('ARTA');
+
+    // ARTA y Auditorio separados: la lista y el directorio se piden de la entidad activa.
+    const lists = asked.filter((u) => /\/tasks\/(mine|requested)/.test(u));
+    expect(lists.length).toBeGreaterThan(0);
+    expect(lists.every((u) => new URL(u).searchParams.get('entity') === 'ARTA')).toBe(true);
+    const directory = asked.filter((u) => u.includes('/users/directory'));
+    expect(directory.length).toBeGreaterThan(0);
+    expect(directory.every((u) => new URL(u).searchParams.get('entity') === 'ARTA')).toBe(true);
   });
 
   /** Correcciones 30-09-2026: «dejar que se puedan asignar tareas a 1 o más personas». */
@@ -89,9 +103,13 @@ test.describe('Tareas y avisos', () => {
   });
 
   test('la campana muestra los avisos sin leer', async ({ page, baseURL }) => {
+    const counted: string[] = [];
     await seedSession(page, baseURL!);
     await mockAuthenticatedApi(page, {
-      '/notifications/unread-count': { count: 2 },
+      '/notifications/unread-count': (route: Route) => {
+        counted.push(route.request().url());
+        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ count: 2 }) });
+      },
       '/notifications': [
         {
           id: 'ntf-1',
@@ -113,5 +131,8 @@ test.describe('Tareas y avisos', () => {
     await bell.click();
 
     await expect(page.getByText('Beto Sandoval te asignó una tarea')).toBeVisible();
+    // El contador es de la entidad activa (más los avisos sin entidad).
+    expect(counted.length).toBeGreaterThan(0);
+    expect(counted.every((u) => new URL(u).searchParams.get('entity') === 'ARTA')).toBe(true);
   });
 });

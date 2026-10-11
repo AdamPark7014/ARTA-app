@@ -3,7 +3,18 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { api } from '@/lib/api';
 import { Icon, ICONS } from './ChatAttachment';
-import { attachmentLabel, isDeleted, listTime, plainText, type ChannelDetail, type ChatMessage, type Colleague, type SavedItem } from './chat-model';
+import {
+  attachmentLabel,
+  isAnnouncementsSlug,
+  isDeleted,
+  isGeneralSlug,
+  listTime,
+  plainText,
+  type ChannelDetail,
+  type ChatMessage,
+  type Colleague,
+  type SavedItem,
+} from './chat-model';
 import { Avatar, ChannelGlyph, errorText, untilLabel } from './chat-ui';
 
 /* Paneles laterales: fijados, guardados e información del canal. */
@@ -371,7 +382,7 @@ export function ChannelInfo({
 
       {!isDirect ? (
         <section className="chat-info__section chat-info__danger">
-          {detail.slug !== 'general' && detail.slug !== 'anuncios' ? (
+          {!isGeneralSlug(detail.slug) && !isAnnouncementsSlug(detail.slug) ? (
             <button type="button" className="chat-info__link is-danger" onClick={onLeave}>
               <Icon d={ICONS.logout} size={15} /> {group ? 'Salir del grupo' : 'Salir del canal'}
             </button>

@@ -26,7 +26,9 @@ import {
   encodeMentions,
   fold,
   fullStamp,
+  isAnnouncementsSlug,
   isDeleted,
+  isGeneralSlug,
   kindOf,
   listTime,
   loadDrafts,
@@ -188,7 +190,7 @@ export default function ChatPage() {
 }
 
 function ChatInner() {
-  const { user } = useUser();
+  const { user, entity } = useUser();
   const meId = user?.id ?? null;
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -296,14 +298,15 @@ function ChatInner() {
 
   /* canales */
 
+  // Canales de la entidad activa (Arta o Auditorio) + los directos, que son personales.
   const loadChannels = useCallback(async () => {
     try {
-      setChannels(await api<ChannelSummary[]>('/chat/channels'));
+      setChannels(await api<ChannelSummary[]>(`/chat/channels?entity=${entity}`));
       setChannelsError(false);
     } catch {
       setChannelsError(true);
     }
-  }, []);
+  }, [entity]);
 
   const scheduleChannels = useCallback(() => {
     window.clearTimeout(channelsTimer.current);
@@ -313,6 +316,29 @@ function ChatInner() {
   useEffect(() => {
     if (meId) void loadChannels();
   }, [meId, loadChannels]);
+
+  // Cambio Arta ⇄ Auditorio con el chat abierto: se cierra la conversación de la otra entidad
+  // (los directos no tienen entidad y siguen abiertos). Al cargar la sesión no cuenta como cambio.
+  const channelsRef = useRef(channels);
+  channelsRef.current = channels;
+  const activeIdRef = useRef(activeId);
+  activeIdRef.current = activeId;
+  const entitySeen = useRef<{ entity: string; meId: string | null }>({ entity, meId });
+  useEffect(() => {
+    const prev = entitySeen.current;
+    entitySeen.current = { entity, meId };
+    if (!prev.meId || !meId || prev.entity === entity) return;
+    setQuery('');
+    setResults(null);
+    const id = activeIdRef.current;
+    const current = id ? channelsRef.current?.find((c) => c.id === id) : null;
+    if (current && !current.entity) return;
+    setActiveId(null);
+    setView('list');
+    setPanel(null);
+    setThread(null);
+    router.replace('/chat', { scroll: false });
+  }, [entity, meId, router]);
 
   /* presencia y «No molestar» (chat v2; con el API viejo simplemente no aparecen) */
 
@@ -399,7 +425,7 @@ function ChatInner() {
   // Sin selección en escritorio → #general.
   useEffect(() => {
     if (activeId || narrow || !channels?.length || withParam || eventParam) return;
-    const general = channels.find((c) => c.slug === 'general') ?? channels[0];
+    const general = channels.find((c) => isGeneralSlug(c.slug)) ?? channels[0];
     setActiveId(general.id);
   }, [activeId, narrow, channels, withParam, eventParam]);
 
@@ -1197,7 +1223,9 @@ function ChatInner() {
     if (q.length < 2) return;
     setSearching(true);
     try {
-      setResults((await api<{ messages: ChatMessage[] }>(`/chat/search?q=${encodeURIComponent(q)}`)).messages);
+      setResults(
+        (await api<{ messages: ChatMessage[] }>(`/chat/search?q=${encodeURIComponent(q)}&entity=${entity}`)).messages,
+      );
     } catch (e) {
       showToast(errorText(e, 'No se pudo buscar'));
     } finally {
@@ -1231,7 +1259,7 @@ function ChatInner() {
   const visible = channels?.filter((c) => !q || fold(c.name).includes(q)) ?? null;
   const sections = useMemo(() => {
     if (!visible) return null;
-    const order = (c: ChannelSummary) => (c.slug === 'general' ? 0 : c.slug === 'anuncios' ? 1 : 2);
+    const order = (c: ChannelSummary) => (isGeneralSlug(c.slug) ? 0 : isAnnouncementsSlug(c.slug) ? 1 : 2);
     const teams = visible.filter((c) => !isDirectLike(c) && !isEvent(c)).sort((a, b) => order(a) - order(b));
     const events = visible.filter((c) => !isDirectLike(c) && isEvent(c));
     const directs = visible.filter((c) => isDirectLike(c));
@@ -1859,6 +1887,7 @@ function ChatInner() {
         <NewConversation
           initialMode={picker}
           meId={meId}
+          entity={entity}
           onClose={() => setPicker(null)}
           onOpen={(id) => {
             setPicker(null);

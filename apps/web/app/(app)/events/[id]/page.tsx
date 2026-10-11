@@ -129,9 +129,17 @@ function EventDetailInner() {
     load()
       .catch((e) => setLoadError(e instanceof Error ? e.message : 'No se pudo cargar el evento'))
       .finally(() => setLoading(false));
-    api<DirUser[]>('/users/directory').then(setDirectory).catch(() => undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
+
+  // Las tareas del evento solo van a quien trabaja en la entidad del evento (Arta o Auditorio).
+  const eventEntity = event?.entity;
+  useEffect(() => {
+    if (!eventEntity) return;
+    api<DirUser[]>(`/users/directory?entity=${encodeURIComponent(eventEntity)}`)
+      .then(setDirectory)
+      .catch(() => setDirectory([]));
+  }, [eventEntity]);
 
   const flash = useCallback((text: string, variant: FlashVariant = 'success') => {
     setMsg(text);

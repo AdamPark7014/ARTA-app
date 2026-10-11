@@ -156,33 +156,44 @@ export default function TasksPage() {
     if (view === 'team' && !canSeeTeam) setView('mine');
   }, [view, canSeeTeam, setView]);
 
+  // ARTA y Auditorio van separados (docs/entidades-arta-auditorio.md): todo se pide de la entidad
+  // activa, y solo cuando ya se sabe cuál es (antes de /auth/me sería ARTA por defecto → 403).
+  const meId = user?.id;
+
   const load = useCallback(async () => {
+    if (!meId) return;
     setLoading(true);
     try {
-      setRows(await api<TaskRecord[]>(VIEW_ENDPOINT[view]));
+      setRows(await api<TaskRecord[]>(`${VIEW_ENDPOINT[view]}?entity=${entity}`));
       setSelected(new Set());
     } catch (e) {
       setError(e instanceof Error ? e.message : 'No se pudieron cargar las tareas');
     } finally {
       setLoading(false);
     }
-  }, [view]);
+  }, [view, entity, meId]);
 
   useEffect(() => {
     load().catch(console.error);
-  }, [load, entity]);
+  }, [load]);
 
+  // Solo se le asigna a quien trabaja en la entidad de la tarea (aquí siempre la activa: los
+  // eventos del selector también son de ella).
   useEffect(() => {
-    api<DirUser[]>('/users/directory')
+    if (!meId) return;
+    setForm((f) => (f.eventId || f.assigneeIds.length ? { ...f, eventId: '', assigneeIds: [] } : f));
+    setWho('all');
+    api<DirUser[]>(`/users/directory?entity=${entity}`)
       .then(setDirectory)
       .catch(() => setDirectory([]));
-  }, []);
+  }, [entity, meId]);
 
   useEffect(() => {
+    if (!meId) return;
     api<EventRow[]>(`/events?entity=${entity}`)
       .then((list) => setEvents(list.filter((e) => e.status !== 'CANCELLED')))
       .catch(() => setEvents([]));
-  }, [entity]);
+  }, [entity, meId]);
 
   /** Sustituye la fila en memoria — nada de recargar 300 tareas por un clic. */
   const patchRow = useCallback((task: TaskRecord) => {
@@ -371,6 +382,8 @@ export default function TasksPage() {
           assigneeIds: form.assigneeIds,
           eventId: form.eventId || undefined,
           dueAt: form.dueAt || undefined,
+          // Con evento manda la entidad del evento; sin él, la activa.
+          entity: form.eventId ? undefined : entity,
         }),
       });
       const who2 = form.assigneeIds

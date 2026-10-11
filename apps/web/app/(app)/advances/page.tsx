@@ -117,10 +117,11 @@ function AdvancesPageInner() {
   const [patched, setPatched] = useState<Record<string, Advance>>({});
   const handledLink = useRef<string | null>(null);
 
+  /** Bandejas de la entidad activa: lo de Auditorio no se mezcla con lo de Arta. */
   async function loadLists() {
     const [p, m] = await Promise.all([
-      api<Advance[]>('/finance/advances/pending').catch(() => [] as Advance[]),
-      api<Advance[]>('/finance/advances/mine').catch(() => [] as Advance[]),
+      api<Advance[]>(`/finance/advances/pending?entity=${entity}`).catch(() => [] as Advance[]),
+      api<Advance[]>(`/finance/advances/mine?entity=${entity}`).catch(() => [] as Advance[]),
     ]);
     setPending(p);
     setMine(m);
@@ -136,6 +137,8 @@ function AdvancesPageInner() {
   }
 
   useEffect(() => {
+    // Antes de /auth/me la entidad aún no es la de la persona (por defecto ARTA → 403 con solo Auditorio).
+    if (!user) return;
     setPending(null);
     setMine(null);
     Promise.all([
@@ -150,7 +153,7 @@ function AdvancesPageInner() {
       })
       .catch(console.error);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [entity]);
+  }, [entity, user?.id]);
 
   useEffect(() => {
     if (tab === 'event') loadEventRows(eventId).catch(console.error);

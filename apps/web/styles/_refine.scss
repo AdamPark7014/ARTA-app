@@ -598,7 +598,7 @@ button.tile:hover {
 }
 
 .file-row__icon--file {
-  background: rgba(123, 159, 212, 0.12);
+  background: color-mix(in srgb, var(--explanada) 12%, transparent);
   color: var(--explanada);
 }
 

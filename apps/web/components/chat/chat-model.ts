@@ -27,6 +27,8 @@ export type ChannelSummary = {
   mutedUntil?: string | null;
   /** Chat v2: directo de grupo (2 a 8 personas). Falta en API viejo. */
   isGroupDm?: boolean;
+  /** ARTA o EXPLANADA (Auditorio); null en directos, que son personales. Falta en API viejo. */
+  entity?: 'ARTA' | 'EXPLANADA' | null;
 };
 
 export type ChannelMember = {
@@ -119,6 +121,16 @@ export type LinkPreview = {
 export type MessagePage = { messages: ChatMessage[]; hasMore: boolean; hasNewer?: boolean };
 export type Colleague = { id: string; fullName: string; title?: string | null; email?: string | null };
 export type UploadResult = { url: string; name?: string | null; mime?: string | null; size?: number | null };
+
+/** #general de cada entidad: el de Auditorio lleva el slug `general-auditorio`. */
+export function isGeneralSlug(slug: string | null | undefined) {
+  return slug === 'general' || slug === 'general-auditorio';
+}
+
+/** #anuncios de cada entidad: el de Auditorio lleva el slug `anuncios-auditorio`. */
+export function isAnnouncementsSlug(slug: string | null | undefined) {
+  return slug === 'anuncios' || slug === 'anuncios-auditorio';
+}
 
 export const MAX_LEN = 8000;
 export const MAX_BYTES = 100 * 1024 * 1024;

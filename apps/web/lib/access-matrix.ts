@@ -146,9 +146,12 @@ export const NAV_ITEMS: NavItem[] = [
   {
     href: '/users',
     label: 'Usuarios',
-    permissions: ['users.manage', 'everything'],
-    roles: ['dir_general', 'super_admin'],
+    // 11-10-2026: dirección adjunta entra a dar de alta gente nueva (`users.create`); editar,
+    // cambiar rol o dar de baja a alguien que ya existe sigue siendo `users.manage`.
+    permissions: ['users.manage', 'users.create'],
+    roles: ['dir_general', 'dir_adjunta', 'super_admin'],
     group: 'Admin',
+    keywords: 'equipo alta personas integrantes',
   },
   {
     href: '/settings',
@@ -452,7 +455,7 @@ export function canSeeNavItem(
 export const ROLE_SCOPE: Record<string, string> = {
   super_admin: 'Acceso total de sistemas',
   dir_general: 'Acceso total Arta + Auditorio · usuarios · cierre · corrida',
-  dir_adjunta: 'Acceso total Arta + Auditorio · cierre · corrida · sin usuarios',
+  dir_adjunta: 'Acceso total en sus entidades · cierre · corrida · da de alta usuarios nuevos',
   gerente_arta: 'Todo Arta · campaña · corrida · autoriza OC Arta · Studio',
   dir_auditorio: 'Todo Auditorio · en Arta solo carpetas generales · autoriza OC Auditorio',
   logistica: 'Eventos ambos · campaña · boletera · checklists · carpetas',

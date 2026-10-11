@@ -498,7 +498,10 @@ export function EventChecklistsPanel({
                 setAddMsg('');
                 if (!templates.length) {
                   try {
-                    const tpls = await api<Array<{ id: string; name: string }>>('/checklists/templates');
+                    // Plantillas generales + las de la entidad del evento (Arta o Auditorio).
+                    const tpls = await api<Array<{ id: string; name: string }>>(
+                      `/checklists/templates?entity=${encodeURIComponent(event.entity)}`,
+                    );
                     setTemplates(tpls.map((t) => ({ id: t.id, name: t.name })));
                   } catch {
                     setTemplates([]);

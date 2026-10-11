@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
 import { useRealtime, useRealtimeStatus } from '@/lib/realtime';
+import { useUser } from '@/lib/user-context';
 
 type Notification = {
   id: string;
@@ -14,6 +15,8 @@ type Notification = {
   readAt?: string | null;
   createdAt: string;
   actor?: { id: string; fullName: string } | null;
+  /** ARTA o EXPLANADA; null = de la cuenta o de un directo, se ve en las dos. Falta en API viejo. */
+  entity?: 'ARTA' | 'EXPLANADA' | null;
 };
 
 const POLL_MS = 120_000;
@@ -43,9 +46,14 @@ function canNotifyDesktop() {
  * Llegan en vivo por socket (`notification:new` / `notification:read`). Con la
  * pestaña en segundo plano se muestra además un aviso del sistema, si la
  * persona lo permitió al abrir la campana.
+ *
+ * Campana y contador son de la entidad activa (Arta o Auditorio) más los avisos
+ * sin entidad (docs/entidades-arta-auditorio.md). El `unread` que traen los
+ * eventos del socket suma las dos entidades, así que se vuelve a pedir el contador.
  */
 export function NotificationBell() {
   const router = useRouter();
+  const { entity } = useUser();
   const [open, setOpen] = useState(false);
   const [count, setCount] = useState(0);
   const [items, setItems] = useState<Notification[]>([]);
@@ -54,30 +62,32 @@ export function NotificationBell() {
 
   const loadCount = useCallback(async () => {
     try {
-      const res = await api<{ count: number }>('/notifications/unread-count');
+      const res = await api<{ count: number }>(`/notifications/unread-count?entity=${entity}`);
       setCount(res.count);
     } catch {
       // Sesión caída o API en despliegue: el badge simplemente no se actualiza.
     }
-  }, []);
+  }, [entity]);
 
   const loadItems = useCallback(async () => {
     setLoading(true);
     try {
-      setItems(await api<Notification[]>('/notifications?take=20'));
+      setItems(await api<Notification[]>(`/notifications?take=20&entity=${entity}`));
     } catch {
       setItems([]);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [entity]);
 
   useRealtime<{ notification?: Notification; unread?: number }>('notification:new', (p) => {
     const n = p?.notification;
-    if (typeof p?.unread === 'number') setCount(p.unread);
-    else setCount((c) => c + 1);
+    void loadCount();
     if (!n) return;
-    setItems((prev) => (prev.some((i) => i.id === n.id) ? prev : [n, ...prev].slice(0, 20)));
+    // Lo de la otra entidad no entra a esta campana (sí al aviso del sistema, abajo).
+    if (!n.entity || n.entity === entity) {
+      setItems((prev) => (prev.some((i) => i.id === n.id) ? prev : [n, ...prev].slice(0, 20)));
+    }
     if (document.hidden && canNotifyDesktop() && window.Notification.permission === 'granted') {
       try {
         const shown = new window.Notification(n.title, { body: n.body ?? undefined, tag: n.id });
@@ -119,7 +129,7 @@ export function NotificationBell() {
   });
 
   useRealtime<{ notificationId?: string; unread?: number }>('notification:read', (p) => {
-    if (typeof p?.unread === 'number') setCount(p.unread);
+    void loadCount();
     if (p?.notificationId) {
       const at = new Date().toISOString();
       setItems((prev) => prev.map((i) => (i.id === p.notificationId ? { ...i, readAt: i.readAt || at } : i)));
@@ -177,7 +187,7 @@ export function NotificationBell() {
   async function markAll() {
     setCount(0);
     setItems((prev) => prev.map((i) => ({ ...i, readAt: i.readAt || new Date().toISOString() })));
-    await api('/notifications/read-all', { method: 'POST' }).catch(() => null);
+    await api(`/notifications/read-all?entity=${entity}`, { method: 'POST' }).catch(() => null);
   }
 
   return (
