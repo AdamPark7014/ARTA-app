@@ -149,7 +149,7 @@ struct ChannelInfoView: View {
 
     var body: some View {
         content
-            .background(ArtaColor.bg)
+            .artaScreenBackground()
             .navigationTitle(model.channel?.isDirect == true ? "Detalles" : "Información")
             .navigationBarTitleDisplayMode(.inline)
             .task {
@@ -279,7 +279,7 @@ struct ChannelInfoView: View {
             if ch.mayPost {
                 Button { editing = true } label: {
                     Label("Editar tema y descripción", systemImage: "pencil")
-                        .foregroundStyle(ArtaColor.gold)
+                        .foregroundStyle(ArtaColor.accent)
                 }
             }
         } header: {
@@ -310,7 +310,7 @@ struct ChannelInfoView: View {
                     .foregroundStyle(ArtaColor.muted)
                 Button { model.mute(false, hours: nil) } label: {
                     Label("Quitar silencio", systemImage: "bell")
-                        .foregroundStyle(ArtaColor.gold)
+                        .foregroundStyle(ArtaColor.accent)
                 }
             } else {
                 Menu {
@@ -345,7 +345,7 @@ struct ChannelInfoView: View {
                             HStack {
                                 Text(m.author.fullName)
                                     .font(.subheadline.weight(.semibold))
-                                    .foregroundStyle(ArtaColor.gold)
+                                    .foregroundStyle(ArtaColor.accent)
                                 Spacer()
                                 Text(relativeTime(m.createdAt))
                                     .font(.caption)
@@ -387,7 +387,7 @@ struct ChannelInfoView: View {
             if ch.mayManage && !ch.isDirect && !ch.isOrgDefault {
                 Button { adding = true } label: {
                     Label("Agregar personas", systemImage: "person.badge.plus")
-                        .foregroundStyle(ArtaColor.gold)
+                        .foregroundStyle(ArtaColor.accent)
                 }
             }
             ForEach(members) { member in
@@ -444,10 +444,10 @@ struct ChannelInfoView: View {
                 if let role = roleLabel(member.role) {
                     Text(role)
                         .font(.caption2.weight(.semibold))
-                        .foregroundStyle(ArtaColor.gold)
+                        .foregroundStyle(ArtaColor.accent)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 3)
-                        .background(Capsule().fill(ArtaColor.goldSoft))
+                        .background(ArtaControlShape(squareRadius: 3).fill(ArtaColor.accentSoft))
                 }
             }
             .contentShape(Rectangle())
@@ -525,7 +525,7 @@ private struct EditChannelSheet: View {
             }
             .scrollContentBackground(.hidden)
             .background(ArtaColor.bg)
-            .tint(ArtaColor.gold)
+            .tint(ArtaColor.accent)
             .navigationTitle("Editar")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -669,10 +669,10 @@ struct PeoplePickerSections: View {
                                     Image(systemName: "xmark").font(.caption2.weight(.bold))
                                 }
                                 .font(.caption.weight(.semibold))
-                                .foregroundStyle(ArtaColor.gold)
+                                .foregroundStyle(ArtaColor.accent)
                                 .padding(.horizontal, 10)
                                 .padding(.vertical, 6)
-                                .background(Capsule().fill(ArtaColor.goldSoft))
+                                .background(ArtaControlShape(squareRadius: 3).fill(ArtaColor.accentSoft))
                             }
                             .buttonStyle(.plain)
                             .accessibilityLabel("Quitar a \(person.fullName)")
@@ -726,7 +726,7 @@ struct PeoplePickerSections: View {
             if onPick == nil {
                 Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
                     .font(.title3)
-                    .foregroundStyle(isSelected ? ArtaColor.gold : ArtaColor.muted)
+                    .foregroundStyle(isSelected ? ArtaColor.accent : ArtaColor.muted)
             }
         }
         .contentShape(Rectangle())
@@ -829,7 +829,7 @@ struct SavedMessagesView: View {
 
     var body: some View {
         content
-            .background(ArtaColor.bg)
+            .artaScreenBackground()
             .navigationTitle("Guardados")
             .navigationBarTitleDisplayMode(.inline)
             .task { await model.load() }
@@ -899,10 +899,10 @@ private struct SavedRow: View {
             HStack(spacing: 6) {
                 Image(systemName: "bookmark.fill")
                     .font(.caption2)
-                    .foregroundStyle(ArtaColor.gold)
+                    .foregroundStyle(ArtaColor.accent)
                 Text(item.channel?.label ?? "Conversación")
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(ArtaColor.gold)
+                    .foregroundStyle(ArtaColor.accent)
                     .lineLimit(1)
                 Spacer(minLength: 4)
                 Text(relativeTime(m.createdAt))

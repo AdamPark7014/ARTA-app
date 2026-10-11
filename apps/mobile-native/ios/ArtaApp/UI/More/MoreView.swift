@@ -56,7 +56,7 @@ struct MoreView: View {
                             Label {
                                 Text(module.label).foregroundStyle(ArtaColor.text)
                             } icon: {
-                                Image(systemName: module.icon).foregroundStyle(ArtaColor.gold)
+                                Image(systemName: module.icon).foregroundStyle(ArtaColor.muted)
                             }
                         }
                     }
@@ -79,7 +79,7 @@ struct MoreView: View {
                     Label {
                         Text("Usuarios bloqueados").foregroundStyle(ArtaColor.text)
                     } icon: {
-                        Image(systemName: "person.crop.circle.badge.xmark").foregroundStyle(ArtaColor.gold)
+                        Image(systemName: "person.crop.circle.badge.xmark").foregroundStyle(ArtaColor.muted)
                     }
                 }
                 .accessibilityIdentifier("more-blocked-users")
@@ -148,7 +148,7 @@ struct MoreView: View {
             .listRowBackground(ArtaColor.bgElev)
         }
         .scrollContentBackground(.hidden)
-        .background(ArtaColor.bg)
+        .artaScreenBackground()
         .navigationTitle("Más")
         .confirmationDialog("¿Cerrar sesión en este teléfono?", isPresented: $confirmLogout, titleVisibility: .visible) {
             Button("Cerrar sesión", role: .destructive) {
@@ -184,12 +184,7 @@ struct MoreView: View {
                 } else if let email = user.email {
                     Text(email).font(.subheadline).foregroundStyle(ArtaColor.muted)
                 }
-                Text(WebModule.roleLabel(access.roleKey))
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(ArtaColor.gold)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(Capsule().fill(ArtaColor.goldSoft))
+                StatusPill(text: WebModule.roleLabel(access.roleKey), tone: .accent)
                 Text(activeEntity.current.brandName)
                     .font(.caption)
                     .foregroundStyle(ArtaColor.muted)

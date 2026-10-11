@@ -179,7 +179,7 @@ struct ChatListView: View {
         }
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
-        .background(ArtaColor.bg)
+        .artaScreenBackground()
         .overlay { overlay }
         .searchable(text: $model.query, prompt: "Buscar mensajes y conversaciones")
         .refreshable { await model.load() }
@@ -237,7 +237,7 @@ struct ChatListView: View {
                 }
             } label: {
                 Image(systemName: model.dndActive ? "moon.fill" : "line.3.horizontal.decrease.circle")
-                    .foregroundStyle(model.dndActive || model.unreadOnly ? ArtaColor.gold : ArtaColor.text)
+                    .foregroundStyle(model.dndActive || model.unreadOnly ? ArtaColor.accent : ArtaColor.text)
             }
             .accessibilityLabel("Opciones de chat")
         }
@@ -262,7 +262,7 @@ struct ChatListView: View {
                         NavigationLink(value: ChatRoute.conversation(channelId: channel.id, focusMessageId: nil)) {
                             ExploreRow(channel: channel)
                         }
-                        .listRowBackground(ArtaColor.bg)
+                        .listRowBackground(Color.clear)
                         .listRowSeparatorTint(ArtaColor.line)
                     }
                 }
@@ -312,25 +312,25 @@ struct ChatListView: View {
         }
         // Para la prueba de interfaz de las capturas (abre el canal de un evento).
         .accessibilityIdentifier(channel.isEvent ? "chat-event-\(channel.id)" : "chat-row-\(channel.id)")
-        .listRowBackground(ArtaColor.bg)
+        .listRowBackground(Color.clear)
         .listRowSeparatorTint(ArtaColor.line)
     }
 
     private var dndBanner: some View {
         HStack(spacing: 10) {
             Image(systemName: "moon.fill")
-                .foregroundStyle(ArtaColor.gold)
+                .foregroundStyle(ArtaColor.accent)
             Text(dndText)
                 .font(.footnote)
                 .foregroundStyle(ArtaColor.text)
             Spacer(minLength: 8)
             Button("Desactivar") { model.setDnd(nil) }
                 .font(.footnote.weight(.semibold))
-                .foregroundStyle(ArtaColor.gold)
+                .foregroundStyle(ArtaColor.accent)
                 .buttonStyle(.plain)
         }
         .padding(10)
-        .background(RoundedRectangle(cornerRadius: 10).fill(ArtaColor.goldSoft))
+        .background(RoundedRectangle(cornerRadius: ArtaRadius.item, style: .continuous).fill(ArtaColor.accentSoft))
         .listRowBackground(Color.clear)
         .listRowSeparator(.hidden)
     }
@@ -361,27 +361,27 @@ struct ChatListView: View {
                 if model.searching && model.results.isEmpty {
                     HStack {
                         Spacer()
-                        ProgressView().tint(ArtaColor.gold)
+                        ProgressView().tint(ArtaColor.accent)
                         Spacer()
                     }
-                    .listRowBackground(ArtaColor.bg)
+                    .listRowBackground(Color.clear)
                 } else if let failure = model.searchError {
                     Text(failure)
                         .font(.footnote)
                         .foregroundStyle(ArtaColor.danger)
-                        .listRowBackground(ArtaColor.bg)
+                        .listRowBackground(Color.clear)
                 } else if model.results.isEmpty {
                     Text("Ningún mensaje coincide con «\(model.trimmedQuery)».")
                         .font(.footnote)
                         .foregroundStyle(ArtaColor.muted)
-                        .listRowBackground(ArtaColor.bg)
+                        .listRowBackground(Color.clear)
                 } else {
                     ForEach(model.results) { message in
                         Button { openResult(message) } label: {
                             SearchResultRow(message: message, query: model.trimmedQuery)
                         }
                         .buttonStyle(.plain)
-                        .listRowBackground(ArtaColor.bg)
+                        .listRowBackground(Color.clear)
                         .listRowSeparatorTint(ArtaColor.line)
                     }
                 }
@@ -410,11 +410,11 @@ struct ChatListView: View {
         if model.loading && model.channels.isEmpty {
             ChatListSkeleton()
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-                .background(ArtaColor.bg)
+                .artaScreenBackground()
         } else if let error = model.error, model.channels.isEmpty {
             ChatErrorState(message: error) { model.retry() }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(ArtaColor.bg)
+                .artaScreenBackground()
         } else if model.trimmedQuery.isEmpty && model.visibleCount == 0 {
             EmptyState(
                 icon: model.unreadOnly ? "checkmark.circle" : "bubble.left.and.bubble.right",
@@ -452,7 +452,8 @@ private struct ChannelRow: View {
                     Spacer(minLength: 4)
                     Text(relativeTime(channel.lastMessageAt))
                         .font(.caption)
-                        .foregroundStyle(bold ? ArtaColor.gold : ArtaColor.muted)
+                        .monospacedDigit()
+                        .foregroundStyle(bold ? ArtaColor.text : ArtaColor.tertiary)
                 }
                 HStack(spacing: 6) {
                     preview
@@ -485,7 +486,7 @@ private struct ChannelRow: View {
     @ViewBuilder
     private var preview: some View {
         if let draft, !draft.isEmpty {
-            Text("Borrador: ").foregroundColor(ArtaColor.danger) + Text(plainText(draft)).foregroundColor(ArtaColor.muted)
+            Text("Borrador: ").foregroundColor(ArtaColor.danger).fontWeight(.medium) + Text(plainText(draft)).foregroundColor(ArtaColor.muted)
         } else {
             Text(plainText(channel.lastMessagePreview ?? channel.topic ?? ""))
                 .foregroundStyle(bold ? ArtaColor.text : ArtaColor.muted)
@@ -517,10 +518,10 @@ private struct ExploreRow: View {
             Spacer(minLength: 8)
             Text("Unirse")
                 .font(.caption.weight(.semibold))
-                .foregroundStyle(ArtaColor.gold)
+                .foregroundStyle(ArtaColor.text)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 5)
-                .overlay(Capsule().stroke(ArtaColor.gold, lineWidth: 1))
+                .overlay(ArtaControlShape().strokeBorder(ArtaColor.lineStrong, lineWidth: 1))
         }
         .padding(.vertical, 3)
     }
@@ -541,7 +542,7 @@ private struct SearchResultRow: View {
         guard !query.isEmpty else { return out }
         var start = out.startIndex
         while start < out.endIndex, let range = out[start...].range(of: query, options: [.caseInsensitive, .diacriticInsensitive]) {
-            out[range].foregroundColor = ArtaColor.gold
+            out[range].foregroundColor = ArtaColor.accent
             out[range].font = Font.subheadline.weight(.semibold)
             start = range.upperBound
         }
@@ -553,7 +554,7 @@ private struct SearchResultRow: View {
             HStack(spacing: 6) {
                 Text(message.channel?.label ?? "Conversación")
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(ArtaColor.gold)
+                    .foregroundStyle(ArtaColor.accent)
                     .lineLimit(1)
                 if message.parentId != nil {
                     Text("· en un hilo")
@@ -669,7 +670,7 @@ struct NewConversationSheet: View {
                             .autocorrectionDisabled()
                         TextField("Tema (opcional)", text: $topic)
                         Toggle("Privado", isOn: $isPrivate)
-                            .tint(ArtaColor.gold)
+                            .tint(ArtaColor.accent)
                     } header: {
                         Text("Canal")
                     } footer: {
@@ -698,7 +699,7 @@ struct NewConversationSheet: View {
             }
             .scrollContentBackground(.hidden)
             .background(ArtaColor.bg)
-            .tint(ArtaColor.gold)
+            .tint(ArtaColor.accent)
             .navigationTitle("Nueva conversación")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

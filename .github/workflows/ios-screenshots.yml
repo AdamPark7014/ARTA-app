@@ -408,7 +408,7 @@ jobs:
             --dataNetwork wifi --wifiMode active --wifiBars 3 \
             --cellularMode active --cellularBars 4 \
             --batteryState charged --batteryLevel 100 || echo "::warning::status_bar override falló"
-          # La app fuerza el tema oscuro; el sistema igual, para que nada desentone.
+          # La app fija su esquema por entidad (Arta claro, Auditorio oscuro); el sistema queda en oscuro.
           xcrun simctl ui "$UDID" appearance dark || true
 
           # Plan B del export: el test también escribe los PNG aquí.

@@ -124,7 +124,7 @@ struct ReportMessageSheet: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(message.author.fullName)
                             .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(ArtaColor.gold)
+                            .foregroundStyle(ArtaColor.accent)
                         Text(preview)
                             .font(.subheadline)
                             .foregroundStyle(ArtaColor.muted)
@@ -146,7 +146,7 @@ struct ReportMessageSheet: View {
                                 Text(option.label).foregroundStyle(ArtaColor.text)
                                 Spacer(minLength: 8)
                                 if reason == option {
-                                    Image(systemName: "checkmark").foregroundStyle(ArtaColor.gold)
+                                    Image(systemName: "checkmark").foregroundStyle(ArtaColor.accent)
                                 }
                             }
                             .contentShape(Rectangle())

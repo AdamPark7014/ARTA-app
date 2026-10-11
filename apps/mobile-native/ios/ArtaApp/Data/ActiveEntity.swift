@@ -23,14 +23,15 @@ enum ArtaEntity: String, CaseIterable, Identifiable {
 
     var other: ArtaEntity { self == .arta ? .explanada : .arta }
 
-    /// Acento de la marca: dorado de Arta, plateado de Auditorio. El resto del tema oscuro no cambia.
-    var accent: Color { self == .arta ? Color(hex: 0xC9A962) : Color(hex: 0xC7CCD4) }
+    /// Acento sólido (docs/diseno/SISTEMA-VISUAL.md): tinta en Arta (tema claro), plata en
+    /// Auditorio (tema oscuro). El resto de los tokens vive en `ArtaColor`.
+    var accent: Color { self == .arta ? Color(hex: 0x0C0C0D) : Color(hex: 0xC7CCD4) }
 
-    /// Tono profundo del acento (bordes del chip y del aviso). Mismos valores que Android.
-    var accentDeep: Color { self == .arta ? Color(hex: 0xA88B47) : Color(hex: 0x9AA1AC) }
+    /// Tono profundo del acento (bordes). Mismos valores que Android.
+    var accentDeep: Color { self == .arta ? Color(hex: 0x55555C) : Color(hex: 0x9AA1AC) }
 
-    /// Burbuja de mis mensajes en el chat: oscuro con un toque del acento.
-    var mineBubble: Color { self == .arta ? Color(hex: 0x2A2419) : Color(hex: 0x22252B) }
+    /// Burbuja de mis mensajes: hueso un tono abajo del papel en Arta; grafito con plata en Auditorio.
+    var mineBubble: Color { self == .arta ? Color(hex: 0xEAE8E2) : Color(hex: 0x1C1E22) }
 }
 
 /// Copia de la entidad activa que se puede leer desde cualquier hilo: la usan
@@ -150,6 +151,8 @@ final class ActiveEntity: ObservableObject {
     private func apply(_ entity: ArtaEntity) {
         // Primero la copia para hilos: lo que se repinta o se recarga al publicar ya la ve.
         EntityContext.update(entity, isScoped: !available.isEmpty)
+        // Barras de UIKit (navegación, pestañas, segmentados): las que se crean al rehacerse la app.
+        ArtaAppearance.apply(entity)
         if current != entity { current = entity }
         if let userId, !available.isEmpty {
             UserDefaults.standard.set(entity.rawValue, forKey: Self.storageKey(userId))
@@ -171,26 +174,36 @@ final class ActiveEntity: ObservableObject {
 
 // MARK: - Piezas de interfaz
 
-/// Aviso arriba de la pantalla tras cambiar de entidad. No intercepta toques.
+/// Aviso arriba de la pantalla tras cambiar de entidad (propuesta visual): en Arta,
+/// píldora negra con texto blanco; en Auditorio, plata con texto negro. No intercepta toques.
 struct EntityNoticeBanner: View {
     let notice: EntityNotice?
 
     var body: some View {
         VStack {
             if let notice {
+                let light = notice.entity == .arta
                 HStack(spacing: 8) {
-                    Circle()
-                        .fill(notice.entity.accent)
-                        .frame(width: 8, height: 8)
+                    Image(systemName: "arrow.left.arrow.right")
+                        .font(.system(size: 13, weight: .semibold))
                     Text(notice.text)
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(ArtaColor.text)
+                        .font(.system(size: 14, weight: .semibold, design: .rounded))
+                    Spacer(minLength: 0)
                 }
+                .foregroundStyle(light ? Color.white : Color(hex: 0x0A0A0B))
                 .padding(.horizontal, 16)
-                .padding(.vertical, 10)
-                .background(Capsule().fill(ArtaColor.surface2))
-                .overlay(Capsule().stroke(notice.entity.accentDeep, lineWidth: 1))
-                .shadow(color: .black.opacity(0.35), radius: 10, y: 4)
+                .padding(.vertical, 12)
+                .background(
+                    Group {
+                        if light {
+                            Capsule(style: .continuous).fill(Color(hex: 0x0C0C0D))
+                        } else {
+                            RoundedRectangle(cornerRadius: 6, style: .continuous).fill(ArtaColor.silver)
+                        }
+                    }
+                )
+                .shadow(color: .black.opacity(light ? 0.22 : 0.6), radius: light ? 12 : 17, x: 0, y: light ? 8 : 14)
+                .padding(.horizontal, 14)
                 .padding(.top, 6)
                 .transition(.move(edge: .top).combined(with: .opacity))
                 .accessibilityIdentifier("entity-notice")
@@ -201,7 +214,8 @@ struct EntityNoticeBanner: View {
     }
 }
 
-/// Chip de la entidad en el encabezado de Inicio. Para los híbridos, tocarlo cambia.
+/// Chip de la entidad en el encabezado de Inicio («● Arta» / «● Auditorio»). Para los
+/// híbridos, tocarlo cambia.
 struct EntityChip: View {
     @EnvironmentObject private var activeEntity: ActiveEntity
 
@@ -220,27 +234,31 @@ struct EntityChip: View {
         } else {
             chipBody(entity, switchable: false)
                 .accessibilityElement(children: .combine)
+                .accessibilityLabel(entity.brandName)
                 .accessibilityIdentifier("inicio-entity-chip")
         }
     }
 
     private func chipBody(_ entity: ArtaEntity, switchable: Bool) -> some View {
-        HStack(spacing: 6) {
+        let light = entity == .arta
+        let shape = ArtaControlShape()
+        return HStack(spacing: 6) {
             Circle()
-                .fill(entity.accent)
-                .frame(width: 8, height: 8)
-            Text(entity.brandName)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(entity.accent)
+                .fill(light ? Color.white : Color(hex: 0xC7CCD4))
+                .frame(width: 5, height: 5)
+            Text(entity.shortName)
+                .font(.system(size: 12, weight: .semibold, design: .rounded))
             if switchable {
                 Image(systemName: "arrow.left.arrow.right")
-                    .font(.caption2.weight(.bold))
-                    .foregroundStyle(ArtaColor.muted)
+                    .font(.system(size: 9, weight: .bold))
+                    .opacity(0.6)
             }
         }
-        .padding(.horizontal, 10)
+        .foregroundStyle(light ? Color.white : Color(hex: 0xC7CCD4))
+        .padding(.horizontal, 11)
         .padding(.vertical, 6)
-        .background(Capsule().fill(entity.accent.opacity(0.12)))
-        .overlay(Capsule().stroke(entity.accentDeep.opacity(0.6), lineWidth: 1))
+        .background(shape.fill(light ? Color(hex: 0x0C0C0D) : Color.white.opacity(0.04)))
+        .overlay(shape.strokeBorder(light ? Color.clear : Color.white.opacity(0.1), lineWidth: 1))
+        .contentShape(shape)
     }
 }

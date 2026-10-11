@@ -53,67 +53,98 @@ enum Haptics {
     static func tap() { UIImpactFeedbackGenerator(style: .light).impactOccurred() }
 }
 
-// MARK: - Colores de estado
+// MARK: - Estados
 
+/// Tono de un estado. Regla del sistema visual: «lleno» (acento con su texto) = requiere
+/// acción; «borde» (contorno de línea fuerte) = informativo. Rojo solo para alertas reales.
 enum PillTone {
-    case neutral, gold, ok, warn, danger, info
+    case neutral, accent, ok, warn, danger, info
 
+    /// Color sólido del tono (íconos y texto suelto).
     var foreground: Color {
         switch self {
-        case .neutral: return ArtaColor.muted
-        case .gold: return ArtaColor.gold
-        case .ok: return Color(hex: 0x22C55E)
-        case .warn: return Color(hex: 0xF59E0B)
+        case .neutral, .info, .ok: return ArtaColor.muted
+        case .accent, .warn: return ArtaColor.text
         case .danger: return ArtaColor.danger
-        case .info: return ArtaColor.read
         }
     }
 
-    var background: Color { foreground.opacity(0.16) }
+    /// `warn` (por aprobar, por autorizar, sin abrir) pide una decisión: va lleno.
+    var isFilled: Bool { self == .warn }
 }
 
+/// Estado en MAYÚSCULAS 10 px: lleno (requiere acción) o con borde (informativo).
 struct StatusPill: View {
     let text: String
     var tone: PillTone = .neutral
 
     var body: some View {
-        Text(text)
-            .font(.caption2.weight(.semibold))
-            .foregroundStyle(tone.foreground)
+        let shape = ArtaControlShape(squareRadius: 3)
+        Text(text.uppercased(with: Locale(identifier: "es_MX")))
+            .font(ArtaFont.status)
+            .tracking(0.6)
+            .foregroundStyle(textColor)
             .padding(.horizontal, 8)
-            .padding(.vertical, 3)
-            .background(Capsule().fill(tone.background))
+            .padding(.vertical, 3.5)
+            .background(shape.fill(tone.isFilled ? ArtaColor.accentFill : AnyShapeStyle(fillColor)))
+            .overlay(shape.strokeBorder(tone.isFilled ? Color.clear : borderColor, lineWidth: 1))
             .lineLimit(1)
+            .fixedSize()
+    }
+
+    private var textColor: Color {
+        if tone.isFilled { return ArtaColor.onAccent }
+        switch tone {
+        case .danger: return ArtaColor.danger
+        case .accent: return ArtaColor.text
+        default: return ArtaColor.muted
+        }
+    }
+
+    private var borderColor: Color {
+        switch tone {
+        case .danger: return ArtaColor.danger.opacity(0.45)
+        case .accent: return ArtaTheme.isLight ? Color(hex: 0x0C0C0D, opacity: 0.35) : Color(hex: 0xC7CCD4, opacity: 0.45)
+        default: return ArtaTheme.isLight ? Color(hex: 0x0C0C0D, opacity: 0.2) : Color.white.opacity(0.18)
+        }
+    }
+
+    private var fillColor: Color {
+        tone == .danger ? ArtaColor.danger.opacity(0.06) : .clear
     }
 }
 
 // MARK: - Estados de pantalla
 
-/// Esqueleto con marcadores `redacted` mientras llega la primera carga.
+/// Esqueleto con marcadores `redacted` mientras llega la primera carga, en tarjetas del tema.
 struct ModuleSkeletonList: View {
     var rows: Int = 6
+    @State private var pulse = false
 
     var body: some View {
         ScrollView {
             VStack(spacing: 12) {
-                ForEach(0..<rows, id: \.self) { _ in
+                ForEach(0..<rows, id: \.self) { i in
                     HStack(spacing: 12) {
-                        Circle().frame(width: 36, height: 36)
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text("Título de ejemplo de una fila").font(.subheadline)
-                            Text("Detalle · vence mañana").font(.caption)
+                        Circle().fill(ArtaColor.surface2).frame(width: 36, height: 36)
+                        VStack(alignment: .leading, spacing: 8) {
+                            RoundedRectangle(cornerRadius: 4).fill(ArtaColor.surface2)
+                                .frame(width: CGFloat(150 + (i * 41) % 90), height: 11)
+                            RoundedRectangle(cornerRadius: 4).fill(ArtaColor.surface2)
+                                .frame(width: CGFloat(90 + (i * 29) % 70), height: 9)
                         }
                         Spacer(minLength: 0)
                     }
-                    .padding(12)
-                    .background(RoundedRectangle(cornerRadius: 12).fill(ArtaColor.bgElev))
+                    .artaCard(padding: 14)
                 }
             }
             .padding(16)
         }
-        .foregroundStyle(ArtaColor.surface2)
-        .redacted(reason: .placeholder)
+        .opacity(pulse ? 0.55 : 1)
+        .animation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true), value: pulse)
+        .onAppear { pulse = true }
         .allowsHitTesting(false)
+        .accessibilityElement(children: .ignore)
         .accessibilityLabel("Cargando")
     }
 }
@@ -129,9 +160,7 @@ struct ModuleErrorView: View {
             Text(message)
         } actions: {
             Button("Reintentar", action: retry)
-                .buttonStyle(.borderedProminent)
-                .tint(ArtaColor.gold)
-                .foregroundStyle(ArtaColor.bg)
+                .buttonStyle(ArtaPrimaryButtonStyle(fullWidth: false))
         }
     }
 }
@@ -150,7 +179,7 @@ struct ModuleEmptyView: View {
     }
 }
 
-/// Tarjeta con título opcional sobre el fondo elevado.
+/// Tarjeta con título opcional en etiqueta «cap» (fichas de detalle).
 struct ModuleCard<Content: View>: View {
     var title: String? = nil
     @ViewBuilder let content: () -> Content
@@ -158,16 +187,74 @@ struct ModuleCard<Content: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             if let title {
-                Text(title)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(ArtaColor.muted)
-                    .textCase(.uppercase)
+                CapLabel(title)
             }
             content()
         }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 16).fill(ArtaColor.bgElev))
+        .artaCard()
+    }
+}
+
+/// Panel del tablero: título 600 y, a la derecha, un dato o «Ver todo» en terciario.
+struct PanelCard<Content: View>: View {
+    let title: String
+    var trailing: String? = nil
+    var trailingId: String? = nil
+    var trailingAction: (() -> Void)? = nil
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(title)
+                    .font(ArtaFont.panelTitle)
+                    .foregroundStyle(ArtaColor.text)
+                    .lineLimit(1)
+                Spacer(minLength: 8)
+                if let trailing {
+                    if let trailingAction {
+                        Button(action: trailingAction) {
+                            HStack(spacing: 3) {
+                                Text(trailing)
+                                Image(systemName: "chevron.right").font(.system(size: 10, weight: .semibold))
+                            }
+                            .font(.footnote)
+                            .foregroundStyle(ArtaColor.tertiary)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier(trailingId ?? "")
+                    } else {
+                        Text(trailing)
+                            .font(.footnote)
+                            .foregroundStyle(ArtaColor.tertiary)
+                            .lineLimit(1)
+                    }
+                }
+            }
+            content()
+        }
+        .artaCard()
+    }
+}
+
+/// Barra de avance de 3 px: tinta en ARTA, degradado plata en Auditorio.
+struct ProgressBar: View {
+    let value: Double
+
+    var body: some View {
+        GeometryReader { geo in
+            ZStack(alignment: .leading) {
+                Capsule().fill(ArtaColor.line)
+                Capsule()
+                    .fill(ArtaTheme.isLight
+                          ? AnyShapeStyle(ArtaColor.accent)
+                          : AnyShapeStyle(LinearGradient(colors: [Color(hex: 0x9AA1AC), Color(hex: 0xF1F3F6)], startPoint: .leading, endPoint: .trailing)))
+                    .frame(width: geo.size.width * min(max(value, 0), 1))
+            }
+        }
+        .frame(height: 3)
+        .accessibilityHidden(true)
     }
 }
 
@@ -178,7 +265,7 @@ struct FactRow: View {
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 12) {
-            Text(label).font(.subheadline).foregroundStyle(ArtaColor.muted)
+            Text(label).font(.subheadline).foregroundStyle(ArtaColor.tertiary)
             Spacer(minLength: 8)
             Text(value).font(.subheadline).foregroundStyle(ArtaColor.text).multilineTextAlignment(.trailing)
         }
@@ -198,7 +285,7 @@ struct PeopleLine: View {
                 HStack(spacing: -6) {
                     ForEach(Array(names.prefix(3).enumerated()), id: \.offset) { _, name in
                         Avatar(name: name, size: 20)
-                            .overlay(Circle().stroke(ArtaColor.bgElev, lineWidth: 1.5))
+                            .overlay(Circle().stroke(ArtaColor.surface, lineWidth: 1.5))
                     }
                 }
                 Text(names.joined(separator: ", "))
@@ -321,6 +408,10 @@ enum MDate {
     }
 
     static func todayTitle() -> String { capitalized(longDay.string(from: Date())) }
+    /// «21:30» (horas tabulares de la línea de tiempo).
+    static func timeText(_ date: Date) -> String { hm.string(from: date) }
+    /// «16 oct».
+    static func dayMonthText(_ date: Date) -> String { dayMonth.string(from: date).replacingOccurrences(of: ".", with: "") }
     static func monthTitle(_ date: Date) -> String { capitalized(monthYear.string(from: date)) }
     static func longDayTitle(_ date: Date) -> String { capitalized(longDay.string(from: date)) }
     static func dayNumber(_ date: Date) -> String { String(Calendar.current.component(.day, from: date)) }
@@ -376,7 +467,7 @@ enum TaskInfo {
         case "DONE": return .ok
         case "PENDING_APPROVAL": return .warn
         case "BLOCKED": return .danger
-        case "IN_PROGRESS": return .gold
+        case "IN_PROGRESS": return .accent
         default: return .neutral
         }
     }
@@ -386,7 +477,7 @@ enum TaskInfo {
         if task.isDone { return ("Hecha", .ok) }
         if task.isPendingApproval { return ("Por aprobar", .warn) }
         if task.status == "BLOCKED" { return ("Bloqueada", .danger) }
-        if task.status == "IN_PROGRESS" { return ("En curso", .gold) }
+        if task.status == "IN_PROGRESS" { return ("En curso", .accent) }
         if task.allAssigneeIds.isEmpty { return ("Sin asignar", .neutral) }
         if task.seenAt == nil { return ("Sin abrir", .warn) }
         return ("Vio · sin avance", .neutral)

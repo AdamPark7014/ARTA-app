@@ -226,7 +226,7 @@ struct ArtaWebView: View {
                 if model.isLoading && model.progress < 1 {
                     ProgressView(value: model.progress)
                         .progressViewStyle(.linear)
-                        .tint(ArtaColor.gold)
+                        .tint(ArtaColor.accent)
                 }
             }
             .overlay {
@@ -299,11 +299,9 @@ struct ArtaWebView: View {
                 UIImpactFeedbackGenerator(style: .light).impactOccurred()
                 model.reload()
             } label: {
-                Text("Reintentar").font(.headline).padding(.horizontal, 24).padding(.vertical, 12)
+                Text("Reintentar")
             }
-            .buttonStyle(.borderedProminent)
-            .tint(ArtaColor.gold)
-            .foregroundStyle(ArtaColor.bg)
+            .buttonStyle(ArtaPrimaryButtonStyle(fullWidth: false))
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(ArtaColor.bg)
@@ -311,7 +309,7 @@ struct ArtaWebView: View {
 
     private func busyView(_ label: String?) -> some View {
         VStack(spacing: 12) {
-            ProgressView().tint(ArtaColor.gold)
+            ProgressView().tint(ArtaColor.accent)
             if let label {
                 Text(label).font(.subheadline).foregroundStyle(ArtaColor.muted)
             }
@@ -386,7 +384,7 @@ final class WebViewModel: NSObject, ObservableObject {
         #if DEBUG
         webView.isInspectable = true
         #endif
-        refreshControl.tintColor = UIColor(ArtaColor.gold)
+        refreshControl.tintColor = UIColor(ArtaColor.accent)
         refreshControl.addTarget(self, action: #selector(pullToRefresh), for: .valueChanged)
         webView.scrollView.refreshControl = refreshControl
         observeWebView()

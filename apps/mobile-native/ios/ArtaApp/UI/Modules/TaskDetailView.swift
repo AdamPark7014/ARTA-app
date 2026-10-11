@@ -39,7 +39,7 @@ struct TaskDetailView: View {
                 }
             }
         }
-        .background(ArtaColor.bg)
+        .artaScreenBackground()
         .navigationTitle("Tarea")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -167,7 +167,7 @@ struct TaskDetailView: View {
                     } label: {
                         Label(event.name ?? "Evento", systemImage: "calendar")
                             .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(ArtaColor.gold)
+                            .foregroundStyle(ArtaColor.accent)
                     }
                     .buttonStyle(.plain)
                 } else {
@@ -203,7 +203,7 @@ struct TaskDetailView: View {
                     actionButton("Aprobar entrega", icon: "checkmark.seal.fill", prominent: true) {
                         Task { await approve() }
                     }
-                    actionButton("Pedir corrección", icon: "arrow.uturn.left", tint: ArtaColor.danger) {
+                    actionButton("Pedir corrección", icon: "arrow.uturn.left", destructive: true) {
                         showReject = true
                     }
                 }
@@ -228,14 +228,25 @@ struct TaskDetailView: View {
         }
     }
 
-    private func actionButton(_ title: String, icon: String, prominent: Bool = false, tint: Color = ArtaColor.gold, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
+    /// Principal = acento (tinta o plata); secundaria = superficie con borde; corrección en rojo.
+    private func actionButton(
+        _ title: String,
+        icon: String,
+        prominent: Bool = false,
+        destructive: Bool = false,
+        action: @escaping () -> Void
+    ) -> some View {
+        let shape = ArtaControlShape()
+        let border: Color = prominent ? .clear : (destructive ? ArtaColor.danger.opacity(0.4) : ArtaColor.lineStrong)
+        return Button(action: action) {
             Label(title, systemImage: icon)
                 .font(.subheadline.weight(.semibold))
-                .foregroundStyle(prominent ? ArtaColor.bg : tint)
+                .foregroundStyle(prominent ? ArtaColor.onAccent : (destructive ? ArtaColor.danger : ArtaColor.text))
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 12)
-                .background(RoundedRectangle(cornerRadius: 12).fill(prominent ? tint : tint.opacity(0.14)))
+                .padding(.vertical, 13)
+                .background(shape.fill(prominent ? ArtaColor.accentFill : AnyShapeStyle(ArtaColor.surface)))
+                .overlay(shape.strokeBorder(border, lineWidth: 1))
+                .contentShape(shape)
         }
         .buttonStyle(.plain)
     }
@@ -272,7 +283,7 @@ struct TaskDetailView: View {
                             Text(person.name).font(.subheadline).foregroundStyle(ArtaColor.text)
                             Spacer()
                             if index == 0 && t.people.count > 1 {
-                                StatusPill(text: "Principal", tone: .gold)
+                                StatusPill(text: "Principal", tone: .accent)
                             }
                         }
                     }
@@ -292,7 +303,7 @@ struct TaskDetailView: View {
                             open(ev)
                         } label: {
                             HStack(spacing: 12) {
-                                Image(systemName: fileIcon(ev.fileUrl)).foregroundStyle(ArtaColor.gold).frame(width: 24)
+                                Image(systemName: fileIcon(ev.fileUrl)).foregroundStyle(ArtaColor.accent).frame(width: 24)
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(ev.displayName).font(.subheadline).foregroundStyle(ArtaColor.text).lineLimit(1)
                                     Text([ev.uploadedBy?.name, MDate.stampText(ev.createdAt)].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · "))
@@ -322,10 +333,10 @@ struct TaskDetailView: View {
                                 Label("Archivo", systemImage: "doc.badge.plus")
                             }
                             Spacer()
-                            if uploading { ProgressView().tint(ArtaColor.gold) }
+                            if uploading { ProgressView().tint(ArtaColor.accent) }
                         }
                         .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(ArtaColor.gold)
+                        .foregroundStyle(ArtaColor.accent)
                         .disabled(uploading)
                     }
                 }
@@ -340,7 +351,7 @@ struct TaskDetailView: View {
                 VStack(alignment: .leading, spacing: 12) {
                     ForEach(t.activityList) { item in
                         HStack(alignment: .top, spacing: 10) {
-                            Circle().fill(ArtaColor.gold).frame(width: 8, height: 8).padding(.top, 6)
+                            TimelineDot(active: true).padding(.top, 5)
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(TaskInfo.actionLabel(item.action)).font(.subheadline.weight(.semibold)).foregroundStyle(ArtaColor.text)
                                 Text([item.actor?.name ?? "Sistema", MDate.stampText(item.createdAt)].filter { !$0.isEmpty }.joined(separator: " · "))
@@ -535,7 +546,7 @@ struct DeliverTaskSheet: View {
                     Section {
                         Label("Corrección pedida: \(rejection)", systemImage: "exclamationmark.bubble.fill")
                             .font(.footnote)
-                            .foregroundStyle(Color(hex: 0xF59E0B))
+                            .foregroundStyle(ArtaColor.warn)
                     }
                     .listRowBackground(ArtaColor.bgElev)
                 }
@@ -549,7 +560,7 @@ struct DeliverTaskSheet: View {
                 Section {
                     ForEach(files) { file in
                         HStack {
-                            Image(systemName: file.mime.hasPrefix("image/") ? "photo" : "doc").foregroundStyle(ArtaColor.gold)
+                            Image(systemName: file.mime.hasPrefix("image/") ? "photo" : "doc").foregroundStyle(ArtaColor.accent)
                             Text(file.name).lineLimit(1)
                             Spacer()
                             Text(fileSize(Int64(file.data.count))).font(.caption).foregroundStyle(ArtaColor.muted)
@@ -580,7 +591,7 @@ struct DeliverTaskSheet: View {
                     .listRowBackground(ArtaColor.bgElev)
                 }
             }
-            .tint(ArtaColor.gold)
+            .tint(ArtaColor.accent)
             .scrollContentBackground(.hidden)
             .background(ArtaColor.bg)
             .navigationTitle("Entregar tarea")

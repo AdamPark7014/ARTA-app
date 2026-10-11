@@ -49,7 +49,7 @@ struct EventDetailView: View {
                 }
             }
         }
-        .background(ArtaColor.bg)
+        .artaScreenBackground()
         .navigationTitle(event?.name ?? "Evento")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -111,17 +111,18 @@ struct EventDetailView: View {
                 HStack(spacing: 8) {
                     StatusPill(text: EventInfo.statusLabel(event.status), tone: EventInfo.statusTone(event.status))
                     if let entity = event.entity {
-                        StatusPill(text: EntityInfo.label(entity), tone: .gold)
+                        StatusPill(text: EntityInfo.label(entity), tone: .accent)
                     }
                     Spacer(minLength: 4)
                     if !event.isClosed, let countdown = MDate.countdown(event.startsAt) {
                         Text(countdown)
                             .font(.caption.weight(.semibold))
-                            .foregroundStyle(ArtaColor.gold)
+                            .foregroundStyle(ArtaColor.accent)
                     }
                 }
                 Text(event.name)
-                    .font(.title2.weight(.bold))
+                    .font(ArtaFont.display(24, weight: .semibold))
+                    .tracking(-0.4)
                     .foregroundStyle(ArtaColor.text)
                     .textSelection(.enabled)
                 if let artist = event.artist, !artist.isEmpty, artist != event.name {
@@ -172,7 +173,8 @@ struct EventDetailView: View {
                     openWeb(event, tab: "checklists", label: "Formatos")
                 } label: {
                     tile("Formatos", value: checklists.isEmpty ? "—" : "\(avg)%",
-                         detail: checklists.count == 1 ? "1 formato" : "\(checklists.count) formatos", icon: "list.clipboard")
+                         detail: checklists.count == 1 ? "1 formato" : "\(checklists.count) formatos", icon: "list.clipboard",
+                         progress: checklists.isEmpty ? nil : Double(avg) / 100)
                 }
                 .buttonStyle(.plain)
                 Button {
@@ -258,7 +260,7 @@ struct EventDetailView: View {
                                             .foregroundStyle(ArtaColor.muted)
                                     }
                                     ProgressView(value: min(max((checklist.progressPct ?? 0) / 100, 0), 1))
-                                        .tint(ArtaColor.gold)
+                                        .tint(ArtaColor.accent)
                                 }
                                 .contentShape(Rectangle())
                             }
@@ -270,25 +272,32 @@ struct EventDetailView: View {
         }
     }
 
-    private func tile(_ title: String, value: String, detail: String, icon: String, alert: Bool = false) -> some View {
+    /// Tarjeta de cifra (sistema visual): etiqueta, cifra ligera tabular, detalle y, si aplica,
+    /// barra de avance de 3 px.
+    private func tile(_ title: String, value: String, detail: String, icon: String, alert: Bool = false, progress: Double? = nil) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            Label(title, systemImage: icon)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(ArtaColor.muted)
-                .lineLimit(1)
+            HStack(spacing: 6) {
+                Image(systemName: icon)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(ArtaColor.tertiary)
+                CapLabel(title)
+            }
             Text(value)
-                .font(.title2.weight(.bold))
+                .font(ArtaFont.figure(26))
+                .tracking(-0.6)
                 .foregroundStyle(alert ? ArtaColor.danger : ArtaColor.text)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
+            if let progress {
+                ProgressBar(value: progress)
+                    .padding(.vertical, 2)
+            }
             Text(detail)
                 .font(.caption)
-                .foregroundStyle(alert ? ArtaColor.danger : ArtaColor.muted)
+                .foregroundStyle(alert ? ArtaColor.danger : ArtaColor.tertiary)
                 .lineLimit(1)
         }
-        .padding(14)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 14).fill(ArtaColor.bgElev))
+        .artaCard(padding: 14)
     }
 
     // MARK: Tareas del evento
@@ -300,14 +309,9 @@ struct EventDetailView: View {
                     Haptics.tap()
                     showNewTask = true
                 } label: {
-                    Label("Nueva tarea del evento", systemImage: "plus.circle.fill")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(ArtaColor.bg)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12)
-                        .background(RoundedRectangle(cornerRadius: 12).fill(ArtaColor.gold))
+                    Label("Nueva tarea del evento", systemImage: "plus")
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(ArtaPrimaryButtonStyle())
             }
             if tasks.isEmpty {
                 ModuleEmptyView(icon: "checklist", title: "Sin tareas", message: "Las tareas ligadas a este evento aparecerán aquí.")
@@ -327,7 +331,7 @@ struct EventDetailView: View {
                         Label(showDone ? "Ocultar hechas" : "Ver hechas (\(doneTasks.count))",
                               systemImage: showDone ? "chevron.up" : "chevron.down")
                             .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(ArtaColor.gold)
+                            .foregroundStyle(ArtaColor.accent)
                     }
                     .buttonStyle(.plain)
                     if showDone {
@@ -393,7 +397,7 @@ struct EventDetailView: View {
                     } label: {
                         HStack(spacing: 12) {
                             Image(systemName: tab.icon)
-                                .foregroundStyle(ArtaColor.gold)
+                                .foregroundStyle(ArtaColor.accent)
                                 .frame(width: 24)
                             Text(tab.label)
                                 .font(.subheadline)

@@ -156,19 +156,23 @@ enum ChatMarkdown {
             if found(m, 1) {
                 var piece = AttributedString(ns.substring(with: m.range(at: 1)))
                 piece.font = Font.system(.body, design: .monospaced)
-                piece.backgroundColor = Color.white.opacity(0.1)
+                piece.backgroundColor = ArtaColor.inset
                 out += piece
             } else if found(m, 2) {
                 var piece = AttributedString("\u{2009}@" + ns.substring(with: m.range(at: 2)) + "\u{2009}")
                 piece.font = Font.body.weight(.semibold)
-                piece.foregroundColor = ArtaColor.gold
-                piece.backgroundColor = ArtaColor.goldSoft
+                piece.foregroundColor = ArtaColor.accent
+                piece.backgroundColor = ArtaColor.accentSoft
                 out += piece
             } else if found(m, 4) {
                 let raw = trimURL(ns.substring(with: m.range(at: 4)))
                 end = m.range.location + max(1, (raw as NSString).length)
                 var piece = styled(raw, style)
-                if let url = URL(string: raw) { piece.link = url }
+                if let url = URL(string: raw) {
+                    piece.link = url
+                    // Monocromo: el enlace se distingue por el subrayado, no por un azul.
+                    piece[AttributeScopes.SwiftUIAttributes.UnderlineStyleAttribute.self] = Text.LineStyle.single
+                }
                 out += piece
             } else if found(m, 5) {
                 var s = style
@@ -185,8 +189,8 @@ enum ChatMarkdown {
             } else if found(m, 8) {
                 var piece = AttributedString("@" + ns.substring(with: m.range(at: 8)))
                 piece.font = Font.body.weight(.semibold)
-                piece.foregroundColor = ArtaColor.gold
-                piece.backgroundColor = ArtaColor.goldSoft
+                piece.foregroundColor = ArtaColor.accent
+                piece.backgroundColor = ArtaColor.accentSoft
                 out += piece
             } else {
                 out += styled(ns.substring(with: m.range), style)
@@ -217,7 +221,7 @@ struct ChatRichText: View {
                         .fixedSize(horizontal: false, vertical: true)
                         .padding(.leading, 11)
                         .overlay(alignment: .leading) {
-                            RoundedRectangle(cornerRadius: 1.5).fill(ArtaColor.gold).frame(width: 3)
+                            RoundedRectangle(cornerRadius: 1.5).fill(ArtaColor.accent).frame(width: 3)
                         }
                 case .code(let code):
                     Text(code)
@@ -226,12 +230,12 @@ struct ChatRichText: View {
                         .fixedSize(horizontal: false, vertical: true)
                         .padding(8)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(RoundedRectangle(cornerRadius: 8).fill(Color.black.opacity(0.35)))
-                        .overlay(RoundedRectangle(cornerRadius: 8).stroke(ArtaColor.line))
+                        .background(RoundedRectangle(cornerRadius: ArtaRadius.small, style: .continuous).fill(ArtaColor.inset))
+                        .overlay(RoundedRectangle(cornerRadius: ArtaRadius.small, style: .continuous).stroke(ArtaColor.line))
                 }
             }
         }
-        .tint(ArtaColor.read)
+        .tint(ArtaColor.text)
     }
 }
 
@@ -250,7 +254,7 @@ struct QuoteBlock: View {
         VStack(alignment: .leading, spacing: 2) {
             Text(ref.authorName ?? "Mensaje")
                 .font(.caption.weight(.semibold))
-                .foregroundStyle(ArtaColor.gold)
+                .foregroundStyle(ArtaColor.accent)
                 .lineLimit(1)
             Text(excerpt)
                 .font(.caption)
@@ -262,9 +266,9 @@ struct QuoteBlock: View {
         .padding(.leading, 11)
         .padding(.trailing, 8)
         .frame(minWidth: 120, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 8).fill(Color.black.opacity(0.22)))
+        .background(RoundedRectangle(cornerRadius: ArtaRadius.small, style: .continuous).fill(ArtaColor.inset))
         .overlay(alignment: .leading) {
-            RoundedRectangle(cornerRadius: 1.5).fill(ArtaColor.gold).frame(width: 3).padding(.vertical, 4)
+            RoundedRectangle(cornerRadius: 1.5).fill(ArtaColor.accent).frame(width: 3).padding(.vertical, 4)
         }
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
@@ -312,13 +316,13 @@ struct LinkPreviewCard: View {
                 }
                 .frame(maxWidth: .infinity)
                 .frame(height: 130)
-                .clipShape(RoundedRectangle(cornerRadius: 8))
+                .clipShape(RoundedRectangle(cornerRadius: ArtaRadius.small, style: .continuous))
             }
             if let site = p.siteName, !site.isEmpty {
                 Text(site).font(.caption2.weight(.semibold)).foregroundStyle(ArtaColor.muted).lineLimit(1)
             }
             if let title = p.title, !title.isEmpty {
-                Text(title).font(.subheadline.weight(.semibold)).foregroundStyle(ArtaColor.read).lineLimit(2)
+                Text(title).font(.subheadline.weight(.semibold)).foregroundStyle(ArtaColor.text).underline().lineLimit(2)
             }
             if let text = p.description, !text.isEmpty {
                 Text(text).font(.caption).foregroundStyle(ArtaColor.muted).lineLimit(3)

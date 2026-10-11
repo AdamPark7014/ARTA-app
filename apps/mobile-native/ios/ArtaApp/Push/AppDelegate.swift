@@ -10,6 +10,8 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         // Modo demo (`-ArtaDemo YES`): también `URLSession.shared` pasa por las fixtures.
         DemoMode.bootstrap()
         #endif
+        // Barras de UIKit con el tema de la entidad (al arrancar, Arta: claro).
+        MainActor.assumeIsolated { ArtaAppearance.apply(EntityContext.entity) }
         // El delegado de UNUserNotificationCenter debe quedar puesto antes de que
         // termine el arranque para recibir el toque que abrió la app.
         PushManager.shared.configure()

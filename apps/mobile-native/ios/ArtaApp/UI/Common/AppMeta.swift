@@ -43,7 +43,7 @@ struct SafariView: UIViewControllerRepresentable {
 
     func makeUIViewController(context: Context) -> SFSafariViewController {
         let controller = SFSafariViewController(url: url)
-        controller.preferredControlTintColor = UIColor(ArtaColor.gold)
+        controller.preferredControlTintColor = UIColor(ArtaColor.accent)
         controller.dismissButtonStyle = .close
         controller.delegate = context.coordinator
         return controller

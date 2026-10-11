@@ -14,15 +14,15 @@ struct NotificationsView: View {
     var body: some View {
         List(items) { item in
             Button { open(item) } label: { NotificationRow(item: item) }
-                .listRowBackground(item.isRead ? ArtaColor.bg : ArtaColor.bgElev)
+                .listRowBackground(item.isRead ? Color.clear : ArtaColor.surface)
                 .listRowSeparatorTint(ArtaColor.line)
         }
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
-        .background(ArtaColor.bg)
+        .artaScreenBackground()
         .overlay {
             if loading && items.isEmpty {
-                ProgressView().tint(ArtaColor.gold)
+                ProgressView().tint(ArtaColor.tertiary)
             } else if let error, items.isEmpty {
                 EmptyState(icon: "wifi.exclamationmark", title: "No se pudo cargar", message: error)
             } else if items.isEmpty {
@@ -91,8 +91,11 @@ private struct NotificationRow: View {
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
             ZStack {
-                Circle().fill(ArtaColor.goldSoft)
-                Image(systemName: icon).foregroundStyle(ArtaColor.gold)
+                Circle().fill(ArtaColor.surface2)
+                Circle().strokeBorder(ArtaColor.line, lineWidth: 1)
+                Image(systemName: icon)
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(item.isRead ? ArtaColor.muted : ArtaColor.text)
             }
             .frame(width: 40, height: 40)
             VStack(alignment: .leading, spacing: 4) {
@@ -102,17 +105,17 @@ private struct NotificationRow: View {
                         .foregroundStyle(ArtaColor.text)
                         .lineLimit(2)
                     Spacer(minLength: 6)
-                    Text(relativeTime(item.createdAt)).font(.caption).foregroundStyle(ArtaColor.muted)
+                    Text(relativeTime(item.createdAt)).font(.caption).monospacedDigit().foregroundStyle(ArtaColor.tertiary)
                 }
                 if let body = item.body, !body.isEmpty {
                     Text(plainText(body)).font(.footnote).foregroundStyle(ArtaColor.muted).lineLimit(3)
                 }
                 if let actor = item.actor {
-                    Text(actor.fullName).font(.caption2).foregroundStyle(ArtaColor.muted)
+                    Text(actor.fullName).font(.caption2).foregroundStyle(ArtaColor.tertiary)
                 }
             }
             if !item.isRead {
-                Circle().fill(ArtaColor.gold).frame(width: 8, height: 8).padding(.top, 6)
+                Circle().fill(ArtaColor.accent).frame(width: 8, height: 8).padding(.top, 6)
             }
         }
         .padding(.vertical, 6)

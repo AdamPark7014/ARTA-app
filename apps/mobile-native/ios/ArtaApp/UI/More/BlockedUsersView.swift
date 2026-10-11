@@ -51,7 +51,7 @@ struct BlockedUsersView: View {
                 .refreshable { await load() }
             }
         }
-        .background(ArtaColor.bg)
+        .artaScreenBackground()
         .navigationTitle("Usuarios bloqueados")
         .navigationBarTitleDisplayMode(.inline)
         .task { await load() }
@@ -80,7 +80,7 @@ struct BlockedUsersView: View {
                     Task { await unblock(user) }
                 }
                 .buttonStyle(.bordered)
-                .tint(ArtaColor.gold)
+                .tint(ArtaColor.accent)
                 .controlSize(.small)
                 .disabled(busyId != nil)
                 .accessibilityIdentifier("blocked-unblock-\(user.id)")

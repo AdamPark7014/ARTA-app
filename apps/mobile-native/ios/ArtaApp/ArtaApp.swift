@@ -15,8 +15,13 @@ struct ArtaApp: App {
                 .environmentObject(session)
                 .environmentObject(router)
                 .environmentObject(activeEntity)
-                .preferredColorScheme(.dark)
+                // Sistema visual (docs/diseno/SISTEMA-VISUAL.md): Arta claro, Auditorio oscuro.
+                // El esquema va en la raíz para que hojas, alertas, teclados y selectores coincidan.
+                .preferredColorScheme(ArtaTheme.colorScheme(for: activeEntity.current))
                 .tint(activeEntity.current.accent)
+                // SF Pro Rounded en toda la app («letras redondeadas amigables»).
+                .fontDesign(.rounded)
+                .buttonBorderShape(activeEntity.current == .arta ? .capsule : .roundedRectangle(radius: 4))
                 .task { await session.restore() }
                 .onOpenURL { url in
                     if let target = PanelLink.target(url: url) { router.follow(target, fromLink: true) }
@@ -41,8 +46,8 @@ struct RootView: View {
             switch session.state {
             case .loading:
                 ZStack {
-                    ArtaColor.bg.ignoresSafeArea()
-                    ProgressView().tint(ArtaColor.gold)
+                    ArtaScreenBackground()
+                    ProgressView().tint(ArtaColor.tertiary)
                 }
             case .signedOut:
                 LoginView()

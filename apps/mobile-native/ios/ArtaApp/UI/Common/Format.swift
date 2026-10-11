@@ -72,7 +72,7 @@ func mentionText(_ body: String) -> AttributedString {
             out += AttributedString(ns.substring(with: NSRange(location: last, length: m.range.location - last)))
         }
         var mention = AttributedString("@" + ns.substring(with: m.range(at: 1)))
-        mention.foregroundColor = ArtaColor.gold
+        mention.foregroundColor = ArtaColor.accent
         mention.font = Font.body.weight(.semibold)
         out += mention
         last = m.range.location + m.range.length

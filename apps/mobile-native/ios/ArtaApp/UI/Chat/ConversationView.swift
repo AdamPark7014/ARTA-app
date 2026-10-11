@@ -280,7 +280,7 @@ struct ConversationView: View {
     }
 
     private var subtitleColor: Color {
-        if !model.typing.isEmpty { return ArtaColor.gold }
+        if !model.typing.isEmpty { return ArtaColor.accent }
         if !inThread && isDirect && isPeerOnline { return ArtaColor.online }
         return ArtaColor.muted
     }
@@ -356,7 +356,7 @@ struct ConversationView: View {
                     LazyVStack(spacing: 2) {
                         if model.hasMore {
                             ProgressView()
-                                .tint(ArtaColor.gold)
+                                .tint(ArtaColor.accent)
                                 .padding(12)
                                 .onAppear {
                                     olderAnchor = model.messages.first?.id
@@ -368,7 +368,7 @@ struct ConversationView: View {
                         }
                         if model.hasNewer {
                             ProgressView()
-                                .tint(ArtaColor.gold)
+                                .tint(ArtaColor.accent)
                                 .padding(12)
                                 .onAppear { model.loadNewer() }
                         }
@@ -468,12 +468,12 @@ struct ConversationView: View {
                     if newBelow > 0 { Text(newBelow == 1 ? "1 nuevo" : "\(newBelow) nuevos") }
                 }
                 .font(.subheadline.weight(.semibold))
-                .foregroundStyle(newBelow > 0 ? ArtaColor.bg : ArtaColor.text)
+                .foregroundStyle(newBelow > 0 ? ArtaColor.onAccent : ArtaColor.text)
                 .padding(.horizontal, newBelow > 0 ? 14 : 12)
                 .padding(.vertical, 10)
-                .background(Capsule().fill(newBelow > 0 ? ArtaColor.gold : ArtaColor.surface2))
-                .overlay(Capsule().stroke(ArtaColor.line, lineWidth: newBelow > 0 ? 0 : 1))
-                .shadow(color: .black.opacity(0.35), radius: 6, y: 2)
+                .background(ArtaControlShape().fill(newBelow > 0 ? ArtaColor.accentFill : AnyShapeStyle(ArtaColor.surface)))
+                .overlay(ArtaControlShape().strokeBorder(ArtaColor.lineStrong, lineWidth: newBelow > 0 ? 0 : 1))
+                .shadow(color: ArtaTheme.isLight ? Color(hex: 0x0C0C0D, opacity: 0.12) : .black.opacity(0.5), radius: 8, y: 3)
             }
             .buttonStyle(.plain)
             .padding(14)
@@ -491,16 +491,17 @@ struct ConversationView: View {
                 .foregroundStyle(ArtaColor.muted)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 4)
-                .background(Capsule().fill(ArtaColor.bgElev))
+                .background(ArtaControlShape().fill(ArtaColor.surface))
+                .overlay(ArtaControlShape().strokeBorder(ArtaColor.line, lineWidth: 1))
                 .padding(.vertical, 8)
         case .unread:
             HStack(spacing: 8) {
-                Rectangle().fill(ArtaColor.gold.opacity(0.6)).frame(height: 1)
+                Rectangle().fill(ArtaColor.accent.opacity(0.35)).frame(height: 1)
                 Text("Mensajes nuevos")
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(ArtaColor.gold)
+                    .foregroundStyle(ArtaColor.accent)
                     .fixedSize()
-                Rectangle().fill(ArtaColor.gold.opacity(0.6)).frame(height: 1)
+                Rectangle().fill(ArtaColor.accent.opacity(0.35)).frame(height: 1)
             }
             .padding(.vertical, 8)
         case .threadDivider(let count):
@@ -630,12 +631,12 @@ struct ConversationView: View {
         if let flash {
             Text(flash)
                 .font(.subheadline.weight(.semibold))
-                .foregroundStyle(ArtaColor.bg)
+                .foregroundStyle(ArtaColor.onAccent)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 16)
                 .padding(.vertical, 10)
-                .background(RoundedRectangle(cornerRadius: 14).fill(ArtaColor.gold))
-                .shadow(color: .black.opacity(0.35), radius: 6, y: 2)
+                .background(RoundedRectangle(cornerRadius: ArtaRadius.inner, style: .continuous).fill(ArtaColor.accentFill))
+                .shadow(color: ArtaTheme.isLight ? Color(hex: 0x0C0C0D, opacity: 0.18) : .black.opacity(0.55), radius: 10, y: 5)
                 .padding(.horizontal, 16)
                 .padding(.top, 10)
                 .transition(.move(edge: .top).combined(with: .opacity))
@@ -731,8 +732,8 @@ struct ConversationView: View {
                     composerRow
                 }
             }
-            .background(ArtaColor.bgElev)
-            .overlay(alignment: .top) { Rectangle().fill(ArtaColor.line).frame(height: 0.5) }
+            .background(ArtaColor.surfaceSoft)
+            .overlay(alignment: .top) { Rectangle().fill(ArtaColor.line).frame(height: 1) }
         }
     }
 
@@ -740,10 +741,10 @@ struct ConversationView: View {
         HStack(spacing: 10) {
             Image(systemName: icon)
                 .font(.system(size: 15))
-                .foregroundStyle(ArtaColor.gold)
+                .foregroundStyle(ArtaColor.accent)
                 .frame(width: 22)
             VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(.caption.weight(.semibold)).foregroundStyle(ArtaColor.gold).lineLimit(1)
+                Text(title).font(.caption.weight(.semibold)).foregroundStyle(ArtaColor.accent).lineLimit(1)
                 Text(detail).font(.caption).foregroundStyle(ArtaColor.muted).lineLimit(1)
             }
             Spacer()
@@ -757,7 +758,7 @@ struct ConversationView: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 8)
-        .overlay(alignment: .leading) { Rectangle().fill(ArtaColor.gold).frame(width: 3) }
+        .overlay(alignment: .leading) { Rectangle().fill(ArtaColor.accent).frame(width: 3) }
     }
 
     private func replyExcerpt(_ m: ChatMessage) -> String {
@@ -780,7 +781,7 @@ struct ConversationView: View {
                 } label: {
                     Image(systemName: "plus.circle.fill")
                         .font(.system(size: Self.composerIcon))
-                        .foregroundStyle(model.uploading ? ArtaColor.gold : ArtaColor.muted)
+                        .foregroundStyle(model.uploading ? ArtaColor.accent : ArtaColor.muted)
                         .frame(width: 36, height: 36)
                 }
                 .accessibilityLabel("Adjuntar")
@@ -791,15 +792,16 @@ struct ConversationView: View {
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
                 .frame(minHeight: 36)
-                .background(RoundedRectangle(cornerRadius: 18).fill(ArtaColor.surface2))
+                .background(RoundedRectangle(cornerRadius: ArtaRadius.composer, style: .continuous).fill(ArtaColor.surface))
+                .overlay(RoundedRectangle(cornerRadius: ArtaRadius.composer, style: .continuous).strokeBorder(ArtaColor.lineStrong, lineWidth: 1))
                 .foregroundStyle(ArtaColor.text)
-                .tint(ArtaColor.gold)
+                .tint(ArtaColor.accent)
                 .onChange(of: draft) { _, value in onDraftChange(value) }
             if editing == nil && draftIsEmpty {
                 Button(action: startRecording) {
                     Image(systemName: "mic.circle.fill")
                         .font(.system(size: Self.composerIcon))
-                        .foregroundStyle(ArtaColor.gold)
+                        .foregroundStyle(ArtaColor.accent)
                         .frame(width: 36, height: 36)
                 }
                 .accessibilityLabel("Grabar nota de voz")
@@ -807,7 +809,7 @@ struct ConversationView: View {
                 Button(action: submit) {
                     Image(systemName: editing == nil ? "arrow.up.circle.fill" : "checkmark.circle.fill")
                         .font(.system(size: Self.composerIcon))
-                        .foregroundStyle(draftIsEmpty ? ArtaColor.muted : ArtaColor.gold)
+                        .foregroundStyle(draftIsEmpty ? ArtaColor.muted : ArtaColor.accent)
                         .frame(width: 36, height: 36)
                 }
                 .disabled(draftIsEmpty)
@@ -1007,7 +1009,7 @@ struct ConversationView: View {
                 } label: {
                     VStack(alignment: .leading, spacing: 4) {
                         HStack {
-                            Text(m.author.fullName).font(.subheadline.weight(.semibold)).foregroundStyle(ArtaColor.gold)
+                            Text(m.author.fullName).font(.subheadline.weight(.semibold)).foregroundStyle(ArtaColor.accent)
                             Spacer()
                             Text(relativeTime(m.createdAt)).font(.caption).foregroundStyle(ArtaColor.muted)
                         }
@@ -1062,7 +1064,7 @@ private struct SwipeToReply: ViewModifier {
             .background(alignment: .leading) {
                 Image(systemName: "arrowshape.turn.up.left.fill")
                     .font(.subheadline)
-                    .foregroundStyle(ArtaColor.gold)
+                    .foregroundStyle(ArtaColor.accent)
                     .opacity(Double(min(1, dx / Self.threshold)))
                     .scaleEffect(armed ? 1.15 : 0.85)
                     .padding(.leading, 4)
@@ -1138,14 +1140,14 @@ struct MessageBubble: View {
                     Button(action: onThread) {
                         Text(message.replies == 1 ? "1 respuesta ›" : "\(message.replies) respuestas ›")
                             .font(.caption.weight(.semibold))
-                            .foregroundStyle(ArtaColor.gold)
+                            .foregroundStyle(ArtaColor.accent)
                     }
                     .buttonStyle(.plain)
                 }
                 if message.failed {
                     HStack(spacing: 12) {
                         Text("No se envió").foregroundStyle(ArtaColor.danger)
-                        Button("Reintentar", action: onRetry).foregroundStyle(ArtaColor.gold)
+                        Button("Reintentar", action: onRetry).foregroundStyle(ArtaColor.accent)
                         Button("Descartar", action: onDiscard).foregroundStyle(ArtaColor.muted)
                     }
                     .font(.caption)
@@ -1166,7 +1168,7 @@ struct MessageBubble: View {
             if showName && showAuthor && !mine {
                 Text(message.author.fullName)
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(ArtaColor.gold)
+                    .foregroundStyle(ArtaColor.accent)
             }
             if message.pinnedAt != nil && !message.isDeleted {
                 Label("Fijado", systemImage: "pin.fill")
@@ -1204,20 +1206,22 @@ struct MessageBubble: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
-        .background(RoundedRectangle(cornerRadius: 16).fill(message.isDeleted ? Color.clear : (mine ? ArtaColor.mine : ArtaColor.bgElev)))
-        .overlay(RoundedRectangle(cornerRadius: 16).stroke(bubbleStroke, lineWidth: highlighted ? 1.5 : 1))
+        .background(RoundedRectangle(cornerRadius: ArtaRadius.bubble, style: .continuous).fill(message.isDeleted ? Color.clear : (mine ? ArtaColor.mine : ArtaColor.surface)))
+        .overlay(RoundedRectangle(cornerRadius: ArtaRadius.bubble, style: .continuous).strokeBorder(bubbleStroke, lineWidth: highlighted ? 1.5 : 1))
         .opacity(message.pending ? 0.75 : 1)
     }
 
     private var bubbleStroke: Color {
-        if highlighted { return ArtaColor.gold }
-        return message.isDeleted ? ArtaColor.line : Color.clear
+        if highlighted { return ArtaColor.accent }
+        if message.isDeleted { return ArtaColor.lineStrong }
+        // Las burbujas ajenas (superficie) llevan línea fina para separarse del fondo.
+        return mine ? Color.clear : ArtaColor.line
     }
 
     private var meta: some View {
         HStack(spacing: 4) {
             if message.isSaved && !message.isDeleted {
-                Image(systemName: "bookmark.fill").foregroundStyle(ArtaColor.gold).accessibilityLabel("Guardado")
+                Image(systemName: "bookmark.fill").foregroundStyle(ArtaColor.accent).accessibilityLabel("Guardado")
             }
             if message.editedAt != nil && !message.isDeleted { Text("editado") }
             Text(messageTime(message.createdAt))
@@ -1252,8 +1256,8 @@ struct MessageBubble: View {
                     }
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
-                    .background(Capsule().fill(reacted ? ArtaColor.goldSoft : ArtaColor.surface2))
-                    .overlay(Capsule().stroke(reacted ? ArtaColor.gold : Color.clear))
+                    .background(ArtaControlShape().fill(reacted ? ArtaColor.accentSoft : ArtaColor.surface2))
+                    .overlay(ArtaControlShape().strokeBorder(reacted ? ArtaColor.accent : Color.clear, lineWidth: 1))
                     .foregroundStyle(ArtaColor.text)
                 }
                 .buttonStyle(.plain)
@@ -1274,7 +1278,7 @@ struct MessageBubble: View {
                     .foregroundStyle(ArtaColor.muted)
                     .padding(.horizontal, 9)
                     .padding(.vertical, 6)
-                    .background(Capsule().fill(ArtaColor.surface2))
+                    .background(ArtaControlShape().fill(ArtaColor.surface2))
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Agregar reacción")
@@ -1352,7 +1356,7 @@ struct TypingDots: View {
             HStack(spacing: 3) {
                 ForEach(0..<3, id: \.self) { i in
                     Circle()
-                        .fill(ArtaColor.gold)
+                        .fill(ArtaColor.accent)
                         .frame(width: 5, height: 5)
                         .opacity(0.3 + 0.7 * abs(sin(t * 3 + Double(i) * 0.6)))
                 }

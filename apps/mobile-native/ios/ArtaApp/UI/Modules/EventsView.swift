@@ -66,7 +66,7 @@ struct EventsView: View {
                 calendarContent
             }
         }
-        .background(ArtaColor.bg)
+        .artaScreenBackground(glow: false)
         .safeAreaInset(edge: .top) {
             if mode == .list && loaded {
                 Picker("Periodo", selection: $scope) {
@@ -186,8 +186,7 @@ struct EventsView: View {
                         }
                     }
                 }
-                .padding(12)
-                .background(RoundedRectangle(cornerRadius: 16).fill(ArtaColor.bgElev))
+                .artaCard(padding: 12)
                 dayAgenda
             }
             .padding(16)
@@ -225,7 +224,7 @@ struct EventsView: View {
             }
             .font(.subheadline.weight(.semibold))
         }
-        .foregroundStyle(ArtaColor.gold)
+        .foregroundStyle(ArtaColor.accent)
         .buttonStyle(.plain)
     }
 
@@ -237,7 +236,7 @@ struct EventsView: View {
         let hasEvents = !events(on: day).isEmpty
         let key = MDate.ymdString(day)
         let hasNotes = notes.contains { $0.date.hasPrefix(key) }
-        let numberColor: Color = isSelected ? ArtaColor.bg : (inMonth ? ArtaColor.text : ArtaColor.muted.opacity(0.5))
+        let numberColor: Color = isSelected ? ArtaColor.onAccent : (inMonth ? ArtaColor.text : ArtaColor.tertiary.opacity(0.6))
         return Button {
             Haptics.tap()
             selectedDay = day
@@ -246,19 +245,21 @@ struct EventsView: View {
             VStack(spacing: 3) {
                 Text(MDate.dayNumber(day))
                     .font(.subheadline.weight(isToday ? .bold : .regular))
+                    .monospacedDigit()
                     .foregroundStyle(numberColor)
+                // Punto lleno = evento; punto de contorno = nota (monocromo, sin colores).
                 HStack(spacing: 3) {
                     Circle()
-                        .fill(hasEvents ? (isSelected ? ArtaColor.bg : ArtaColor.gold) : Color.clear)
+                        .fill(hasEvents ? (isSelected ? ArtaColor.onAccent : ArtaColor.accent) : Color.clear)
                         .frame(width: 5, height: 5)
                     Circle()
-                        .fill(hasNotes ? (isSelected ? ArtaColor.bg : ArtaColor.read) : Color.clear)
+                        .strokeBorder(hasNotes ? (isSelected ? ArtaColor.onAccent : ArtaColor.accent) : Color.clear, lineWidth: 1)
                         .frame(width: 5, height: 5)
                 }
             }
             .frame(maxWidth: .infinity, minHeight: 44)
-            .background(RoundedRectangle(cornerRadius: 10).fill(isSelected ? ArtaColor.gold : Color.clear))
-            .overlay(RoundedRectangle(cornerRadius: 10).stroke(isToday && !isSelected ? ArtaColor.gold : Color.clear, lineWidth: 1))
+            .background(RoundedRectangle(cornerRadius: ArtaRadius.item, style: .continuous).fill(isSelected ? ArtaColor.accentFill : AnyShapeStyle(Color.clear)))
+            .overlay(RoundedRectangle(cornerRadius: ArtaRadius.item, style: .continuous).strokeBorder(isToday && !isSelected ? ArtaColor.lineStrong : Color.clear, lineWidth: 1))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -280,7 +281,7 @@ struct EventsView: View {
                     } label: {
                         Label("Nota", systemImage: "plus")
                             .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(ArtaColor.gold)
+                            .foregroundStyle(ArtaColor.accent)
                     }
                     .buttonStyle(.plain)
                 }
@@ -300,8 +301,7 @@ struct EventsView: View {
                     router.open(AppRoute.event(event.id))
                 } label: {
                     EventRow(event: event)
-                        .padding(12)
-                        .background(RoundedRectangle(cornerRadius: 12).fill(ArtaColor.bgElev))
+                        .artaCard(padding: 12)
                 }
                 .buttonStyle(.plain)
             }
@@ -319,7 +319,7 @@ struct EventsView: View {
     private func noteRow(_ note: CalendarNote) -> some View {
         HStack(alignment: .top, spacing: 12) {
             Image(systemName: "note.text")
-                .foregroundStyle(ArtaColor.read)
+                .foregroundStyle(ArtaColor.muted)
                 .frame(width: 24)
             VStack(alignment: .leading, spacing: 3) {
                 Text(note.text)
@@ -336,8 +336,7 @@ struct EventsView: View {
                 .font(.caption)
                 .foregroundStyle(ArtaColor.muted)
         }
-        .padding(12)
-        .background(RoundedRectangle(cornerRadius: 12).fill(ArtaColor.bgElev))
+        .artaCard(padding: 12)
         .contentShape(Rectangle())
     }
 
@@ -445,15 +444,17 @@ struct EventRow: View {
         HStack(spacing: 12) {
             VStack(spacing: 0) {
                 Text(startDate.map { MDate.shortMonth($0) } ?? "—")
-                    .font(.caption2.weight(.semibold))
+                    .font(.system(size: 10, weight: .semibold, design: .rounded))
+                    .tracking(1)
                     .textCase(.uppercase)
-                    .foregroundStyle(ArtaColor.gold)
+                    .foregroundStyle(ArtaColor.tertiary)
                 Text(startDate.map { MDate.dayNumber($0) } ?? "")
-                    .font(.title3.weight(.bold))
+                    .font(.system(size: 20, weight: .light, design: .rounded))
+                    .monospacedDigit()
                     .foregroundStyle(ArtaColor.text)
             }
             .frame(width: 46, height: 50)
-            .background(RoundedRectangle(cornerRadius: 10).fill(ArtaColor.surface2))
+            .background(RoundedRectangle(cornerRadius: ArtaRadius.item, style: .continuous).fill(ArtaColor.surface2))
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(event.name)
@@ -462,12 +463,12 @@ struct EventRow: View {
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
                 Text(MDate.eventWhen(event.startsAt, event.endsAt))
-                    .font(.caption)
-                    .foregroundStyle(ArtaColor.gold)
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(ArtaColor.muted)
                 if !place.isEmpty {
                     Text(place)
                         .font(.caption)
-                        .foregroundStyle(ArtaColor.muted)
+                        .foregroundStyle(ArtaColor.tertiary)
                         .lineLimit(1)
                 }
             }
@@ -479,7 +480,7 @@ struct EventRow: View {
                 if let entity = event.entity {
                     Text(EntityInfo.label(entity))
                         .font(.caption2)
-                        .foregroundStyle(ArtaColor.muted)
+                        .foregroundStyle(ArtaColor.tertiary)
                 }
             }
         }
@@ -619,7 +620,7 @@ struct CalendarNoteSheet: View {
                     .listRowBackground(ArtaColor.bgElev)
                 }
             }
-            .tint(ArtaColor.gold)
+            .tint(ArtaColor.accent)
             .scrollContentBackground(.hidden)
             .background(ArtaColor.bg)
             .navigationTitle(draft.note == nil ? "Nueva nota" : "Editar nota")

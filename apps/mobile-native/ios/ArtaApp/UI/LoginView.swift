@@ -17,17 +17,19 @@ struct LoginView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 24) {
-                Spacer(minLength: 60)
-                VStack(spacing: 8) {
-                    Text("ARTA")
-                        .font(.system(size: 44, weight: .heavy, design: .serif))
-                        .tracking(8)
-                        .foregroundStyle(ArtaColor.gold)
-                    Text("Producciones · Operación")
-                        .font(.subheadline)
-                        .foregroundStyle(ArtaColor.muted)
+                Spacer(minLength: 72)
+                // Sin sesión la app es ARTA neutro (claro): el logotipo real en tinta.
+                VStack(spacing: 14) {
+                    Image("ArtaLogo")
+                        .resizable()
+                        .renderingMode(.template)
+                        .scaledToFit()
+                        .frame(height: 74)
+                        .foregroundStyle(ArtaColor.text)
+                        .accessibilityLabel("Arta Producciones")
+                    CapLabel("Operación")
                 }
-                .padding(.bottom, 16)
+                .padding(.bottom, 20)
 
                 if needsEnrollment {
                     enrollment
@@ -51,7 +53,7 @@ struct LoginView: View {
             .frame(maxWidth: .infinity)
         }
         .scrollDismissesKeyboard(.interactively)
-        .background(ArtaColor.bg.ignoresSafeArea())
+        .artaScreenBackground()
     }
 
     private var credentials: some View {
@@ -116,12 +118,13 @@ struct LoginView: View {
 
     private var enrollment: some View {
         VStack(spacing: 14) {
-            Image(systemName: "lock.shield").font(.system(size: 40)).foregroundStyle(ArtaColor.gold)
+            Image(systemName: "lock.shield").font(.system(size: 36, weight: .light)).foregroundStyle(ArtaColor.text)
             Text("Tu organización exige verificación en dos pasos. Actívala primero en el panel web y luego vuelve a entrar aquí.")
                 .multilineTextAlignment(.center)
                 .foregroundStyle(ArtaColor.text)
             Link("Abrir el panel web", destination: ApiConfig.origin)
-                .foregroundStyle(ArtaColor.gold)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(ArtaColor.text)
             Button("Volver") {
                 needsEnrollment = false
                 error = nil
@@ -140,29 +143,25 @@ struct LoginView: View {
                 .accessibilityIdentifier("login-terms")
         }
         .font(.caption)
-        .foregroundStyle(ArtaColor.muted)
+        .foregroundStyle(ArtaColor.tertiary)
         .padding(.top, 24)
     }
 
+    /// Campo: superficie con borde de línea fuerte (sistema visual, «Formularios»).
     private func field<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
-        content()
-            .padding(14)
-            .background(RoundedRectangle(cornerRadius: 12).fill(ArtaColor.bgElev))
-            .overlay(RoundedRectangle(cornerRadius: 12).stroke(ArtaColor.line))
+        let shape = RoundedRectangle(cornerRadius: ArtaRadius.inner, style: .continuous)
+        return content()
+            .padding(.horizontal, 16)
+            .padding(.vertical, 14)
+            .background(shape.fill(ArtaColor.surface))
+            .overlay(shape.strokeBorder(ArtaColor.lineStrong, lineWidth: 1))
             .foregroundStyle(ArtaColor.text)
     }
 
     private func primaryButton(_ title: String, disabled: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Text(title)
-                .font(.headline)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 14)
-                .background(RoundedRectangle(cornerRadius: 12).fill(ArtaColor.gold))
-                .foregroundStyle(ArtaColor.bg)
-        }
-        .disabled(disabled || busy)
-        .opacity(disabled || busy ? 0.6 : 1)
+        Button(title, action: action)
+            .buttonStyle(ArtaPrimaryButtonStyle())
+            .disabled(disabled || busy)
     }
 
     private func submit() {

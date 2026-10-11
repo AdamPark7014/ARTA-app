@@ -67,14 +67,14 @@ struct MessageActionsSheet: View {
                         row(blockTitle, icon: "hand.raised", destructive: true, id: "msg-action-block") { onAction(.block) }
                     }
                 }
-                .background(RoundedRectangle(cornerRadius: 14).fill(ArtaColor.surface2))
+                .background(ArtaCardBackground())
                 .padding(.horizontal, 16)
                 .padding(.top, 12)
                 if !message.allReactions.isEmpty { whoReacted }
             }
             .padding(.bottom, 20)
         }
-        .background(ArtaColor.bgElev)
+        .background(ArtaColor.bg)
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
         .sheet(isPresented: $showPicker) {
@@ -86,7 +86,7 @@ struct MessageActionsSheet: View {
         VStack(alignment: .leading, spacing: 4) {
             Text(message.author.fullName)
                 .font(.subheadline.weight(.semibold))
-                .foregroundStyle(ArtaColor.gold)
+                .foregroundStyle(ArtaColor.accent)
             Text(previewText)
                 .font(.subheadline)
                 .foregroundStyle(ArtaColor.muted)
@@ -115,8 +115,8 @@ struct MessageActionsSheet: View {
                         Text(emoji)
                             .font(.system(size: 24))
                             .frame(width: 44, height: 44)
-                            .background(Circle().fill(reacted(emoji) ? ArtaColor.goldSoft : ArtaColor.surface2))
-                            .overlay(Circle().stroke(reacted(emoji) ? ArtaColor.gold : Color.clear, lineWidth: 1.5))
+                            .background(Circle().fill(reacted(emoji) ? ArtaColor.accentSoft : ArtaColor.surface2))
+                            .overlay(Circle().stroke(reacted(emoji) ? ArtaColor.accent : Color.clear, lineWidth: 1.5))
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("Reaccionar con \(emoji)")
@@ -130,7 +130,7 @@ struct MessageActionsSheet: View {
                         .overlay(alignment: .bottomTrailing) {
                             Image(systemName: "plus.circle.fill")
                                 .font(.system(size: 13))
-                                .foregroundStyle(ArtaColor.gold)
+                                .foregroundStyle(ArtaColor.accent)
                         }
                 }
                 .buttonStyle(.plain)

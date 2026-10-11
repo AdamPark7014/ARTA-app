@@ -191,7 +191,7 @@ struct ChatSkeleton: View {
                         if !mine {
                             RoundedRectangle(cornerRadius: 4).fill(ArtaColor.surface2).frame(width: 90, height: 10)
                         }
-                        RoundedRectangle(cornerRadius: 14)
+                        RoundedRectangle(cornerRadius: ArtaRadius.bubble, style: .continuous)
                             .fill(mine ? ArtaColor.mine : ArtaColor.surface2)
                             .frame(width: widths[i], height: i % 2 == 0 ? 44 : 32)
                     }
@@ -217,18 +217,11 @@ struct ChatErrorState: View {
 
     var body: some View {
         VStack(spacing: 12) {
-            Image(systemName: "wifi.exclamationmark").font(.system(size: 40)).foregroundStyle(ArtaColor.muted)
+            Image(systemName: "wifi.exclamationmark").font(.system(size: 34, weight: .light)).foregroundStyle(ArtaColor.tertiary)
             Text("No se pudo cargar").font(.headline).foregroundStyle(ArtaColor.text)
             Text(message).font(.subheadline).foregroundStyle(ArtaColor.muted).multilineTextAlignment(.center)
-            Button(action: onRetry) {
-                Text("Reintentar")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(ArtaColor.bg)
-                    .padding(.horizontal, 22)
-                    .padding(.vertical, 10)
-                    .background(Capsule().fill(ArtaColor.gold))
-            }
-            .buttonStyle(.plain)
+            Button("Reintentar", action: onRetry)
+                .buttonStyle(ArtaPrimaryButtonStyle(fullWidth: false))
             .padding(.top, 4)
         }
         .padding(32)

@@ -54,7 +54,7 @@ struct TasksView: View {
 
     var body: some View {
         content
-            .background(ArtaColor.bg)
+            .artaScreenBackground(glow: false)
             .safeAreaInset(edge: .top, spacing: 0) { header }
             .navigationTitle("Tareas")
             .searchable(text: $query, prompt: "Buscar tarea, persona, evento…")
@@ -97,8 +97,8 @@ struct TasksView: View {
                 if let flash {
                     Label(flash, systemImage: "checkmark.circle.fill")
                         .font(.footnote)
-                        .foregroundStyle(ArtaColor.gold)
-                        .listRowBackground(ArtaColor.goldSoft)
+                        .foregroundStyle(ArtaColor.text)
+                        .listRowBackground(ArtaColor.accentSoft)
                 }
                 ForEach(groups, id: \.bucket) { group in
                     Section {
@@ -159,10 +159,11 @@ struct TasksView: View {
         } label: {
             Text(f.title)
                 .font(.footnote.weight(.semibold))
-                .foregroundStyle(on ? ArtaColor.bg : ArtaColor.text)
+                .foregroundStyle(on ? ArtaColor.onAccent : ArtaColor.muted)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)
-                .background(Capsule().fill(on ? ArtaColor.gold : ArtaColor.surface2))
+                .background(ArtaControlShape().fill(on ? ArtaColor.accentFill : AnyShapeStyle(ArtaColor.surface)))
+                .overlay(ArtaControlShape().strokeBorder(on ? Color.clear : ArtaColor.lineStrong, lineWidth: 1))
         }
         .buttonStyle(.plain)
     }
@@ -281,11 +282,12 @@ struct TaskRow: View {
         return "circle"
     }
 
+    /// Monocromo: hecha en terciario, por aprobar en tinta/plata; rojo solo si está vencida o bloqueada.
     private var iconColor: Color {
-        if task.isDone { return Color(hex: 0x22C55E) }
+        if task.isDone { return ArtaColor.tertiary }
         if task.status == "BLOCKED" || overdue { return ArtaColor.danger }
-        if task.isPendingApproval { return Color(hex: 0xF59E0B) }
-        return ArtaColor.muted
+        if task.isPendingApproval { return ArtaColor.accent }
+        return ArtaColor.tertiary
     }
 
     var body: some View {
@@ -296,16 +298,16 @@ struct TaskRow: View {
                 .frame(width: 24)
             VStack(alignment: .leading, spacing: 4) {
                 Text(task.title)
-                    .strikethrough(task.isDone, color: ArtaColor.muted)
+                    .strikethrough(task.isDone, color: ArtaColor.tertiary)
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(task.isDone ? ArtaColor.muted : ArtaColor.text)
                     .lineLimit(2)
                 HStack(spacing: 4) {
                     if !task.isDone, let due = MDate.dueText(task.dueAt) {
-                        Text(due).foregroundStyle(overdue ? ArtaColor.danger : ArtaColor.muted)
+                        Text(due).foregroundStyle(overdue ? ArtaColor.danger : ArtaColor.tertiary)
                     }
                     if showEvent, let name = task.event?.name, !name.isEmpty {
-                        Text("· \(name)").foregroundStyle(ArtaColor.muted)
+                        Text("· \(name)").foregroundStyle(ArtaColor.tertiary)
                     }
                 }
                 .font(.caption)
@@ -428,7 +430,7 @@ struct TaskFormSheet: View {
                             .environment(\.locale, Locale(identifier: "es_MX"))
                     }
                 }
-                .tint(ArtaColor.gold)
+                .tint(ArtaColor.accent)
                 .listRowBackground(ArtaColor.bgElev)
 
                 Section("Módulo") {
@@ -579,7 +581,7 @@ struct AssigneePickerSheet: View {
             .scrollContentBackground(.hidden)
             .background(ArtaColor.bg)
             .overlay {
-                if directory.isEmpty { ProgressView().tint(ArtaColor.gold) }
+                if directory.isEmpty { ProgressView().tint(ArtaColor.accent) }
             }
             .searchable(text: $query, prompt: "Buscar persona")
             .navigationTitle("Responsables")
@@ -609,8 +611,8 @@ struct AssigneePickerSheet: View {
             }
             Spacer()
             if let index = selection.firstIndex(of: person.id) {
-                if index == 0 { StatusPill(text: "Principal", tone: .gold) }
-                Image(systemName: "checkmark.circle.fill").foregroundStyle(ArtaColor.gold)
+                if index == 0 { StatusPill(text: "Principal", tone: .accent) }
+                Image(systemName: "checkmark.circle.fill").foregroundStyle(ArtaColor.accent)
             } else {
                 Image(systemName: "circle").foregroundStyle(ArtaColor.muted)
             }

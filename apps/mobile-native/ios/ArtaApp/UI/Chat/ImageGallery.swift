@@ -137,8 +137,9 @@ private struct ZoomableImage: View {
                         .foregroundStyle(ArtaColor.muted)
                         .frame(width: geo.size.width, height: geo.size.height)
                 } else {
+                    // La galería siempre es negra: el indicador va en blanco en las dos entidades.
                     ProgressView()
-                        .tint(ArtaColor.gold)
+                        .tint(.white)
                         .frame(width: geo.size.width, height: geo.size.height)
                 }
             }

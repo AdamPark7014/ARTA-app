@@ -9,6 +9,9 @@ import XCTest
 ///
 /// Recorrido y nombres de los adjuntos (`NN-nombre`, lifetime `.keepAlways`):
 ///   01-inicio  02-chats  03-chat-evento  04-tareas  05-aprobaciones  06-eventos  07-avisos
+/// Las capturas de tienda son de Arta (tema claro). Después, para revisar el tema oscuro, el
+/// chip de Inicio cambia a Auditorio (la cuenta demo es híbrida) y se adjuntan capturas de
+/// revisión `auditorio-*` (sin prefijo `NN-`: van a `debug/` del artefacto de logs, no a la tienda).
 /// («06-eventos» es el hub del primer evento de la semana que lista Inicio: la app no
 /// tiene lista nativa de eventos en la navegación).
 ///
@@ -16,6 +19,7 @@ import XCTest
 ///   tab-inicio  tab-chats  tab-tareas  tab-avisos  tab-mas          (HomeView)
 ///   chat-event-<id> / chat-row-<id>                                 (ChatListView)
 ///   inicio-approvals  inicio-approvals-card  inicio-event-<id>      (InicioView)
+///   inicio-entity-chip  entity-notice                               (ActiveEntity)
 ///
 /// Todo es TOLERANTE: si una pantalla no aparece se anota como omitida, se adjunta el
 /// árbol de accesibilidad (`dbg-*`) y el test sigue con las demás. Solo falla si la
@@ -186,6 +190,9 @@ final class StoreScreenshotsUITests: XCTestCase {
             omitir("avisos: no se encontró la pestaña")
         }
 
+        // 8. Tema oscuro: Auditorio (revisión visual, no son capturas de tienda).
+        recorrerAuditorio()
+
         let listaCapturadas = capturadas.joined(separator: ", ")
         let listaOmitidas = omitidas.map { "  - \($0)" }.joined(separator: "\n")
         adjuntarTexto(
@@ -193,6 +200,68 @@ final class StoreScreenshotsUITests: XCTestCase {
             "Capturadas (\(capturadas.count)): \(listaCapturadas)\nOmitidas (\(omitidas.count)):\n\(listaOmitidas)\n"
         )
         XCTAssertFalse(capturadas.isEmpty, "No se pudo hacer ni una sola captura")
+    }
+
+    // MARK: - Auditorio (tema oscuro)
+
+    private func recorrerAuditorio() {
+        guard irAPestana(.inicio) else {
+            omitir("auditorio: no se encontró la pestaña Inicio")
+            return
+        }
+        asegurarRaiz(.inicio, titulo: "Inicio")
+        let chip = porId("inicio-entity-chip")
+        guard buscar([chip], timeout: 8) != nil else {
+            omitir("auditorio: no apareció el chip de entidad en Inicio")
+            adjuntarJerarquia("dbg-sin-chip")
+            return
+        }
+        tocar(chip)
+        // El aviso «Ahora en Auditorio» dura 1,6 s.
+        pausa(0.5)
+        adjuntarCapturaDebug("auditorio-00-aviso")
+        _ = buscar([app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "Hola")).firstMatch], timeout: 20)
+        pausa(2.0)
+        esperarSinCarga()
+        adjuntarCapturaDebug("auditorio-01-inicio")
+        adjuntarJerarquia("dbg-auditorio-inicio")
+
+        if irAPestana(.chats) {
+            _ = buscar([porPrefijo("chat-event-"), porPrefijo("chat-row-"), app.cells.firstMatch], timeout: 15)
+            pausa(1.0)
+            esperarSinCarga()
+            adjuntarCapturaDebug("auditorio-02-chats")
+            let tituloChats = tituloActual()
+            if abrir([porPrefijo("chat-event-"), porPrefijo("chat-row-"), app.cells.firstMatch], desde: tituloChats) {
+                pausa(1.5)
+                esperarSinCarga()
+                adjuntarCapturaDebug("auditorio-03-chat")
+                volver(a: tituloChats, pestana: .chats)
+            }
+        }
+        if irAPestana(.tareas) {
+            pausa(1.5)
+            esperarSinCarga()
+            adjuntarCapturaDebug("auditorio-04-tareas")
+        }
+        if irAPestana(.avisos) {
+            pausa(1.0)
+            esperarSinCarga()
+            adjuntarCapturaDebug("auditorio-05-avisos")
+        }
+        if tocarSiExiste([app.tabBars.buttons.matching(identifier: "tab-mas").firstMatch, porId("tab-mas")], timeout: 6) {
+            pausa(1.0)
+            adjuntarCapturaDebug("auditorio-06-mas")
+        }
+
+        // De regreso a Arta, como estaba.
+        if irAPestana(.inicio) {
+            asegurarRaiz(.inicio, titulo: "Inicio")
+            if buscar([chip], timeout: 6) != nil {
+                tocar(chip)
+                pausa(2.0)
+            }
+        }
     }
 
     // MARK: - Captura

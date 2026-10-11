@@ -23,15 +23,15 @@ struct AttachmentContent: View {
                         .font(.largeTitle)
                         .foregroundStyle(ArtaColor.muted)
                         .frame(width: 220, height: 160)
-                        .background(ArtaColor.surface2)
+                        .background(ArtaColor.inset)
                 default:
                     ProgressView()
-                        .tint(ArtaColor.gold)
+                        .tint(ArtaColor.accent)
                         .frame(width: 220, height: 160)
                         .background(ArtaColor.surface2)
                 }
             }
-            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .clipShape(RoundedRectangle(cornerRadius: ArtaRadius.inner, style: .continuous))
             .contentShape(Rectangle())
             .onTapGesture { onImage(url) }
             .accessibilityLabel("Foto")
@@ -82,7 +82,7 @@ private struct VideoThumb: View {
             }
         }
         .frame(width: 240, height: 160)
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .clipShape(RoundedRectangle(cornerRadius: ArtaRadius.inner, style: .continuous))
         .contentShape(Rectangle())
         .task(id: attachment.url) {
             probe = RemoteMedia.cached(attachment.url)
@@ -112,9 +112,9 @@ private struct AudioBubble: View {
             Button { player.toggle(attachment.url) } label: {
                 Image(systemName: isCurrent && player.isPlaying ? "pause.fill" : "play.fill")
                     .font(.title3)
-                    .foregroundStyle(attachment.isVoiceNote ? ArtaColor.bg : ArtaColor.text)
+                    .foregroundStyle(attachment.isVoiceNote ? ArtaColor.onAccent : ArtaColor.text)
                     .frame(width: 40, height: 40)
-                    .background(Circle().fill(attachment.isVoiceNote ? ArtaColor.gold : ArtaColor.surface2))
+                    .background(Circle().fill(attachment.isVoiceNote ? ArtaColor.accentFill : AnyShapeStyle(ArtaColor.inset)))
             }
             .buttonStyle(.plain)
             .accessibilityLabel(isCurrent && player.isPlaying ? "Pausar" : "Reproducir")
@@ -135,7 +135,7 @@ private struct AudioBubble: View {
                         scrub = nil
                     }
                 )
-                .tint(mine ? ArtaColor.read : ArtaColor.gold)
+                .tint(ArtaColor.accent)
                 Text(clock(isCurrent && player.position > 0 ? player.position : total))
                     .font(.caption2)
                     .foregroundStyle(ArtaColor.muted)
@@ -154,13 +154,14 @@ private struct DocumentRow: View {
 
     private var ext: String { AttachmentNames.ext(attachment.name ?? attachment.url) }
 
+    /// Monocromo (sistema visual): el tipo lo dice el ícono y la extensión, no el color.
     private var icon: (String, Color) {
         switch ext {
-        case "pdf": return ("doc.richtext.fill", Color(red: 0.90, green: 0.33, blue: 0.29))
-        case "xls", "xlsx", "csv", "numbers": return ("tablecells.fill", Color(red: 0.25, green: 0.73, blue: 0.31))
-        case "ppt", "pptx", "key": return ("rectangle.on.rectangle.angled.fill", Color(red: 0.94, green: 0.53, blue: 0.24))
+        case "pdf": return ("doc.richtext.fill", ArtaColor.text)
+        case "xls", "xlsx", "csv", "numbers": return ("tablecells.fill", ArtaColor.text)
+        case "ppt", "pptx", "key": return ("rectangle.on.rectangle.angled.fill", ArtaColor.text)
         case "zip": return ("doc.zipper", ArtaColor.muted)
-        default: return ("doc.text.fill", Color(red: 0.31, green: 0.62, blue: 0.97))
+        default: return ("doc.text.fill", ArtaColor.text)
         }
     }
 
@@ -178,7 +179,7 @@ private struct DocumentRow: View {
         }
         .padding(10)
         .frame(minWidth: 200, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 10).fill(ArtaColor.surface2))
+        .background(RoundedRectangle(cornerRadius: ArtaRadius.item, style: .continuous).fill(ArtaColor.inset))
         .contentShape(Rectangle())
         .accessibilityLabel("Documento \(attachment.name ?? "")")
     }
@@ -197,7 +198,7 @@ struct VideoScreen: View {
                 if let player {
                     VideoPlayer(player: player).ignoresSafeArea()
                 } else {
-                    ProgressView().tint(ArtaColor.gold)
+                    ProgressView().tint(.white)
                 }
             }
             .toolbar {
@@ -207,6 +208,9 @@ struct VideoScreen: View {
             }
             .toolbarBackground(.hidden, for: .navigationBar)
         }
+        // El reproductor siempre es negro: controles claros también en Arta (tema claro).
+        .environment(\.colorScheme, .dark)
+        .tint(.white)
         .onAppear {
             ChatAudioPlayer.shared.stop()
             try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback)
@@ -237,9 +241,9 @@ struct RecordingBar: View {
                 .monospacedDigit()
                 .foregroundStyle(ArtaColor.text)
             ProgressView(value: Double(recorder.level))
-                .tint(ArtaColor.gold)
+                .tint(ArtaColor.accent)
             Button(action: onSend) {
-                Image(systemName: "arrow.up.circle.fill").font(.system(size: 32)).foregroundStyle(ArtaColor.gold)
+                Image(systemName: "arrow.up.circle.fill").font(.system(size: 32)).foregroundStyle(ArtaColor.accent)
             }
             .accessibilityLabel("Enviar nota de voz")
         }
@@ -261,9 +265,9 @@ struct UploadBar: View {
                 .font(.caption)
                 .foregroundStyle(ArtaColor.muted)
             if let f = progress.fraction {
-                ProgressView(value: f).tint(ArtaColor.gold)
+                ProgressView(value: f).tint(ArtaColor.accent)
             } else {
-                ProgressView().progressViewStyle(.linear).tint(ArtaColor.gold)
+                ProgressView().progressViewStyle(.linear).tint(ArtaColor.accent)
             }
         }
         .padding(.horizontal, 14)

@@ -61,7 +61,7 @@ struct ApprovalsView: View {
                 historyList
             }
         }
-        .background(ArtaColor.bg)
+        .artaScreenBackground(glow: false)
         .safeAreaInset(edge: .top) {
             Picker("Vista", selection: $segment) {
                 ForEach(Segment.allCases) { s in
@@ -77,10 +77,11 @@ struct ApprovalsView: View {
             if let flash {
                 Text(flash)
                     .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(ArtaColor.bg)
+                    .foregroundStyle(ArtaColor.onAccent)
                     .padding(.horizontal, 16)
                     .padding(.vertical, 10)
-                    .background(Capsule().fill(ArtaColor.gold))
+                    .background(ArtaControlShape().fill(ArtaColor.accentFill))
+                    .shadow(color: ArtaTheme.isLight ? Color(hex: 0x0C0C0D, opacity: 0.18) : .black.opacity(0.55), radius: 10, y: 5)
                     .padding(.bottom, 16)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
@@ -215,8 +216,8 @@ struct ApprovalsView: View {
                         Task { await approve(task) }
                     }
                     .buttonStyle(.borderedProminent)
-                    .tint(ArtaColor.gold)
-                    .foregroundStyle(ArtaColor.bg)
+                    .tint(ArtaColor.accent)
+                    .foregroundStyle(ArtaColor.onAccent)
                     .disabled(task.isEventClosed)
                 }
             }
@@ -248,7 +249,8 @@ struct ApprovalsView: View {
                 Spacer(minLength: 8)
                 VStack(alignment: .trailing, spacing: 4) {
                     Text(Money.mxn(row.amount?.value))
-                        .font(.subheadline.weight(.bold))
+                        .font(.subheadline.weight(.semibold))
+                        .monospacedDigit()
                         .foregroundStyle(ArtaColor.text)
                     StatusPill(text: POInfo.statusLabel(row.status), tone: POInfo.statusTone(row.status))
                 }
@@ -288,7 +290,8 @@ struct ApprovalsView: View {
                 Spacer(minLength: 8)
                 VStack(alignment: .trailing, spacing: 4) {
                     Text(Money.mxn(advance.amount?.value))
-                        .font(.subheadline.weight(.bold))
+                        .font(.subheadline.weight(.semibold))
+                        .monospacedDigit()
                         .foregroundStyle(ArtaColor.text)
                     StatusPill(text: AdvanceInfo.statusLabel(advance.advanceStatus),
                                tone: AdvanceInfo.statusTone(advance.advanceStatus))
@@ -309,7 +312,7 @@ struct ApprovalsView: View {
                             .font(.caption.weight(.semibold))
                     }
                     .buttonStyle(.borderless)
-                    .tint(ArtaColor.gold)
+                    .tint(ArtaColor.accent)
                 }
                 Spacer(minLength: 4)
                 if advance.isPending {
@@ -324,16 +327,16 @@ struct ApprovalsView: View {
                         }
                     }
                     .buttonStyle(.borderedProminent)
-                    .tint(ArtaColor.gold)
-                    .foregroundStyle(ArtaColor.bg)
+                    .tint(ArtaColor.accent)
+                    .foregroundStyle(ArtaColor.onAccent)
                 } else if advance.isApproved {
                     Button("Marcar pagado") {
                         payingAdvance = advance
                         confirmPay = true
                     }
                     .buttonStyle(.borderedProminent)
-                    .tint(ArtaColor.gold)
-                    .foregroundStyle(ArtaColor.bg)
+                    .tint(ArtaColor.accent)
+                    .foregroundStyle(ArtaColor.onAccent)
                 }
             }
             .controlSize(.small)
@@ -650,8 +653,8 @@ struct PurchaseOrderSheet: View {
                                 HStack {
                                     Text("Evento").font(.subheadline).foregroundStyle(ArtaColor.muted)
                                     Spacer(minLength: 8)
-                                    Text(event.name ?? "Ver evento").font(.subheadline.weight(.semibold)).foregroundStyle(ArtaColor.gold)
-                                    Image(systemName: "chevron.right").font(.caption).foregroundStyle(ArtaColor.gold)
+                                    Text(event.name ?? "Ver evento").font(.subheadline.weight(.semibold)).foregroundStyle(ArtaColor.accent)
+                                    Image(systemName: "chevron.right").font(.caption).foregroundStyle(ArtaColor.accent)
                                 }
                             }
                             .buttonStyle(.plain)
@@ -709,7 +712,7 @@ struct PurchaseOrderSheet: View {
                                     open(proof)
                                 } label: {
                                     HStack(spacing: 12) {
-                                        Image(systemName: "doc.text.magnifyingglass").foregroundStyle(ArtaColor.gold)
+                                        Image(systemName: "doc.text.magnifyingglass").foregroundStyle(ArtaColor.accent)
                                         VStack(alignment: .leading, spacing: 2) {
                                             Text(proofName(proof)).font(.subheadline).foregroundStyle(ArtaColor.text).lineLimit(1)
                                             if let amount = proof.amount?.value {
@@ -732,7 +735,7 @@ struct PurchaseOrderSheet: View {
                     } label: {
                         Label("Ver órdenes del evento en la web", systemImage: "safari")
                             .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(ArtaColor.gold)
+                            .foregroundStyle(ArtaColor.accent)
                     }
                     .buttonStyle(.plain)
                 }
@@ -756,9 +759,10 @@ struct PurchaseOrderSheet: View {
                                 Text("Rechazar")
                                     .font(.subheadline.weight(.semibold))
                                     .frame(maxWidth: .infinity)
-                                    .padding(.vertical, 12)
+                                    .padding(.vertical, 13)
                                     .foregroundStyle(ArtaColor.danger)
-                                    .background(RoundedRectangle(cornerRadius: 12).fill(ArtaColor.danger.opacity(0.14)))
+                                    .background(ArtaControlShape().fill(ArtaColor.surface))
+                                    .overlay(ArtaControlShape().strokeBorder(ArtaColor.danger.opacity(0.4), lineWidth: 1))
                             }
                             .buttonStyle(.plain)
                             Button {
@@ -767,9 +771,9 @@ struct PurchaseOrderSheet: View {
                                 Text("Autorizar")
                                     .font(.subheadline.weight(.semibold))
                                     .frame(maxWidth: .infinity)
-                                    .padding(.vertical, 12)
-                                    .foregroundStyle(ArtaColor.bg)
-                                    .background(RoundedRectangle(cornerRadius: 12).fill(ArtaColor.gold))
+                                    .padding(.vertical, 13)
+                                    .foregroundStyle(ArtaColor.onAccent)
+                                    .background(ArtaControlShape().fill(ArtaColor.accentFill))
                             }
                             .buttonStyle(.plain)
                         }
