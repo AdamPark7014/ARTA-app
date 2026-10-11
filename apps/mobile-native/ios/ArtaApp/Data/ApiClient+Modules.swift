@@ -14,19 +14,32 @@ extension ApiClient {
 
     // MARK: Tareas
 
-    func myTasks() async throws -> [ArtaTask] { try await get("tasks/mine") }
-    func requestedTasks() async throws -> [ArtaTask] { try await get("tasks/requested") }
+    /// Listados de tareas de la entidad activa (`?entity=`, docs/entidades-arta-auditorio.md).
+    func myTasks() async throws -> [ArtaTask] { try await entityTasks("tasks/mine") }
+    func requestedTasks() async throws -> [ArtaTask] { try await entityTasks("tasks/requested") }
 
     /// Solo dirección y convenios (403 para el resto).
     func teamTasks(status: String? = nil) async throws -> [ArtaTask] {
-        try await get("tasks/workload", query: ["status": status])
+        try await entityTasks("tasks/workload", query: ["status": status])
+    }
+
+    /// Respaldo mientras el API ignore `?entity=`: fuera las tareas de la otra entidad.
+    private func entityTasks(_ path: String, query: [String: String?] = [:]) async throws -> [ArtaTask] {
+        let entity = EntityContext.query
+        var params = query
+        params["entity"] = entity
+        let list: [ArtaTask] = try await get(path, query: params)
+        return list.filter { EntityContext.keeps($0.entity ?? $0.event?.entity, for: entity) }
     }
 
     func eventTasks(_ eventId: String) async throws -> [ArtaTask] { try await get("tasks/event/\(eventId)") }
     func task(_ id: String) async throws -> ArtaTask { try await get("tasks/\(id)") }
 
+    /// Sin evento, la tarea es de la entidad activa; con evento, el API copia la del evento.
     func createTask(_ body: CreateTaskBody) async throws -> ArtaTask {
-        try await send("POST", "tasks", body: body, as: ArtaTask.self)
+        var payload = body
+        if payload.eventId == nil && payload.entity == nil { payload.entity = EntityContext.query }
+        return try await send("POST", "tasks", body: payload, as: ArtaTask.self)
     }
 
     func updateTask(_ id: String, _ body: UpdateTaskBody) async throws -> ArtaTask {
@@ -72,9 +85,11 @@ extension ApiClient {
 
     // MARK: Eventos
 
-    /// Sin `entity`: todas las entidades que la persona opera. `scope`: active | past | all.
-    func events(scope: String? = nil, entity: String? = nil) async throws -> [ArtaEvent] {
-        try await get("events", query: ["scope": scope, "entity": entity])
+    /// Eventos de la entidad activa (o de `entity`). Sin entidad conocida, todas las que la
+    /// persona opera. `scope`: active | past | all.
+    func events(scope: String? = nil, entity: String? = EntityContext.query) async throws -> [ArtaEvent] {
+        let list: [ArtaEvent] = try await get("events", query: ["scope": scope, "entity": entity])
+        return list.filter { EntityContext.keeps($0.entity, for: entity) }
     }
 
     func event(_ id: String) async throws -> ArtaEventDetail { try await get("events/\(id)") }
@@ -123,7 +138,12 @@ extension ApiClient {
     // MARK: Anticipos (docs/ANTICIPOS-CONTRATO.md)
 
     /// Lo que yo puedo resolver: `PENDING` si apruebo, `APPROVED` si pago. 404 = API aún sin la ruta.
-    func pendingAdvances() async throws -> [AdvanceRow] { try await get("finance/advances/pending") }
+    /// Solo la entidad activa.
+    func pendingAdvances() async throws -> [AdvanceRow] {
+        let entity = EntityContext.query
+        let list: [AdvanceRow] = try await get("finance/advances/pending", query: ["entity": entity])
+        return list.filter { EntityContext.keeps($0.entity ?? $0.event?.entity, for: entity) }
+    }
 
     func approveAdvance(_ id: String) async throws {
         try await send("PATCH", "finance/advances/\(id)/approve")

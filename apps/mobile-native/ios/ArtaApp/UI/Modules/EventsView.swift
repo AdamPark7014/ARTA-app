@@ -29,7 +29,8 @@ struct EventsView: View {
     @State private var notesError: String?
     @State private var editingNote: NoteDraft?
 
-    private var noteEntities: [String] { profile?.eventEntities ?? [] }
+    /// Solo la entidad activa: las notas y los eventos ya no se juntan entre Arta y Auditorio.
+    private var noteEntities: [String] { profile?.activeEventEntity.map { [$0] } ?? [] }
 
     private var searched: [ArtaEvent] {
         let q = Self.fold(query.moduleTrimmed)
@@ -159,7 +160,7 @@ struct EventsView: View {
     }
 
     private var emptyMessage: String {
-        if noteEntities.isEmpty { return "Tu rol no opera eventos." }
+        if noteEntities.isEmpty { return "Tu rol no opera eventos en \(EntityContext.entity.shortName)." }
         if !query.moduleTrimmed.isEmpty { return "Nada coincide con «\(query.moduleTrimmed)»." }
         return "Desliza hacia abajo para actualizar."
     }
@@ -373,10 +374,10 @@ struct EventsView: View {
         do {
             let me = try await ModulesProfileStore.shared.load()
             profile = me
-            if me.eventEntities.isEmpty {
-                events = []
+            if let entity = me.activeEventEntity {
+                events = try await ApiClient.shared.events(scope: "all", entity: entity)
             } else {
-                events = try await ApiClient.shared.events(scope: "all")
+                events = []
             }
             loaded = true
             error = nil
@@ -389,23 +390,24 @@ struct EventsView: View {
         loading = false
     }
 
-    /// Las notas se piden por entidad (el API exige una) para las semanas visibles del mes.
+    /// Notas de la entidad activa (el API exige una) para las semanas visibles del mes.
     private func loadNotes() async {
         guard let me = profile else { return }
         let days = MonthGrid.days(for: month)
         guard let first = days.first, let last = days.last else { return }
         let from = MDate.ymdString(first)
         let to = MDate.ymdString(last)
-        var result: [CalendarNote] = []
+        guard let entity = me.activeEventEntity else {
+            notes = []
+            notesError = nil
+            return
+        }
         do {
-            for entity in me.eventEntities {
-                var list = try await ApiClient.shared.calendarNotes(entity: entity, from: from, to: to)
-                for index in list.indices where list[index].entity == nil {
-                    list[index].entity = entity
-                }
-                result += list
+            var list = try await ApiClient.shared.calendarNotes(entity: entity, from: from, to: to)
+            for index in list.indices where list[index].entity == nil {
+                list[index].entity = entity
             }
-            notes = result
+            notes = list
             notesError = nil
         } catch {
             if !error.isModuleCancellation { notesError = error.userMessage }

@@ -209,7 +209,13 @@ final class AppRouter: ObservableObject {
 
     func reset() {
         tab = .inicio
+        resetStacks()
+    }
+
+    /// Cambio de entidad: lo abierto en cada pestaña era de la otra; se queda la pestaña.
+    func resetStacks() {
         chatPath = []
+        chatJump = nil
         inicioPath = []
         tareasPath = []
         avisosPath = []

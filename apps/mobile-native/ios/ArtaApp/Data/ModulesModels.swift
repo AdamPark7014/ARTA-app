@@ -81,6 +81,13 @@ extension ModulesProfile {
         return (entities ?? []).filter { !(role == "dir_auditorio" && $0 == "ARTA") }
     }
 
+    /// La entidad activa (`ActiveEntity`) si la persona opera eventos en ella; `nil` si no.
+    /// La app ya no junta las dos entidades: todo se pide de la activa.
+    var activeEventEntity: String? {
+        let active = EntityContext.entity.rawValue
+        return eventEntities.contains(active) ? active : nil
+    }
+
     /// Ve «Todas las tareas» (`GET tasks/workload`).
     var seesTeamTasks: Bool {
         ["super_admin", "dir_general", "dir_adjunta", "gerente_arta", "dir_auditorio", "convenios"].contains(role)
@@ -187,6 +194,8 @@ struct ArtaTask: Codable, Equatable, Identifiable {
     var event: TaskEventRef?
     var evidences: [TaskEvidence]?
     var activities: [TaskActivity]?
+    /// ARTA | EXPLANADA (con evento, la del evento). Falta en el API viejo.
+    var entity: String?
 }
 
 extension ArtaTask {
@@ -225,6 +234,8 @@ struct CreateTaskBody: Encodable {
     var assigneeIds: [String] = []
     var eventId: String? = nil
     var dueAt: String? = nil
+    /// Solo sin evento (con evento, el API copia la del evento): la entidad activa.
+    var entity: String? = nil
 }
 
 /// `PATCH tasks/:id`. Lo que va en `nil` no se manda; `dueAt = .some(nil)` manda `null` (quita la fecha).
@@ -460,6 +471,8 @@ struct AdvanceRow: Codable, Equatable, Identifiable {
     var decidedBy: PersonRef?
     var paidBy: PersonRef?
     var event: TaskEventRef?
+    /// ARTA | EXPLANADA (con evento, la del evento). Falta en el API viejo.
+    var entity: String?
 
     var isPending: Bool { advanceStatus == "PENDING" }
     var isApproved: Bool { advanceStatus == "APPROVED" }

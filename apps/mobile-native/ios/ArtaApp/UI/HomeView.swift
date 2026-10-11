@@ -2,15 +2,47 @@ import Combine
 import SwiftUI
 import UIKit
 
+/// Con sesión. La app trabaja en una entidad a la vez (docs/entidades-arta-auditorio.md):
+/// al cambiar, `HomeView` se rehace entera, así cada pantalla recarga sus listas con
+/// `?entity=`, los globos se vuelven a contar y todo se repinta con el acento nuevo.
+struct SignedInView: View {
+    let user: UserDto
+    @EnvironmentObject private var activeEntity: ActiveEntity
+
+    var body: some View {
+        HomeView(user: user)
+            .id(activeEntity.current)
+            .overlay(alignment: .top) {
+                EntityNoticeBanner(notice: activeEntity.notice)
+            }
+    }
+}
+
 struct HomeView: View {
     let user: UserDto
     @EnvironmentObject private var router: AppRouter
+    @EnvironmentObject private var activeEntity: ActiveEntity
     @State private var chatUnread = 0
     @State private var noticeUnread = 0
+    @State private var lastInicioTap = Date.distantPast
+    @State private var countsTask: Task<Void, Never>?
 
-    /// Tocar la pestaña ya activa vuelve a su raíz (`AppRouter.select`).
+    /// Tocar la pestaña ya activa vuelve a su raíz (`AppRouter.select`); dos toques
+    /// seguidos en Inicio cambian de entidad.
     private var tabSelection: Binding<AppRouter.Tab> {
-        Binding(get: { router.tab }, set: { router.select($0) })
+        Binding(get: { router.tab }, set: { tab in
+            if tab == .inicio { inicioTapped() }
+            router.select(tab)
+        })
+    }
+
+    /// Doble toque en la casita (como Facebook): Arta ⇄ Auditorio, solo para híbridos.
+    /// El primer toque ya devolvió Inicio a su raíz; el segundo, si llega pronto, cambia.
+    private func inicioTapped() {
+        let now = Date()
+        let isDouble = router.tab == .inicio && now.timeIntervalSince(lastInicioTap) < 0.4
+        lastInicioTap = isDouble ? .distantPast : now
+        if isDouble { activeEntity.toggle() }
     }
 
     var body: some View {
@@ -71,15 +103,32 @@ struct HomeView: View {
             ChatBlocks.shared.refresh(force: true)
             await loadCounts()
         }
-        .onReceive(RealtimeClient.shared.chatUnread) { chatUnread = $0 }
-        .onReceive(RealtimeClient.shared.notificationsUnread) { noticeUnread = $0 }
+        // El socket manda el total de todas las entidades: a un híbrido solo le sirve
+        // como señal para volver a contar la activa por HTTP.
+        .onReceive(RealtimeClient.shared.chatUnread) { total in
+            if activeEntity.isHybrid { scheduleCounts() } else { chatUnread = total }
+        }
+        .onReceive(RealtimeClient.shared.notificationsUnread) { total in
+            if activeEntity.isHybrid { scheduleCounts() } else { noticeUnread = total }
+        }
         .onReceive(RealtimeClient.shared.connected.filter { $0 }) { _ in Task { await loadCounts() } }
         .onChange(of: chatUnread + noticeUnread) { _, total in PushManager.shared.setBadge(total) }
     }
 
+    /// Globos de Chats y Avisos: solo la entidad activa (`?entity=` en `ApiClient`).
     private func loadCounts() async {
         if let n = try? await ApiClient.shared.chatUnread() { chatUnread = n }
         if let n = try? await ApiClient.shared.notificationsUnread() { noticeUnread = n }
+    }
+
+    /// Ráfagas del socket (varios mensajes seguidos) → una sola recuenta.
+    private func scheduleCounts() {
+        countsTask?.cancel()
+        countsTask = Task {
+            try? await Task.sleep(nanoseconds: 400_000_000)
+            guard !Task.isCancelled else { return }
+            await loadCounts()
+        }
     }
 
     /// Mismas pantallas en cualquier pestaña que no sea Chats (su pila es de `ChatRoute`).

@@ -2,7 +2,7 @@ import QuickLook
 import SwiftUI
 
 /// Lo que espera mi visto bueno: entregas de tareas que pedí (o todas, si soy dirección)
-/// y órdenes de compra por autorizar de las entidades que puedo autorizar.
+/// y órdenes de compra y anticipos de la entidad activa, si puedo autorizarlos.
 struct ApprovalsView: View {
     enum Segment: String, CaseIterable, Identifiable {
         case pending = "Pendientes"
@@ -444,9 +444,10 @@ struct ApprovalsView: View {
                 let known = Set(pending.map(\.id))
                 pending += team.filter { $0.isPendingApproval && !known.contains($0.id) }
             }
+            // Solo la entidad activa (docs/entidades-arta-auditorio.md): antes se juntaban las dos.
             var rows: [PurchaseOrderRow] = []
-            for entity in me.eventEntities where me.authorizesPO(entity: entity) {
-                rows += try await ApiClient.shared.purchaseOrders(entity: entity)
+            if let entity = me.activeEventEntity, me.authorizesPO(entity: entity) {
+                rows = try await ApiClient.shared.purchaseOrders(entity: entity)
             }
             // La entrega más antigua primero: es la que lleva más tiempo esperando.
             tasks = pending.sorted { ($0.submittedAt ?? "") < ($1.submittedAt ?? "") }

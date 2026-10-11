@@ -5,6 +5,8 @@ struct ArtaApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var session = Session.shared
     @StateObject private var router = AppRouter.shared
+    /// Arta o Auditorio: acento, datos y marca de toda la app.
+    @StateObject private var activeEntity = ActiveEntity.shared
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {
@@ -12,8 +14,9 @@ struct ArtaApp: App {
             RootView()
                 .environmentObject(session)
                 .environmentObject(router)
+                .environmentObject(activeEntity)
                 .preferredColorScheme(.dark)
-                .tint(ArtaColor.gold)
+                .tint(activeEntity.current.accent)
                 .task { await session.restore() }
                 .onOpenURL { url in
                     if let target = PanelLink.target(url: url) { router.follow(target, fromLink: true) }
@@ -44,7 +47,7 @@ struct RootView: View {
             case .signedOut:
                 LoginView()
             case .signedIn(let user):
-                HomeView(user: user)
+                SignedInView(user: user)
             }
         }
         .animation(.default, value: session.state)

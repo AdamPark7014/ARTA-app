@@ -12,6 +12,8 @@ struct UserDto: Codable, Equatable {
     var title: String?
     var roleKey: String?
     var organizationId: String?
+    /// `["ARTA"]`, `["EXPLANADA"]` o las dos (`/auth/me`; el login trae un usuario parcial sin ellas).
+    var entities: [String]?
 
     var name: String { (fullName?.isEmpty == false ? fullName : email) ?? "" }
 }
@@ -64,6 +66,8 @@ struct ChannelSummary: Decodable, Identifiable, Equatable {
     var mutedUntil: String?
     /// Chat v2: directo de grupo (`kind = PRIVATE`). Falta en el API viejo.
     var isGroupDm: Bool?
+    /// ARTA | EXPLANADA; `null` en directos y grupos de directos (son personales).
+    var entity: String?
 
     var isDirect: Bool { kind.uppercased() == "DM" || kind.uppercased() == "DIRECT" || peer != nil }
     var isGroup: Bool { isGroupDm == true }
@@ -286,6 +290,8 @@ struct CreateChannelBody: Encodable {
     var topic: String?
     var description: String?
     var memberIds: [String]?
+    /// Entidad del canal (ARTA | EXPLANADA). Sin ella el API usa la única de la persona o ARTA.
+    var entity: String? = nil
 }
 
 struct UpdateChannelBody: Encodable {
@@ -382,6 +388,8 @@ struct NotificationDto: Decodable, Identifiable, Equatable {
     var readAt: String?
     let createdAt: String
     var actor: NotificationActor?
+    /// ARTA | EXPLANADA; `null` en avisos personales (menciones, directos).
+    var entity: String?
 
     var isRead: Bool { readAt != nil }
 }

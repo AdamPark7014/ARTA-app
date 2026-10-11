@@ -1,6 +1,7 @@
 import SwiftUI
 
-/// Pantalla de inicio: lo que vence hoy, lo que espera mi visto bueno y los eventos de la semana.
+/// Pantalla de inicio: lo que vence hoy, lo que espera mi visto bueno y los eventos de la semana,
+/// todo de la entidad activa (el chip del encabezado la muestra y, a los híbridos, la cambia).
 struct InicioView: View {
     let user: UserDto
 
@@ -91,6 +92,8 @@ struct InicioView: View {
 
     private var greeting: some View {
         VStack(alignment: .leading, spacing: 4) {
+            EntityChip()
+                .padding(.bottom, 6)
             Text(MDate.todayTitle())
                 .font(.subheadline)
                 .foregroundStyle(ArtaColor.muted)
@@ -264,8 +267,8 @@ struct InicioView: View {
             profile = me
             let tasks = try await ApiClient.shared.myTasks()
             var events: [ArtaEvent] = []
-            if !me.eventEntities.isEmpty {
-                events = try await ApiClient.shared.events(scope: "active")
+            if let entity = me.activeEventEntity {
+                events = try await ApiClient.shared.events(scope: "active", entity: entity)
             }
             myTasks = tasks
             upcoming = Self.nextSevenDays(events)
@@ -292,11 +295,11 @@ struct InicioView: View {
         }
         taskApprovals = pendingTasks.count
 
+        // Solo las órdenes de la entidad activa (antes se sumaban las dos).
         var orders = 0
-        for entity in me.eventEntities where me.authorizesPO(entity: entity) {
-            if let rows = try? await ApiClient.shared.purchaseOrders(entity: entity) {
-                orders += rows.filter { $0.isPending && !$0.isEventClosed }.count
-            }
+        if let entity = me.activeEventEntity, me.authorizesPO(entity: entity),
+           let rows = try? await ApiClient.shared.purchaseOrders(entity: entity) {
+            orders = rows.filter { $0.isPending && !$0.isEventClosed }.count
         }
         poApprovals = orders
 

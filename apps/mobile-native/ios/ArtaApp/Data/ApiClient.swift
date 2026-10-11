@@ -287,7 +287,12 @@ extension ApiClient {
         return res.user
     }
 
-    func channels() async throws -> [ChannelSummary] { try await get("chat/channels") }
+    /// Canales de la entidad activa más los directos (`?entity=`, docs/entidades-arta-auditorio.md).
+    func channels() async throws -> [ChannelSummary] {
+        let entity = EntityContext.query
+        let list: [ChannelSummary] = try await get("chat/channels", query: ["entity": entity])
+        return list.filter { EntityContext.keeps($0.entity, for: entity) }
+    }
     func channel(_ id: String) async throws -> ChannelDetail { try await get("chat/channels/\(id)") }
 
     func messages(_ channelId: String, before: String? = nil, after: String? = nil, around: String? = nil, limit: Int? = nil) async throws -> MessagePage {
@@ -312,13 +317,16 @@ extension ApiClient {
     func markRead(_ channelId: String) async throws { try await send("POST", "chat/channels/\(channelId)/read") }
     func mute(_ channelId: String, muted: Bool, hours: Int?) async throws { try await send("PATCH", "chat/channels/\(channelId)/mute", body: MuteBody(muted: muted, hours: hours)) }
     func openDirect(_ userId: String) async throws -> ChannelDetail { try await send("POST", "chat/dm", body: DirectBody(userId: userId), as: ChannelDetail.self) }
+    /// La búsqueda general se limita a la entidad activa; dentro de un canal, no hace falta.
     func search(_ q: String, channelId: String? = nil) async throws -> [ChatMessage] {
-        let res: MessageList = try await get("chat/search", query: ["q": q, "channelId": channelId])
+        let entity = channelId == nil ? EntityContext.query : nil
+        let res: MessageList = try await get("chat/search", query: ["q": q, "channelId": channelId, "entity": entity])
         return res.messages
     }
     func colleagues(_ q: String? = nil) async throws -> [Colleague] { try await get("chat/colleagues", query: ["q": q]) }
+    /// Globo de Chats: solo la entidad activa (y los directos).
     func chatUnread() async throws -> Int {
-        let res: UnreadTotal = try await get("chat/unread")
+        let res: UnreadTotal = try await get("chat/unread", query: ["entity": EntityContext.query])
         return res.total ?? 0
     }
 
@@ -332,7 +340,11 @@ extension ApiClient {
         return res.items ?? []
     }
     func groupDm(_ userIds: [String]) async throws -> ChannelDetail { try await send("POST", "chat/group-dm", body: GroupDmBody(userIds: userIds), as: ChannelDetail.self) }
-    func createChannel(_ body: CreateChannelBody) async throws -> ChannelDetail { try await send("POST", "chat/channels", body: body, as: ChannelDetail.self) }
+    func createChannel(_ body: CreateChannelBody) async throws -> ChannelDetail {
+        var payload = body
+        if payload.entity == nil { payload.entity = EntityContext.query }
+        return try await send("POST", "chat/channels", body: payload, as: ChannelDetail.self)
+    }
     func updateChannel(_ channelId: String, _ body: UpdateChannelBody) async throws -> ChannelDetail { try await send("PATCH", "chat/channels/\(channelId)", body: body, as: ChannelDetail.self) }
     func archiveChannel(_ channelId: String) async throws { try await send("POST", "chat/channels/\(channelId)/archive") }
     func addMembers(_ channelId: String, userIds: [String]) async throws -> ChannelDetail { try await send("POST", "chat/channels/\(channelId)/members", body: MembersBody(userIds: userIds), as: ChannelDetail.self) }
@@ -362,9 +374,14 @@ extension ApiClient {
         }
     }
 
-    func notifications(take: Int = 50) async throws -> [NotificationDto] { try await get("notifications", query: ["take": String(take)]) }
+    func notifications(take: Int = 50) async throws -> [NotificationDto] {
+        let entity = EntityContext.query
+        let list: [NotificationDto] = try await get("notifications", query: ["take": String(take), "entity": entity])
+        return list.filter { EntityContext.keeps($0.entity, for: entity) }
+    }
+    /// Globo de Avisos: solo la entidad activa (y los avisos personales).
     func notificationsUnread() async throws -> Int {
-        let res: UnreadCount = try await get("notifications/unread-count")
+        let res: UnreadCount = try await get("notifications/unread-count", query: ["entity": EntityContext.query])
         return res.count ?? 0
     }
     func notificationRead(_ id: String) async throws { try await send("PATCH", "notifications/\(id)/read") }

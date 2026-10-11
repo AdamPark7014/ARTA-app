@@ -44,7 +44,9 @@ enum ChatMarkdown {
     }
 
     static func blocks(_ body: String) -> [ChatBlock] {
-        if let hit = cache.object(forKey: body as NSString) { return hit.blocks }
+        // Las menciones llevan el acento de la entidad activa: la caché se separa por entidad.
+        let cacheKey = (EntityContext.entity.rawValue + "|" + body) as NSString
+        if let hit = cache.object(forKey: cacheKey) { return hit.blocks }
         var out: [ChatBlock] = []
         let parts = body.components(separatedBy: "```")
         let unclosed = parts.count % 2 == 0
@@ -61,7 +63,7 @@ enum ChatMarkdown {
                 if !text.isEmpty { out.append(contentsOf: textBlocks(text)) }
             }
         }
-        cache.setObject(Box(out), forKey: body as NSString)
+        cache.setObject(Box(out), forKey: cacheKey)
         return out
     }
 

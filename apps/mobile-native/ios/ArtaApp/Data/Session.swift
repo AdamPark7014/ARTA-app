@@ -44,6 +44,7 @@ final class Session: ObservableObject {
         // en memoria. No pasa por `signedIn` para no guardar nada ni abrir socket/push.
         if DemoMode.isActive {
             if let user = DemoMode.sessionUser() {
+                ActiveEntity.shared.configure(user: user)
                 state = .signedIn(user)
             } else {
                 state = .signedOut
@@ -55,6 +56,8 @@ final class Session: ObservableObject {
             state = .signedOut
             return
         }
+        // Acento correcto desde la pantalla de carga; `/auth/me` lo confirma enseguida.
+        if let cached = cachedUser() { ActiveEntity.shared.configure(user: cached) }
         do {
             signedIn(try await ApiClient.shared.me())
         } catch let error as ApiError where error.isUnauthorized {
@@ -95,6 +98,8 @@ final class Session: ObservableObject {
         if let data = try? JSONEncoder().encode(user) {
             UserDefaults.standard.set(data, forKey: Self.userKey)
         }
+        // Antes de mostrar la app: las primeras peticiones ya llevan `?entity=`.
+        ActiveEntity.shared.configure(user: user)
         state = .signedIn(user)
         RealtimeClient.shared.connect()
         Task { await PushManager.shared.requestPermissionAndRegister() }
@@ -121,6 +126,7 @@ final class Session: ObservableObject {
         ChatBlocks.shared.reset()
         UserDefaults.standard.removeObject(forKey: Self.userKey)
         AppRouter.shared.reset()
+        ActiveEntity.shared.reset()
         state = .signedOut
     }
 

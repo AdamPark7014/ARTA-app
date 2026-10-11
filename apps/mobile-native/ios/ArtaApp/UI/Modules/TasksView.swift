@@ -404,13 +404,18 @@ struct TaskFormSheet: View {
                 .listRowBackground(ArtaColor.bgElev)
 
                 if isCreate && fixedEventId == nil {
-                    Section("Evento") {
+                    Section {
                         Picker("Evento", selection: $eventId) {
                             Text("Sin evento").tag(String?.none)
                             ForEach(events) { ev in
                                 Text(ev.name).tag(Optional(ev.id))
                             }
                         }
+                    } header: {
+                        Text("Evento")
+                    } footer: {
+                        // Los eventos de la lista ya son solo de la entidad activa.
+                        Text("Sin evento, la tarea queda en \(EntityContext.entity.brandName).")
                     }
                     .listRowBackground(ArtaColor.bgElev)
                 }

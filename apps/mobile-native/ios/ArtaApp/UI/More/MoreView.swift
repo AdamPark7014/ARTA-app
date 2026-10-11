@@ -7,6 +7,7 @@ struct MoreView: View {
     let user: UserDto
 
     @EnvironmentObject private var session: Session
+    @EnvironmentObject private var activeEntity: ActiveEntity
     @Environment(\.openURL) private var openURL
     @State private var access: WebAccess
     @State private var confirmLogout = false
@@ -29,6 +30,24 @@ struct MoreView: View {
                 profileHeader
             }
             .listRowBackground(ArtaColor.bgElev)
+
+            // Solo híbridos (docs/entidades-arta-auditorio.md). Al cambiar, la app se rehace en la otra entidad.
+            if activeEntity.isHybrid {
+                Section {
+                    Picker("Entidad", selection: entitySelection) {
+                        ForEach(ArtaEntity.allCases) { entity in
+                            Text(entity.shortName).tag(entity)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .accessibilityIdentifier("more-entity-picker")
+                } header: {
+                    Text("Entidad")
+                } footer: {
+                    Text("Atajo: doble toque en la pestaña Inicio.")
+                }
+                .listRowBackground(ArtaColor.bgElev)
+            }
 
             ForEach(sections) { section in
                 Section(section.group) {
@@ -149,6 +168,10 @@ struct MoreView: View {
         .refreshable { await loadAccess() }
     }
 
+    private var entitySelection: Binding<ArtaEntity> {
+        Binding(get: { activeEntity.current }, set: { activeEntity.select($0) })
+    }
+
     private var profileHeader: some View {
         HStack(spacing: 16) {
             Avatar(name: user.name, size: 56)
@@ -167,6 +190,10 @@ struct MoreView: View {
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
                     .background(Capsule().fill(ArtaColor.goldSoft))
+                Text(activeEntity.current.brandName)
+                    .font(.caption)
+                    .foregroundStyle(ArtaColor.muted)
+                    .accessibilityIdentifier("more-entity-brand")
             }
             Spacer(minLength: 0)
         }
