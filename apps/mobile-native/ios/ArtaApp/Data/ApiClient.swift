@@ -385,7 +385,10 @@ extension ApiClient {
         return res.count ?? 0
     }
     func notificationRead(_ id: String) async throws { try await send("PATCH", "notifications/\(id)/read") }
-    func notificationsReadAll() async throws { try await send("POST", "notifications/read-all") }
+    /// «Leer todo» solo marca lo de la entidad activa (y los avisos personales).
+    func notificationsReadAll() async throws {
+        _ = try await perform(request("POST", "notifications/read-all", query: ["entity": EntityContext.query]))
+    }
 
     func registerPush(_ body: RegisterPushBody) async throws { try await send("POST", "devices/push", body: body) }
     func removePush(_ token: String) async throws { try await send("DELETE", "devices/push", body: RemovePushBody(token: token)) }
