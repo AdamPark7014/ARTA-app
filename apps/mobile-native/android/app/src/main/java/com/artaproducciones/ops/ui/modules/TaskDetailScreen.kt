@@ -20,13 +20,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.Event
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -37,11 +35,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
@@ -65,6 +61,10 @@ import com.artaproducciones.ops.data.api.userMessage
 import com.artaproducciones.ops.ui.chat.ChatMedia
 import com.artaproducciones.ops.ui.common.Avatar
 import com.artaproducciones.ops.ui.theme.ArtaColors
+import com.artaproducciones.ops.ui.theme.Button
+import com.artaproducciones.ops.ui.theme.LocalArtaTokens
+import com.artaproducciones.ops.ui.theme.OutlinedButton
+import com.artaproducciones.ops.ui.theme.TextButton
 import kotlinx.coroutines.launch
 import okhttp3.MultipartBody
 
@@ -305,7 +305,7 @@ private fun TaskBody(
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text(task.title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            Text(task.title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Pill(taskStatusLabel(task), taskStatusColor(task.status))
                 if (task.status != "DONE") {
@@ -388,7 +388,7 @@ private fun TaskBody(
                     Text(
                         "Aprobada por ${it.fullName}${task.approvedAt?.let { a -> " · ${stampLabel(a)}" } ?: ""}",
                         style = MaterialTheme.typography.bodySmall,
-                        color = OkGreen,
+                        color = ArtaColors.Ok,
                     )
                 }
             }
@@ -486,7 +486,7 @@ private fun Banner(text: String, color: androidx.compose.ui.graphics.Color) {
         modifier = Modifier
             .padding(horizontal = 16.dp)
             .fillMaxWidth()
-            .background(color.copy(alpha = 0.12f), RoundedCornerShape(8.dp))
+            .background(color.copy(alpha = 0.1f), LocalArtaTokens.current.itemShape)
             .padding(12.dp),
     )
 }
@@ -519,13 +519,13 @@ private fun TaskActionBar(
                             modifier = Modifier.weight(1f),
                         ) { Text("Rechazar") }
                         Button(onClick = onApprove, enabled = enabled, modifier = Modifier.weight(1f)) {
-                            if (busy == "approve") CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = ArtaColors.Bg)
+                            if (busy == "approve") CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = ArtaColors.OnAccent)
                             else Text("Dar visto bueno")
                         }
                     }
                     can.deliver -> Button(onClick = onDeliver, enabled = enabled, modifier = Modifier.weight(1f)) { Text("Entregar") }
                     can.markDone -> Button(onClick = onMarkDone, enabled = enabled, modifier = Modifier.weight(1f)) {
-                        if (busy == "DONE") CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = ArtaColors.Bg)
+                        if (busy == "DONE") CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = ArtaColors.OnAccent)
                         else Text("Marcar hecha")
                     }
                 }
@@ -624,7 +624,7 @@ private fun DeliverSheet(task: TaskDto, onDismiss: () -> Unit, onDelivered: (Tas
             }
             error?.let { Text(it, color = ArtaColors.Danger) }
             Button(onClick = { send() }, enabled = !sending, modifier = Modifier.fillMaxWidth()) {
-                if (sending) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = ArtaColors.Bg)
+                if (sending) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = ArtaColors.OnAccent)
                 else Text("Enviar entrega")
             }
             Spacer(Modifier.height(8.dp))

@@ -9,35 +9,35 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -45,12 +45,18 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.artaproducciones.ops.data.ActiveEntity
 import com.artaproducciones.ops.data.api.ChatAttachment
 import com.artaproducciones.ops.data.api.ModulesMe
@@ -58,7 +64,16 @@ import com.artaproducciones.ops.data.api.PersonRef
 import com.artaproducciones.ops.data.api.TaskDto
 import com.artaproducciones.ops.data.api.userMessage
 import com.artaproducciones.ops.ui.chat.openAttachment
+import com.artaproducciones.ops.ui.theme.ArtaCard
 import com.artaproducciones.ops.ui.theme.ArtaColors
+import com.artaproducciones.ops.ui.theme.ArtaType
+import com.artaproducciones.ops.ui.theme.Button
+import com.artaproducciones.ops.ui.theme.LocalArtaTokens
+import com.artaproducciones.ops.ui.theme.OutlinedButton
+import com.artaproducciones.ops.ui.theme.StatusPill
+import com.artaproducciones.ops.ui.theme.TABULAR
+import com.artaproducciones.ops.ui.theme.TextButton
+import com.artaproducciones.ops.ui.theme.Tone
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import java.text.NumberFormat
@@ -168,15 +183,16 @@ fun taskStatusLabel(t: TaskDto): String = when (t.status) {
     else -> t.status
 }
 
+/** Relleno (acento) = espera una decisión; el resto, contorno. */
+@Composable
+@ReadOnlyComposable
 fun taskStatusColor(status: String): Color = when (status) {
     "PENDING_APPROVAL" -> ArtaColors.Gold
-    "DONE" -> OkGreen
+    "DONE" -> ArtaColors.Ok
     "BLOCKED" -> ArtaColors.Danger
     "IN_PROGRESS" -> ArtaColors.Read
     else -> ArtaColors.Muted
 }
-
-internal val OkGreen = Color(0xFF22C55E)
 
 val TASK_ACTION_LABEL = mapOf(
     "created" to "Tarea creada",
@@ -352,10 +368,12 @@ fun poStatusLabel(status: String): String = when (status) {
     else -> status
 }
 
+@Composable
+@ReadOnlyComposable
 fun poStatusColor(status: String): Color = when (status) {
     "PENDING_AUTH", "DRAFT" -> ArtaColors.Gold
     "AUTHORIZED" -> ArtaColors.Read
-    "PAID" -> OkGreen
+    "PAID" -> ArtaColors.Ok
     "REJECTED", "CANCELLED" -> ArtaColors.Danger
     else -> ArtaColors.Muted
 }
@@ -394,30 +412,42 @@ fun rememberHaptics(): Haptics {
 
 // ─── Piezas de UI compartidas ───────────────────────────────────────────────
 
-/** Encabezado grande de las pestañas (como «Avisos»). */
+/** Encabezado grande de las pestañas (como «Avisos»): ligero, como el saludo de Inicio. */
 @Composable
 fun ScreenTitle(title: String, modifier: Modifier = Modifier, trailing: @Composable RowScope.() -> Unit = {}) {
     Row(
-        modifier.fillMaxWidth().padding(start = 20.dp, end = 8.dp, top = 20.dp, bottom = 8.dp),
+        modifier.fillMaxWidth().padding(start = 20.dp, end = 8.dp, top = 22.dp, bottom = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(title, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+        Text(
+            title,
+            style = ArtaType.ScreenTitle,
+            color = ArtaColors.Text,
+            modifier = Modifier.weight(1f).semantics { heading() },
+        )
         trailing()
     }
 }
 
-/** Barra de las pantallas de detalle: atrás + título + acciones. */
+/** Barra de las pantallas de detalle: atrás + título + acciones, con línea fina abajo. */
 @Composable
 fun DetailTopBar(title: String, onBack: () -> Unit, actions: @Composable RowScope.() -> Unit = {}) {
+    val line = ArtaColors.Line
     Row(
-        Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 8.dp),
+        Modifier
+            .fillMaxWidth()
+            .drawBehind { drawLine(line, Offset(0f, size.height - 0.5f), Offset(size.width, size.height - 0.5f), 1f) }
+            // Estas pantallas no viven en un Scaffold: la barra de estado la libra la barra misma.
+            .statusBarsPadding()
+            .padding(horizontal = 4.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Atrás") }
         Text(
             title,
-            style = MaterialTheme.typography.titleLarge,
+            style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.SemiBold,
+            fontSize = 17.sp,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f),
@@ -426,74 +456,77 @@ fun DetailTopBar(title: String, onBack: () -> Unit, actions: @Composable RowScop
     }
 }
 
+/** Etiqueta de sección: MAYÚSCULAS espaciadas en terciario, contador tabular al lado. */
 @Composable
 fun SectionTitle(text: String, modifier: Modifier = Modifier, count: Int? = null, trailing: @Composable RowScope.() -> Unit = {}) {
-    Row(modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(text.uppercase(ES_MX), style = MaterialTheme.typography.labelMedium, color = ArtaColors.Muted, fontWeight = FontWeight.SemiBold)
+    Row(
+        modifier.fillMaxWidth().heightIn(min = 40.dp).padding(start = 20.dp, end = 12.dp, top = 10.dp, bottom = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text.uppercase(ES_MX),
+            style = ArtaType.Cap,
+            color = ArtaColors.Tertiary,
+            modifier = Modifier.semantics { heading() },
+        )
         if (count != null) {
             Spacer(Modifier.width(8.dp))
-            Text("$count", style = MaterialTheme.typography.labelMedium, color = ArtaColors.Gold, fontWeight = FontWeight.Bold)
+            Text("$count", style = ArtaType.Cap.copy(fontFeatureSettings = TABULAR), color = ArtaColors.Text)
         }
         Spacer(Modifier.weight(1f))
         trailing()
     }
 }
 
+/**
+ * Estado en píldora (MAYÚSCULAS 10.5). El acento va relleno (requiere acción); los demás van en
+ * contorno con su color: peligro y ok solo para errores y cierres reales.
+ */
 @Composable
 fun Pill(text: String, color: Color, modifier: Modifier = Modifier) {
-    Box(
-        modifier
-            .background(color.copy(alpha = 0.16f), RoundedCornerShape(50))
-            .padding(horizontal = 8.dp, vertical = 2.dp),
-    ) {
-        Text(text, color = color, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold, maxLines = 1)
+    val tone = when (color) {
+        ArtaColors.Gold -> Tone.Action
+        ArtaColors.Danger -> Tone.Danger
+        ArtaColors.Ok -> Tone.Ok
+        ArtaColors.Warn -> Tone.Warn
+        ArtaColors.Text -> Tone.Strong
+        else -> Tone.Info
     }
+    StatusPill(text, tone, modifier)
 }
 
 @Composable
 fun ModuleCard(modifier: Modifier = Modifier, onClick: (() -> Unit)? = null, content: @Composable ColumnScope.() -> Unit) {
-    val shape = RoundedCornerShape(12.dp)
-    val border = BorderStroke(0.5.dp, ArtaColors.Line)
-    if (onClick != null) {
-        Surface(onClick = onClick, modifier = modifier.fillMaxWidth(), shape = shape, color = ArtaColors.BgElev, border = border) {
-            Column(Modifier.padding(12.dp), content = content)
-        }
-    } else {
-        Surface(modifier = modifier.fillMaxWidth(), shape = shape, color = ArtaColors.BgElev, border = border) {
-            Column(Modifier.padding(12.dp), content = content)
-        }
-    }
+    ArtaCard(modifier = modifier, onClick = onClick, contentPadding = PaddingValues(14.dp), content = content)
 }
 
 @Composable
 fun SkeletonBlock(modifier: Modifier = Modifier, height: Int = 14, widthFraction: Float = 1f) {
     val transition = rememberInfiniteTransition(label = "skeleton")
     val alpha by transition.animateFloat(
-        initialValue = 0.35f,
-        targetValue = 0.8f,
+        initialValue = 0.45f,
+        targetValue = 1f,
         animationSpec = infiniteRepeatable(tween(800), RepeatMode.Reverse),
         label = "skeletonAlpha",
     )
+    val shape = if (LocalArtaTokens.current.isPill) RoundedCornerShape(50) else RoundedCornerShape(2.dp)
     Box(
         modifier
             .fillMaxWidth(widthFraction)
             .height(height.dp)
             .alpha(alpha)
-            .background(ArtaColors.Surface2, RoundedCornerShape(6.dp)),
+            .background(ArtaColors.Surface2, shape),
     )
 }
 
-/** Esqueleto de lista mientras carga la primera vez. */
+/** Esqueleto de lista mientras carga la primera vez: mismas tarjetas que el contenido. */
 @Composable
 fun SkeletonList(rows: Int = 6, modifier: Modifier = Modifier) {
-    Column(modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         repeat(rows) {
-            Column(
-                Modifier.fillMaxWidth().background(ArtaColors.BgElev, RoundedCornerShape(12.dp)).padding(12.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                SkeletonBlock(height = 16, widthFraction = 0.7f)
-                SkeletonBlock(height = 12, widthFraction = 0.45f)
+            ArtaCard(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                SkeletonBlock(height = 14, widthFraction = 0.7f)
+                SkeletonBlock(height = 10, widthFraction = 0.45f)
             }
         }
     }
@@ -502,14 +535,14 @@ fun SkeletonList(rows: Int = 6, modifier: Modifier = Modifier) {
 @Composable
 fun EmptyState(title: String, text: String? = null, actionLabel: String? = null, onAction: (() -> Unit)? = null, modifier: Modifier = Modifier) {
     Column(
-        modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 40.dp),
+        modifier.fillMaxWidth().padding(horizontal = 32.dp, vertical = 44.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center)
+        Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center, color = ArtaColors.Text)
         if (text != null) Text(text, color = ArtaColors.Muted, style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center)
         if (actionLabel != null && onAction != null) {
-            Spacer(Modifier.height(4.dp))
+            Spacer(Modifier.height(8.dp))
             OutlinedButton(onClick = onAction) { Text(actionLabel) }
         }
     }
@@ -530,14 +563,17 @@ fun ErrorState(message: String, onRetry: () -> Unit, modifier: Modifier = Modifi
 /** Banda de error sobre contenido que ya estaba cargado (no lo tapa). */
 @Composable
 fun InlineError(message: String, onRetry: () -> Unit) {
+    val shape = LocalArtaTokens.current.itemShape
     Row(
         Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)
-            .background(ArtaColors.Danger.copy(alpha = 0.12f), RoundedCornerShape(8.dp))
+            .clip(shape)
+            .background(ArtaColors.Danger.copy(alpha = 0.08f))
+            .border(1.dp, ArtaColors.Danger.copy(alpha = 0.25f), shape)
             .padding(start = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(message, color = ArtaColors.Danger, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
-        TextButton(onClick = onRetry) { Text("Reintentar") }
+        TextButton(onClick = onRetry, colors = ButtonDefaults.textButtonColors(contentColor = ArtaColors.Danger)) { Text("Reintentar") }
     }
 }
 
@@ -557,8 +593,7 @@ fun ConfirmDialog(
         confirmButton = {
             Button(
                 onClick = { onDismiss(); onConfirm() },
-                colors = if (danger) ButtonDefaults.buttonColors(containerColor = ArtaColors.Danger, contentColor = Color.White)
-                else ButtonDefaults.buttonColors(),
+                colors = if (danger) ButtonDefaults.buttonColors(containerColor = ArtaColors.Danger, contentColor = ArtaColors.OnDanger) else null,
             ) { Text(confirmLabel) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar") } },
@@ -598,7 +633,7 @@ fun ReasonDialog(
                 onClick = {
                     if (reason.isBlank()) showError = true else { onDismiss(); onConfirm(reason.trim()) }
                 },
-                colors = ButtonDefaults.buttonColors(containerColor = ArtaColors.Danger, contentColor = Color.White),
+                colors = ButtonDefaults.buttonColors(containerColor = ArtaColors.Danger, contentColor = ArtaColors.OnDanger),
             ) { Text(confirmLabel) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar") } },

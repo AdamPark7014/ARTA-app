@@ -21,21 +21,19 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AttachFile
-import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
@@ -49,6 +47,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -62,6 +61,11 @@ import com.artaproducciones.ops.data.api.PoRowDto
 import com.artaproducciones.ops.data.api.TaskDto
 import com.artaproducciones.ops.data.api.userMessage
 import com.artaproducciones.ops.ui.theme.ArtaColors
+import com.artaproducciones.ops.ui.theme.ArtaType
+import com.artaproducciones.ops.ui.theme.Button
+import com.artaproducciones.ops.ui.theme.OutlinedButton
+import com.artaproducciones.ops.ui.theme.TABULAR
+import com.artaproducciones.ops.ui.theme.TextButton
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
@@ -256,7 +260,7 @@ fun ApprovalsScreen(nav: ModuleNav, focusAdvanceId: String? = null) {
     Column(Modifier.fillMaxSize()) {
         DetailTopBar("Aprobaciones", onBack = { nav.back() })
         val pending = if (p != null && d != null) d.pendingCount(p) else 0
-        TabRow(selectedTabIndex = tab, containerColor = ArtaColors.Bg, contentColor = ArtaColors.Gold) {
+        TabRow(selectedTabIndex = tab, containerColor = Color.Transparent, contentColor = ArtaColors.Text) {
             Tab(selected = tab == 0, onClick = { tab = 0 }, text = { Text(if (pending > 0) "Pendientes · $pending" else "Pendientes") })
             Tab(selected = tab == 1, onClick = { tab = 1 }, text = { Text("Historial") })
         }
@@ -515,7 +519,7 @@ private fun ReviewTaskCard(task: TaskDto, busy: Boolean, onOpen: () -> Unit, onA
                 modifier = Modifier.weight(1f),
             ) { Text("Rechazar") }
             Button(onClick = onApprove, enabled = !busy, modifier = Modifier.weight(1f)) {
-                if (busy) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = ArtaColors.Bg)
+                if (busy) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = ArtaColors.OnAccent)
                 else Text("Visto bueno")
             }
         }
@@ -529,7 +533,7 @@ private fun PoCard(item: PoItem, onClick: () -> Unit) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(r.vendorName ?: "Sin proveedor", fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
             Spacer(Modifier.width(8.dp))
-            Text(money(r.amount), fontWeight = FontWeight.Bold, color = ArtaColors.Gold)
+            Text(money(r.amount), fontWeight = FontWeight.SemiBold, color = ArtaColors.Text, style = LocalTextStyle.current.copy(fontFeatureSettings = TABULAR))
         }
         Text("${poRubroLabel(r.rubro)} · ${r.eventName}", style = MaterialTheme.typography.bodySmall, color = ArtaColors.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
         Spacer(Modifier.height(4.dp))
@@ -628,7 +632,7 @@ private fun PoSheet(
                 )
                 Pill(poStatusLabel(status), poStatusColor(status))
             }
-            Text(money(d?.amount?.toDoubleOrNull() ?: row.amount), style = MaterialTheme.typography.headlineMedium, color = ArtaColors.Gold, fontWeight = FontWeight.Bold)
+            Text(money(d?.amount?.toDoubleOrNull() ?: row.amount), style = ArtaType.Kpi, color = ArtaColors.Text)
             Text(
                 row.eventName,
                 color = ArtaColors.Gold,
@@ -701,7 +705,7 @@ private fun PoSheet(
                                 modifier = Modifier.weight(1f),
                             ) { Text("Rechazar") }
                             Button(onClick = { setStatus("AUTHORIZED") }, enabled = !busy, modifier = Modifier.weight(1f)) {
-                                if (busy) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = ArtaColors.Bg) else Text("Autorizar")
+                                if (busy) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = ArtaColors.OnAccent) else Text("Autorizar")
                             }
                         }
                         d.status == "AUTHORIZED" && perms.canMarkPaid -> when {
@@ -714,7 +718,7 @@ private fun PoSheet(
                             }
                             !canPayNow -> Text("Hoy no es día de cobro: el pago se registra en el siguiente día de cobro.", color = ArtaColors.Muted)
                             else -> Button(onClick = { confirm = "PAID" }, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
-                                if (busy) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = ArtaColors.Bg) else Text("Marcar pagada")
+                                if (busy) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = ArtaColors.OnAccent) else Text("Marcar pagada")
                             }
                         }
                     }

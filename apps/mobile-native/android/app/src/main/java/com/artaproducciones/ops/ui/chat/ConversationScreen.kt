@@ -28,6 +28,7 @@ import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -90,12 +91,12 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -117,6 +118,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
@@ -160,6 +162,8 @@ import com.artaproducciones.ops.ui.common.messageTime
 import com.artaproducciones.ops.ui.common.parseInstant
 import com.artaproducciones.ops.ui.common.plainText
 import com.artaproducciones.ops.ui.theme.ArtaColors
+import com.artaproducciones.ops.ui.theme.LocalArtaTokens
+import com.artaproducciones.ops.ui.theme.TextButton
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.time.Instant
@@ -458,7 +462,10 @@ fun ConversationScreen(
     }
 
     Scaffold(
-        containerColor = ArtaColors.Bg,
+        containerColor = Color.Transparent,
+        // Sin márgenes del sistema abajo: el composer pinta su fondo hasta el borde y libra la
+        // barra de navegación por dentro (si no, quedaba una franja del fondo bajo el composer).
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
             TopAppBar(
@@ -500,7 +507,7 @@ fun ConversationScreen(
                                     style = MaterialTheme.typography.bodySmall,
                                     color = when {
                                         state.typing.isNotEmpty() -> ArtaColors.Gold
-                                        isDirect && peerOnline -> OnlineGreen
+                                        isDirect && peerOnline -> ArtaColors.Ok
                                         else -> ArtaColors.Muted
                                     },
                                 )
@@ -648,13 +655,13 @@ fun ConversationScreen(
                     Surface(
                         color = ArtaColors.Surface2,
                         contentColor = if (unseen > 0) ArtaColors.Gold else ArtaColors.Text,
-                        shape = RoundedCornerShape(20.dp),
+                        shape = LocalArtaTokens.current.controlShape,
                         shadowElevation = 6.dp,
                         border = BorderStroke(1.dp, ArtaColors.Line),
                         modifier = Modifier
                             .align(Alignment.BottomEnd)
                             .padding(Space.L)
-                            .clip(RoundedCornerShape(20.dp))
+                            .clip(LocalArtaTokens.current.controlShape)
                             .clickable {
                                 unseen = 0
                                 vm.jumpToLatest()
@@ -930,7 +937,7 @@ private fun LoadingRow() {
 @Composable
 private fun DaySeparator(label: String) {
     Box(Modifier.fillMaxWidth().padding(vertical = Space.M), contentAlignment = Alignment.Center) {
-        Surface(color = ArtaColors.Surface2, shape = RoundedCornerShape(10.dp)) {
+        Surface(color = ArtaColors.Surface2, shape = LocalArtaTokens.current.controlShape) {
             Text(label, color = ArtaColors.Muted, style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(horizontal = Space.M, vertical = Space.XS))
         }
     }
@@ -1067,14 +1074,19 @@ private fun MessageBubble(
                     Spacer(Modifier.width(6.dp))
                 }
                 Column(horizontalAlignment = if (mine) Alignment.End else Alignment.Start) {
+                    val tokens = LocalArtaTokens.current
+                    val big = if (tokens.isPill) 18.dp else 6.dp
+                    val tail = if (tokens.isPill) 5.dp else 2.dp
                     Surface(
                         color = if (mine) ArtaColors.Mine else ArtaColors.BgElev,
+                        contentColor = if (mine) ArtaColors.OnMine else ArtaColors.Text,
                         shape = RoundedCornerShape(
-                            topStart = if (!mine && showAuthor) 4.dp else 16.dp,
-                            topEnd = if (mine && showAuthor) 4.dp else 16.dp,
-                            bottomStart = 16.dp,
-                            bottomEnd = 16.dp,
+                            topStart = if (!mine && showAuthor) tail else big,
+                            topEnd = if (mine && showAuthor) tail else big,
+                            bottomStart = big,
+                            bottomEnd = big,
                         ),
+                        border = if (mine) null else BorderStroke(1.dp, ArtaColors.Line),
                         modifier = Modifier
                             .widthIn(max = maxWidth)
                             .combinedClickable(
@@ -1082,7 +1094,10 @@ private fun MessageBubble(
                                 onLongClick = { if (canInteract) onLongPress() },
                             ),
                     ) {
-                        BubbleContent(m, mine, showAuthor, ticks, onOpenAttachment, onJumpTo)
+                        // Dentro de mi burbuja todo toma los tokens de la burbuja (texto blanco sobre tinta en ARTA).
+                        CompositionLocalProvider(LocalArtaTokens provides if (mine) tokens.inMine() else tokens) {
+                            BubbleContent(m, mine, showAuthor, ticks, onOpenAttachment, onJumpTo)
+                        }
                     }
                     if (m.reactions.isNotEmpty() && !m.deleted) {
                         FlowRow(
@@ -1361,7 +1376,7 @@ private fun Composer(
             onValueChange = onChange,
             placeholder = { Text(placeholder, maxLines = 1, overflow = TextOverflow.Ellipsis) },
             maxLines = 6,
-            shape = RoundedCornerShape(22.dp),
+            shape = LocalArtaTokens.current.controlShape,
             trailingIcon = {
                 IconButton(onClick = onEmoji) { Icon(Icons.Outlined.EmojiEmotions, "Emojis", tint = ArtaColors.Muted) }
             },
@@ -1381,8 +1396,8 @@ private fun Composer(
         IconButton(
             onClick = onSend,
             enabled = value.text.isNotBlank(),
-            modifier = Modifier.background(if (value.text.isNotBlank()) ArtaColors.Gold else ArtaColors.Surface2, CircleShape),
-        ) { Icon(Icons.AutoMirrored.Filled.Send, "Enviar", tint = if (value.text.isNotBlank()) ArtaColors.Bg else ArtaColors.Muted) }
+            modifier = Modifier.clip(CircleShape).background(if (value.text.isNotBlank()) LocalArtaTokens.current.accentBrush else SolidColor(ArtaColors.Surface2)),
+        ) { Icon(Icons.AutoMirrored.Filled.Send, "Enviar", tint = if (value.text.isNotBlank()) ArtaColors.OnAccent else ArtaColors.Muted) }
     }
 }
 

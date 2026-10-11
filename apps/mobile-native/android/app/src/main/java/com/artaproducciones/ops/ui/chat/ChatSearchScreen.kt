@@ -61,8 +61,8 @@ import com.artaproducciones.ops.ui.theme.ArtaColors
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 
-/** Coincidencias de [q] resaltadas en dorado (sin distinguir mayúsculas). */
-fun highlight(text: String, q: String): AnnotatedString = buildAnnotatedString {
+/** Coincidencias de [q] resaltadas con [mark] (sin distinguir mayúsculas). */
+fun highlight(text: String, q: String, mark: SpanStyle = SpanStyle(fontWeight = FontWeight.Bold)): AnnotatedString = buildAnnotatedString {
     if (q.isBlank()) {
         append(text)
         return@buildAnnotatedString
@@ -75,7 +75,7 @@ fun highlight(text: String, q: String): AnnotatedString = buildAnnotatedString {
             break
         }
         append(text.substring(i, j))
-        withStyle(SpanStyle(color = ArtaColors.Gold, fontWeight = FontWeight.Bold, background = ArtaColors.GoldSoft)) {
+        withStyle(mark) {
             append(text.substring(j, j + q.length))
         }
         i = j + q.length
@@ -132,7 +132,7 @@ fun ChatSearchScreen(onBack: () -> Unit, openMessage: (channelId: String, messag
     }
 
     Scaffold(
-        containerColor = ArtaColors.Bg,
+        containerColor = Color.Transparent,
         topBar = {
             TopAppBar(
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = ArtaColors.BgElev),
@@ -210,7 +210,7 @@ private fun SearchResultRow(m: ChatMessage, q: String, onClick: () -> Unit) {
                 )
             }
             Text(
-                highlight(snippet(plainText(m.body), q), q),
+                highlight(snippet(plainText(m.body), q), q, SpanStyle(color = ArtaColors.Text, fontWeight = FontWeight.Bold, background = ArtaColors.GoldSoft)),
                 style = MaterialTheme.typography.bodyMedium,
                 maxLines = 3,
                 overflow = TextOverflow.Ellipsis,

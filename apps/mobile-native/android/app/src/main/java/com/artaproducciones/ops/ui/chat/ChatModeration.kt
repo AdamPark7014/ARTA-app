@@ -15,8 +15,6 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
@@ -26,7 +24,6 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -43,6 +40,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.artaproducciones.ops.data.api.userMessage
 import com.artaproducciones.ops.ui.theme.ArtaColors
+import com.artaproducciones.ops.ui.theme.Button
+import com.artaproducciones.ops.ui.theme.TextButton
 import kotlinx.coroutines.launch
 
 /** Motivos de `POST /chat/messages/:id/report`, en el orden y con los textos del contrato. */
@@ -192,10 +191,10 @@ fun ReportMessageSheet(
                 Button(
                     onClick = ::send,
                     enabled = reason != null && !sending,
-                    colors = ButtonDefaults.buttonColors(containerColor = ArtaColors.Gold, contentColor = ArtaColors.Bg),
+                    
                 ) {
                     if (sending) {
-                        CircularProgressIndicator(Modifier.size(18.dp), color = ArtaColors.Bg, strokeWidth = 2.dp)
+                        CircularProgressIndicator(Modifier.size(18.dp), color = ArtaColors.OnAccent, strokeWidth = 2.dp)
                     } else {
                         Text("Enviar reporte")
                     }

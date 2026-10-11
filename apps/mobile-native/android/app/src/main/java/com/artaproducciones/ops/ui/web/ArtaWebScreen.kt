@@ -37,7 +37,6 @@ import androidx.compose.material.icons.outlined.CloudOff
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Share
-import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -62,6 +61,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
@@ -77,6 +77,7 @@ import com.artaproducciones.ops.data.api.userMessage
 import com.artaproducciones.ops.ui.modules.ModuleNav
 import com.artaproducciones.ops.ui.more.WebModules
 import com.artaproducciones.ops.ui.theme.ArtaColors
+import com.artaproducciones.ops.ui.theme.Button
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -251,7 +252,7 @@ fun ArtaWebScreen(
     }
 
     Scaffold(
-        containerColor = ArtaColors.Bg,
+        containerColor = Color.Transparent,
         topBar = {
             TopAppBar(
                 title = {
@@ -322,12 +323,15 @@ fun ArtaWebScreen(
                 )
                 !loaded && error == null -> LinearProgressIndicator(Modifier.fillMaxWidth(), color = ArtaColors.Gold, trackColor = ArtaColors.Surface2)
             }
+            val webBg = ArtaColors.Bg.toArgb()
+            val spinner = ArtaColors.Gold.toArgb()
+            val spinnerBg = ArtaColors.BgElev.toArgb()
             Box(Modifier.fillMaxSize()) {
                 AndroidView(
                     modifier = Modifier.fillMaxSize(),
                     factory = { ctx ->
                         val wv = WebView(ctx)
-                        configure(wv)
+                        configure(wv, webBg)
                         wv.setDownloadListener { url, _, contentDisposition, mimeType, _ ->
                             download(url, contentDisposition, mimeType)
                         }
@@ -402,8 +406,8 @@ fun ArtaWebScreen(
                         }
                         host.webView = wv
                         SwipeRefreshLayout(ctx).apply {
-                            setColorSchemeColors(ArtaColors.Gold.toArgb())
-                            setProgressBackgroundColorSchemeColor(ArtaColors.Surface2.toArgb())
+                            setColorSchemeColors(spinner)
+                            setProgressBackgroundColorSchemeColor(spinnerBg)
                             // Solo con la página arriba del todo: si no, el gesto es scroll de la web.
                             setOnChildScrollUpCallback { _, _ -> wv.scrollY > 0 }
                             setOnRefreshListener {
@@ -446,8 +450,8 @@ private fun ErrorState(message: String, onRetry: () -> Unit) {
 }
 
 @SuppressLint("SetJavaScriptEnabled")
-private fun configure(wv: WebView) {
-    wv.setBackgroundColor(ArtaColors.Bg.toArgb())
+private fun configure(wv: WebView, background: Int) {
+    wv.setBackgroundColor(background)
     wv.settings.apply {
         javaScriptEnabled = true
         domStorageEnabled = true

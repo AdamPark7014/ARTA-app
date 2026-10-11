@@ -1,6 +1,5 @@
 package com.artaproducciones.ops.ui.modules
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -14,7 +13,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Add
@@ -22,7 +20,6 @@ import androidx.compose.material.icons.filled.Event
 import androidx.compose.material.icons.filled.Forum
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Schedule
-import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -32,7 +29,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -45,10 +41,12 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.artaproducciones.ops.data.api.EventDetailDto
 import com.artaproducciones.ops.data.api.ModulesClient
 import com.artaproducciones.ops.data.api.ModulesSession
@@ -56,6 +54,11 @@ import com.artaproducciones.ops.data.api.TaskEventRef
 import com.artaproducciones.ops.data.api.userMessage
 import com.artaproducciones.ops.ui.common.Avatar
 import com.artaproducciones.ops.ui.theme.ArtaColors
+import com.artaproducciones.ops.ui.theme.ArtaType
+import com.artaproducciones.ops.ui.theme.Button
+import com.artaproducciones.ops.ui.theme.LocalArtaTokens
+import com.artaproducciones.ops.ui.theme.TextButton
+import com.artaproducciones.ops.ui.theme.cardSurface
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 
@@ -146,8 +149,8 @@ fun EventDetailScreen(eventId: String, nav: ModuleNav) {
                         ScrollableTabRow(
                             selectedTabIndex = tab.ordinal,
                             edgePadding = 16.dp,
-                            containerColor = ArtaColors.Bg,
-                            contentColor = ArtaColors.Gold,
+                            containerColor = Color.Transparent,
+                            contentColor = ArtaColors.Text,
                         ) {
                             NativeTab.entries.forEach { t ->
                                 Tab(selected = tab == t, onClick = { tab = t }, text = { Text(t.label) })
@@ -217,7 +220,7 @@ fun EventDetailScreen(eventId: String, nav: ModuleNav) {
                                     )
                                     Button(onClick = { openChat() }, enabled = !openingChat, modifier = Modifier.fillMaxWidth()) {
                                         if (openingChat) {
-                                            CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = ArtaColors.Bg)
+                                            CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = ArtaColors.OnAccent)
                                         } else {
                                             Icon(Icons.Default.Forum, contentDescription = null, modifier = Modifier.size(18.dp))
                                             Spacer(Modifier.width(8.dp))
@@ -268,9 +271,9 @@ fun EventDetailScreen(eventId: String, nav: ModuleNav) {
 private fun EventHeader(ev: EventDetailDto) {
     Column(Modifier.padding(horizontal = 16.dp, vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(ev.name, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+            Text(ev.name, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
             val label = eventStatusLabel(ev.status) ?: "Activo"
-            Pill(label, if (ev.status == "ACTIVE") OkGreen else if (ev.status == "CANCELLED") ArtaColors.Danger else ArtaColors.Muted)
+            Pill(label, if (ev.status == "ACTIVE") ArtaColors.Ok else if (ev.status == "CANCELLED") ArtaColors.Danger else ArtaColors.Muted)
         }
         ev.artist?.takeIf { it.isNotBlank() && it != ev.name }?.let { Text(it, color = ArtaColors.Muted) }
         val until = daysUntilLabel(ev.startsAt)
@@ -315,11 +318,11 @@ private fun QuickFacts(ev: EventDetailDto, p: ModulesPerms) {
 @Composable
 private fun Fact(label: String, value: String, sub: String?, modifier: Modifier = Modifier) {
     Column(
-        modifier.background(ArtaColors.BgElev, RoundedCornerShape(12.dp)).padding(12.dp),
+        modifier.cardSurface(LocalArtaTokens.current).padding(12.dp),
         verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
         Text(label, style = MaterialTheme.typography.labelSmall, color = ArtaColors.Muted, maxLines = 1)
-        Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        Text(value, style = ArtaType.Kpi.copy(fontSize = 24.sp, lineHeight = 28.sp), color = ArtaColors.Text)
         sub?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = if (it.contains("vencid")) ArtaColors.Danger else ArtaColors.Muted, maxLines = 1) }
     }
 }
@@ -360,7 +363,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.summaryItems(ev: Even
             LinearProgressIndicator(
                 progress = { (pct / 100.0).toFloat() },
                 modifier = Modifier.fillMaxWidth(),
-                color = if (pct >= 100.0) OkGreen else ArtaColors.Gold,
+                color = if (pct >= 100.0) ArtaColors.Ok else ArtaColors.Gold,
                 trackColor = ArtaColors.Surface2,
             )
         }

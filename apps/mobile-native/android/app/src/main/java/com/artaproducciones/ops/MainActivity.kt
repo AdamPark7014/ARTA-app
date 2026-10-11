@@ -12,10 +12,13 @@ import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.runtime.LaunchedEffect
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.lifecycleScope
+import com.artaproducciones.ops.data.ActiveEntity
+import com.artaproducciones.ops.data.BizEntity
 import com.artaproducciones.ops.data.Session
 import com.artaproducciones.ops.data.api.ApiClient
 import com.artaproducciones.ops.data.api.ApiDebugHooks
@@ -26,6 +29,9 @@ import com.artaproducciones.ops.ui.theme.ArtaTheme
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 
+/** Velo de la barra de navegación cuando el sistema no sabe pintar íconos oscuros (el de AndroidX). */
+private val NAV_DARK_SCRIM = Color.argb(0x80, 0x1b, 0x1b, 0x1b)
+
 class MainActivity : ComponentActivity() {
     /** Destino pendiente de un aviso tocado; la navegación lo consume y lo limpia. */
     private val pendingLink = MutableStateFlow<DeepLink?>(null)
@@ -35,12 +41,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         val splash = installSplashScreen()
         super.onCreate(savedInstanceState)
-        // La app siempre es oscura: íconos claros en las barras aunque el teléfono esté en modo claro
-        // (con el estilo automático salían negros sobre negro).
-        enableEdgeToEdge(
-            statusBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),
-            navigationBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),
-        )
+        applySystemBars(ActiveEntity.current)
         splash.setKeepOnScreenCondition { Session.state.value is Session.State.Loading }
         // Solo debug: `--ez arta_demo true` enciende el modo demo; tiene que ir antes de restaurar la sesión.
         val demoLink = ApiDebugHooks.launch?.invoke(intent)
@@ -48,12 +49,31 @@ class MainActivity : ComponentActivity() {
         // Al recrear (rotación) el sistema vuelve a entregar el mismo intent: no se reabre el aviso.
         if (savedInstanceState == null) handle(intent, demoLink)
         setContent {
+            // ARTA es clara y Auditorio oscura sin importar el modo del teléfono: los íconos de
+            // las barras siguen a la entidad (con el estilo automático salían del color del fondo).
+            val entity = ActiveEntity.current
+            LaunchedEffect(entity) { applySystemBars(entity) }
             ArtaTheme {
                 ArtaApp(pendingLink = pendingLink, onLinkConsumed = { pendingLink.value = null })
             }
         }
         // Capturas de tienda: sin el diálogo de permisos encima.
         if (!ApiDebugHooks.demo) requestNotificationPermission()
+    }
+
+    private fun applySystemBars(entity: BizEntity) {
+        if (entity == BizEntity.EXPLANADA) {
+            enableEdgeToEdge(
+                statusBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),
+                navigationBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),
+            )
+        } else {
+            enableEdgeToEdge(
+                statusBarStyle = SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT),
+                // En API 26 la barra de navegación no admite íconos oscuros: ahí va el velo por omisión.
+                navigationBarStyle = SystemBarStyle.light(Color.TRANSPARENT, NAV_DARK_SCRIM),
+            )
+        }
     }
 
     override fun onNewIntent(intent: Intent) {

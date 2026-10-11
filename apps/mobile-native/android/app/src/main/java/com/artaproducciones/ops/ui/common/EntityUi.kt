@@ -5,19 +5,13 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.SwapHoriz
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -33,9 +27,9 @@ import com.artaproducciones.ops.data.BizEntity
 import com.artaproducciones.ops.ui.modules.Dot
 import com.artaproducciones.ops.ui.modules.ModulesStore
 import com.artaproducciones.ops.ui.modules.rememberHaptics
-import com.artaproducciones.ops.ui.theme.ArtaColors
-import com.artaproducciones.ops.ui.theme.EntityPalette
 import com.artaproducciones.ops.ui.theme.LocalActiveEntity
+import com.artaproducciones.ops.ui.theme.LocalArtaTokens
+import com.artaproducciones.ops.ui.theme.SegmentedControl
 
 /**
  * Cambia la entidad activa (docs/entidades-arta-auditorio.md). La caché de listas era de la
@@ -55,20 +49,23 @@ fun toggleEntity(): BizEntity? = ActiveEntity.current.other.takeIf { switchEntit
 fun entitySwitchedMessage(entity: BizEntity): String = "Ahora en ${entity.short}"
 
 /**
- * Chip de marca del encabezado de Inicio: «Arta Producciones» o «Auditorio Explanada».
- * Para un híbrido es un botón que cambia de entidad; para los demás solo dice dónde está.
+ * Chip de entidad del encabezado de Inicio: «● Arta» (píldora tinta) o «● Auditorio» (plata,
+ * recto). Para un híbrido es un botón que cambia de entidad; para los demás solo dice dónde está.
  */
 @Composable
 fun EntityChip(modifier: Modifier = Modifier) {
     val entity = LocalActiveEntity.current
+    val t = LocalArtaTokens.current
     val hybrid = ActiveEntity.isHybrid
     val haptics = rememberHaptics()
-    val accent = EntityPalette.of(entity).accent
-    val shape = RoundedCornerShape(50)
+    val shape = t.controlShape
+    val fg = if (t.isDark) t.accent else t.onAccent
     val base = modifier
         .clip(shape)
-        .background(accent.copy(alpha = 0.12f))
-        .border(1.dp, accent.copy(alpha = 0.35f), shape)
+        .then(
+            if (t.isDark) Modifier.background(Color(0x0AFFFFFF)).border(1.dp, Color(0x1AFFFFFF), shape)
+            else Modifier.background(t.accent),
+        )
     val clickable = if (hybrid) {
         base.clickable(onClickLabel = "Cambiar a ${entity.other.short}", role = Role.Button) {
             if (toggleEntity() != null) haptics.confirm()
@@ -77,49 +74,36 @@ fun EntityChip(modifier: Modifier = Modifier) {
         base
     }
     Row(
-        clickable.padding(start = 10.dp, end = if (hybrid) 8.dp else 12.dp, top = 6.dp, bottom = 6.dp),
+        clickable.padding(start = 11.dp, end = if (hybrid) 9.dp else 12.dp, top = 6.dp, bottom = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Dot(accent, 8)
-        Spacer(Modifier.width(8.dp))
+        Dot(fg, 6)
+        Spacer(Modifier.width(7.dp))
         Text(
-            entity.brand,
-            color = accent,
-            style = MaterialTheme.typography.labelLarge,
+            entity.short,
+            color = fg,
+            style = MaterialTheme.typography.labelMedium,
             fontWeight = FontWeight.SemiBold,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
         if (hybrid) {
-            Spacer(Modifier.width(6.dp))
-            Icon(Icons.Outlined.SwapHoriz, contentDescription = null, tint = accent, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(5.dp))
+            Icon(Icons.Outlined.SwapHoriz, contentDescription = null, tint = fg.copy(alpha = 0.75f), modifier = Modifier.size(15.dp))
         }
     }
 }
 
-/** Selector «Arta | Auditorio» de Más (solo híbridos). Cada opción con su propio acento. */
-@OptIn(ExperimentalMaterial3Api::class)
+/** Selector «Arta | Auditorio» de Más (solo híbridos). */
 @Composable
 fun EntitySelector(modifier: Modifier = Modifier) {
     val entity = LocalActiveEntity.current
     val options = ActiveEntity.available
     val haptics = rememberHaptics()
-    SingleChoiceSegmentedButtonRow(modifier.fillMaxWidth()) {
-        options.forEachIndexed { i, option ->
-            val accent = EntityPalette.of(option).accent
-            SegmentedButton(
-                selected = option == entity,
-                onClick = { if (switchEntity(option)) haptics.confirm() },
-                shape = SegmentedButtonDefaults.itemShape(index = i, count = options.size),
-                colors = SegmentedButtonDefaults.colors(
-                    activeContainerColor = accent.copy(alpha = 0.18f),
-                    activeContentColor = accent,
-                    activeBorderColor = accent.copy(alpha = 0.6f),
-                    inactiveContainerColor = Color.Transparent,
-                    inactiveContentColor = ArtaColors.Muted,
-                    inactiveBorderColor = ArtaColors.Line,
-                ),
-            ) { Text(option.short, maxLines = 1) }
-        }
-    }
+    SegmentedControl(
+        options = options.map { it.short },
+        selected = options.indexOf(entity).coerceAtLeast(0),
+        onSelect = { i -> if (switchEntity(options[i])) haptics.confirm() },
+        modifier = modifier,
+    )
 }

@@ -16,11 +16,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.VolumeOff
-import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.Bedtime
+import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.Campaign
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Edit
@@ -35,7 +34,6 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -44,7 +42,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -59,6 +56,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -73,7 +72,12 @@ import com.artaproducciones.ops.ui.common.parseInstant
 import com.artaproducciones.ops.ui.common.plainText
 import com.artaproducciones.ops.ui.common.relativeTime
 import com.artaproducciones.ops.ui.theme.ArtaColors
+import com.artaproducciones.ops.ui.theme.ArtaType
 import com.artaproducciones.ops.ui.theme.LocalActiveEntity
+import com.artaproducciones.ops.ui.theme.LocalArtaTokens
+import com.artaproducciones.ops.ui.theme.TextButton
+import com.artaproducciones.ops.ui.theme.artaFilterChipBorder
+import com.artaproducciones.ops.ui.theme.artaFilterChipColors
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.merge
@@ -86,6 +90,7 @@ import java.time.LocalDate
 import java.time.LocalTime
 import java.time.ZoneId
 import java.time.temporal.ChronoUnit
+import java.util.Locale
 
 private enum class Section(val key: String, val title: String) {
     Channels("canales", "Canales"),
@@ -196,12 +201,12 @@ fun ChatListScreen(openChat: (String) -> Unit) {
                 Modifier.fillMaxWidth().padding(start = Space.L + Space.XS, end = Space.XS, top = Space.L, bottom = Space.XS),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text("Chats", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                Text("Chats", style = ArtaType.ScreenTitle, color = ArtaColors.Text, modifier = Modifier.weight(1f).semantics { heading() })
                 IconButton(onClick = { openChat(ChatRoutes.SEARCH) }) { Icon(Icons.Outlined.Search, "Buscar mensajes") }
                 IconButton(onClick = { openChat(ChatRoutes.SAVED) }) { Icon(Icons.Outlined.BookmarkBorder, "Guardados") }
                 Box {
                     IconButton(onClick = { menu = true }) { Icon(Icons.Outlined.MoreVert, "Más opciones") }
-                    DropdownMenu(expanded = menu, onDismissRequest = { menu = false }, containerColor = ArtaColors.Surface2) {
+                    DropdownMenu(expanded = menu, onDismissRequest = { menu = false }, containerColor = ArtaColors.BgElev) {
                         Text(
                             "No molestar",
                             color = ArtaColors.Muted,
@@ -230,7 +235,7 @@ fun ChatListScreen(openChat: (String) -> Unit) {
                     Modifier
                         .fillMaxWidth()
                         .padding(horizontal = Space.L, vertical = Space.XS)
-                        .background(ArtaColors.GoldSoft, CircleShape)
+                        .background(ArtaColors.GoldSoft, LocalArtaTokens.current.controlShape)
                         .padding(start = Space.M),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
@@ -252,15 +257,22 @@ fun ChatListScreen(openChat: (String) -> Unit) {
                     leadingIcon = { Icon(Icons.Outlined.FilterList, null) },
                     trailingIcon = { if (query.isNotEmpty()) IconButton(onClick = { query = "" }) { Icon(Icons.Outlined.Close, "Borrar") } },
                     singleLine = true,
-                    shape = CircleShape,
-                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = ArtaColors.Gold, cursorColor = ArtaColors.Gold),
+                    shape = LocalArtaTokens.current.controlShape,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = ArtaColors.Text.copy(alpha = 0.5f),
+                        unfocusedBorderColor = ArtaColors.LineStrong,
+                        focusedContainerColor = ArtaColors.SurfaceSoft,
+                        unfocusedContainerColor = ArtaColors.SurfaceSoft,
+                        cursorColor = ArtaColors.Text,
+                    ),
                     modifier = Modifier.weight(1f),
                 )
                 FilterChip(
                     selected = unreadOnly,
                     onClick = { unreadOnly = !unreadOnly },
                     label = { Text("No leídos") },
-                    colors = FilterChipDefaults.filterChipColors(selectedContainerColor = ArtaColors.GoldSoft, selectedLabelColor = ArtaColors.Gold),
+                    colors = artaFilterChipColors(),
+                    border = artaFilterChipBorder(unreadOnly),
                 )
             }
             PullToRefreshBox(
@@ -321,7 +333,8 @@ fun ChatListScreen(openChat: (String) -> Unit) {
         FloatingActionButton(
             onClick = { openChat(ChatRoutes.NEW) },
             containerColor = ArtaColors.Gold,
-            contentColor = ArtaColors.Bg,
+            contentColor = ArtaColors.OnAccent,
+            shape = LocalArtaTokens.current.controlShape,
             modifier = Modifier.align(Alignment.BottomEnd).padding(Space.L + Space.XS),
         ) { Icon(Icons.Outlined.Edit, "Nueva conversación") }
     }
@@ -341,14 +354,13 @@ private fun SectionHeader(title: String, unread: Int, open: Boolean, onToggle: (
         )
         Spacer(Modifier.width(Space.XS))
         Text(
-            title,
-            color = ArtaColors.Muted,
-            style = MaterialTheme.typography.labelLarge,
-            fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.weight(1f),
+            title.uppercase(Locale.forLanguageTag("es-MX")),
+            color = ArtaColors.Tertiary,
+            style = ArtaType.Cap,
+            modifier = Modifier.weight(1f).semantics { heading() },
         )
         if (!open && unread > 0) {
-            Badge(containerColor = ArtaColors.Gold, contentColor = ArtaColors.Bg) { Text(if (unread > 99) "99+" else "$unread") }
+            Badge(containerColor = ArtaColors.Gold, contentColor = ArtaColors.OnAccent) { Text(if (unread > 99) "99+" else "$unread") }
         }
     }
 }
@@ -397,7 +409,7 @@ private fun ChannelRow(c: ChannelSummary, online: Boolean, onClick: () -> Unit) 
                 if (c.muted) Icon(Icons.AutoMirrored.Outlined.VolumeOff, "Silenciado", tint = ArtaColors.Muted, modifier = Modifier.size(16.dp))
                 if (unread) {
                     Spacer(Modifier.width(6.dp))
-                    Badge(containerColor = if (c.muted) ArtaColors.Muted else ArtaColors.Gold, contentColor = ArtaColors.Bg) {
+                    Badge(containerColor = if (c.muted) ArtaColors.Tertiary else ArtaColors.Gold, contentColor = ArtaColors.OnAccent) {
                         Text(if (c.unreadCount > 99) "99+" else "${c.unreadCount}")
                     }
                 }

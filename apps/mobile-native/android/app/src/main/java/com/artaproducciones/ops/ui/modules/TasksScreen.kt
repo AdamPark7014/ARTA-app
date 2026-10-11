@@ -25,9 +25,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
@@ -50,6 +48,10 @@ import com.artaproducciones.ops.data.api.TaskDto
 import com.artaproducciones.ops.data.api.userMessage
 import com.artaproducciones.ops.ui.theme.ArtaColors
 import com.artaproducciones.ops.ui.theme.LocalActiveEntity
+import com.artaproducciones.ops.ui.theme.LocalArtaTokens
+import com.artaproducciones.ops.ui.theme.SegmentedControl
+import com.artaproducciones.ops.ui.theme.artaFilterChipBorder
+import com.artaproducciones.ops.ui.theme.artaFilterChipColors
 import java.time.LocalDate
 
 private enum class TaskView(val label: String, val key: String) {
@@ -149,15 +151,12 @@ fun TasksScreen(nav: ModuleNav) {
         Column(Modifier.fillMaxSize()) {
             ScreenTitle("Tareas")
             if (views.size > 1) {
-                SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
-                    views.forEachIndexed { i, v ->
-                        SegmentedButton(
-                            selected = view == v,
-                            onClick = { view = v },
-                            shape = SegmentedButtonDefaults.itemShape(index = i, count = views.size),
-                        ) { Text(v.label, maxLines = 1) }
-                    }
-                }
+                SegmentedControl(
+                    options = views.map { it.label },
+                    selected = views.indexOf(view).coerceAtLeast(0),
+                    onSelect = { view = views[it] },
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                )
             }
             OutlinedTextField(
                 value = query,
@@ -168,6 +167,14 @@ fun TasksScreen(nav: ModuleNav) {
                     if (query.isNotEmpty()) IconButton(onClick = { query = "" }) { Icon(Icons.Default.Close, contentDescription = "Limpiar") }
                 },
                 singleLine = true,
+                shape = LocalArtaTokens.current.controlShape,
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = ArtaColors.Text.copy(alpha = 0.5f),
+                    unfocusedBorderColor = ArtaColors.LineStrong,
+                    focusedContainerColor = ArtaColors.SurfaceSoft,
+                    unfocusedContainerColor = ArtaColors.SurfaceSoft,
+                    cursorColor = ArtaColors.Text,
+                ),
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
             )
             LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -181,6 +188,8 @@ fun TasksScreen(nav: ModuleNav) {
                         selected = filter == f,
                         onClick = { filter = f },
                         label = { Text(if (count > 0) "${f.label} · $count" else f.label) },
+                        colors = artaFilterChipColors(),
+                        border = artaFilterChipBorder(filter == f),
                     )
                 }
             }
@@ -228,7 +237,8 @@ fun TasksScreen(nav: ModuleNav) {
                 icon = { Icon(Icons.Default.Add, contentDescription = null) },
                 text = { Text("Nueva tarea") },
                 containerColor = ArtaColors.Gold,
-                contentColor = ArtaColors.Bg,
+                contentColor = ArtaColors.OnAccent,
+                shape = LocalArtaTokens.current.controlShape,
                 modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp),
             )
         }

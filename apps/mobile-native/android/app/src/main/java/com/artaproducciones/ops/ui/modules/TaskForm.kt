@@ -23,7 +23,6 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Event
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DatePicker
@@ -34,10 +33,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.InputChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
@@ -61,6 +58,9 @@ import com.artaproducciones.ops.data.api.ModulesSession
 import com.artaproducciones.ops.data.api.TaskDto
 import com.artaproducciones.ops.data.api.userMessage
 import com.artaproducciones.ops.ui.theme.ArtaColors
+import com.artaproducciones.ops.ui.theme.Button
+import com.artaproducciones.ops.ui.theme.OutlinedButton
+import com.artaproducciones.ops.ui.theme.TextButton
 import kotlinx.coroutines.launch
 import java.time.Instant
 import java.time.LocalDate
@@ -245,7 +245,7 @@ fun TaskFormSheet(
             error?.let { Text(it, color = ArtaColors.Danger) }
 
             Button(onClick = { save() }, enabled = !saving, modifier = Modifier.fillMaxWidth()) {
-                if (saving) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = ArtaColors.Bg)
+                if (saving) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = ArtaColors.OnAccent)
                 else Text(if (editing) "Guardar cambios" else "Crear tarea")
             }
             Spacer(Modifier.size(8.dp))

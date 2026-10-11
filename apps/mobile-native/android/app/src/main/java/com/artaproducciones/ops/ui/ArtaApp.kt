@@ -8,19 +8,23 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.Chat
+import androidx.compose.material.icons.automirrored.outlined.FormatListBulleted
+import androidx.compose.material.icons.filled.ChatBubble
+import androidx.compose.material.icons.filled.GridView
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.outlined.ChatBubbleOutline
+import androidx.compose.material.icons.outlined.GridView
 import androidx.compose.material.icons.outlined.Home
-import androidx.compose.material.icons.outlined.Menu
 import androidx.compose.material.icons.outlined.Notifications
-import androidx.compose.material.icons.outlined.TaskAlt
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Snackbar
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -34,12 +38,19 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -71,7 +82,11 @@ import com.artaproducciones.ops.ui.more.BlockedUsersScreen
 import com.artaproducciones.ops.ui.more.MoreScreen
 import com.artaproducciones.ops.ui.notifications.NotificationsScreen
 import com.artaproducciones.ops.ui.theme.ArtaColors
+import com.artaproducciones.ops.ui.theme.EntitySwitchBanner
 import com.artaproducciones.ops.ui.theme.LocalActiveEntity
+import com.artaproducciones.ops.ui.theme.LocalArtaTokens
+import com.artaproducciones.ops.ui.theme.TABULAR
+import com.artaproducciones.ops.ui.theme.screenBackground
 import com.artaproducciones.ops.ui.web.ArtaWebScreen
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.StateFlow
@@ -182,10 +197,14 @@ sealed interface DeepLink {
 @Composable
 fun ArtaApp(pendingLink: StateFlow<DeepLink?>, onLinkConsumed: () -> Unit) {
     val state by Session.state.collectAsState()
-    when (val s = state) {
-        Session.State.Loading -> Box(Modifier.fillMaxSize())
-        Session.State.SignedOut -> LoginScreen()
-        is Session.State.SignedIn -> SignedInNav(s.user, pendingLink, onLinkConsumed)
+    // Un solo fondo para toda la app (papel en ARTA; negro con reflector en Auditorio): las
+    // pantallas van transparentes encima y el cambio de entidad lo repinta todo de una vez.
+    Box(Modifier.fillMaxSize().screenBackground(LocalArtaTokens.current)) {
+        when (val s = state) {
+            Session.State.Loading -> Box(Modifier.fillMaxSize())
+            Session.State.SignedOut -> LoginScreen()
+            is Session.State.SignedIn -> SignedInNav(s.user, pendingLink, onLinkConsumed)
+        }
     }
 }
 
@@ -426,27 +445,30 @@ private fun HomeScreen(
         onTab(Tab.Inicio)
     }
 
+    val tokens = LocalArtaTokens.current
+    val barLine = tokens.line
     Scaffold(
-        containerColor = ArtaColors.Bg,
-        snackbarHost = {
-            SnackbarHost(snackbar) { data ->
-                Snackbar(data, containerColor = ArtaColors.Surface2, contentColor = ArtaColors.Text, actionColor = ArtaColors.Gold)
-            }
-        },
+        containerColor = Color.Transparent,
         bottomBar = {
-            NavigationBar(containerColor = ArtaColors.BgElev) {
+            // Barra de pestañas con línea fina arriba, sin indicador: la pestaña activa va en el
+            // color del texto y en SemiBold; las demás en terciario (SISTEMA-VISUAL.md › Apps).
+            NavigationBar(
+                containerColor = if (tokens.isDark) Color(0x05FFFFFF) else Color(0xE6FFFFFF),
+                tonalElevation = 0.dp,
+                modifier = Modifier.drawBehind { drawLine(barLine, Offset(0f, 0f), Offset(size.width, 0f), 1.dp.toPx()) },
+            ) {
                 val colors = NavigationBarItemDefaults.colors(
-                    selectedIconColor = ArtaColors.Bg,
-                    indicatorColor = ArtaColors.Gold,
-                    selectedTextColor = ArtaColors.Gold,
-                    unselectedIconColor = ArtaColors.Muted,
-                    unselectedTextColor = ArtaColors.Muted,
+                    selectedIconColor = ArtaColors.Text,
+                    selectedTextColor = ArtaColors.Text,
+                    indicatorColor = Color.Transparent,
+                    unselectedIconColor = ArtaColors.Tertiary,
+                    unselectedTextColor = ArtaColors.Tertiary,
                 )
                 NavigationBarItem(
                     selected = tab == Tab.Inicio,
                     onClick = ::onHomeTap,
-                    icon = { Icon(Icons.Outlined.Home, null) },
-                    label = { Text("Inicio") },
+                    icon = { TabIcon(tab == Tab.Inicio, Icons.Filled.Home, Icons.Outlined.Home) },
+                    label = { TabLabel("Inicio", tab == Tab.Inicio) },
                     colors = colors,
                     modifier = Modifier
                         // Solo mira (pase inicial, sin consumir): el clic de la pestaña sigue igual.
@@ -473,29 +495,29 @@ private fun HomeScreen(
                 NavigationBarItem(
                     selected = tab == Tab.Chats,
                     onClick = { onTab(Tab.Chats) },
-                    icon = { Counted(chatUnread) { Icon(Icons.AutoMirrored.Outlined.Chat, null) } },
-                    label = { Text("Chats") },
+                    icon = { Counted(chatUnread) { TabIcon(tab == Tab.Chats, Icons.Filled.ChatBubble, Icons.Outlined.ChatBubbleOutline) } },
+                    label = { TabLabel("Chats", tab == Tab.Chats) },
                     colors = colors,
                 )
                 NavigationBarItem(
                     selected = tab == Tab.Tareas,
                     onClick = { onTab(Tab.Tareas) },
-                    icon = { Icon(Icons.Outlined.TaskAlt, null) },
-                    label = { Text("Tareas") },
+                    icon = { TabIcon(tab == Tab.Tareas, Icons.AutoMirrored.Outlined.FormatListBulleted, Icons.AutoMirrored.Outlined.FormatListBulleted) },
+                    label = { TabLabel("Tareas", tab == Tab.Tareas) },
                     colors = colors,
                 )
                 NavigationBarItem(
                     selected = tab == Tab.Avisos,
                     onClick = { onTab(Tab.Avisos) },
-                    icon = { Counted(noticeUnread) { Icon(Icons.Outlined.Notifications, null) } },
-                    label = { Text("Avisos") },
+                    icon = { Counted(noticeUnread) { TabIcon(tab == Tab.Avisos, Icons.Filled.Notifications, Icons.Outlined.Notifications) } },
+                    label = { TabLabel("Avisos", tab == Tab.Avisos) },
                     colors = colors,
                 )
                 NavigationBarItem(
                     selected = tab == Tab.Mas,
                     onClick = { onTab(Tab.Mas) },
-                    icon = { Icon(Icons.Outlined.Menu, null) },
-                    label = { Text("Más") },
+                    icon = { TabIcon(tab == Tab.Mas, Icons.Filled.GridView, Icons.Outlined.GridView) },
+                    label = { TabLabel("Más", tab == Tab.Mas) },
                     colors = colors,
                 )
             }
@@ -509,11 +531,35 @@ private fun HomeScreen(
                 Tab.Avisos -> NotificationsScreen(openLink = openLink, onUnreadChange = { noticeUnread = it })
                 Tab.Mas -> MoreScreen(user = user, nav = moduleNav)
             }
+            // Aviso «Ahora en …» arriba, como en la propuesta: tinta en ARTA, plata en Auditorio.
+            SnackbarHost(snackbar, Modifier.align(Alignment.TopCenter).padding(horizontal = 14.dp, vertical = 10.dp)) { data ->
+                EntitySwitchBanner(data.visuals.message)
+            }
         }
     }
 }
 
 @Composable
+private fun TabIcon(selected: Boolean, filled: ImageVector, outlined: ImageVector) {
+    Icon(if (selected) filled else outlined, contentDescription = null)
+}
+
+@Composable
+private fun TabLabel(text: String, selected: Boolean) {
+    Text(text, fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium)
+}
+
+@Composable
 private fun Counted(count: Int, icon: @Composable () -> Unit) {
-    if (count <= 0) icon() else BadgedBox(badge = { Badge { Text(if (count > 99) "99+" else "$count") } }) { icon() }
+    if (count <= 0) {
+        icon()
+    } else {
+        BadgedBox(
+            badge = {
+                Badge(containerColor = ArtaColors.Gold, contentColor = ArtaColors.OnAccent) {
+                    Text(if (count > 99) "99+" else "$count", style = LocalTextStyle.current.copy(fontFeatureSettings = TABULAR))
+                }
+            },
+        ) { icon() }
+    }
 }

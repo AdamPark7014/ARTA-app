@@ -16,14 +16,12 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
-import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -33,16 +31,20 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.artaproducciones.ops.data.BizEntity
 import com.artaproducciones.ops.data.Session
 import com.artaproducciones.ops.ui.common.LegalLinks
 import com.artaproducciones.ops.ui.theme.ArtaColors
+import com.artaproducciones.ops.ui.theme.ArtaType
+import com.artaproducciones.ops.ui.theme.BrandMark
+import com.artaproducciones.ops.ui.theme.Button
+import com.artaproducciones.ops.ui.theme.TextButton
 import kotlinx.coroutines.launch
 
 @Composable
@@ -90,9 +92,10 @@ fun LoginScreen() {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        Text("ARTA", color = ArtaColors.Gold, fontSize = 44.sp, fontWeight = FontWeight.Black, letterSpacing = 6.sp)
-        Text("Operaciones", color = ArtaColors.Muted, style = MaterialTheme.typography.titleMedium)
-        Spacer(Modifier.height(36.dp))
+        BrandMark(BizEntity.ARTA, Modifier.height(54.dp))
+        Spacer(Modifier.height(14.dp))
+        Text("OPERACIONES", color = ArtaColors.Tertiary, style = ArtaType.Cap.copy(letterSpacing = 3.sp))
+        Spacer(Modifier.height(40.dp))
 
         if (challengeId == null) {
             OutlinedTextField(
@@ -147,7 +150,7 @@ fun LoginScreen() {
             enabled = !busy && (if (challengeId == null) email.isNotBlank() && password.length >= 4 else code.length >= 6),
             modifier = Modifier.fillMaxWidth().height(52.dp),
         ) {
-            if (busy) CircularProgressIndicator(Modifier.height(22.dp), color = ArtaColors.Bg, strokeWidth = 2.dp)
+            if (busy) CircularProgressIndicator(Modifier.height(22.dp), color = ArtaColors.OnAccent, strokeWidth = 2.dp)
             else Text(if (challengeId == null) "Entrar" else "Verificar")
         }
 
@@ -157,7 +160,7 @@ fun LoginScreen() {
             TextButton(onClick = { LegalLinks.open(context, LegalLinks.PRIVACY) }) {
                 Text("Aviso de privacidad", color = ArtaColors.Muted, style = MaterialTheme.typography.bodySmall)
             }
-            Text("·", color = ArtaColors.Muted, style = MaterialTheme.typography.bodySmall)
+            Text("·", color = ArtaColors.Tertiary, style = MaterialTheme.typography.bodySmall)
             TextButton(onClick = { LegalLinks.open(context, LegalLinks.TERMS) }) {
                 Text("Términos", color = ArtaColors.Muted, style = MaterialTheme.typography.bodySmall)
             }

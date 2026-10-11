@@ -1,32 +1,39 @@
 package com.artaproducciones.ops.ui.modules
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.CalendarMonth
-import androidx.compose.material.icons.filled.FactCheck
-import androidx.compose.material.icons.filled.Payments
-import androidx.compose.material.icons.filled.ReceiptLong
-import androidx.compose.material3.AssistChip
-import androidx.compose.material3.AssistChipDefaults
+import androidx.compose.material.icons.outlined.CalendarMonth
+import androidx.compose.material.icons.outlined.FactCheck
+import androidx.compose.material.icons.outlined.Payments
+import androidx.compose.material.icons.outlined.ReceiptLong
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -37,10 +44,25 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.artaproducciones.ops.data.ActiveEntity
+import com.artaproducciones.ops.data.BizEntity
+import com.artaproducciones.ops.data.api.AdvanceDto
 import com.artaproducciones.ops.data.api.EventSummaryDto
 import com.artaproducciones.ops.data.api.ModulesClient
 import com.artaproducciones.ops.data.api.ModulesSession
@@ -48,14 +70,26 @@ import com.artaproducciones.ops.data.api.TaskDto
 import com.artaproducciones.ops.data.api.UserDto
 import com.artaproducciones.ops.data.api.userMessage
 import com.artaproducciones.ops.ui.common.EntityChip
+import com.artaproducciones.ops.ui.theme.ArtaCard
 import com.artaproducciones.ops.ui.theme.ArtaColors
+import com.artaproducciones.ops.ui.theme.ArtaType
+import com.artaproducciones.ops.ui.theme.BrandMark
 import com.artaproducciones.ops.ui.theme.LocalActiveEntity
+import com.artaproducciones.ops.ui.theme.LocalArtaTokens
+import com.artaproducciones.ops.ui.theme.StatusPill
+import com.artaproducciones.ops.ui.theme.TABULAR
+import com.artaproducciones.ops.ui.theme.TextButton
+import com.artaproducciones.ops.ui.theme.Tone
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import java.time.LocalDate
+import java.time.ZoneId
+import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
+import java.time.temporal.ChronoUnit
 
 private val TODAY_LONG = DateTimeFormatter.ofPattern("EEEE d 'de' MMMM", ES_MX)
+private val HM = DateTimeFormatter.ofPattern("HH:mm", ES_MX)
 
 private class InicioData(
     val myTasks: List<TaskDto>?,
@@ -64,7 +98,10 @@ private class InicioData(
     val firstError: String?,
 )
 
-/** Inicio: lo de hoy y lo que viene (misma idea que el dashboard web, sin las cifras técnicas). */
+/**
+ * Inicio (docs/diseno/SISTEMA-VISUAL.md › Apps): saludo, dos tarjetas de cifra, «Hoy» como línea
+ * de tiempo y lo que espera mi visto bueno. Todo sale de lo que ya se carga aquí; nada nuevo del API.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun InicioScreen(user: UserDto, nav: ModuleNav) {
@@ -125,30 +162,25 @@ fun InicioScreen(user: UserDto, nav: ModuleNav) {
         modifier = Modifier.fillMaxSize(),
     ) {
         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 32.dp)) {
-            item {
-                Column(Modifier.padding(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 8.dp)) {
-                    EntityChip()
-                    Spacer(Modifier.height(12.dp))
-                    Text(TODAY_LONG.format(today).replaceFirstChar { it.titlecase(ES_MX) }, color = ArtaColors.Muted)
-                    Text(
-                        "Hola, ${firstName(user.fullName)}",
-                        style = MaterialTheme.typography.headlineMedium,
-                        fontWeight = FontWeight.Bold,
-                    )
-                }
-            }
+            item { Header(user, today, entity) }
             when {
                 !hasContent && d?.firstError != null -> item { ErrorState(d.firstError, onRetry = { tick++ }) }
-                !hasContent || p == null || d == null -> item { SkeletonList(4) }
+                !hasContent || p == null || d == null -> item { InicioSkeleton() }
                 else -> {
                     d.firstError?.let { msg -> item { InlineError(msg) { tick++ } } }
+                    item { KpiRow(p, d, today, entity, nav) }
                     item { QuickActions(p, d.approvals, onNewTask = { creating = true }, nav = nav) }
-                    todayTasks(d.myTasks, today, nav)
+                    val ops = p.opsEntity != null
+                    val todayEvents = if (ops) eventsOn(d.events, today) else emptyList()
+                    if (todayEvents.isNotEmpty()) {
+                        item { TodayPanel(todayEvents, today, onOpen = { nav.openEvent(it) }) }
+                    }
                     val approvals = d.approvals
                     if (approvals != null && (p.approvesMoney || approvals.tasksToReview.isNotEmpty() || approvals.actionableAdvances.isNotEmpty())) {
-                        item { ApprovalsSummary(approvals, p, onOpen = { nav.openApprovals() }) }
+                        item { ApprovalsPanel(approvals, p, nav) }
                     }
-                    if (p.opsEntity != null) upcomingEvents(d.events, today, nav)
+                    todayTasks(d.myTasks, today, nav)
+                    if (ops) upcomingEvents(d.events, today, nav)
                 }
             }
         }
@@ -166,34 +198,406 @@ fun InicioScreen(user: UserDto, nav: ModuleNav) {
     }
 }
 
+// ─── Encabezado ─────────────────────────────────────────────────────────────
+
 @Composable
-private fun QuickActions(p: ModulesPerms, approvals: ApprovalsData?, onNewTask: () -> Unit, nav: ModuleNav) {
-    val pending = approvals?.pendingCount(p) ?: 0
-    LazyRow(
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        if (p.canCreateTasks) item { Action("Nueva tarea", Icons.Default.Add, onNewTask) }
-        if (p.approvesMoney || pending > 0) {
-            item { Action(if (pending > 0) "Aprobaciones · $pending" else "Aprobaciones", Icons.Default.FactCheck) { nav.openApprovals() } }
+private fun Header(user: UserDto, today: LocalDate, entity: BizEntity) {
+    Column(Modifier.padding(start = 20.dp, end = 16.dp, top = 18.dp, bottom = 14.dp)) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            BrandMark(entity)
+            Spacer(Modifier.weight(1f))
+            EntityChip()
         }
-        if (p.opsEntity != null) item { Action("Calendario", Icons.Default.CalendarMonth) { nav.openWeb("/calendar", "Calendario") } }
-        if (p.canPo) item { Action("Órdenes de compra", Icons.Default.ReceiptLong) { nav.openWeb("/purchase-orders", "Órdenes de compra") } }
-        if (p.canSeeFinance) item { Action("Anticipos", Icons.Default.Payments) { nav.openWeb("/advances", "Anticipos") } }
+        Spacer(Modifier.height(22.dp))
+        Text(TODAY_LONG.format(today).uppercase(ES_MX), style = ArtaType.Cap, color = ArtaColors.Tertiary)
+        Spacer(Modifier.height(4.dp))
+        Text(
+            buildAnnotatedString {
+                append("Hola, ")
+                withStyle(SpanStyle(fontWeight = FontWeight.SemiBold)) { append(firstName(user.fullName)) }
+            },
+            style = ArtaType.Greeting,
+            color = ArtaColors.Text,
+            modifier = Modifier.semantics { heading() },
+        )
     }
 }
 
 @Composable
-private fun Action(label: String, icon: ImageVector, onClick: () -> Unit) {
-    AssistChip(
-        onClick = onClick,
-        label = { Text(label) },
-        leadingIcon = { Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp), tint = ArtaColors.Gold) },
-        colors = AssistChipDefaults.assistChipColors(containerColor = ArtaColors.BgElev),
+private fun InicioSkeleton() {
+    Column(Modifier.fillMaxWidth()) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            repeat(2) {
+                ArtaCard(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    SkeletonBlock(height = 10, widthFraction = 0.6f)
+                    SkeletonBlock(height = 26, widthFraction = 0.3f)
+                    SkeletonBlock(height = 10, widthFraction = 0.8f)
+                }
+            }
+        }
+        SkeletonList(3)
+    }
+}
+
+// ─── Cifras ─────────────────────────────────────────────────────────────────
+
+private class Kpi(
+    val label: String,
+    val value: String,
+    val detail: String?,
+    val silver: Boolean = false,
+    /** El detalle es una alerta real (tareas vencidas): va en el color de peligro. */
+    val alert: Boolean = false,
+    val onClick: (() -> Unit)? = null,
+    val clickLabel: String? = null,
+)
+
+private val ACTIONABLE = setOf("OPEN", "IN_PROGRESS", "BLOCKED")
+
+private fun EventSummaryDto.startLocal(): ZonedDateTime? = parseIso(startsAt)?.atZone(ZoneId.systemDefault())
+private fun EventSummaryDto.endLocal(): ZonedDateTime? = parseIso(endsAt)?.atZone(ZoneId.systemDefault())
+
+/** Eventos vivos que tocan [day] (los de varios días cuentan todos sus días). */
+private fun eventsOn(events: List<EventSummaryDto>?, day: LocalDate): List<EventSummaryDto> =
+    events.orEmpty()
+        .filter { it.status !in CLOSED_EVENT }
+        .filter { e ->
+            val start = e.startDay() ?: return@filter false
+            val end = e.endDay() ?: start
+            !day.isBefore(start) && !day.isAfter(end)
+        }
+        .sortedBy { it.startsAt ?: "" }
+
+private fun nextEvent(events: List<EventSummaryDto>?, today: LocalDate): EventSummaryDto? =
+    events.orEmpty()
+        .filter { it.status !in CLOSED_EVENT }
+        .filter { e -> !(e.endDay() ?: e.startDay() ?: return@filter false).isBefore(today) }
+        .minByOrNull { it.startsAt ?: "9999" }
+
+private fun plural(n: Int, one: String, many: String) = "$n ${if (n == 1) one else many}"
+
+@Composable
+private fun KpiRow(p: ModulesPerms, d: InicioData, today: LocalDate, entity: BizEntity, nav: ModuleNav) {
+    val auditorio = entity == BizEntity.EXPLANADA
+    val approvals = d.approvals
+    val approver = approvals != null && (p.approvesMoney || approvals.tasksToReview.isNotEmpty() || approvals.actionableAdvances.isNotEmpty())
+    val next = if (p.opsEntity != null) nextEvent(d.events, today) else null
+    val actionable = d.myTasks.orEmpty().filter { it.status in ACTIONABLE }
+
+    val showKpi: Kpi? = next?.let { e ->
+        val days = e.startDay()?.let { ChronoUnit.DAYS.between(today, it) }
+        val value = when {
+            days == null -> "—"
+            days < 0 -> "En curso"
+            days == 0L -> "Hoy"
+            days == 1L -> "Mañana"
+            else -> "$days días"
+        }
+        Kpi(if (auditorio) "Próximo show" else "Próximo evento", value, e.name, silver = auditorio, onClick = { nav.openEvent(e.id) }, clickLabel = "Abrir ${e.name}")
+    }
+    val approvalsKpi: Kpi? = approvals?.takeIf { approver }?.let { a ->
+        val orders = a.toAuthorize(p).size + a.toPay(p).size
+        val advances = a.actionableAdvances.size
+        val deliveries = a.tasksToReview.size
+        val parts = listOfNotNull(
+            orders.takeIf { it > 0 }?.let { "$it OC" },
+            advances.takeIf { it > 0 }?.let { plural(it, "anticipo", "anticipos") },
+            deliveries.takeIf { it > 0 }?.let { plural(it, "entrega", "entregas") },
+        )
+        Kpi("Por aprobar", "${a.pendingCount(p)}", parts.joinToString(" · ").ifEmpty { "Nada pendiente" }, onClick = { nav.openApprovals() }, clickLabel = "Abrir aprobaciones")
+    }
+    val openKpi = Kpi(
+        "Abiertas",
+        "${actionable.size}",
+        if (actionable.isEmpty()) "Estás al día" else "tareas mías",
+        onClick = { nav.openWeb("/tasks", "Tareas") },
+        clickLabel = "Abrir tareas",
+    )
+    // Auditorio pone primero el próximo show (como la propuesta); ARTA, lo que espera su visto bueno.
+    val first = (if (auditorio) showKpi ?: approvalsKpi else approvalsKpi ?: showKpi) ?: openKpi
+
+    val dueToday = actionable.count { it.bucket(today) == DueBucket.TODAY }
+    val overdue = actionable.count { it.isOverdue(today) }
+    val second = Kpi(
+        "Vencen hoy",
+        "$dueToday",
+        when {
+            actionable.isEmpty() -> "Sin tareas abiertas"
+            overdue > 0 -> "${plural(overdue, "vencida", "vencidas")} · de ${actionable.size} abiertas"
+            else -> "de ${plural(actionable.size, "abierta", "abiertas")}"
+        },
+        alert = overdue > 0,
+        onClick = { nav.openWeb("/tasks", "Tareas") },
+        clickLabel = "Abrir tareas",
+    )
+
+    Row(
+        Modifier.fillMaxWidth().height(IntrinsicSize.Min).padding(horizontal = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        KpiCard(first, Modifier.weight(1f).fillMaxHeight())
+        KpiCard(second, Modifier.weight(1f).fillMaxHeight())
+    }
+}
+
+@Composable
+private fun KpiCard(k: Kpi, modifier: Modifier) {
+    val t = LocalArtaTokens.current
+    ArtaCard(
+        modifier = modifier.semantics(mergeDescendants = true) {},
+        onClick = k.onClick,
+        onClickLabel = k.clickLabel,
+        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 13.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Text(k.label.uppercase(ES_MX), style = ArtaType.Cap.copy(fontSize = 10.sp, letterSpacing = 1.4.sp), color = ArtaColors.Tertiary, maxLines = 1)
+        val valueStyle = if (k.silver) ArtaType.Kpi.copy(brush = t.accentBrush) else ArtaType.Kpi.copy(color = ArtaColors.Text)
+        Text(k.value, style = valueStyle, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        k.detail?.let {
+            Text(it, style = MaterialTheme.typography.bodySmall, color = if (k.alert) ArtaColors.Danger else ArtaColors.Tertiary, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        }
+    }
+}
+
+// ─── Acciones rápidas ───────────────────────────────────────────────────────
+
+@Composable
+private fun QuickActions(p: ModulesPerms, approvals: ApprovalsData?, onNewTask: () -> Unit, nav: ModuleNav) {
+    val pending = approvals?.pendingCount(p) ?: 0
+    LazyRow(
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        if (p.canCreateTasks) item { ActionPill("Nueva tarea", Icons.Default.Add, primary = true, onClick = onNewTask) }
+        if (p.approvesMoney || pending > 0) {
+            item { ActionPill(if (pending > 0) "Aprobaciones · $pending" else "Aprobaciones", Icons.Outlined.FactCheck) { nav.openApprovals() } }
+        }
+        if (p.opsEntity != null) item { ActionPill("Calendario", Icons.Outlined.CalendarMonth) { nav.openWeb("/calendar", "Calendario") } }
+        if (p.canPo) item { ActionPill("Órdenes de compra", Icons.Outlined.ReceiptLong) { nav.openWeb("/purchase-orders", "Órdenes de compra") } }
+        if (p.canSeeFinance) item { ActionPill("Anticipos", Icons.Outlined.Payments) { nav.openWeb("/advances", "Anticipos") } }
+    }
+}
+
+/** Botón píldora de acción: el principal en acento; los demás, superficie con línea fuerte. */
+@Composable
+private fun ActionPill(label: String, icon: ImageVector, primary: Boolean = false, onClick: () -> Unit) {
+    val t = LocalArtaTokens.current
+    val shape = t.controlShape
+    val fg = if (primary) t.onAccent else t.text
+    val paint = if (primary) Modifier.background(t.accentBrush) else Modifier.background(t.surface).border(1.dp, t.lineStrong, shape)
+    Row(
+        Modifier
+            .minimumInteractiveComponentSize()
+            .clip(shape)
+            .then(paint)
+            .clickable(role = Role.Button, onClick = onClick)
+            .padding(start = 12.dp, end = 15.dp, top = 8.dp, bottom = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(icon, contentDescription = null, tint = fg, modifier = Modifier.size(17.dp))
+        Spacer(Modifier.width(7.dp))
+        Text(label, color = fg, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold, maxLines = 1)
+    }
+}
+
+// ─── Hoy (línea de tiempo) ──────────────────────────────────────────────────
+
+private class Moment(val time: String, val done: Boolean, val title: String, val detail: String?, val eventId: String)
+
+private fun momentsOf(events: List<EventSummaryDto>, today: LocalDate, now: ZonedDateTime): List<Moment> {
+    val single = events.size == 1
+    return events.flatMap { e ->
+        val start = e.startLocal()
+        val end = e.endLocal()
+        val place = e.venue?.takeIf { it.isNotBlank() }
+        val live = start != null && !now.isBefore(start) && (end == null || now.isBefore(end))
+        val startsToday = start?.toLocalDate() == today
+        buildList {
+            add(
+                Moment(
+                    time = if (startsToday && start != null) HM.format(start) else "Hoy",
+                    done = start != null && !now.isBefore(start),
+                    // Con un solo evento su nombre ya va en el encabezado del panel.
+                    title = if (single) (if (startsToday) "Inicio" else "Continúa") else e.name,
+                    detail = listOfNotNull(place, "en curso".takeIf { live }).joinToString(" · ").ifBlank { null },
+                    eventId = e.id,
+                ),
+            )
+            if (end != null && end.toLocalDate() == today) {
+                add(Moment(HM.format(end), !now.isBefore(end), "Cierre", if (single) null else e.name, e.id))
+            }
+        }
+    }
+}
+
+@Composable
+private fun TodayPanel(events: List<EventSummaryDto>, today: LocalDate, onOpen: (String) -> Unit) {
+    val moments = remember(events, today) { momentsOf(events, today, ZonedDateTime.now()) }
+    ArtaCard(
+        Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 8.dp),
+    ) {
+        PanelHeader("Hoy", if (events.size == 1) events.first().name else plural(events.size, "evento", "eventos"))
+        Spacer(Modifier.height(6.dp))
+        moments.forEach { m -> TimelineRow(m) { onOpen(m.eventId) } }
+    }
+}
+
+@Composable
+private fun PanelHeader(title: String, trailing: String?, onTrailing: (() -> Unit)? = null) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            title,
+            style = ArtaType.PanelTitle,
+            color = ArtaColors.Text,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f).semantics { heading() },
+        )
+        if (trailing != null) {
+            Spacer(Modifier.width(12.dp))
+            val click = if (onTrailing != null) {
+                Modifier
+                    .minimumInteractiveComponentSize()
+                    .clip(LocalArtaTokens.current.controlShape)
+                    .clickable(role = Role.Button, onClick = onTrailing)
+                    .padding(horizontal = 6.dp, vertical = 4.dp)
+            } else {
+                Modifier
+            }
+            Text(
+                trailing,
+                style = MaterialTheme.typography.bodySmall,
+                color = ArtaColors.Tertiary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.widthIn(max = 170.dp).then(click),
+            )
+        }
+    }
+}
+
+@Composable
+private fun TimelineRow(m: Moment, onClick: () -> Unit) {
+    val t = LocalArtaTokens.current
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(t.itemShape)
+            .clickable(onClick = onClick)
+            .padding(vertical = 7.dp),
+        verticalAlignment = Alignment.Top,
+    ) {
+        Text(m.time, style = ArtaType.Time, color = ArtaColors.Tertiary, modifier = Modifier.width(52.dp).padding(top = 1.dp))
+        Box(Modifier.width(22.dp).padding(top = 4.dp), contentAlignment = Alignment.TopCenter) { TimelineDot(m.done) }
+        Column(Modifier.weight(1f).padding(start = 6.dp)) {
+            Text(m.title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium, color = ArtaColors.Text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            m.detail?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = ArtaColors.Tertiary, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+        }
+    }
+}
+
+/** Punto de la línea de tiempo: relleno = hecho o en curso; contorno = pendiente. En Auditorio, con brillo. */
+@Composable
+private fun TimelineDot(done: Boolean) {
+    val t = LocalArtaTokens.current
+    val accent = t.accent
+    val glow = if (done && t.isDark) {
+        Modifier.drawBehind {
+            drawCircle(Brush.radialGradient(listOf(accent.copy(alpha = 0.45f), Color.Transparent)), radius = size.minDimension * 1.2f)
+        }
+    } else {
+        Modifier
+    }
+    Box(
+        glow
+            .size(10.dp)
+            .clip(CircleShape)
+            .background(if (done) accent else t.bg)
+            .border(2.dp, accent, CircleShape),
     )
 }
 
-private val ACTIONABLE = setOf("OPEN", "IN_PROGRESS", "BLOCKED")
+// ─── Esperan tu visto bueno ─────────────────────────────────────────────────
+
+private class Pending(val title: String, val detail: String?, val amount: String?, val status: String, val action: Boolean, val open: () -> Unit)
+
+private fun AdvanceDto.who(): String? = uploadedBy?.fullName?.takeIf { it.isNotBlank() }?.let { firstName(it) }
+
+private fun joinDetail(vararg parts: String?): String? = parts.filterNotNull().filter { it.isNotBlank() }.joinToString(" · ").ifBlank { null }
+
+@Composable
+private fun ApprovalsPanel(a: ApprovalsData, p: ModulesPerms, nav: ModuleNav) {
+    val items = buildList {
+        a.tasksToReview.forEach { t ->
+            val who = t.assigneePeople().firstOrNull()?.fullName?.let(::firstName)
+            add(Pending("Entrega · ${t.title}", joinDetail(who, t.event?.name), null, "Revisar", true) { nav.openTask(t.id) })
+        }
+        a.toAuthorize(p).forEach { o ->
+            add(Pending("Orden de compra · ${poRubroLabel(o.row.rubro)}", joinDetail(o.row.vendorName, o.row.eventName), money(o.row.amount), "Autorizar", true) { nav.openApprovals() })
+        }
+        a.toPay(p).forEach { o ->
+            // Fuera de la ventana de pagos no hay nada que hacer todavía: va como informativo.
+            add(Pending("Orden de compra · ${poRubroLabel(o.row.rubro)}", joinDetail(o.row.vendorName, o.row.eventName), money(o.row.amount), if (a.canPayNow) "Pagar" else "Por pagar", a.canPayNow) { nav.openApprovals() })
+        }
+        a.actionableAdvances.forEach { ad ->
+            val toApprove = ad.advanceStatus == "PENDING"
+            add(Pending("Anticipo · ${ad.conceptLabel()}", joinDetail(ad.who(), ad.event?.name), advanceAmountLabel(ad.amount), if (toApprove) "Aprobar" else "Pagar", true) { nav.openApprovals() })
+        }
+    }
+    ArtaCard(
+        Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
+        contentPadding = PaddingValues(start = 16.dp, end = 10.dp, top = 8.dp, bottom = 6.dp),
+    ) {
+        PanelHeader("Esperan tu visto bueno", "Ver todo", onTrailing = { nav.openApprovals() })
+        if (items.isEmpty()) {
+            Text(
+                "Nada pendiente de tu visto bueno.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = ArtaColors.Muted,
+                modifier = Modifier.padding(top = 2.dp, bottom = 10.dp),
+            )
+        }
+        items.take(5).forEachIndexed { i, item ->
+            if (i > 0) HorizontalDivider(thickness = 1.dp, color = ArtaColors.Line, modifier = Modifier.padding(end = 6.dp))
+            PendingRow(item)
+        }
+        if (items.size > 5) {
+            Text(
+                "${items.size - 5} más en Aprobaciones",
+                style = MaterialTheme.typography.bodySmall,
+                color = ArtaColors.Tertiary,
+                modifier = Modifier.padding(top = 2.dp, bottom = 8.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun PendingRow(item: Pending) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clickable(onClick = item.open)
+            .padding(top = 11.dp, bottom = 11.dp, end = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(item.title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium, color = ArtaColors.Text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            item.detail?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = ArtaColors.Tertiary, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+        }
+        Spacer(Modifier.width(10.dp))
+        Text(
+            item.amount ?: "—",
+            style = MaterialTheme.typography.bodyMedium.merge(TextStyle(fontFeatureSettings = TABULAR)),
+            color = if (item.amount != null) ArtaColors.Text else ArtaColors.Tertiary,
+        )
+        Spacer(Modifier.width(10.dp))
+        StatusPill(item.status, if (item.action) Tone.Action else Tone.Info)
+    }
+}
+
+// ─── Mis tareas de hoy y próximos días ──────────────────────────────────────
 
 private fun androidx.compose.foundation.lazy.LazyListScope.todayTasks(tasks: List<TaskDto>?, today: LocalDate, nav: ModuleNav) {
     if (tasks == null) return
@@ -203,7 +607,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.todayTasks(tasks: Lis
         .sortedBy { it.dueAt ?: "" }
     val overdue = urgent.count { it.isOverdue(today) }
     item {
-        SectionTitle("Mis tareas de hoy", count = urgent.size.takeIf { it > 0 }) {
+        SectionTitle("Mis tareas de hoy", count = urgent.size.takeIf { it > 0 }, modifier = Modifier.padding(top = 8.dp)) {
             if (overdue > 0) Text("$overdue vencidas", style = MaterialTheme.typography.labelMedium, color = ArtaColors.Danger)
         }
     }
@@ -212,8 +616,9 @@ private fun androidx.compose.foundation.lazy.LazyListScope.todayTasks(tasks: Lis
             val rest = actionable.size
             Text(
                 if (rest > 0) "Nada vence hoy. Tienes $rest pendiente${if (rest == 1) "" else "s"} en Tareas." else "Estás al día: no tienes tareas pendientes.",
+                style = MaterialTheme.typography.bodyMedium,
                 color = ArtaColors.Muted,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
             )
         }
     } else {
@@ -224,52 +629,11 @@ private fun androidx.compose.foundation.lazy.LazyListScope.todayTasks(tasks: Lis
                 Text(
                     "$more pendiente${if (more == 1) "" else "s"} más en Tareas",
                     style = MaterialTheme.typography.bodySmall,
-                    color = ArtaColors.Muted,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                    color = ArtaColors.Tertiary,
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
                 )
             }
         }
-    }
-}
-
-@Composable
-private fun ApprovalsSummary(a: ApprovalsData, p: ModulesPerms, onOpen: () -> Unit) {
-    val toAuthorize = a.toAuthorize(p)
-    val toPay = a.toPay(p)
-    val advancesToApprove = a.actionableAdvances.filter { it.advanceStatus == "PENDING" }
-    val advancesToPay = a.actionableAdvances.filter { it.advanceStatus == "APPROVED" }
-    val total = a.tasksToReview.size + toAuthorize.size + toPay.size + advancesToApprove.size + advancesToPay.size
-    SectionTitle("Por aprobar", count = total.takeIf { it > 0 })
-    ModuleCard(Modifier.padding(horizontal = 16.dp, vertical = 4.dp), onClick = onOpen) {
-        if (total == 0) {
-            Text("Nada pendiente de tu visto bueno.", color = ArtaColors.Muted)
-        } else {
-            if (a.tasksToReview.isNotEmpty()) {
-                SummaryLine("Entregas de tareas", "${a.tasksToReview.size}")
-            }
-            if (toAuthorize.isNotEmpty()) {
-                SummaryLine("Órdenes por autorizar", "${toAuthorize.size} · ${money(toAuthorize.sumOf { it.row.amount })}")
-            }
-            if (toPay.isNotEmpty()) {
-                SummaryLine("Órdenes por pagar", "${toPay.size} · ${money(toPay.sumOf { it.row.amount })}")
-            }
-            if (advancesToApprove.isNotEmpty()) {
-                SummaryLine("Anticipos por aprobar", "${advancesToApprove.size} · ${money(advancesToApprove.sumOf { advanceAmount(it.amount) ?: 0.0 })}")
-            }
-            if (advancesToPay.isNotEmpty()) {
-                SummaryLine("Anticipos por pagar", "${advancesToPay.size} · ${money(advancesToPay.sumOf { advanceAmount(it.amount) ?: 0.0 })}")
-            }
-        }
-    }
-}
-
-@Composable
-private fun SummaryLine(label: String, value: String) {
-    Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-        Dot(ArtaColors.Gold, 8)
-        Spacer(Modifier.width(10.dp))
-        Text(label, modifier = Modifier.weight(1f))
-        Text(value, fontWeight = FontWeight.SemiBold, color = ArtaColors.Gold)
     }
 }
 
@@ -285,12 +649,19 @@ private fun androidx.compose.foundation.lazy.LazyListScope.upcomingEvents(events
         }
         .sortedBy { it.startsAt ?: "" }
     item {
-        SectionTitle("Próximos 7 días", count = upcoming.size.takeIf { it > 0 }) {
+        SectionTitle("Próximos 7 días", count = upcoming.size.takeIf { it > 0 }, modifier = Modifier.padding(top = 8.dp)) {
             TextButton(onClick = { nav.openWeb("/events", "Eventos") }) { Text("Ver eventos") }
         }
     }
     if (upcoming.isEmpty()) {
-        item { Text("Sin shows en los próximos 7 días.", color = ArtaColors.Muted, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) }
+        item {
+            Text(
+                "Sin shows en los próximos 7 días.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = ArtaColors.Muted,
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
+            )
+        }
     }
     items(upcoming, key = { "e-${it.id}" }) { e -> EventRow(e, onClick = { nav.openEvent(e.id) }) }
 }

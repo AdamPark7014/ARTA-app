@@ -12,21 +12,19 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AttachFile
-import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -39,6 +37,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.artaproducciones.ops.data.api.AdvanceDto
 import com.artaproducciones.ops.ui.theme.ArtaColors
+import com.artaproducciones.ops.ui.theme.Button
+import com.artaproducciones.ops.ui.theme.LocalArtaTokens
+import com.artaproducciones.ops.ui.theme.OutlinedButton
+import com.artaproducciones.ops.ui.theme.TABULAR
+import com.artaproducciones.ops.ui.theme.TextButton
 
 // ─── Anticipos (docs/ANTICIPOS-CONTRATO.md) ─────────────────────────────────
 
@@ -58,11 +61,13 @@ fun advanceStatusLabel(status: String?): String = when (status) {
     else -> "Anticipo"
 }
 
+@Composable
+@ReadOnlyComposable
 fun advanceStatusColor(status: String?): Color = when (status) {
     "PENDING" -> ArtaColors.Gold
     "APPROVED" -> ArtaColors.Read
     "REJECTED" -> ArtaColors.Danger
-    "PAID" -> OkGreen
+    "PAID" -> ArtaColors.Ok
     else -> ArtaColors.Muted
 }
 
@@ -83,7 +88,7 @@ internal fun AdvanceCard(
     onPaid: () -> Unit,
 ) {
     val outer = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
-    ModuleCard(if (highlighted) outer.border(1.5.dp, ArtaColors.Gold, RoundedCornerShape(12.dp)) else outer) {
+    ModuleCard(if (highlighted) outer.border(1.5.dp, ArtaColors.Gold, LocalArtaTokens.current.cardShape) else outer) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 advance.conceptLabel(),
@@ -93,7 +98,7 @@ internal fun AdvanceCard(
                 modifier = Modifier.weight(1f),
             )
             Spacer(Modifier.width(8.dp))
-            Text(advanceAmountLabel(advance.amount), fontWeight = FontWeight.Bold, color = ArtaColors.Gold)
+            Text(advanceAmountLabel(advance.amount), fontWeight = FontWeight.SemiBold, color = ArtaColors.Text, style = LocalTextStyle.current.copy(fontFeatureSettings = TABULAR))
         }
         advance.event?.name?.takeIf { it.isNotBlank() }?.let {
             Text(it, style = MaterialTheme.typography.bodySmall, color = ArtaColors.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -196,7 +201,7 @@ internal fun AdvanceRejectSheet(advance: AdvanceDto, onConfirm: (String) -> Unit
                 TextButton(onClick = onDismiss, modifier = Modifier.weight(1f)) { Text("Cancelar") }
                 Button(
                     onClick = { if (advanceReasonValid(reason)) onConfirm(reason.trim()) else showError = true },
-                    colors = ButtonDefaults.buttonColors(containerColor = ArtaColors.Danger, contentColor = Color.White),
+                    colors = ButtonDefaults.buttonColors(containerColor = ArtaColors.Danger, contentColor = ArtaColors.OnDanger),
                     modifier = Modifier.weight(1f),
                 ) { Text("Rechazar") }
             }

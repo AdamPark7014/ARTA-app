@@ -8,6 +8,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -16,7 +18,7 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.artaproducciones.ops.ui.theme.ArtaColors
+import com.artaproducciones.ops.ui.theme.LocalArtaTokens
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -62,12 +64,12 @@ fun dayLabel(date: LocalDate): String {
 
 private val MENTION = Regex("""\[@([^\]]{1,80})]\(user:([\w-]{1,64})\)""")
 
-/** Texto de un mensaje con las menciones `[@Nombre](user:id)` como «@Nombre» en dorado. */
+/** Texto de un mensaje con las menciones `[@Nombre](user:id)` como «@Nombre» en negritas. */
 fun mentionText(body: String): AnnotatedString = buildAnnotatedString {
     var last = 0
     MENTION.findAll(body).forEach { m ->
         append(body.substring(last, m.range.first))
-        withStyle(SpanStyle(color = ArtaColors.Gold, fontWeight = FontWeight.SemiBold)) { append("@" + m.groupValues[1]) }
+        withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append("@" + m.groupValues[1]) }
         last = m.range.last + 1
     }
     append(body.substring(last))
@@ -87,15 +89,17 @@ fun initialsOf(name: String): String = name.trim().removePrefix("#")
 
 @Composable
 fun Avatar(name: String, size: Dp = 44.dp, modifier: Modifier = Modifier, channel: Boolean = false) {
+    val t = LocalArtaTokens.current
     Box(
         modifier = modifier
             .size(size)
-            .background(if (channel) ArtaColors.Surface2 else ArtaColors.Gold, CircleShape),
+            .clip(CircleShape)
+            .background(if (channel) SolidColor(t.fill) else t.accentBrush),
         contentAlignment = Alignment.Center,
     ) {
         Text(
             text = if (channel) "#" else initialsOf(name),
-            color = if (channel) ArtaColors.Gold else ArtaColors.Bg,
+            color = if (channel) t.text else t.onAccent,
             fontWeight = FontWeight.Bold,
             fontSize = (size.value * 0.38f).sp,
         )

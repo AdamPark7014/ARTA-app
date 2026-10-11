@@ -21,8 +21,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CloudOff
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -41,6 +39,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.artaproducciones.ops.ui.common.Avatar
 import com.artaproducciones.ops.ui.theme.ArtaColors
+import com.artaproducciones.ops.ui.theme.Button
+import com.artaproducciones.ops.ui.theme.LocalArtaTokens
 
 /** Escala de espacios del chat (4/8/12/16/24). */
 object Space {
@@ -51,7 +51,6 @@ object Space {
     val XL = 24.dp
 }
 
-val OnlineGreen = Color(0xFF22C55E)
 
 /** Nombres de un directo de grupo: el API los manda como «Ana, Luis, Marta». */
 fun groupNames(name: String): List<String> = name.split(',').map { it.trim() }.filter { it.isNotBlank() }
@@ -72,7 +71,7 @@ fun PresenceAvatar(name: String, size: Dp = 44.dp, online: Boolean = false, modi
             Box(
                 Modifier.align(Alignment.BottomEnd).size(dot)
                     .background(ArtaColors.Bg, CircleShape).padding(2.dp)
-                    .background(OnlineGreen, CircleShape),
+                    .background(ArtaColors.Ok, CircleShape),
             )
         }
     }
@@ -111,13 +110,15 @@ fun ConversationAvatar(name: String, kind: String?, isGroupDm: Boolean, online: 
 @Composable
 fun skeletonAlpha(): Float {
     val t = rememberInfiniteTransition(label = "skeleton")
-    val a by t.animateFloat(0.35f, 0.75f, infiniteRepeatable(tween(850), RepeatMode.Reverse), label = "alpha")
+    val a by t.animateFloat(0.5f, 1f, infiniteRepeatable(tween(850), RepeatMode.Reverse), label = "alpha")
     return a
 }
 
 @Composable
 fun SkeletonBox(modifier: Modifier, alpha: Float, shape: Shape = RoundedCornerShape(6.dp)) {
-    Box(modifier.alpha(alpha).background(ArtaColors.Surface2, shape))
+    // Sobre el papel de ARTA el relleno neutro casi no se ve: un gris un punto más hondo.
+    val tone = if (LocalArtaTokens.current.isDark) ArtaColors.Surface2 else Color(0xFFE8E6E0)
+    Box(modifier.alpha(alpha).background(tone, shape))
 }
 
 /** Esqueleto de filas tipo lista (chats, búsqueda, guardados). */
@@ -151,7 +152,7 @@ fun ConversationSkeleton(modifier: Modifier = Modifier) {
                     SkeletonBox(Modifier.size(32.dp), a, CircleShape)
                     Spacer(Modifier.width(Space.S))
                 }
-                SkeletonBox(Modifier.width(w.dp).height(44.dp), a, RoundedCornerShape(16.dp))
+                SkeletonBox(Modifier.width(w.dp).height(44.dp), a, RoundedCornerShape(if (LocalArtaTokens.current.isPill) 18.dp else 6.dp))
             }
         }
     }
@@ -172,7 +173,7 @@ fun ErrorState(message: String?, onRetry: () -> Unit, modifier: Modifier = Modif
         Spacer(Modifier.height(Space.XS))
         Button(
             onClick = onRetry,
-            colors = ButtonDefaults.buttonColors(containerColor = ArtaColors.Gold, contentColor = ArtaColors.Bg),
+            
         ) { Text("Reintentar") }
     }
 }

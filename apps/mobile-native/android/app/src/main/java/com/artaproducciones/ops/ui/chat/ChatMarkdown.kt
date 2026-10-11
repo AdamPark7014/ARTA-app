@@ -53,10 +53,10 @@ private val ORDERED = Regex("""^(\d{1,3})[.)]\s+(.*)$""")
 private val BULLET = Regex("""^[-•*]\s+(.*)$""")
 private val QUOTE = Regex("""^>\s?(.*)$""")
 
-private val CodeBg = Color(0xFF0B0B0E)
-private val CodeFg = Color(0xFFE4E4E7)
-private val MentionStyle = SpanStyle(color = ArtaColors.Gold, background = ArtaColors.GoldSoft, fontWeight = FontWeight.SemiBold)
-private val LinkStyles = TextLinkStyles(SpanStyle(color = ArtaColors.Read, textDecoration = TextDecoration.Underline))
+// Menciones y enlaces heredan el color del texto que los rodea (monocromo): se leen igual en mi
+// burbuja (tinta o grafito) y en la ajena. El gris al 15 % marca la mención en los dos modos.
+private val MentionStyle = SpanStyle(background = Color(0x26888888), fontWeight = FontWeight.Bold)
+private val LinkStyles = TextLinkStyles(SpanStyle(textDecoration = TextDecoration.Underline, fontWeight = FontWeight.SemiBold))
 
 fun parseBlocks(body: String): List<MdBlock> {
     val out = ArrayList<MdBlock>()
@@ -167,7 +167,7 @@ private fun AnnotatedString.Builder.appendInline(text: String) {
         append(text.substring(pos, best.range.first))
         var end = best.range.last + 1
         when (bestTok) {
-            Tok.Code -> withStyle(SpanStyle(fontFamily = FontFamily.Monospace, background = CodeBg, color = CodeFg)) {
+            Tok.Code -> withStyle(SpanStyle(fontFamily = FontFamily.Monospace, background = Color(0x26888888))) {
                 append("\u2009" + best.groupValues[1] + "\u2009")
             }
             Tok.Mention -> withStyle(MentionStyle) { append("\u2009@" + best.groupValues[1] + "\u2009") }
@@ -218,11 +218,11 @@ private fun MdBlockView(b: MdBlock, style: TextStyle, color: Color) {
         is MdBlock.Code -> Text(
             b.text,
             style = style.copy(fontFamily = FontFamily.Monospace, fontSize = 13.sp, lineHeight = 18.sp),
-            color = CodeFg,
+            color = ArtaColors.Text,
             softWrap = false,
             modifier = Modifier
                 .clip(RoundedCornerShape(6.dp))
-                .background(CodeBg)
+                .background(ArtaColors.Surface2)
                 .horizontalScroll(rememberScrollState())
                 .padding(horizontal = 8.dp, vertical = 6.dp),
         )
@@ -231,11 +231,11 @@ private fun MdBlockView(b: MdBlock, style: TextStyle, color: Color) {
             style = style,
             color = color.copy(alpha = 0.85f),
             modifier = Modifier
-                .drawBehind { drawRect(ArtaColors.Gold, size = Size(3.dp.toPx(), size.height)) }
+                .drawBehind { drawRect(color.copy(alpha = 0.45f), size = Size(3.dp.toPx(), size.height)) }
                 .padding(start = 11.dp),
         )
         is MdBlock.Item -> Row {
-            Text(b.marker, style = style, color = ArtaColors.Muted, modifier = Modifier.widthIn(min = 18.dp))
+            Text(b.marker, style = style, color = color.copy(alpha = 0.7f), modifier = Modifier.widthIn(min = 18.dp))
             Text(remember(b.text) { inlineMarkdown(b.text) }, style = style, color = color, modifier = Modifier.padding(start = 4.dp))
         }
     }

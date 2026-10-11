@@ -83,6 +83,7 @@ import com.artaproducciones.ops.data.api.ChatAttachment
 import com.artaproducciones.ops.data.api.userMessage
 import com.artaproducciones.ops.ui.common.fileSize
 import com.artaproducciones.ops.ui.theme.ArtaColors
+import com.artaproducciones.ops.ui.theme.LocalArtaTokens
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -97,10 +98,10 @@ fun AttachSheet(onPick: (AttachSource) -> Unit, onDismiss: () -> Unit) {
             Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 12.dp),
             horizontalArrangement = Arrangement.SpaceEvenly,
         ) {
-            AttachOption(Icons.Outlined.PhotoCamera, "Cámara", Color(0xFFE85D75)) { onPick(AttachSource.Camera) }
-            AttachOption(Icons.Outlined.Videocam, "Video", Color(0xFFB86BE0)) { onPick(AttachSource.Video) }
-            AttachOption(Icons.Outlined.PhotoLibrary, "Galería", Color(0xFF4F9DF7)) { onPick(AttachSource.Gallery) }
-            AttachOption(Icons.Outlined.Description, "Documento", Color(0xFF7C6CF2)) { onPick(AttachSource.Document) }
+            AttachOption(Icons.Outlined.PhotoCamera, "Cámara") { onPick(AttachSource.Camera) }
+            AttachOption(Icons.Outlined.Videocam, "Video") { onPick(AttachSource.Video) }
+            AttachOption(Icons.Outlined.PhotoLibrary, "Galería") { onPick(AttachSource.Gallery) }
+            AttachOption(Icons.Outlined.Description, "Documento") { onPick(AttachSource.Document) }
         }
         Text(
             "Fotos, videos, notas de voz y documentos hasta 100 MB",
@@ -113,13 +114,15 @@ fun AttachSheet(onPick: (AttachSource) -> Unit, onDismiss: () -> Unit) {
 }
 
 @Composable
-private fun AttachOption(icon: ImageVector, label: String, tint: Color, onClick: () -> Unit) {
+private fun AttachOption(icon: ImageVector, label: String, onClick: () -> Unit) {
+    val t = LocalArtaTokens.current
     Column(
-        Modifier.clip(RoundedCornerShape(12.dp)).clickable(onClick = onClick).padding(8.dp),
+        Modifier.clip(t.itemShape).clickable(onClick = onClick).padding(8.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Box(Modifier.size(56.dp).background(tint, CircleShape), contentAlignment = Alignment.Center) {
-            Icon(icon, null, tint = Color.White, modifier = Modifier.size(26.dp))
+        // Monocromo: los cuatro en el acento de la entidad (tinta o plata), como el resto de la app.
+        Box(Modifier.size(56.dp).clip(if (t.isPill) CircleShape else RoundedCornerShape(6.dp)).background(t.accentBrush), contentAlignment = Alignment.Center) {
+            Icon(icon, null, tint = t.onAccent, modifier = Modifier.size(26.dp))
         }
         Spacer(Modifier.height(6.dp))
         Text(label, style = MaterialTheme.typography.labelMedium)
@@ -224,20 +227,31 @@ private fun AudioAttachment(a: ChatAttachment, mine: Boolean) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
-            Modifier.size(40.dp).background(if (a.isVoiceNote) ArtaColors.Gold else ArtaColors.Surface2, CircleShape)
+            Modifier.size(40.dp).background(
+                when {
+                    mine -> ArtaColors.OnMine
+                    a.isVoiceNote -> ArtaColors.Gold
+                    else -> ArtaColors.Surface2
+                },
+                CircleShape,
+            )
                 .clip(CircleShape).clickable { ChatAudio.toggle(context, a.url) },
             contentAlignment = Alignment.Center,
         ) {
             Icon(
                 if (isCurrent && playing) Icons.Filled.Pause else Icons.Filled.PlayArrow,
                 if (isCurrent && playing) "Pausar" else "Reproducir",
-                tint = if (a.isVoiceNote) ArtaColors.Bg else ArtaColors.Text,
+                tint = when {
+                    mine -> ArtaColors.Mine
+                    a.isVoiceNote -> ArtaColors.OnAccent
+                    else -> ArtaColors.Text
+                },
             )
         }
         Column(Modifier.weight(1f).padding(start = 6.dp)) {
             if (!a.isVoiceNote) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Outlined.Headphones, null, tint = ArtaColors.Muted, modifier = Modifier.size(14.dp))
+                    Icon(Icons.Outlined.Headphones, null, tint = if (mine) ArtaColors.OnMineSecondary else ArtaColors.Muted, modifier = Modifier.size(14.dp))
                     Text(" " + (a.name ?: "Audio"), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelMedium)
                 }
             }
@@ -253,15 +267,15 @@ private fun AudioAttachment(a: ChatAttachment, mine: Boolean) {
                     dragging = false
                 },
                 colors = SliderDefaults.colors(
-                    thumbColor = if (mine) ArtaColors.Read else ArtaColors.Gold,
-                    activeTrackColor = if (mine) ArtaColors.Read else ArtaColors.Gold,
-                    inactiveTrackColor = ArtaColors.Line,
+                    thumbColor = if (mine) ArtaColors.OnMine else ArtaColors.Gold,
+                    activeTrackColor = if (mine) ArtaColors.OnMine else ArtaColors.Gold,
+                    inactiveTrackColor = if (mine) ArtaColors.OnMine.copy(alpha = 0.25f) else ArtaColors.LineStrong,
                 ),
                 modifier = Modifier.height(24.dp),
             )
             Text(
                 if (isCurrent && position > 0) clock(position) else clock(total),
-                color = ArtaColors.Muted,
+                color = if (mine) ArtaColors.OnMineSecondary else ArtaColors.Muted,
                 style = MaterialTheme.typography.labelSmall,
             )
         }
@@ -276,14 +290,14 @@ private fun DocumentAttachment(a: ChatAttachment, onOpen: () -> Unit) {
         "xls", "xlsx", "csv", "numbers" -> Icons.Outlined.TableChart to Color(0xFF3FB950)
         "ppt", "pptx", "key" -> Icons.Outlined.Slideshow to Color(0xFFF0883E)
         "zip" -> Icons.Outlined.FolderZip to ArtaColors.Muted
-        else -> Icons.Outlined.Description to Color(0xFF4F9DF7)
+        else -> Icons.Outlined.Description to ArtaColors.Muted
     }
     Row(
         Modifier
             .padding(vertical = 4.dp)
             .widthIn(min = 200.dp, max = 260.dp)
-            .background(ArtaColors.Surface2, RoundedCornerShape(10.dp))
-            .clip(RoundedCornerShape(10.dp))
+            .background(ArtaColors.Surface2, LocalArtaTokens.current.itemShape)
+            .clip(LocalArtaTokens.current.itemShape)
             .clickable(onClick = onOpen)
             .padding(10.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -363,8 +377,8 @@ fun RecordingBar(recorder: VoiceRecorder, onCancel: () -> Unit, onSend: () -> Un
             modifier = Modifier.weight(1f).height(6.dp).clip(RoundedCornerShape(3.dp)),
         )
         Spacer(Modifier.width(10.dp))
-        IconButton(onClick = onSend, modifier = Modifier.background(ArtaColors.Gold, CircleShape)) {
-            Icon(Icons.AutoMirrored.Filled.Send, "Enviar nota de voz", tint = ArtaColors.Bg)
+        IconButton(onClick = onSend, modifier = Modifier.background(LocalArtaTokens.current.accentBrush, CircleShape)) {
+            Icon(Icons.AutoMirrored.Filled.Send, "Enviar nota de voz", tint = ArtaColors.OnAccent)
         }
     }
 }
@@ -389,8 +403,8 @@ fun UploadBar(progress: UploadProgress) {
 /** Botón de micrófono del composer cuando no hay texto (tocar para grabar). */
 @Composable
 fun MicButton(onClick: () -> Unit) {
-    Surface(color = ArtaColors.Gold, shape = CircleShape, modifier = Modifier.size(48.dp).clip(CircleShape).clickable(onClick = onClick)) {
-        Box(contentAlignment = Alignment.Center) { Icon(Icons.Outlined.Mic, "Grabar nota de voz", tint = ArtaColors.Bg) }
+    Surface(color = Color.Transparent, shape = CircleShape, modifier = Modifier.size(48.dp).clip(CircleShape).background(LocalArtaTokens.current.accentBrush).clickable(onClick = onClick)) {
+        Box(contentAlignment = Alignment.Center) { Icon(Icons.Outlined.Mic, "Grabar nota de voz", tint = ArtaColors.OnAccent) }
     }
 }
 

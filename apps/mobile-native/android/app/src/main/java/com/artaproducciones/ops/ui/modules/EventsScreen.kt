@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.CalendarMonth
@@ -30,11 +29,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -46,17 +41,23 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.artaproducciones.ops.data.api.CalendarNoteDto
 import com.artaproducciones.ops.data.api.EventSummaryDto
 import com.artaproducciones.ops.data.api.ModulesClient
 import com.artaproducciones.ops.data.api.ModulesSession
 import com.artaproducciones.ops.data.api.userMessage
 import com.artaproducciones.ops.ui.theme.ArtaColors
+import com.artaproducciones.ops.ui.theme.ArtaType
 import com.artaproducciones.ops.ui.theme.LocalActiveEntity
+import com.artaproducciones.ops.ui.theme.LocalArtaTokens
+import com.artaproducciones.ops.ui.theme.SegmentedControl
+import com.artaproducciones.ops.ui.theme.TextButton
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
@@ -177,15 +178,12 @@ fun EventsScreen(nav: ModuleNav, showBack: Boolean = true) {
                 )
                 else -> LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 32.dp)) {
                     item {
-                        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
-                            EventSegment.entries.forEachIndexed { i, s ->
-                                SegmentedButton(
-                                    selected = segment == s,
-                                    onClick = { segment = s },
-                                    shape = SegmentedButtonDefaults.itemShape(index = i, count = EventSegment.entries.size),
-                                ) { Text(s.label, maxLines = 1) }
-                            }
-                        }
+                        SegmentedControl(
+                            options = EventSegment.entries.map { it.label },
+                            selected = segment.ordinal,
+                            onSelect = { segment = EventSegment.entries[it] },
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                        )
                     }
                     item {
                         OutlinedTextField(
@@ -229,11 +227,11 @@ internal fun EventRow(e: EventSummaryDto, onClick: () -> Unit) {
             Column(
                 Modifier
                     .width(48.dp)
-                    .background(ArtaColors.Surface2, RoundedCornerShape(8.dp))
+                    .background(ArtaColors.Surface2, LocalArtaTokens.current.itemShape)
                     .padding(vertical = 6.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                Text(start?.dayOfMonth?.toString() ?: "—", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                Text(start?.dayOfMonth?.toString() ?: "—", style = ArtaType.Kpi.copy(fontSize = 20.sp, lineHeight = 24.sp, fontWeight = FontWeight.Normal), color = ArtaColors.Text)
                 Text(
                     start?.let { MONTH_SHORT.format(it).replace(".", "") } ?: "",
                     style = MaterialTheme.typography.labelSmall,
@@ -379,12 +377,12 @@ private fun DayCell(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val shape = RoundedCornerShape(10.dp)
+    val shape = LocalArtaTokens.current.itemShape
     Box(
         modifier
             .aspectRatio(1f)
             .padding(2.dp)
-            .background(if (isSelected) ArtaColors.GoldSoft else ArtaColors.Bg, shape)
+            .background(if (isSelected) ArtaColors.GoldSoft else Color.Transparent, shape)
             .then(if (isToday) Modifier.border(1.dp, ArtaColors.Gold, shape) else Modifier)
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,

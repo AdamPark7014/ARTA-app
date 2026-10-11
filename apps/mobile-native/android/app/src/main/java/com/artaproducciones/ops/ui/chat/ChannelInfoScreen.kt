@@ -22,8 +22,8 @@ import androidx.compose.material.icons.automirrored.outlined.Logout
 import androidx.compose.material.icons.outlined.Archive
 import androidx.compose.material.icons.outlined.Bookmark
 import androidx.compose.material.icons.outlined.Edit
-import androidx.compose.material.icons.outlined.NotificationsOff
 import androidx.compose.material.icons.outlined.NotificationsNone
+import androidx.compose.material.icons.outlined.NotificationsOff
 import androidx.compose.material.icons.outlined.PersonAdd
 import androidx.compose.material.icons.outlined.PersonRemove
 import androidx.compose.material.icons.outlined.PushPin
@@ -41,7 +41,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -77,6 +76,7 @@ import com.artaproducciones.ops.data.api.userMessage
 import com.artaproducciones.ops.ui.common.parseInstant
 import com.artaproducciones.ops.ui.common.plainText
 import com.artaproducciones.ops.ui.theme.ArtaColors
+import com.artaproducciones.ops.ui.theme.TextButton
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import java.time.Duration
@@ -163,7 +163,7 @@ fun ChannelInfoScreen(
 
     val d = detail
     Scaffold(
-        containerColor = ArtaColors.Bg,
+        containerColor = Color.Transparent,
         snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
             TopAppBar(
@@ -204,7 +204,7 @@ fun ChannelInfoScreen(
                                         direct -> if (d.peer?.id in online) "En línea" else (d.peer?.title ?: "Mensaje directo")
                                         else -> kindLabel(d.kind, d.isGroupDm) + " · ${d.memberCount.coerceAtLeast(d.members.size)} miembros"
                                     },
-                                    color = if (direct && d.peer?.id in online) OnlineGreen else ArtaColors.Muted,
+                                    color = if (direct && d.peer?.id in online) ArtaColors.Ok else ArtaColors.Muted,
                                     style = MaterialTheme.typography.bodyMedium,
                                 )
                             }

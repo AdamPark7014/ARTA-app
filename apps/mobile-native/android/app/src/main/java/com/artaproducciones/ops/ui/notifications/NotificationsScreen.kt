@@ -19,7 +19,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -31,6 +30,9 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.artaproducciones.ops.data.ActiveEntity
@@ -41,8 +43,11 @@ import com.artaproducciones.ops.data.realtime.RealtimeClient
 import com.artaproducciones.ops.ui.DeepLink
 import com.artaproducciones.ops.ui.common.Avatar
 import com.artaproducciones.ops.ui.common.relativeTime
+import com.artaproducciones.ops.ui.modules.EmptyState
 import com.artaproducciones.ops.ui.theme.ArtaColors
+import com.artaproducciones.ops.ui.theme.ArtaType
 import com.artaproducciones.ops.ui.theme.LocalActiveEntity
+import com.artaproducciones.ops.ui.theme.TextButton
 import kotlinx.coroutines.launch
 
 /** Bandeja de avisos de todos los procesos (la campana del panel web). */
@@ -82,8 +87,8 @@ fun NotificationsScreen(openLink: (DeepLink) -> Unit, onUnreadChange: (Int) -> U
     }
 
     Column(Modifier.fillMaxSize()) {
-        Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 8.dp, top = 20.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("Avisos", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+        Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 8.dp, top = 22.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("Avisos", style = ArtaType.ScreenTitle, color = ArtaColors.Text, modifier = Modifier.weight(1f).semantics { heading() })
             if (items.any { it.readAt == null }) {
                 TextButton(onClick = {
                     scope.launch {
@@ -109,7 +114,7 @@ fun NotificationsScreen(openLink: (DeepLink) -> Unit, onUnreadChange: (Int) -> U
             LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
                 error?.let { item { Text(it, color = ArtaColors.Danger, modifier = Modifier.padding(20.dp)) } }
                 if (!loading && items.isEmpty() && error == null) {
-                    item { Text("No tienes avisos.", color = ArtaColors.Muted, modifier = Modifier.padding(20.dp)) }
+                    item { EmptyState("No tienes avisos", "Aquí llegan las entregas, aprobaciones y menciones de tu equipo.") }
                 }
                 items(items, key = { it.id }) { n -> NotificationRow(n) { open(n) } }
             }
@@ -123,19 +128,19 @@ private fun NotificationRow(n: NotificationDto, onClick: () -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()
-            .background(if (unread) ArtaColors.GoldSoft.copy(alpha = 0.08f) else ArtaColors.Bg)
+            .background(if (unread) ArtaColors.GoldSoft else Color.Transparent)
             .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 12.dp),
+            .padding(start = 20.dp, end = 16.dp, top = 14.dp, bottom = 14.dp),
         verticalAlignment = Alignment.Top,
     ) {
         Avatar(n.actor?.fullName ?: "ARTA", size = 40.dp)
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
-            Text(n.title, fontWeight = if (unread) FontWeight.Bold else FontWeight.Normal)
+            Text(n.title, color = ArtaColors.Text, fontWeight = if (unread) FontWeight.SemiBold else FontWeight.Normal)
             n.body?.takeIf { it.isNotBlank() }?.let { Text(it, color = ArtaColors.Muted, style = MaterialTheme.typography.bodyMedium) }
-            Text(relativeTime(n.createdAt), color = ArtaColors.Muted, style = MaterialTheme.typography.labelSmall)
+            Text(relativeTime(n.createdAt), color = ArtaColors.Tertiary, style = ArtaType.Time, modifier = Modifier.padding(top = 2.dp))
         }
-        if (unread) Box(Modifier.padding(top = 6.dp).size(10.dp).background(ArtaColors.Gold, CircleShape))
+        if (unread) Box(Modifier.padding(top = 7.dp).size(8.dp).background(ArtaColors.Gold, CircleShape))
     }
     HorizontalDivider(color = ArtaColors.Line, thickness = 0.5.dp)
 }

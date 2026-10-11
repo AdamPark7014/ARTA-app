@@ -41,7 +41,6 @@ import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRowDefaults
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -57,6 +56,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -70,6 +70,7 @@ import com.artaproducciones.ops.data.api.GroupDmBody
 import com.artaproducciones.ops.data.api.userMessage
 import com.artaproducciones.ops.ui.common.Avatar
 import com.artaproducciones.ops.ui.theme.ArtaColors
+import com.artaproducciones.ops.ui.theme.TextButton
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -125,7 +126,7 @@ fun NewConversationScreen(onBack: () -> Unit, openChat: (String) -> Unit) {
     }
 
     Scaffold(
-        containerColor = ArtaColors.Bg,
+        containerColor = Color.Transparent,
         snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
             TopAppBar(
@@ -196,7 +197,7 @@ fun NewConversationScreen(onBack: () -> Unit, openChat: (String) -> Unit) {
                         Switch(
                             checked = private,
                             onCheckedChange = { private = it },
-                            colors = SwitchDefaults.colors(checkedTrackColor = ArtaColors.Gold, checkedThumbColor = ArtaColors.Bg),
+                            colors = SwitchDefaults.colors(checkedTrackColor = ArtaColors.Gold, checkedThumbColor = ArtaColors.OnAccent),
                         )
                     }
                     Text("Miembros (opcional)", color = ArtaColors.Muted, style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = Space.S))
@@ -317,7 +318,7 @@ fun PeoplePicker(
                             checked = checked,
                             onCheckedChange = null,
                             enabled = !full,
-                            colors = CheckboxDefaults.colors(checkedColor = ArtaColors.Gold, checkmarkColor = ArtaColors.Bg),
+                            colors = CheckboxDefaults.colors(checkedColor = ArtaColors.Gold, checkmarkColor = ArtaColors.OnAccent),
                         )
                     }
                 }

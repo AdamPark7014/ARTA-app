@@ -61,7 +61,6 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -77,6 +76,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.artaproducciones.ops.BuildConfig
@@ -91,7 +92,9 @@ import com.artaproducciones.ops.ui.common.EntitySelector
 import com.artaproducciones.ops.ui.common.LegalLinks
 import com.artaproducciones.ops.ui.modules.ModuleNav
 import com.artaproducciones.ops.ui.theme.ArtaColors
+import com.artaproducciones.ops.ui.theme.ArtaType
 import com.artaproducciones.ops.ui.theme.LocalActiveEntity
+import com.artaproducciones.ops.ui.theme.TextButton
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -336,7 +339,7 @@ fun MoreScreen(user: UserDto, nav: ModuleNav) {
                     EntitySelector()
                     Text(
                         "También con doble toque en Inicio.",
-                        color = ArtaColors.Muted,
+                        color = ArtaColors.Tertiary,
                         style = MaterialTheme.typography.bodySmall,
                     )
                 }
@@ -466,7 +469,7 @@ fun MoreScreen(user: UserDto, nav: ModuleNav) {
         item(key = "version") {
             Text(
                 "ARTA · versión ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})",
-                color = ArtaColors.Muted,
+                color = ArtaColors.Tertiary,
                 style = MaterialTheme.typography.bodySmall,
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 24.dp),
             )
@@ -529,17 +532,17 @@ fun MoreScreen(user: UserDto, nav: ModuleNav) {
 @Composable
 private fun ProfileHeader(user: UserDto) {
     Row(
-        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 24.dp),
+        Modifier.fillMaxWidth().padding(start = 20.dp, end = 16.dp, top = 28.dp, bottom = 20.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        Avatar(user.fullName, size = 64.dp)
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(user.fullName.ifBlank { "ARTA" }, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        Avatar(user.fullName, size = 60.dp)
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(user.fullName.ifBlank { "ARTA" }, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold, color = ArtaColors.Text)
             val role = WebModules.roleLabel(user.roleKey)
-            if (role.isNotBlank()) Text(role, color = ArtaColors.Gold, style = MaterialTheme.typography.bodyMedium)
-            Text(LocalActiveEntity.current.brand, color = ArtaColors.Text, style = MaterialTheme.typography.bodyMedium)
-            user.email?.takeIf { it.isNotBlank() }?.let { Text(it, color = ArtaColors.Muted, style = MaterialTheme.typography.bodySmall) }
+            if (role.isNotBlank()) Text(role, color = ArtaColors.Muted, style = MaterialTheme.typography.bodyMedium)
+            Text(LocalActiveEntity.current.brand.uppercase(Locale.forLanguageTag("es-MX")), color = ArtaColors.Tertiary, style = ArtaType.Cap, modifier = Modifier.padding(top = 4.dp))
+            user.email?.takeIf { it.isNotBlank() }?.let { Text(it, color = ArtaColors.Tertiary, style = MaterialTheme.typography.bodySmall) }
         }
     }
     HorizontalDivider(color = ArtaColors.Line)
@@ -549,10 +552,9 @@ private fun ProfileHeader(user: UserDto) {
 private fun SectionLabel(text: String) {
     Text(
         text.uppercase(Locale.forLanguageTag("es-MX")),
-        color = ArtaColors.Muted,
-        style = MaterialTheme.typography.labelMedium,
-        fontWeight = FontWeight.SemiBold,
-        modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 24.dp, bottom = 8.dp),
+        color = ArtaColors.Tertiary,
+        style = ArtaType.Cap,
+        modifier = Modifier.padding(start = 20.dp, end = 16.dp, top = 24.dp, bottom = 8.dp).semantics { heading() },
     )
 }
 
@@ -562,7 +564,7 @@ private fun MoreRow(
     label: String,
     onClick: () -> Unit,
     supporting: String? = null,
-    tint: Color = ArtaColors.Gold,
+    tint: Color = ArtaColors.Muted,
     textColor: Color = ArtaColors.Text,
     chevron: Boolean = true,
 ) {
@@ -570,16 +572,16 @@ private fun MoreRow(
         Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 12.dp),
+            .padding(start = 20.dp, end = 14.dp, top = 12.dp, bottom = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(24.dp))
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(22.dp))
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(label, color = textColor, style = MaterialTheme.typography.bodyLarge)
-            supporting?.let { Text(it, color = ArtaColors.Muted, style = MaterialTheme.typography.bodySmall) }
+            supporting?.let { Text(it, color = ArtaColors.Tertiary, style = MaterialTheme.typography.bodySmall) }
         }
-        if (chevron) Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, contentDescription = null, tint = ArtaColors.Muted)
+        if (chevron) Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, contentDescription = null, tint = ArtaColors.Tertiary)
     }
 }
 
