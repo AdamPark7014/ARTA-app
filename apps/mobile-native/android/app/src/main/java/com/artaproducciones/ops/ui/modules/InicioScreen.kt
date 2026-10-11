@@ -587,12 +587,14 @@ private fun PendingRow(item: Pending) {
             item.detail?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = ArtaColors.Tertiary, maxLines = 1, overflow = TextOverflow.Ellipsis) }
         }
         Spacer(Modifier.width(10.dp))
-        Text(
-            item.amount ?: "—",
-            style = MaterialTheme.typography.bodyMedium.merge(TextStyle(fontFeatureSettings = TABULAR)),
-            color = if (item.amount != null) ArtaColors.Text else ArtaColors.Tertiary,
-        )
-        Spacer(Modifier.width(10.dp))
+        item.amount?.let { amount ->
+            Text(
+                amount,
+                style = MaterialTheme.typography.bodyMedium.merge(TextStyle(fontFeatureSettings = TABULAR)),
+                color = ArtaColors.Text,
+            )
+            Spacer(Modifier.width(10.dp))
+        }
         StatusPill(item.status, if (item.action) Tone.Action else Tone.Info)
     }
 }

@@ -9,6 +9,9 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -377,7 +380,7 @@ private fun PendingList(
     val toAuthorize = data.toAuthorize(perms).sortedByDescending { it.row.ageDays }
     val toPay = data.toPay(perms).sortedByDescending { it.row.ageDays }
     val advances = data.actionableAdvances
-    LazyColumn(Modifier.fillMaxSize(), state = listState, contentPadding = PaddingValues(bottom = 32.dp)) {
+    LazyColumn(Modifier.fillMaxSize(), state = listState, contentPadding = PaddingValues(bottom = 32.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding())) {
         error?.let { msg -> item { InlineError(msg, onRetry) } }
         if (data.tasksToReview.isEmpty() && toAuthorize.isEmpty() && toPay.isEmpty() && advances.isEmpty()) {
             item {
@@ -473,7 +476,7 @@ private fun HistoryList(data: ApprovalsData, perms: ModulesPerms, onOpenTask: (T
         .sortedByDescending { it.row.paidAt ?: it.row.authorizedAt ?: it.row.createdAt ?: "" }
         .take(60)
     val approved = data.requested.filter { it.status == "DONE" }.sortedByDescending { it.approvedAt ?: it.updatedAt ?: "" }.take(40)
-    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 32.dp)) {
+    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 32.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding())) {
         if (orders.isEmpty() && approved.isEmpty()) {
             item { EmptyState("Sin historial todavía", "Aquí quedan las órdenes autorizadas o pagadas y las tareas que aprobaste.") }
         }
