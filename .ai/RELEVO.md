@@ -1,12 +1,34 @@
 # RELEVO
 
 - **Último turno:** claude-code
-- **Fecha:** 2026-10-09
+- **Fecha:** 2026-10-11
 - **Rama:** main
   (Adam es el único programador).
 - **Producción:** `7cabc06` desplegado desde `main` el 2026-10-07 ~17:05 UTC (bundle + `update.sh --no-pull`,
   log `/root/arta-deploy-.log`). Incluye reportar/bloquear en el chat (migración `20261006120000`), el candado
   de Studio/plantillas y la página nueva de «Eliminar cuenta».
+
+## Turno claude-code (2026-10-11): ARTA y Auditorio separados (API, web, iOS, Android)
+
+Pedido de Adam: Auditorio (EXPLANADA) es otro negocio; nada de Auditorio en ARTA salvo para híbridos.
+Contrato completo: `docs/entidades-arta-auditorio.md`.
+- **Accesos** (`apps/api/scripts/apply-access-arta-auditorio-1011.ts`, todos `dir_adjunta` salvo dirección
+  general): Leida y Marisol ARTA; Monse y Kika ambas; Rodrigo, Will y JP Auditorio; Chacho y Arturo
+  `dir_general`. `dir_adjunta` da de alta gente nueva (`users.create`) pero no toca usuarios existentes.
+- **API** (`49ce057`): migración `20261011120000` (entidad en ChatChannel/TaskAssignment/PaymentProof),
+  `common/entity-scope.ts` (`?entity=` en listados; sin él, todas las de la persona), chat con #general y
+  #anuncios por entidad (`general-auditorio`/`anuncios-auditorio`, solo donde hay gente solo de Auditorio),
+  avisos/tareas/anticipos/Inicio/plantillas por entidad, carpetas con 403.
+- **Web** (`0ba0322`): `?entity=` en tareas, chat, avisos, anticipos y plantillas; Usuarios para
+  `users.create` (solo alta); acento de Auditorio plateado `#c7ccd4`/`#9aa1ac` (antes azul).
+- **iOS** (`f233b36`, `933ce62`, `8382ff8`) y **Android** (`a70059d`): entidad activa por usuario, doble
+  toque en Inicio (y chip en Inicio, selector en Más) para híbridos, acento dorado/plateado, `?entity=` en
+  todo. Sin subir a tiendas todavía (la 1.0.0 sigue en revisión). Pendiente en apps: las vistas web
+  dentro de la app siguen en `arta.*` y un aviso de la otra entidad no cambia de entidad al abrirlo.
+- **Propuesta visual** para «una UI más acorde a ARTA en todo el sitio»:
+  https://claude.ai/artifact/7rGqhpHLkLyHqvez6Cidqq (espera visto bueno de Adam antes de aplicarla).
+- **Pendiente**: formatos de Auditorio desde `Downloads\CHECKLIST AUDITORIO.xlsx` (hojas Auditorio,
+  Merch, Limpieza, Mantenimiento) y `Compromiso_Horarios_Produccion_Dia_del_Show_Explanada_Puebla_V2.docx`.
 
 ## Turno claude-code (2026-10-09): repo público con historial sin contraseñas
 
