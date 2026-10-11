@@ -1,0 +1,299 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Propuesta visual ARTA y Auditorio · profesional</title>
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@300;400;500;600;700;800&family=Outfit:wght@800;900&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #0b0b0d; font-family: 'Nunito', sans-serif; color: #fff; padding: 44px; -webkit-font-smoothing: antialiased; }
+  .titulo { font-weight: 300; font-size: 32px; letter-spacing: -0.8px; margin: 0 0 6px; }
+  .titulo b { font-weight: 600; }
+  .sub { margin: 0 0 30px; color: #9d9da6; font-size: 14.5px; }
+  .fila { display: flex; gap: 34px; align-items: flex-start; margin-bottom: 48px; }
+  .etq { font-family: 'Nunito', sans-serif; font-size: 11px; letter-spacing: 1.5px; color: #7d7d86; margin-bottom: 12px; }
+  .logo { font-family: 'Outfit', sans-serif; font-weight: 900; letter-spacing: -2px; line-height: 1; }
+  .cap { font-size: 11px; letter-spacing: 1.6px; text-transform: uppercase; font-weight: 500; }
+  .mono { font-family: 'Nunito', sans-serif; font-variant-numeric: tabular-nums; }
+  .ico { width: 16px; height: 16px; flex: none; }
+
+  .web { width: 1060px; height: 700px; overflow: hidden; display: flex; position: relative; }
+  .web nav { width: 228px; padding: 24px 16px; display: flex; flex-direction: column; gap: 22px; position: relative; z-index: 1; }
+  .grupo { display: flex; flex-direction: column; gap: 2px; }
+  .grupo .cap { padding: 0 12px 6px; font-size: 10px; }
+  .web nav a { display: flex; align-items: center; gap: 11px; padding: 8px 12px; font-size: 13px; font-weight: 500; text-decoration: none; }
+  .web nav a .badge { margin-left: auto; font-size: 11px; padding: 1px 7px; }
+  .web .area { flex: 1; display: flex; flex-direction: column; position: relative; z-index: 1; min-width: 0; }
+  .barra { height: 58px; display: flex; align-items: center; gap: 14px; padding: 0 28px; }
+  .buscar { flex: 1; max-width: 420px; display: flex; align-items: center; gap: 10px; padding: 8px 12px; font-size: 13px; }
+  .buscar kbd { margin-left: auto; font-family: 'Nunito', sans-serif; font-size: 11px; padding: 1px 6px; }
+  .avatar { width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600; }
+  .web main { flex: 1; padding: 26px 28px; display: flex; flex-direction: column; gap: 20px; overflow: hidden; }
+  .saludo { display: flex; justify-content: space-between; align-items: flex-end; }
+  .h1 { font-weight: 300; font-size: 30px; letter-spacing: -0.9px; }
+  .h1 b { font-weight: 600; }
+  .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  .kpi { padding: 16px 16px 14px; display: flex; flex-direction: column; gap: 10px; }
+  .kpi .v { font-weight: 300; font-size: 34px; letter-spacing: -1.2px; line-height: 1; }
+  .kpi .d { font-size: 12px; }
+  .barrita { height: 3px; border-radius: 3px; overflow: hidden; }
+  .barrita i { display: block; height: 100%; }
+  .dos { display: grid; grid-template-columns: 1.05fr 1fr; gap: 12px; min-height: 0; }
+  .panel { padding: 16px 18px; display: flex; flex-direction: column; gap: 12px; }
+  .ph { display: flex; justify-content: space-between; align-items: center; font-weight: 600; font-size: 13.5px; }
+  .ph span:last-child { font-weight: 400; font-size: 12px; }
+  .linea { display: grid; grid-template-columns: 56px 14px 1fr; align-items: start; gap: 10px; font-size: 13px; }
+  .linea .t { font-family: 'Nunito', sans-serif; font-size: 12px; padding-top: 1px; }
+  .linea .p { width: 9px; height: 9px; border-radius: 50%; margin-top: 4px; }
+  .linea .x { display: flex; flex-direction: column; gap: 2px; }
+  .linea .x small { font-size: 11.5px; }
+  .fila-ap { display: grid; grid-template-columns: 1fr auto auto; gap: 12px; align-items: center; padding: 10px 0; font-size: 13px; }
+  .fila-ap small { display: block; font-size: 11.5px; margin-top: 2px; }
+  .estado { font-size: 10.5px; letter-spacing: .6px; text-transform: uppercase; font-weight: 600; padding: 3px 8px; }
+  .boton { padding: 10px 18px; font-weight: 600; font-size: 13px; border: 0; display: inline-flex; align-items: center; gap: 8px; }
+
+  /* ARTA · claro */
+  .arta .web { background: #f7f6f3; color: #0c0c0d; border-radius: 22px; box-shadow: 0 30px 80px rgba(0,0,0,.35); }
+  .arta nav { background: #fcfbf9; border-right: 1px solid rgba(12,12,13,.07); }
+  .arta .cap { color: #8b8b92; }
+  .arta nav a { color: #55555c; border-radius: 10px; }
+  .arta nav a.on { background: #0c0c0d; color: #fff; }
+  .arta nav a .badge { background: rgba(12,12,13,.07); color: #0c0c0d; border-radius: 999px; }
+  .arta nav a.on .badge { background: rgba(255,255,255,.18); color: #fff; }
+  .arta .switch { background: #efede8; border-radius: 12px; }
+  .arta .switch span { border-radius: 9px; }
+  .arta .switch .on { background: #fff; color: #0c0c0d; box-shadow: 0 1px 2px rgba(0,0,0,.08), 0 2px 8px rgba(0,0,0,.06); }
+  .arta .switch .off { color: #8b8b92; }
+  .arta .barra { border-bottom: 1px solid rgba(12,12,13,.07); background: rgba(255,255,255,.55); }
+  .arta .buscar { background: #fff; border: 1px solid rgba(12,12,13,.08); border-radius: 10px; color: #8b8b92; }
+  .arta .buscar kbd { border: 1px solid rgba(12,12,13,.12); border-radius: 5px; color: #55555c; }
+  .arta .avatar { background: #0c0c0d; color: #fff; }
+  .arta .kpi, .arta .panel { background: #fff; border: 1px solid rgba(12,12,13,.06); border-radius: 16px; box-shadow: 0 1px 2px rgba(12,12,13,.04), 0 10px 26px rgba(12,12,13,.05); }
+  .arta .kpi .d, .arta .ph span:last-child, .arta .linea .t, .arta .linea small, .arta .fila-ap small { color: #8b8b92; }
+  .arta .barrita { background: rgba(12,12,13,.07); }
+  .arta .barrita i { background: #0c0c0d; }
+  .arta .linea .p { border: 2px solid #0c0c0d; background: #fff; }
+  .arta .linea .p.on { background: #0c0c0d; }
+  .arta .fila-ap + .fila-ap { border-top: 1px solid rgba(12,12,13,.06); }
+  .arta .estado { border-radius: 999px; }
+  .arta .estado.lleno { background: #0c0c0d; color: #fff; }
+  .arta .estado.borde { border: 1px solid rgba(12,12,13,.2); color: #55555c; }
+  .arta .boton { background: #0c0c0d; color: #fff; border-radius: 999px; box-shadow: 0 6px 16px rgba(12,12,13,.2); }
+  .arta .boton.sec { background: #fff; color: #0c0c0d; border: 1px solid rgba(12,12,13,.12); box-shadow: none; }
+
+  /* Auditorio · oscuro */
+  .audi .web { background: #08080a; color: #f2f2f4; border-radius: 8px; box-shadow: 0 30px 80px rgba(0,0,0,.6), inset 0 0 0 1px rgba(255,255,255,.06); }
+  .audi .web::before { content: ""; position: absolute; inset: 0; background: radial-gradient(560px 320px at 62% -12%, rgba(199,204,212,.14), transparent 70%); }
+  .audi nav { background: rgba(255,255,255,.015); border-right: 1px solid rgba(255,255,255,.06); }
+  .audi .cap { color: #7d7d86; }
+  .audi nav a { color: #9a9aa3; border-radius: 4px; }
+  .audi nav a.on { color: #0a0a0b; background: linear-gradient(135deg, #f1f3f6 0%, #c7ccd4 55%, #9aa1ac 100%); }
+  .audi nav a .badge { background: rgba(255,255,255,.06); color: #c7ccd4; border-radius: 3px; }
+  .audi nav a.on .badge { background: rgba(10,10,11,.12); color: #0a0a0b; }
+  .audi .switch { background: rgba(255,255,255,.035); border: 1px solid rgba(255,255,255,.06); border-radius: 5px; }
+  .audi .switch span { border-radius: 3px; }
+  .audi .switch .on { background: linear-gradient(135deg, #f1f3f6 0%, #c7ccd4 55%, #9aa1ac 100%); color: #0a0a0b; }
+  .audi .switch .off { color: #7d7d86; }
+  .audi .barra { border-bottom: 1px solid rgba(255,255,255,.06); }
+  .audi .buscar { background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.08); border-radius: 4px; color: #7d7d86; }
+  .audi .buscar kbd { border: 1px solid rgba(255,255,255,.14); border-radius: 3px; color: #a1a1aa; }
+  .audi .avatar { background: linear-gradient(135deg, #f1f3f6, #9aa1ac); color: #0a0a0b; }
+  .audi .kpi, .audi .panel { background: linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,.012)); border: 1px solid rgba(255,255,255,.07); border-radius: 6px; box-shadow: inset 0 1px 0 rgba(255,255,255,.05); }
+  .audi .kpi .d, .audi .ph span:last-child, .audi .linea .t, .audi .linea small, .audi .fila-ap small { color: #85858e; }
+  .audi .barrita { background: rgba(255,255,255,.07); }
+  .audi .barrita i { background: linear-gradient(90deg, #9aa1ac, #f1f3f6); }
+  .audi .linea .p { border: 2px solid #c7ccd4; background: #08080a; }
+  .audi .linea .p.on { background: #c7ccd4; box-shadow: 0 0 10px rgba(199,204,212,.5); }
+  .audi .fila-ap + .fila-ap { border-top: 1px solid rgba(255,255,255,.06); }
+  .audi .estado { border-radius: 3px; }
+  .audi .estado.lleno { background: linear-gradient(135deg, #f1f3f6, #9aa1ac); color: #0a0a0b; }
+  .audi .estado.borde { border: 1px solid rgba(255,255,255,.18); color: #a1a1aa; }
+  .audi .boton { background: linear-gradient(135deg, #f1f3f6 0%, #c7ccd4 55%, #9aa1ac 100%); color: #0a0a0b; border-radius: 4px; }
+  .audi .boton.sec { background: rgba(255,255,255,.04); color: #e4e4e7; border: 1px solid rgba(255,255,255,.12); }
+  .audi .plata { background: linear-gradient(135deg, #ffffff 0%, #c7ccd4 60%, #8e95a0 100%); -webkit-background-clip: text; color: transparent; }
+
+  .switch { display: grid; grid-template-columns: 1fr 1fr; gap: 3px; padding: 3px; }
+  .switch span { text-align: center; padding: 7px 0; font-size: 12.5px; font-weight: 600; }
+
+  /* Celular */
+  .tel { width: 310px; height: 700px; overflow: hidden; display: flex; flex-direction: column; position: relative; }
+  .tel .cuerpo { flex: 1; padding: 40px 16px 10px; display: flex; flex-direction: column; gap: 14px; position: relative; z-index: 1; }
+  .tel .tabs { display: grid; grid-template-columns: repeat(5, 1fr); padding: 10px 6px 22px; font-size: 10px; text-align: center; position: relative; z-index: 1; }
+  .tel .tabs div { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .tel .kpi { padding: 12px; gap: 6px; }
+  .tel .kpi .v { font-size: 28px; }
+  .toast { position: absolute; top: 14px; left: 14px; right: 14px; padding: 11px 14px; font-weight: 600; font-size: 12.5px; z-index: 2; display: flex; align-items: center; gap: 8px; }
+  .arta .tel { background: #f7f6f3; color: #0c0c0d; border-radius: 42px; border: 7px solid #e7e5df; box-shadow: 0 30px 70px rgba(0,0,0,.35); }
+  .arta .tel .tabs { background: rgba(255,255,255,.9); color: #8b8b92; border-top: 1px solid rgba(12,12,13,.06); }
+  .arta .tel .tabs .on { color: #0c0c0d; font-weight: 600; }
+  .audi .tel { background: #08080a; color: #f2f2f4; border-radius: 42px; border: 7px solid #1c1d21; box-shadow: 0 30px 70px rgba(0,0,0,.6); }
+  .audi .tel::before { content: ""; position: absolute; inset: 0; background: radial-gradient(260px 200px at 50% -5%, rgba(199,204,212,.16), transparent 70%); }
+  .audi .tel .tabs { background: rgba(255,255,255,.015); color: #7d7d86; border-top: 1px solid rgba(255,255,255,.06); }
+  .audi .tel .tabs .on { color: #e6e9ee; font-weight: 600; }
+  .audi .toast { background: linear-gradient(135deg, #f1f3f6 0%, #c7ccd4 55%, #9aa1ac 100%); color: #0a0a0b; border-radius: 6px; box-shadow: 0 14px 34px rgba(0,0,0,.6); }
+  .chip { padding: 6px 11px; font-size: 11.5px; font-weight: 600; display: inline-flex; align-items: center; gap: 7px; }
+  .arta .chip { background: #0c0c0d; color: #fff; border-radius: 999px; }
+  .audi .chip { background: rgba(255,255,255,.04); color: #c7ccd4; border: 1px solid rgba(255,255,255,.1); border-radius: 4px; }
+</style>
+</head>
+<body>
+  <div class="titulo">Propuesta visual · <b>ARTA y Auditorio</b></div>
+  <p class="sub">Blanco, grises y negro en los dos, opuestos. ARTA claro, papel y tinta. Auditorio oscuro, reflector y plata. Datos de ejemplo: los reales salen de la app.</p>
+
+  <!-- ARTA -->
+  <div class="fila arta">
+    <div>
+      <div class="etq">WEB · INICIO ARTA</div>
+      <div class="web">
+        <nav>
+          <div style="padding:0 12px"><div class="logo" style="font-size:40px">arta</div><div class="cap" style="margin-top:7px;font-size:9.5px;letter-spacing:3px">Producciones</div></div>
+          <div class="switch"><span class="on">Arta</span><span class="off">Auditorio</span></div>
+          <div class="grupo"><span class="cap">Operación</span>
+            <a class="on"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/></svg>Inicio</a>
+            <a><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>Eventos<span class="badge mono">6</span></a>
+            <a><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M9 6h11M9 12h11M9 18h11"/><path d="m4 6 1 1 2-2M4 12l1 1 2-2"/></svg>Tareas<span class="badge mono">4</span></a>
+            <a><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M20 6 9 17l-5-5"/></svg>Aprobaciones<span class="badge mono">3</span></a>
+            <a><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 7h16M4 12h16M4 17h10"/></svg>Órdenes de compra</a>
+          </div>
+          <div class="grupo"><span class="cap">Equipo</span>
+            <a><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/></svg>Chat<span class="badge mono">2</span></a>
+            <a><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>Carpetas</a>
+          </div>
+          <div class="cap" style="margin-top:auto;padding:0 12px;letter-spacing:.5px;text-transform:none;font-size:11.5px">La experiencia del Show</div>
+        </nav>
+        <div class="area">
+          <div class="barra">
+            <div class="buscar"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>Buscar evento, tarea o persona<kbd>Ctrl K</kbd></div>
+            <div style="margin-left:auto;display:flex;align-items:center;gap:16px"><svg class="ico" style="width:18px;height:18px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 8 3 8H3s3-1 3-8"/><path d="M10 20a2 2 0 0 0 4 0"/></svg><div class="avatar">JL</div></div>
+          </div>
+          <main>
+            <div class="saludo">
+              <div style="display:flex;flex-direction:column;gap:6px"><span class="cap">Domingo 11 de octubre</span><span class="h1">Buenos días, <b>José Luis</b></span></div>
+              <div style="display:flex;gap:8px"><button class="boton sec">Nueva tarea</button><button class="boton">Nuevo evento</button></div>
+            </div>
+            <div class="kpis">
+              <div class="kpi"><span class="cap">Eventos activos</span><span class="v mono">6</span><span class="d">2 esta semana</span></div>
+              <div class="kpi"><span class="cap">Por aprobar</span><span class="v mono">3</span><span class="d">1 OC · 1 anticipo · 1 entrega</span></div>
+              <div class="kpi"><span class="cap">Vencen hoy</span><span class="v mono">2</span><span class="d">de 14 tareas abiertas</span></div>
+              <div class="kpi"><span class="cap">Formatos al día</span><span class="v mono">71%</span><div class="barrita"><i style="width:71%"></i></div></div>
+            </div>
+            <div class="dos">
+              <div class="panel">
+                <div class="ph"><span>Hoy · [Evento de Arta]</span><span>[Recinto]</span></div>
+                <div class="linea"><span class="t">10:00</span><span class="p on"></span><span class="x">Montaje de audio<small>Proveedor de audio · en curso</small></span></div>
+                <div class="linea"><span class="t">17:00</span><span class="p"></span><span class="x">Soundcheck<small>Producción</small></span></div>
+                <div class="linea"><span class="t">19:30</span><span class="p"></span><span class="x">Apertura de puertas<small>Boletera</small></span></div>
+                <div class="linea"><span class="t">21:00</span><span class="p"></span><span class="x">Show<small>Duración aprox. 2 h</small></span></div>
+              </div>
+              <div class="panel">
+                <div class="ph"><span>Esperan tu visto bueno</span><span>Ver todo</span></div>
+                <div class="fila-ap"><span>Orden de compra · audio<small>[Proveedor] · [Evento]</small></span><span class="mono">$[monto]</span><span class="estado lleno">Revisar</span></div>
+                <div class="fila-ap"><span>Anticipo · hospedaje<small>[Quién lo pidió] · [Evento]</small></span><span class="mono">$[monto]</span><span class="estado lleno">Revisar</span></div>
+                <div class="fila-ap"><span>Entrega de tarea<small>Lista de medios · [Evento]</small></span><span class="mono">—</span><span class="estado borde">Evidencia</span></div>
+              </div>
+            </div>
+          </main>
+        </div>
+      </div>
+    </div>
+    <div>
+      <div class="etq">APP · INICIO ARTA</div>
+      <div class="tel">
+        <div class="cuerpo">
+          <div style="display:flex;justify-content:space-between;align-items:center"><span class="logo" style="font-size:30px">arta</span><span class="chip">● Arta</span></div>
+          <div style="display:flex;flex-direction:column;gap:4px"><span class="cap">Domingo 11 de octubre</span><span class="h1" style="font-size:26px">Hola, <b>José Luis</b></span></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+            <div class="kpi" style="background:#fff;border:1px solid rgba(12,12,13,.06);border-radius:16px"><span class="cap" style="font-size:9.5px">Por aprobar</span><span class="v mono">3</span><span class="d" style="color:#8b8b92;font-size:11px">OC · anticipo · entrega</span></div>
+            <div class="kpi" style="background:#fff;border:1px solid rgba(12,12,13,.06);border-radius:16px"><span class="cap" style="font-size:9.5px">Vencen hoy</span><span class="v mono">2</span><span class="d" style="color:#8b8b92;font-size:11px">de 14 abiertas</span></div>
+          </div>
+          <div class="panel" style="padding:14px">
+            <div class="ph"><span>Hoy</span><span>[Evento]</span></div>
+            <div class="linea"><span class="t">10:00</span><span class="p on"></span><span class="x">Montaje<small>en curso</small></span></div>
+            <div class="linea"><span class="t">17:00</span><span class="p"></span><span class="x">Soundcheck</span></div>
+            <div class="linea"><span class="t">21:00</span><span class="p"></span><span class="x">Show</span></div>
+          </div>
+        </div>
+        <div class="tabs"><div class="on"><svg class="ico" style="width:20px;height:20px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/></svg>Inicio</div><div><svg class="ico" style="width:20px;height:20px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/></svg>Chats</div><div><svg class="ico" style="width:20px;height:20px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M9 6h11M9 12h11M9 18h11"/></svg>Tareas</div><div><svg class="ico" style="width:20px;height:20px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 8 3 8H3s3-1 3-8"/></svg>Avisos</div><div><svg class="ico" style="width:20px;height:20px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="4" y="4" width="6" height="6" rx="1"/><rect x="14" y="4" width="6" height="6" rx="1"/><rect x="4" y="14" width="6" height="6" rx="1"/><rect x="14" y="14" width="6" height="6" rx="1"/></svg>Más</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- AUDITORIO -->
+  <div class="fila audi">
+    <div>
+      <div class="etq">WEB · INICIO AUDITORIO</div>
+      <div class="web">
+        <nav>
+          <div style="padding:0 12px"><div class="logo plata" style="font-size:24px;letter-spacing:1.5px;font-weight:800">EXPLANADA</div><div class="cap" style="margin-top:7px;font-size:9.5px;letter-spacing:3px">Auditorio Arema</div></div>
+          <div class="switch"><span class="off">Arta</span><span class="on">Auditorio</span></div>
+          <div class="grupo"><span class="cap">Operación</span>
+            <a class="on"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/></svg>Inicio</a>
+            <a><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="5" width="18" height="16" rx="1"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>Shows<span class="badge mono">1</span></a>
+            <a><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M9 6h11M9 12h11M9 18h11"/><path d="m4 6 1 1 2-2M4 12l1 1 2-2"/></svg>Tareas</a>
+            <a><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M20 6 9 17l-5-5"/></svg>Aprobaciones</a>
+            <a><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.5-.5-.5-2.5z"/></svg>Mantenimiento<span class="badge mono">5</span></a>
+          </div>
+          <div class="grupo"><span class="cap">Equipo</span>
+            <a><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/></svg>Chat</a>
+            <a><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>Carpetas</a>
+          </div>
+          <div class="cap" style="margin-top:auto;padding:0 12px;letter-spacing:.5px;text-transform:none;font-size:11.5px">Auditorio Explanada Puebla</div>
+        </nav>
+        <div class="area">
+          <div class="barra">
+            <div class="buscar"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>Buscar show, tarea o área<kbd>Ctrl K</kbd></div>
+            <div style="margin-left:auto;display:flex;align-items:center;gap:16px"><svg class="ico" style="width:18px;height:18px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 8 3 8H3s3-1 3-8"/><path d="M10 20a2 2 0 0 0 4 0"/></svg><div class="avatar">RL</div></div>
+          </div>
+          <main>
+            <div class="saludo">
+              <div style="display:flex;flex-direction:column;gap:6px"><span class="cap">Domingo 11 de octubre</span><span class="h1">Buenos días, <b>Rodrigo</b></span></div>
+              <div style="display:flex;gap:8px"><button class="boton sec">Reportar mantenimiento</button><button class="boton">Nuevo show</button></div>
+            </div>
+            <div class="kpis">
+              <div class="kpi"><span class="cap">Próximo show</span><span class="v mono plata">5 días</span><span class="d">Omar Camacho · 16 oct</span></div>
+              <div class="kpi"><span class="cap">Checklist del show</span><span class="v mono">[N]%</span><div class="barrita"><i style="width:40%"></i></div></div>
+              <div class="kpi"><span class="cap">Limpieza</span><span class="v mono">[N]/15</span><span class="d">áreas listas</span></div>
+              <div class="kpi"><span class="cap">Mantenimiento</span><span class="v mono">[N]</span><span class="d">solicitudes abiertas</span></div>
+            </div>
+            <div class="dos">
+              <div class="panel">
+                <div class="ph"><span>Compromiso de horarios · Omar Camacho</span><span>16 oct</span></div>
+                <div class="linea"><span class="t">[hh:mm]</span><span class="p on"></span><span class="x">Inicio de montaje<small>Producción externa</small></span></div>
+                <div class="linea"><span class="t">[hh:mm]</span><span class="p"></span><span class="x">Llegada de planta de luz<small>Con caja acústica</small></span></div>
+                <div class="linea"><span class="t">[hh:mm]</span><span class="p"></span><span class="x">Inicio del show</span></div>
+                <div class="linea"><span class="t">[hh:mm]</span><span class="p"></span><span class="x">Límite de desmontaje<small>Después: cargo por hora</small></span></div>
+              </div>
+              <div class="panel">
+                <div class="ph"><span>Mantenimiento por atender</span><span>Ver todo</span></div>
+                <div class="fila-ap"><span>Planta de luz de emergencia<small>Supervisión · [responsable]</small></span><span class="mono">[fecha]</span><span class="estado lleno">Urgente</span></div>
+                <div class="fila-ap"><span>Butacas sala primer piso<small>Cambio solicitado</small></span><span class="mono">[fecha]</span><span class="estado borde">En curso</span></div>
+                <div class="fila-ap"><span>Aire acondicionado<small>Todo el recinto</small></span><span class="mono">[fecha]</span><span class="estado borde">Pendiente</span></div>
+              </div>
+            </div>
+          </main>
+        </div>
+      </div>
+    </div>
+    <div>
+      <div class="etq">APP · DOBLE TOQUE EN INICIO → AUDITORIO</div>
+      <div class="tel">
+        <div class="toast"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 3l4 4-4 4"/><path d="M3 11V9a2 2 0 0 1 2-2h16"/><path d="M7 21l-4-4 4-4"/><path d="M21 13v2a2 2 0 0 1-2 2H3"/></svg>Ahora en Auditorio</div>
+        <div class="cuerpo" style="padding-top:76px">
+          <div style="display:flex;justify-content:space-between;align-items:center"><span class="logo plata" style="font-size:19px;letter-spacing:1.2px;font-weight:800">EXPLANADA</span><span class="chip">● Auditorio</span></div>
+          <div style="display:flex;flex-direction:column;gap:4px"><span class="cap">Domingo 11 de octubre</span><span class="h1" style="font-size:26px">Hola, <b>José Luis</b></span></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+            <div class="kpi"><span class="cap" style="font-size:9.5px">Próximo show</span><span class="v mono plata" style="font-size:24px">5 días</span><span class="d" style="font-size:11px">Omar Camacho</span></div>
+            <div class="kpi"><span class="cap" style="font-size:9.5px">Checklist</span><span class="v mono">[N]%</span><div class="barrita"><i style="width:40%"></i></div></div>
+          </div>
+          <div class="panel" style="padding:14px">
+            <div class="ph"><span>Mantenimiento</span><span>3</span></div>
+            <div class="fila-ap" style="grid-template-columns:1fr auto"><span>Planta de luz<small>Supervisión</small></span><span class="estado lleno">Urgente</span></div>
+            <div class="fila-ap" style="grid-template-columns:1fr auto"><span>Butacas 1er piso<small>Cambio</small></span><span class="estado borde">En curso</span></div>
+          </div>
+        </div>
+        <div class="tabs"><div class="on"><svg class="ico" style="width:20px;height:20px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/></svg>Inicio</div><div><svg class="ico" style="width:20px;height:20px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/></svg>Chats</div><div><svg class="ico" style="width:20px;height:20px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M9 6h11M9 12h11M9 18h11"/></svg>Tareas</div><div><svg class="ico" style="width:20px;height:20px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 8 3 8H3s3-1 3-8"/></svg>Avisos</div><div><svg class="ico" style="width:20px;height:20px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="4" y="4" width="6" height="6" rx="1"/><rect x="14" y="4" width="6" height="6" rx="1"/><rect x="4" y="14" width="6" height="6" rx="1"/><rect x="14" y="14" width="6" height="6" rx="1"/></svg>Más</div></div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
