@@ -12,9 +12,59 @@ function daysBetween(a: Date, b: Date) {
   return Math.max(0, Math.round((b.getTime() - a.getTime()) / 86_400_000));
 }
 
+/** Registros de bitácora que cuelgan de un evento (los de sistema y de usuarios no son de ninguna entidad). */
+const ENTITY_AUDIT_RESOURCES = [
+  'Event',
+  'TaskAssignment',
+  'ChecklistInstance',
+  'EventFile',
+  'PurchaseOrder',
+  'Campaign',
+  'PaymentProof',
+] as const;
+
+type AuditRow = { resource: string; resourceId: string | null; metaJson: unknown };
+
+function metaEventId(meta: unknown): string | null {
+  if (!meta || typeof meta !== 'object') return null;
+  const id = (meta as Record<string, unknown>).eventId;
+  return typeof id === 'string' ? id : null;
+}
+
 @Injectable()
 export class AnalyticsService {
   constructor(private prisma: PrismaService) {}
+
+  /**
+   * «Actividad reciente» solo de la entidad del tablero (ARTA o Auditorio, 11-10-2026): cada registro se
+   * resuelve a su evento y se queda si el evento es de esa entidad.
+   */
+  private async auditOfEntity<T extends AuditRow>(rows: T[], entity: EntityKey, eventIds: Set<string>): Promise<T[]> {
+    const idsOf = (resource: string) =>
+      rows.filter((r) => r.resource === resource && r.resourceId).map((r) => r.resourceId as string);
+    const [tasks, instances, files, orders] = await Promise.all([
+      this.prisma.taskAssignment.findMany({ where: { id: { in: idsOf('TaskAssignment') }, entity }, select: { id: true } }),
+      this.prisma.checklistInstance.findMany({
+        where: { id: { in: idsOf('ChecklistInstance') }, eventId: { in: [...eventIds] } },
+        select: { id: true },
+      }),
+      this.prisma.eventFile.findMany({
+        where: { id: { in: idsOf('EventFile') }, eventId: { in: [...eventIds] } },
+        select: { id: true },
+      }),
+      this.prisma.purchaseOrder.findMany({
+        where: { id: { in: idsOf('PurchaseOrder') }, eventId: { in: [...eventIds] } },
+        select: { id: true },
+      }),
+    ]);
+    const keep = new Set([...tasks, ...instances, ...files, ...orders].map((x) => x.id));
+    return rows.filter((r) => {
+      const fromMeta = metaEventId(r.metaJson);
+      if (fromMeta) return eventIds.has(fromMeta);
+      if (r.resource === 'Event') return !!r.resourceId && eventIds.has(r.resourceId);
+      return !!r.resourceId && keep.has(r.resourceId);
+    });
+  }
 
   async overview(entity: EntityKey, organizationId: string) {
     const now = new Date();
@@ -75,12 +125,14 @@ export class AnalyticsService {
         where: {
           createdAt: { gte: day30 },
           user: { organizationId },
+          resource: { in: [...ENTITY_AUDIT_RESOURCES] },
         },
         orderBy: { createdAt: 'desc' },
-        take: 8,
+        take: 80,
         include: { user: { select: { fullName: true } } },
       }),
     ]);
+    const entityAudit = (await this.auditOfEntity(recentAudit, entity, new Set(events.map((e) => e.id)))).slice(0, 8);
 
     const eventIds = events.map((e) => e.id);
     const advances = eventIds.length
@@ -325,7 +377,7 @@ export class AnalyticsService {
       bottomMargin,
       createdTrend: Object.entries(createdTrend).map(([month, count]) => ({ month, count })),
       alerts,
-      recentActivity: recentAudit.map((a) => ({
+      recentActivity: entityAudit.map((a) => ({
         id: a.id,
         action: a.action,
         resource: a.resource,

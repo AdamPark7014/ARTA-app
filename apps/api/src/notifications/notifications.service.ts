@@ -153,7 +153,7 @@ export class NotificationsService {
    */
   async eventAudience(eventId: string, excludeUserId?: string | null): Promise<string[]> {
     const [event, tasks, channel] = await Promise.all([
-      this.prisma.event.findUnique({ where: { id: eventId }, select: { createdById: true } }),
+      this.prisma.event.findUnique({ where: { id: eventId }, select: { createdById: true, entity: true } }),
       // Responsables principales y corresponsables (una tarea puede ser de varias personas).
       this.prisma.taskAssignment.findMany({
         where: { eventId, OR: [{ assigneeId: { not: null } }, { coAssignees: { some: {} } }] },
@@ -175,9 +175,13 @@ export class NotificationsService {
     if (ids.size === 0) return [];
     const active = await this.prisma.user.findMany({
       where: { id: { in: [...ids] }, active: true },
-      select: { id: true },
+      select: { id: true, roleKey: true, entities: true },
     });
-    return active.map((u) => u.id);
+    // ARTA y Auditorio van separados: del equipo, solo quien todavía opera la entidad del evento.
+    const entity = (event?.entity ?? null) as RbacEntity | null;
+    return active
+      .filter((u) => !entity || canAccessEventOps(u.entities as RbacEntity[], u.roleKey as RoleKey, entity))
+      .map((u) => u.id);
   }
 
   /** Aviso a todo el equipo del evento menos a quien hizo el cambio. Nunca lanza. */

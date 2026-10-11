@@ -17,12 +17,13 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { Prisma, TaskStatus } from '@prisma/client';
-import { IsArray, IsOptional, IsString } from 'class-validator';
+import { IsArray, IsIn, IsOptional, IsString } from 'class-validator';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { NotificationsService, type NotifyInput } from '../notifications/notifications.service';
 import { assertSameTenant, tenantIdOf } from '../common/tenant';
 import { assertEventNotClosed } from '../common/event-guards';
+import { canSeeEntity, entityForNew, entityScope, userEntities } from '../common/entity-scope';
 import { canAccessEventOps, eventOpsEntities, isDirectionRole, type EntityKey, type RoleKey } from '../common/rbac/roles';
 import { MULTER_OPTIONS, contentMatchesExtension, discardUpload } from '../uploads/upload-storage';
 import {
@@ -55,6 +56,8 @@ class CreateTaskDto {
   /** 1 o más personas, en orden: la primera queda como responsable principal. */
   @IsOptional() @IsArray() @IsString({ each: true }) assigneeIds?: string[];
   @IsOptional() @IsString() dueAt?: string;
+  /** ARTA o EXPLANADA para una tarea sin evento (con evento manda la del evento). */
+  @IsOptional() @IsIn(['ARTA', 'EXPLANADA']) entity?: string;
 }
 
 const TASK_INCLUDE = {
@@ -135,11 +138,15 @@ export class TasksController {
     return event;
   }
 
-  private async assertAssigneeInOrg(user: AuthUser, assigneeId?: string | null) {
+  private async assertAssigneeInOrg(
+    user: AuthUser,
+    assigneeId: string | null | undefined,
+    entity: EntityKey | null,
+  ) {
     if (!assigneeId) return null;
     const assignee = await this.prisma.user.findUnique({
       where: { id: assigneeId },
-      select: { id: true, fullName: true, active: true, organizationId: true },
+      select: { id: true, fullName: true, active: true, organizationId: true, roleKey: true, entities: true },
     });
     if (!assignee || !assignee.active) throw new NotFoundException('Persona no encontrada');
     if (
@@ -148,14 +155,20 @@ export class TasksController {
     ) {
       throw new ForbiddenException('Esa persona no pertenece a tu organización');
     }
-    return assignee;
+    // 11-10-2026: ARTA y Auditorio van separados; la tarea solo va a quien trabaja en esa entidad.
+    if (entity && !userEntities(assignee).includes(entity)) {
+      throw new ForbiddenException(
+        `${assignee.fullName} no trabaja en ${entity === 'ARTA' ? 'Arta' : 'Auditorio'}`,
+      );
+    }
+    return { id: assignee.id, fullName: assignee.fullName };
   }
 
-  /** Cada persona elegida, en el orden elegido, validada contra la organización. */
-  private async assertAssigneesInOrg(user: AuthUser, ids: string[]) {
+  /** Cada persona elegida, en el orden elegido, validada contra la organización y la entidad. */
+  private async assertAssigneesInOrg(user: AuthUser, ids: string[], entity: EntityKey | null) {
     const people = [];
     for (const id of ids) {
-      const person = await this.assertAssigneeInOrg(user, id);
+      const person = await this.assertAssigneeInOrg(user, id, entity);
       if (person) people.push(person);
     }
     return people;
@@ -174,7 +187,13 @@ export class TasksController {
   private async notifyAssigned(
     actor: AuthUser,
     people: Array<{ id: string }>,
-    task: { id: string; title: string; organizationId: string | null; dueAt: Date | null },
+    task: {
+      id: string;
+      title: string;
+      organizationId: string | null;
+      dueAt: Date | null;
+      entity?: NotifyInput['entity'] | null;
+    },
     event: { id: string; name: string; entity: NotifyInput['entity'] } | null | undefined,
     kind: 'task.assigned' | 'task.reassigned',
   ) {
@@ -187,20 +206,21 @@ export class TasksController {
         title: kind === 'task.assigned' ? `${actor.fullName} te asignó una tarea` : `${actor.fullName} te pasó una tarea`,
         body: `${task.title}${event ? ` · ${event.name}` : ''}${dueLabel(task.dueAt)}`,
         linkUrl: taskLink(event?.id, task.id),
-        entity: event?.entity,
+        entity: event?.entity ?? task.entity ?? undefined,
       });
     }
   }
 
   private async assertCanTouch(
     user: AuthUser,
-    task: { eventId: string | null; organizationId: string | null },
+    task: { eventId: string | null; organizationId: string | null; entity?: EntityKey | null },
   ) {
     if (task.eventId) {
       await this.assertEvent(user, task.eventId);
       return;
     }
     assertSameTenant(user, task.organizationId);
+    if (!canSeeEntity(user, task.entity)) throw new ForbiddenException();
   }
 
   private async loadTask(id: string) {
@@ -232,7 +252,8 @@ export class TasksController {
   }
 
   @Get('mine')
-  async mine(@Req() req: { user: AuthUser }) {
+  async mine(@Req() req: { user: AuthUser }, @Query('entity') entity?: string) {
+    const scope = entityScope(req.user, entity);
     const allowed = eventOpsEntities(req.user.entities as EntityKey[], req.user.roleKey as RoleKey);
     const isSuper = req.user.roleKey === 'super_admin';
     const orgId = tenantIdOf(req.user);
@@ -240,6 +261,7 @@ export class TasksController {
       where: {
         // Mías = soy el responsable principal o uno de los corresponsables.
         AND: [{ OR: [{ assigneeId: req.user.id }, { coAssignees: { some: { userId: req.user.id } } }] }],
+        entity: { in: scope },
         OR: [
           { eventId: null, ...(isSuper ? {} : { organizationId: orgId }) },
           ...(allowed.length
@@ -273,10 +295,12 @@ export class TasksController {
   }
 
   @Get('requested')
-  async requested(@Req() req: { user: AuthUser }) {
+  async requested(@Req() req: { user: AuthUser }, @Query('entity') entity?: string) {
+    const scope = entityScope(req.user, entity);
     const rows = await this.prisma.taskAssignment.findMany({
       where: {
         createdById: req.user.id,
+        entity: { in: scope },
         // Si quien pidió también la tiene, es suya: va en «Mis tareas».
         NOT: { OR: [{ assigneeId: req.user.id }, { coAssignees: { some: { userId: req.user.id } } }] },
       },
@@ -288,7 +312,11 @@ export class TasksController {
   }
 
   @Get('workload')
-  async workload(@Req() req: { user: AuthUser }, @Query('status') status?: string) {
+  async workload(
+    @Req() req: { user: AuthUser },
+    @Query('status') status?: string,
+    @Query('entity') entity?: string,
+  ) {
     const managers = [
       'super_admin',
       'dir_general',
@@ -303,9 +331,11 @@ export class TasksController {
     const isSuper = req.user.roleKey === 'super_admin';
     const orgId = tenantIdOf(req.user);
     const allowed = eventOpsEntities(req.user.entities as EntityKey[], req.user.roleKey as RoleKey);
+    const scope = entityScope(req.user, entity);
     const rows = await this.prisma.taskAssignment.findMany({
       where: {
         ...(status && status !== 'all' ? { status: status as TaskStatus } : {}),
+        entity: { in: scope },
         OR: [
           { eventId: null, ...(isSuper ? {} : { organizationId: orgId }) },
           ...(allowed.length
@@ -342,14 +372,16 @@ export class TasksController {
       throw new ForbiddenException('Tu acceso es solo a carpetas generales');
     }
     const event = dto.eventId ? await this.assertEventOpen(req.user, dto.eventId) : null;
+    const entity = (event?.entity as EntityKey | undefined) ?? entityForNew(req.user, dto.entity);
     // Correcciones 30-09-2026: una tarea puede ser de 1 o más personas.
-    const people = await this.assertAssigneesInOrg(req.user, this.requestedAssignees(dto) ?? []);
+    const people = await this.assertAssigneesInOrg(req.user, this.requestedAssignees(dto) ?? [], entity);
     const [primary, ...others] = people;
 
     const created = await this.prisma.taskAssignment.create({
       data: {
         eventId: dto.eventId || undefined,
         organizationId: event?.organizationId || tenantIdOf(req.user),
+        entity,
         title: dto.title,
         module: dto.module,
         detail: dto.detail,
@@ -425,7 +457,7 @@ export class TasksController {
       title: `${req.user.fullName} subió evidencia a una tarea`,
       body: `${task.title} · ${evidence.label || file.originalname}`,
       linkUrl: taskLink(task.eventId, task.id),
-      entity: task.event?.entity,
+      entity: task.event?.entity ?? task.entity ?? undefined,
     });
 
     return evidence;
@@ -503,7 +535,7 @@ export class TasksController {
         ? [task.createdById]
         : await this.notifications.whoCan({
             organizationId: task.organizationId,
-            entity: task.event?.entity ?? null,
+            entity: task.event?.entity ?? task.entity ?? null,
             directionOnly: true,
             exclude: req.user.id,
           });
@@ -514,7 +546,7 @@ export class TasksController {
         title: `${req.user.fullName} entregó una tarea para tu revisión`,
         body: `${task.title}${eventName ? ` · ${eventName}` : ''}`,
         linkUrl: link,
-        entity: task.event?.entity,
+        entity: task.event?.entity ?? task.entity ?? undefined,
       });
     } else if (task.createdById && task.createdById !== req.user.id) {
       await this.notifications.notify({
@@ -525,7 +557,7 @@ export class TasksController {
         title: `${req.user.fullName} completó una tarea que pediste`,
         body: `${task.title}${eventName ? ` · ${eventName}` : ''}`,
         linkUrl: link,
-        entity: task.event?.entity,
+        entity: task.event?.entity ?? task.entity ?? undefined,
       });
     }
 
@@ -566,7 +598,7 @@ export class TasksController {
         title: `${req.user.fullName} aprobó tu entrega`,
         body: task.title,
         linkUrl: taskLink(task.eventId, task.id),
-        entity: task.event?.entity,
+        entity: task.event?.entity ?? task.entity ?? undefined,
       });
     }
 
@@ -617,7 +649,7 @@ export class TasksController {
         title: `${req.user.fullName} pidió corrección en tu entrega`,
         body: `${task.title}: ${note}`,
         linkUrl: taskLink(task.eventId, task.id),
-        entity: task.event?.entity,
+        entity: task.event?.entity ?? task.entity ?? undefined,
       });
     }
 
@@ -648,7 +680,13 @@ export class TasksController {
     const before = taskAssigneeIds(task);
     const wanted = this.requestedAssignees(body);
     const reassigned = wanted !== undefined && wanted.join('|') !== before.join('|');
-    const people = reassigned ? await this.assertAssigneesInOrg(req.user, wanted!) : [];
+    const people = reassigned
+      ? await this.assertAssigneesInOrg(
+          req.user,
+          wanted!,
+          ((task.event?.entity as EntityKey | undefined) ?? task.entity ?? null) as EntityKey | null,
+        )
+      : [];
     const added = people.filter((p) => !before.includes(p.id));
 
     if (body.status === 'DONE' && taskNeedsApproval(task) && isTaskAssignee(req.user.id, task)) {
@@ -819,7 +857,7 @@ export class TasksController {
       title: `${req.user.fullName} eliminó una tarea`,
       body: `${task.title}${task.event ? ` · ${task.event.name}` : ''}`,
       linkUrl: taskLink(task.eventId),
-      entity: task.event?.entity,
+      entity: task.event?.entity ?? task.entity ?? undefined,
     });
     return { ok: true };
   }

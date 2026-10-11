@@ -25,6 +25,7 @@ import {
 } from '../common/revisions/revision.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { assertSameTenant, assertSharedCatalogWrite } from '../common/tenant';
+import { entityScope } from '../common/entity-scope';
 import { assertEventNotClosed } from '../common/event-guards';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { UploadedFile, UseInterceptors } from '@nestjs/common';
@@ -115,6 +116,7 @@ export class ChecklistsController {
   templates(
     @Req() req: { user: AuthUser },
     @Query('all') all?: string,
+    @Query('entity') entity?: string,
   ) {
     const canManage =
       isDirectionRole(req.user.roleKey) ||
@@ -127,8 +129,13 @@ export class ChecklistsController {
       throw new ForbiddenException('Sin permiso para ver todas las plantillas');
     }
 
+    // ARTA y Auditorio separados (11-10-2026): plantillas de las entidades de la persona; vacío = de las dos.
+    const scope = entityScope(req.user, entity);
     return this.prisma.checklistTemplate.findMany({
-      where: all === '1' ? undefined : { active: true },
+      where: {
+        ...(all === '1' ? {} : { active: true }),
+        OR: [{ entities: { isEmpty: true } }, { entities: { hasSome: scope } }],
+      },
       orderBy: { name: 'asc' },
     });
   }

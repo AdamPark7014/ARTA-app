@@ -10,6 +10,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   Req,
   UseGuards,
   Optional,
@@ -33,6 +34,7 @@ import {
   type RoleKey,
 } from '../common/rbac/roles';
 import { assertSameTenant, tenantIdOf } from '../common/tenant';
+import { entityScope, userEntities } from '../common/entity-scope';
 import { assertUserSeatAvailable } from '../common/plan-limits';
 
 class CreateUserDto {
@@ -73,9 +75,43 @@ export class UsersController {
     });
   }
 
+  private canManageUsers(user: { roleKey: string; permissions?: string[] }) {
+    return hasPermission(user.roleKey as RoleKey, user.permissions || [], PERMISSIONS.USERS_MANAGE);
+  }
+
+  /** Editar, cambiar de rol o dar de baja a alguien que ya existe: solo dirección general. */
   private assertUsersManage(user: { roleKey: string; permissions?: string[] }) {
-    if (!hasPermission(user.roleKey as RoleKey, user.permissions || [], PERMISSIONS.USERS_MANAGE)) {
+    if (!this.canManageUsers(user)) {
       throw new ForbiddenException('Solo Arturo y José Luis (dirección) gestionan usuarios');
+    }
+  }
+
+  /** Ver el equipo y dar de alta gente nueva: dirección general y adjunta (11-10-2026). */
+  private assertUsersCreate(user: { roleKey: string; permissions?: string[] }) {
+    if (
+      !this.canManageUsers(user) &&
+      !hasPermission(user.roleKey as RoleKey, user.permissions || [], PERMISSIONS.USERS_CREATE)
+    ) {
+      throw new ForbiddenException('No puedes dar de alta usuarios');
+    }
+  }
+
+  /**
+   * Quien solo da de alta no reparte dirección general ni plataforma, ni entidades que él no tiene.
+   */
+  private assertCreateScope(
+    actor: { roleKey: string; permissions?: string[]; entities?: string[] | null },
+    roleKey: string,
+    entities: string[],
+  ) {
+    if (this.canManageUsers(actor)) return;
+    if (roleKey === 'dir_general' || roleKey === 'super_admin') {
+      throw new ForbiddenException('Solo dirección general da ese rol');
+    }
+    const mine = userEntities(actor);
+    const outside = entities.filter((e) => !mine.includes(e as EntityKey));
+    if (outside.length) {
+      throw new ForbiddenException('Solo puedes dar acceso a tus entidades (Arta o Auditorio)');
     }
   }
 
@@ -96,10 +132,11 @@ export class UsersController {
    * Arta puede pedirle apoyo a alguien que solo opera el Auditorio.
    */
   @Get('directory')
-  directory(
+  async directory(
     @Req() req: { user: { entities: string[]; roleKey: string; organizationId?: string | null } },
+    @Query('entity') entity?: string,
   ) {
-    return this.prisma.user.findMany({
+    const people = await this.prisma.user.findMany({
       where: {
         active: true,
         organizationId: tenantIdOf(req.user),
@@ -107,6 +144,10 @@ export class UsersController {
       select: { id: true, fullName: true, email: true, title: true, roleKey: true, entities: true },
       orderBy: { fullName: 'asc' },
     });
+    // 11-10-2026: con `?entity=`, solo quien puede trabajar en esa entidad (a quién se le asigna una tarea).
+    if (!entity) return people;
+    const [only] = entityScope(req.user, entity);
+    return people.filter((p) => userEntities(p).includes(only));
   }
 
   @Get()
@@ -116,7 +157,7 @@ export class UsersController {
       user: { id: string; roleKey: string; permissions: string[]; organizationId?: string | null };
     },
   ) {
-    this.assertUsersManage(req.user);
+    this.assertUsersCreate(req.user);
     const users = await this.prisma.user.findMany({
       where: { organizationId: tenantIdOf(req.user) },
       select: {
@@ -141,10 +182,10 @@ export class UsersController {
 
   @Post()
   async create(
-    @Req() req: { user: { id: string; roleKey: string; permissions: string[] } },
+    @Req() req: { user: { id: string; roleKey: string; permissions: string[]; entities?: string[] } },
     @Body() dto: CreateUserDto,
   ) {
-    this.assertUsersManage(req.user);
+    this.assertUsersCreate(req.user);
     this.assertAssignableRole(req.user.roleKey, dto.roleKey);
     const passwordHash = await bcrypt.hash(dto.password, 12);
     const actor = await this.prisma.user.findUnique({
@@ -158,7 +199,10 @@ export class UsersController {
     const entities =
       dto.entities?.length > 0
         ? dto.entities
-        : ROLE_DEFAULT_ENTITIES[dto.roleKey as RoleKey] || (['ARTA'] as EntityKey[]);
+        : this.canManageUsers(req.user)
+          ? ROLE_DEFAULT_ENTITIES[dto.roleKey as RoleKey] || (['ARTA'] as EntityKey[])
+          : (userEntities(req.user) as EntityKey[]);
+    this.assertCreateScope(req.user, dto.roleKey, entities);
 
     const existing = await this.prisma.user.findUnique({
       where: { email },
@@ -170,6 +214,10 @@ export class UsersController {
       }
       if (existing.active) {
         throw new ConflictException('Ya existe un usuario activo con ese email');
+      }
+      // Reactivar es tocar a alguien que ya existe: solo dirección general.
+      if (!this.canManageUsers(req.user)) {
+        throw new ForbiddenException('Ese correo es de alguien dado de baja; pídele a dirección general que lo reactive');
       }
       // Reactivar baja anterior con los datos nuevos
       const revived = await this.prisma.user.update({
@@ -268,9 +316,12 @@ export class UsersController {
 
   @Get('roles')
   roles(@Req() req: { user: { roleKey: string; permissions: string[] } }) {
-    this.assertUsersManage(req.user);
+    this.assertUsersCreate(req.user);
+    const manage = this.canManageUsers(req.user);
     const keys =
-      req.user.roleKey === 'super_admin' ? ALL_ROLES : ALL_ROLES.filter((r) => r !== 'super_admin');
+      req.user.roleKey === 'super_admin'
+        ? ALL_ROLES
+        : ALL_ROLES.filter((r) => r !== 'super_admin' && (manage || r !== 'dir_general'));
     return keys.map((r) => ({
       key: r,
       label: ROLE_LABELS[r],
@@ -282,7 +333,7 @@ export class UsersController {
 
   @Get('permissions/catalog')
   permissionsCatalog(@Req() req: { user: { roleKey: string; permissions: string[] } }) {
-    this.assertUsersManage(req.user);
+    this.assertUsersCreate(req.user);
     return ASSIGNABLE_PERMISSIONS.map((key) => ({
       key,
       label: PERMISSION_LABELS[key] || key,

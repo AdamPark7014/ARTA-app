@@ -7,7 +7,8 @@ import {
 import { ChatChannelKind, ChatMessageKind, Prisma } from '@prisma/client';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { tenantIdOf } from '../common/tenant';
-import { ALL_ROLES, isDirectionRole } from '../common/rbac/roles';
+import { ALL_ROLES, isDirectionRole, type EntityKey } from '../common/rbac/roles';
+import { canSeeEntity, ENTITY_KEYS, entityForNew, entityScope, userEntities } from '../common/entity-scope';
 import { NotificationsService } from '../notifications/notifications.service';
 import { shortName } from '../notifications/notification-push-meta';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
@@ -38,10 +39,23 @@ export type ChatUser = {
   roleKey: string;
   organizationId?: string | null;
   fullName?: string;
+  /** ARTA / EXPLANADA (llegan en el token; los canales con entidad se filtran por ellas). */
+  entities?: string[] | null;
 };
 
 export const GENERAL_SLUG = 'general';
 export const ANNOUNCEMENTS_SLUG = 'anuncios';
+/**
+ * ARTA y Auditorio van separados (docs/entidades-arta-auditorio.md): cada entidad tiene su #general
+ * y su #anuncios. Los de ARTA conservan los slugs de siempre.
+ */
+const DEFAULT_CHANNEL_SLUGS: Record<EntityKey, { general: string; announcements: string }> = {
+  ARTA: { general: GENERAL_SLUG, announcements: ANNOUNCEMENTS_SLUG },
+  EXPLANADA: { general: 'general-auditorio', announcements: 'anuncios-auditorio' },
+};
+export const DEFAULT_SLUGS = new Set(
+  Object.values(DEFAULT_CHANNEL_SLUGS).flatMap((d) => [d.general, d.announcements]),
+);
 const LEGACY_GENERAL = 'general';
 const LEGACY_DM_PREFIX = 'dm:';
 export const MAX_BODY = 8000;
@@ -151,6 +165,7 @@ type ChannelRow = {
   postingRestricted: boolean;
   lastMessageAt: Date | null;
   lastMessagePreview: string | null;
+  entity: EntityKey | null;
 };
 
 function serializeQuote(q: NonNullable<MessageRow['replyTo']>): ChatQuoteDto {
@@ -217,43 +232,61 @@ export class ChatService {
 
   // ─── Canales de la organización ──────────────────────────────────────────
 
-  /** #general (todos escriben) y #anuncios (solo dirección); toda la gente activa es miembro. */
+  /**
+   * #general (todos escriben) y #anuncios (solo dirección) de cada entidad; es miembro toda la gente
+   * activa de esa entidad. De paso saca de los canales de una entidad a quien ya no la ve.
+   */
   async ensureDefaults(orgId: string, force = false) {
     const last = this.defaultsCheckedAt.get(orgId) ?? 0;
     if (!force && Date.now() - last < DEFAULTS_TTL_MS) return;
-    const defaults = [
-      {
-        slug: GENERAL_SLUG,
-        name: 'general',
-        topic: 'Conversación del equipo',
-        description: 'Canal abierto para toda la organización',
-        postingRestricted: false,
-      },
-      {
-        slug: ANNOUNCEMENTS_SLUG,
-        name: 'anuncios',
-        topic: 'Avisos importantes de dirección',
-        description: 'Comunicados oficiales; solo dirección publica',
-        postingRestricted: true,
-      },
-    ];
     const users = await this.prisma.user.findMany({
       where: { active: true, ...this.orgUserWhere(orgId) },
-      select: { id: true },
+      select: { id: true, roleKey: true, entities: true },
     });
-    for (const d of defaults) {
-      const channel = await this.prisma.chatChannel.upsert({
-        where: { organizationId_slug: { organizationId: orgId, slug: d.slug } },
-        create: { organizationId: orgId, kind: ChatChannelKind.PUBLIC, ...d },
-        update: { isArchived: false },
-        select: { id: true },
-      });
-      if (users.length) {
+    for (const entity of ENTITY_KEYS) {
+      const members = users.filter((u) => userEntities(u).includes(entity));
+      if (!members.length) continue;
+      const auditorio = entity === 'EXPLANADA';
+      // Los de Auditorio solo hacen falta si alguien ve Auditorio y no Arta (en ARTA: Rodrigo, Will, JP).
+      // Así una organización sin esa gente (la demo de las tiendas) sigue con un solo #general.
+      if (auditorio && !members.some((u) => !userEntities(u).includes('ARTA'))) continue;
+      const slugs = DEFAULT_CHANNEL_SLUGS[entity];
+      const defaults = [
+        {
+          slug: slugs.general,
+          // Nombre propio: las apps 1.0.0 no filtran por entidad y un híbrido vería dos «#general».
+          name: auditorio ? 'general-auditorio' : 'general',
+          topic: auditorio ? 'Conversación del equipo del Auditorio' : 'Conversación del equipo',
+          description: auditorio ? 'Canal abierto para todo el Auditorio' : 'Canal abierto para toda la organización',
+          postingRestricted: false,
+        },
+        {
+          slug: slugs.announcements,
+          name: auditorio ? 'anuncios-auditorio' : 'anuncios',
+          topic: auditorio ? 'Avisos importantes de dirección del Auditorio' : 'Avisos importantes de dirección',
+          description: 'Comunicados oficiales; solo dirección publica',
+          postingRestricted: true,
+        },
+      ];
+      for (const d of defaults) {
+        const channel = await this.prisma.chatChannel.upsert({
+          where: { organizationId_slug: { organizationId: orgId, slug: d.slug } },
+          create: { organizationId: orgId, kind: ChatChannelKind.PUBLIC, entity, ...d },
+          update: { isArchived: false, entity },
+          select: { id: true },
+        });
         await this.prisma.chatChannelMember.createMany({
-          data: users.map((u) => ({ channelId: channel.id, userId: u.id })),
+          data: members.map((u) => ({ channelId: channel.id, userId: u.id })),
           skipDuplicates: true,
         });
       }
+    }
+    for (const entity of ENTITY_KEYS) {
+      const outsiders = users.filter((u) => !userEntities(u).includes(entity)).map((u) => u.id);
+      if (!outsiders.length) continue;
+      await this.prisma.chatChannelMember.deleteMany({
+        where: { userId: { in: outsiders }, channel: { organizationId: orgId, entity } },
+      });
     }
     this.defaultsCheckedAt.set(orgId, Date.now());
   }
@@ -289,6 +322,7 @@ export class ChatService {
       include: { members: { where: { userId: user.id }, take: 1 } },
     });
     if (!channel || channel.isArchived) throw new NotFoundException('Conversación no encontrada');
+    if (!canSeeEntity(user, channel.entity)) throw new NotFoundException('Conversación no encontrada');
     let membership = channel.members[0] ?? null;
     if (!membership) {
       if (channel.kind !== ChatChannelKind.PUBLIC) {
@@ -324,12 +358,14 @@ export class ChatService {
   }
 
   /** Total para el globo del menú y del ícono de la app (sin conversaciones silenciadas). */
-  async unreadTotal(user: ChatUser): Promise<{ total: number }> {
+  async unreadTotal(user: ChatUser, entity?: string | null): Promise<{ total: number }> {
+    const scope: string[] = entityScope(user, entity);
     const rows = await this.prisma.$queryRaw<Array<{ n: number }>>`
       SELECT COUNT(*)::int AS n
       FROM "ChatMessage" m
       JOIN "ChatChannelMember" mm ON mm."channelId" = m."channelId" AND mm."userId" = ${user.id}
       JOIN "ChatChannel" c ON c."id" = m."channelId" AND c."isArchived" = false
+        AND (c."entity" IS NULL OR c."entity"::text = ANY(${scope}::text[]))
       WHERE m."deletedAt" IS NULL
         AND m."parentId" IS NULL
         AND m."senderId" <> ${user.id}
@@ -341,14 +377,19 @@ export class ChatService {
     return { total: Number(rows[0]?.n ?? 0) };
   }
 
-  async listChannels(user: ChatUser) {
+  async listChannels(user: ChatUser, entity?: string | null) {
     const orgId = tenantIdOf(user);
+    const scope = entityScope(user, entity);
     await this.ensureDefaults(orgId);
     const channels = await this.prisma.chatChannel.findMany({
       where: {
         organizationId: orgId,
         isArchived: false,
-        OR: [{ kind: ChatChannelKind.PUBLIC }, { members: { some: { userId: user.id } } }],
+        AND: [
+          { OR: [{ kind: ChatChannelKind.PUBLIC }, { members: { some: { userId: user.id } } }] },
+          // Directos y grupos (sin entidad) se ven en las dos; lo demás solo en su entidad.
+          { OR: [{ entity: null }, { entity: { in: scope } }] },
+        ],
       },
       include: {
         members: {
@@ -377,6 +418,7 @@ export class ChatService {
           name: peer?.fullName ?? ch.name,
           topic: ch.topic,
           eventId: ch.eventId,
+          entity: ch.entity,
           peer,
           isGroupDm: ch.isGroupDm,
           isMember: Boolean(membership),
@@ -412,6 +454,7 @@ export class ChatService {
       topic: channel.topic,
       description: channel.description,
       eventId: channel.eventId,
+      entity: channel.entity,
       peer,
       isGroupDm: channel.isGroupDm,
       postingRestricted: channel.postingRestricted,
@@ -434,9 +477,17 @@ export class ChatService {
 
   async createChannel(
     user: ChatUser,
-    input: { name?: string; kind?: 'PUBLIC' | 'PRIVATE'; topic?: string; description?: string; memberIds?: string[] },
+    input: {
+      name?: string;
+      kind?: 'PUBLIC' | 'PRIVATE';
+      topic?: string;
+      description?: string;
+      memberIds?: string[];
+      entity?: string | null;
+    },
   ) {
     const orgId = tenantIdOf(user);
+    const entity = entityForNew(user, input.entity);
     const name = (input.name ?? '').trim().replace(/^#/, '').slice(0, 80);
     if (name.length < 2) throw new BadRequestException('Nombre de canal inválido');
     const kind = input.kind === 'PRIVATE' ? ChatChannelKind.PRIVATE : ChatChannelKind.PUBLIC;
@@ -445,13 +496,14 @@ export class ChatService {
       const exists = await this.prisma.chatChannel.findFirst({ where: { organizationId: orgId, slug } });
       if (exists) throw new BadRequestException('Ya existe un canal con ese nombre');
     }
-    const extra = await this.validColleagueIds(user, input.memberIds);
+    const extra = await this.validColleagueIds(user, input.memberIds, entity);
     const channel = await this.prisma.chatChannel.create({
       data: {
         organizationId: orgId,
         kind,
         slug,
         name,
+        entity,
         topic: input.topic?.trim().slice(0, 250) || null,
         description: input.description?.trim().slice(0, 1000) || null,
         createdById: user.id,
@@ -467,14 +519,15 @@ export class ChatService {
     return this.getChannel(user, channel.id);
   }
 
-  private async validColleagueIds(user: ChatUser, ids?: string[] | null): Promise<string[]> {
+  /** Gente activa de mi organización; con `entity`, solo quien trabaja en esa entidad. */
+  private async validColleagueIds(user: ChatUser, ids?: string[] | null, entity?: EntityKey | null): Promise<string[]> {
     const wanted = [...new Set((ids ?? []).filter((id) => typeof id === 'string' && id && id !== user.id))];
     if (!wanted.length) return [];
     const rows = await this.prisma.user.findMany({
       where: { id: { in: wanted.slice(0, 200) }, active: true, ...this.orgUserWhere(tenantIdOf(user)) },
-      select: { id: true },
+      select: { id: true, roleKey: true, entities: true },
     });
-    return rows.map((r) => r.id);
+    return rows.filter((r) => !entity || userEntities(r).includes(entity)).map((r) => r.id);
   }
 
   /** Campana + push a quien entra a un canal o grupo (no a quien lo agregó). */
@@ -601,9 +654,9 @@ export class ChatService {
     const orgId = tenantIdOf(user);
     const event = await this.prisma.event.findFirst({
       where: { id: eventId, OR: [{ organizationId: orgId }, ...(this.isDefaultOrg(orgId) ? [{ organizationId: null }] : [])] },
-      select: { id: true, name: true, artist: true },
+      select: { id: true, name: true, artist: true, entity: true },
     });
-    if (!event) throw new NotFoundException('Evento no encontrado');
+    if (!event || !canSeeEntity(user, event.entity)) throw new NotFoundException('Evento no encontrado');
     const existing = await this.prisma.chatChannel.findUnique({ where: { eventId }, select: { id: true } });
     if (existing) return this.getChannel(user, existing.id);
 
@@ -617,6 +670,7 @@ export class ChatService {
         name: label,
         topic: 'Producción del evento',
         eventId,
+        entity: event.entity,
         createdById: user.id,
         members: { create: [{ userId: user.id, role: 'owner' }] },
       },
@@ -636,7 +690,7 @@ export class ChatService {
     const data: Prisma.ChatChannelUpdateInput = {};
     if (input.topic !== undefined) data.topic = input.topic.trim().slice(0, 250) || null;
     if (input.description !== undefined) data.description = input.description.trim().slice(0, 1000) || null;
-    if (input.name !== undefined && channel.slug !== GENERAL_SLUG && channel.slug !== ANNOUNCEMENTS_SLUG) {
+    if (input.name !== undefined && !DEFAULT_SLUGS.has(channel.slug ?? '')) {
       const name = input.name.trim().replace(/^#/, '').slice(0, 80);
       if (name.length < 2) throw new BadRequestException('Nombre de canal inválido');
       data.name = name;
@@ -651,7 +705,8 @@ export class ChatService {
     if (channel.kind === ChatChannelKind.DIRECT) {
       throw new BadRequestException('Un directo es entre dos personas; crea un canal privado');
     }
-    const ids = await this.validColleagueIds(user, userIds);
+    // A un canal de Arta o de Auditorio solo entra quien trabaja en esa entidad.
+    const ids = await this.validColleagueIds(user, userIds, channel.entity);
     if (!ids.length) throw new BadRequestException('Elige al menos a una persona de tu organización');
     const already = await this.prisma.chatChannelMember.findMany({
       where: { channelId, userId: { in: ids } },
@@ -684,7 +739,7 @@ export class ChatService {
       throw new ForbiddenException('Solo quien administra el canal quita personas');
     }
     if (channel.kind === ChatChannelKind.DIRECT) throw new BadRequestException('No puedes salir de un directo');
-    if (channel.slug === GENERAL_SLUG || channel.slug === ANNOUNCEMENTS_SLUG) {
+    if (DEFAULT_SLUGS.has(channel.slug ?? '')) {
       throw new BadRequestException('Los canales de la organización incluyen a todo el equipo');
     }
     const removed = await this.prisma.chatChannelMember.deleteMany({ where: { channelId, userId: targetId } });
@@ -711,7 +766,7 @@ export class ChatService {
   async archiveChannel(user: ChatUser, channelId: string) {
     const { channel, membership } = await this.access(user, channelId);
     if (!this.canModerate(user, membership.role)) throw new ForbiddenException('Solo quien administra el canal lo archiva');
-    if (channel.kind === ChatChannelKind.DIRECT || channel.slug === GENERAL_SLUG || channel.slug === ANNOUNCEMENTS_SLUG) {
+    if (channel.kind === ChatChannelKind.DIRECT || DEFAULT_SLUGS.has(channel.slug ?? '')) {
       throw new BadRequestException('Esta conversación no se archiva');
     }
     await this.prisma.chatChannel.update({ where: { id: channelId }, data: { isArchived: true } });
@@ -1034,6 +1089,7 @@ export class ChatService {
           : `${shortName(author) || author} te mencionó en ${channelLabel}`,
         body: preview,
         linkUrl: url,
+        entity: channel.entity ?? undefined,
       })),
     );
   }
@@ -1205,7 +1261,10 @@ export class ChatService {
           channel: {
             organizationId: tenantIdOf(user),
             isArchived: false,
-            OR: [{ kind: ChatChannelKind.PUBLIC }, { members: { some: { userId: user.id } } }],
+            AND: [
+              { OR: [{ kind: ChatChannelKind.PUBLIC }, { members: { some: { userId: user.id } } }] },
+              { OR: [{ entity: null }, { entity: { in: userEntities(user) } }] },
+            ],
           },
         },
       },
@@ -1312,7 +1371,8 @@ export class ChatService {
     return { ok: true, lastReadAt: at };
   }
 
-  async searchMessages(user: ChatUser, rawQuery: string, channelId?: string) {
+  async searchMessages(user: ChatUser, rawQuery: string, channelId?: string, entity?: string | null) {
+    const scope = entityScope(user, entity);
     const q = (rawQuery ?? '').trim().slice(0, 100);
     if (q.length < 2) return { messages: [] };
     if (channelId) await this.access(user, channelId);
@@ -1328,7 +1388,10 @@ export class ChatService {
           : {
               organizationId: tenantIdOf(user),
               isArchived: false,
-              OR: [{ kind: ChatChannelKind.PUBLIC }, { members: { some: { userId: user.id } } }],
+              AND: [
+                { OR: [{ kind: ChatChannelKind.PUBLIC }, { members: { some: { userId: user.id } } }] },
+                { OR: [{ entity: null }, { entity: { in: scope } }] },
+              ],
             },
       },
       include: { ...messageInclude, channel: { select: { id: true, name: true, kind: true, isGroupDm: true } } },
@@ -1472,9 +1535,11 @@ export class ChatService {
   private async notifyReport(user: ChatUser, channel: ChannelRow, message: MessageRow, reason: ReportReason) {
     const direction = await this.prisma.user.findMany({
       where: { active: true, roleKey: { in: DIRECTION_ROLES }, ...this.orgUserWhere(channel.organizationId) },
-      select: { id: true },
+      select: { id: true, roleKey: true, entities: true },
     });
-    const directionIds = direction.map((d) => d.id);
+    const directionIds = direction
+      .filter((d) => !channel.entity || userEntities(d).includes(channel.entity))
+      .map((d) => d.id);
     // Dueños del canal + qué miembros de dirección están dentro (para saber a quién enlazar al mensaje).
     const inside = await this.prisma.chatChannelMember.findMany({
       where: {
@@ -1501,6 +1566,7 @@ export class ChatService {
         type: 'chat.report',
         title: 'Reporte en el chat',
         body,
+        entity: channel.entity ?? undefined,
         // Un privado o directo ajeno no se abre: el enlace queda en el chat.
         linkUrl: channel.kind === ChatChannelKind.PUBLIC || members.has(uid) ? messageUrl : '/chat',
       })),

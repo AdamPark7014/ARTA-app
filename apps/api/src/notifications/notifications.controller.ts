@@ -9,11 +9,13 @@ import {
   Req,
   UseGuards,
 } from '@nestjs/common';
+import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { entityScope } from '../common/entity-scope';
 import { NotificationsService } from './notifications.service';
 
-type AuthUser = { id: string };
+type AuthUser = { id: string; roleKey: string; entities?: string[] | null };
 
 @Controller('notifications')
 @UseGuards(JwtAuthGuard)
@@ -23,18 +25,29 @@ export class NotificationsController {
     private notifications: NotificationsService,
   ) {}
 
-  /** Bandeja del usuario. `unread=1` deja solo lo no leído. */
+  /**
+   * Avisos de las entidades de la persona (ARTA / Auditorio, docs/entidades-arta-auditorio.md).
+   * Los avisos sin entidad (chat directo, cuenta) se ven en las dos.
+   */
+  private scopeWhere(user: AuthUser, entity?: string): Prisma.NotificationWhereInput {
+    const scope = entityScope(user, entity);
+    return { OR: [{ entity: null }, { entity: { in: scope } }] };
+  }
+
+  /** Bandeja del usuario. `unread=1` deja solo lo no leído; `entity=` solo esa entidad. */
   @Get()
   list(
     @Req() req: { user: AuthUser },
     @Query('unread') unread?: string,
     @Query('take') take?: string,
+    @Query('entity') entity?: string,
   ) {
     const limit = Math.min(Math.max(Number(take) || 30, 1), 100);
     return this.prisma.notification.findMany({
       where: {
         userId: req.user.id,
         ...(unread === '1' || unread === 'true' ? { readAt: null } : {}),
+        ...this.scopeWhere(req.user, entity),
       },
       include: { actor: { select: { id: true, fullName: true } } },
       orderBy: { createdAt: 'desc' },
@@ -43,9 +56,9 @@ export class NotificationsController {
   }
 
   @Get('unread-count')
-  async unreadCount(@Req() req: { user: AuthUser }) {
+  async unreadCount(@Req() req: { user: AuthUser }, @Query('entity') entity?: string) {
     const count = await this.prisma.notification.count({
-      where: { userId: req.user.id, readAt: null },
+      where: { userId: req.user.id, readAt: null, ...this.scopeWhere(req.user, entity) },
     });
     return { count };
   }
@@ -60,10 +73,11 @@ export class NotificationsController {
     return updated;
   }
 
+  /** «Marcar todo como leído»; con `entity=`, solo lo de esa entidad (y lo que no tiene). */
   @Post('read-all')
-  async markAllRead(@Req() req: { user: AuthUser }) {
+  async markAllRead(@Req() req: { user: AuthUser }, @Query('entity') entity?: string) {
     const res = await this.prisma.notification.updateMany({
-      where: { userId: req.user.id, readAt: null },
+      where: { userId: req.user.id, readAt: null, ...this.scopeWhere(req.user, entity) },
       data: { readAt: new Date() },
     });
     if (res.count > 0) void this.notifications.syncRead(req.user.id, null).catch(() => undefined);

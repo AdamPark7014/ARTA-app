@@ -9,10 +9,12 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   Req,
   UseGuards,
 } from '@nestjs/common';
 import { AdvanceStatus, DocType, Prisma } from '@prisma/client';
+import { entityScope } from '../common/entity-scope';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { hasPermission, canAccessEventOps, isDirectionRole, PERMISSIONS, type EntityKey, type RoleKey } from '../common/rbac/roles';
@@ -372,6 +374,7 @@ export class FinanceController {
         fileUrl: body.fileUrl?.trim() || null,
         uploadedById: req.user.id,
         advanceStatus: 'PENDING',
+        entity: event.entity,
       },
       include: ADVANCE_INCLUDE,
     });
@@ -414,11 +417,13 @@ export class FinanceController {
    * `APPROVED` donde pago. Solo eventos abiertos de mi organización.
    */
   @Get('advances/pending')
-  async pendingAdvances(@Req() req: { user: AuthUser }) {
+  async pendingAdvances(@Req() req: { user: AuthUser }, @Query('entity') entity?: string) {
     const me = req.user;
+    const scope = entityScope(me, entity);
     const events = await this.prisma.event.findMany({
       where: {
         status: { notIn: ['CLOSED', 'CANCELLED'] },
+        entity: { in: scope },
         ...(me.roleKey === 'super_admin' ? {} : { organizationId: tenantIdOf(me) }),
       },
       select: { id: true, name: true, entity: true },
@@ -446,9 +451,15 @@ export class FinanceController {
 
   /** Mis solicitudes, todas, más recientes primero. */
   @Get('advances/mine')
-  async myAdvances(@Req() req: { user: AuthUser }) {
+  async myAdvances(@Req() req: { user: AuthUser }, @Query('entity') entity?: string) {
+    const scope = entityScope(req.user, entity);
     const rows = await this.prisma.paymentProof.findMany({
-      where: { uploadedById: req.user.id, purchaseOrderId: null, advanceStatus: { not: null } },
+      where: {
+        uploadedById: req.user.id,
+        purchaseOrderId: null,
+        advanceStatus: { not: null },
+        entity: { in: scope },
+      },
       orderBy: { createdAt: 'desc' },
       take: 200,
       include: ADVANCE_INCLUDE,

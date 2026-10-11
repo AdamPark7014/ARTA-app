@@ -159,6 +159,9 @@ describe('ChecklistsController · plantillas solo desde la organización de Arta
   it('las lecturas no cambian: otra organización sigue listando plantillas activas', async () => {
     const { controller, prisma } = setup();
     await expect(controller.templates(foreign)).resolves.toEqual([template]);
-    expect(prisma.checklistTemplate.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { active: true } }));
+    // 11-10-2026: además del `active`, solo plantillas de las entidades de la persona (o de las dos).
+    expect(prisma.checklistTemplate.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ active: true }) }),
+    );
   });
 });

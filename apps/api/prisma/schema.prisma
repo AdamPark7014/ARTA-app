@@ -516,10 +516,13 @@ model PaymentProof {
   paidAt        DateTime?
   /// Comprobante de pago, si el de la solicitud era otra cosa.
   paidProofUrl  String?
+  /// ARTA o Auditorio. Con evento (o con OC) se copia de su evento; sin él, lo elige quien lo pide.
+  entity        EntityKey?
 
   @@index([eventId])
   @@index([purchaseOrderId])
   @@index([advanceStatus])
+  @@index([entity])
 }
 
 // ─── Corrida financiera ──────────────────────────────────────────────────────
@@ -609,6 +612,8 @@ model TaskAssignment {
   /// Tenant de la tarea (se copia del evento cuando lo hay)
   organizationId String?
   organization   Organization? @relation(fields: [organizationId], references: [id])
+  /// ARTA o Auditorio. Con evento se copia del evento; sin él, lo elige quien la pide.
+  entity         EntityKey?
   assigneeId     String?
   assignee       User?         @relation("TaskAssignee", fields: [assigneeId], references: [id])
   /// Quién pidió el apoyo — recibe el aviso cuando se cierra
@@ -643,6 +648,7 @@ model TaskAssignment {
   @@index([organizationId, status])
   @@index([eventId])
   @@index([createdById, status])
+  @@index([organizationId, entity])
 }
 
 /// Una tarea puede ser de 1 o más personas (correcciones 30-09-2026).
@@ -1126,6 +1132,8 @@ model ChatChannel {
   isGroupDm          Boolean             @default(false)
   /// Canal del evento (uno por evento).
   eventId            String?             @unique
+  /// ARTA o Auditorio (el del evento en los canales de evento). Null en directos y grupos: son personales.
+  entity             EntityKey?
   /// Solo dirección publica (anuncios).
   postingRestricted  Boolean             @default(false)
   createdById        String?
@@ -1139,6 +1147,7 @@ model ChatChannel {
   @@unique([organizationId, slug])
   @@unique([organizationId, dmKey])
   @@index([organizationId, lastMessageAt])
+  @@index([organizationId, entity])
 }
 
 model ChatChannelMember {

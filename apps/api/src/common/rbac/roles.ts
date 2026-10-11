@@ -43,14 +43,15 @@ export function roleLabel(roleKey: string | null | undefined): string {
 /** Texto corto para que dirección elija rol sin adivinar. */
 export const ROLE_HINTS: Record<RoleKey, string> = {
   super_admin: 'Plataforma completa (solo Nexara).',
-  dir_general: 'Arturo / José Luis — todo el panel, altas de equipo.',
-  dir_adjunta: 'Leida / Sol — lo mismo que dirección general, sin gestionar usuarios.',
+  dir_general: 'Arturo / José Luis — todo el panel, Arta y Auditorio, y gestión de usuarios.',
+  dir_adjunta:
+    'Opera todo en sus entidades (Arta, Auditorio o ambas). Da de alta gente nueva, pero no edita ni da de baja a usuarios existentes.',
   gerente_arta: 'Todo Arta: operación, finanzas y campaña.',
   dir_auditorio: 'Operación del Auditorio / Explanada.',
   logistica: 'Producción, checklists, campaña, boletera.',
   convenios: 'Patrocinios y convenios; ve tareas de todos.',
   enlace_gobierno: 'Pagos gobierno, marcar OC pagadas.',
-  solo_carpetas: 'Williams / Juan Pablo — ven carpetas generales de Arta y Auditorio; no editan.',
+  solo_carpetas: 'Ve las carpetas generales de sus entidades; no edita.',
 };
 
 export const PERMISSION_LABELS: Record<string, string> = {
@@ -68,6 +69,7 @@ export const PERMISSION_LABELS: Record<string, string> = {
   'folders.edit': 'Editar carpetas',
   'vendor.pin': 'PINs de proveedor',
   'users.manage': 'Gestionar usuarios',
+  'users.create': 'Dar de alta usuarios',
   everything: 'Acceso total',
 };
 
@@ -84,7 +86,10 @@ export const ROLE_DEFAULT_ENTITIES: Record<RoleKey, EntityKey[]> = {
 };
 
 export const PERMISSIONS = {
+  /** Editar, cambiar de rol, dar de baja o reactivar a usuarios existentes (solo dirección general). */
   USERS_MANAGE: 'users.manage',
+  /** Dar de alta gente nueva sin tocar a nadie que ya exista (dirección adjunta, 11-10-2026). */
+  USERS_CREATE: 'users.create',
   FINANCE_EDIT: 'finance.edit',
   FINANCE_VIEW: 'finance.view',
   CAMPAIGN_EDIT: 'campaign.edit',
@@ -124,6 +129,7 @@ export const ROLE_PERMISSIONS: Record<RoleKey, Permission[]> = {
   dir_general: [
     PERMISSIONS.EVERYTHING,
     PERMISSIONS.USERS_MANAGE,
+    PERMISSIONS.USERS_CREATE,
     PERMISSIONS.FINANCE_EDIT,
     PERMISSIONS.CAMPAIGN_EDIT,
     PERMISSIONS.PO_AUTHORIZE,
@@ -140,8 +146,9 @@ export const ROLE_PERMISSIONS: Record<RoleKey, Permission[]> = {
    * 16-09-2026 · Leida y Sol: «los mismos permisos de Arturo y José Luis
    * excepto gestión de usuarios». La tabla no lleva `EVERYTHING` porque eso
    * incluye `users.manage`; `hasPermission` le concede todo lo demás.
+   * 11-10-2026 · sí da de alta gente nueva (`users.create`), sin tocar a los que ya existen.
    */
-  dir_adjunta: [...ASSIGNABLE_PERMISSIONS],
+  dir_adjunta: [...ASSIGNABLE_PERMISSIONS, PERMISSIONS.USERS_CREATE],
   gerente_arta: [
     PERMISSIONS.FINANCE_EDIT,
     PERMISSIONS.FINANCE_VIEW,

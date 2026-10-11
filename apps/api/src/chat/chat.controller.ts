@@ -65,6 +65,8 @@ class CreateChannelDto {
   @IsOptional() @IsString() @MaxLength(250) topic?: string;
   @IsOptional() @IsString() @MaxLength(1000) description?: string;
   @IsOptional() @IsArray() @ArrayMaxSize(200) @IsString({ each: true }) memberIds?: string[];
+  /** ARTA o EXPLANADA (Auditorio); sin ella, la única de la persona o ARTA. */
+  @IsOptional() @IsIn(['ARTA', 'EXPLANADA']) entity?: string;
 }
 
 class UpdateChannelDto {
@@ -205,8 +207,8 @@ export class ChatController {
   // ─── Canales ─────────────────────────────────────────────────────────────
 
   @Get('channels')
-  channels(@Req() req: Req_) {
-    return this.chat.listChannels(req.user);
+  channels(@Req() req: Req_, @Query('entity') entity?: string) {
+    return this.chat.listChannels(req.user, entity);
   }
 
   @Post('channels')
@@ -328,8 +330,13 @@ export class ChatController {
   }
 
   @Get('search')
-  search(@Req() req: Req_, @Query('q') q?: string, @Query('channelId') channelId?: string) {
-    return this.chat.searchMessages(req.user, q ?? '', channelId || undefined);
+  search(
+    @Req() req: Req_,
+    @Query('q') q?: string,
+    @Query('channelId') channelId?: string,
+    @Query('entity') entity?: string,
+  ) {
+    return this.chat.searchMessages(req.user, q ?? '', channelId || undefined, entity);
   }
 
   @Get('colleagues')
@@ -360,8 +367,8 @@ export class ChatController {
   }
 
   @Get('unread')
-  unread(@Req() req: Req_) {
-    return this.chat.unreadTotal(req.user);
+  unread(@Req() req: Req_, @Query('entity') entity?: string) {
+    return this.chat.unreadTotal(req.user, entity);
   }
 
   // ─── Compatibilidad con la web actual (hilos «general» / «dm:<id>») ───────

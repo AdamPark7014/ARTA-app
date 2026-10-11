@@ -34,6 +34,7 @@ import {
   type RoleKey,
 } from '../common/rbac/roles';
 import { assertSameTenant, orgWhere, tenantIdOf } from '../common/tenant';
+import { entityScope } from '../common/entity-scope';
 import { MULTER_OPTIONS } from '../uploads/upload-storage';
 import type { Response } from 'express';
 import { join } from 'path';
@@ -156,7 +157,9 @@ export class FoldersController {
 
   @Get()
   async list(@Req() req: { user: AuthUser }, @Query('entity') entity?: EntityKey) {
-    const ent = (entity && req.user.entities.includes(entity) ? entity : req.user.entities[0]) as EntityKey;
+    // Pedir una entidad ajena da 403 (antes devolvía la primera propia sin avisar); sin `entity`, la primera.
+    const [ent] = entityScope(req.user, entity) as EntityKey[];
+    if (!ent) throw new ForbiddenException('No tienes una entidad asignada');
     this.assertEntity(req.user, ent);
     const folders = await this.prisma.sharedFolder.findMany({
       where: { entity: ent, ...orgWhere(req.user) },
