@@ -36,7 +36,14 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.5rem;
+  gap: 8px;
+}
+
+/* El buscador de la sección no se estira a todo el ancho ni empuja el botón al renglón de abajo. */
+.sx-actions > .field--search {
+  flex: 0 1 240px;
+  width: 240px;
+  min-width: 160px;
 }
 
 .sx-stack {
@@ -49,7 +56,8 @@
 .surface {
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
-  background: var(--bg-elev);
+  background: var(--card-bg);
+  box-shadow: var(--shadow-card);
 }
 
 .surface--pad {
@@ -68,7 +76,7 @@
 
 .surface__title {
   margin: 0;
-  font-size: 0.95rem;
+  font-size: 14px;
   font-weight: 600;
 }
 
@@ -80,27 +88,30 @@
 
 .seg {
   display: inline-flex;
+  justify-self: start;
+  width: fit-content;
+  max-width: 100%;
   flex-wrap: wrap;
-  gap: 2px;
+  gap: 3px;
   padding: 3px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: var(--bg-soft);
+  border: 1px solid var(--seg-line);
+  border-radius: var(--radius-ctl);
+  background: var(--seg-bg);
 }
 
 .seg__btn {
   display: inline-flex;
   align-items: center;
   gap: 0.45rem;
-  padding: 0.42rem 0.95rem;
+  padding: 6px 14px;
   border: 0;
-  border-radius: 999px;
+  border-radius: var(--radius-ctl);
   background: transparent;
   color: var(--muted);
-  font-size: 0.82rem;
-  font-weight: 560;
+  font-size: 12.5px;
+  font-weight: 600;
   cursor: pointer;
-  transition: color 0.15s ease, background 0.15s ease;
+  transition: color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
 }
 
 .seg__btn:hover {
@@ -110,28 +121,39 @@
 .seg__btn.is-on {
   background: var(--bg-elev);
   color: var(--text);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45), inset 0 0 0 1px var(--line);
+  box-shadow: 0 1px 2px rgba(12, 12, 13, 0.08), 0 2px 8px rgba(12, 12, 13, 0.06);
+}
+
+[data-entity='EXPLANADA'] .seg__btn.is-on {
+  background: var(--accent-fill);
+  color: var(--on-accent);
+  box-shadow: none;
 }
 
 .seg__btn:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--text);
   outline-offset: 1px;
 }
 
 .seg__count {
   min-width: 1.25rem;
   padding: 0 0.35rem;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.07);
-  font-size: 0.7rem;
+  border-radius: var(--radius-ctl);
+  background: var(--fill-soft);
+  font-size: 11px;
   font-weight: 650;
   text-align: center;
   font-variant-numeric: tabular-nums;
 }
 
 .seg__btn.is-on .seg__count {
-  background: color-mix(in srgb, var(--accent) 24%, transparent);
+  background: var(--fill-soft);
   color: var(--text);
+}
+
+[data-entity='EXPLANADA'] .seg__btn.is-on .seg__count {
+  background: var(--count-on-bg);
+  color: var(--on-accent);
 }
 
 /* ── Píldoras de estado ─────────────────────────────────────────────────── */
@@ -139,52 +161,54 @@
 .pill {
   display: inline-flex;
   align-items: center;
-  gap: 0.42rem;
-  padding: 0.24rem 0.65rem;
-  border: 1px solid var(--line-strong);
-  border-radius: 999px;
+  gap: 6px;
+  padding: 3px 8px;
+  border: 1px solid var(--pill-line, var(--line-strong));
+  border-radius: var(--radius-ctl);
   color: var(--muted);
-  font-size: 0.74rem;
-  font-weight: 600;
+  font-size: 10.5px;
+  font-weight: 650;
+  letter-spacing: 0.6px;
+  line-height: 1.3;
+  text-transform: uppercase;
   white-space: nowrap;
 }
 
-.pill::before {
+/* Punto de estado solo donde hay estado real (hecho / error), nunca de adorno. */
+.pill--ok::before,
+.pill--paid::before {
   content: '';
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: currentColor;
+  background: var(--ok);
 }
 
-.pill--review {
-  color: var(--warn);
-  border-color: color-mix(in srgb, var(--warn) 35%, transparent);
-  background: color-mix(in srgb, var(--warn) 8%, transparent);
+.pill--review,
+.pill--fill {
+  color: var(--on-accent);
+  border-color: transparent;
+  background: var(--accent-fill);
 }
 
-.pill--ok {
-  color: var(--ok);
-  border-color: color-mix(in srgb, var(--ok) 35%, transparent);
-  background: color-mix(in srgb, var(--ok) 8%, transparent);
-}
-
+.pill--ok,
 .pill--paid {
-  color: var(--accent);
-  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
-  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: var(--text);
 }
 
 .pill--danger {
   color: var(--danger);
-  border-color: color-mix(in srgb, var(--danger) 35%, transparent);
-  background: color-mix(in srgb, var(--danger) 8%, transparent);
+  border-color: color-mix(in srgb, var(--danger) 45%, transparent);
+  background: color-mix(in srgb, var(--danger) 6%, transparent);
 }
 
 .pill--info {
-  color: var(--explanada);
-  border-color: color-mix(in srgb, var(--explanada) 35%, transparent);
-  background: color-mix(in srgb, var(--explanada) 8%, transparent);
+  color: var(--muted);
+}
+
+.pill--warn {
+  color: var(--warn);
+  border-color: color-mix(in srgb, var(--warn) 45%, transparent);
 }
 
 /* ── Recorrido de estados ───────────────────────────────────────────────── */
@@ -233,7 +257,7 @@
 
 .flow-lite__step.is-now .flow-lite__dot {
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent);
+  box-shadow: 0 0 0 3px var(--ring);
 }
 
 /* ── Botones discretos ──────────────────────────────────────────────────── */
@@ -245,7 +269,7 @@
   height: 2rem;
   padding: 0;
   border: 1px solid transparent;
-  border-radius: 8px;
+  border-radius: var(--radius-item);
   background: transparent;
   color: var(--muted);
   font-size: 1rem;
@@ -256,7 +280,7 @@
 
 .icon-btn:hover {
   border-color: var(--line);
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--hover);
   color: var(--text);
 }
 
@@ -275,38 +299,40 @@
   gap: 0.35rem;
   padding: 0.4rem 0.55rem;
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--radius-item);
   background: none;
   color: var(--muted);
-  font-size: 0.82rem;
-  font-weight: 560;
+  font-size: 12.5px;
+  font-weight: 600;
   cursor: pointer;
 }
 
 .btn-quiet:hover {
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--hover);
   color: var(--text);
 }
 
 .btn-quiet--accent {
-  color: var(--accent);
+  color: var(--text);
 }
 
 /* ── Mosaicos de cifra ──────────────────────────────────────────────────── */
 
 .tiles {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
-  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
 }
 
 .tile {
   display: grid;
-  gap: 0.2rem;
-  padding: 1rem 1.1rem;
+  align-content: start;
+  gap: 10px;
+  padding: 16px 16px 14px;
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
-  background: var(--bg-elev);
+  background: var(--card-bg);
+  box-shadow: var(--shadow-card);
   color: var(--text);
   font: inherit;
   text-align: left;
@@ -318,22 +344,24 @@ button.tile {
 }
 
 button.tile:hover {
-  border-color: color-mix(in srgb, var(--accent) 40%, var(--line));
+  border-color: var(--line-strong);
   transform: translateY(-1px);
 }
 
 .tile__label {
-  color: var(--muted);
-  font-size: 0.7rem;
-  letter-spacing: 0.08em;
+  color: var(--text-3);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 1.6px;
   text-transform: uppercase;
 }
 
 .tile__value {
-  margin-top: 0.15rem;
   font-family: var(--font-display);
-  font-size: 1.5rem;
-  line-height: 1.15;
+  font-size: 30px;
+  font-weight: 300;
+  letter-spacing: -1px;
+  line-height: 1;
   font-variant-numeric: tabular-nums;
 }
 
@@ -350,8 +378,8 @@ button.tile:hover {
 }
 
 .tile__sub {
-  color: var(--muted);
-  font-size: 0.78rem;
+  color: var(--text-3);
+  font-size: 12px;
 }
 
 /* ── Tabla limpia (y editable como hoja) ────────────────────────────────── */
@@ -361,6 +389,7 @@ button.tile:hover {
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
   background: var(--bg-elev);
+  box-shadow: var(--shadow-card);
 }
 
 .dtable {
@@ -374,10 +403,10 @@ button.tile:hover {
   padding: 0.7rem 0.75rem;
   border-bottom: 1px solid var(--line);
   background: color-mix(in srgb, var(--bg-soft) 55%, transparent);
-  color: var(--muted);
-  font-size: 0.68rem;
+  color: var(--text-3);
+  font-size: 10.5px;
   font-weight: 600;
-  letter-spacing: 0.08em;
+  letter-spacing: 1.2px;
   text-align: left;
   text-transform: uppercase;
   white-space: nowrap;
@@ -394,7 +423,7 @@ button.tile:hover {
 }
 
 .dtable tbody tr:hover td {
-  background: rgba(255, 255, 255, 0.018);
+  background: var(--hover);
 }
 
 .dtable .num {
@@ -424,12 +453,12 @@ button.tile:hover {
 }
 
 .dtable tr.is-open td {
-  background: rgba(255, 255, 255, 0.022);
+  background: var(--hover);
 }
 
 .dtable td.dtable__detail {
   padding: 0.25rem 1rem 1rem;
-  background: rgba(255, 255, 255, 0.022);
+  background: var(--hover);
 }
 
 /* Celda editable: sin borde hasta que se usa — se lee como documento. */
@@ -465,7 +494,7 @@ button.tile:hover {
 }
 
 .dtable input.cell::placeholder {
-  color: rgba(161, 161, 170, 0.4);
+  color: var(--text-3);
 }
 
 .dtable input.cell:disabled {
@@ -513,6 +542,7 @@ button.tile:hover {
 .totals__value {
   font-family: var(--font-display);
   font-size: 1.3rem;
+  font-weight: 400;
   font-variant-numeric: tabular-nums;
 }
 
@@ -538,8 +568,8 @@ button.tile:hover {
   height: 46px;
   margin-bottom: 0.25rem;
   border-radius: 50%;
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
-  color: var(--accent);
+  background: var(--fill-soft);
+  color: var(--text);
   font-size: 1.25rem;
 }
 
@@ -584,22 +614,12 @@ button.tile:hover {
   place-items: center;
   width: 40px;
   height: 40px;
-  border-radius: 10px;
-  background: rgba(62, 207, 142, 0.12);
-  color: var(--ok);
+  border-radius: var(--radius-item);
+  background: var(--fill-soft);
+  color: var(--text);
   font-size: 0.64rem;
   font-weight: 750;
   letter-spacing: 0.06em;
-}
-
-.file-row__icon--pdf {
-  background: rgba(232, 93, 76, 0.12);
-  color: var(--danger);
-}
-
-.file-row__icon--file {
-  background: color-mix(in srgb, var(--explanada) 12%, transparent);
-  color: var(--explanada);
 }
 
 .file-row__main {
@@ -692,11 +712,11 @@ button.tile:hover {
 .choice__opt {
   padding: 0.45rem 0.85rem;
   border: 1px solid var(--line-strong);
-  border-radius: 8px;
+  border-radius: var(--radius-ctl);
   background: transparent;
   color: var(--muted);
   font-size: 0.82rem;
-  font-weight: 560;
+  font-weight: 600;
   cursor: pointer;
 }
 
@@ -705,9 +725,9 @@ button.tile:hover {
 }
 
 .choice__opt.is-on {
-  border-color: color-mix(in srgb, var(--accent) 60%, transparent);
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
-  color: var(--text);
+  border-color: transparent;
+  background: var(--accent-fill);
+  color: var(--on-accent);
 }
 
 /* ── Desplegable ────────────────────────────────────────────────────────── */
@@ -825,7 +845,7 @@ button.tile:hover {
   position: absolute;
   top: 0;
   bottom: 0;
-  border-left: 1px dashed rgba(255, 255, 255, 0.05);
+  border-left: 1px dashed var(--line);
 }
 
 .timeline__bar {
@@ -844,7 +864,7 @@ button.tile:hover {
   display: block;
   overflow: hidden;
   padding: 0 0.6rem;
-  color: #0a0a0a;
+  color: var(--on-accent);
   font-size: 0.68rem;
   font-weight: 650;
   line-height: 1.4rem;
@@ -854,10 +874,14 @@ button.tile:hover {
 .timeline__bar--undated {
   background: repeating-linear-gradient(
     45deg,
-    rgba(255, 255, 255, 0.08) 0 6px,
-    rgba(255, 255, 255, 0.03) 6px 12px
+    var(--hover-strong) 0 6px,
+    var(--hover) 6px 12px
   );
   box-shadow: none;
+}
+
+.timeline__bar--undated span {
+  color: var(--muted);
 }
 
 .timeline__today,
@@ -870,19 +894,19 @@ button.tile:hover {
 
 .timeline__today {
   width: 1px;
-  background: color-mix(in srgb, var(--ok) 65%, transparent);
+  background: var(--text-3);
 }
 
 .timeline__show {
   width: 2px;
-  background: var(--danger);
+  background: var(--text);
 }
 
 .timeline__flag {
   position: absolute;
   top: 0.55rem;
   margin-left: 6px;
-  color: var(--danger);
+  color: var(--text);
   font-size: 0.6rem;
   font-weight: 750;
   letter-spacing: 0.08em;
@@ -891,7 +915,7 @@ button.tile:hover {
 }
 
 .timeline__flag--today {
-  color: var(--ok);
+  color: var(--muted);
 }
 
 @media (max-width: 720px) {
@@ -922,8 +946,12 @@ button.tile:hover {
   margin: 0;
   font-family: var(--font-display);
   font-size: 1.15rem;
-  font-weight: 560;
-  text-transform: capitalize;
+  font-weight: 600;
+}
+
+/* «Octubre de 2026», no «Octubre De 2026». */
+.mcal__title::first-letter {
+  text-transform: uppercase;
 }
 
 .mcal__grid {
@@ -955,7 +983,7 @@ button.tile:hover {
 }
 
 .mcal__day.is-out {
-  background: rgba(0, 0, 0, 0.18);
+  background: var(--hover);
 }
 
 .mcal__day.is-out .mcal__num {
@@ -974,8 +1002,8 @@ button.tile:hover {
   width: 1.45rem;
   height: 1.45rem;
   border-radius: 50%;
-  background: var(--accent);
-  color: #0a0a0a;
+  background: var(--accent-fill);
+  color: var(--on-accent);
   font-weight: 700;
 }
 
@@ -993,7 +1021,8 @@ button.tile:hover {
 }
 
 .mcal__chip--show {
-  background: color-mix(in srgb, var(--danger) 22%, transparent);
+  background: var(--accent-fill);
+  color: var(--on-accent);
   font-weight: 650;
 }
 
@@ -1100,9 +1129,8 @@ button.tile:hover {
   padding: 1.5rem 1.6rem;
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
-  background:
-    radial-gradient(ellipse 70% 120% at 100% 0%, color-mix(in srgb, var(--accent) 10%, transparent), transparent 60%),
-    var(--bg-elev);
+  background: var(--hero-glow, none), var(--card-bg);
+  box-shadow: var(--shadow-card);
 }
 
 .ev-hero__top {
@@ -1206,15 +1234,15 @@ button.tile:hover {
   min-width: 12rem;
   padding: 0.35rem;
   border: 1px solid var(--line-strong);
-  border-radius: 10px;
-  background: var(--bg-soft);
+  border-radius: var(--radius);
+  background: var(--bg-elev);
   box-shadow: var(--shadow-md);
 }
 
 .ev-more__menu button {
   padding: 0.55rem 0.7rem;
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--radius-item);
   background: none;
   color: var(--text);
   font-size: 0.85rem;
@@ -1223,7 +1251,7 @@ button.tile:hover {
 }
 
 .ev-more__menu button:hover {
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--hover);
 }
 
 .ev-more__menu button.is-danger {
@@ -1397,9 +1425,9 @@ button.tile:hover {
   justify-content: space-between;
   gap: 0.6rem 1rem;
   padding: 0.7rem 0.9rem 0.7rem 1.1rem;
-  border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line-strong));
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--bg-soft) 92%, var(--accent));
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-ctl);
+  background: var(--bg-elev);
   box-shadow: var(--shadow-md);
   font-size: 0.85rem;
 }
@@ -1420,16 +1448,26 @@ button.tile:hover {
 
 /* ── Contador del chat en el menú ───────────────────────────────────────── */
 
+/* Contador a la derecha del ítem (SISTEMA-VISUAL: «ítems con contador»). */
 .nav a .nav-badge {
-  min-width: 1.3rem;
+  min-width: 22px;
   margin-left: auto;
-  padding: 0 0.4rem;
-  border-radius: 999px;
-  background: var(--accent);
-  color: #0a0a0a;
-  font-size: 0.68rem;
-  font-weight: 750;
-  line-height: 1.3rem;
+  padding: 1px 7px;
+  border-radius: var(--radius-ctl);
+  background: var(--count-bg, var(--fill-soft));
+  color: var(--count-fg, var(--text));
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 16px;
   text-align: center;
   font-variant-numeric: tabular-nums;
+}
+
+[data-entity='EXPLANADA'] .nav a .nav-badge {
+  border-radius: 3px;
+}
+
+.nav a.active .nav-badge {
+  background: var(--count-on-bg, var(--fill-soft));
+  color: var(--count-on-fg, var(--text));
 }

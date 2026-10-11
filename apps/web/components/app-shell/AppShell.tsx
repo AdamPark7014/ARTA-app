@@ -1,18 +1,24 @@
 'use client';
 
 import Image from 'next/image';
-import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useUser } from '@/lib/user-context';
 import { EntityKey } from '@/lib/api';
-import { canAccessEventOps, userHasPermission, visibleNavItems } from '@/lib/access-matrix';
+import { visibleNavItems } from '@/lib/access-matrix';
 import { createSecureHandoffUrl } from '@/lib/cross-entity-handoff';
+import { AccountMenu } from './AccountMenu';
 import { NotificationBell } from './NotificationBell';
 import { SidebarNav } from './SidebarNav';
-import { SidebarSearch } from './SidebarSearch';
+import { TopbarSearch } from './TopbarSearch';
+import { useEntityTheme } from './useEntityTheme';
 import { UserChip } from '@/components/ui/UserChip';
 
+/**
+ * Marco del panel (docs/diseno/SISTEMA-VISUAL.md): menú lateral de 228 px con
+ * logo, Arta | Auditorio y grupos con contador; barra superior de 58 px con el
+ * título, el buscador (Ctrl K), la campana y el avatar.
+ */
 export function AppShell({
   children,
   title,
@@ -30,11 +36,14 @@ export function AppShell({
    * como el Dock de macOS.
    *
    * Arranca APAGADO: escondido de fábrica, quien entra por primera vez no
-   * encuentra la navegación — solo queda un filo dorado de 6 px que hay que
-   * adivinar. Se activa desde «Esconder menú» y a partir de ahí se recuerda.
+   * encuentra la navegación — solo queda un filo de 6 px que hay que adivinar.
+   * Se activa desde «Esconder menú» y a partir de ahí se recuerda.
    */
   const [autoHide, setAutoHide] = useState(false);
   const [autoHideReady, setAutoHideReady] = useState(false);
+
+  // Mientras carga la sesión manda el tema que dejó el script del layout.
+  useEntityTheme(!loading && user ? entity : null);
 
   useEffect(() => {
     try {
@@ -71,11 +80,6 @@ export function AppShell({
 
   const nav = useMemo(() => (user ? visibleNavItems(user, entity) : []), [user, entity]);
 
-  const canCreateEvent =
-    !!user &&
-    canAccessEventOps(user.roleKey, entity) &&
-    userHasPermission(user.roleKey, user.permissions, ['event.create', 'everything']);
-
   async function switchEntity(next: EntityKey) {
     if (!user || next === entity) return;
     if (!user.entities.includes(next)) return;
@@ -95,33 +99,32 @@ export function AppShell({
       <div className="shell shell--loading" aria-busy="true" aria-label="Cargando ARTA">
         <aside className="sidebar">
           <div className="brand">
-            <div className="skeleton skeleton--value" style={{ width: 110, height: 36 }} />
-            <span>
-              <div className="skeleton skeleton--label" style={{ width: 90, marginTop: 8 }} />
-            </span>
+            <div className="skeleton skeleton--value" style={{ width: 104, height: 40 }} />
           </div>
           <div className="entity-switch" aria-hidden>
-            <div className="skeleton skeleton--row" style={{ height: 28, borderRadius: 999 }} />
-            <div className="skeleton skeleton--row" style={{ height: 28, borderRadius: 999 }} />
+            <div className="skeleton skeleton--row" style={{ height: 28 }} />
+            <div className="skeleton skeleton--row" style={{ height: 28 }} />
           </div>
           <nav className="nav" aria-hidden>
-            {Array.from({ length: 7 }).map((_, i) => (
-              <div
-                key={i}
-                className="skeleton skeleton--row"
-                style={{ height: 36, width: `${78 - (i % 3) * 8}%`, marginBottom: 6 }}
-              />
-            ))}
+            <div className="nav-group">
+              {Array.from({ length: 7 }).map((_, i) => (
+                <div
+                  key={i}
+                  className="skeleton skeleton--row"
+                  style={{ height: 32, width: `${88 - (i % 3) * 10}%` }}
+                />
+              ))}
+            </div>
           </nav>
         </aside>
         <div className="main">
           <header className="topbar">
             <div className="topbar-left">
-              <div className="skeleton skeleton--value" style={{ width: 160, height: 22 }} />
+              <div className="skeleton skeleton--value" style={{ width: 120, height: 18 }} />
             </div>
           </header>
-          <div className="content" style={{ padding: '1.25rem 1.5rem' }}>
-            <p className="muted" style={{ marginBottom: 16, fontSize: 13 }}>
+          <div className="content">
+            <p className="muted" style={{ margin: '0 0 16px', fontSize: 13 }}>
               Cargando ARTA…
             </p>
             <div className="skeleton-stack">
@@ -136,19 +139,15 @@ export function AppShell({
   }
 
   const can = (e: EntityKey) => user.entities.includes(e);
-  const brandSub = entity === 'ARTA' ? 'PRODUCCIONES' : 'AUDITORIO AREMA';
+  const menuHidden = autoHideReady && autoHide;
 
   return (
     <div
-      className={`shell ${navOpen ? 'shell--nav-open' : ''} ${
-        autoHideReady && autoHide ? 'shell--nav-auto' : ''
-      }`}
+      className={`shell ${navOpen ? 'shell--nav-open' : ''} ${menuHidden ? 'shell--nav-auto' : ''}`}
       data-entity={entity}
     >
       {/* Franja sensible: al pasar el cursor, el menú entra (estilo Dock macOS). */}
-      {autoHideReady && autoHide ? (
-        <div className="shell-hot-edge" aria-hidden title="Menú" />
-      ) : null}
+      {menuHidden ? <div className="shell-hot-edge" aria-hidden title="Menú" /> : null}
       {navOpen ? (
         <button
           type="button"
@@ -162,19 +161,23 @@ export function AppShell({
         <div className="brand">
           {entity === 'ARTA' ? (
             <Image
-              src="/brand/arta-logo.png"
-              alt="arta"
-              width={118}
-              height={48}
+              src="/brand/arta-logo-ink.png"
+              alt="arta producciones"
+              width={104}
+              height={57}
               className="shell-logo"
               priority
             />
           ) : (
-            <div className="brand-wordmark" aria-label="EXPLANADA · Auditorio Arema">
-              <span className="brand-wordmark__mark">EXPLANADA</span>
+            <div className="brand-wordmark" role="img" aria-label="EXPLANADA · Auditorio Arema">
+              <span className="brand-wordmark__mark" aria-hidden>
+                EXPLANADA
+              </span>
+              <span className="brand__sub" aria-hidden>
+                Auditorio Arema
+              </span>
             </div>
           )}
-          <span>{brandSub}</span>
         </div>
 
         <div className="entity-switch" role="tablist" aria-label="Entidad">
@@ -199,8 +202,6 @@ export function AppShell({
             Auditorio
           </button>
         </div>
-
-        <SidebarSearch value={navQuery} onChange={setNavQuery} />
 
         <Suspense fallback={<nav className="nav" aria-hidden />}>
           <SidebarNav items={nav} query={navQuery} />
@@ -253,7 +254,7 @@ export function AppShell({
               <span />
               <span className="sr-only">Menú</span>
             </button>
-            {autoHideReady && autoHide ? (
+            {menuHidden ? (
               <button
                 type="button"
                 className="btn ghost btn-sm topbar-pin-nav"
@@ -263,20 +264,12 @@ export function AppShell({
                 Fijar menú
               </button>
             ) : null}
-            <div>
-              <h1>{title || 'Panel'}</h1>
-              <div className="topbar-sub">
-                {entity === 'ARTA' ? 'Arta Producciones' : 'Auditorio Arema · Explanada'}
-              </div>
-            </div>
+            <h1>{title || 'Panel'}</h1>
           </div>
+          <TopbarSearch value={navQuery} onChange={setNavQuery} items={nav} menuHidden={menuHidden} />
           <div className="topbar-actions">
             <NotificationBell />
-            {canCreateEvent ? (
-              <Link href="/events/new" className="btn btn-sm">
-                Nuevo evento
-              </Link>
-            ) : null}
+            <AccountMenu name={user.fullName} title={user.title} onLogout={logout} />
           </div>
         </header>
         <div className="content">{children}</div>

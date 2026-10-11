@@ -58,30 +58,91 @@ body[data-shell='app'] {
   }
 }
 
-@media (max-width: 640px) {
+@media (max-width: 900px) {
   .topbar {
-    padding: 0.5rem 0.75rem;
-    gap: 0.5rem;
+    padding: 0 16px;
+    gap: 10px;
   }
 
-  .topbar-left,
-  .topbar-left > div {
+  .topbar-left {
+    flex: 1 1 auto;
+  }
+}
+
+@media (max-width: 640px) {
+  .topbar {
+    padding: 0 12px;
+    gap: 8px;
+    min-height: 54px;
+  }
+
+  .topbar-left {
     min-width: 0;
   }
 
   .topbar h1 {
-    font-size: 1.05rem;
+    font-size: 15px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
   }
 
-  .topbar-sub {
+  .topbar-actions {
+    gap: 6px;
+  }
+
+  /* Buscador: una lupa de 40 px que se abre a todo el ancho al tocarla. */
+  .topbar-search {
+    flex: 0 0 40px;
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    justify-content: center;
+    border-color: transparent;
+    background: transparent;
+    color: var(--text);
+  }
+
+  [data-entity='EXPLANADA'] .topbar-search {
+    background: transparent;
+  }
+
+  .topbar-search__kbd {
     display: none;
   }
 
-  .topbar-actions {
-    gap: 0.4rem;
+  .shell .topbar-search__input {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+  }
+
+  .topbar-search:focus-within,
+  .topbar-search.has-query {
+    position: absolute;
+    top: 50%;
+    left: 12px;
+    right: 12px;
+    z-index: 5;
+    width: auto;
+    max-width: none;
+    padding: 0 8px 0 12px;
+    justify-content: flex-start;
+    transform: translateY(-50%);
+    border-color: var(--line-strong);
+    background: var(--field-bg);
+    color: var(--text-3);
+  }
+
+  [data-entity='EXPLANADA'] .topbar-search:focus-within,
+  [data-entity='EXPLANADA'] .topbar-search.has-query {
+    background: var(--bg-elev);
+  }
+
+  .topbar-search:focus-within .topbar-search__input,
+  .topbar-search.has-query .topbar-search__input {
+    position: static;
+    opacity: 1;
   }
 
   /* Anclado a la campana se salía por la izquierda: en teléfono va de lado a lado. */

@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   activeNavKey,
   navHref,
@@ -59,6 +59,19 @@ export function SidebarNav({ items, query }: Props) {
     [items, pathname, searchParams],
   );
 
+  // Con el menú largo (Admin abajo), el ítem activo puede quedar fuera de la vista.
+  const navRef = useRef<HTMLElement>(null);
+  // Solo se desplaza el menú (nunca la página, ni el cajón escondido del teléfono).
+  useEffect(() => {
+    const nav = navRef.current;
+    const el = nav?.querySelector<HTMLElement>('a.active');
+    if (!nav || !el) return;
+    const box = nav.getBoundingClientRect();
+    const item = el.getBoundingClientRect();
+    if (item.bottom > box.bottom - 16) nav.scrollTop += item.bottom - box.bottom + 24;
+    else if (item.top < box.top) nav.scrollTop -= box.top - item.top + 8;
+  }, [activeKey]);
+
   if (!groups.length) {
     return (
       <nav className="nav" aria-label="Módulos del panel">
@@ -68,7 +81,7 @@ export function SidebarNav({ items, query }: Props) {
   }
 
   return (
-    <nav className="nav" aria-label="Módulos del panel">
+    <nav className="nav" aria-label="Módulos del panel" ref={navRef}>
       {groups.map(([group, groupItems]) => (
         <div key={group} className="nav-group">
           <div className="nav-group-label">{group}</div>

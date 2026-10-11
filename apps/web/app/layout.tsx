@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { Nunito, Outfit } from 'next/font/google';
 import '../styles/globals.scss';
 import { UserProvider } from '@/lib/user-context';
 import { ROOT_DOMAIN } from '@/lib/domains';
@@ -28,6 +29,26 @@ export const metadata: Metadata = {
 };
 
 /**
+ * Letra del panel (docs/diseno/SISTEMA-VISUAL.md): Nunito en toda la interfaz y
+ * Outfit solo para la palabra «EXPLANADA» del Auditorio. Se sirven desde el
+ * propio dominio (next/font), sin pedirle nada a Google en cada visita.
+ * Nunito va como fuente variable: cubre del 300 al 800 del sistema y también
+ * los pesos intermedios (560, 650) que usan títulos y etiquetas.
+ */
+const nunito = Nunito({
+  subsets: ['latin'],
+  display: 'swap',
+  variable: '--font-nunito',
+});
+
+const outfit = Outfit({
+  subsets: ['latin'],
+  weight: ['800', '900'],
+  display: 'swap',
+  variable: '--font-outfit',
+});
+
+/**
  * Respaldo del «modo app» del lado cliente: `(app)/layout` lo decide en el
  * servidor, pero el login (y cualquier ruta fuera de ese grupo) llega aquí y
  * una navegación suave posterior no vuelve a ejecutar scripts del servidor.
@@ -37,7 +58,7 @@ const APP_SHELL_FALLBACK =
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="es-MX" suppressHydrationWarning>
+    <html lang="es-MX" className={`${nunito.variable} ${outfit.variable}`} suppressHydrationWarning>
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />

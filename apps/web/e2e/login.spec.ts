@@ -54,7 +54,7 @@ test.describe('Login del panel', () => {
     await page.getByRole('button', { name: 'Confirmar 2FA' }).click();
 
     await page.waitForURL('**/dashboard');
-    await expect(page.getByRole('heading', { name: 'Hola, Ana' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /^Buen(os|as) (días|tardes|noches), Ana$/ })).toBeVisible();
     expect(verifyCalls).toBe(1);
   });
 

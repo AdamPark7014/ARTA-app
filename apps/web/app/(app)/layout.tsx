@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import { headers } from 'next/headers';
 import { WebPushPrompt } from '@/components/web-push/WebPushPrompt';
+import { PANEL_THEME_SCRIPT } from '@/lib/entity-theme';
 
 export const metadata: Metadata = {
   robots: { index: false, follow: false, nocache: true },
@@ -22,6 +23,7 @@ const APP_SHELL_SCRIPT =
 export default function PanelLayout({ children }: { children: React.ReactNode }) {
   return (
     <>
+      <script dangerouslySetInnerHTML={{ __html: PANEL_THEME_SCRIPT }} />
       {isArtaApp() ? <script dangerouslySetInnerHTML={{ __html: APP_SHELL_SCRIPT }} /> : null}
       {children}
       {isArtaApp() ? null : <WebPushPrompt />}

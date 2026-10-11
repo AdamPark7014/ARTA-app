@@ -52,6 +52,21 @@
   --accent: #8b6914;
   --paper-ink: #111114;
   --paper-rule: #cfcfd6;
+  /* El resto de tokens del sistema, también en papel (claro aunque el panel sea el Auditorio). */
+  --scheme: light;
+  --text-3: #6b6b72;
+  --bg-elev: #ffffff;
+  --card-bg: #ffffff;
+  --field-bg: #ffffff;
+  --line-field: #b9b9c2;
+  --hover: rgba(17, 17, 20, 0.04);
+  --hover-strong: rgba(17, 17, 20, 0.07);
+  --fill-soft: rgba(17, 17, 20, 0.06);
+  --ring: rgba(17, 17, 20, 0.15);
+  --accent-fill: var(--accent);
+  --accent-hover: var(--accent);
+  --on-accent: #ffffff;
+  --btn-sec-bg: #ffffff;
 
   width: 100%;
   max-width: 816px;
@@ -109,7 +124,8 @@
 
 .shell .fsheet input::placeholder,
 .shell .fsheet textarea::placeholder {
-  color: #b4b4bc;
+  /* Terciario del papel: se lee como pista (5.3:1), no como dato capturado. */
+  color: var(--text-3);
   font-style: italic;
 }
 

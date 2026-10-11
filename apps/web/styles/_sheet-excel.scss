@@ -153,7 +153,7 @@
   max-width: 17rem;
   padding: 0.3rem;
   border: 1px solid var(--line-strong);
-  border-radius: 10px;
+  border-radius: var(--radius);
   background: var(--bg-elev);
   color: var(--text);
   box-shadow: var(--shadow-md);
@@ -182,11 +182,11 @@
 }
 
 .sheet-menu__item.is-danger {
-  color: #f19a92;
+  color: var(--danger);
 }
 
 .sheet-menu__item.is-danger:hover {
-  background: rgba(180, 35, 24, 0.22);
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
 }
 
 .sheet-menu__hint {

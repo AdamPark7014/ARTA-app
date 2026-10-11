@@ -42,7 +42,7 @@ test.describe('App shell', () => {
     await expect(nav.getByRole('link', { name: 'Finanzas' })).toHaveCount(0);
     await expect(nav.getByRole('link', { name: 'Plantillas' })).toHaveCount(0);
 
-    await expect(page.getByRole('heading', { name: 'Hola, Ana' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /^Buen(os|as) (días|tardes|noches), Ana$/ })).toBeVisible();
     await expect(page.getByText('Ana Robles').first()).toBeVisible();
   });
 

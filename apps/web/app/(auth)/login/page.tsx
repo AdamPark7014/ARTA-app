@@ -158,7 +158,7 @@ function LoginForm() {
 
     if (typeof window === 'undefined') {
 
-      return { title: 'Acceso al panel', hint: 'Operación Arta y Auditorio Arema' };
+      return { title: 'Acceso al panel', hint: 'Operación Arta y Auditorio Arema', entity: null };
 
     }
 
@@ -172,6 +172,8 @@ function LoginForm() {
 
         hint: 'Explanada · operación y cierre del auditorio',
 
+        entity: 'EXPLANADA' as const,
+
       };
 
     }
@@ -184,11 +186,13 @@ function LoginForm() {
 
         hint: 'Eventos, formatos, finanzas y Studio',
 
+        entity: 'ARTA' as const,
+
       };
 
     }
 
-    return { title: 'Acceso al panel', hint: 'Elige el subdominio de tu entidad' };
+    return { title: 'Acceso al panel', hint: 'Elige el subdominio de tu entidad', entity: null };
 
   }, []);
 
@@ -208,21 +212,43 @@ function LoginForm() {
 
         <aside className="login-brand-panel">
 
-          <Image
+          {panelContext.entity === 'EXPLANADA' ? (
 
-            src="/brand/arta-logo.png"
+            <div className="login-wordmark" role="img" aria-label="EXPLANADA · Auditorio Arema">
 
-            alt="arta — La experiencia del Show"
+              <span className="brand-wordmark__mark" aria-hidden>
 
-            width={320}
+                EXPLANADA
 
-            height={160}
+              </span>
 
-            priority
+              <span className="login-wordmark__sub" aria-hidden>
 
-            className="login-logo"
+                Auditorio Arema
 
-          />
+              </span>
+
+            </div>
+
+          ) : (
+
+            <Image
+
+              src="/brand/arta-logo-ink.png"
+
+              alt="arta producciones — La experiencia del Show"
+
+              width={220}
+
+              height={120}
+
+              priority
+
+              className="login-logo"
+
+            />
+
+          )}
 
           <p className="login-tagline">La experiencia del Show</p>
 

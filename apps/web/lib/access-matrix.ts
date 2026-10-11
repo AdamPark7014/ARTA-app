@@ -67,16 +67,19 @@ export const HIDDEN_NAV_GROUP = 'Vistas de portafolio';
  * del hub de cada evento.
  */
 export const NAV_ITEMS: NavItem[] = [
-  { href: '/dashboard', label: 'Inicio', group: 'Inicio', exact: true },
+  // Sistema visual 11-10-2026 (docs/diseno/SISTEMA-VISUAL.md): el menú se agrupa en
+  // «Operación» y «Equipo»; Control, Marca y Admin siguen con su propio grupo.
+  // Solo cambia la etiqueta del grupo: permisos, roles y entidades quedan igual.
+  { href: '/dashboard', label: 'Inicio', group: 'Operación', exact: true },
   // Junta 11-09-2026: «crear un chat interno entre todos y personal».
-  { href: '/chat', label: 'Chat', group: 'Inicio', keywords: 'mensajes equipo conversacion personal' },
+  { href: '/chat', label: 'Chat', group: 'Equipo', keywords: 'mensajes equipo conversacion personal' },
 
   // ── Eventos: las cuatro entradas que pidió la junta ────────────────────────
   {
     href: '/events/new',
     label: 'Crear evento',
     permissions: ['event.create', 'everything'],
-    group: 'Eventos',
+    group: 'Operación',
     requiresEventOps: true,
     exact: true,
     keywords: 'nuevo alta show',
@@ -84,7 +87,7 @@ export const NAV_ITEMS: NavItem[] = [
   {
     href: '/events',
     label: 'Eventos actuales',
-    group: 'Eventos',
+    group: 'Operación',
     requiresEventOps: true,
     query: 'scope=active',
     queryIsDefault: true,
@@ -93,7 +96,7 @@ export const NAV_ITEMS: NavItem[] = [
   {
     href: '/events',
     label: 'Eventos pasados',
-    group: 'Eventos',
+    group: 'Operación',
     requiresEventOps: true,
     query: 'scope=past',
     keywords: 'historico cerrados archivo',
@@ -101,14 +104,14 @@ export const NAV_ITEMS: NavItem[] = [
   {
     href: '/calendar',
     label: 'Calendario',
-    group: 'Eventos',
+    group: 'Operación',
     requiresEventOps: true,
     keywords: 'agenda mes semana fechas shows',
   },
   {
     href: '/tasks',
     label: 'Tareas',
-    group: 'Eventos',
+    group: 'Operación',
     // Junta 11-09-2026: «solo carpetas generales» no ve tareas.
     roles: ['super_admin', 'dir_general', 'dir_adjunta', 'gerente_arta', 'dir_auditorio', 'logistica', 'convenios', 'enlace_gobierno'],
     keywords: 'pendientes apoyo asignar workload',
@@ -402,7 +405,7 @@ export function visibleNavItems(
     FOLDER_CENTRIC_ROLES.includes(user.roleKey as RoleKey);
   if (!needsFolders) return items;
   return items.map((item) =>
-    item.href === '/folders' ? { ...item, hidden: false, group: 'Documentos' } : item,
+    item.href === '/folders' ? { ...item, hidden: false, group: 'Equipo' } : item,
   );
 }
 

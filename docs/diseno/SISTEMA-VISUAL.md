@@ -77,3 +77,18 @@ Los colores semánticos solo en errores y alertas reales, nunca de decoración.
 - Mismos tokens; tarjetas 16 px vs 6 px; botones píldora vs 4 px; barra de pestañas con línea fina superior.
 - Inicio: saludo, dos tarjetas de cifra, «Hoy» como línea de tiempo y la lista de pendientes.
 - Aviso al cambiar de entidad: en ARTA, píldora negra; en Auditorio, plata con texto negro.
+
+## Implementación web (11-10-2026)
+
+- Tokens en `apps/web/styles/globals.scss`, bajo `[data-entity='ARTA']` y `[data-entity='EXPLANADA']`. El atributo
+  va en `<html>` (script inicial en `lib/entity-theme.ts` y `useEntityTheme` en el marco), así que modales,
+  menús y avisos heredan el tema. `:root` sigue oscuro solo para el sitio público y el portal de proveedores.
+- Nombres: `--bg`, `--card-bg` (superficie de tarjeta), `--bg-elev` (superficie opaca), `--bg-soft`, `--seg-bg`,
+  `--text`, `--muted` (secundario), `--text-3` (terciario), `--line`, `--line-strong`, `--line-field`,
+  `--accent` / `--accent-fill` / `--on-accent`, `--danger` / `--ok` / `--warn`, `--radius-lg` (tarjeta),
+  `--radius-ctl` (botón, chip, estado), `--radius-item` (menú), `--shadow-card`, `--hover`, `--ring` (foco).
+- Contraste AA verificado por DOM en las dos entidades. Dos ajustes respecto a la tabla: el terciario de ARTA
+  es `#6b6b73` (el `#8b8b92` da 3.4:1 sobre blanco) y el del Auditorio `#8a8a93` (bajo el reflector el
+  `#85858e` quedaba en 4.4:1).
+- Letra: Nunito variable y Outfit 800/900 con `next/font` (se sirven desde el propio dominio).
+- La hoja de formatos (`.fsheet`) y los editores de hoja y documento siguen siendo papel claro en los dos temas.

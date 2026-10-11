@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode, type RefObject } from 'react';
 import { Icon, ICONS } from './ChatAttachment';
-import { hueOf, initials, type ChannelSummary } from './chat-model';
+import { initials, type ChannelSummary } from './chat-model';
 
 /* Piezas compartidas del chat: avatares con presencia, menús, diálogos y utilidades. */
 
@@ -39,25 +39,20 @@ export function isDirectLike(c: { kind: string; isGroupDm?: boolean | null }) {
 }
 
 export function Avatar({
-  id,
   name,
   size = 'md',
   online,
 }: {
+  /** Se conserva en la firma: identifica a la persona aunque el avatar ya no lleve color propio. */
   id: string;
   name: string;
   size?: 'xs' | 'sm' | 'md' | 'lg';
   /** `undefined` = sin punto; `false` = aro gris (desconectado). */
   online?: boolean;
 }) {
-  const h = hueOf(id);
-  const style = {
-    '--chat-tint': `hsl(${h} 30% 56% / 0.15)`,
-    '--chat-ink': `hsl(${h} 42% 76%)`,
-    '--chat-ring': `hsl(${h} 34% 62% / 0.22)`,
-  } as CSSProperties;
+  // Monocromo (docs/diseno/SISTEMA-VISUAL.md): el avatar es del tema, no un color por persona.
   return (
-    <span className={`chat-avatar chat-avatar--${size}`} style={style} aria-hidden>
+    <span className={`chat-avatar chat-avatar--${size}`} aria-hidden>
       {initials(name)}
       {online === undefined ? null : <span className={`chat-presence${online ? ' is-on' : ''}`} />}
     </span>
