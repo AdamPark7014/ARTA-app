@@ -117,8 +117,13 @@ struct HomeView: View {
 
     /// Globos de Chats y Avisos: solo la entidad activa (`?entity=` en `ApiClient`).
     private func loadCounts() async {
-        if let n = try? await ApiClient.shared.chatUnread() { chatUnread = n }
-        if let n = try? await ApiClient.shared.notificationsUnread() { noticeUnread = n }
+        let chat = try? await ApiClient.shared.chatUnread()
+        let notices = try? await ApiClient.shared.notificationsUnread()
+        if let chat { chatUnread = chat }
+        if let notices { noticeUnread = notices }
+        // Tras cambiar de entidad la suma puede quedar igual a la inicial (0) y `onChange`
+        // no saltaría: el número del ícono se fija aquí también.
+        if chat != nil && notices != nil { PushManager.shared.setBadge(chatUnread + noticeUnread) }
     }
 
     /// Ráfagas del socket (varios mensajes seguidos) → una sola recuenta.
