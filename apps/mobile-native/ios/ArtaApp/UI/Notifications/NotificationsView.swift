@@ -14,7 +14,7 @@ struct NotificationsView: View {
     var body: some View {
         List(items) { item in
             Button { open(item) } label: { NotificationRow(item: item) }
-                .listRowBackground(item.isRead ? Color.clear : ArtaColor.surface)
+                .listRowBackground(Color.clear)
                 .listRowSeparatorTint(ArtaColor.line)
         }
         .listStyle(.plain)

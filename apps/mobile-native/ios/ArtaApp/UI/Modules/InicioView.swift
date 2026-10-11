@@ -113,7 +113,8 @@ struct InicioView: View {
                 eventsCard
             }
             .padding(.horizontal, 16)
-            .padding(.top, 4)
+            // La barra de navegación queda vacía (la marca va aquí): el encabezado sube a su altura.
+            .padding(.top, -24)
             .padding(.bottom, 24)
         }
         .refreshable { await load() }

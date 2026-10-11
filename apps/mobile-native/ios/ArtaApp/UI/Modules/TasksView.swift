@@ -57,6 +57,8 @@ struct TasksView: View {
             .artaScreenBackground(glow: false)
             .safeAreaInset(edge: .top, spacing: 0) { header }
             .navigationTitle("Tareas")
+            // Con el encabezado fijo (segmentado y filtros) el título grande no se muestra.
+            .navigationBarTitleDisplayMode(.inline)
             .searchable(text: $query, prompt: "Buscar tarea, persona, evento…")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {

@@ -216,10 +216,22 @@ final class StoreScreenshotsUITests: XCTestCase {
             adjuntarJerarquia("dbg-sin-chip")
             return
         }
-        tocar(chip)
+        // Inicio quedó desplazado hacia abajo (aprobaciones, eventos): el chip está arriba.
+        subirAlInicio(chip)
+        if chip.isHittable {
+            chip.tap()
+        } else {
+            // Atajo de la app: doble toque en la pestaña Inicio.
+            app.tabBars.buttons.matching(identifier: Pestana.inicio.id).firstMatch.doubleTap()
+        }
         // El aviso «Ahora en Auditorio» dura 1,6 s.
         pausa(0.5)
         adjuntarCapturaDebug("auditorio-00-aviso")
+        guard esperarEntidad("Auditorio", chip: chip) else {
+            omitir("auditorio: el cambio de entidad no ocurrió")
+            adjuntarJerarquia("dbg-sin-cambio")
+            return
+        }
         _ = buscar([app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "Hola")).firstMatch], timeout: 20)
         pausa(2.0)
         esperarSinCarga()
@@ -258,10 +270,31 @@ final class StoreScreenshotsUITests: XCTestCase {
         if irAPestana(.inicio) {
             asegurarRaiz(.inicio, titulo: "Inicio")
             if buscar([chip], timeout: 6) != nil {
-                tocar(chip)
+                subirAlInicio(chip)
+                if chip.isHittable { chip.tap() }
                 pausa(2.0)
             }
         }
+    }
+
+    /// Desliza hacia abajo (el contenido sube) hasta que el elemento de arriba se pueda tocar.
+    private func subirAlInicio(_ elemento: XCUIElement) {
+        var intentos = 0
+        while elemento.exists && !elemento.isHittable && intentos < 5 {
+            app.swipeDown()
+            pausa(0.6)
+            intentos += 1
+        }
+    }
+
+    /// El chip de Inicio dice la marca de la entidad activa («Auditorio Explanada»).
+    private func esperarEntidad(_ nombre: String, chip: XCUIElement) -> Bool {
+        let limite = Date().addingTimeInterval(10)
+        while Date() < limite {
+            if chip.exists && chip.label.contains(nombre) { return true }
+            pausa(0.4)
+        }
+        return false
     }
 
     // MARK: - Captura
