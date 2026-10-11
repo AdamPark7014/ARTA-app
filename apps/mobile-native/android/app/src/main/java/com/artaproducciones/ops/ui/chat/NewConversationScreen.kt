@@ -60,6 +60,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.artaproducciones.ops.data.ActiveEntity
 import com.artaproducciones.ops.data.Session
 import com.artaproducciones.ops.data.api.ApiClient
 import com.artaproducciones.ops.data.api.Colleague
@@ -105,6 +106,8 @@ fun NewConversationScreen(onBack: () -> Unit, openChat: (String) -> Unit) {
                             kind = if (private) "PRIVATE" else "PUBLIC",
                             topic = topic.trim().ifBlank { null },
                             memberIds = ids,
+                            // Los canales son de una entidad; los directos y grupos de directos, personales.
+                            entity = ActiveEntity.param,
                         ),
                     )
                     ids.size == 1 -> ApiClient.api.openDirect(DirectBody(ids.first()))

@@ -53,6 +53,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.artaproducciones.ops.data.ActiveEntity
 import com.artaproducciones.ops.data.api.AdvanceDto
 import com.artaproducciones.ops.data.api.ModulesClient
 import com.artaproducciones.ops.data.api.ModulesSession
@@ -62,7 +63,6 @@ import com.artaproducciones.ops.data.api.TaskDto
 import com.artaproducciones.ops.data.api.userMessage
 import com.artaproducciones.ops.ui.theme.ArtaColors
 import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -93,25 +93,30 @@ internal data class ApprovalsData(
     fun pendingCount(p: ModulesPerms) = tasksToReview.size + toAuthorize(p).size + toPay(p).size + actionableAdvances.size
 }
 
+/** Anticipos de la entidad activa que esperan mi decisión. */
+private suspend fun fetchPendingAdvances(): List<AdvanceDto> = ModulesClient.api.pendingAdvances(ActiveEntity.param)
+
 /** El API filtra por permisos; si la ruta aún no existe (404) o falla, la sección no aparece. */
 internal suspend fun loadPendingAdvances(p: ModulesPerms): List<AdvanceDto> =
-    if (p.approvesMoney || p.has("finance.edit")) runCatching { ModulesClient.api.pendingAdvances() }.getOrDefault(emptyList()) else emptyList()
+    if (p.approvesMoney || p.has("finance.edit")) runCatching { fetchPendingAdvances() }.getOrDefault(emptyList()) else emptyList()
 
 /**
- * Lo que espera mi decisión. Tareas: las que pedí (dirección ve todas las de su
- * operación, como en el API). OC: `GET /analytics/purchase-orders` por cada entidad.
+ * Lo que espera mi decisión, solo de la entidad activa. Tareas: las que pedí (dirección ve
+ * todas las de su operación, como en el API). OC: `GET /analytics/purchase-orders?entity=`.
  */
 internal suspend fun loadApprovals(p: ModulesPerms): ApprovalsData = coroutineScope {
-    val requested = async { ModulesClient.api.requestedTasks() }
+    val active = ActiveEntity.param
+    val ops = p.opsEntity
+    val requested = async { ModulesClient.api.requestedTasks(active) }
     val review = async {
-        if (p.isDirection) ModulesClient.api.workload("PENDING_APPROVAL") else null
+        if (p.isDirection) ModulesClient.api.workload("PENDING_APPROVAL", active) else null
     }
-    val orders = if (p.approvesMoney) {
-        p.eventOpsEntities.map { entity ->
-            async { runCatching { ModulesClient.api.poAnalytics(entity).orders.map { PoItem(it, entity) } }.getOrDefault(emptyList()) }
+    val orders = async {
+        if (p.approvesMoney && ops != null) {
+            runCatching { ModulesClient.api.poAnalytics(ops).orders.map { PoItem(it, ops) } }.getOrDefault(emptyList())
+        } else {
+            emptyList()
         }
-    } else {
-        emptyList()
     }
     val window = async { if (p.canMarkPaid) runCatching { ModulesClient.api.poWindow().canPayNow }.getOrDefault(false) else false }
     val advances = async { loadPendingAdvances(p) }
@@ -121,7 +126,7 @@ internal suspend fun loadApprovals(p: ModulesPerms): ApprovalsData = coroutineSc
             .filter { p.canReviewTask(it) }
             .sortedBy { it.submittedAt ?: it.updatedAt ?: "" },
         requested = mine,
-        orders = orders.awaitAll().flatten(),
+        orders = orders.await(),
         canPayNow = window.await(),
         advances = advances.await(),
     )
@@ -207,12 +212,12 @@ fun ApprovalsScreen(nav: ModuleNav, focusAdvanceId: String? = null) {
                     },
                 )
                 // Quien aprueba también puede pagar: el mismo anticipo vuelve como «Por pagar».
-                runCatching { ModulesClient.api.pendingAdvances() }.getOrNull()?.let { list -> data = data?.copy(advances = list) }
+                runCatching { fetchPendingAdvances() }.getOrNull()?.let { list -> data = data?.copy(advances = list) }
             } catch (e: Exception) {
                 haptics.reject()
                 notify(e.userMessage())
                 val fresh = if (e is HttpException && e.code() == 409) {
-                    runCatching { ModulesClient.api.pendingAdvances() }.getOrNull()
+                    runCatching { fetchPendingAdvances() }.getOrNull()
                 } else {
                     null
                 }

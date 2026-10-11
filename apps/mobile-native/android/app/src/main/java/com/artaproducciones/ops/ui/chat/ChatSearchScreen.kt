@@ -49,6 +49,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import com.artaproducciones.ops.data.ActiveEntity
 import com.artaproducciones.ops.data.api.ApiClient
 import com.artaproducciones.ops.data.api.ChatChannelRef
 import com.artaproducciones.ops.data.api.ChatMessage
@@ -118,7 +119,7 @@ fun ChatSearchScreen(onBack: () -> Unit, openMessage: (channelId: String, messag
         delay(300)
         loading = true
         try {
-            results = ApiClient.api.search(q).messages
+            results = ApiClient.api.search(q, entity = ActiveEntity.param).messages
             error = null
             searched = q
         } catch (e: CancellationException) {

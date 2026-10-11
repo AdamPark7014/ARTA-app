@@ -43,11 +43,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.artaproducciones.ops.data.ActiveEntity
 import com.artaproducciones.ops.data.api.ModulesClient
 import com.artaproducciones.ops.data.api.ModulesSession
 import com.artaproducciones.ops.data.api.TaskDto
 import com.artaproducciones.ops.data.api.userMessage
 import com.artaproducciones.ops.ui.theme.ArtaColors
+import com.artaproducciones.ops.ui.theme.LocalActiveEntity
 import java.time.LocalDate
 
 private enum class TaskView(val label: String, val key: String) {
@@ -104,22 +106,27 @@ fun TasksScreen(nav: ModuleNav) {
     var tick by remember { mutableIntStateOf(0) }
     var creating by remember { mutableStateOf(false) }
     val today = LocalDate.now()
+    val entity = LocalActiveEntity.current
 
     LaunchedEffect(Unit) {
         runCatching { ModulesSession.me() }.onSuccess { perms = ModulesPerms(it) }
     }
 
-    LaunchedEffect(view, tick) {
-        if (shownView != view) {
+    var shownEntity by remember { mutableStateOf(entity) }
+
+    LaunchedEffect(view, tick, entity) {
+        if (shownView != view || shownEntity != entity) {
             rows = ModulesStore.taskLists[view.key]
             shownView = view
+            shownEntity = entity
         }
         loading = true
         try {
+            val active = ActiveEntity.param
             val list = when (view) {
-                TaskView.MINE -> ModulesClient.api.myTasks()
-                TaskView.REQUESTED -> ModulesClient.api.requestedTasks()
-                TaskView.TEAM -> ModulesClient.api.workload()
+                TaskView.MINE -> ModulesClient.api.myTasks(active)
+                TaskView.REQUESTED -> ModulesClient.api.requestedTasks(active)
+                TaskView.TEAM -> ModulesClient.api.workload(entity = active)
             }
             ModulesStore.taskLists[view.key] = list
             rows = list

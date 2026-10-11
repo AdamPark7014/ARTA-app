@@ -62,6 +62,7 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.artaproducciones.ops.data.ActiveEntity
 import com.artaproducciones.ops.data.api.ApiClient
 import com.artaproducciones.ops.data.api.ChannelSummary
 import com.artaproducciones.ops.data.api.userMessage
@@ -72,6 +73,7 @@ import com.artaproducciones.ops.ui.common.parseInstant
 import com.artaproducciones.ops.ui.common.plainText
 import com.artaproducciones.ops.ui.common.relativeTime
 import com.artaproducciones.ops.ui.theme.ArtaColors
+import com.artaproducciones.ops.ui.theme.LocalActiveEntity
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.merge
@@ -135,10 +137,12 @@ fun ChatListScreen(openChat: (String) -> Unit) {
     // Al entrar al chat: quién está bloqueado (pudo cambiar desde la web), para ignorar lo suyo en tiempo real.
     LaunchedEffect(Unit) { ChatBlocks.ensureLoaded(refresh = true) }
     val online by ChatPresence.online.collectAsState()
+    val entity = LocalActiveEntity.current
 
     suspend fun load() {
         try {
-            channels = ApiClient.api.channels()
+            // Canales de la entidad activa más los directos (los directos son personales).
+            channels = ApiClient.api.channels(ActiveEntity.param)
             error = null
             loaded = true
         } catch (e: CancellationException) {
@@ -150,7 +154,7 @@ fun ChatListScreen(openChat: (String) -> Unit) {
         }
     }
 
-    LaunchedEffect(reloadTick) { load() }
+    LaunchedEffect(reloadTick, entity) { load() }
     LaunchedEffect(Unit) { dndUntil = runCatching { ApiClient.api.chatPrefs().dndUntil }.getOrNull() }
     // Ráfagas de actividad (varios mensajes seguidos) se juntan en una sola recarga.
     LaunchedEffect(Unit) {

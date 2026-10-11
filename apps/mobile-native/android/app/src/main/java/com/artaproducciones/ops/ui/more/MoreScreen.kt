@@ -80,15 +80,18 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.artaproducciones.ops.BuildConfig
+import com.artaproducciones.ops.data.ActiveEntity
 import com.artaproducciones.ops.data.Session
 import com.artaproducciones.ops.data.api.ApiClient
 import com.artaproducciones.ops.data.api.UserDto
 import com.artaproducciones.ops.push.PushRegistration
 import com.artaproducciones.ops.ui.chat.ModerationText
 import com.artaproducciones.ops.ui.common.Avatar
+import com.artaproducciones.ops.ui.common.EntitySelector
 import com.artaproducciones.ops.ui.common.LegalLinks
 import com.artaproducciones.ops.ui.modules.ModuleNav
 import com.artaproducciones.ops.ui.theme.ArtaColors
+import com.artaproducciones.ops.ui.theme.LocalActiveEntity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -325,6 +328,21 @@ fun MoreScreen(user: UserDto, nav: ModuleNav) {
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
         item { ProfileHeader(user) }
 
+        // Solo híbridos: el mismo cambio que el doble toque en Inicio.
+        if (ActiveEntity.isHybrid) {
+            item(key = "h-entity") { SectionLabel("Entidad") }
+            item(key = "entity") {
+                Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    EntitySelector()
+                    Text(
+                        "También con doble toque en Inicio.",
+                        color = ArtaColors.Muted,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+            }
+        }
+
         visibleGroups.forEach { (group, items) ->
             item(key = "h-$group") { SectionLabel(group) }
             items(items, key = { "m-${it.path}" }) { module ->
@@ -520,6 +538,7 @@ private fun ProfileHeader(user: UserDto) {
             Text(user.fullName.ifBlank { "ARTA" }, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
             val role = WebModules.roleLabel(user.roleKey)
             if (role.isNotBlank()) Text(role, color = ArtaColors.Gold, style = MaterialTheme.typography.bodyMedium)
+            Text(LocalActiveEntity.current.brand, color = ArtaColors.Text, style = MaterialTheme.typography.bodyMedium)
             user.email?.takeIf { it.isNotBlank() }?.let { Text(it, color = ArtaColors.Muted, style = MaterialTheme.typography.bodySmall) }
         }
     }

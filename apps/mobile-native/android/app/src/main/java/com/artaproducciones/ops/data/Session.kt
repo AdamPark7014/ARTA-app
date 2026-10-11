@@ -46,6 +46,7 @@ object Session {
 
     fun init(context: Context) {
         app = context.applicationContext
+        ActiveEntity.init(app)
     }
 
     /** Al abrir la app: con cookie guardada se confirma con `/auth/me`; sin red se usa el último usuario. */
@@ -96,6 +97,8 @@ object Session {
     }
 
     private fun signedIn(user: UserDto) {
+        // Antes del estado: la primera pantalla ya pide con la entidad (y el color) de esta persona.
+        ActiveEntity.bind(user, save = !ApiDebugHooks.demo)
         // Modo demo: la sesión ficticia vive solo en memoria; no pisa la guardada ni abre socket/push.
         if (ApiDebugHooks.demo) {
             _state.value = State.SignedIn(user)
@@ -133,6 +136,8 @@ object Session {
     }
 
     private fun clearLocal() {
+        // La entidad elegida queda guardada por usuario; solo se vuelve al dorado de la pantalla de entrada.
+        ActiveEntity.reset()
         // Modo demo: «Cerrar sesión» no borra la sesión real que hubiera guardada en el teléfono.
         if (ApiDebugHooks.demo) {
             _state.value = State.SignedOut

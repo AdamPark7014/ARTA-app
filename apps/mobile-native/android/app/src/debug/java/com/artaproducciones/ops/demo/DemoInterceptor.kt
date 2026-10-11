@@ -27,7 +27,9 @@ import java.util.concurrent.ConcurrentHashMap
  * a `chain.proceed`.
  *
  * - GET del API → fixture por clave exacta (ruta + `entity`/`scope`), luego sin `scope`, luego
- *   sin query. Sin fixture: lista vacía donde el DTO es una lista, página vacía en mensajes,
+ *   sin `entity`, luego sin query. Con `?entity=` y una fixture grabada sin entidad, la lista se
+ *   filtra como el API ([DemoEntities]); los globos de chat y avisos se cuentan sobre lo filtrado.
+ *   Sin fixture: lista vacía donde el DTO es una lista, página vacía en mensajes,
  *   404 en lo demás (las pantallas lo muestran como «Sin datos en el modo demo»).
  * - Escrituras → 200 con lo que espera quien llama (el mensaje enviado, la tarea con su nuevo
  *   estado…) y el cambio se guarda en memoria para que la siguiente lectura lo vea.
@@ -69,11 +71,17 @@ internal class DemoInterceptor(context: Context) : Interceptor {
     // ─── Lecturas ───────────────────────────────────────────────────────────
 
     private fun read(path: String, url: HttpUrl): String? {
-        DemoKeys.candidates(path, url).firstNotNullOfOrNull { store.raw(it) }?.let { return it }
+        val entity = url.queryParameter("entity")?.takeIf { it.isNotBlank() }
+        if (entity != null) entityCount(path, entity)?.let { return it }
+        for (key in DemoKeys.candidates(path, url)) {
+            val raw = store.raw(key) ?: continue
+            // Grabado sin entidad: se filtra como el API (lo grabado con `entity=` ya viene filtrado).
+            return if (entity != null && "entity=" !in key) DemoEntities.filter(path, raw, entity, ::eventEntity) else raw
+        }
         val s = path.split('/')
         return when {
             s.size == 4 && s[0] == "chat" && s[1] == "messages" && s[3] == "thread" -> thread(s[2])
-            path == "chat/search" -> search(url.queryParameter("q").orEmpty(), url.queryParameter("channelId"))
+            path == "chat/search" -> search(url.queryParameter("q").orEmpty(), url.queryParameter("channelId"), entity)
             s.size == 4 && s[0] == "chat" && s[1] == "channels" && s[3] == "messages" -> EMPTY_PAGE
             s.size == 4 && s[0] == "chat" && s[1] == "channels" && s[3] == "pins" -> """{"messages":[]}"""
             path == "analytics/purchase-orders" -> """{"orders":[]}"""
@@ -87,13 +95,30 @@ internal class DemoInterceptor(context: Context) : Interceptor {
         return JSONObject().put("root", root).put("replies", store.arr(repliesKey(rootId)) ?: JSONArray()).toString()
     }
 
-    private fun search(q: String, channelId: String?): String {
+    /** Entidad de un evento según las listas de eventos grabadas. */
+    private fun eventEntity(eventId: String): String? =
+        store.keys().filter { it == "events" || it.startsWith("events?") }
+            .firstNotNullOfOrNull { k -> store.arr(k).objects().firstOrNull { it.optString("id") == eventId }?.str("entity") }
+
+    private fun entityItems(path: String, entity: String): List<JSONObject> =
+        store.arr(path).objects().filter { DemoEntities.keep(path, it, entity, ::eventEntity) }
+
+    /** Globos de chat y avisos de una sola entidad: se cuentan sobre las listas filtradas. */
+    private fun entityCount(path: String, entity: String): String? = when (path) {
+        "chat/unread" -> JSONObject().put("total", entityItems("chat/channels", entity).sumOf { it.optInt("unreadCount") }).toString()
+        "notifications/unread-count" -> JSONObject().put("count", entityItems("notifications", entity).count { it.isNull("readAt") }).toString()
+        else -> null
+    }
+
+    private fun search(q: String, channelId: String?, entity: String?): String {
         val needle = q.trim().lowercase()
         val out = JSONArray()
+        val allowed = entity?.let { e -> entityItems("chat/channels", e).map { it.optString("id") }.toSet() }
         if (needle.isNotEmpty()) {
             for ((key, page) in messagePages()) {
                 val cid = key.split('/')[2]
                 if (channelId != null && cid != channelId) continue
+                if (allowed != null && cid !in allowed) continue
                 val ref = channelRef(cid)
                 page.optJSONArray("messages").objects()
                     .filter { !it.optBoolean("deleted") && it.optString("body").lowercase().contains(needle) }
@@ -133,10 +158,14 @@ internal class DemoInterceptor(context: Context) : Interceptor {
             // Avisos
             s.size == 3 && s[0] == "notifications" && s[2] == "read" -> notificationRead(s[1])
             path == "notifications/read-all" -> {
+                // Con `?entity=`, como el API: solo los de esa entidad (y los que no tienen).
+                val entity = request.url.queryParameter("entity")?.takeIf { it.isNotBlank() }
+                fun mine(n: JSONObject) = entity == null || DemoEntities.keep("notifications", n, entity, ::eventEntity)
                 store.arr("notifications")?.let { list ->
-                    store.put("notifications", JSONArray(list.objects().map { if (it.isNull("readAt")) it.put("readAt", now()) else it }))
+                    store.put("notifications", JSONArray(list.objects().map { if (it.isNull("readAt") && mine(it)) it.put("readAt", now()) else it }))
                 }
-                store.put("notifications/unread-count", JSONObject().put("count", 0))
+                val left = store.arr("notifications").objects().count { it.isNull("readAt") }
+                store.put("notifications/unread-count", JSONObject().put("count", left))
                 OK
             }
             // Tareas
@@ -445,6 +474,8 @@ internal class DemoInterceptor(context: Context) : Interceptor {
             .put("updatedAt", createdAt)
             .put("eventId", eventId ?: JSONObject.NULL)
             .put("event", event ?: JSONObject.NULL)
+            // Como el API: con evento, la del evento; sin evento, la que mandó la app (entidad activa).
+            .put("entity", event?.opt("entity") ?: body.opt("entity") ?: JSONObject.NULL)
             .put("createdById", meId())
             .put("createdBy", person(meId()))
             .put("evidences", JSONArray())

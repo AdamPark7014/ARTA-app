@@ -1,6 +1,9 @@
 package com.artaproducciones.ops.ui
 
 import android.net.Uri
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -17,6 +20,10 @@ import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Snackbar
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -28,11 +35,17 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.semantics
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.artaproducciones.ops.data.ActiveEntity
 import com.artaproducciones.ops.data.Session
 import com.artaproducciones.ops.data.api.ApiClient
 import com.artaproducciones.ops.data.api.UserDto
@@ -43,6 +56,8 @@ import com.artaproducciones.ops.ui.chat.ChatSearchScreen
 import com.artaproducciones.ops.ui.chat.ConversationScreen
 import com.artaproducciones.ops.ui.chat.NewConversationScreen
 import com.artaproducciones.ops.ui.chat.SavedMessagesScreen
+import com.artaproducciones.ops.ui.common.entitySwitchedMessage
+import com.artaproducciones.ops.ui.common.toggleEntity
 import com.artaproducciones.ops.ui.login.LoginScreen
 import com.artaproducciones.ops.ui.modules.ApprovalsScreen
 import com.artaproducciones.ops.ui.modules.EventDetailScreen
@@ -51,18 +66,33 @@ import com.artaproducciones.ops.ui.modules.InicioScreen
 import com.artaproducciones.ops.ui.modules.ModuleNav
 import com.artaproducciones.ops.ui.modules.TaskDetailScreen
 import com.artaproducciones.ops.ui.modules.TasksScreen
+import com.artaproducciones.ops.ui.modules.rememberHaptics
 import com.artaproducciones.ops.ui.more.BlockedUsersScreen
 import com.artaproducciones.ops.ui.more.MoreScreen
 import com.artaproducciones.ops.ui.notifications.NotificationsScreen
 import com.artaproducciones.ops.ui.theme.ArtaColors
+import com.artaproducciones.ops.ui.theme.LocalActiveEntity
 import com.artaproducciones.ops.ui.web.ArtaWebScreen
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.drop
 
 /** `navigate("approvals")` sigue valiendo: el argumento es opcional. */
 private const val APPROVALS_ROUTE = "approvals?advance={advance}"
 
 /** Más › Usuarios bloqueados (chat). */
 private const val BLOCKED_USERS_ROUTE = "blocked-users"
+
+/**
+ * Dos toques en Inicio más juntos que esto (entre que se suelta el dedo una vez y la otra)
+ * cambian Arta ⇄ Auditorio, como el doble toque de Facebook. Algo más holgado que el
+ * doubleTapTimeout del sistema (300 ms).
+ */
+private const val HOME_DOUBLE_TAP_MS = 400L
+
+/** Un globo del socket trae el total de todas mis entidades; un híbrido lo vuelve a pedir de la activa. */
+private const val BADGE_REFRESH_DELAY_MS = 300L
 
 /** Pestañas del cascarón, en el orden del contrato de paridad. */
 enum class Tab { Inicio, Chats, Tareas, Avisos, Mas }
@@ -345,16 +375,64 @@ private fun HomeScreen(
 ) {
     var chatUnread by remember { mutableIntStateOf(0) }
     var noticeUnread by remember { mutableIntStateOf(0) }
+    // Hora (del evento, no del clic) en que se soltaron los dos últimos toques sobre Inicio: el
+    // clic puede procesarse tarde si la pantalla está ocupada recomponiendo, el evento no.
+    val homeUps = remember { LongArray(2) }
+    val entity = LocalActiveEntity.current
+    val hybrid = ActiveEntity.isHybrid
+    val haptics = rememberHaptics()
+    val snackbar = remember { SnackbarHostState() }
 
-    LaunchedEffect(Unit) {
-        runCatching { chatUnread = ApiClient.api.chatUnread().total }
-        runCatching { noticeUnread = ApiClient.api.notificationsUnread().count }
+    // Los globos cuentan solo la entidad activa: se piden de nuevo al cambiarla.
+    LaunchedEffect(entity) {
+        runCatching { chatUnread = ApiClient.api.chatUnread(ActiveEntity.param).total }
+        runCatching { noticeUnread = ApiClient.api.notificationsUnread(ActiveEntity.param).count }
     }
-    LaunchedEffect(Unit) { RealtimeClient.chatUnread.collect { chatUnread = it } }
-    LaunchedEffect(Unit) { RealtimeClient.notificationsUnread.collect { noticeUnread = it } }
+    LaunchedEffect(Unit) {
+        RealtimeClient.chatUnread.collectLatest { total ->
+            if (!ActiveEntity.isHybrid) {
+                chatUnread = total
+            } else {
+                delay(BADGE_REFRESH_DELAY_MS)
+                runCatching { chatUnread = ApiClient.api.chatUnread(ActiveEntity.param).total }
+            }
+        }
+    }
+    LaunchedEffect(Unit) {
+        RealtimeClient.notificationsUnread.collectLatest { unread ->
+            if (!ActiveEntity.isHybrid) {
+                noticeUnread = unread
+            } else {
+                delay(BADGE_REFRESH_DELAY_MS)
+                runCatching { noticeUnread = ApiClient.api.notificationsUnread(ActiveEntity.param).count }
+            }
+        }
+    }
+    // Aviso breve con cada cambio (doble toque, chip de Inicio o selector de Más).
+    LaunchedEffect(Unit) {
+        ActiveEntity.changes.drop(1).collectLatest { now ->
+            snackbar.currentSnackbarData?.dismiss()
+            snackbar.showSnackbar(entitySwitchedMessage(now), duration = SnackbarDuration.Short)
+        }
+    }
+
+    fun onHomeTap() {
+        val gap = homeUps[1] - homeUps[0]
+        if (hybrid && homeUps[0] > 0L && gap in 0L..HOME_DOUBLE_TAP_MS) {
+            // Un tercer toque seguido no vuelve a cambiar: empieza otra cuenta.
+            homeUps.fill(0L)
+            if (toggleEntity() != null) haptics.confirm()
+        }
+        onTab(Tab.Inicio)
+    }
 
     Scaffold(
         containerColor = ArtaColors.Bg,
+        snackbarHost = {
+            SnackbarHost(snackbar) { data ->
+                Snackbar(data, containerColor = ArtaColors.Surface2, contentColor = ArtaColors.Text, actionColor = ArtaColors.Gold)
+            }
+        },
         bottomBar = {
             NavigationBar(containerColor = ArtaColors.BgElev) {
                 val colors = NavigationBarItemDefaults.colors(
@@ -366,10 +444,31 @@ private fun HomeScreen(
                 )
                 NavigationBarItem(
                     selected = tab == Tab.Inicio,
-                    onClick = { onTab(Tab.Inicio) },
+                    onClick = ::onHomeTap,
                     icon = { Icon(Icons.Outlined.Home, null) },
                     label = { Text("Inicio") },
                     colors = colors,
+                    modifier = Modifier
+                        // Solo mira (pase inicial, sin consumir): el clic de la pestaña sigue igual.
+                        .pointerInput(Unit) {
+                            awaitEachGesture {
+                                awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                                val up = waitForUpOrCancellation(PointerEventPass.Initial) ?: return@awaitEachGesture
+                                homeUps[0] = homeUps[1]
+                                homeUps[1] = up.uptimeMillis
+                            }
+                        }
+                        // Con lector de pantalla el doble toque es «activar»: el cambio va como acción propia.
+                        .then(
+                            if (!hybrid) Modifier else Modifier.semantics {
+                                customActions = listOf(
+                                    CustomAccessibilityAction("Cambiar a ${entity.other.short}") {
+                                        if (toggleEntity() != null) haptics.confirm()
+                                        true
+                                    },
+                                )
+                            },
+                        ),
                 )
                 NavigationBarItem(
                     selected = tab == Tab.Chats,

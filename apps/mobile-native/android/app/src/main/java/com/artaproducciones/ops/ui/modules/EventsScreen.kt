@@ -56,9 +56,7 @@ import com.artaproducciones.ops.data.api.ModulesClient
 import com.artaproducciones.ops.data.api.ModulesSession
 import com.artaproducciones.ops.data.api.userMessage
 import com.artaproducciones.ops.ui.theme.ArtaColors
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
+import com.artaproducciones.ops.ui.theme.LocalActiveEntity
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
@@ -101,12 +99,16 @@ fun EventsScreen(nav: ModuleNav, showBack: Boolean = true) {
     var selected by remember { mutableStateOf(LocalDate.now()) }
     var notes by remember { mutableStateOf<List<CalendarNoteDto>>(emptyList()) }
     val today = LocalDate.now()
+    val entity = LocalActiveEntity.current
 
-    LaunchedEffect(tick) {
+    LaunchedEffect(tick, entity) {
         loading = true
         try {
-            perms = ModulesPerms(ModulesSession.me())
-            val list = ModulesClient.api.events(scope = "all")
+            val p = ModulesPerms(ModulesSession.me())
+            perms = p
+            // Solo la entidad activa; sin operación de eventos en ella, no hay nada que pedir.
+            val ops = p.opsEntity
+            val list = if (ops == null) emptyList() else ModulesClient.api.events(entity = ops, scope = "all")
             ModulesStore.events = list
             events = list
             error = null
@@ -117,16 +119,16 @@ fun EventsScreen(nav: ModuleNav, showBack: Boolean = true) {
         }
     }
 
-    LaunchedEffect(month, perms, tick, monthMode) {
+    LaunchedEffect(month, perms, tick, monthMode, entity) {
         val p = perms ?: return@LaunchedEffect
         if (!monthMode) return@LaunchedEffect
+        val ops = p.opsEntity ?: run {
+            notes = emptyList()
+            return@LaunchedEffect
+        }
         val from = month.atDay(1).toString()
         val to = month.atEndOfMonth().toString()
-        notes = coroutineScope {
-            p.eventOpsEntities.map { entity ->
-                async { runCatching { ModulesClient.api.calendarNotes(entity, from, to) }.getOrDefault(emptyList()) }
-            }.awaitAll().flatten()
-        }
+        notes = runCatching { ModulesClient.api.calendarNotes(ops, from, to) }.getOrDefault(emptyList())
     }
 
     val visible = remember(events, segment, query) {

@@ -261,16 +261,16 @@ interface ArtaModulesApi {
     @GET("users/directory")
     suspend fun directory(): List<DirUserDto>
 
-    // Tareas
+    // Tareas. [entity] en los listados: solo esa entidad (null = todas las mías, apps 1.0.0).
     @GET("tasks/mine")
-    suspend fun myTasks(): List<TaskDto>
+    suspend fun myTasks(@Query("entity") entity: String? = null): List<TaskDto>
 
     @GET("tasks/requested")
-    suspend fun requestedTasks(): List<TaskDto>
+    suspend fun requestedTasks(@Query("entity") entity: String? = null): List<TaskDto>
 
     /** Solo dirección y convenios (403 para el resto). */
     @GET("tasks/workload")
-    suspend fun workload(@Query("status") status: String? = null): List<TaskDto>
+    suspend fun workload(@Query("status") status: String? = null, @Query("entity") entity: String? = null): List<TaskDto>
 
     @GET("tasks/event/{eventId}")
     suspend fun eventTasks(@Path("eventId") eventId: String): List<TaskDto>
@@ -329,7 +329,7 @@ interface ArtaModulesApi {
 
     // Anticipos: lo que yo puedo resolver (PENDING si apruebo, APPROVED si pago)
     @GET("finance/advances/pending")
-    suspend fun pendingAdvances(): List<AdvanceDto>
+    suspend fun pendingAdvances(@Query("entity") entity: String? = null): List<AdvanceDto>
 
     @PATCH("finance/advances/{id}/approve")
     suspend fun approveAdvance(@Path("id") id: String)

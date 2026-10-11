@@ -19,11 +19,15 @@ internal object DemoKeys {
         return if (query.isEmpty()) path else "$path?$query"
     }
 
-    /** De más a menos específica: exacta, sin `scope` (p. ej. `scope=active` no se grabó) y sin query. */
+    /**
+     * De más a menos específica: exacta, sin `scope` (p. ej. `scope=active` no se grabó), sin
+     * `entity` (las apps ahora mandan la entidad activa en todo listado; lo grabado sin ella lo
+     * filtra [DemoEntities]) y sin query.
+     */
     fun candidates(path: String, url: HttpUrl): List<String> {
         val entity = url.queryParameter("entity")?.takeIf { it.isNotBlank() }
         val scope = url.queryParameter("scope")?.takeIf { it.isNotBlank() }
-        return listOf(key(path, entity, scope), key(path, entity, null), path).distinct()
+        return listOf(key(path, entity, scope), key(path, entity, null), key(path, null, scope), path).distinct()
     }
 
     /** `chat/channels/x` si [url] es del API ([base] = `…/api/`); null para `/uploads`, otro host, etc. */
@@ -33,6 +37,37 @@ internal object DemoKeys {
         val segments = url.pathSegments.filter { it.isNotEmpty() }
         if (segments.size < prefix.size || segments.subList(0, prefix.size) != prefix) return null
         return segments.drop(prefix.size).joinToString("/")
+    }
+}
+
+/**
+ * Modo demo con `?entity=` (docs/entidades-arta-auditorio.md): una lista grabada sin entidad se
+ * filtra como lo haría el API, para que el cambio Arta ⇄ Auditorio se vea también en la demo.
+ */
+internal object DemoEntities {
+    /**
+     * Entidad de una fila: la suya, la de su evento o, sin evento, la que le puso la migración
+     * (canales y tareas de ARTA; directos y grupos de directos, de nadie). Null = se ve en las dos.
+     */
+    fun of(path: String, item: JSONObject, eventEntity: (String) -> String?): String? {
+        item.str("entity")?.let { return it }
+        item.optJSONObject("event")?.str("entity")?.let { return it }
+        item.str("eventId")?.let { id -> eventEntity(id)?.let { return it } }
+        return when {
+            path == "chat/channels" -> if (item.optString("kind") == "DIRECT" || item.optBoolean("isGroupDm")) null else "ARTA"
+            path.startsWith("tasks/") || path.startsWith("finance/advances") -> "ARTA"
+            else -> null
+        }
+    }
+
+    fun keep(path: String, item: JSONObject, entity: String, eventEntity: (String) -> String?): Boolean =
+        of(path, item, eventEntity).let { it == null || it == entity }
+
+    /** Solo lo de [entity] (más lo personal). Lo que no es una lista se devuelve igual. */
+    fun filter(path: String, raw: String, entity: String, eventEntity: (String) -> String?): String {
+        if (!raw.trimStart().startsWith("[")) return raw
+        val list = runCatching { JSONArray(raw) }.getOrNull() ?: return raw
+        return JSONArray(list.objects().filter { keep(path, it, entity, eventEntity) }).toString()
     }
 }
 

@@ -33,6 +33,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.artaproducciones.ops.data.ActiveEntity
 import com.artaproducciones.ops.data.api.ApiClient
 import com.artaproducciones.ops.data.api.NotificationDto
 import com.artaproducciones.ops.data.api.userMessage
@@ -41,6 +42,7 @@ import com.artaproducciones.ops.ui.DeepLink
 import com.artaproducciones.ops.ui.common.Avatar
 import com.artaproducciones.ops.ui.common.relativeTime
 import com.artaproducciones.ops.ui.theme.ArtaColors
+import com.artaproducciones.ops.ui.theme.LocalActiveEntity
 import kotlinx.coroutines.launch
 
 /** Bandeja de avisos de todos los procesos (la campana del panel web). */
@@ -52,10 +54,11 @@ fun NotificationsScreen(openLink: (DeepLink) -> Unit, onUnreadChange: (Int) -> U
     var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
     var tick by remember { mutableIntStateOf(0) }
+    val entity = LocalActiveEntity.current
 
     suspend fun load() {
         try {
-            items = ApiClient.api.notifications(take = 60)
+            items = ApiClient.api.notifications(take = 60, entity = ActiveEntity.param)
             error = null
             onUnreadChange(items.count { it.readAt == null })
         } catch (e: Exception) {
@@ -65,7 +68,7 @@ fun NotificationsScreen(openLink: (DeepLink) -> Unit, onUnreadChange: (Int) -> U
         }
     }
 
-    LaunchedEffect(tick) { load() }
+    LaunchedEffect(tick, entity) { load() }
     LaunchedEffect(Unit) { RealtimeClient.notificationsUnread.collect { load() } }
 
     fun open(n: NotificationDto) {
@@ -84,7 +87,8 @@ fun NotificationsScreen(openLink: (DeepLink) -> Unit, onUnreadChange: (Int) -> U
             if (items.any { it.readAt == null }) {
                 TextButton(onClick = {
                     scope.launch {
-                        runCatching { ApiClient.api.notificationsReadAll() }
+                        // Solo la entidad activa: lo de la otra sigue sin leer hasta que se vea allá.
+                        runCatching { ApiClient.api.notificationsReadAll(ActiveEntity.param) }
                             .onSuccess {
                                 items = items.map { it.copy(readAt = it.readAt ?: "now") }
                                 onUnreadChange(0)

@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -39,13 +40,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.artaproducciones.ops.data.ActiveEntity
 import com.artaproducciones.ops.data.api.EventSummaryDto
 import com.artaproducciones.ops.data.api.ModulesClient
 import com.artaproducciones.ops.data.api.ModulesSession
 import com.artaproducciones.ops.data.api.TaskDto
 import com.artaproducciones.ops.data.api.UserDto
 import com.artaproducciones.ops.data.api.userMessage
+import com.artaproducciones.ops.ui.common.EntityChip
 import com.artaproducciones.ops.ui.theme.ArtaColors
+import com.artaproducciones.ops.ui.theme.LocalActiveEntity
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import java.time.LocalDate
@@ -70,18 +74,27 @@ fun InicioScreen(user: UserDto, nav: ModuleNav) {
     var tick by remember { mutableIntStateOf(0) }
     var creating by remember { mutableStateOf(false) }
     val today = LocalDate.now()
+    val entity = LocalActiveEntity.current
+    var dataEntity by remember { mutableStateOf(entity) }
 
-    LaunchedEffect(user.id, tick) {
+    LaunchedEffect(user.id, tick, entity) {
+        // Lo cargado era de la otra entidad: esqueleto en vez de mezclarlo con lo nuevo.
+        if (dataEntity != entity) {
+            data = null
+            dataEntity = entity
+        }
         loading = true
         try {
             val p = ModulesPerms(ModulesSession.me(expectedId = user.id))
             perms = p
+            val active = ActiveEntity.param
+            val ops = p.opsEntity
             data = coroutineScope {
-                val tasks = async { runCatching { ModulesClient.api.myTasks() } }
+                val tasks = async { runCatching { ModulesClient.api.myTasks(active) } }
                 val approvals = async { runCatching { loadApprovals(p) } }
                 val events = async {
                     runCatching {
-                        if (p.eventOpsEntities.isEmpty()) emptyList() else ModulesClient.api.events(scope = "active")
+                        if (ops == null) emptyList() else ModulesClient.api.events(entity = ops, scope = "active")
                     }
                 }
                 val t = tasks.await()
@@ -114,6 +127,8 @@ fun InicioScreen(user: UserDto, nav: ModuleNav) {
         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 32.dp)) {
             item {
                 Column(Modifier.padding(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 8.dp)) {
+                    EntityChip()
+                    Spacer(Modifier.height(12.dp))
                     Text(TODAY_LONG.format(today).replaceFirstChar { it.titlecase(ES_MX) }, color = ArtaColors.Muted)
                     Text(
                         "Hola, ${firstName(user.fullName)}",
@@ -133,7 +148,7 @@ fun InicioScreen(user: UserDto, nav: ModuleNav) {
                     if (approvals != null && (p.approvesMoney || approvals.tasksToReview.isNotEmpty() || approvals.actionableAdvances.isNotEmpty())) {
                         item { ApprovalsSummary(approvals, p, onOpen = { nav.openApprovals() }) }
                     }
-                    if (p.eventOpsEntities.isNotEmpty()) upcomingEvents(d.events, today, nav)
+                    if (p.opsEntity != null) upcomingEvents(d.events, today, nav)
                 }
             }
         }
@@ -162,7 +177,7 @@ private fun QuickActions(p: ModulesPerms, approvals: ApprovalsData?, onNewTask: 
         if (p.approvesMoney || pending > 0) {
             item { Action(if (pending > 0) "Aprobaciones · $pending" else "Aprobaciones", Icons.Default.FactCheck) { nav.openApprovals() } }
         }
-        if (p.eventOpsEntities.isNotEmpty()) item { Action("Calendario", Icons.Default.CalendarMonth) { nav.openWeb("/calendar", "Calendario") } }
+        if (p.opsEntity != null) item { Action("Calendario", Icons.Default.CalendarMonth) { nav.openWeb("/calendar", "Calendario") } }
         if (p.canPo) item { Action("Órdenes de compra", Icons.Default.ReceiptLong) { nav.openWeb("/purchase-orders", "Órdenes de compra") } }
         if (p.canSeeFinance) item { Action("Anticipos", Icons.Default.Payments) { nav.openWeb("/advances", "Anticipos") } }
     }

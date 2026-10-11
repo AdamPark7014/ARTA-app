@@ -53,6 +53,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.artaproducciones.ops.data.ActiveEntity
 import com.artaproducciones.ops.data.api.DirUserDto
 import com.artaproducciones.ops.data.api.EventSummaryDto
 import com.artaproducciones.ops.data.api.ModulesClient
@@ -103,7 +104,7 @@ fun TaskFormSheet(
     LaunchedEffect(Unit) {
         runCatching { ModulesSession.directory() }.onSuccess { people = it }
         if (!editing && presetEventId == null) {
-            runCatching { ModulesClient.api.events(scope = "active") }
+            runCatching { ModulesClient.api.events(entity = ActiveEntity.param, scope = "active") }
                 .onSuccess { list -> events = list.filter { it.status !in CLOSED_EVENT }.sortedBy { it.startsAt ?: "9999" } }
         }
     }
@@ -130,6 +131,8 @@ fun TaskFormSheet(
                         if (module.isNotBlank()) put("module", module.trim())
                         put("assigneeIds", assigneeIds.toList())
                         eventId?.let { put("eventId", it) }
+                        // Sin evento, la tarea es de la entidad activa (con evento el API copia la del evento).
+                        if (eventId == null) ActiveEntity.param?.let { put("entity", it) }
                         dueText?.let { put("dueAt", it) }
                     }
                     ModulesClient.api.createTask(body)

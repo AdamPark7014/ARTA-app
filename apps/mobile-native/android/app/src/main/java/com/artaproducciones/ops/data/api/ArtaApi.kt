@@ -178,6 +178,8 @@ data class CreateChannelBody(
     val topic: String? = null,
     val description: String? = null,
     val memberIds: List<String> = emptyList(),
+    /** `ARTA` | `EXPLANADA`: la entidad activa (si no viene, el API usa la única del usuario o ARTA). */
+    val entity: String? = null,
 )
 data class UpdateChannelBody(val name: String? = null, val topic: String? = null, val description: String? = null)
 data class MembersBody(val userIds: List<String>)
@@ -235,8 +237,9 @@ interface ArtaApi {
     @GET("auth/me")
     suspend fun me(): MeResponse
 
+    /** [entity]: solo esa entidad más los directos (docs/entidades-arta-auditorio.md); null = todas las mías. */
     @GET("chat/channels")
-    suspend fun channels(): List<ChannelSummary>
+    suspend fun channels(@Query("entity") entity: String? = null): List<ChannelSummary>
 
     @GET("chat/channels/{id}")
     suspend fun channel(@Path("id") id: String): ChannelDetail
@@ -282,7 +285,11 @@ interface ArtaApi {
     suspend fun openDirect(@Body body: DirectBody): ChannelDetail
 
     @GET("chat/search")
-    suspend fun search(@Query("q") q: String, @Query("channelId") channelId: String? = null): MessageList
+    suspend fun search(
+        @Query("q") q: String,
+        @Query("channelId") channelId: String? = null,
+        @Query("entity") entity: String? = null,
+    ): MessageList
 
     @GET("chat/colleagues")
     suspend fun colleagues(@Query("q") q: String? = null): List<Colleague>
@@ -292,7 +299,7 @@ interface ArtaApi {
     suspend fun upload(@Part file: MultipartBody.Part): UploadResult
 
     @GET("chat/unread")
-    suspend fun chatUnread(): UnreadTotal
+    suspend fun chatUnread(@Query("entity") entity: String? = null): UnreadTotal
 
     @POST("chat/channels")
     suspend fun createChannel(@Body body: CreateChannelBody): ChannelDetail
@@ -350,16 +357,17 @@ interface ArtaApi {
     suspend fun blocks(): List<BlockedUser>
 
     @GET("notifications")
-    suspend fun notifications(@Query("take") take: Int = 50): List<NotificationDto>
+    suspend fun notifications(@Query("take") take: Int = 50, @Query("entity") entity: String? = null): List<NotificationDto>
 
     @GET("notifications/unread-count")
-    suspend fun notificationsUnread(): UnreadCount
+    suspend fun notificationsUnread(@Query("entity") entity: String? = null): UnreadCount
 
     @PATCH("notifications/{id}/read")
     suspend fun notificationRead(@Path("id") id: String): NotificationDto
 
+    /** Con [entity], solo los avisos de esa entidad (y los que no tienen). */
     @POST("notifications/read-all")
-    suspend fun notificationsReadAll(): OkResponse
+    suspend fun notificationsReadAll(@Query("entity") entity: String? = null): OkResponse
 
     @POST("devices/push")
     suspend fun registerPush(@Body body: RegisterPushBody): Any

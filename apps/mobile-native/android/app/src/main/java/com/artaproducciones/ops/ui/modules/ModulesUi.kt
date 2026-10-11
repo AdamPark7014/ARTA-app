@@ -51,6 +51,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.artaproducciones.ops.data.ActiveEntity
 import com.artaproducciones.ops.data.api.ChatAttachment
 import com.artaproducciones.ops.data.api.ModulesMe
 import com.artaproducciones.ops.data.api.PersonRef
@@ -116,7 +117,11 @@ class ModulesPerms(val me: ModulesMe) {
         return !(role == "dir_auditorio" && entity == "ARTA")
     }
 
-    val eventOpsEntities: List<String> get() = me.entities.filter { canAccessEventOps(it) }
+    /**
+     * La entidad activa, si el rol opera eventos en ella (eventos, OC, calendario). Null = en esta
+     * entidad no hay operación de eventos para la persona: no se piden esos listados.
+     */
+    val opsEntity: String? get() = ActiveEntity.param?.takeIf { canAccessEventOps(it) }
 
     val canAuthorizePo: Boolean get() = has("po.authorize")
     val canMarkPaid: Boolean get() = has("po.mark_paid")
@@ -606,7 +611,10 @@ fun Dot(color: Color, size: Int = 6) {
     Box(Modifier.size(size.dp).background(color, RoundedCornerShape(50)))
 }
 
-/** Caché en memoria para no mostrar esqueleto cada vez que se vuelve a una pantalla. */
+/**
+ * Caché en memoria para no mostrar esqueleto cada vez que se vuelve a una pantalla.
+ * Es de la entidad activa: al cambiar de entidad se vacía (`switchEntity`).
+ */
 object ModulesStore {
     val taskLists = mutableMapOf<String, List<TaskDto>>()
     var events: List<com.artaproducciones.ops.data.api.EventSummaryDto>? = null
