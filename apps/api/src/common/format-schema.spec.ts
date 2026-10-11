@@ -1,13 +1,18 @@
+import { calcProgress } from './checklist-progress';
 import {
   bindFormatToEvent,
+  capturedRows,
   carryFormatValues,
   columnTotal,
+  droppedFormatValues,
   eventDateValue,
   eventTimeValue,
   formatItemDisplay,
   isFormatItemComplete,
   normalizeFormatData,
+  signatureLabels,
   tableRows,
+  walkFormat,
   YES,
   NO,
   type FormatData,
@@ -188,5 +193,144 @@ describe('format-schema · migración de respuestas', () => {
     expect(carryFormatValues(target, { sections: [{ id: 'x' }] }).sections[0].items[0].value).toBe('');
     expect(normalizeFormatData({ sections: [{ id: 's', items: [{ id: 'y', type: 'yesno', value: 'si' }] }] }).sections[0].items[0].value).toBe(YES);
     expect(normalizeFormatData('basura').sections).toEqual([]);
+  });
+});
+
+describe('format-schema · formatos del Auditorio (texto fijo, listas de la plantilla, firmas con nombre)', () => {
+  const lista = {
+    id: 'actividades',
+    label: 'Actividades',
+    type: 'table' as const,
+    columns: [
+      { id: 'actividad', label: 'Actividad', prefilled: true },
+      { id: 'responsable', label: 'Responsable' },
+    ],
+    rows: [
+      { actividad: 'Bodega', responsable: null },
+      { actividad: 'Suites', responsable: null },
+    ],
+  };
+
+  it('la lista que trae la plantilla no cuenta como captura; lo escrito en otra columna sí', () => {
+    expect(isFormatItemComplete(lista)).toBe(false);
+    expect(capturedRows(lista)).toHaveLength(0);
+    expect(formatItemDisplay(lista)).toBeNull();
+    const lleno = { ...lista, rows: [lista.rows[0], { actividad: 'Suites', responsable: 'Ana' }] };
+    expect(isFormatItemComplete(lleno)).toBe(true);
+    expect(formatItemDisplay(lleno)).toBe('Suites · Ana');
+    // Un renglón que la persona agrega solo con la primera columna sí es captura si no hay columnas fijas.
+    expect(capturedRows({ ...lista, columns: lista.columns.map((c) => ({ ...c, prefilled: false })) })).toHaveLength(2);
+  });
+
+  it('texto fijo: no se captura, no puntúa y no se migra', () => {
+    const data: FormatData = {
+      sections: [
+        {
+          id: 'condiciones',
+          title: 'Condiciones',
+          items: [
+            { id: 'c1', label: 'La Producción deberá revisar…', type: 'paragraph' },
+            { id: 'enc', label: 'Encargado', type: 'text', value: '' },
+          ],
+        },
+      ],
+    };
+    expect(isFormatItemComplete(data.sections[0].items[0])).toBe(true);
+    expect(walkFormat(data).map(({ item }) => item.id)).toEqual(['enc']);
+    expect(calcProgress(data)).toBe(0);
+    data.sections[0].items[1].value = 'Luis';
+    expect(calcProgress(data)).toBe(100);
+    expect(formatItemDisplay(data.sections[0].items[0])).toBeNull();
+  });
+
+  it('firmas: ENTREGADO / AUTORIZADO por defecto, o el nombre de cada parte', () => {
+    expect(signatureLabels({ sections: [] })).toEqual({ delivered: 'Entregado', authorized: 'Autorizado' });
+    expect(signatureLabels(null)).toEqual({ delivered: 'Entregado', authorized: 'Autorizado' });
+    const conNombres = {
+      sections: [
+        {
+          id: 'firmas',
+          title: 'Firmas',
+          items: [
+            { id: 'firma_entregado', label: 'Producción externa', type: 'signature' },
+            { id: 'firma_autorizado', label: 'Auditorio Explanada Puebla', type: 'signature' },
+          ],
+        },
+      ],
+    };
+    expect(signatureLabels(conNombres)).toEqual({ delivered: 'Producción externa', authorized: 'Auditorio Explanada Puebla' });
+    // Las firmas viejas del seed eran texto: no cambian la etiqueta.
+    const viejas = { sections: [{ id: 'firmas', title: 'F', items: [{ id: 'firma_entregado', label: 'Usar botón', type: 'text' }] }] };
+    expect(signatureLabels(viejas).delivered).toBe('Entregado');
+  });
+});
+
+describe('format-schema · droppedFormatValues (no migrar a ciegas)', () => {
+  const nuevo: FormatData = {
+    sections: [
+      { id: 'encabezado', title: 'Datos', items: [{ id: 'evento', label: 'Evento', type: 'text', value: '' }] },
+      {
+        id: 'mantenimiento',
+        title: 'Mantenimiento',
+        items: [{ id: 'actividades', label: 'Actividades', type: 'table', columns: [{ id: 'a', label: 'A' }], rows: [] }],
+      },
+      { id: 'observaciones', title: 'Observaciones', items: [{ id: 'observaciones', label: 'Observaciones', type: 'longtext', value: '' }] },
+    ],
+  };
+
+  const viejo = (overrides: Record<string, unknown> = {}) => ({
+    sections: [
+      {
+        id: 'encabezado',
+        title: 'Datos',
+        items: [
+          { id: 'evento', label: 'Evento', type: 'text', value: 'SHOW' },
+          { id: 'responsable', label: 'Responsable', type: 'text', value: overrides.responsable ?? '' },
+        ],
+      },
+      {
+        id: 'hallazgos',
+        title: 'Inspección del venue',
+        items: [{ id: 'hallazgos', label: 'Hallazgos', type: 'table', columns: [{ id: 'area', label: 'Área' }], rows: overrides.rows ?? [] }],
+      },
+      { id: 'cierre', title: 'Cierre', items: [{ id: 'inspeccion', label: 'Inspección realizada', type: 'check', done: overrides.done ?? false, note: '' }] },
+      { id: 'observaciones', title: 'Observaciones', items: [{ id: 'observaciones', label: 'Observaciones', type: 'longtext', value: 'Todo bien' }] },
+    ],
+  });
+
+  it('un formato sin nada capturado fuera de lo que sigue existiendo se migra sin pérdida', () => {
+    expect(droppedFormatValues(nuevo, viejo())).toEqual([]);
+    const out = carryFormatValues(nuevo, viejo());
+    expect(out.sections[0].items[0].value).toBe('SHOW');
+    expect(out.sections[2].items[0].value).toBe('Todo bien');
+  });
+
+  it('reporta lo capturado que se quedaría fuera', () => {
+    expect(droppedFormatValues(nuevo, viejo({ responsable: 'Rodrigo', rows: [{ area: 'Baños' }], done: true }))).toEqual([
+      'Datos › Responsable',
+      'Inspección del venue › Hallazgos',
+      'Cierre › Inspección realizada',
+    ]);
+  });
+
+  it('«Campos adicionales» del evento también cuentan como pérdida', () => {
+    const conExtras = {
+      sections: [
+        ...viejo().sections,
+        {
+          id: 'extras',
+          title: 'Campos adicionales',
+          items: [{ id: 'extras', label: 'Campos adicionales', type: 'table', columns: [{ id: 'label', label: 'Etiqueta' }], rows: [{ label: 'Gafete' }] }],
+        },
+      ],
+    };
+    expect(droppedFormatValues(nuevo, conExtras)).toEqual(['Campos adicionales › Campos adicionales']);
+  });
+
+  it('una tabla que pasa a ser texto (o al revés) también se pierde', () => {
+    const tablaATexto: FormatData = {
+      sections: [{ id: 's', title: 'S', items: [{ id: 'hallazgos', label: 'Hallazgos', type: 'text', value: '' }] }],
+    };
+    expect(droppedFormatValues(tablaATexto, viejo({ rows: [{ area: 'Baños' }] }))).toContain('Inspección del venue › Hallazgos');
   });
 });

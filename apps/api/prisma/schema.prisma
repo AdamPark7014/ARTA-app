@@ -87,6 +87,10 @@ enum ChecklistTemplateKey {
   ANTICIPOS
   MANTENIMIENTO
   CUSTOM
+  // Formatos del Auditorio (11-10-2026); MANTENIMIENTO también es del Auditorio.
+  CHECKLIST_AUDITORIO
+  LIMPIEZA
+  COMPROMISO_HORARIOS
 }
 
 enum OrgPlan {

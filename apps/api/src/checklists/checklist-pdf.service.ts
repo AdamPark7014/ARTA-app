@@ -15,7 +15,9 @@ import {
   cellDisplay,
   columnTotal,
   isCheckType,
+  isParagraphType,
   normalizeFormatData,
+  signatureLabels,
   type FormatColumn,
   type FormatData,
   type FormatItem,
@@ -452,8 +454,13 @@ export class ChecklistPdfService {
       return;
     }
 
+    // Texto fijo: varios párrafos seguidos son las viñetas del documento.
+    const bullets = items.filter((i) => isParagraphType(i.type)).length > 1;
+
     for (const item of items) {
-      if (isCheckType(item.type)) {
+      if (isParagraphType(item.type)) {
+        this.drawParagraph(cur, item, bullets);
+      } else if (isCheckType(item.type)) {
         this.ensure(cur, 16);
         this.drawCheck(cur, section, item, M, W);
         cur.y += 15;
@@ -609,6 +616,24 @@ export class ChecklistPdfService {
     cur.y += 18;
   }
 
+  /** Texto fijo del documento (condiciones, aceptación), tal cual; con viñeta si son varios. */
+  private drawParagraph(cur: Cursor, item: FormatItem, bullet: boolean) {
+    const { doc } = cur;
+    const size = 8.8;
+    const lineH = 11.5;
+    const indent = bullet ? 12 : 0;
+    doc.font(FONT).fontSize(size);
+    const lines = this.wrap(doc, safe(item.label).trim(), size, W - indent);
+    lines.forEach((line, i) => {
+      this.ensure(cur, lineH);
+      if (i === 0 && bullet) doc.circle(M + 3.5, cur.y + 4.2, 1.5).fillColor(cur.accent).fill();
+      doc.font(FONT).fontSize(size).fillColor(INK);
+      doc.text(line, M + indent, cur.y, { width: W - indent + 4, lineBreak: false });
+      cur.y += lineH;
+    });
+    cur.y += bullet ? 3 : 5;
+  }
+
   private drawLongText(cur: Cursor, section: FormatSection, item: FormatItem) {
     const { doc } = cur;
     const size = 9;
@@ -652,8 +677,10 @@ export class ChecklistPdfService {
     const rows = Array.isArray(item.rows) ? item.rows : [];
     const minRows = Math.max(1, item.minRows ?? 4);
     const count = Math.max(rows.length, minRows);
-    const headH = 17;
-    const rowH = 16;
+    const baseHeadH = 17;
+    const baseRowH = 16;
+    const headLineH = 8;
+    const cellLineH = 10;
     const pad = 4;
     const weights = columns.map((c) => Math.max(0.5, c.width ?? 1));
     const totalWeight = weights.reduce((a, b) => a + b, 0);
@@ -662,15 +689,34 @@ export class ChecklistPdfService {
     widths.forEach((w) => xs.push(xs[xs.length - 1] + w));
     const totals = columns.map((c) => (c.total ? columnTotal(item, c.id) : null));
     const hasTotals = columns.some((c) => c.total);
+    const isNumeric = (c: FormatColumn) => c.type === 'number' || c.type === 'money';
+
+    /*
+     * Lo escrito en una celda se imprime completo: el texto que no cabe a lo
+     * ancho baja de renglón y la fila crece (antes se cortaba con «...» y en
+     * el papel se perdía media actividad). Los números siguen en una línea.
+     */
+    const cellLines = (text: string, c: FormatColumn, width: number, size: number, max: number): string[] => {
+      if (isNumeric(c)) return [this.fit(doc, text, size, width)];
+      const all = this.wrap(doc, text, size, width);
+      if (all.length <= max) return all;
+      const kept = all.slice(0, max);
+      kept[max - 1] = this.fit(doc, `${kept[max - 1]} ${all.slice(max).join(' ')}`, size, width);
+      return kept;
+    };
+
+    doc.font(BOLD);
+    const headLines = columns.map((c, i) => cellLines(upper(c.label), c, widths[i] - pad * 2, 7, 3));
+    const headH = baseHeadH + (Math.max(...headLines.map((l) => l.length)) - 1) * headLineH;
 
     const label = section.items.length > 1 || section.title !== item.label ? upper(item.label) : '';
     if (label) {
-      this.ensure(cur, 14 + headH + rowH * 2);
+      this.ensure(cur, 14 + headH + baseRowH * 2);
       doc.font(BOLD).fontSize(7.5).fillColor(MUTED);
       doc.text(`${label}:`, M, cur.y, { width: W, lineBreak: false });
       cur.y += 12;
     } else {
-      this.ensure(cur, headH + rowH * 2);
+      this.ensure(cur, headH + baseRowH * 2);
     }
 
     const drawHead = () => {
@@ -678,11 +724,12 @@ export class ChecklistPdfService {
       doc.rect(M, cur.y, W, headH).lineWidth(0.6).strokeColor(INK).stroke();
       doc.font(BOLD).fontSize(7).fillColor(INK);
       columns.forEach((c, i) => {
-        const numeric = c.type === 'number' || c.type === 'money';
-        doc.text(this.fit(doc, upper(c.label), 7, widths[i] - pad * 2), xs[i] + pad, cur.y + 5.5, {
-          width: widths[i] - pad * 2 + 2,
-          align: numeric ? 'right' : 'left',
-          lineBreak: false,
+        headLines[i].forEach((line, n) => {
+          doc.text(line, xs[i] + pad, cur.y + 5.5 + n * headLineH, {
+            width: widths[i] - pad * 2 + 2,
+            align: isNumeric(c) ? 'right' : 'left',
+            lineBreak: false,
+          });
         });
       });
       cur.y += headH;
@@ -690,32 +737,37 @@ export class ChecklistPdfService {
 
     drawHead();
     for (let r = 0; r < count; r += 1) {
+      const row = rows[r];
+      doc.font(FONT);
+      const lines = columns.map((c, i) => {
+        if (!row) return [];
+        const raw = row[c.id];
+        const textValue = c.type === 'date' ? dateDisplay(raw) : cellDisplay(c, raw);
+        return textValue ? cellLines(textValue, c, widths[i] - pad * 2, 8.5, 6) : [];
+      });
+      const rowH = baseRowH + (Math.max(1, ...lines.map((l) => l.length)) - 1) * cellLineH;
       if (cur.y + rowH > BOTTOM) {
         this.newPage(cur);
         drawHead();
       }
-      const row = rows[r];
       const top = cur.y;
       doc.rect(M, top, W, rowH).lineWidth(0.4).strokeColor(LINE).stroke();
       xs.slice(1, -1).forEach((x) => doc.moveTo(x, top).lineTo(x, top + rowH).lineWidth(0.4).strokeColor(LINE).stroke());
-      if (row) {
-        doc.font(FONT).fontSize(8.5).fillColor(INK);
-        columns.forEach((c, i) => {
-          const raw = row[c.id];
-          const textValue = c.type === 'date' ? dateDisplay(raw) : cellDisplay(c, raw);
-          if (!textValue) return;
-          const numeric = c.type === 'number' || c.type === 'money';
-          doc.text(this.fit(doc, textValue, 8.5, widths[i] - pad * 2), xs[i] + pad, top + 4.5, {
+      doc.font(FONT).fontSize(8.5).fillColor(INK);
+      columns.forEach((c, i) => {
+        lines[i].forEach((line, n) => {
+          doc.text(line, xs[i] + pad, top + 4.5 + n * cellLineH, {
             width: widths[i] - pad * 2 + 2,
-            align: numeric ? 'right' : 'left',
+            align: isNumeric(c) ? 'right' : 'left',
             lineBreak: false,
           });
         });
-      }
+      });
       cur.y += rowH;
     }
 
     if (hasTotals) {
+      const rowH = baseRowH;
       if (cur.y + rowH > BOTTOM) this.newPage(cur);
       const top = cur.y;
       doc.rect(M, top, W, rowH).fillColor(SOFT).fill();
@@ -760,8 +812,9 @@ export class ChecklistPdfService {
     doc.text('FIRMAS', M, cur.y, { lineBreak: false });
     cur.y += 14;
     const colW = (W - 24) / 2;
-    this.drawSignatureBlock(doc, M, cur.y, colW, 'ENTREGADO', input.delivered);
-    this.drawSignatureBlock(doc, M + colW + 24, cur.y, colW, 'AUTORIZADO', input.authorized);
+    const labels = signatureLabels(input.data);
+    this.drawSignatureBlock(doc, M, cur.y, colW, upper(labels.delivered), input.delivered);
+    this.drawSignatureBlock(doc, M + colW + 24, cur.y, colW, upper(labels.authorized), input.authorized);
     cur.y += blockH - 30;
   }
 

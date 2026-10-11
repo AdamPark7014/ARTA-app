@@ -24,9 +24,44 @@ Además, dos formatos que no vienen de Drive pero ya existían en el sistema com
 listas de casillas se rehicieron con campos de verdad (Adam, 24-09: «más que
 palomitas, colocar los campos necesarios»): **Catering y Camerinos**
 (`CATERING`: proveedor, contacto, personas, menú, restricciones, horarios de
-servicio en tabla, camerinos en tabla) y **Mantenimiento (Auditorio)**
-(`MANTENIMIENTO`, solo Explanada: fecha de inspección, responsable, hallazgos e
-inventario técnico en tabla, cierre).
+servicio en tabla, camerinos en tabla) y **Mantenimiento (Auditorio)**, que el
+11-10-2026 se rehízo con el Excel del propio Auditorio (ver abajo).
+
+## ARTA y Auditorio: cada uno con sus formatos (11-10-2026)
+
+Con la separación por entidad (`docs/entidades-arta-auditorio.md`) los ocho
+formatos de Arta (`EVENTO_GENERAL`, `PRODUCCION`, `HOSPEDAJE`,
+`TRANSPORTACION`, `RUEDA_PRENSA`, `ARTES_SHOWS`, `PENDONES`, `CATERING`) y el
+libro «Distribución de Pendones (Excel)» van **solo a eventos de Arta**
+(`entities: ['ARTA']`). Ninguno está documentado como compartido. El Auditorio
+(`EXPLANADA`) tiene los suyos, tomados de sus documentos:
+
+| Documento del Auditorio | Plantilla | Cómo se captura |
+|---|---|---|
+| CHECKLIST AUDITORIO.xlsx · hojas AUDITORIO y MERCH | `CHECKLIST_AUDITORIO` «Checklist Auditorio» | Encabezado (evento, showtime y empresa/promotor desde el evento; boletera). **Producción**: load in, load out y soundcheck (hora), rider y minuto a minuto (adjunto), encargado, pirotecnia / papirotecnia / CO2 (SÍ/NO). **Camerinos**: horarios, cuántos, quick change y catering caliente (no gas) SÍ/NO. **Merch**: SÍ/NO, porcentaje a cobrar, operador y contacto merch del talento (la hoja MERCH). **Prensa**: cuántos medios, cuántas canciones, encargado por promotor. **Venue**: permisos, contrato (adjunto), apertura de puertas y de sala, término del show (hora), capacidad esperada |
+| CHECKLIST AUDITORIO.xlsx · hoja LIMPIEZA | `LIMPIEZA` «Checklist Limpieza» | Evento, showtime y capacidad; **tabla** Actividad · Responsable · Horario · Estatus · Observaciones que nace con las 15 áreas de la hoja |
+| CHECKLIST AUDITORIO.xlsx · hoja MANTENIMIENTO | `MANTENIMIENTO` «Checklist Mantenimiento» (sustituye al de antes) | **Tabla** Actividad · Responsable · Fecha de supervisión · Observaciones · Cambios · Fecha de solicitud · Fecha de entrega con las 20 áreas; los «botones para foto» de Observaciones y Testigos son **dos adjuntos por área** (sección «Fotos: observaciones y testigos», opcionales) |
+| Compromiso de horarios — Día del show (Word) | `COMPROMISO_HORARIOS` | Encabezado (evento, fecha, productor / empresa desde el evento; encargado de producción); **tabla** Concepto · Horario comprometido · Hora real · Observaciones con los 10 renglones del Word (el vacío queda para un concepto libre); **Condiciones** (las 8, palabra por palabra) y **Aceptación** como texto fijo; cargo por extensión de desmontaje (hora límite y costo por hora o fracción); firmas **Producción externa** y **Auditorio Explanada Puebla** |
+
+Decisiones:
+
+- **Fotos**: una celda de tabla no lleva archivo; el tipo que existe para eso es
+  `attachment` (un archivo o un link por campo: la foto desde el teléfono, un
+  PDF o el link a un álbum). Cada área de Mantenimiento tiene «foto de
+  observaciones» y «testigos (fotos)».
+- **Listas que trae la plantilla** (áreas, conceptos): la primera columna es
+  `prefilled`; esos renglones no cuentan como captura, así que un formato recién
+  creado no sale «completo». En la hoja la celda parte renglón y sigue editable.
+- **Texto fijo** (`paragraph`): condiciones y aceptación se imprimen tal cual
+  (viñetas si son varios), no se capturan ni puntúan.
+- **Firmas**: son las mismas dos firmas digitales (ENTREGADO / AUTORIZADO); el
+  formato les pone nombre en su sección `firmas`. Producción externa firma en el
+  pad de Entregado (el pad deja escribir el nombre de quien firma) y el
+  Auditorio en Autorizado (lo permite dirección o `dir_auditorio` en eventos del
+  Auditorio).
+- **Versiones por formato**: `STANDARD_FORMAT_VERSION` es 4, pero cada formato
+  guarda la suya (`formatVersion`): los de Arta siguen en 3, así que el script
+  no reescribe sus formatos vivos.
 
 Los «BOTÓN» del Word (rider, layout, party A/B, confirmaciones, artes) eran un
 archivo aparte. Ahora son un **adjunto del propio formato** (se sube desde el
@@ -38,11 +73,14 @@ con su nombre o como link clicable.
 
 - **Contrato** de campos: `apps/api/src/common/format-schema.ts`. Tipos:
   `check` (con `note`), `text`, `longtext`, `number`, `date`, `time`, `yesno`,
-  `select`, `table` (`columns`, `rows`, `minRows`, `total`), `attachment`
-  (`value` = nombre o link, `fileId` = adjunto del formato), `signature`.
+  `select`, `table` (`columns`, `rows`, `minRows`, `total`; columna
+  `prefilled` = la escribe la plantilla), `attachment` (`value` = nombre o
+  link, `fileId` = adjunto del formato), `signature` (su `label` nombra la
+  firma), `paragraph` (texto fijo: el texto es `label`).
   `optional: true` = vacío no resta avance. `bind` = se rellena desde el evento.
-- **Catálogo** de los siete formatos: `apps/api/src/checklists/format-catalog.ts`
-  (`STANDARD_FORMATS`, `STANDARD_FORMAT_VERSION`, `RETIRED_TEMPLATES`). Los ids
+- **Catálogo** de los formatos de Arta y del Auditorio: `apps/api/src/checklists/format-catalog.ts`
+  (`STANDARD_FORMATS`, `STANDARD_FORMAT_VERSION`, `RETIRED_TEMPLATES`,
+  `EXTRA_TEMPLATE_ENTITIES`). Los ids
   de ítem son estables: los índices por módulo (Hospedaje, Transporte, Prensa,
   Artes) leen `nombre`, `contacto`, `desayuno`, `prov`, `vans`, `modelo`,
   `venue`, `hora`, `ciudad`, `promotores`, `boletera`, `sponsors`.
@@ -147,13 +185,40 @@ docker exec -w /app/apps/api arta-api npx ts-node --transpile-only scripts/gener
 docker exec -w /app/apps/api arta-api npx ts-node --transpile-only scripts/generate-missing-campaign-and-corrida.ts --confirm-produccion
 ```
 
-Qué hace: sube las siete plantillas a la versión del catálogo (snapshot en
+Qué hace: crea las plantillas estándar que falten, pone a cada una sus
+entidades (Arta → `ARTA`, Auditorio → `EXPLANADA`, y el libro de Pendones Excel
+→ `ARTA`), sube cada plantilla a la versión de **su** formato (snapshot en
 «Versiones anteriores», auditoría), migra los formatos en **borrador o en
-revisión y sin firma de autorización** conservando lo capturado por id de ítem,
-rellena el encabezado desde el evento, guarda la versión anterior y regenera el
-PDF; retira las plantillas duplicadas (`--keep-duplicates` para no hacerlo).
-Los formatos aprobados, sellados o autorizados **no se tocan**. Fuera de una
-base local exige `--confirm-produccion`.
+revisión, sin firma de autorización y de eventos abiertos** conservando lo
+capturado por id de ítem, rellena el encabezado desde el evento, guarda la
+versión anterior y regenera el PDF; retira las plantillas duplicadas
+(`--keep-duplicates` para no hacerlo). Los formatos aprobados, sellados,
+autorizados o de eventos cerrados/cancelados **no se tocan**. Si la forma nueva
+dejaría fuera algo capturado (una tabla que ya no existe, «Campos adicionales»)
+ese formato **no se migra** y se reporta; `--allow-data-loss` lo migra igual (lo
+anterior queda en Versiones). Fuera de una base local exige
+`--confirm-produccion`. Es idempotente: la segunda corrida no cambia nada.
+
+### Formatos del Auditorio en eventos que ya existían (11-10-2026)
+
+`--add-auditorio-formats` agrega a cada evento **abierto** del Auditorio
+(ni cerrado ni cancelado; los `[SEED_DEMO]` se omiten salvo `--include-seed`)
+los formatos del Auditorio que le falten, igual que «Agregar formato»
+(encabezado desde el evento, avance y PDF). **No borra ni modifica** los
+formatos que el evento ya tiene: si ya hay uno de esa plantilla, no crea otro.
+`--event <id>` lo limita a un evento.
+
+```bash
+# 0) Desplegar: la migración 20261011150000_formatos_auditorio agrega las claves y el
+#    seed del arranque crea las tres plantillas nuevas (y sube Mantenimiento si nadie lo editó).
+# 1) Simulación: entidades, Mantenimiento y qué formatos se agregarían
+docker exec -w /app/apps/api arta-api npx ts-node --transpile-only scripts/upgrade-format-templates.ts --dry --add-auditorio-formats
+# 2) Aplicar
+docker exec -w /app/apps/api arta-api npx ts-node --transpile-only scripts/upgrade-format-templates.ts --add-auditorio-formats --confirm-produccion
+```
+
+Los formatos de Arta que un evento del Auditorio recibió antes de la separación
+se quedan donde están (el script no borra nada); se quitan a mano si sobran.
 
 ## El seed ya no pisa plantillas
 
@@ -175,9 +240,14 @@ npx -w apps/api ts-node --transpile-only scripts/render-format-samples.ts --empt
 ## Pruebas
 
 - `format-schema.spec.ts`: completitud por tipo, totales, enlace con el evento,
-  migración de respuestas (casilla → SÍ/NO, ids que cambian de sección).
-- `format-catalog.spec.ts`: siete formatos, encabezado enlazado, ids únicos,
-  columnas válidas, ids estables por módulo, los 42 puntos de Evento general.
+  migración de respuestas (casilla → SÍ/NO, ids que cambian de sección), listas
+  `prefilled`, texto fijo, nombres de firma y `droppedFormatValues` (qué se
+  perdería al migrar).
+- `format-catalog.spec.ts`: los doce formatos y su entidad, encabezado enlazado,
+  ids únicos, columnas válidas, ids estables por módulo, los 42 puntos de Evento
+  general, y cada formato del Auditorio contra su Excel / Word.
+- `apps/web/e2e/formatos-auditorio.spec.ts`: el Compromiso de horarios en la
+  hoja (texto fijo, concepto largo completo, firmas con nombre).
 - `checklist-pdf.service.spec.ts`: el generador real imprime cada formato y
   deja un campo por dato capturable, todo dentro de la hoja; con 40 renglones y
   firmas pagina.

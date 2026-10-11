@@ -50,6 +50,7 @@ const TYPE_LABEL: Record<string, string> = {
   table: 'Tabla',
   attachment: 'Adjunto',
   signature: 'Firma',
+  paragraph: 'Texto fijo',
 };
 
 function entityLabel(entities: string[]) {

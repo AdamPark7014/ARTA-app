@@ -1,5 +1,5 @@
 /**
- * Imprime los siete formatos estándar con datos de muestra, sin base de datos,
+ * Imprime los formatos estándar (Arta y Auditorio) con datos de muestra, sin base de datos,
  * para revisar el diseño del PDF a ojo antes de desplegar.
  *
  *   OUT_DIR=C:\tmp\formatos npx ts-node --transpile-only scripts/render-format-samples.ts
@@ -86,14 +86,14 @@ function sampleValue(item: FormatItem, index: number): FormatItem {
       break;
     case 'table': {
       const cols = item.columns ?? [];
-      it.rows = Array.from({ length: 4 }, (_, r) =>
-        Object.fromEntries(
-          cols.map((c) => [
-            c.id,
-            c.type === 'number' ? (r + 1) * 5 : c.type === 'money' ? 1500 * (r + 1) : c.type === 'time' ? `${10 + r}:00` : c.type === 'date' ? '2026-11-14' : `${c.label} ${r + 1}`,
-          ]),
-        ),
-      );
+      const cell = (c: (typeof cols)[number], r: number) =>
+        c.type === 'number' ? (r + 1) * 5 : c.type === 'money' ? 1500 * (r + 1) : c.type === 'time' ? `${10 + r}:00` : c.type === 'date' ? '2026-11-14' : `${c.label} ${r + 1}`;
+      // Lista que trae la plantilla (áreas del Auditorio, conceptos): se respeta y se llenan las primeras.
+      it.rows = item.rows?.length
+        ? item.rows.map((row, r) =>
+            r < 3 ? Object.fromEntries(cols.map((c) => [c.id, c.prefilled ? row[c.id] ?? null : cell(c, r)])) : { ...row },
+          )
+        : Array.from({ length: 4 }, (_, r) => Object.fromEntries(cols.map((c) => [c.id, cell(c, r)])));
       break;
     }
     default:
@@ -122,7 +122,7 @@ async function main() {
       {
         title: format.name,
         eventName: EVENT.name,
-        entity: 'ARTA',
+        entity: format.entities.includes('EXPLANADA') ? 'EXPLANADA' : 'ARTA',
         artist: EVENT.artist,
         venue: EVENT.venue,
         city: EVENT.city,

@@ -235,6 +235,31 @@
   align-items: start;
 }
 
+/* Texto fijo del documento (condiciones, aceptación): se lee, no se captura. */
+.fsheet__para {
+  margin: 0 0 7px;
+  color: var(--paper-ink);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.fsheet__para--bullet {
+  position: relative;
+  margin-bottom: 4px;
+  padding-left: 14px;
+}
+
+.fsheet__para--bullet::before {
+  content: "";
+  position: absolute;
+  top: 0.62em;
+  left: 3px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
 .fsheet__line--attach .hub-attach {
   gap: 0.3rem;
 }

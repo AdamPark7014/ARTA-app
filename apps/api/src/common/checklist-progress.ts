@@ -38,8 +38,8 @@ export type ChecklistData = { sections?: ChecklistSection[] };
 /** Secciones que no cuentan para el avance. */
 export const NON_SCORING_SECTIONS = new Set(['firmas']);
 
-/** Tipos de ítem que no cuentan para el avance. */
-const NON_SCORING_TYPES = new Set(['signature']);
+/** Tipos de ítem que no cuentan para el avance (firmas y texto fijo del documento). */
+const NON_SCORING_TYPES = new Set(['signature', 'paragraph']);
 
 export function isItemComplete(item: ChecklistItem): boolean {
   return isFormatItemComplete(item as FormatItem);

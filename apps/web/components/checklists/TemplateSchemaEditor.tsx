@@ -10,6 +10,8 @@ export type SchemaColumn = {
   type?: 'text' | 'number' | 'money' | 'time' | 'date';
   width?: number;
   total?: boolean;
+  /** Columna que trae escrita la plantilla (actividades, conceptos). */
+  prefilled?: boolean;
 };
 
 export type SchemaItem = {
@@ -50,6 +52,7 @@ const FIELD_TYPES: Array<{ value: string; label: string; hint: string }> = [
   { value: 'select', label: 'Opciones', hint: 'Si incluye “Otra”, el checklist pide el nombre' },
   { value: 'table', label: 'Tabla', hint: 'Renglones que se capturan en el evento (rooming, minuto a minuto…); termina una columna con * para sumarla' },
   { value: 'attachment', label: 'Adjunto', hint: 'Archivo o link que vive en el propio formato (rider, layout, artes…)' },
+  { value: 'paragraph', label: 'Texto fijo', hint: 'Condición o cláusula que se imprime tal cual; no se captura ni cuenta para el avance' },
 ];
 
 export const TYPE_LABELS: Record<string, string> = Object.fromEntries(FIELD_TYPES.map((t) => [t.value, t.label]));
@@ -93,7 +96,14 @@ export function parseColumns(text: string, previous: SchemaColumn[] = []): Schem
               : /^fecha|check-?in|check-?out/i.test(label)
                 ? 'date'
                 : 'text';
-      return { id, label, type, total: total || (prev?.total && type === 'number') || undefined, width: prev?.width };
+      return {
+        id,
+        label,
+        type,
+        total: total || (prev?.total && type === 'number') || undefined,
+        width: prev?.width,
+        prefilled: prev?.prefilled || undefined,
+      };
     });
 }
 
@@ -422,6 +432,13 @@ export function TemplateSchemaEditor({ templateId, initial, onSaved }: Props) {
                           return (
                             <div className="pdf-line" key={it.id}>
                               [ ]&nbsp;&nbsp;{it.label || 'Pregunta'}
+                            </div>
+                          );
+                        }
+                        if (t === 'paragraph') {
+                          return (
+                            <div className="pdf-line" key={it.id}>
+                              {it.label || 'Texto fijo'}
                             </div>
                           );
                         }

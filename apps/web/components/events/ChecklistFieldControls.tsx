@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   NO_LABEL,
   YES_LABEL,
@@ -217,6 +217,45 @@ function isNumeric(c: ChecklistColumn) {
   return c.type === 'number' || c.type === 'money';
 }
 
+/**
+ * Celda que parte renglón: la actividad o el concepto que trae la plantilla
+ * («Llegada de planta de luz / generador eléctrico con caja acústica») se lee
+ * completo en vez de cortarse en un input de una línea. Sigue siendo editable.
+ */
+function WrapCell({
+  value,
+  ariaLabel,
+  placeholder,
+  onChange,
+}: {
+  value: string;
+  ariaLabel: string;
+  placeholder?: string;
+  onChange: (value: string) => void;
+}) {
+  const ref = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight}px`;
+  }, [value]);
+  return (
+    <textarea
+      ref={ref}
+      className="cell cell--wrap"
+      rows={1}
+      value={value}
+      aria-label={ariaLabel}
+      placeholder={placeholder}
+      onChange={(e) => onChange(e.target.value)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') e.preventDefault();
+      }}
+    />
+  );
+}
+
 function columnSum(rows: ChecklistRow[], column: ChecklistColumn): number | null {
   let sum = 0;
   let any = false;
@@ -304,6 +343,18 @@ export function TableField({
                   return (
                     <td key={c.id} className={isNumeric(c) ? 'num' : undefined}>
                       {c.type === 'money' && value !== '' ? money(Number(value)) : value}
+                    </td>
+                  );
+                }
+                if (c.prefilled && !isNumeric(c)) {
+                  return (
+                    <td key={c.id}>
+                      <WrapCell
+                        value={value}
+                        ariaLabel={`${c.label}, renglón ${r + 1}`}
+                        placeholder={r === rows.length - 1 ? c.label : undefined}
+                        onChange={(v) => setCell(r, c, v)}
+                      />
                     </td>
                   );
                 }

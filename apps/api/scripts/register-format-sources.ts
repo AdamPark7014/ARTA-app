@@ -196,7 +196,8 @@ async function main() {
             key: 'CUSTOM',
             name: 'Distribución de Pendones (Excel)',
             description: 'Hoja base con layout/merges iguales al formato del cliente',
-            entities: [],
+            // Libro de Pendones de Arta: no va a eventos del Auditorio (separación 11-10-2026).
+            entities: ['ARTA'],
             schemaJson: { sections: [] } as unknown as Prisma.InputJsonValue,
             active: true,
             ...( { excelTemplateUrl: url } as any),

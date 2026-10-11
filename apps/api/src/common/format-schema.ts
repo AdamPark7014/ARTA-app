@@ -22,7 +22,13 @@ export type FormatFieldType =
   | 'select'
   | 'table'
   | 'attachment'
-  | 'signature';
+  | 'signature'
+  /**
+   * Texto fijo del documento (condiciones, cláusulas, aceptación): el texto es
+   * `label`, se imprime tal cual y no se captura ni cuenta para el avance.
+   * Varios seguidos en una sección salen como viñetas.
+   */
+  | 'paragraph';
 
 export type FormatColumnType = 'text' | 'number' | 'money' | 'time' | 'date';
 
@@ -34,6 +40,11 @@ export type FormatColumn = {
   width?: number;
   /** Suma la columna en el pie de la tabla. */
   total?: boolean;
+  /**
+   * La columna viene escrita desde la plantilla (actividad, concepto): esos
+   * renglones ya existen al crear el formato y no cuentan como captura.
+   */
+  prefilled?: boolean;
 };
 
 export type FormatRow = Record<string, string | number | null>;
@@ -105,6 +116,11 @@ export function isCheckType(type?: string | null): boolean {
   return type === 'check' || !type;
 }
 
+/** Texto fijo del documento: ni se captura ni puntúa. */
+export function isParagraphType(type?: string | null): boolean {
+  return type === 'paragraph';
+}
+
 /** Tipos que guardan su respuesta en `value`. */
 export function isValueType(type?: string | null): boolean {
   return (
@@ -133,6 +149,17 @@ export function tableRows(item: Pick<FormatItem, 'rows'>): FormatRow[] {
   return (Array.isArray(item.rows) ? item.rows : []).filter(rowHasContent);
 }
 
+/**
+ * Renglones con algo capturado de verdad: lo que trae escrito la plantilla
+ * (columnas `prefilled`, p. ej. la lista de actividades) no cuenta.
+ */
+export function capturedRows(item: Pick<FormatItem, 'rows' | 'columns'>): FormatRow[] {
+  const fixed = new Set((item.columns ?? []).filter((c) => c?.prefilled).map((c) => c.id));
+  const rows = tableRows(item);
+  if (!fixed.size) return rows;
+  return rows.filter((row) => Object.entries(row).some(([key, value]) => !fixed.has(key) && hasText(value)));
+}
+
 /** Suma de una columna numérica; `null` si nada es número. */
 export function columnTotal(item: Pick<FormatItem, 'rows'>, columnId: string): number | null {
   let sum = 0;
@@ -150,9 +177,9 @@ export function columnTotal(item: Pick<FormatItem, 'rows'>, columnId: string): n
 /** Un ítem está resuelto cuando tiene respuesta, según su tipo. */
 export function isFormatItemComplete(item: FormatItem): boolean {
   if (isCheckType(item.type)) return !!item.done;
-  if (item.type === 'table') return tableRows(item).length > 0;
+  if (item.type === 'table') return capturedRows(item).length > 0;
   if (item.type === 'attachment') return hasText(item.value) || hasText(item.fileId);
-  if (item.type === 'signature') return true;
+  if (item.type === 'signature' || isParagraphType(item.type)) return true;
   return hasText(item.value);
 }
 
@@ -178,12 +205,13 @@ export function cellDisplay(column: FormatColumn | undefined, value: unknown): s
  * `null` = nada capturado.
  */
 export function formatItemDisplay(item: FormatItem): string | null {
+  if (isParagraphType(item.type)) return null;
   if (isCheckType(item.type)) {
     const note = hasText(item.note) ? ` (${String(item.note).trim()})` : '';
     return item.done ? `Sí${note}` : `No${note}`;
   }
   if (item.type === 'table') {
-    const rows = tableRows(item);
+    const rows = capturedRows(item);
     if (!rows.length) return null;
     const cols = item.columns ?? [];
     return rows
@@ -348,17 +376,63 @@ function normalizeItem(item: FormatItem): FormatItem {
   return out;
 }
 
-/** Ítems de captura (fuera firmas), en orden, con su sección. */
+/**
+ * Cómo se llama cada pad de firma en este formato. Por defecto ENTREGADO y
+ * AUTORIZADO; un documento puede nombrar a las partes (el Compromiso de
+ * horarios firma «Producción externa» y «Auditorio Explanada Puebla»).
+ */
+export function signatureLabels(data: unknown): { delivered: string; authorized: string } {
+  const firmas = normalizeFormatData(data).sections.find((s) => s.id === SIGNATURES_SECTION_ID);
+  const label = (id: string, fallback: string) => {
+    const item = firmas?.items.find((i) => i.id === id && i.type === 'signature');
+    return item?.label?.trim() || fallback;
+  };
+  return { delivered: label('firma_entregado', 'Entregado'), authorized: label('firma_autorizado', 'Autorizado') };
+}
+
+/** Ítems de captura (fuera firmas y texto fijo), en orden, con su sección. */
 export function walkFormat(data: FormatData): Array<{ section: FormatSection; item: FormatItem }> {
   const out: Array<{ section: FormatSection; item: FormatItem }> = [];
   for (const section of data.sections ?? []) {
     if (section.id === SIGNATURES_SECTION_ID) continue;
     for (const item of section.items ?? []) {
-      if (item.type === 'signature') continue;
+      if (item.type === 'signature' || isParagraphType(item.type)) continue;
       out.push({ section, item });
     }
   }
   return out;
+}
+
+/** ¿El ítem trae algo que una persona capturó? (Una casilla sin marcar y sin nota, no.) */
+function hasCapture(item: FormatItem): boolean {
+  if (isCheckType(item.type)) return !!item.done || hasText(item.note);
+  if (item.type === 'table') return capturedRows(item).length > 0;
+  if (item.type === 'attachment') return hasText(item.value) || hasText(item.fileId);
+  return hasText(item.value);
+}
+
+/**
+ * Lo capturado en `previous` que NO tendría dónde caer al llevarlo a `target`
+ * con `carryFormatValues` (sección o ítem que ya no existe, como «Campos
+ * adicionales» agregados en el evento). Sirve para no migrar a ciegas un
+ * formato que perdería datos. Devuelve «Sección › Ítem» por cada uno.
+ */
+export function droppedFormatValues(target: FormatData, previous: unknown): string[] {
+  const prev = normalizeFormatData(previous);
+  const byFull = new Map<string, FormatItem>();
+  const byId = new Map<string, FormatItem>();
+  for (const { section, item } of walkFormat(normalizeFormatData(target))) {
+    byFull.set(`${section.id}:${item.id}`, item);
+    if (!byId.has(item.id)) byId.set(item.id, item);
+  }
+  return walkFormat(prev)
+    .filter(({ section, item }) => {
+      if (!hasCapture(item)) return false;
+      const next = byFull.get(`${section.id}:${item.id}`) ?? byId.get(item.id);
+      // Una tabla solo pasa a otra tabla (y viceversa): lo demás se pierde.
+      return !next || (next.type === 'table') !== (item.type === 'table');
+    })
+    .map(({ section, item }) => `${section.title || section.id} › ${item.label || item.id}`);
 }
 
 /**

@@ -57,3 +57,10 @@ ni de plataforma. Editar, cambiar de rol, desactivar o reactivar a alguien que y
 
 - El switch Arta/Auditorio del menú ya existía (dominios `arta.*` / `auditorio.*`).
 - El acento de Auditorio pasa de azul (`#7b9fd4`) a plateado (`#c7ccd4`, oscuro `#9aa1ac`).
+
+## Formatos (checklists)
+
+- Los formatos de Arta (`EVENTO_GENERAL`, `PRODUCCION`, `HOSPEDAJE`, `TRANSPORTACION`, `RUEDA_PRENSA`,
+  `ARTES_SHOWS`, `PENDONES`, `CATERING` y el libro «Distribución de Pendones (Excel)») van solo a eventos de Arta.
+- El Auditorio tiene los suyos, de sus propios documentos: `CHECKLIST_AUDITORIO`, `LIMPIEZA`, `MANTENIMIENTO` y
+  `COMPROMISO_HORARIOS`. Detalle, decisiones y comandos para producción en `docs/FORMATOS.md`.

@@ -63,7 +63,8 @@ export type Checklist = {
 /**
  * Tipos de campo de un formato (espejo de `apps/api/src/common/format-schema.ts`):
  * check · text · longtext · number · date · time · yesno · select · table ·
- * attachment · signature.
+ * attachment · signature · paragraph (texto fijo del documento: el texto es
+ * `label`, no se captura ni cuenta para el avance).
  */
 export type ChecklistColumn = {
   id: string;
@@ -72,6 +73,8 @@ export type ChecklistColumn = {
   width?: number;
   /** Se suma en el pie de la tabla. */
   total?: boolean;
+  /** Viene escrita desde la plantilla (actividad, concepto): no cuenta como captura. */
+  prefilled?: boolean;
 };
 
 export type ChecklistRow = Record<string, string | number | null>;
@@ -125,19 +128,40 @@ export function tableRowsWithContent(rows?: ChecklistRow[] | null): ChecklistRow
   return (Array.isArray(rows) ? rows : []).filter((r) => !!r && Object.values(r).some(hasText));
 }
 
+/** Texto fijo del documento (condiciones, aceptación): se lee, no se captura. */
+export function isParagraphItem(it: Pick<ChecklistItem, 'type'>): boolean {
+  return it.type === 'paragraph';
+}
+
+/** Renglones con algo capturado: lo que trae escrito la plantilla (columnas `prefilled`) no cuenta. */
+export function capturedRows(it: Pick<ChecklistItem, 'rows' | 'columns'>): ChecklistRow[] {
+  const fixed = new Set((it.columns || []).filter((c) => c.prefilled).map((c) => c.id));
+  return tableRowsWithContent(it.rows).filter(
+    (row) => !fixed.size || Object.entries(row).some(([key, value]) => !fixed.has(key) && hasText(value)),
+  );
+}
+
 /** Misma regla que el servidor (`isFormatItemComplete`). */
 export function isItemDone(it: ChecklistItem): boolean {
   if (isCheckItem(it)) return !!it.done;
-  if (it.type === 'table') return tableRowsWithContent(it.rows).length > 0;
+  if (it.type === 'table') return capturedRows(it).length > 0;
   if (it.type === 'attachment') return hasText(it.value) || hasText(it.fileId);
-  if (it.type === 'signature') return true;
+  if (it.type === 'signature' || isParagraphItem(it)) return true;
   return hasText(it.value);
 }
 
-/** Un ítem opcional vacío no cuenta para el avance. */
+/** Un ítem opcional vacío no cuenta para el avance; firmas y texto fijo, nunca. */
 export function isScoringItem(it: ChecklistItem): boolean {
-  if (it.type === 'signature') return false;
+  if (it.type === 'signature' || isParagraphItem(it)) return false;
   return !it.optional || isItemDone(it);
+}
+
+/** Cómo se llama cada pad de firma en este formato (espejo de `signatureLabels` del API). */
+export function signatureLabels(data?: ChecklistData | null): { delivered: string; authorized: string } {
+  const firmas = (data?.sections || []).find((s) => s.id === 'firmas');
+  const label = (id: string, fallback: string) =>
+    firmas?.items?.find((i) => i.id === id && i.type === 'signature')?.label?.trim() || fallback;
+  return { delivered: label('firma_entregado', 'Entregado'), authorized: label('firma_autorizado', 'Autorizado') };
 }
 
 /** El contenido del formato. Llega con el formato abierto, no con la lista. */

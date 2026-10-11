@@ -251,9 +251,10 @@ const USER_VIEWS: Record<
 };
 
 /**
- * Plantillas retiradas. Las nueve estándar (Evento general, Producción,
- * Hospedaje, Transportación, Rueda de prensa, Artes, Pendones, Catering y
- * Mantenimiento) viven en `src/checklists/format-catalog.ts`.
+ * Plantillas retiradas. Las estándar viven en `src/checklists/format-catalog.ts`:
+ * las ocho de Arta (Evento general, Producción, Hospedaje, Transportación,
+ * Rueda de prensa, Artes, Pendones, Catering) y las cuatro del Auditorio
+ * (Checklist Auditorio, Limpieza, Mantenimiento, Compromiso de horarios).
  *
  * `active: false` = retirada: duplica un módulo del sistema (OC, boletera,
  * corrida, campaña, anticipos). Se conserva para que los formatos ya creados

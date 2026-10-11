@@ -19,7 +19,9 @@ import { DocStatusBadge, DocStatusControl } from '@/components/ui/DocStatusContr
 import {
   isCheckItem,
   isItemDone,
+  isParagraphItem,
   isScoringItem,
+  signatureLabels,
   type Checklist,
   type ChecklistItem,
   type ChecklistSection,
@@ -350,6 +352,8 @@ export function EventChecklistsPanel({
     () => (activeChecklist?.dataJson?.sections || []).filter((s: Section) => s.id !== 'firmas'),
     [activeChecklist],
   );
+  /** Nombre de cada firma (el Compromiso de horarios firma Producción externa / Auditorio). */
+  const sigLabels = useMemo(() => signatureLabels(activeChecklist?.dataJson), [activeChecklist?.dataJson]);
 
   const stats = useMemo(() => {
     const perSection = sections.map((s) => {
@@ -727,13 +731,13 @@ export function EventChecklistsPanel({
           <div className="surface__body">
             <div className="sig-grid">
               <SignaturePad
-                label="Entregado"
+                label={sigLabels.delivered}
                 signerName={userFullName}
                 existing={activeChecklist.deliveredSignature}
                 onSign={(p) => onSignChecklist('ENTREGADO', p)}
               />
               <SignaturePad
-                label="Autorizado"
+                label={sigLabels.authorized}
                 signerName={userFullName}
                 existing={activeChecklist.authorizedSignature}
                 onSign={(p) => onSignChecklist('AUTORIZADO', p)}
@@ -984,6 +988,7 @@ export function EventChecklistsPanel({
             files={checklistFiles}
             onUpdateItem={onUpdateItem}
             onUpload={readOnly ? undefined : onUpload}
+            signatureLabels={sigLabels}
             onOpenSignatures={() => {
               openDrawer('firmas');
               requestAnimationFrame(() => {
@@ -1050,7 +1055,12 @@ export function EventChecklistsPanel({
                       }`}
                     >
                       {section.items.map((item) =>
-                        isCheckItem(item) ? (
+                        isParagraphItem(item) ? (
+                          // Texto fijo del documento (condiciones, aceptación): se lee, no se captura.
+                          <p key={item.id} className="hub-para">
+                            {item.label}
+                          </p>
+                        ) : isCheckItem(item) ? (
                           <CheckRow
                             key={item.id}
                             item={item}

@@ -107,4 +107,47 @@ describe('ChecklistPdfService.generate', () => {
     expect(pages).toBeGreaterThanOrEqual(2);
     expect(Math.max(...fieldMap.fields.map((f) => f.page))).toBeGreaterThanOrEqual(0);
   });
+
+  const pageCount = (filePath: string) => (readFileSync(filePath, 'latin1').match(/\/Type\s*\/Page[^s]/g) || []).length;
+
+  it('una celda larga se imprime completa: la fila crece en vez de cortar el texto', async () => {
+    const format = STANDARD_FORMATS.find((f) => f.key === 'MANTENIMIENTO')!;
+    const base = bindFormatToEvent(format.schema, event);
+    const input = (data: typeof base) => ({
+      title: format.name,
+      eventName: event.name,
+      entity: 'EXPLANADA',
+      data,
+      delivered: null,
+      authorized: null,
+      statusLabel: 'Borrador',
+    });
+    const vacio = await svc().generate('test-mant-vacio', input(base));
+
+    const largo = 'Se revisó a fondo y hay que cambiar piezas, pintar, limpiar filtros y volver a revisar con el proveedor la semana próxima';
+    const lleno = JSON.parse(JSON.stringify(base)) as typeof base;
+    for (const { item } of walkFormat(lleno)) {
+      if (item.type === 'table') item.rows = item.rows!.map((r) => ({ ...r, responsable: 'Mantenimiento', observaciones: largo, cambios: largo }));
+    }
+    const conTexto = await svc().generate('test-mant-lleno', input(lleno));
+    expect(pageCount(conTexto.filePath)).toBeGreaterThan(pageCount(vacio.filePath));
+    for (const f of conTexto.fieldMap.fields) expect(f.y + f.h).toBeLessThan(conTexto.fieldMap.pageHeight - 90);
+  });
+
+  it('el texto fijo del Compromiso de horarios no deja campos de captura', async () => {
+    const format = STANDARD_FORMATS.find((f) => f.key === 'COMPROMISO_HORARIOS')!;
+    const { fieldMap } = await svc().generate('test-compromiso', {
+      title: format.name,
+      eventName: event.name,
+      entity: 'EXPLANADA',
+      data: bindFormatToEvent(format.schema, event),
+      delivered: null,
+      authorized: null,
+      statusLabel: 'Borrador',
+    });
+    const sections = new Set(fieldMap.fields.map((f) => f.sectionId));
+    expect(sections.has('condiciones')).toBe(false);
+    expect(sections.has('aceptacion')).toBe(false);
+    expect(sections.has('cargo_extension')).toBe(true);
+  });
 });

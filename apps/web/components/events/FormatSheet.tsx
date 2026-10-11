@@ -6,6 +6,8 @@ import {
   NO_LABEL,
   YES_LABEL,
   isCheckItem,
+  isItemDone,
+  isParagraphItem,
   type Checklist,
   type ChecklistItem,
   type ChecklistSection,
@@ -36,6 +38,8 @@ type Props = {
   onUpload?: (file: File) => Promise<EventFile | void>;
   /** Abre el cajón de firmas al tocar una firma pendiente. */
   onOpenSignatures?: () => void;
+  /** Nombre de cada firma en este formato (por defecto Entregado / Autorizado). */
+  signatureLabels?: { delivered: string; authorized: string };
 };
 
 const STATUS_LABEL: Record<string, string> = {
@@ -70,20 +74,17 @@ export function FormatSheet({
   onUpdateItem,
   onUpload,
   onOpenSignatures,
+  signatureLabels,
 }: Props) {
   const completion = useMemo(() => {
     let total = 0;
     let filled = 0;
     for (const s of sections) {
       for (const item of s.items) {
+        // El texto fijo (condiciones) no se llena; la lista que trae la plantilla no cuenta como captura.
+        if (isParagraphItem(item)) continue;
         total += 1;
-        const v = (item as any).done ? true : (item as any).value;
-        if (Array.isArray((item as any).rows)) {
-          const rows = (item as any).rows as any[];
-          if (rows.some((r) => Object.values(r).some((c) => c !== null && c !== ''))) filled += 1;
-        } else if (v !== null && v !== undefined && String(v).trim() !== '') {
-          filled += 1;
-        }
+        if (isItemDone(item)) filled += 1;
       }
     }
     const pct = total ? Math.round((filled / total) * 100) : 0;
@@ -160,6 +161,15 @@ export function FormatSheet({
                 </div>
               ) : (
                 section.items.map((item) => {
+                  if (isParagraphItem(item)) {
+                    // Texto fijo del documento; varios seguidos son las viñetas del Word.
+                    const bullet = section.items.filter(isParagraphItem).length > 1;
+                    return (
+                      <p key={item.id} className={`fsheet__para ${bullet ? 'fsheet__para--bullet' : ''}`}>
+                        {item.label}
+                      </p>
+                    );
+                  }
                   if (isCheckItem(item)) {
                     return <CheckLine key={item.id} item={item} readOnly={readOnly} onPatch={patch(section, item)} />;
                   }
@@ -253,8 +263,18 @@ export function FormatSheet({
         <section className="fsheet__sign" aria-label="Firmas">
           <h2 className="fsheet__sec-title fsheet__sec-title--ink">Firmas</h2>
           <div className="fsheet__sign-grid">
-            <SignatureBox label="Entregado" sig={checklist.deliveredSignature} readOnly={readOnly} onOpen={onOpenSignatures} />
-            <SignatureBox label="Autorizado" sig={checklist.authorizedSignature} readOnly={readOnly} onOpen={onOpenSignatures} />
+            <SignatureBox
+              label={signatureLabels?.delivered || 'Entregado'}
+              sig={checklist.deliveredSignature}
+              readOnly={readOnly}
+              onOpen={onOpenSignatures}
+            />
+            <SignatureBox
+              label={signatureLabels?.authorized || 'Autorizado'}
+              sig={checklist.authorizedSignature}
+              readOnly={readOnly}
+              onOpen={onOpenSignatures}
+            />
           </div>
         </section>
 
