@@ -8,6 +8,17 @@
   `update.sh --no-pull`, log `/root/arta-deploy-20261012-pulido.log`; respaldo automático en `/root/arta-backups/`).
   El servidor ya está en el historial nuevo: el bundle incremental hace fast-forward.
 
+## Turno claude-code (2026-10-12, mediodía): acabado visual a medias → Cursor
+
+Adam: «todavía te faltan detalles» y luego «dime qué falta a ver si Cursor puede acabarlo y lo pules». Se
+detuvieron los agentes y se guardaron puntos de control que **compilan** (no verificados en pantalla):
+web `9d2eabb` (`styles/_acabado.scss`, `lib/format.ts`, `PageHeader`, cabecera de evento compacta, campos del
+sistema, color solo en alertas, un relleno por fila, chat sin slugs, Organizaciones/Seguridad/Configuración/
+Plantillas/Calendario/acceso), Android `5950776`, iOS `7b28b29`…`5557c44`. **Lo que falta está en
+`.ai/EXEC-PACKET.md` (LISTO PARA CURSOR)**: revisar pantalla por pantalla, cerrar huecos, auditoría limpia,
+capturas en `.ai/scratch/acabado/` (excluida de git en `.git/info/exclude`). Producción sigue en `ec45283`:
+desplegar solo después de la revisión de Claude.
+
 ## Turno claude-code (2026-10-12, madrugada): pulido «sin cortes»
 
 Adam: «más premium y agradable, tiene muchos cortes no agradables» (textos con «…», cosas cortadas por bordes o

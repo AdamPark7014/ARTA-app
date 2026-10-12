@@ -1,111 +1,153 @@
 # EXEC-PACKET — ARTA-app
 
 - **Escrito por:** Claude (cabeza)
-- **Fecha:** 2026-09-23
+- **Fecha:** 2026-10-12
 - **Rama:** main
-- **Estado:** CERRADO
+- **Estado:** LISTO PARA CURSOR
 <!-- Estados: BORRADOR → LISTO PARA CURSOR → EN EJECUCION → CERRADO -->
 
 ## Objetivo
-Los 10 archivos de la carpeta «FORMATOS ARTA» de Drive (gerencia, 23-09-2026) pasan a ser
-formatos **estándar del sistema**: se capturan dentro de ARTA para cualquier evento, la única
-salida es **PDF** con la identidad del cliente (logo + pie de los Word), y no hace falta
-subir/bajar Word ni Excel. Fuera de alcance: Orden de compra y Creación de boletera ya son
-módulos propios con su PDF (se retiran sus plantillas-checklist duplicadas, nada más).
+Terminar la **segunda pasada visual** («acabado») que pidió Adam: «todavía te faltan detalles por mejorar
+para mejorar el sistema visualmente». El código ya está casi todo escrito y **compila**; lo que falta es
+**revisarlo pantalla por pantalla, corregir lo que se vea mal y cerrar los huecos** en web, Android e iOS.
+Claude revisa y pule al final, y despliega la web.
 
-## Mapa Drive → sistema
-| Archivo en Drive | Cómo queda |
-|---|---|
-| CHECKLIST EVENTO GENERAL.docx | plantilla `EVENTO_GENERAL` v2: encabezado + 45 puntos del cliente, agrupados, con nota por casilla |
-| CHECKLIST PRODUCCIÓN.docx | `PRODUCCION` v2: riders (adjunto), proveedores y encargados (texto), PMs, horarios, **minuto a minuto (tabla)**, layout (adjunto), observaciones |
-| CHECKLIST HOSPEDAJE.docx | `HOSPEDAJE` v2: hotel, enlace, desayuno SÍ/NO, **Party A / Party B (rooming en tabla)**, confirmaciones (adjunto), observaciones |
-| CHECKLIST TRANSPORTACIÓN.docx | `TRANSPORTACION` v2: proveedor, contacto, camionetas, modelo, incluye, estatus, **traslados (tabla opcional)**, observaciones |
-| CHECKLIST RUEDA DE PRENSA.xlsx.docx | `RUEDA_PRENSA` v2: datos de la RP, encargados, banners/pantallas/identificadores SÍ/NO, **medios confirmados (tabla)**, observaciones |
-| CHECKLIST INFO ARTES SHOWS.docx | `ARTES_SHOWS` v2: promotoras, boletera, patrocinadores, extras, 5 entregables (adjunto), fechas, autorizó |
-| DISTRUIBUICION PENDONES.xlsx | `PENDONES` v2: ciudad, **avenidas × 1.ª/2.ª/3.ª parte con totales (tabla)**, fechas de colocación, permiso, observaciones |
-| CREACIÓN BOLETERA.docx | ya es el módulo Boletera (`lib/boletera-pdf.ts`); plantilla `BOLETERA` se retira (inactiva) |
-| ORDEN DE COMPRA.xlsx (×2, misma plantilla) | ya es el módulo Órdenes de compra (`lib/po-pdf.ts`); plantilla `ORDEN_COMPRA` se retira |
+Sistema visual aprobado (manda): `docs/diseno/SISTEMA-VISUAL.md` (incluye la sección «Sin cortes»).
+ARTA claro (papel `#f7f6f3` / tinta `#0c0c0d`, redondeado), Auditorio oscuro (negro / plata, recto),
+Nunito en web y Android, SF Pro Rounded en iOS. Monocromo: color **solo** en alertas y errores reales.
+
+## Estado al entregar (lo que ya está en main)
+- Web `9d2eabb` (punto de control, compila: typecheck + `npm run build`): estilos en
+  `apps/web/styles/_acabado.scss` (se importa al final de `globals.scss`), formato de cifras en
+  `apps/web/lib/format.ts`, nombres de chat en `apps/web/components/chat/chat-ui.tsx`
+  (`channelLabel` / `channelDisplayName`). Cubre, **sin verificar**, los puntos 1–11 de abajo.
+- Android `5950776` (compila, 42 pruebas unitarias en verde): entrada premium, «Rechazar» discreto,
+  cifras sin «—», encabezados de sección iguales. **Sin verificar en el emulador.**
+- iOS `7b28b29`, `a349f91`, `7f2fb7f`, `5557c44`: entrada premium, secciones con el mismo encabezado, sin «—»
+  en cifras, detalle de tarea. Compilación de `5557c44` lanzada (corrida 38300682548): confirmar en verde.
+- Pasada anterior «sin cortes» ya desplegada (`ec45283`): auditoría Playwright en
+  `apps/web/playwright.audit.config.ts` + `apps/web/e2e/audit/` + datos `apps/web/e2e/support/rich-fixtures.ts`.
 
 ## Criterios de éxito
-- [x] `apps/api/src/common/format-schema.ts`: contrato único (tipos check/text/longtext/number/date/time/yesno/select/table/attachment), enlace al evento, avance, display, migración de valores.
-- [x] `apps/api/src/checklists/format-catalog.ts`: los 7 formatos estándar, fieles a los Word/Excel del cliente, con ids estables (los módulos Hospedaje/Transporte/Prensa/Artes siguen leyendo `nombre`, `contacto`, `prov`, `vans`…).
-- [x] PDF servidor (`checklist-pdf.service.ts`): logo + pie del cliente, encabezado del show en rejilla, casillas a dos columnas, SÍ/NO, tablas con totales, adjuntos con link, firmas; mapa de campos para capturar sobre la hoja.
-- [x] Avance y diff entienden los tipos nuevos; `optional` no cuenta vacío.
-- [x] Al crear evento o formato, el encabezado se rellena solo desde el evento.
-- [x] `scripts/upgrade-format-templates.ts`: sube plantillas a v2 (con snapshot), migra formatos en borrador conservando respuestas, retira duplicados, regenera PDFs. `--dry` / `--confirm-produccion`.
-- [x] Web: captura de todos los tipos (tabla con filas/totales, SÍ/NO, hora, adjunto desde el propio formato), editor de plantillas con los tipos nuevos.
-- [x] tests: jest API 227/227 (nuevos: format-schema, format-catalog, checklist-pdf.service) · e2e `checklist-pdf.spec.ts` 3/3.
-- [x] producción (23-09): desplegado `7c01296` por bundle, `upgrade-format-templates.ts` corrido en el contenedor (`--dry` y real): 47 formatos migrados, 9 sellados intactos, 5 plantillas retiradas. Respaldo `20260924-0345.sql.gz`.
-- [ ] verificación manual con sesión real: Adam abre un evento en producción → Formatos → 7 formatos y sus PDFs. Docker local sigue sin arrancar; cuando levante, correr el script ahí también.
+- [ ] **Web**, en las dos entidades (ARTA y Auditorio) a 1536×864 y 1536×730 (login, tareas y chat también a
+      390×844), cada punto se ve terminado:
+  1. Todas las pantallas con el mismo encabezado (`PageHeader`/`.ph`: título, una línea de descripción,
+     acciones a la derecha, mismo aire). Revisar en especial Tareas, Usuarios, Seguridad, Organizaciones,
+     Plantillas, Configuración, que antes no tenían título.
+  2. Cabecera del evento compacta (título ~24–26 px, datos en un renglón, «cuánto falta» como ficha) y
+     pestañas que se quedan pegadas bajo la barra superior al bajar. Nada encimado.
+  3. Ningún campo con aspecto del navegador: selects con chevron propio, fecha/hora con icono propio y
+     «dd/mm/aaaa» como pista, números sin flechitas, casillas/radios/interruptores del tema. El alta rápida
+     de Tareas se lee como un solo compositor.
+  4. Sin color de decoración: tarjetas y grupos neutros (Tareas «Vencidas/Bloqueadas», Usuarios «Sin entrar /
+     Bloqueados / Alto riesgo»), distribución por rol en tonos de tinta/plata con leyenda, Corrida sin aviso
+     ni botón verdes, Plantillas sin «Activa» verde ni «Inactiva» roja. El color solo en punto/texto pequeño
+     de una alerta real.
+  5. Máximo un elemento relleno por fila (Órdenes de compra, OC del evento, Boletera, Usuarios, Seguridad):
+     estado con contorno + punto junto a su botón; «Eliminar/Revocar» discretos (rojo solo al pasar el
+     cursor) y siempre con confirmación.
+  6. Chat sin slugs en **ningún** lugar: lista, encabezado, estado vacío («Este es el inicio de…»),
+     marcador del cuadro de texto («Escribe un mensaje…» o «Mensaje para <nombre>» si cabe), diálogos.
+  7. Organizaciones y Seguridad en español de negocio (nada de «Tenants», «soft enforced», «Stripe env»,
+     slugs en monoespaciado); fechas cortas («11 oct, 23:32»); columnas que no parten nombres en 4–5 renglones
+     (también «Último acceso» en Usuarios).
+  8. Configuración con su diseño de ajustes (etiqueta y explicación a la izquierda, control a la derecha), no
+     una tarjeta perdida en una esquina.
+  9. Plantillas: tarjetas alineadas arriba, misma estructura, acciones al pie.
+  10. Calendario: fichas finas con barra de acento (no bloques negros), «hoy» claro, fines de semana y otros
+      meses suaves, sin cortes.
+  11. Acceso (login): pantalla partida, marca a la izquierda con «La experiencia del Show», formulario claro,
+      contraseña con marcador «Tu contraseña», botón principal en el acento con estado apagado intencional.
+      Probar `arta.localhost` (claro) y `auditorio.localhost` (oscuro) y 390×844.
+  12. Cifras con un solo formato (`lib/format.ts`): tarjetas sin centavos, tablas y detalle con centavos.
+  13. Ninguna cifra grande con «—» (poner la palabra: «Sin formatos», etc.); iconos del mismo tamaño y trazo;
+      estados al pasar el cursor y foco visibles.
+- [ ] Huecos de la pasada anterior: en 390×844 las tablas de **Órdenes de compra** y **Campañas** pasan a
+      tarjetas; en Inicio el panel «Hoy» no deja hueco abajo cuando la otra columna es más alta.
+- [ ] Auditoría «sin cortes» limpia otra vez: 0 texto cortado (salvo un renglón con `title`), 0 recortes,
+      0 scroll horizontal, contraste AA, en las 2 entidades × 4 tamaños.
+- [ ] Specs web que pasan hoy siguen pasando: app-shell, tasks, login, layout, mobile-shell, users-alta,
+      formatos-auditorio (actualizar selectores solo si el cambio es puramente visual).
+- [ ] **Android** verificado en el emulador (modo demo, las dos entidades): entrada, Aprobaciones (Rechazar),
+      detalle de evento (sin «—»), detalle de tarea, alta de tarea, Inicio; paridad con iOS.
+- [ ] **iOS**: `ios-build.yml` y `ios-screenshots.yml` en verde; revisar las capturas de las dos entidades
+      (las de tienda 01–07 siguen válidas).
+- [ ] Capturas antes/después de cada punto en `.ai/scratch/acabado/` (no se versiona) para que Claude revise.
 
-## Contexto mínimo a cargar (≤7 archivos)
-- `apps/api/src/common/format-schema.ts`
-- `apps/api/src/checklists/format-catalog.ts`
-- `apps/api/src/checklists/checklist-pdf.service.ts`
-- `apps/web/components/events/EventChecklistsPanel.tsx`
-- `apps/web/components/events/ChecklistFieldControls.tsx` (SÍ/NO, adjunto, tabla)
-- `apps/api/scripts/upgrade-format-templates.ts`
-- `docs/FORMATOS.md`
+## Contexto mínimo a cargar
+1. `docs/diseno/SISTEMA-VISUAL.md` — tokens, tipografía, componentes, «Sin cortes».
+2. `apps/web/styles/_acabado.scss` — índice de lo hecho por punto (comentarios «═══ N. …»).
+3. `apps/web/components/ui/PageChrome.tsx` — `PageHeader`.
+4. `apps/web/components/chat/chat-ui.tsx` — `channelLabel` / `channelDisplayName`.
+5. `apps/web/playwright.audit.config.ts` + `apps/web/e2e/audit/` — auditoría y cómo se sirve la app (puerto 3100).
+6. `apps/mobile-native/android/app/src/main/java/com/artaproducciones/ops/ui/theme/Components.kt` — componentes Android.
+7. `apps/mobile-native/ios/ArtaApp/UI/Common/Theme.swift` — tokens iOS.
 
-## Archivos a tocar (máx 12)
-| Archivo | Acción | Notas |
-|---------|--------|-------|
-| `apps/api/src/common/format-schema.ts` | nuevo | contrato |
-| `apps/api/src/checklists/format-catalog.ts` | nuevo | catálogo v2 |
-| `apps/api/src/checklists/checklist-pdf.service.ts` | reescrito | pdfkit, brand en `apps/api/assets/brand` |
-| `apps/api/src/common/checklist-progress.ts` · `doc-diff.ts` | editar | delegan en format-schema |
-| `apps/api/src/checklists/checklists.controller.ts` · `events/events.controller.ts` | editar | `bindFormatToEvent` al instanciar |
-| `apps/api/prisma/seed.ts` | editar | usa el catálogo; no pisa plantillas editadas |
-| `apps/api/scripts/upgrade-format-templates.ts` | nuevo | migración |
-| `apps/web/components/events/event-detail.types.ts` | editar | tipos |
-| `apps/web/components/events/EventChecklistsPanel.tsx` + `ChecklistFieldControls.tsx` | editar/nuevo | captura |
-| `apps/web/components/files/ChecklistPdfEditor.tsx` · `checklists/TemplateSchemaEditor.tsx` · `app/(app)/checklists/page.tsx` | editar | tipos nuevos |
-| `apps/web/app/(app)/hospitality/page.tsx` | editar | columna Desayuno en vez de Habitaciones |
-| `apps/web/styles/_hub.scss` | editar | tabla, SÍ/NO, adjunto, nota |
+## Archivos a tocar
+1. `apps/web/styles/_acabado.scss` (ajustes de estilo de los 13 puntos)
+2. `apps/web/components/ui/PageChrome.tsx`
+3. `apps/web/components/chat/ChatPanels.tsx` y `apps/web/app/(app)/chat/page.tsx` (estado vacío y marcador sin slug)
+4. `apps/web/components/ui/EventHero.tsx` y `apps/web/components/events/EventTabBar.tsx`
+5. `apps/web/app/(app)/purchase-orders/page.tsx` y `apps/web/app/(app)/campaigns/page.tsx` (tarjetas en móvil)
+6. `apps/web/app/(app)/dashboard/page.tsx` (panel «Hoy»)
+7. `apps/web/lib/format.ts`
+8. `apps/web/app/(auth)/login/page.tsx`
+9. Las páginas de `apps/web/app/(app)/*/page.tsx` donde la revisión encuentre detalles
+10. `apps/mobile-native/android/.../ui/login/LoginScreen.kt`, `ui/modules/ApprovalsScreen.kt`, `ui/modules/EventDetailScreen.kt`
+11. `apps/mobile-native/ios/ArtaApp/UI/**` solo si las capturas muestran algo mal
+12. `docs/diseno/SISTEMA-VISUAL.md` (anotar reglas nuevas: encabezado de pantalla, un relleno por fila, campos)
 
-## Pasos numerados (hiperdetallados)
-1. Contrato (`format-schema.ts`) → catálogo (`format-catalog.ts`) → pruebas de forma (ids únicos, encabezado con `bind`, columnas válidas).
-2. PDF: reescribir `generate()` con layout propio (y manual), brand desde `apps/api/assets/brand`, mapa de campos para check/value; tablas y adjuntos solo en formulario.
-3. Avance/diff: `isItemComplete` y `itemDisplay` delegan en `format-schema`.
-4. Instanciación: `bindFormatToEvent(template.schemaJson, event)` en `events.controller` (alta) y `checklists.controller` (`from-template`).
-5. Seed: 7 estándar desde el catálogo; los demás con `active`; en `update` no pisar plantillas con `version > 1` (editadas en la UI).
-6. Script de upgrade (ver criterios). Corre en Docker: `docker exec -w /app/apps/api arta-api npx ts-node --transpile-only scripts/upgrade-format-templates.ts --dry`.
-7. Web: tipos; panel con controles nuevos; `onUpload` devuelve el archivo para enlazarlo al ítem adjunto; editor de plantillas; página de plantillas; estilos.
-8. Regenerar fixtures e2e (`apps/web/e2e/fixtures/README-regenerar.ts.txt`) porque cambió el diseño del PDF.
-
-## Resto para Cursor (lo que Claude deja abierto)
-- Levantar Docker local, correr el script de upgrade (`--dry` y luego real), abrir un evento y revisar visualmente los 7 PDFs con la sesión de Adam. Ajustar espaciados si algo se corta.
-- Correr `npm -w apps/web run test:e2e -- checklist-pdf` tras regenerar fixtures.
-- Producción: `git bundle` + `bash deploy/update.sh --no-pull` (ver RELEVO) y luego el script de upgrade en el contenedor de producción con `--confirm-produccion`.
+## Pasos numerados
+1. `pwsh -File C:\dev\scripts\relevo\relevo.ps1 estado` — el árbol debe estar limpio en `5557c44` o posterior.
+   Si hay archivos sin commitear, son de otro turno: `relevo.ps1 salvar` antes de tocar nada.
+2. Web: levantar la app con la API simulada como lo hace la auditoría (ver `playwright.audit.config.ts`) y sacar
+   capturas de TODAS las pantallas en las dos entidades a 1536×864 y 1536×730 → `.ai/scratch/acabado/antes-*`.
+3. Recorrer los puntos 1–13 con las capturas; corregir en `_acabado.scss` o en la página. Un commit pequeño por
+   punto (o por grupo de pantallas). Revisar Auditorio igual de terminado que ARTA.
+4. Terminar el chat (punto 6): estado vacío, marcador del cuadro de texto, diálogos y búsqueda sin slug.
+5. Móvil web (390×844): Órdenes de compra y Campañas como tarjetas; Tareas, chat y login sin cortes.
+6. Inicio: panel «Hoy» sin hueco (que la rejilla no estire la tarjeta, o que la lista crezca para llenarla).
+7. Correr la auditoría (`npx playwright test -c playwright.audit.config.ts` desde `apps/web`, app en 3100) hasta
+   que quede limpia; correr los 7 specs; `npm run typecheck` y `npm run build`.
+8. Capturas «después» → `.ai/scratch/acabado/despues-*` (mismos nombres que «antes»).
+9. Android: `gradlew.bat assembleDebug testDebugUnitTest`; instalar la copia de prueba lado a lado
+   (`--init-script` con `redesign-init.gradle`, que vive en el scratchpad de Claude; si no lo encuentras,
+   usa el emulador con la app de prueba ya instalada `com.artaproducciones.ops.redesign`; **no desinstalar la de
+   tienda**). El emulador es lento: esperar ~25 s tras abrir antes de tocar. Revisar entrada, Aprobaciones,
+   evento, tarea, alta de tarea e Inicio en las dos entidades (doble toque en Inicio cambia de entidad).
+10. iOS: confirmar `gh run view 38300682548 -R AdamPark7014/ARTA-app` en verde; correr
+    `gh workflow run ios-screenshots.yml -R AdamPark7014/ARTA-app --ref main`, descargar y revisar.
+11. Subir a `origin main` (`git pull --rebase` antes). **No desplegar**: Claude revisa y despliega.
+12. Actualizar `.ai/RELEVO.md` entero en el último commit y `relevo.ps1 cerrar -Mensaje "acabado visual listo para revisión"`.
 
 ## Tests / verificación
-```powershell
-npm -w apps/api run test -- --runInBand format checklist doc-diff
-npx -w apps/api tsc --noEmit -p apps/api/tsconfig.json
-npx -w apps/web tsc --noEmit -p apps/web/tsconfig.json
-# PDFs de muestra (sin base): apps/api/scripts/render-format-samples.ts
-```
+- Web: `npm run typecheck`, `npm run build` (si falla `next/font` al bajar Nunito, es la red: reintentar),
+  auditoría «sin cortes» limpia, specs app-shell, tasks, login, layout, mobile-shell, users-alta,
+  formatos-auditorio.
+- Android: `gradlew.bat assembleDebug testDebugUnitTest` (42+ pruebas, 0 fallas) + capturas del emulador.
+- iOS: `ios-build.yml` y `ios-screenshots.yml` en verde; capturas revisadas.
+- Capturas antes/después en `.ai/scratch/acabado/`.
 
-## Workers (Cursor los dirige; un writer por worktree)
-- **NO_LLM** (rg / git / tests / lint / playwright):
-- **LOCAL** — comando exacto, no una intención. Ej.:
-  `pwsh -File C:\Users\adpoz\Projects\ai-oss-2026\scripts\ollama-worker.ps1 -Action digest -Repo "." -Max 120`
-  `... -Action find -Repo "." -Query "..."` · `... -Action map -ItemsInline "..." -Prompt "... {{item}}"`
-- **MCP / Firecrawl / n8n / Temporal**:
-
-## Worktrees
-No aplica: todo va directo en `main`, sin ramas ni worktrees (Adam es el único programador;
-regla en `C:\dev\scripts\ai-os\GIT-SOLO-MAIN.md`). Varios agentes = mismo checkout y archivos distintos.
--
+## Workers (NO_LLM / LOCAL / MCP)
+- NO_LLM: Playwright (auditoría y capturas), gradle, `gh` para las corridas de iOS, `adb exec-out screencap`.
+- LOCAL: `ollama_find` para localizar clases/estilos en `globals.scss` y parciales antes de leer a mano.
 
 ## No hacer / riesgos
-- No cambiar ids de ítem del catálogo (los índices por módulo los leen) ni bajar `STANDARD_FORMAT_VERSION`.
-- No editar las plantillas estándar a mano en la UI para «subirlas»: eso lo hace el script con snapshot.
-- El script no toca formatos aprobados/sellados/autorizados; no forzarlo con `--include-signed` (no existe a propósito).
-- Docker Desktop en esta máquina a veces no levanta el motor: matar procesos y relanzar; nunca «Reset to factory defaults» (borra la base).
-- Los estilos nuevos van en `styles/_formats.scss` (no en `_hub.scss` como decía el plan).
+- **Solo `main`**: sin ramas, worktrees ni PRs. Commits con rutas explícitas (nunca `git add -A`), mensaje en
+  español con el trailer `Agente: cursor`. No escribir la palabra «push» en mensajes de commit; una ruta que
+  contenga `push/` (p. ej. `components/web-push/`) en la línea de `git add` la bloquea el hook: usar
+  `git add --pathspec-from-file=<archivo>`.
+- Repo **público**: nada de contraseñas, llaves, correos reales ni datos personales (los datos de prueba usan
+  `@arta.test` / `@example.com`). No tocar `key.properties`, `*.jks`, `versionCode`, `.env*`, `docs/ACCESS.md`.
+- No cambiar llamadas al API, permisos ni datos: es solo presentación.
+- No rediseñar: el sistema está aprobado; esto es acabado. Nada de colores nuevos (ni azul, violeta ni dorado).
+- No desplegar al servidor ni subir a TestFlight / Play: lo hace Claude tras revisar.
+- Prohibido `git reset --hard`, `git checkout --`, `git clean`, `git stash drop`.
+- El emulador Android es lento (2 GB): un «no responde» al abrir la versión debug es del emulador, no de la app
+  (medido el 12-10: igual que antes del pulido).
 
 ## Handoff a Cursor
-(Una sola frase de arranque. `packet.ps1 handoff` la copia al portapapeles junto con el boot.)
-Implementa `.ai/EXEC-PACKET.md` de ARTA-app paso a paso sin cambiar la arquitectura; cierra con relevo.
-
+Frase de arranque: «Lee `.ai/EXEC-PACKET.md` de ARTA-app y ejecútalo de principio a fin: revisa pantalla por
+pantalla el acabado visual (web, Android, iOS), corrige lo que se vea mal, deja la auditoría sin cortes limpia,
+captura antes/después en `.ai/scratch/acabado/` y sube a main sin desplegar.»
+Al terminar: marcar `- **Estado:** CERRADO` aquí y avisar a Adam para que Claude revise, pula y despliegue.
