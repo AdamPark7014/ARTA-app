@@ -4,9 +4,27 @@
 - **Fecha:** 2026-10-11
 - **Rama:** main
   (Adam es el único programador).
-- **Producción:** `495c11d` desplegado desde `main` el 2026-10-11 ~23:15 UTC (bundle `c3cc958..main` +
-  `update.sh --no-pull`, log `/root/arta-deploy-20261011-icono.log`; respaldo automático en `/root/arta-backups/`).
+- **Producción:** `ec45283` desplegado desde `main` el 2026-10-12 ~05:40 UTC (bundle `495c11d..main` +
+  `update.sh --no-pull`, log `/root/arta-deploy-20261012-pulido.log`; respaldo automático en `/root/arta-backups/`).
   El servidor ya está en el historial nuevo: el bundle incremental hace fast-forward.
+
+## Turno claude-code (2026-10-12, madrugada): pulido «sin cortes»
+
+Adam: «más premium y agradable, tiene muchos cortes no agradables» (textos con «…», cosas cortadas por bordes o
+barras). Hecho en las tres plataformas, con capturas antes/después revisadas:
+- **Web** (`2724a4a`, `ec45283`, desplegado): auditoría Playwright de 40 pantallas × 2 entidades × 4 tamaños
+  (`apps/web/playwright.audit.config.ts`, `e2e/audit/`, datos `e2e/support/rich-fixtures.ts`; correr con la app en
+  el 3100). Texto cortado 175–197 → 0 por tamaño (lo que queda en un renglón lleva `title`), recortes 15–178 → 0.
+  Estilos en `styles/_pulido.scss` (se importa al final), comportamiento en `components/app-shell/useShellPolish.ts`.
+  Pendiente: tablas de OC y campañas en móvil siguen como tabla con desvanecido; «Último acceso» en Usuarios.
+- **iOS** (`2207b7b`, `8b31a8e`, `2b9e2fa`, `971a5ac`; ios-build 38209662592 y capturas 38209664892 verdes):
+  desvanecido antes de la barra de pestañas y bajo la barra de estado, renglones a dos líneas, canal de evento
+  con el evento de título y el artista abajo, aviso de cambio de entidad compacto.
+- **Android** (`94f5970`, `5ef64c2`, `1d95d84`): accesos de Inicio en cuadrícula, filtros de Tareas en dos
+  renglones, «nueva conversación» en la barra de Chats (el botón flotante tapaba el último chat), desvanecidos
+  bajo barras. Medido en el emulador (2 GB, debug): arranca igual o más rápido que antes del pulido; el «no
+  responde» que salió una vez fue del emulador, no de la app.
+- Nada de esto está en tiendas: iOS 1.0.0 (11) sigue `WAITING_FOR_REVIEW`; va en 1.0.1 / versionCode 4.
 
 ## Turno claude-code (2026-10-11, tarde): formatos del Auditorio, sistema visual e ícono nuevo
 
