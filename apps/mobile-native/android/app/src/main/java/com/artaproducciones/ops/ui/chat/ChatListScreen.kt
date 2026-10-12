@@ -40,7 +40,6 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -211,6 +210,14 @@ fun ChatListScreen(openChat: (String) -> Unit) {
                 Text("Chats", style = ArtaType.ScreenTitle, color = ArtaColors.Text, modifier = Modifier.weight(1f).semantics { heading() })
                 IconButton(onClick = { openChat(ChatRoutes.SEARCH) }) { Icon(Icons.Outlined.Search, "Buscar mensajes") }
                 IconButton(onClick = { openChat(ChatRoutes.SAVED) }) { Icon(Icons.Outlined.BookmarkBorder, "Guardados") }
+                // Nueva conversación arriba (como en la web): un botón flotante tapaba la fecha y los
+                // no leídos del último chat de la lista.
+                IconButton(onClick = { openChat(ChatRoutes.NEW) }) {
+                    Box(
+                        Modifier.size(34.dp).background(ArtaColors.Gold, LocalArtaTokens.current.controlShape),
+                        contentAlignment = Alignment.Center,
+                    ) { Icon(Icons.Outlined.Edit, "Nueva conversación", tint = ArtaColors.OnAccent, modifier = Modifier.size(18.dp)) }
+                }
                 Box {
                     IconButton(onClick = { menu = true }) { Icon(Icons.Outlined.MoreVert, "Más opciones") }
                     DropdownMenu(expanded = menu, onDismissRequest = { menu = false }, containerColor = ArtaColors.BgElev) {
@@ -301,7 +308,7 @@ fun ChatListScreen(openChat: (String) -> Unit) {
                     else -> LazyColumn(
                         Modifier.fillMaxSize().fadingEdges(listState, start = 16.dp, end = 28.dp),
                         state = listState,
-                        contentPadding = PaddingValues(bottom = 104.dp),
+                        contentPadding = PaddingValues(bottom = 24.dp),
                     ) {
                         error?.let { msg ->
                             item {
@@ -332,13 +339,6 @@ fun ChatListScreen(openChat: (String) -> Unit) {
                 }
             }
         }
-        FloatingActionButton(
-            onClick = { openChat(ChatRoutes.NEW) },
-            containerColor = ArtaColors.Gold,
-            contentColor = ArtaColors.OnAccent,
-            shape = LocalArtaTokens.current.controlShape,
-            modifier = Modifier.align(Alignment.BottomEnd).padding(Space.L + Space.XS),
-        ) { Icon(Icons.Outlined.Edit, "Nueva conversación") }
     }
 }
 
