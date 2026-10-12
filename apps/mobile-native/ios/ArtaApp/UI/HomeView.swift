@@ -12,7 +12,9 @@ struct SignedInView: View {
     var body: some View {
         ZStack {
             // Debajo, el fondo de la entidad nueva: el cambio pasa por papel o por negro limpios.
+            // El `id` lo rehace al cambiar (lee la entidad de `EntityContext`, que SwiftUI no observa).
             ArtaScreenBackground()
+                .id(activeEntity.current)
             HomeView(user: user)
                 .id(activeEntity.current)
                 // Cambio de entidad: la app vieja se va rápido y la nueva entra suave, sin que
