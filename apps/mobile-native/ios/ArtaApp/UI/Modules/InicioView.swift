@@ -218,7 +218,8 @@ struct InicioView: View {
     private var nextEventKPI: some View {
         let label = isLight ? "Próximo evento" : "Próximo show"
         guard let event = nextEvent, let start = parseDate(event.startsAt) else {
-            return kpi(label, value: "—", detail: "Sin fechas próximas", silver: true, id: "inicio-kpi-next") {
+            // Sin fecha próxima, la palabra va en el lugar de la cifra (nunca una raya suelta).
+            return kpi(label, value: "Sin fechas", detail: "Nada próximo en el calendario", quiet: true, id: "inicio-kpi-next") {
                 router.open(AppRoute.web(path: "/calendar", title: "Calendario"))
             }
         }
@@ -247,6 +248,7 @@ struct InicioView: View {
         value: String,
         detail: String?,
         silver: Bool = false,
+        quiet: Bool = false,
         id: String,
         action: @escaping () -> Void
     ) -> some View {
@@ -259,7 +261,7 @@ struct InicioView: View {
                 Text(value)
                     .font(ArtaFont.figure(figureSize))
                     .tracking(-0.8)
-                    .foregroundStyle(silver ? ArtaColor.figureStyle : AnyShapeStyle(ArtaColor.text))
+                    .foregroundStyle(quiet ? AnyShapeStyle(ArtaColor.muted) : (silver ? ArtaColor.figureStyle : AnyShapeStyle(ArtaColor.text)))
                     .lineLimit(1)
                     .minimumScaleFactor(0.6)
                 if let detail {

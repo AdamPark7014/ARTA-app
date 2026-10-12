@@ -118,55 +118,48 @@ struct EventDetailView: View {
 
     private func header(_ event: ArtaEventDetail) -> some View {
         ModuleCard {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 8) {
+            VStack(alignment: .leading, spacing: ArtaSpace.s) {
+                HStack(spacing: ArtaSpace.s) {
                     StatusPill(text: EventInfo.statusLabel(event.status), tone: EventInfo.statusTone(event.status))
                     if let entity = event.entity {
                         StatusPill(text: EntityInfo.label(entity), tone: .accent)
                     }
-                    Spacer(minLength: 4)
+                    Spacer(minLength: ArtaSpace.xs)
                     if !event.isClosed, let countdown = MDate.countdown(event.startsAt) {
                         Text(countdown)
                             .font(.caption.weight(.semibold))
-                            .foregroundStyle(ArtaColor.accent)
+                            .monospacedDigit()
+                            .foregroundStyle(ArtaColor.text)
                     }
                 }
-                Text(event.name)
-                    .font(ArtaFont.display(24, weight: .semibold))
-                    .tracking(-0.4)
-                    .foregroundStyle(ArtaColor.text)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .textSelection(.enabled)
-                if let artist = event.artist, !artist.isEmpty, artist != event.name {
-                    Text(artist)
-                        .font(.subheadline)
-                        .foregroundStyle(ArtaColor.muted)
+                VStack(alignment: .leading, spacing: ArtaSpace.xxs) {
+                    Text(event.name)
+                        .font(ArtaFont.display(24, weight: .semibold))
+                        .tracking(-0.4)
+                        .foregroundStyle(ArtaColor.text)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .textSelection(.enabled)
+                    if let artist = event.artist, !artist.isEmpty, artist != event.name {
+                        Text(artist)
+                            .font(.subheadline)
+                            .foregroundStyle(ArtaColor.muted)
+                    }
                 }
-                Label(MDate.eventWhen(event.startsAt, event.endsAt), systemImage: "calendar")
-                    .font(.subheadline)
-                    .monospacedDigit()
-                    .foregroundStyle(ArtaColor.text)
+                .padding(.bottom, ArtaSpace.xs)
+                // Ícono en columna fija: fecha, lugar, horario y funciones arrancan en la misma orilla.
+                InfoLine(icon: "calendar", text: MDate.eventWhen(event.startsAt, event.endsAt))
                 let place = [event.venue, event.city].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
                 if !place.isEmpty {
-                    Label(place, systemImage: "mappin.and.ellipse")
-                        .font(.subheadline)
-                        .foregroundStyle(ArtaColor.text)
+                    InfoLine(icon: "mappin.and.ellipse", text: place)
                 }
                 if let schedule = event.schedule, !schedule.isEmpty {
-                    Label(schedule, systemImage: "clock")
-                        .font(.subheadline)
-                        .monospacedDigit()
-                        .foregroundStyle(ArtaColor.text)
+                    InfoLine(icon: "clock", text: schedule)
                 }
                 if let functions = event.functions, functions > 0 {
-                    Label(functions == 1 ? "1 función" : "\(functions) funciones", systemImage: "ticket")
-                        .font(.subheadline)
-                        .foregroundStyle(ArtaColor.text)
+                    InfoLine(icon: "ticket", text: functions == 1 ? "1 función" : "\(functions) funciones")
                 }
                 if event.isClosed {
-                    Label("Evento cerrado: solo lectura.", systemImage: "lock.fill")
-                        .font(.footnote)
-                        .foregroundStyle(ArtaColor.muted)
+                    InfoLine(icon: "lock", text: "Evento cerrado: solo lectura.", color: ArtaColor.muted)
                 }
             }
         }
@@ -182,9 +175,11 @@ struct EventDetailView: View {
         let pendingOrders = orders.filter { $0.status == "PENDING_AUTH" }
         let overdue = openTasks.filter { DueBucket.of($0) == .overdue }.count
         var tiles: [SummaryTile] = [
-            SummaryTile(id: "checklists", title: "Formatos", value: checklists.isEmpty ? "—" : "\(avg)%",
-                        detail: checklists.isEmpty ? "Sin formatos" : pluralized(checklists.count, "formato", "formatos"),
-                        icon: "list.clipboard", progress: checklists.isEmpty ? nil : Double(avg) / 100) {
+            // Sin formatos, la palabra va en el lugar de la cifra (nunca una raya suelta).
+            SummaryTile(id: "checklists", title: "Formatos", value: checklists.isEmpty ? "Sin formatos" : "\(avg)%",
+                        detail: checklists.isEmpty ? "Se crean en la web" : pluralized(checklists.count, "formato", "formatos"),
+                        icon: "list.clipboard", progress: checklists.isEmpty ? nil : Double(avg) / 100,
+                        quiet: checklists.isEmpty) {
                 openWeb(event, tab: "checklists", label: "Formatos")
             },
             SummaryTile(id: "tasks", title: "Tareas", value: "\(openTasks.count)",
@@ -213,7 +208,7 @@ struct EventDetailView: View {
                         ForEach(row) { item in
                             Button(action: item.action) {
                                 tile(item.title, value: item.value, detail: item.detail, icon: item.icon,
-                                     alert: item.alert, progress: item.progress)
+                                     alert: item.alert, progress: item.progress, quiet: item.quiet)
                             }
                             .buttonStyle(ArtaPressStyle())
                         }
@@ -271,20 +266,21 @@ struct EventDetailView: View {
                                 router.open(AppRoute.web(path: "/events/\(event.id)?tab=checklists&checklist=\(checklist.id)",
                                                          title: checklist.title ?? "Formato"))
                             } label: {
-                                VStack(alignment: .leading, spacing: 6) {
-                                    HStack {
+                                VStack(alignment: .leading, spacing: ArtaSpace.s) {
+                                    HStack(alignment: .firstTextBaseline) {
                                         Text(checklist.title ?? "Formato")
                                             .font(.subheadline)
                                             .foregroundStyle(ArtaColor.text)
                                             .lineLimit(2)
                                             .multilineTextAlignment(.leading)
-                                        Spacer(minLength: 8)
+                                        Spacer(minLength: ArtaSpace.s)
                                         Text("\(Int(checklist.progressPct ?? 0))%")
                                             .font(.caption.weight(.semibold))
+                                            .monospacedDigit()
                                             .foregroundStyle(ArtaColor.muted)
                                     }
-                                    ProgressView(value: min(max((checklist.progressPct ?? 0) / 100, 0), 1))
-                                        .tint(ArtaColor.accent)
+                                    // La misma barra de 3 pt de las tarjetas de cifra.
+                                    ProgressBar(value: (checklist.progressPct ?? 0) / 100)
                                 }
                                 .contentShape(Rectangle())
                             }
@@ -298,18 +294,15 @@ struct EventDetailView: View {
 
     /// Tarjeta de cifra (sistema visual): etiqueta, cifra ligera tabular, detalle y, si aplica,
     /// barra de avance de 3 px.
-    private func tile(_ title: String, value: String, detail: String, icon: String, alert: Bool = false, progress: Double? = nil) -> some View {
+    /// Igual que las de Inicio: sin ícono junto a la etiqueta (los íconos de distinto alto
+    /// desalineaban las etiquetas de un renglón).
+    private func tile(_ title: String, value: String, detail: String, icon: String, alert: Bool = false, progress: Double? = nil, quiet: Bool = false) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 6) {
-                Image(systemName: icon)
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(ArtaColor.tertiary)
-                CapLabel(title)
-            }
+            CapLabel(title)
             Text(value)
                 .font(ArtaFont.figure(26))
                 .tracking(-0.6)
-                .foregroundStyle(alert ? ArtaColor.danger : ArtaColor.text)
+                .foregroundStyle(alert ? ArtaColor.danger : (quiet ? ArtaColor.muted : ArtaColor.text))
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
             if let progress {
@@ -346,7 +339,7 @@ struct EventDetailView: View {
                 ModuleEmptyView(icon: "checklist", title: "Sin tareas", message: "Las tareas ligadas a este evento aparecerán aquí.")
                     .frame(minHeight: 240)
             } else {
-                ModuleCard(title: "Abiertas (\(openTasks.count))") {
+                ModuleCard(title: "Abiertas", count: openTasks.count) {
                     if openTasks.isEmpty {
                         Text("Todo hecho.").font(.subheadline).foregroundStyle(ArtaColor.muted)
                     } else {
@@ -364,7 +357,7 @@ struct EventDetailView: View {
                     }
                     .buttonStyle(.plain)
                     if showDone {
-                        ModuleCard(title: "Hechas") {
+                        ModuleCard(title: "Hechas", count: doneTasks.count) {
                             taskList(doneTasks)
                         }
                     }
@@ -433,13 +426,13 @@ struct EventDetailView: View {
                                 .foregroundStyle(ArtaColor.text)
                             Spacer()
                             if tab.count > 0 {
-                                CountBadge(count: tab.count, muted: true)
+                                QuietCount(count: tab.count)
                             }
                             Image(systemName: "chevron.right")
-                                .font(.caption)
-                                .foregroundStyle(ArtaColor.muted)
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(ArtaColor.tertiary)
                         }
-                        .padding(.vertical, 10)
+                        .padding(.vertical, ArtaSpace.m)
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(ArtaPressStyle(scale: 0.99))
@@ -499,6 +492,8 @@ private struct SummaryTile: Identifiable {
     let icon: String
     var alert = false
     var progress: Double?
+    /// Sin dato: la palabra va en secundario, no con el peso de una cifra.
+    var quiet = false
     let action: () -> Void
 }
 
