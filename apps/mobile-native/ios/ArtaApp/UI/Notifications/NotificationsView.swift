@@ -12,17 +12,24 @@ struct NotificationsView: View {
     private var unread: Int { items.filter { !$0.isRead }.count }
 
     var body: some View {
-        List(items) { item in
-            Button { open(item) } label: { NotificationRow(item: item) }
-                .listRowBackground(Color.clear)
-                .listRowSeparatorTint(ArtaColor.line)
+        List {
+            Section {
+                ForEach(items) { item in
+                    Button { open(item) } label: { NotificationRow(item: item) }
+                        .listRowBackground(Color.clear)
+                        .listRowSeparatorTint(ArtaColor.line)
+                }
+            }
+            // Sin la línea suelta arriba del primer aviso (bajo el título).
+            .listSectionSeparator(.hidden, edges: .top)
         }
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
+        .artaTabBarScrim()
         .artaScreenBackground()
         .overlay {
             if loading && items.isEmpty {
-                ProgressView().tint(ArtaColor.tertiary)
+                NotificationsSkeleton()
             } else if let error, items.isEmpty {
                 EmptyState(icon: "wifi.exclamationmark", title: "No se pudo cargar", message: error)
             } else if items.isEmpty {
@@ -103,21 +110,62 @@ private struct NotificationRow: View {
                     Text(item.title)
                         .font(.subheadline.weight(item.isRead ? .regular : .semibold))
                         .foregroundStyle(ArtaColor.text)
-                        .lineLimit(2)
+                        .lineLimit(3)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .layoutPriority(1)
                     Spacer(minLength: 6)
-                    Text(relativeTime(item.createdAt)).font(.caption).monospacedDigit().foregroundStyle(ArtaColor.tertiary)
+                    Text(relativeTime(item.createdAt))
+                        .font(.caption)
+                        .monospacedDigit()
+                        .foregroundStyle(ArtaColor.tertiary)
+                        .fixedSize()
                 }
                 if let body = item.body, !body.isEmpty {
-                    Text(plainText(body)).font(.footnote).foregroundStyle(ArtaColor.muted).lineLimit(3)
+                    Text(plainText(body))
+                        .font(.footnote)
+                        .monospacedDigit()
+                        .foregroundStyle(ArtaColor.muted)
+                        .lineLimit(3)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 if let actor = item.actor {
                     Text(actor.fullName).font(.caption2).foregroundStyle(ArtaColor.tertiary)
                 }
             }
-            if !item.isRead {
-                Circle().fill(ArtaColor.accent).frame(width: 8, height: 8).padding(.top, 6)
-            }
+            // Punto de «sin leer» siempre en su columna: las filas leídas no se corren.
+            Circle()
+                .fill(item.isRead ? Color.clear : ArtaColor.accent)
+                .frame(width: 8, height: 8)
+                .padding(.top, 6)
+                .accessibilityHidden(true)
         }
         .padding(.vertical, 6)
+    }
+}
+
+/// Esqueleto de avisos mientras llega la primera carga.
+private struct NotificationsSkeleton: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 22) {
+            ForEach(0..<6, id: \.self) { i in
+                HStack(alignment: .top, spacing: 12) {
+                    Circle().fill(ArtaColor.surface2).frame(width: 40, height: 40)
+                    VStack(alignment: .leading, spacing: 8) {
+                        SkeletonBar(width: CGFloat(160 + (i * 43) % 80), height: 12)
+                        SkeletonBar(width: CGFloat(220 + (i * 31) % 60), height: 9)
+                        SkeletonBar(width: 90, height: 8)
+                    }
+                    Spacer(minLength: 0)
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, ArtaLayout.gutter)
+        .padding(.top, ArtaSpace.l)
+        .artaShimmer()
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .background(ArtaScreenBackground())
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Cargando avisos")
     }
 }

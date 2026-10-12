@@ -75,8 +75,8 @@ struct EventsView: View {
                     }
                 }
                 .pickerStyle(.segmented)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
+                .padding(.horizontal, ArtaLayout.gutter)
+                .padding(.vertical, ArtaSpace.s)
                 .background(ArtaColor.bg)
             }
         }
@@ -147,6 +147,7 @@ struct EventsView: View {
             .listStyle(.insetGrouped)
             .scrollContentBackground(.hidden)
             .refreshable { await load() }
+            .artaTabBarScrim()
         }
     }
 
@@ -189,8 +190,10 @@ struct EventsView: View {
                 .artaCard(padding: 12)
                 dayAgenda
             }
-            .padding(16)
+            .padding(.horizontal, ArtaLayout.gutter)
+            .padding(.vertical, ArtaSpace.l)
         }
+        .artaTabBarScrim()
         .refreshable {
             await load()
             await loadNotes()
@@ -462,17 +465,22 @@ struct EventRow: View {
                     .foregroundStyle(ArtaColor.text)
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
                 Text(MDate.eventWhen(event.startsAt, event.endsAt))
                     .font(.caption.weight(.medium))
+                    .monospacedDigit()
                     .foregroundStyle(ArtaColor.muted)
                 if !place.isEmpty {
                     Text(place)
                         .font(.caption)
                         .foregroundStyle(ArtaColor.tertiary)
-                        .lineLimit(1)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
-            Spacer(minLength: 4)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .layoutPriority(1)
             VStack(alignment: .trailing, spacing: 4) {
                 if let status = event.status, !status.isEmpty, status != "ACTIVE" {
                     StatusPill(text: EventInfo.statusLabel(status), tone: EventInfo.statusTone(status))

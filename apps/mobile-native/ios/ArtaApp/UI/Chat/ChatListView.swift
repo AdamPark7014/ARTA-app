@@ -179,6 +179,7 @@ struct ChatListView: View {
         }
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
+        .artaTabBarScrim()
         .artaScreenBackground()
         .overlay { overlay }
         .searchable(text: $model.query, prompt: "Buscar mensajes y conversaciones")
@@ -434,26 +435,40 @@ private struct ChannelRow: View {
 
     private var bold: Bool { channel.unread > 0 && !channel.isMuted }
 
+    /// Canal de evento: «Noche de Boleros» de título y «Trío Luna de Plata» debajo.
+    private var name: EventChannelName {
+        EventChannelName(channel.displayName, isEvent: channel.isEvent && !channel.isDirect && !channel.isGroup)
+    }
+
     var body: some View {
         HStack(spacing: 12) {
             avatar
             VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: 5) {
+                HStack(alignment: .firstTextBaseline, spacing: 5) {
                     if channel.isPrivate && !channel.isGroup {
                         Image(systemName: "lock.fill").font(.caption2).foregroundStyle(ArtaColor.muted)
                     }
                     if channel.isAnnouncement {
                         Image(systemName: "megaphone.fill").font(.caption2).foregroundStyle(ArtaColor.muted)
                     }
-                    Text(channel.displayName)
+                    Text(name.title)
                         .font(.body.weight(bold ? .bold : .regular))
                         .foregroundStyle(channel.isMuted ? ArtaColor.muted : ArtaColor.text)
-                        .lineLimit(1)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .layoutPriority(1)
                     Spacer(minLength: 4)
                     Text(relativeTime(channel.lastMessageAt))
                         .font(.caption)
                         .monospacedDigit()
                         .foregroundStyle(bold ? ArtaColor.text : ArtaColor.tertiary)
+                        .fixedSize()
+                }
+                if let context = name.context {
+                    Text(context)
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(ArtaColor.tertiary)
+                        .lineLimit(1)
                 }
                 HStack(spacing: 6) {
                     preview
@@ -584,33 +599,26 @@ private struct SearchResultRow: View {
     }
 }
 
-/// Esqueleto de la lista mientras llega la primera carga.
+/// Esqueleto de la lista mientras llega la primera carga (con el brillo del tema).
 private struct ChatListSkeleton: View {
-    @State private var pulse = false
-
     var body: some View {
-        VStack(spacing: 18) {
+        VStack(spacing: 20) {
             ForEach(0..<8, id: \.self) { i in
                 HStack(spacing: 12) {
                     Circle()
                         .fill(ArtaColor.surface2)
                         .frame(width: 50, height: 50)
                     VStack(alignment: .leading, spacing: 8) {
-                        RoundedRectangle(cornerRadius: 4)
-                            .fill(ArtaColor.surface2)
-                            .frame(width: CGFloat(110 + (i * 37) % 90), height: 12)
-                        RoundedRectangle(cornerRadius: 4)
-                            .fill(ArtaColor.surface2)
-                            .frame(width: CGFloat(170 + (i * 53) % 80), height: 10)
+                        SkeletonBar(width: CGFloat(110 + (i * 37) % 90), height: 12)
+                        SkeletonBar(width: CGFloat(170 + (i * 53) % 80), height: 10)
                     }
                     Spacer()
                 }
             }
         }
-        .padding(16)
-        .opacity(pulse ? 0.45 : 1)
-        .animation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true), value: pulse)
-        .onAppear { pulse = true }
+        .padding(.horizontal, ArtaLayout.gutter)
+        .padding(.vertical, ArtaSpace.l)
+        .artaShimmer()
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Cargando conversaciones")
     }

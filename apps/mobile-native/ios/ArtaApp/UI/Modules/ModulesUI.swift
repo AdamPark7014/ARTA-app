@@ -116,33 +116,31 @@ struct StatusPill: View {
 
 // MARK: - Estados de pantalla
 
-/// Esqueleto con marcadores `redacted` mientras llega la primera carga, en tarjetas del tema.
+/// Esqueleto mientras llega la primera carga: tarjetas del tema con marcadores y un brillo
+/// que las recorre (blanco en ARTA, plata tenue en Auditorio).
 struct ModuleSkeletonList: View {
     var rows: Int = 6
-    @State private var pulse = false
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 12) {
+            VStack(spacing: ArtaSpace.m) {
                 ForEach(0..<rows, id: \.self) { i in
-                    HStack(spacing: 12) {
+                    HStack(spacing: ArtaSpace.m) {
                         Circle().fill(ArtaColor.surface2).frame(width: 36, height: 36)
-                        VStack(alignment: .leading, spacing: 8) {
-                            RoundedRectangle(cornerRadius: 4).fill(ArtaColor.surface2)
-                                .frame(width: CGFloat(150 + (i * 41) % 90), height: 11)
-                            RoundedRectangle(cornerRadius: 4).fill(ArtaColor.surface2)
-                                .frame(width: CGFloat(90 + (i * 29) % 70), height: 9)
+                        VStack(alignment: .leading, spacing: ArtaSpace.s) {
+                            SkeletonBar(width: CGFloat(150 + (i * 41) % 90), height: 12)
+                            SkeletonBar(width: CGFloat(90 + (i * 29) % 70), height: 8)
                         }
                         Spacer(minLength: 0)
                     }
-                    .artaCard(padding: 14)
+                    .artaCard(padding: ArtaSpace.l)
                 }
             }
-            .padding(16)
+            .padding(.horizontal, ArtaLayout.gutter)
+            .padding(.vertical, ArtaSpace.l)
+            .artaShimmer()
         }
-        .opacity(pulse ? 0.55 : 1)
-        .animation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true), value: pulse)
-        .onAppear { pulse = true }
+        .scrollDisabled(true)
         .allowsHitTesting(false)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Cargando")
@@ -154,14 +152,13 @@ struct ModuleErrorView: View {
     let retry: () -> Void
 
     var body: some View {
-        ContentUnavailableView {
-            Label("No se pudo cargar", systemImage: "wifi.exclamationmark")
-        } description: {
-            Text(message)
-        } actions: {
-            Button("Reintentar", action: retry)
-                .buttonStyle(ArtaPrimaryButtonStyle(fullWidth: false))
-        }
+        EmptyState(
+            icon: "wifi.exclamationmark",
+            title: "No se pudo cargar",
+            message: message,
+            actionTitle: "Reintentar",
+            action: retry
+        )
     }
 }
 
@@ -171,11 +168,7 @@ struct ModuleEmptyView: View {
     var message: String? = nil
 
     var body: some View {
-        ContentUnavailableView {
-            Label(title, systemImage: icon)
-        } description: {
-            if let message { Text(message) }
-        }
+        EmptyState(icon: icon, title: title, message: message)
     }
 }
 
@@ -204,25 +197,30 @@ struct PanelCard<Content: View>: View {
     @ViewBuilder let content: () -> Content
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
+        VStack(alignment: .leading, spacing: ArtaSpace.m) {
+            HStack(alignment: .firstTextBaseline, spacing: ArtaSpace.s) {
                 Text(title)
                     .font(ArtaFont.panelTitle)
                     .foregroundStyle(ArtaColor.text)
-                    .lineLimit(1)
-                Spacer(minLength: 8)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .layoutPriority(1)
+                Spacer(minLength: ArtaSpace.s)
                 if let trailing {
                     if let trailingAction {
                         Button(action: trailingAction) {
                             HStack(spacing: 3) {
                                 Text(trailing)
+                                    .lineLimit(1)
                                 Image(systemName: "chevron.right").font(.system(size: 10, weight: .semibold))
                             }
                             .font(.footnote)
                             .foregroundStyle(ArtaColor.tertiary)
+                            // Área de toque cómoda sin mover el diseño.
+                            .padding(.vertical, ArtaSpace.xs)
                             .contentShape(Rectangle())
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(ArtaPressStyle(scale: 0.96))
                         .accessibilityIdentifier(trailingId ?? "")
                     } else {
                         Text(trailing)
@@ -264,18 +262,32 @@ struct FactRow: View {
     let value: String
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 12) {
-            Text(label).font(.subheadline).foregroundStyle(ArtaColor.tertiary)
-            Spacer(minLength: 8)
-            Text(value).font(.subheadline).foregroundStyle(ArtaColor.text).multilineTextAlignment(.trailing)
+        HStack(alignment: .firstTextBaseline, spacing: ArtaSpace.m) {
+            Text(label)
+                .font(.subheadline)
+                .foregroundStyle(ArtaColor.tertiary)
+                .fixedSize()
+            Spacer(minLength: ArtaSpace.s)
+            Text(value)
+                .font(.subheadline)
+                .monospacedDigit()
+                .foregroundStyle(ArtaColor.text)
+                .multilineTextAlignment(.trailing)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 }
 
-/// Avatares apilados con los nombres al lado.
+/// Avatares apilados con los nombres al lado. Con más de dos personas: «Ana, Beto +2»
+/// (sin puntos suspensivos a media palabra).
 struct PeopleLine: View {
     let names: [String]
     var emptyText: String = "Sin asignar"
+
+    private var summary: String {
+        guard names.count > 2 else { return names.joined(separator: ", ") }
+        return names.prefix(2).joined(separator: ", ") + " +\(names.count - 2)"
+    }
 
     var body: some View {
         if names.isEmpty {
@@ -288,10 +300,11 @@ struct PeopleLine: View {
                             .overlay(Circle().stroke(ArtaColor.surface, lineWidth: 1.5))
                     }
                 }
-                Text(names.joined(separator: ", "))
+                Text(summary)
                     .font(.caption)
                     .foregroundStyle(ArtaColor.muted)
-                    .lineLimit(1)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }

@@ -172,9 +172,29 @@ struct StackedAvatars: View {
     }
 }
 
+/// Nombre de un canal de evento. El API lo arma como «Artista · Evento» (`chat.service.ts`):
+/// el evento va de título y el artista aparte, en vez de un renglón cortado con «…».
+struct EventChannelName {
+    let title: String
+    let context: String?
+
+    init(_ name: String, isEvent: Bool) {
+        if isEvent, let range = name.range(of: " · ") {
+            let first = name[..<range.lowerBound].trimmingCharacters(in: .whitespaces)
+            let rest = name[range.upperBound...].trimmingCharacters(in: .whitespaces)
+            if !first.isEmpty && !rest.isEmpty {
+                title = rest
+                context = first
+                return
+            }
+        }
+        title = name
+        context = nil
+    }
+}
+
 /// Esqueleto mientras carga la conversación.
 struct ChatSkeleton: View {
-    @State private var pulse = false
     private let widths: [CGFloat] = [210, 150, 240, 120, 180, 220, 140]
 
     var body: some View {
@@ -202,30 +222,26 @@ struct ChatSkeleton: View {
         }
         .padding(.horizontal, 14)
         .padding(.top, 16)
-        .opacity(pulse ? 0.45 : 1)
-        .animation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true), value: pulse)
-        .onAppear { pulse = true }
+        .artaShimmer()
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Cargando mensajes")
     }
 }
 
-/// Error de carga con «Reintentar» (no se confunde con «Aún no hay mensajes»).
+/// Error de carga con «Reintentar» (no se confunde con «Aún no hay mensajes»). Mismo estilo
+/// que los demás vacíos y errores de la app.
 struct ChatErrorState: View {
     let message: String
     var onRetry: () -> Void
 
     var body: some View {
-        VStack(spacing: 12) {
-            Image(systemName: "wifi.exclamationmark").font(.system(size: 34, weight: .light)).foregroundStyle(ArtaColor.tertiary)
-            Text("No se pudo cargar").font(.headline).foregroundStyle(ArtaColor.text)
-            Text(message).font(.subheadline).foregroundStyle(ArtaColor.muted).multilineTextAlignment(.center)
-            Button("Reintentar", action: onRetry)
-                .buttonStyle(ArtaPrimaryButtonStyle(fullWidth: false))
-            .padding(.top, 4)
-        }
-        .padding(32)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        EmptyState(
+            icon: "wifi.exclamationmark",
+            title: "No se pudo cargar",
+            message: message,
+            actionTitle: "Reintentar",
+            action: onRetry
+        )
     }
 }
 
@@ -341,6 +357,7 @@ struct EmojiPickerSheet: View {
             }
         }
         .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
     }
 
     private func pick(_ emoji: String) {

@@ -138,6 +138,7 @@ struct MessageActionsSheet: View {
             }
             .padding(.horizontal, 16)
         }
+        .artaHorizontalEdgeFade(ArtaSpace.m)
     }
 
     private var blockTitle: String {

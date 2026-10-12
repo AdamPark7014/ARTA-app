@@ -14,11 +14,18 @@ import XCTest
 /// revisión `auditorio-*` (sin prefijo `NN-`: van a `debug/` del artefacto de logs, no a la tienda).
 /// («06-eventos» es el hub del primer evento de la semana que lista Inicio: la app no
 /// tiene lista nativa de eventos en la navegación).
+/// Para revisar cortes también se adjuntan (a `debug/`, nunca a la tienda): `arta-*` (detalle
+/// de tarea, hojas, finales de pantalla contra la barra de pestañas, Más, info del canal),
+/// `auditorio-*`, `xxl-*` (relanzando con letra grande, Dynamic Type XXL) y `login-*`
+/// (relanzando sin modo demo).
 ///
 /// Identificadores que pone la app:
 ///   tab-inicio  tab-chats  tab-tareas  tab-avisos  tab-mas          (HomeView)
 ///   chat-event-<id> / chat-row-<id>                                 (ChatListView)
 ///   inicio-approvals  inicio-approvals-card  inicio-event-<id>      (InicioView)
+///   inicio-new-task                                                 (InicioView)
+///   task-row-<id>  tasks-filter-<filtro>                            (TasksView)
+///   approval-order-<id>                                             (ApprovalsView)
 ///   inicio-entity-chip  entity-notice                               (ActiveEntity)
 ///
 /// Todo es TOLERANTE: si una pantalla no aparece se anota como omitida, se adjunta el
@@ -37,6 +44,7 @@ final class StoreScreenshotsUITests: XCTestCase {
     private var monitorDeAlertas: NSObjectProtocol?
     private var capturadas: [String] = []
     private var omitidas: [String] = []
+    private var revisiones: [String] = []
 
     /// Botones que aceptan una alerta del sistema (no se espera ninguna: el demo no pide permisos).
     private static let botonesPermitir = [
@@ -190,16 +198,205 @@ final class StoreScreenshotsUITests: XCTestCase {
             omitir("avisos: no se encontró la pestaña")
         }
 
-        // 8. Tema oscuro: Auditorio (revisión visual, no son capturas de tienda).
+        // 8. Más pantallas de Arta para revisar cortes (no son capturas de tienda: van a debug/).
+        recorrerArtaExtra()
+
+        // 9. Tema oscuro: Auditorio (revisión visual, no son capturas de tienda).
         recorrerAuditorio()
 
+        adjuntarResumen()
+        XCTAssertFalse(capturadas.isEmpty, "No se pudo hacer ni una sola captura")
+
+        // 10. Relanzando la app: letra grande (Dynamic Type XXL) y la pantalla de entrada.
+        recorrerLetraGrande()
+        capturarLogin()
+        adjuntarResumen()
+    }
+
+    private func adjuntarResumen() {
         let listaCapturadas = capturadas.joined(separator: ", ")
         let listaOmitidas = omitidas.map { "  - \($0)" }.joined(separator: "\n")
         adjuntarTexto(
             "resumen",
-            "Capturadas (\(capturadas.count)): \(listaCapturadas)\nOmitidas (\(omitidas.count)):\n\(listaOmitidas)\n"
+            "Capturadas (\(capturadas.count)): \(listaCapturadas)\nRevisión: \(revisiones.joined(separator: ", "))\nOmitidas (\(omitidas.count)):\n\(listaOmitidas)\n"
         )
-        XCTAssertFalse(capturadas.isEmpty, "No se pudo hacer ni una sola captura")
+    }
+
+    // MARK: - Revisión de Arta (cortes, hojas y finales de pantalla)
+
+    private func recorrerArtaExtra() {
+        // Tareas: la fila de filtros desplazada al final y el detalle de una tarea.
+        if irAPestana(.tareas) {
+            pausa(1.0)
+            let filtro = porPrefijo("tasks-filter-")
+            if buscar([filtro], timeout: 5) != nil {
+                filtro.swipeLeft()
+                pausa(0.8)
+                revisar("arta-08-tareas-filtros-al-final")
+                filtro.swipeRight()
+                pausa(0.5)
+            }
+            if abrir([porPrefijo("task-row-")], desde: "Tareas") {
+                pausa(1.5)
+                revisar("arta-09-tarea")
+                deslizarArriba(2)
+                revisar("arta-10-tarea-abajo")
+                volver(a: "Tareas", pestana: .tareas)
+            } else {
+                omitir("revisión: no se abrió ninguna tarea")
+            }
+        }
+
+        if irAPestana(.inicio) {
+            asegurarRaiz(.inicio, titulo: "Inicio")
+            // El final de Inicio contra la barra de pestañas.
+            deslizarArriba(4)
+            revisar("arta-11-inicio-abajo")
+            subirAlInicio(porId("inicio-entity-chip"))
+
+            // Hoja de nueva tarea.
+            if tocarSiExiste([porId("inicio-new-task")], timeout: 6) {
+                pausa(1.5)
+                revisar("arta-12-nueva-tarea")
+                cerrarHoja(["Cancelar"])
+            }
+
+            // Aprobaciones y el detalle de la orden de compra.
+            asegurarRaiz(.inicio, titulo: "Inicio")
+            if abrir([porId("inicio-approvals"), porId("inicio-approvals-card")], desde: "Inicio") {
+                pausa(1.2)
+                if tocarSiExiste([porPrefijo("approval-order-")], timeout: 6) {
+                    pausa(1.8)
+                    revisar("arta-13-orden-de-compra")
+                    deslizarArriba(2)
+                    revisar("arta-14-orden-de-compra-abajo")
+                    cerrarHoja(["Cerrar"])
+                }
+                volver(a: "Inicio", pestana: .inicio)
+            }
+
+            // Evento: el final de la ficha y su pestaña de tareas.
+            asegurarRaiz(.inicio, titulo: "Inicio")
+            if abrir([porPrefijo("inicio-event-")], desde: "Inicio") {
+                pausa(1.5)
+                deslizarArriba(4)
+                revisar("arta-15-evento-abajo")
+                for _ in 0..<4 { app.swipeDown(); pausa(0.4) }
+                let tareasDelEvento = app.segmentedControls.buttons["Tareas"]
+                if tareasDelEvento.exists {
+                    tocar(tareasDelEvento)
+                    pausa(1.0)
+                    revisar("arta-16-evento-tareas")
+                }
+                volver(a: "Inicio", pestana: .inicio)
+            }
+        }
+
+        // Más: arriba y el final de la lista.
+        if tocarSiExiste([app.tabBars.buttons.matching(identifier: "tab-mas").firstMatch, porId("tab-mas")], timeout: 6) {
+            pausa(1.0)
+            revisar("arta-17-mas")
+            deslizarArriba(4)
+            revisar("arta-18-mas-abajo")
+        }
+
+        // Chats: información del canal del evento (desde el título de la conversación).
+        if irAPestana(.chats) {
+            pausa(0.8)
+            let tituloChats = tituloActual()
+            if abrir([porPrefijo("chat-event-")], desde: tituloChats) {
+                pausa(1.5)
+                let cabecera = app.navigationBars.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Noche de Boleros")).firstMatch
+                if tocarSiExiste([cabecera], timeout: 4) {
+                    pausa(1.5)
+                    revisar("arta-19-canal-info")
+                }
+                volver(a: tituloChats, pestana: .chats)
+                volver(a: tituloChats, pestana: .chats)
+            }
+        }
+    }
+
+    // MARK: - Letra grande y entrada (relanzan la app)
+
+    /// Dynamic Type XXL: lo que antes se cortaba con «…» debe acomodarse en más renglones.
+    private func recorrerLetraGrande() {
+        app.terminate()
+        app.launchArguments = [
+            "-ArtaDemo", "YES",
+            "-AppleLanguages", "(es-MX)",
+            "-AppleLocale", "es_MX",
+            "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryXXL"
+        ]
+        app.launch()
+        guard buscar(elementosDePestana(.inicio), timeout: 40) != nil else {
+            omitir("letra grande: la app no llegó a las pestañas")
+            return
+        }
+        _ = buscar([app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "Hola")).firstMatch], timeout: 20)
+        pausa(1.5)
+        revisar("xxl-01-inicio")
+        deslizarArriba(3)
+        revisar("xxl-02-inicio-medio")
+        if irAPestana(.tareas) {
+            pausa(1.5)
+            revisar("xxl-03-tareas")
+        }
+        if irAPestana(.chats) {
+            pausa(1.2)
+            revisar("xxl-04-chats")
+        }
+        if irAPestana(.avisos) {
+            pausa(1.2)
+            revisar("xxl-05-avisos")
+        }
+    }
+
+    /// Sin modo demo y sin sesión guardada, la app abre en la pantalla de entrada.
+    private func capturarLogin() {
+        app.terminate()
+        app.launchArguments = ["-ArtaDemo", "NO", "-AppleLanguages", "(es-MX)", "-AppleLocale", "es_MX"]
+        app.launchEnvironment = ["TZ": "America/Mexico_City"]
+        app.launch()
+        if buscar([porId("login-email")], timeout: 30) != nil {
+            pausa(1.0)
+            revisar("login-01-entrada")
+        } else {
+            omitir("login: no apareció la pantalla de entrada")
+            adjuntarJerarquia("dbg-sin-login")
+        }
+    }
+
+    /// Captura de revisión (sin prefijo `NN-`: el flujo la deja en debug/, no en la tienda).
+    private func revisar(_ nombre: String) {
+        despejarAlertas()
+        esperarSinCarga()
+        adjuntarCapturaDebug(nombre)
+        revisiones.append(nombre)
+    }
+
+    private func deslizarArriba(_ veces: Int) {
+        for _ in 0..<veces {
+            app.swipeUp()
+            pausa(0.5)
+        }
+        pausa(0.6)
+    }
+
+    /// Cierra una hoja con su botón («Cancelar», «Cerrar») o, si no aparece, deslizándola hacia abajo.
+    private func cerrarHoja(_ botones: [String]) {
+        for nombre in botones {
+            let boton = app.buttons[nombre]
+            if boton.exists && boton.isHittable {
+                boton.tap()
+                pausa(1.0)
+                return
+            }
+        }
+        let inicio = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.15))
+        let fin = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.95))
+        inicio.press(forDuration: 0.05, thenDragTo: fin)
+        pausa(1.0)
     }
 
     // MARK: - Auditorio (tema oscuro)
@@ -264,6 +461,27 @@ final class StoreScreenshotsUITests: XCTestCase {
         if tocarSiExiste([app.tabBars.buttons.matching(identifier: "tab-mas").firstMatch, porId("tab-mas")], timeout: 6) {
             pausa(1.0)
             adjuntarCapturaDebug("auditorio-06-mas")
+            deslizarArriba(4)
+            revisar("auditorio-07-mas-abajo")
+        }
+        if irAPestana(.tareas) {
+            pausa(1.0)
+            if abrir([porPrefijo("task-row-")], desde: "Tareas") {
+                pausa(1.5)
+                revisar("auditorio-08-tarea")
+                volver(a: "Tareas", pestana: .tareas)
+            }
+        }
+        if irAPestana(.inicio) {
+            asegurarRaiz(.inicio, titulo: "Inicio")
+            deslizarArriba(4)
+            revisar("auditorio-09-inicio-abajo")
+            subirAlInicio(chip)
+            if abrir([porId("inicio-approvals"), porId("inicio-approvals-card")], desde: "Inicio") {
+                pausa(1.5)
+                revisar("auditorio-10-aprobaciones")
+                volver(a: "Inicio", pestana: .inicio)
+            }
         }
 
         // De regreso a Arta, como estaba.

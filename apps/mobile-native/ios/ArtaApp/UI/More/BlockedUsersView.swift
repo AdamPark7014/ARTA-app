@@ -49,6 +49,7 @@ struct BlockedUsersView: View {
                 .listStyle(.insetGrouped)
                 .scrollContentBackground(.hidden)
                 .refreshable { await load() }
+                .artaTabBarScrim()
             }
         }
         .artaScreenBackground()

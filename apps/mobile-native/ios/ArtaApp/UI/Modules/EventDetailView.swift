@@ -53,6 +53,15 @@ struct EventDetailView: View {
         .navigationTitle(event?.name ?? "Evento")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
+            // Nombres largos: se achican un poco antes de cortarse (el nombre completo va en la tarjeta).
+            ToolbarItem(placement: .principal) {
+                Text(event?.name ?? "Evento")
+                    .font(.headline)
+                    .foregroundStyle(ArtaColor.text)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+                    .accessibilityAddTraits(.isHeader)
+            }
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
                     Task { await openChat() }
@@ -100,9 +109,11 @@ struct EventDetailView: View {
                 }
                 moreCard(event)
             }
-            .padding(16)
+            .padding(.horizontal, ArtaLayout.gutter)
+            .padding(.vertical, ArtaSpace.l)
         }
         .refreshable { await load() }
+        .artaTabBarScrim()
     }
 
     private func header(_ event: ArtaEventDetail) -> some View {
@@ -124,6 +135,7 @@ struct EventDetailView: View {
                     .font(ArtaFont.display(24, weight: .semibold))
                     .tracking(-0.4)
                     .foregroundStyle(ArtaColor.text)
+                    .fixedSize(horizontal: false, vertical: true)
                     .textSelection(.enabled)
                 if let artist = event.artist, !artist.isEmpty, artist != event.name {
                     Text(artist)
@@ -132,6 +144,7 @@ struct EventDetailView: View {
                 }
                 Label(MDate.eventWhen(event.startsAt, event.endsAt), systemImage: "calendar")
                     .font(.subheadline)
+                    .monospacedDigit()
                     .foregroundStyle(ArtaColor.text)
                 let place = [event.venue, event.city].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
                 if !place.isEmpty {
@@ -142,6 +155,7 @@ struct EventDetailView: View {
                 if let schedule = event.schedule, !schedule.isEmpty {
                     Label(schedule, systemImage: "clock")
                         .font(.subheadline)
+                        .monospacedDigit()
                         .foregroundStyle(ArtaColor.text)
                 }
                 if let functions = event.functions, functions > 0 {
@@ -167,39 +181,48 @@ struct EventDetailView: View {
         let orders = event.purchaseOrders ?? []
         let pendingOrders = orders.filter { $0.status == "PENDING_AUTH" }
         let overdue = openTasks.filter { DueBucket.of($0) == .overdue }.count
-        return VStack(alignment: .leading, spacing: 16) {
-            LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
-                Button {
-                    openWeb(event, tab: "checklists", label: "Formatos")
-                } label: {
-                    tile("Formatos", value: checklists.isEmpty ? "—" : "\(avg)%",
-                         detail: checklists.count == 1 ? "1 formato" : "\(checklists.count) formatos", icon: "list.clipboard",
-                         progress: checklists.isEmpty ? nil : Double(avg) / 100)
-                }
-                .buttonStyle(.plain)
-                Button {
-                    pane = .tasks
-                } label: {
-                    tile("Tareas", value: "\(openTasks.count)",
-                         detail: overdue > 0 ? "\(overdue) vencida(s)" : "abiertas", icon: "checklist",
-                         alert: overdue > 0)
-                }
-                .buttonStyle(.plain)
-                if canPo {
-                    Button {
-                        openWeb(event, tab: "ocs", label: "Órdenes de compra")
-                    } label: {
-                        tile("Por autorizar", value: "\(pendingOrders.count)",
-                             detail: Money.mxn(pendingOrders.reduce(0) { $0 + ($1.amount?.value ?? 0) }), icon: "doc.text")
+        var tiles: [SummaryTile] = [
+            SummaryTile(id: "checklists", title: "Formatos", value: checklists.isEmpty ? "—" : "\(avg)%",
+                        detail: checklists.isEmpty ? "Sin formatos" : pluralized(checklists.count, "formato", "formatos"),
+                        icon: "list.clipboard", progress: checklists.isEmpty ? nil : Double(avg) / 100) {
+                openWeb(event, tab: "checklists", label: "Formatos")
+            },
+            SummaryTile(id: "tasks", title: "Tareas", value: "\(openTasks.count)",
+                        detail: overdue > 0 ? pluralized(overdue, "vencida", "vencidas") : (openTasks.count == 1 ? "abierta" : "abiertas"),
+                        icon: "checklist", alert: overdue > 0) {
+                withAnimation(.snappy(duration: 0.25)) { pane = .tasks }
+            },
+        ]
+        if canPo {
+            tiles.append(SummaryTile(id: "ocs", title: "Por autorizar", value: "\(pendingOrders.count)",
+                                     detail: Money.mxn(pendingOrders.reduce(0) { $0 + ($1.amount?.value ?? 0) }), icon: "doc.text") {
+                openWeb(event, tab: "ocs", label: "Órdenes de compra")
+            })
+        }
+        let files = (event.files ?? []).count
+        tiles.append(SummaryTile(id: "files", title: "Documentos", value: "\(files)",
+                                 detail: files == 1 ? "archivo" : "archivos", icon: "folder") {
+            openWeb(event, tab: "files", label: "Documentos")
+        })
+        let rows = stride(from: 0, to: tiles.count, by: 2).map { Array(tiles[$0..<min($0 + 2, tiles.count)]) }
+        return VStack(alignment: .leading, spacing: ArtaSpace.l) {
+            // Renglones de dos tarjetas del mismo alto (con o sin barra de avance).
+            VStack(spacing: ArtaSpace.m) {
+                ForEach(rows, id: \.first?.id) { row in
+                    HStack(spacing: ArtaSpace.m) {
+                        ForEach(row) { item in
+                            Button(action: item.action) {
+                                tile(item.title, value: item.value, detail: item.detail, icon: item.icon,
+                                     alert: item.alert, progress: item.progress)
+                            }
+                            .buttonStyle(ArtaPressStyle())
+                        }
+                        if row.count == 1 {
+                            Color.clear.frame(maxWidth: .infinity)
+                        }
                     }
-                    .buttonStyle(.plain)
+                    .fixedSize(horizontal: false, vertical: true)
                 }
-                Button {
-                    openWeb(event, tab: "files", label: "Documentos")
-                } label: {
-                    tile("Documentos", value: "\((event.files ?? []).count)", detail: "archivos", icon: "folder")
-                }
-                .buttonStyle(.plain)
             }
 
             ModuleCard(title: "Ficha") {
@@ -253,7 +276,8 @@ struct EventDetailView: View {
                                         Text(checklist.title ?? "Formato")
                                             .font(.subheadline)
                                             .foregroundStyle(ArtaColor.text)
-                                            .lineLimit(1)
+                                            .lineLimit(2)
+                                            .multilineTextAlignment(.leading)
                                         Spacer(minLength: 8)
                                         Text("\(Int(checklist.progressPct ?? 0))%")
                                             .font(.caption.weight(.semibold))
@@ -292,12 +316,17 @@ struct EventDetailView: View {
                 ProgressBar(value: progress)
                     .padding(.vertical, 2)
             }
+            Spacer(minLength: 0)
             Text(detail)
                 .font(.caption)
+                .monospacedDigit()
                 .foregroundStyle(alert ? ArtaColor.danger : ArtaColor.tertiary)
-                .lineLimit(1)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
         }
-        .artaCard(padding: 14)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .artaCard(padding: ArtaSpace.l)
+        .contentShape(Rectangle())
     }
 
     // MARK: Tareas del evento
@@ -354,7 +383,7 @@ struct EventDetailView: View {
                 }
                 .buttonStyle(.plain)
                 if task.id != list.last?.id {
-                    Divider().overlay(ArtaColor.line)
+                    ArtaDivider(leading: 36)
                 }
             }
         }
@@ -413,9 +442,9 @@ struct EventDetailView: View {
                         .padding(.vertical, 10)
                         .contentShape(Rectangle())
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(ArtaPressStyle(scale: 0.99))
                     if tab.id != tabs.last?.id {
-                        Divider().overlay(ArtaColor.line)
+                        ArtaDivider(leading: 36)
                     }
                 }
             }
@@ -459,6 +488,18 @@ struct EventDetailView: View {
         }
         openingChat = false
     }
+}
+
+/// Tarjeta de cifra del resumen del evento.
+private struct SummaryTile: Identifiable {
+    let id: String
+    let title: String
+    let value: String
+    let detail: String
+    let icon: String
+    var alert = false
+    var progress: Double?
+    let action: () -> Void
 }
 
 private struct EventWebTab: Identifiable {

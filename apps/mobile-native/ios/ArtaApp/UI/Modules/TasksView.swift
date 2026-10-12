@@ -111,12 +111,16 @@ struct TasksView: View {
                                 TaskRow(task: task)
                             }
                             .listRowBackground(ArtaColor.bgElev)
+                            .listRowSeparatorTint(ArtaColor.line)
+                            // Para la prueba de interfaz de las capturas (detalle de tarea).
+                            .accessibilityIdentifier("task-row-\(task.id)")
                         }
                     } header: {
                         HStack {
                             Text(group.bucket.title)
                             Spacer()
                             Text("\(group.tasks.count)")
+                                .monospacedDigit()
                         }
                         .foregroundStyle(group.bucket == .overdue ? ArtaColor.danger : ArtaColor.muted)
                     }
@@ -128,46 +132,57 @@ struct TasksView: View {
                 if groups.isEmpty { emptyView }
             }
             .refreshable { await load() }
+            .artaTabBarScrim()
         }
     }
 
     private var header: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: ArtaSpace.m) {
             Picker("Vista", selection: $scope) {
                 ForEach(scopes) { s in
                     Text(s.title).tag(s)
                 }
             }
             .pickerStyle(.segmented)
+            .padding(.horizontal, ArtaLayout.gutter)
 
+            // Los chips corren de borde a borde: arrancan en el margen, se desvanecen en las
+            // orillas y al final dejan el mismo margen (ninguna etiqueta queda partida).
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
+                HStack(spacing: ArtaSpace.s) {
                     ForEach(Filter.allCases) { f in
                         chip(f)
                     }
                 }
+                .padding(.horizontal, ArtaLayout.gutter)
+                .padding(.vertical, ArtaSpace.xxs)
             }
+            .artaHorizontalEdgeFade(ArtaSpace.m)
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 8)
+        .padding(.vertical, ArtaSpace.s)
         .background(ArtaColor.bg)
     }
 
     private func chip(_ f: Filter) -> some View {
         let on = f == filter
         return Button {
-            filter = f
+            withAnimation(.snappy(duration: 0.22)) { filter = f }
             Haptics.tap()
         } label: {
             Text(f.title)
                 .font(.footnote.weight(.semibold))
                 .foregroundStyle(on ? ArtaColor.onAccent : ArtaColor.muted)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
+                .lineLimit(1)
+                .fixedSize()
+                .padding(.horizontal, 14)
+                .padding(.vertical, 7)
                 .background(ArtaControlShape().fill(on ? ArtaColor.accentFill : AnyShapeStyle(ArtaColor.surface)))
                 .overlay(ArtaControlShape().strokeBorder(on ? Color.clear : ArtaColor.lineStrong, lineWidth: 1))
+                .contentShape(ArtaControlShape())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(ArtaPressStyle(scale: 0.95))
+        .accessibilityIdentifier("tasks-filter-\(f.rawValue)")
+        .accessibilityAddTraits(on ? .isSelected : [])
     }
 
     @ViewBuilder
@@ -292,42 +307,62 @@ struct TaskRow: View {
         return ArtaColor.tertiary
     }
 
+    /// «vence hoy 23:00 · Noche de Boleros»: un solo texto que se acomoda en dos renglones
+    /// en vez de cortar la hora o el evento con puntos suspensivos.
+    private var meta: Text? {
+        var parts: [Text] = []
+        if !task.isDone, let due = MDate.dueText(task.dueAt) {
+            parts.append(Text(due).foregroundColor(overdue ? ArtaColor.danger : ArtaColor.tertiary))
+        }
+        if showEvent, let name = task.event?.name?.moduleTrimmed, !name.isEmpty {
+            parts.append(Text(name).foregroundColor(ArtaColor.tertiary))
+        }
+        guard let first = parts.first else { return nil }
+        return parts.dropFirst().reduce(first) { $0 + Text(" · ").foregroundColor(ArtaColor.tertiary) + $1 }
+    }
+
+    /// El título usa todo el ancho; el estado va abajo a la derecha, junto a las personas,
+    /// para no robarle espacio al título.
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
+        HStack(alignment: .top, spacing: ArtaSpace.m) {
             Image(systemName: icon)
                 .font(.title3)
                 .foregroundStyle(iconColor)
                 .frame(width: 24)
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: ArtaSpace.xs) {
                 Text(task.title)
                     .strikethrough(task.isDone, color: ArtaColor.tertiary)
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(task.isDone ? ArtaColor.muted : ArtaColor.text)
-                    .lineLimit(2)
-                HStack(spacing: 4) {
-                    if !task.isDone, let due = MDate.dueText(task.dueAt) {
-                        Text(due).foregroundStyle(overdue ? ArtaColor.danger : ArtaColor.tertiary)
-                    }
-                    if showEvent, let name = task.event?.name, !name.isEmpty {
-                        Text("· \(name)").foregroundStyle(ArtaColor.tertiary)
-                    }
+                    .lineLimit(3)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+                if let meta {
+                    meta
+                        .font(.caption)
+                        .monospacedDigit()
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-                .font(.caption)
-                .lineLimit(1)
-                PeopleLine(names: task.people.map(\.name))
                 if !task.isDone, let note = task.rejectionNote, !note.isEmpty {
                     Text("Corrección: \(note)")
                         .font(.caption)
                         .foregroundStyle(ArtaColor.danger)
                         .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-            }
-            Spacer(minLength: 4)
-            if let engagement = TaskInfo.engagement(task) {
-                StatusPill(text: engagement.0, tone: engagement.1)
+                HStack(alignment: .center, spacing: ArtaSpace.s) {
+                    PeopleLine(names: task.people.map(\.name))
+                    Spacer(minLength: ArtaSpace.s)
+                    if let engagement = TaskInfo.engagement(task) {
+                        StatusPill(text: engagement.0, tone: engagement.1)
+                    }
+                }
+                .padding(.top, ArtaSpace.xxs)
             }
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, ArtaSpace.xs)
         .contentShape(Rectangle())
     }
 }
@@ -600,6 +635,7 @@ struct AssigneePickerSheet: View {
             }
         }
         .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
     }
 
     private func row(_ person: DirectoryPerson) -> some View {

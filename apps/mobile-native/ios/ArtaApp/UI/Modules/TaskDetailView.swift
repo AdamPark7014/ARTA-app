@@ -141,9 +141,11 @@ struct TaskDetailView: View {
                 evidenceCard(t)
                 historyCard(t)
             }
-            .padding(16)
+            .padding(.horizontal, ArtaLayout.gutter)
+            .padding(.vertical, ArtaSpace.l)
         }
         .refreshable { await load() }
+        .artaTabBarScrim()
     }
 
     private func headerCard(_ t: ArtaTask) -> some View {
@@ -152,12 +154,14 @@ struct TaskDetailView: View {
                 Text(t.title)
                     .font(.title3.weight(.bold))
                     .foregroundStyle(ArtaColor.text)
+                    .fixedSize(horizontal: false, vertical: true)
                     .textSelection(.enabled)
-                HStack(spacing: 8) {
+                HStack(spacing: ArtaSpace.s) {
                     StatusPill(text: TaskInfo.statusLabel(t.status), tone: TaskInfo.statusTone(t.status))
                     if !t.isDone, let due = MDate.dueText(t.dueAt) {
                         Text(due)
                             .font(.caption.weight(.semibold))
+                            .monospacedDigit()
                             .foregroundStyle(DueBucket.of(t) == .overdue ? ArtaColor.danger : ArtaColor.muted)
                     }
                 }
@@ -168,8 +172,9 @@ struct TaskDetailView: View {
                         Label(event.name ?? "Evento", systemImage: "calendar")
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(ArtaColor.accent)
+                            .multilineTextAlignment(.leading)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(ArtaPressStyle(scale: 0.97))
                 } else {
                     Label("Sin evento", systemImage: "calendar").font(.subheadline).foregroundStyle(ArtaColor.muted)
                 }
@@ -278,10 +283,13 @@ struct TaskDetailView: View {
             } else {
                 VStack(alignment: .leading, spacing: 10) {
                     ForEach(Array(t.people.enumerated()), id: \.element.id) { index, person in
-                        HStack(spacing: 12) {
+                        HStack(spacing: ArtaSpace.m) {
                             Avatar(name: person.name, size: 32)
-                            Text(person.name).font(.subheadline).foregroundStyle(ArtaColor.text)
-                            Spacer()
+                            Text(person.name)
+                                .font(.subheadline)
+                                .foregroundStyle(ArtaColor.text)
+                                .fixedSize(horizontal: false, vertical: true)
+                            Spacer(minLength: ArtaSpace.s)
                             if index == 0 && t.people.count > 1 {
                                 StatusPill(text: "Principal", tone: .accent)
                             }
@@ -305,7 +313,11 @@ struct TaskDetailView: View {
                             HStack(spacing: 12) {
                                 Image(systemName: fileIcon(ev.fileUrl)).foregroundStyle(ArtaColor.accent).frame(width: 24)
                                 VStack(alignment: .leading, spacing: 2) {
-                                    Text(ev.displayName).font(.subheadline).foregroundStyle(ArtaColor.text).lineLimit(1)
+                                    Text(ev.displayName)
+                                        .font(.subheadline)
+                                        .foregroundStyle(ArtaColor.text)
+                                        .lineLimit(2)
+                                        .truncationMode(.middle)
                                     Text([ev.uploadedBy?.name, MDate.stampText(ev.createdAt)].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · "))
                                         .font(.caption)
                                         .foregroundStyle(ArtaColor.muted)
@@ -356,7 +368,9 @@ struct TaskDetailView: View {
                                 Text(TaskInfo.actionLabel(item.action)).font(.subheadline.weight(.semibold)).foregroundStyle(ArtaColor.text)
                                 Text([item.actor?.name ?? "Sistema", MDate.stampText(item.createdAt)].filter { !$0.isEmpty }.joined(separator: " · "))
                                     .font(.caption)
+                                    .monospacedDigit()
                                     .foregroundStyle(ArtaColor.muted)
+                                    .fixedSize(horizontal: false, vertical: true)
                                 if let extra = TaskInfo.activityDetail(item) {
                                     Text(extra).font(.footnote).foregroundStyle(ArtaColor.text)
                                 }
@@ -579,7 +593,9 @@ struct DeliverTaskSheet: View {
                     Text("Evidencia")
                 } footer: {
                     if !task.evidenceList.isEmpty {
-                        Text("Ya hay \(task.evidenceList.count) archivo(s) adjunto(s) en esta tarea.")
+                        Text(task.evidenceList.count == 1
+                             ? "Ya hay 1 archivo adjunto en esta tarea."
+                             : "Ya hay \(task.evidenceList.count) archivos adjuntos en esta tarea.")
                     }
                 }
                 .listRowBackground(ArtaColor.bgElev)

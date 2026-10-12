@@ -355,22 +355,223 @@ struct CountBadge: View {
     }
 }
 
+/// Vacío, error o «sin resultados»: el mismo estilo en toda la app (ícono en un círculo
+/// de superficie con línea fina, título 600, mensaje secundario y, si aplica, una acción).
 struct EmptyState: View {
     let icon: String
     let title: String
     var message: String?
+    var actionTitle: String?
+    var action: (() -> Void)?
 
     var body: some View {
-        VStack(spacing: 10) {
-            Image(systemName: icon)
-                .font(.system(size: 34, weight: .light))
-                .foregroundStyle(ArtaColor.tertiary)
-            Text(title).font(.headline).foregroundStyle(ArtaColor.text)
-            if let message {
-                Text(message).font(.subheadline).foregroundStyle(ArtaColor.muted).multilineTextAlignment(.center)
+        VStack(spacing: ArtaSpace.m) {
+            ZStack {
+                Circle().fill(ArtaColor.surface2)
+                Circle().strokeBorder(ArtaColor.line, lineWidth: 1)
+                Image(systemName: icon)
+                    .font(.system(size: 22, weight: .regular))
+                    .foregroundStyle(ArtaColor.muted)
+            }
+            .frame(width: 60, height: 60)
+            .padding(.bottom, ArtaSpace.xs)
+            .accessibilityHidden(true)
+            Text(title)
+                .font(.headline)
+                .foregroundStyle(ArtaColor.text)
+                .multilineTextAlignment(.center)
+            if let message, !message.isEmpty {
+                Text(message)
+                    .font(.subheadline)
+                    .foregroundStyle(ArtaColor.muted)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: 300)
+            }
+            if let actionTitle, let action {
+                Button(actionTitle, action: action)
+                    .buttonStyle(ArtaPrimaryButtonStyle(fullWidth: false))
+                    .padding(.top, ArtaSpace.xs)
             }
         }
-        .padding(32)
+        .padding(ArtaSpace.xxxl)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .accessibilityElement(children: .contain)
     }
+}
+
+// MARK: - Espaciado y márgenes (grilla de 4 pt)
+
+enum ArtaSpace {
+    static let xxs: CGFloat = 2
+    static let xs: CGFloat = 4
+    static let s: CGFloat = 8
+    static let m: CGFloat = 12
+    static let l: CGFloat = 16
+    static let xl: CGFloat = 20
+    static let xxl: CGFloat = 24
+    static let xxxl: CGFloat = 32
+}
+
+enum ArtaLayout {
+    /// Margen lateral de pantalla: el mismo que usa el sistema en listas, buscador y
+    /// barras (20 pt en los iPhone anchos —Plus y Pro Max—, 16 en los demás). Así las
+    /// pantallas propias y las listas del sistema quedan alineadas al mismo borde.
+    @MainActor static var gutter: CGFloat {
+        UIScreen.main.bounds.width >= 414 ? 20 : 16
+    }
+
+    /// Lo que se desvanece arriba de la barra de pestañas (y el aire extra que deja el
+    /// contenido para que lo último nunca quede bajo el desvanecido).
+    static let bottomFade: CGFloat = 28
+}
+
+// MARK: - Bordes de desplazamiento
+
+/// Desvanecido del fondo bajo la barra de pestañas flotante: lo que se desplaza se funde
+/// con el papel (o el negro) antes de llegar a la barra y no asoma cortado alrededor de
+/// ella. No intercepta toques.
+struct ArtaBottomScrim: View {
+    var fade: CGFloat = ArtaLayout.bottomFade
+
+    var body: some View {
+        GeometryReader { proxy in
+            let inset = proxy.safeAreaInsets.bottom
+            // Parte del degradado entra bajo la barra; el resto, sólido hasta el borde.
+            let overlap = min(inset, 22)
+            VStack(spacing: 0) {
+                Spacer(minLength: 0)
+                LinearGradient(
+                    stops: [
+                        .init(color: ArtaColor.bg.opacity(0), location: 0),
+                        .init(color: ArtaColor.bg.opacity(0.78), location: 0.55),
+                        .init(color: ArtaColor.bg, location: 1),
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .frame(height: fade + overlap)
+                ArtaColor.bg.frame(height: max(inset - overlap, 0))
+            }
+            .ignoresSafeArea(.container, edges: .bottom)
+        }
+        // Con el teclado arriba, el desvanecido se queda abajo (tapado), no sube con él.
+        .ignoresSafeArea(.keyboard, edges: .bottom)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+}
+
+extension View {
+    /// Pantallas con la barra de pestañas visible: desvanecido abajo y aire para que el
+    /// último bloque se pueda leer completo al final del desplazamiento.
+    func artaTabBarScrim() -> some View {
+        self
+            .contentMargins(.bottom, ArtaLayout.bottomFade, for: .scrollContent)
+            .overlay(alignment: .bottom) { ArtaBottomScrim() }
+    }
+
+    /// Filas horizontales (chips): los bordes se desvanecen en vez de cortar una etiqueta
+    /// a la mitad contra el borde de la pantalla.
+    func artaHorizontalEdgeFade(_ width: CGFloat = ArtaSpace.l) -> some View {
+        mask {
+            HStack(spacing: 0) {
+                LinearGradient(colors: [.clear, .black], startPoint: .leading, endPoint: .trailing)
+                    .frame(width: width)
+                Rectangle().fill(.black)
+                LinearGradient(colors: [.black, .clear], startPoint: .leading, endPoint: .trailing)
+                    .frame(width: width)
+            }
+        }
+    }
+}
+
+// MARK: - Línea fina
+
+/// Separador de 1 pt en el color de línea, con sangría para no cruzar la tarjeta de lado a lado.
+struct ArtaDivider: View {
+    var leading: CGFloat = 0
+
+    var body: some View {
+        Rectangle()
+            .fill(ArtaColor.line)
+            .frame(height: 1)
+            .padding(.leading, leading)
+            .accessibilityHidden(true)
+    }
+}
+
+// MARK: - Estado presionado
+
+/// Tarjetas, mosaicos y filas tocables: se hunden apenas (escala y tono) con un resorte corto.
+struct ArtaPressStyle: ButtonStyle {
+    var scale: CGFloat = 0.98
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? scale : 1)
+            .opacity(configuration.isPressed ? 0.86 : 1)
+            .animation(.spring(response: 0.26, dampingFraction: 0.72), value: configuration.isPressed)
+    }
+}
+
+// MARK: - Esqueleto con brillo
+
+/// Brillo que recorre los marcadores de carga: blanco suave sobre papel en ARTA, reflejo
+/// plata tenue en Auditorio. Con «Reducir movimiento», queda quieto.
+struct ArtaShimmer: ViewModifier {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var phase: CGFloat = 0
+
+    func body(content: Content) -> some View {
+        content
+            .overlay {
+                if !reduceMotion {
+                    GeometryReader { geo in
+                        let width = geo.size.width
+                        let band = max(width * 0.45, 120)
+                        LinearGradient(
+                            colors: [.clear, highlight, .clear],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                        .frame(width: band)
+                        .offset(x: -band + phase * (width + band))
+                    }
+                    .mask { content }
+                    .allowsHitTesting(false)
+                }
+            }
+            .onAppear {
+                guard !reduceMotion else { return }
+                withAnimation(.linear(duration: 1.35).repeatForever(autoreverses: false)) { phase = 1 }
+            }
+    }
+
+    private var highlight: Color {
+        ArtaTheme.isLight ? Color.white.opacity(0.75) : Color(hex: 0xC7CCD4, opacity: 0.1)
+    }
+}
+
+extension View {
+    func artaShimmer() -> some View { modifier(ArtaShimmer()) }
+}
+
+/// Marcador de carga (barra redondeada en el relleno neutro).
+struct SkeletonBar: View {
+    var width: CGFloat?
+    var height: CGFloat = 10
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: min(height / 2, ArtaRadius.small), style: .continuous)
+            .fill(ArtaColor.surface2)
+            .frame(width: width, height: height)
+    }
+}
+
+// MARK: - Texto
+
+/// «1 pendiente» / «3 pendientes».
+func pluralized(_ count: Int, _ one: String, _ many: String) -> String {
+    "\(count) \(count == 1 ? one : many)"
 }

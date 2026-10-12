@@ -242,23 +242,31 @@ struct ConversationView: View {
         }
     }
 
+    /// Canal de evento: el evento de título; el artista pasa al subtítulo.
+    private var channelName: EventChannelName? {
+        guard let ch = model.channel else { return nil }
+        return EventChannelName(ch.displayName, isEvent: ch.isEvent && !ch.isDirect && !ch.isGroup)
+    }
+
     private var titleBlock: some View {
         HStack(spacing: 8) {
             if !inThread { headerAvatar }
             VStack(alignment: inThread ? .center : .leading, spacing: 1) {
-                Text(inThread ? "Hilo" : (model.channel?.displayName ?? "…"))
+                Text(inThread ? "Hilo" : (channelName?.title ?? "…"))
                     .font(.headline)
                     .foregroundStyle(ArtaColor.text)
                     .lineLimit(1)
+                    .minimumScaleFactor(0.85)
                 if !subtitle.isEmpty {
                     Text(subtitle)
                         .font(.caption)
                         .foregroundStyle(subtitleColor)
                         .lineLimit(1)
+                        .minimumScaleFactor(0.9)
                 }
             }
         }
-        .frame(maxWidth: 260)
+        .frame(maxWidth: 280)
         .contentShape(Rectangle())
     }
 
@@ -290,9 +298,11 @@ struct ConversationView: View {
         if !model.typing.isEmpty {
             return model.typing.count == 1 ? "\(model.typing[0]) está escribiendo…" : "Varios están escribiendo…"
         }
-        if inThread { return model.channel?.displayName ?? "" }
+        if inThread { return channelName?.title ?? "" }
         guard let ch = model.channel else { return "" }
         if ch.isDirect { return isPeerOnline ? "en línea" : (ch.peer?.title ?? "Mensaje directo") }
+        // «Trío Luna de Plata» en vez de un título cortado; el tema genérico sobra.
+        if let context = channelName?.context { return context }
         if let topic = ch.topic, !topic.isEmpty { return topic }
         var parts: [String] = []
         if let n = ch.memberCount, n > 0 { parts.append(n == 1 ? "1 miembro" : "\(n) miembros") }
@@ -1031,6 +1041,7 @@ struct ConversationView: View {
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Listo") { showPins = false } } }
         }
         .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
     }
 }
 

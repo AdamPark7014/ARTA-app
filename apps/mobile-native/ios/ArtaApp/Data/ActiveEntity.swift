@@ -175,7 +175,8 @@ final class ActiveEntity: ObservableObject {
 // MARK: - Piezas de interfaz
 
 /// Aviso arriba de la pantalla tras cambiar de entidad (propuesta visual): en Arta,
-/// píldora negra con texto blanco; en Auditorio, plata con texto negro. No intercepta toques.
+/// píldora negra con texto blanco; en Auditorio, plata con texto negro. Compacto y centrado
+/// (no tapa la marca ni el chip del encabezado) y entra con un resorte. No intercepta toques.
 struct EntityNoticeBanner: View {
     let notice: EntityNotice?
 
@@ -185,14 +186,14 @@ struct EntityNoticeBanner: View {
                 let light = notice.entity == .arta
                 HStack(spacing: 8) {
                     Image(systemName: "arrow.left.arrow.right")
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(.system(size: 12, weight: .semibold))
                     Text(notice.text)
                         .font(.system(size: 14, weight: .semibold, design: .rounded))
-                    Spacer(minLength: 0)
+                        .lineLimit(1)
                 }
                 .foregroundStyle(light ? Color.white : Color(hex: 0x0A0A0B))
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
+                .padding(.horizontal, 18)
+                .padding(.vertical, 10)
                 .background(
                     Group {
                         if light {
@@ -203,13 +204,13 @@ struct EntityNoticeBanner: View {
                     }
                 )
                 .shadow(color: .black.opacity(light ? 0.22 : 0.6), radius: light ? 12 : 17, x: 0, y: light ? 8 : 14)
-                .padding(.horizontal, 14)
                 .padding(.top, 6)
-                .transition(.move(edge: .top).combined(with: .opacity))
+                .transition(.move(edge: .top).combined(with: .opacity).combined(with: .scale(scale: 0.92, anchor: .top)))
                 .accessibilityIdentifier("entity-notice")
             }
         }
-        .animation(.easeOut(duration: 0.25), value: notice)
+        .frame(maxWidth: .infinity)
+        .animation(.spring(response: 0.38, dampingFraction: 0.78), value: notice)
         .allowsHitTesting(false)
     }
 }

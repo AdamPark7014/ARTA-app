@@ -226,6 +226,7 @@ struct ChannelInfoView: View {
         .listStyle(.insetGrouped)
         .scrollContentBackground(.hidden)
         .refreshable { await model.load() }
+        .artaTabBarScrim()
     }
 
     // MARK: Secciones
@@ -237,6 +238,7 @@ struct ChannelInfoView: View {
                 .font(.title3.weight(.semibold))
                 .foregroundStyle(ArtaColor.text)
                 .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
             Text(kindLabel(ch))
                 .font(.subheadline)
                 .foregroundStyle(ch.isDirect && presence.isOnline(ch.peer?.id) ? ArtaColor.online : ArtaColor.muted)
@@ -543,6 +545,7 @@ private struct EditChannelSheet: View {
             }
         }
         .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
         .onAppear {
             guard !loaded else { return }
             loaded = true
@@ -678,7 +681,9 @@ struct PeoplePickerSections: View {
                             .accessibilityLabel("Quitar a \(person.fullName)")
                         }
                     }
+                    .padding(.horizontal, ArtaSpace.xs)
                 }
+                .artaHorizontalEdgeFade(ArtaSpace.s)
             }
         } footer: {
             if let limit, onPick == nil {
@@ -870,6 +875,7 @@ struct SavedMessagesView: View {
             .listStyle(.plain)
             .scrollContentBackground(.hidden)
             .refreshable { await model.load() }
+            .artaTabBarScrim()
         }
     }
 

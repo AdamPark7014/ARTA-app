@@ -148,6 +148,7 @@ struct MoreView: View {
             .listRowBackground(ArtaColor.bgElev)
         }
         .scrollContentBackground(.hidden)
+        .artaTabBarScrim()
         .artaScreenBackground()
         .navigationTitle("Más")
         .confirmationDialog("¿Cerrar sesión en este teléfono?", isPresented: $confirmLogout, titleVisibility: .visible) {
@@ -175,24 +176,33 @@ struct MoreView: View {
     private var profileHeader: some View {
         HStack(spacing: 16) {
             Avatar(name: user.name, size: 56)
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: ArtaSpace.xs) {
                 Text(user.name)
                     .font(.title3.weight(.semibold))
                     .foregroundStyle(ArtaColor.text)
+                    .fixedSize(horizontal: false, vertical: true)
                 if let title = user.title, !title.isEmpty {
-                    Text(title).font(.subheadline).foregroundStyle(ArtaColor.muted)
+                    Text(title)
+                        .font(.subheadline)
+                        .foregroundStyle(ArtaColor.muted)
+                        .fixedSize(horizontal: false, vertical: true)
                 } else if let email = user.email {
-                    Text(email).font(.subheadline).foregroundStyle(ArtaColor.muted)
+                    Text(email)
+                        .font(.subheadline)
+                        .foregroundStyle(ArtaColor.muted)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
                 }
                 StatusPill(text: WebModule.roleLabel(access.roleKey), tone: .accent)
+                    .padding(.top, ArtaSpace.xxs)
                 Text(activeEntity.current.brandName)
                     .font(.caption)
-                    .foregroundStyle(ArtaColor.muted)
+                    .foregroundStyle(ArtaColor.tertiary)
                     .accessibilityIdentifier("more-entity-brand")
             }
             Spacer(minLength: 0)
         }
-        .padding(.vertical, 8)
+        .padding(.vertical, ArtaSpace.s)
     }
 
     private func legalRow(_ title: String, systemImage: String, url: URL, id: String) -> some View {

@@ -69,8 +69,8 @@ struct ApprovalsView: View {
                 }
             }
             .pickerStyle(.segmented)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 8)
+            .padding(.horizontal, ArtaLayout.gutter)
+            .padding(.vertical, ArtaSpace.s)
             .background(ArtaColor.bg)
         }
         .overlay(alignment: .bottom) {
@@ -175,6 +175,7 @@ struct ApprovalsView: View {
             .listStyle(.insetGrouped)
             .scrollContentBackground(.hidden)
             .refreshable { await load() }
+            .artaTabBarScrim()
         }
     }
 
@@ -236,22 +237,27 @@ struct ApprovalsView: View {
                     Text(row.vendorName?.isEmpty == false ? (row.vendorName ?? "") : POInfo.rubroLabel(row.rubro))
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(ArtaColor.text)
-                        .lineLimit(1)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
                     Text([row.eventName ?? "Sin evento", POInfo.rubroLabel(row.rubro)].joined(separator: " · "))
                         .font(.caption)
                         .foregroundStyle(ArtaColor.muted)
-                        .lineLimit(1)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
                     Text(orderMeta(row))
                         .font(.caption)
-                        .foregroundStyle(ArtaColor.muted)
-                        .lineLimit(1)
+                        .foregroundStyle(ArtaColor.tertiary)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-                Spacer(minLength: 8)
-                VStack(alignment: .trailing, spacing: 4) {
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .layoutPriority(1)
+                VStack(alignment: .trailing, spacing: 6) {
                     Text(Money.mxn(row.amount?.value))
                         .font(.subheadline.weight(.semibold))
                         .monospacedDigit()
                         .foregroundStyle(ArtaColor.text)
+                        .fixedSize()
                     StatusPill(text: POInfo.statusLabel(row.status), tone: POInfo.statusTone(row.status))
                 }
             }
@@ -259,6 +265,8 @@ struct ApprovalsView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        // Para la prueba de interfaz de las capturas (detalle de la orden).
+        .accessibilityIdentifier("approval-order-\(row.id)")
     }
 
     private func orderMeta(_ row: PurchaseOrderRow) -> String {
@@ -278,21 +286,27 @@ struct ApprovalsView: View {
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(ArtaColor.text)
                         .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
                     Text(advanceEventLine(advance))
                         .font(.caption)
                         .foregroundStyle(ArtaColor.muted)
-                        .lineLimit(1)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
                     Text(advanceMeta(advance))
                         .font(.caption)
-                        .foregroundStyle(ArtaColor.muted)
-                        .lineLimit(1)
+                        .monospacedDigit()
+                        .foregroundStyle(ArtaColor.tertiary)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-                Spacer(minLength: 8)
-                VStack(alignment: .trailing, spacing: 4) {
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .layoutPriority(1)
+                VStack(alignment: .trailing, spacing: 6) {
                     Text(Money.mxn(advance.amount?.value))
                         .font(.subheadline.weight(.semibold))
                         .monospacedDigit()
                         .foregroundStyle(ArtaColor.text)
+                        .fixedSize()
                     StatusPill(text: AdvanceInfo.statusLabel(advance.advanceStatus),
                                tone: AdvanceInfo.statusTone(advance.advanceStatus))
                 }
@@ -402,6 +416,7 @@ struct ApprovalsView: View {
             .listStyle(.insetGrouped)
             .scrollContentBackground(.hidden)
             .refreshable { await load() }
+            .artaTabBarScrim()
         }
     }
 
@@ -627,8 +642,11 @@ struct PurchaseOrderSheet: View {
                 ModuleCard {
                     VStack(alignment: .leading, spacing: 8) {
                         Text(amountText)
-                            .font(.largeTitle.weight(.bold))
-                            .foregroundStyle(ArtaColor.text)
+                            .font(ArtaFont.figure(34))
+                            .tracking(-0.8)
+                            .foregroundStyle(ArtaColor.figureStyle)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.7)
                         HStack(spacing: 8) {
                             StatusPill(text: POInfo.statusLabel(po.status), tone: POInfo.statusTone(po.status))
                             if let withIva = po.withIva {
@@ -694,7 +712,11 @@ struct PurchaseOrderSheet: View {
                                         }
                                     }
                                     Spacer(minLength: 8)
-                                    Text(Money.mxn(line.total?.value)).font(.subheadline.weight(.semibold)).foregroundStyle(ArtaColor.text)
+                                    Text(Money.mxn(line.total?.value))
+                                        .font(.subheadline.weight(.semibold))
+                                        .monospacedDigit()
+                                        .foregroundStyle(ArtaColor.text)
+                                        .fixedSize()
                                 }
                             }
                         }
@@ -782,7 +804,8 @@ struct PurchaseOrderSheet: View {
                     }
                 }
             }
-            .padding(16)
+            .padding(.horizontal, ArtaLayout.gutter)
+            .padding(.vertical, ArtaSpace.l)
         }
     }
 

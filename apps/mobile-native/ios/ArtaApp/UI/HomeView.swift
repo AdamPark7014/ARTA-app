@@ -10,11 +10,15 @@ struct SignedInView: View {
     @EnvironmentObject private var activeEntity: ActiveEntity
 
     var body: some View {
-        HomeView(user: user)
-            .id(activeEntity.current)
-            .overlay(alignment: .top) {
-                EntityNoticeBanner(notice: activeEntity.notice)
-            }
+        ZStack {
+            HomeView(user: user)
+                .id(activeEntity.current)
+                // Cambio de entidad: la app vieja se funde en la nueva (papel ⇄ negro) en vez de saltar.
+                .transition(.opacity.animation(.easeInOut(duration: 0.32)))
+        }
+        .overlay(alignment: .top) {
+            EntityNoticeBanner(notice: activeEntity.notice)
+        }
     }
 }
 

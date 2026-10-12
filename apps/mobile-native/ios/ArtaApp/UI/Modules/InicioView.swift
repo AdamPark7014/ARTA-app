@@ -94,9 +94,9 @@ struct InicioView: View {
 
     private var content: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: ArtaSpace.m) {
                 header
-                    .padding(.bottom, 10)
+                    .padding(.bottom, ArtaSpace.s)
                 greeting
                 if let refreshError {
                     Label(refreshError, systemImage: "exclamationmark.triangle.fill")
@@ -104,20 +104,22 @@ struct InicioView: View {
                         .foregroundStyle(ArtaColor.danger)
                 }
                 kpiRow
-                    .padding(.top, 6)
+                    .padding(.top, ArtaSpace.s)
                 if !timeline.isEmpty { todayCard }
                 if showsApprovals { approvalsCard }
                 tasksCard
                 shortcuts
-                    .padding(.top, 4)
+                    .padding(.top, ArtaSpace.xs)
                 eventsCard
             }
-            .padding(.horizontal, 16)
+            .padding(.horizontal, ArtaLayout.gutter)
             // La barra de navegación queda vacía (la marca va aquí): el encabezado sube a su altura.
             .padding(.top, -24)
-            .padding(.bottom, 24)
+            .padding(.bottom, ArtaSpace.l)
         }
         .refreshable { await load() }
+        // El final (Próximos 7 días) ya no asoma cortado detrás de la barra de pestañas.
+        .artaTabBarScrim()
     }
 
     // MARK: Encabezado y saludo
@@ -263,17 +265,19 @@ struct InicioView: View {
                 if let detail {
                     Text(detail)
                         .font(.caption)
+                        .monospacedDigit()
                         .foregroundStyle(ArtaColor.tertiary)
                         .lineLimit(2)
                         .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 Spacer(minLength: 0)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .artaCard(padding: 14)
+            .artaCard(padding: ArtaSpace.l)
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(ArtaPressStyle())
         .accessibilityIdentifier(id)
     }
 
@@ -348,15 +352,16 @@ struct InicioView: View {
 
     private var todayCard: some View {
         let items = timeline
-        return PanelCard(title: "Hoy", trailing: todayEvents.count == 1 ? todayEvents.first?.name : "\(todayEvents.count) eventos") {
-            VStack(alignment: .leading, spacing: 12) {
+        // Con un solo evento hoy su nombre ya va en la línea de tiempo: arriba, solo cuántos hay.
+        return PanelCard(title: "Hoy", trailing: todayEvents.count == 1 ? nil : "\(todayEvents.count) eventos") {
+            VStack(alignment: .leading, spacing: ArtaSpace.m) {
                 ForEach(items) { item in
                     Button {
                         router.open(item.route)
                     } label: {
                         timelineRow(item)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(ArtaPressStyle(scale: 0.99))
                     .accessibilityIdentifier("inicio-today-\(item.id)")
                 }
             }
@@ -378,11 +383,14 @@ struct InicioView: View {
                     .foregroundStyle(ArtaColor.text)
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
                 if let detail = item.detail {
                     Text(detail)
                         .font(.caption)
                         .foregroundStyle(ArtaColor.tertiary)
-                        .lineLimit(1)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
             Spacer(minLength: 0)
@@ -417,10 +425,9 @@ struct InicioView: View {
             ))
         }
         for advance in approvalAdvances {
-            let label = advance.label?.moduleTrimmed ?? ""
             out.append(ApprovalItem(
                 id: "adv-\(advance.id)",
-                title: label.isEmpty ? "Anticipo" : "Anticipo · " + label,
+                title: Self.advanceTitle(advance.label),
                 detail: Self.joined([advance.uploadedBy?.name, advance.event?.name]),
                 amount: Money.mxn(advance.amount?.value),
                 status: advance.isPending ? "Revisar" : "Por pagar",
@@ -429,10 +436,11 @@ struct InicioView: View {
             ))
         }
         for task in approvalTasks {
+            // El título de la tarea manda (hasta dos renglones); el tipo y el evento, abajo.
             out.append(ApprovalItem(
                 id: "task-\(task.id)",
-                title: "Entrega de tarea",
-                detail: Self.joined([task.title, task.event?.name]),
+                title: task.title,
+                detail: Self.joined(["Entrega de tarea", task.event?.name]),
                 amount: nil,
                 status: "Revisar",
                 tone: .warn,
@@ -458,51 +466,74 @@ struct InicioView: View {
                 VStack(alignment: .leading, spacing: 0) {
                     ForEach(items) { item in
                         if item.id != items.first?.id {
-                            Rectangle().fill(ArtaColor.line).frame(height: 1)
+                            ArtaDivider()
                         }
                         Button {
                             router.open(item.route)
                         } label: {
                             approvalRow(item)
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(ArtaPressStyle(scale: 0.99))
                     }
                     if approvalItems.count > items.count {
                         Text("y \(approvalItems.count - items.count) más")
                             .font(.footnote)
                             .foregroundStyle(ArtaColor.tertiary)
-                            .padding(.top, 8)
+                            .padding(.top, ArtaSpace.s)
                     }
                 }
+                // Primera y última fila sin aire de más contra el título y el borde.
+                .padding(.vertical, -ArtaSpace.s)
             }
         }
     }
 
+    /// Texto a la izquierda en dos renglones si hace falta; monto arriba y estado abajo a la
+    /// derecha, en su propia columna, para que ninguno le quite el ancho al otro.
     private func approvalRow(_ item: ApprovalItem) -> some View {
-        HStack(alignment: .center, spacing: 10) {
-            VStack(alignment: .leading, spacing: 2) {
+        HStack(alignment: .top, spacing: ArtaSpace.m) {
+            VStack(alignment: .leading, spacing: 3) {
                 Text(item.title)
                     .font(.subheadline)
                     .foregroundStyle(ArtaColor.text)
-                    .lineLimit(1)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
                 if !item.detail.isEmpty {
                     Text(item.detail)
                         .font(.caption)
                         .foregroundStyle(ArtaColor.tertiary)
-                        .lineLimit(1)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
-            Spacer(minLength: 6)
-            if let amount = item.amount {
-                Text(amount)
-                    .font(.footnote.monospacedDigit())
-                    .foregroundStyle(ArtaColor.text)
-                    .lineLimit(1)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .layoutPriority(1)
+            VStack(alignment: .trailing, spacing: 6) {
+                if let amount = item.amount {
+                    Text(amount)
+                        .font(.subheadline.weight(.semibold))
+                        .monospacedDigit()
+                        .foregroundStyle(ArtaColor.text)
+                        .lineLimit(1)
+                        .fixedSize()
+                }
+                StatusPill(text: item.status, tone: item.tone)
             }
-            StatusPill(text: item.status, tone: item.tone)
         }
-        .padding(.vertical, 10)
+        .padding(.vertical, ArtaSpace.m)
         .contentShape(Rectangle())
+    }
+
+    /// «Anticipo de hospedaje» tal cual (sin «Anticipo · Anticipo de…»); si la etiqueta no
+    /// dice que es anticipo, se antepone.
+    private static func advanceTitle(_ label: String?) -> String {
+        let clean = label?.moduleTrimmed ?? ""
+        guard !clean.isEmpty else { return "Anticipo" }
+        let folded = clean.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: Locale(identifier: "es_MX"))
+        if folded.hasPrefix("anticipo") { return clean }
+        return "Anticipo · " + clean
     }
 
     // MARK: Pendientes
@@ -512,22 +543,24 @@ struct InicioView: View {
             if dueTasks.isEmpty {
                 Label(openTasks.isEmpty
                       ? "Sin pendientes. Todo al día."
-                      : "Nada vence hoy. Tienes \(openTasks.count) pendiente(s) más adelante.",
+                      : "Nada vence hoy. Tienes \(pluralized(openTasks.count, "pendiente", "pendientes")) más adelante.",
                       systemImage: "checkmark.circle")
                     .font(.subheadline)
                     .foregroundStyle(ArtaColor.muted)
+                    .fixedSize(horizontal: false, vertical: true)
             } else {
                 let shown = Array(dueTasks.prefix(6))
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: ArtaSpace.s) {
                     ForEach(shown) { task in
                         Button {
                             router.open(AppRoute.task(task.id))
                         } label: {
                             TaskRow(task: task)
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(ArtaPressStyle(scale: 0.99))
                         if task.id != shown.last?.id {
-                            Rectangle().fill(ArtaColor.line).frame(height: 1)
+                            // Sangría hasta el texto (ícono 24 + 12), no de lado a lado.
+                            ArtaDivider(leading: 36)
                         }
                     }
                     if dueTasks.count > shown.count {
@@ -547,60 +580,79 @@ struct InicioView: View {
 
     // MARK: Accesos
 
+    private struct Shortcut: Identifiable {
+        let id: String
+        let title: String
+        let icon: String
+        var badge = 0
+        var primary = false
+        let action: () -> Void
+    }
+
+    private var shortcutItems: [Shortcut] {
+        var items: [Shortcut] = [
+            Shortcut(id: "inicio-new-task", title: "Nueva tarea", icon: "plus", primary: true) { showNewTask = true },
+            Shortcut(id: "inicio-my-tasks", title: "Mis tareas", icon: "checklist") { router.select(.tareas) },
+        ]
+        if showsApprovals {
+            items.append(Shortcut(id: "inicio-approvals", title: "Aprobaciones", icon: "checkmark.seal", badge: totalApprovals) {
+                router.open(AppRoute.approvals)
+            })
+        }
+        items.append(Shortcut(id: "inicio-calendar", title: "Calendario", icon: "calendar") {
+            router.open(AppRoute.web(path: "/calendar", title: "Calendario"))
+        })
+        if seesPurchaseOrders {
+            items.append(Shortcut(id: "inicio-purchase-orders", title: "Órdenes de compra", icon: "doc.text") {
+                router.open(AppRoute.web(path: "/purchase-orders", title: "Órdenes de compra"))
+            })
+        }
+        return items
+    }
+
+    /// Dos columnas con renglones del mismo alto; si sobra uno, ocupa el renglón completo
+    /// (sin un mosaico huérfano a media pantalla).
     private var shortcuts: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        let items = shortcutItems
+        let rows = stride(from: 0, to: items.count, by: 2).map { Array(items[$0..<min($0 + 2, items.count)]) }
+        return VStack(alignment: .leading, spacing: ArtaSpace.m) {
             CapLabel("Accesos")
-                .padding(.leading, 4)
-            LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
-                tile("Nueva tarea", icon: "plus", id: "inicio-new-task", primary: true) { showNewTask = true }
-                tile("Mis tareas", icon: "checklist", id: "inicio-my-tasks") { router.select(.tareas) }
-                if showsApprovals {
-                    tile("Aprobaciones", icon: "checkmark.seal", id: "inicio-approvals", badge: totalApprovals) {
-                        router.open(AppRoute.approvals)
+                .padding(.leading, ArtaSpace.xs)
+            VStack(spacing: ArtaSpace.m) {
+                ForEach(rows, id: \.first?.id) { row in
+                    HStack(spacing: ArtaSpace.m) {
+                        ForEach(row) { item in tile(item) }
                     }
-                }
-                tile("Calendario", icon: "calendar", id: "inicio-calendar") {
-                    router.open(AppRoute.web(path: "/calendar", title: "Calendario"))
-                }
-                if seesPurchaseOrders {
-                    tile("Órdenes de compra", icon: "doc.text", id: "inicio-purchase-orders") {
-                        router.open(AppRoute.web(path: "/purchase-orders", title: "Órdenes de compra"))
-                    }
+                    .fixedSize(horizontal: false, vertical: true)
                 }
             }
         }
     }
 
     /// `id`: identificador de accesibilidad (lo usan las pruebas de interfaz de las capturas).
-    private func tile(
-        _ title: String,
-        icon: String,
-        id: String,
-        badge: Int = 0,
-        primary: Bool = false,
-        action: @escaping () -> Void
-    ) -> some View {
+    private func tile(_ item: Shortcut) -> some View {
         Button {
             Haptics.tap()
-            action()
+            item.action()
         } label: {
             HStack(spacing: 10) {
-                Image(systemName: icon)
-                    .font(.system(size: 16, weight: primary ? .semibold : .regular))
+                Image(systemName: item.icon)
+                    .font(.system(size: 16, weight: item.primary ? .semibold : .regular))
                     .frame(width: 20)
-                Text(title)
+                Text(item.title)
                     .font(.subheadline.weight(.semibold))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
                 Spacer(minLength: 0)
-                if badge > 0 { CountBadge(count: badge) }
+                if item.badge > 0 { CountBadge(count: item.badge) }
             }
-            .foregroundStyle(primary ? ArtaColor.onAccent : ArtaColor.text)
+            .foregroundStyle(item.primary ? ArtaColor.onAccent : ArtaColor.text)
             .padding(.horizontal, 14)
-            .padding(.vertical, 13)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.vertical, 14)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
             .background {
-                if primary {
+                if item.primary {
                     RoundedRectangle(cornerRadius: ArtaRadius.card, style: .continuous).fill(ArtaColor.accentFill)
                 } else {
                     ArtaCardBackground()
@@ -608,8 +660,8 @@ struct InicioView: View {
             }
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
-        .accessibilityIdentifier(id)
+        .buttonStyle(ArtaPressStyle())
+        .accessibilityIdentifier(item.id)
     }
 
     // MARK: Semana
@@ -627,17 +679,18 @@ struct InicioView: View {
                     .foregroundStyle(ArtaColor.muted)
             } else {
                 let rows = upcoming
-                VStack(alignment: .leading, spacing: 10) {
+                VStack(alignment: .leading, spacing: ArtaSpace.m) {
                     ForEach(rows) { event in
                         if event.id != rows.first?.id {
-                            Rectangle().fill(ArtaColor.line).frame(height: 1)
+                            // Sangría hasta el texto (cuadro de fecha 46 + 12).
+                            ArtaDivider(leading: 58)
                         }
                         Button {
                             router.open(AppRoute.event(event.id))
                         } label: {
                             EventRow(event: event)
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(ArtaPressStyle(scale: 0.99))
                         .accessibilityIdentifier("inicio-event-\(event.id)")
                     }
                 }
