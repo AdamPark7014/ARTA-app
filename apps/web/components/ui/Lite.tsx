@@ -23,7 +23,8 @@ export function SectionHead({
     <div className="sx-head">
       <div className="sx-head__copy">
         <h2 className="sx-head__title">{title}</h2>
-        {sub ? <p className="sx-head__sub">{sub}</p> : null}
+        {/* `div` y no `p`: en Campaña y Convenios el `sub` lleva la lista de estados (`<ol>`), que no cabe en un párrafo. */}
+        {sub ? <div className="sx-head__sub">{sub}</div> : null}
       </div>
       {children ? <div className="sx-actions">{children}</div> : null}
     </div>
