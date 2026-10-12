@@ -3,9 +3,9 @@
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { AppShell } from '@/components/app-shell/AppShell';
-import { EmptyLite, Pill, SectionHead } from '@/components/ui/Lite';
+import { EmptyLite } from '@/components/ui/Lite';
 import { LoadingBlock } from '@/components/ui/LoadingBlock';
-import { FieldSearch } from '@/components/ui/PageChrome';
+import { FieldSearch, PageHeader } from '@/components/ui/PageChrome';
 import { api } from '@/lib/api';
 import { userHasPermission } from '@/lib/access-matrix';
 import { boleteraDateLabel } from '@/lib/boletera';
@@ -117,11 +117,11 @@ export default function TicketingPage() {
   return (
     <AppShell title="Boletera">
       <div className="sx-stack page-workspace bol">
-        <SectionHead title="Creación de boletera" sub="Eventos actuales y su documento para la boletera.">
+        <PageHeader title="Creación de boletera" description="Eventos actuales y su documento para la boletera.">
           {rows.length > 6 ? (
             <FieldSearch value={q} onChange={setQ} placeholder="Buscar evento…" label="Buscar evento" />
           ) : null}
-        </SectionHead>
+        </PageHeader>
 
         {error ? (
           <p className="inline-note bol-error" role="alert">
@@ -168,7 +168,7 @@ export default function TicketingPage() {
                         </Link>
                         {meta ? <div className="t-muted t-small">{meta}</div> : null}
                       </td>
-                      <td>{setup ? setup.boletera : <Pill tone="draft">Sin crear</Pill>}</td>
+                      <td>{setup ? setup.boletera : <span className="t-muted">Sin crear</span>}</td>
                       <td className="num">
                         {capacity !== null ? capacity.toLocaleString('es-MX') : <span className="t-muted">—</span>}
                       </td>
@@ -189,7 +189,7 @@ export default function TicketingPage() {
                               </Link>
                             </>
                           ) : canEdit ? (
-                            <Link className="btn btn-sm" href={href}>
+                            <Link className="btn ghost btn-sm" href={href}>
                               Crear
                             </Link>
                           ) : (

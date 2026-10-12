@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { api } from '@/lib/api';
 import { Icon, ICONS } from './ChatAttachment';
 import { fold, plainText, type ChannelDetail, type ChannelSummary, type Colleague } from './chat-model';
-import { Avatar, ChannelGlyph, errorText, isDirectLike, Modal, PanelHead } from './chat-ui';
+import { Avatar, ChannelGlyph, channelDisplayName, errorText, isDirectLike, Modal, PanelHead } from './chat-ui';
 
 const GROUP_MAX = 8;
 
@@ -335,7 +335,7 @@ export function QuickSwitcher({
                 <>
                   <ChannelGlyph c={it.c} size="sm" online={it.c.kind === 'DIRECT' && it.c.peer ? isOnline(it.c.peer.id) : undefined} />
                   <span className="chat-row__main">
-                    <span className="chat-row__name">{isDirectLike(it.c) ? it.c.name : `#${it.c.name}`}</span>
+                    <span className="chat-row__name">{channelDisplayName(it.c)}</span>
                     {it.c.lastMessagePreview ? <span className="chat-row__preview">{plainText(it.c.lastMessagePreview)}</span> : null}
                   </span>
                   {it.c.unreadCount > 0 ? <span className="chat-row__badge">{it.c.unreadCount > 99 ? '99+' : it.c.unreadCount}</span> : null}

@@ -9,13 +9,12 @@ import {
   FieldCheck,
   FieldSelect,
   FlashMessage,
-  FormGrid,
   PageHeader,
 } from '@/components/ui/PageChrome';
-import { StatusBadge } from '@/components/ui/StatusBadge';
 import { roleLabel } from '@arta/rbac';
 import { api } from '@/lib/api';
 import { useUser } from '@/lib/user-context';
+import { fullDateTime, shortDate } from '@/lib/format';
 
 type Org = {
   id: string;
@@ -50,28 +49,38 @@ type InviteRow = {
   createdAt: string;
 };
 
+/** Planes en lenguaje de negocio (los valores del API siguen siendo TRIAL / OPS / ENTERPRISE). */
 const PLAN_LIMITS: Record<
   string,
   { label: string; users: number | '∞'; events: number | '∞'; features: string[] }
 > = {
   TRIAL: {
-    label: 'Trial',
+    label: 'Prueba',
     users: 10,
     events: 5,
-    features: ['Ops básico', 'Webhooks limitados', 'Digests email'],
+    features: ['Operación de eventos básica', 'Pocas conexiones con otros sistemas', 'Resumen diario por correo'],
   },
   OPS: {
-    label: 'Ops',
+    label: 'Operación',
     users: 50,
     events: 40,
-    features: ['Multi-entidad', 'Vendor PIN', 'Analytics completo'],
+    features: ['Arta y Auditorio en un mismo panel', 'Acceso de proveedores con PIN', 'Reportes completos'],
   },
   ENTERPRISE: {
-    label: 'Enterprise',
+    label: 'Empresa',
     users: '∞',
     events: '∞',
-    features: ['SSO path', 'Prioridad sync boletera', 'Soporte dedicado'],
+    features: ['Inicio de sesión corporativo', 'Boletera sincronizada con prioridad', 'Soporte dedicado'],
   },
+};
+
+const BILLING_LABEL: Record<string, string> = {
+  active: 'Pagos al corriente',
+  trialing: 'En periodo de prueba',
+  past_due: 'Pago pendiente',
+  unpaid: 'Pago pendiente',
+  canceled: 'Suscripción cancelada',
+  incomplete: 'Pago por completar',
 };
 
 export default function OrganizationsPage() {
@@ -144,8 +153,8 @@ export default function OrganizationsPage() {
       .finally(() => setLoading(false));
     if (typeof window !== 'undefined') {
       const q = new URLSearchParams(window.location.search);
-      if (q.get('billing') === 'success') setMsg('Suscripción actualizada · Stripe');
-      if (q.get('billing') === 'cancel') setMsg('Checkout cancelado');
+      if (q.get('billing') === 'success') setMsg('Suscripción actualizada');
+      if (q.get('billing') === 'cancel') setMsg('Pago cancelado');
     }
   }, []);
 
@@ -158,7 +167,7 @@ export default function OrganizationsPage() {
       });
       if (res.url) window.location.href = res.url;
     } catch (err) {
-      setMsg(err instanceof Error ? err.message : 'Error checkout');
+      setMsg(err instanceof Error ? err.message : 'No se pudo abrir el pago');
     }
   }
 
@@ -168,7 +177,7 @@ export default function OrganizationsPage() {
       const res = await api<{ url: string }>('/billing/portal', { method: 'POST' });
       if (res.url) window.location.href = res.url;
     } catch (err) {
-      setMsg(err instanceof Error ? err.message : 'Error portal');
+      setMsg(err instanceof Error ? err.message : 'No se pudo abrir la facturación');
     }
   }
 
@@ -178,7 +187,7 @@ export default function OrganizationsPage() {
     try {
       await api('/organizations', { method: 'POST', body: JSON.stringify(form) });
       setForm({ name: '', slug: '' });
-      setMsg('Organización creada (trial)');
+      setMsg('Organización creada en plan de prueba');
       await load();
     } catch (err) {
       setMsg(err instanceof Error ? err.message : 'Error');
@@ -204,10 +213,10 @@ export default function OrganizationsPage() {
       );
       setInviteForm({ email: '', roleKey: inviteForm.roleKey, entities: inviteForm.entities });
       setLastInviteUrl(created.acceptUrl);
-      setMsg(`Invitación enviada a ${created.email} (también en outbox email)`);
+      setMsg(`Invitación enviada a ${created.email}`);
       await loadPeople(me.id);
     } catch (err) {
-      setMsg(err instanceof Error ? err.message : 'Error invite');
+      setMsg(err instanceof Error ? err.message : 'No se pudo enviar la invitación');
     }
   }
 
@@ -242,11 +251,13 @@ export default function OrganizationsPage() {
     };
   }, [limits, usersNow, eventsNow]);
 
+  const billingLabel = billing?.billingStatus ? BILLING_LABEL[billing.billingStatus] || '' : '';
+
   const msgVariant =
-    msg === 'Checkout cancelado' || msg === 'Elige al menos una entidad'
+    msg === 'Pago cancelado' || msg === 'Elige al menos una entidad'
       ? 'warn'
-      : msg === 'Organización creada (trial)' ||
-          msg === 'Suscripción actualizada · Stripe' ||
+      : msg === 'Organización creada en plan de prueba' ||
+          msg === 'Suscripción actualizada' ||
           msg.startsWith('Invitación enviada')
         ? 'success'
         : 'error';
@@ -254,7 +265,10 @@ export default function OrganizationsPage() {
   return (
     <AppShell title="Organizaciones">
       <div className="stack page-workspace">
-        <PageHeader description="Tenants aislados (usuarios + eventos). Planes TRIAL / OPS / ENTERPRISE con límites soft enforced en API (crear usuarios, invites y eventos)." />
+        <PageHeader
+          title="Organizaciones"
+          description="Cada organización tiene su propio equipo y sus eventos; el plan marca cuántos caben."
+        />
         {msg ? (
           <FlashMessage variant={msgVariant} onDismiss={() => setMsg('')}>
             {msg}
@@ -263,256 +277,205 @@ export default function OrganizationsPage() {
 
         {loading ? (
           <>
-            <LoadingKpis count={4} />
+            <LoadingKpis count={3} />
             <LoadingBlock rows={4} label="Cargando organizaciones…" />
           </>
         ) : (
           <>
             {me ? (
-              <div className="grid-cards kpi-grid-dense">
-                <div className="kpi">
-                  <div className="label">Tenant</div>
-                  <div className="value" style={{ fontSize: '1.1rem' }}>
-                    {me.name}
+              <section className="org-card">
+                <div className="org-card__main">
+                  <p className="ph__eyebrow">Tu organización</p>
+                  <h2 className="org-card__name">{me.name}</h2>
+                  <p className="org-card__meta">
+                    <span className="pill">Plan {limits.label}</span>
+                    {typeof stats?.activeEvents === 'number' ? (
+                      <span>
+                        {stats.activeEvents} {stats.activeEvents === 1 ? 'evento activo' : 'eventos activos'}
+                      </span>
+                    ) : null}
+                    {billingLabel ? <span>{billingLabel}</span> : null}
+                  </p>
+                  <div className="org-usage">
+                    <UsageMeter label="Personas" now={usersNow} max={limits.users} pct={usage.usersPct} near={usage.usersNear} />
+                    <UsageMeter label="Eventos" now={eventsNow} max={limits.events} pct={usage.eventsPct} near={usage.eventsNear} />
                   </div>
-                  <div className="kpi-sub muted">
-                    {me.slug} · {limits.label}
-                  </div>
                 </div>
-                <div className={`kpi ${usage.usersNear ? 'kpi--danger' : ''}`}>
-                  <div className="label">Usuarios</div>
-                  <div className="value">
-                    {usersNow}
-                    <span className="muted" style={{ fontSize: 14 }}>
-                      {' '}
-                      / {limits.users}
-                    </span>
-                  </div>
-                  {limits.users !== '∞' ? (
-                    <div className="progress" style={{ marginTop: 8 }}>
-                      <span style={{ width: `${usage.usersPct}%` }} />
-                    </div>
-                  ) : null}
-                </div>
-                <div className={`kpi ${usage.eventsNear ? 'kpi--danger' : ''}`}>
-                  <div className="label">Eventos</div>
-                  <div className="value">
-                    {eventsNow}
-                    <span className="muted" style={{ fontSize: 14 }}>
-                      {' '}
-                      / {limits.events}
-                    </span>
-                  </div>
-                  {limits.events !== '∞' ? (
-                    <div className="progress" style={{ marginTop: 8 }}>
-                      <span style={{ width: `${usage.eventsPct}%` }} />
-                    </div>
-                  ) : null}
-                </div>
-                <div className="kpi">
-                  <div className="label">Activos</div>
-                  <div className="value">{stats?.activeEvents ?? '—'}</div>
-                </div>
-              </div>
-            ) : null}
-
-            <div className="dash-split">
-              <div className="panel">
-                <div className="panel-head">
-                  <h2>Plan · {limits.label}</h2>
-                </div>
-                <div className="panel-body">
-                  <ul className="muted" style={{ margin: '0 0 1rem', paddingLeft: '1.1rem', lineHeight: 1.55 }}>
+                <div className="org-card__plan">
+                  <p className="ph__eyebrow">Incluye</p>
+                  <ul className="org-features">
                     {limits.features.map((f) => (
                       <li key={f}>{f}</li>
                     ))}
                   </ul>
-                  <p className="muted" style={{ fontSize: 13, margin: 0 }}>
-                    Invita por email (sin password inicial). El link vive 7 días; si no hay SMTP, copia
-                    la URL que aparece al crear.
-                  </p>
-                  <div style={{ marginTop: 14 }}>
-                    <div className="muted" style={{ fontSize: 12, marginBottom: 8 }}>
-                      Billing · {billing?.billingStatus || '—'}
-                      {billing && !billing.configured ? ' · Stripe no configurado (env)' : ''}
-                    </div>
-                    <div className="btn-row" style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                  {billing?.configured || billing?.stripeCustomerId ? (
+                    <div className="org-card__actions">
                       {billing?.configured && plan !== 'OPS' ? (
                         <button className="btn" type="button" onClick={() => startCheckout('OPS')}>
-                          Suscribir Ops
+                          Contratar Operación
                         </button>
                       ) : null}
                       {billing?.configured && plan !== 'ENTERPRISE' ? (
                         <button className="btn ghost" type="button" onClick={() => startCheckout('ENTERPRISE')}>
-                          Suscribir Enterprise
+                          Contratar Empresa
                         </button>
                       ) : null}
                       {billing?.stripeCustomerId ? (
                         <button className="btn ghost" type="button" onClick={openPortal}>
-                          Portal Stripe
+                          Facturas y forma de pago
                         </button>
                       ) : null}
                     </div>
-                  </div>
-                  {isPlatform ? (
-                    <div className="panel" style={{ marginTop: 12 }}>
-                      <div className="panel-head">
-                        <h2>Nueva organización</h2>
-                      </div>
-                      <div className="panel-body">
-                        <form className="form" onSubmit={onCreate}>
-                          <FormGrid>
-                            <label>
-                              Nombre
-                              <input
-                                required
-                                value={form.name}
-                                onChange={(e) => setForm({ ...form, name: e.target.value })}
-                              />
-                            </label>
-                            <label>
-                              Slug
-                              <input
-                                required
-                                value={form.slug}
-                                onChange={(e) => setForm({ ...form, slug: e.target.value })}
-                                placeholder="mi-org"
-                              />
-                            </label>
-                          </FormGrid>
-                          <button className="btn" type="submit">
-                            Crear trial
-                          </button>
-                        </form>
-                      </div>
-                    </div>
                   ) : null}
                 </div>
-              </div>
+              </section>
+            ) : null}
 
-              <div className="panel">
-                <div className="panel-head">
-                  <h2>Directorio · {rows.length}</h2>
-                </div>
-                <div className="panel-body">
-                  {!rows.length ? (
-                    <EmptyState
-                      title="Sin listado"
-                      description="Requiere rol de dirección, o aún no hay orgs además del tenant actual."
-                    />
-                  ) : (
-                    <div className="table-wrap">
-                      <table className="table table-sticky">
-                        <thead>
-                          <tr>
-                            <th>Nombre</th>
-                            <th>Slug</th>
-                            <th>Plan</th>
-                            <th>2FA obligatorio</th>
-                            <th className="num">Usuarios</th>
-                            <th className="num">Eventos</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {rows.map((o) => (
-                            <tr key={o.id}>
-                              <td>
-                                <strong>{o.name}</strong>
-                                {!o.active ? <StatusBadge value="off" kind="raw" /> : null}
-                              </td>
-                              <td>
-                                <code>{o.slug}</code>
-                              </td>
-                              <td>
-                                {isPlatform ? (
-                                  <FieldSelect
-                                    value={o.plan}
-                                    onChange={async (v) => {
-                                      try {
-                                        await api(`/organizations/${o.id}`, {
-                                          method: 'PATCH',
-                                          body: JSON.stringify({ plan: v }),
-                                        });
-                                        await load();
-                                      } catch (err) {
-                                        setMsg(err instanceof Error ? err.message : 'Error plan');
-                                      }
-                                    }}
-                                    label={`Plan de ${o.name}`}
-                                    options={[
-                                      { value: 'TRIAL', label: 'TRIAL' },
-                                      { value: 'OPS', label: 'OPS' },
-                                      { value: 'ENTERPRISE', label: 'ENTERPRISE' },
-                                    ]}
-                                  />
-                                ) : (
-                                  <StatusBadge value={o.plan} kind="raw" />
-                                )}
-                              </td>
-                              <td>
-                                <label className="toggle-inline">
-                                  <input
-                                    type="checkbox"
-                                    checked={!!o.settingsJson?.require2fa}
-                                    onChange={async (e) => {
-                                      try {
-                                        await api(`/organizations/${o.id}`, {
-                                          method: 'PATCH',
-                                          body: JSON.stringify({ require2fa: e.target.checked }),
-                                        });
-                                        await load();
-                                      } catch (err) {
-                                        setMsg(err instanceof Error ? err.message : 'Error 2FA');
-                                      }
-                                    }}
-                                  />
-                                  <span>{o.settingsJson?.require2fa ? 'Sí' : 'No'}</span>
-                                </label>
-                              </td>
-                              <td className="num">{o._count?.users ?? 0}</td>
-                              <td className="num">{o._count?.events ?? 0}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </div>
+            <div className="panel">
+              <div className="panel-head">
+                <h2>Directorio · {rows.length}</h2>
               </div>
+              {!rows.length ? (
+                <div className="panel-body">
+                  <EmptyState
+                    title="Sin otras organizaciones"
+                    description="Aquí aparecen las organizaciones de la plataforma cuando tienes permiso de dirección."
+                  />
+                </div>
+              ) : (
+                <div className="table-wrap">
+                  <table className="table table-sticky org-table">
+                    <colgroup>
+                      <col />
+                      <col style={{ width: 170 }} />
+                      <col style={{ width: 150 }} />
+                      <col style={{ width: 110 }} />
+                      <col style={{ width: 110 }} />
+                    </colgroup>
+                    <thead>
+                      <tr>
+                        <th>Organización</th>
+                        <th>Plan</th>
+                        <th>Dos pasos</th>
+                        <th className="num">Personas</th>
+                        <th className="num">Eventos</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {rows.map((o) => (
+                        <tr key={o.id}>
+                          <td>
+                            <span className="org-table__name">{o.name}</span>
+                            <span className="org-table__sub">
+                              {o.slug}
+                              {!o.active ? ' · desactivada' : ''}
+                            </span>
+                          </td>
+                          <td>
+                            {isPlatform ? (
+                              <FieldSelect
+                                value={o.plan}
+                                onChange={async (v) => {
+                                  try {
+                                    await api(`/organizations/${o.id}`, {
+                                      method: 'PATCH',
+                                      body: JSON.stringify({ plan: v }),
+                                    });
+                                    await load();
+                                  } catch (err) {
+                                    setMsg(err instanceof Error ? err.message : 'No se pudo cambiar el plan');
+                                  }
+                                }}
+                                label={`Plan de ${o.name}`}
+                                options={Object.entries(PLAN_LIMITS).map(([value, p]) => ({ value, label: p.label }))}
+                              />
+                            ) : (
+                              <span className="pill">{(PLAN_LIMITS[o.plan] || PLAN_LIMITS.OPS).label}</span>
+                            )}
+                          </td>
+                          <td>
+                            <label className="toggle-inline">
+                              <input
+                                type="checkbox"
+                                checked={!!o.settingsJson?.require2fa}
+                                onChange={async (e) => {
+                                  try {
+                                    await api(`/organizations/${o.id}`, {
+                                      method: 'PATCH',
+                                      body: JSON.stringify({ require2fa: e.target.checked }),
+                                    });
+                                    await load();
+                                  } catch (err) {
+                                    setMsg(err instanceof Error ? err.message : 'No se pudo cambiar la verificación');
+                                  }
+                                }}
+                              />
+                              <span>{o.settingsJson?.require2fa ? 'Obligatoria' : 'Opcional'}</span>
+                            </label>
+                          </td>
+                          <td className="num">{o._count?.users ?? 0}</td>
+                          <td className="num">{o._count?.events ?? 0}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              {isPlatform ? (
+                <form className="org-new" onSubmit={onCreate}>
+                  <span className="org-new__title">Nueva organización</span>
+                  <input
+                    required
+                    aria-label="Nombre de la organización"
+                    placeholder="Nombre"
+                    value={form.name}
+                    onChange={(e) => setForm({ ...form, name: e.target.value })}
+                  />
+                  <input
+                    required
+                    aria-label="Identificador para la dirección web"
+                    placeholder="identificador-web"
+                    value={form.slug}
+                    onChange={(e) => setForm({ ...form, slug: e.target.value })}
+                  />
+                  <button className="btn ghost" type="submit">
+                    Crear en prueba
+                  </button>
+                </form>
+              ) : null}
             </div>
 
             {me ? (
-              <div className="dash-split">
+              <div className="users-layout">
                 <div className="panel">
                   <div className="panel-head">
-                    <h2>Invitar miembro</h2>
+                    <h2>Invitar a alguien</h2>
                   </div>
                   <div className="panel-body">
                     <form className="form" onSubmit={sendInvite}>
-                      <FormGrid>
-                        <label>
-                          Email
-                          <input
-                            required
-                            type="email"
-                            value={inviteForm.email}
-                            onChange={(e) => setInviteForm({ ...inviteForm, email: e.target.value })}
-                          />
-                        </label>
-                        <label>
-                          Rol
-                          <FieldSelect
-                            value={inviteForm.roleKey}
-                            onChange={(v) => setInviteForm({ ...inviteForm, roleKey: v })}
-                            label="Rol del invitado"
-                            options={(roles.length
-                              ? roles
-                              : [{ key: 'logistica', label: 'Logística' }]
-                            ).map((r) => ({ value: r.key, label: r.label }))}
-                          />
-                        </label>
-                      </FormGrid>
-                      <div className="row" style={{ gap: 12 }}>
+                      <label>
+                        Correo
+                        <input
+                          required
+                          type="email"
+                          placeholder="nombre@correo.com"
+                          value={inviteForm.email}
+                          onChange={(e) => setInviteForm({ ...inviteForm, email: e.target.value })}
+                        />
+                      </label>
+                      <label>
+                        Rol
+                        <FieldSelect
+                          value={inviteForm.roleKey}
+                          onChange={(v) => setInviteForm({ ...inviteForm, roleKey: v })}
+                          label="Rol del invitado"
+                          options={(roles.length ? roles : [{ key: 'logistica', label: 'Logística' }]).map((r) => ({
+                            value: r.key,
+                            label: r.label,
+                          }))}
+                        />
+                      </label>
+                      <div className="row" style={{ gap: 16 }}>
                         {(['ARTA', 'EXPLANADA'] as const).map((ent) => (
                           <FieldCheck
                             key={ent}
@@ -522,121 +485,124 @@ export default function OrganizationsPage() {
                           />
                         ))}
                       </div>
+                      <p className="muted kpi-sub" style={{ margin: 0 }}>
+                        Le llega un enlace para elegir su contraseña; vale 7 días.
+                      </p>
                       <button className="btn" type="submit">
                         Enviar invitación
                       </button>
                     </form>
                     {lastInviteUrl ? (
                       <p className="muted" style={{ marginTop: 12, fontSize: 13, wordBreak: 'break-all' }}>
-                        Link (cópialo si SMTP está off):{' '}
-                        <a href={lastInviteUrl}>{lastInviteUrl}</a>
+                        Si el correo no llega, comparte este enlace: <a href={lastInviteUrl}>{lastInviteUrl}</a>
                       </p>
                     ) : null}
-
-                    <h3 style={{ marginTop: 20, fontSize: 15 }}>Invitaciones · {invites.length}</h3>
-                    {!invites.length ? (
-                      <EmptyState
-                        title="Sin invitaciones"
-                        description="Invita por email para onboarding sin crear password a mano."
-                      />
-                    ) : (
-                      <div className="table-wrap" style={{ marginTop: 8 }}>
-                        <table className="table table-sticky">
-                          <thead>
-                            <tr>
-                              <th>Email</th>
-                              <th>Rol</th>
-                              <th>Estado</th>
-                              <th></th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {invites.map((inv) => {
-                              const status = inv.acceptedAt
-                                ? 'aceptada'
-                                : inv.revokedAt
-                                  ? 'revocada'
-                                  : new Date(inv.expiresAt) < new Date()
-                                    ? 'expirada'
-                                    : 'pendiente';
-                              return (
-                                <tr key={inv.id}>
-                                  <td>{inv.email}</td>
-                                  <td className="muted">{roleLabel(inv.roleKey)}</td>
-                                  <td>
-                                    <StatusBadge value={status} kind="raw" />
-                                  </td>
-                                  <td>
-                                    {status === 'pendiente' ? (
-                                      <button
-                                        className="btn ghost btn-sm btn-danger"
-                                        type="button"
-                                        onClick={() => revokeInvite(inv.id)}
-                                      >
-                                        Revocar
-                                      </button>
-                                    ) : null}
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
                   </div>
+                  <div className="panel-head panel-head--sub">
+                    <h2>Invitaciones · {invites.length}</h2>
+                  </div>
+                  {!invites.length ? (
+                    <div className="panel-body">
+                      <p className="muted kpi-sub" style={{ margin: 0 }}>
+                        Sin invitaciones por ahora.
+                      </p>
+                    </div>
+                  ) : (
+                    <ul className="org-invites">
+                      {invites.map((inv) => {
+                        const status = inv.acceptedAt
+                          ? 'Aceptada'
+                          : inv.revokedAt
+                            ? 'Revocada'
+                            : new Date(inv.expiresAt) < new Date()
+                              ? 'Vencida'
+                              : 'Pendiente';
+                        return (
+                          <li key={inv.id} className="org-invites__row">
+                            <span className="org-invites__main">
+                              <span className="org-invites__email">{inv.email}</span>
+                              <span className="org-invites__meta">
+                                {roleLabel(inv.roleKey)} · {status}
+                              </span>
+                            </span>
+                            {status === 'Pendiente' ? (
+                              <button
+                                className="btn-quiet btn-quiet--danger"
+                                type="button"
+                                onClick={() => {
+                                  if (confirm(`¿Revocar la invitación de ${inv.email}?`)) void revokeInvite(inv.id);
+                                }}
+                              >
+                                Revocar
+                              </button>
+                            ) : null}
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
                 </div>
 
                 <div className="panel">
                   <div className="panel-head">
                     <h2>Miembros · {members.length}</h2>
                     <ActionLink href="/users" variant="ghost">
-                      Gobernanza
+                      Administrar en Usuarios
                     </ActionLink>
                   </div>
-                  <div className="panel-body">
-                    {!members.length ? (
+                  {!members.length ? (
+                    <div className="panel-body">
                       <EmptyState
                         title="Sin miembros listados"
-                        description="Requiere permiso users.manage, o aún no hay usuarios en el tenant."
+                        description="Aparecen cuando tienes permiso para administrar usuarios."
                       />
-                    ) : (
-                      <div className="table-wrap">
-                        <table className="table table-sticky">
-                          <thead>
-                            <tr>
-                              <th>Nombre</th>
-                              <th>Rol</th>
-                              <th>Entidades</th>
-                              <th>Último login</th>
+                    </div>
+                  ) : (
+                    <div className="table-wrap">
+                      <table className="table table-sticky org-members">
+                        <colgroup>
+                          <col />
+                          <col style={{ width: 200 }} />
+                          <col style={{ width: 150 }} />
+                          <col style={{ width: 120 }} />
+                        </colgroup>
+                        <thead>
+                          <tr>
+                            <th>Nombre</th>
+                            <th>Rol</th>
+                            <th>Entidades</th>
+                            <th>Último acceso</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {members.map((u) => (
+                            <tr key={u.id}>
+                              <td>
+                                <span className="org-table__name">{u.fullName}</span>
+                                <span className="org-table__sub">
+                                  {u.email}
+                                  {!u.active ? ' · inactivo' : ''}
+                                </span>
+                              </td>
+                              <td className="muted">{roleLabel(u.roleKey)}</td>
+                              <td className="muted">
+                                {u.entities.map((e) => (e === 'EXPLANADA' ? 'Auditorio' : 'Arta')).join(' · ')}
+                              </td>
+                              <td className="muted t-num">
+                                {u.lastLoginAt ? (
+                                  <time dateTime={u.lastLoginAt} title={fullDateTime(u.lastLoginAt)}>
+                                    {shortDate(u.lastLoginAt)}
+                                  </time>
+                                ) : (
+                                  'Nunca'
+                                )}
+                              </td>
                             </tr>
-                          </thead>
-                          <tbody>
-                            {members.map((u) => (
-                              <tr key={u.id}>
-                                <td>
-                                  <strong>{u.fullName}</strong>
-                                  <div className="muted" style={{ fontSize: 12 }}>
-                                    {u.email}
-                                    {!u.active ? ' · inactivo' : ''}
-                                  </div>
-                                </td>
-                                <td className="muted">{roleLabel(u.roleKey)}</td>
-                                <td className="muted">
-                                  {u.entities.map((e) => (e === 'EXPLANADA' ? 'Auditorio' : 'Arta')).join(' · ')}
-                                </td>
-                                <td className="muted">
-                                  {u.lastLoginAt
-                                    ? new Date(u.lastLoginAt).toLocaleDateString('es-MX')
-                                    : '—'}
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
-                  </div>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
                 </div>
               </div>
             ) : null}
@@ -644,5 +610,38 @@ export default function OrganizationsPage() {
         )}
       </div>
     </AppShell>
+  );
+}
+
+/** Uso del plan: cifra, tope y barra fina. Cerca del tope, el detalle avisa (sin teñir la tarjeta). */
+function UsageMeter({
+  label,
+  now,
+  max,
+  pct,
+  near,
+}: {
+  label: string;
+  now: number;
+  max: number | '∞';
+  pct: number;
+  near: boolean;
+}) {
+  return (
+    <div className="usage">
+      <div className="usage__head">
+        <span className="usage__label">{label}</span>
+        <span className="usage__value">
+          {now}
+          <span className="usage__max"> {max === '∞' ? 'sin tope' : `de ${max}`}</span>
+        </span>
+      </div>
+      {max !== '∞' ? (
+        <div className="usage__bar" aria-hidden>
+          <span style={{ width: `${pct}%` }} />
+        </div>
+      ) : null}
+      {near ? <span className="usage__warn">Cerca del tope del plan</span> : null}
+    </div>
   );
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { Tab } from './event-detail.types';
 import { TAB_LABELS } from './useEventTab';
 
@@ -29,8 +29,33 @@ export function EventTabBar({ tab, modules, onSelect }: Props) {
       nav.scrollLeft = left + el.offsetWidth - nav.clientWidth + 24;
   }, [tab]);
 
+  // Al bajar, las pestañas se quedan pegadas bajo la barra superior (que ya lleva
+  // el nombre del evento): la barra condensada es esa pareja. `is-stuck` le da la
+  // línea y la sombra que la barra superior suelta mientras tanto.
+  const barRef = useRef<HTMLDivElement>(null);
+  const [stuck, setStuck] = useState(false);
+  useEffect(() => {
+    const el = barRef.current;
+    if (!el || typeof IntersectionObserver === 'undefined') return;
+    const top = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--topbar-h')) || 58;
+    // Pegada, su borde de arriba queda justo en la barra superior: ya no cabe entera
+    // en la ventana recortada 1 px por debajo de esa barra.
+    const io = new IntersectionObserver(
+      ([entry]) => setStuck(entry.intersectionRatio < 1 && entry.boundingClientRect.top <= top + 1),
+      { rootMargin: `-${top + 1}px 0px 0px 0px`, threshold: [1] },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+  useEffect(() => {
+    const root = document.documentElement;
+    if (stuck) root.setAttribute('data-tabs-stuck', '');
+    else root.removeAttribute('data-tabs-stuck');
+    return () => root.removeAttribute('data-tabs-stuck');
+  }, [stuck]);
+
   return (
-    <div className="event-tabs">
+    <div ref={barRef} className={`event-tabs${stuck ? ' is-stuck' : ''}`}>
       <label className="event-tabs__mobile">
         <span className="event-tabs__mobile-label">Módulo</span>
         <select

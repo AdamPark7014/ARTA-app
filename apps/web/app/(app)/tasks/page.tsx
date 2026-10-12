@@ -457,7 +457,8 @@ export default function TasksPage() {
     <AppShell title="Tareas">
       <div className="stack page-workspace">
         <PageHeader
-          description={`Todo lo que el equipo tiene pendiente en ${entity === 'ARTA' ? 'Arta Producciones' : 'Auditorio Arema'}. Escribe una tarea y pulsa Enter para asignarla.`}
+          title="Tareas"
+          description={`Lo que el equipo tiene pendiente en ${entity === 'ARTA' ? 'Arta Producciones' : 'Auditorio Arema'}.`}
           hint="Al entregar una tarea que pediste a otra persona, el responsable sube evidencia (nota + archivo) y tú la apruebas o rechazas en «Que pedí». Todo queda en el historial."
         >
           <ActionLink href="/events" variant="ghost">
@@ -476,46 +477,50 @@ export default function TasksPage() {
           </FlashMessage>
         ) : null}
 
-        <div className="quick-add">
-          <div className="quick-add__row">
-            <input
-              ref={titleRef}
-              className="field quick-add__title"
-              value={form.title}
-              placeholder="Nueva tarea… (ej. Cotizar transporte del staff)"
-              aria-label="Tarea"
-              onChange={(e) => setForm({ ...form, title: e.target.value })}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !creating) {
-                  e.preventDefault();
-                  void createTask();
-                }
-              }}
-            />
+        <div className="quick-add composer">
+          <input
+            ref={titleRef}
+            className="quick-add__title composer__title"
+            value={form.title}
+            placeholder="Nueva tarea… (ej. Cotizar transporte del staff)"
+            aria-label="Tarea"
+            onChange={(e) => setForm({ ...form, title: e.target.value })}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !creating) {
+                e.preventDefault();
+                void createTask();
+              }
+            }}
+          />
+          <div className="composer__bar">
             <AssigneesPicker
               value={form.assigneeIds}
               directory={directory}
               onChange={(ids) => setForm({ ...form, assigneeIds: ids })}
               label="Asignar a"
-              className="quick-add__who"
+              className="quick-add__who composer__who"
             />
             <input
-              className="field quick-add__due"
+              className="field quick-add__due composer__due"
               type="date"
               value={form.dueAt}
               aria-label="Fecha de vencimiento"
+              title="Fecha de vencimiento"
               onChange={(e) => setForm({ ...form, dueAt: e.target.value })}
             />
-            <button className="btn" type="button" disabled={creating} onClick={createTask}>
-              {creating ? 'Asignando…' : 'Asignar tarea'}
-            </button>
             <button
-              className="btn ghost btn-sm"
+              className="btn-quiet composer__more"
               type="button"
               aria-expanded={advanced}
               onClick={() => setAdvanced((v) => !v)}
             >
-              {advanced ? 'Menos' : 'Más campos'}
+              {advanced ? 'Menos campos' : 'Más campos'}
+            </button>
+            <span className="composer__hint" aria-hidden>
+              <kbd>Enter</kbd> para asignar
+            </span>
+            <button className="btn composer__send" type="button" disabled={creating || !form.title.trim()} onClick={createTask}>
+              {creating ? 'Asignando…' : 'Asignar tarea'}
             </button>
           </div>
           {advanced ? (

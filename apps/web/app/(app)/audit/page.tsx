@@ -82,7 +82,8 @@ export default function AuditPage() {
     <AppShell title="Auditoría">
       <div className="stack page-workspace">
         <PageHeader
-          description="Quién tocó qué en los últimos 30 días: cada movimiento con su autor, su fecha y el documento al que le pasó."
+          title="Auditoría"
+          description="Quién tocó qué en los últimos 30 días: cada movimiento con su autor, su fecha y su documento."
           hint="Las acciones marcadas en ámbar deshacen, borran o esquivan un control — no son errores, son las que conviene poder explicar."
         />
 
@@ -122,10 +123,11 @@ export default function AuditPage() {
                   </div>
                   <div className="panel-body">
                     <DistBar
-                      segments={(data.topActions ?? []).slice(0, 6).map((a, i) => ({
+                      variant="mono"
+                      label="Lo que más se hace"
+                      segments={(data.topActions ?? []).slice(0, 6).map((a) => ({
                         label: auditActionLabel(a.action),
                         value: a.count,
-                        tone: (['ok', 'warn', 'muted', 'danger'] as const)[i % 4],
                       }))}
                     />
                     <ul className="compact-list" style={{ marginTop: 12 }}>

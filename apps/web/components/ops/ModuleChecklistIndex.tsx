@@ -153,6 +153,7 @@ export function ModuleChecklistIndex({
     <AppShell title={title}>
       <div className="page-workspace stack">
         <PageHeader
+          title={title}
           description={description}
           hint={
             hint ??

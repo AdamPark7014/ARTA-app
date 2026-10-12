@@ -406,8 +406,8 @@ export default function StudioPage() {
     <AppShell title="Studio · Sitio Arta">
       <div className="stack page-workspace">
         <PageHeader
-          title="Studio · Sitio Arta"
-          description="CMS del sitio público arta PRODUCCIONES. Edita carrusel, noticias y secciones; publica o guarda borrador."
+          title="Studio"
+          description="Carrusel, noticias y secciones del sitio público de Arta. Guarda como borrador o publica."
         >
           <Link className="btn" href="/p/arta" target="_blank" rel="noopener noreferrer">
             Ver sitio live

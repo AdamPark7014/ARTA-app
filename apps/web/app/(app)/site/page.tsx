@@ -54,7 +54,7 @@ export default function SitePreviewPage() {
   return (
     <div>
       <div className="site-preview-bar">
-        <PageHeader hint="Vista previa del sitio público — no es la URL pública">
+        <PageHeader description="Vista previa del sitio público; los cambios se hacen en Studio.">
           <ActionLink href="/studio" variant="ghost">
             Studio
           </ActionLink>

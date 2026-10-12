@@ -94,9 +94,10 @@ export default function RiskWorkspacePage() {
     <AppShell title="Riesgo">
       <div className="stack page-workspace">
         <PageHeader
-          description={`Vista cruzada de riesgo operativo por disciplina (checklists). Drill-down a cada índice · ${entity}.`}
+          title="Riesgo"
+          description="Riesgo operativo por área, a partir del avance de los formatos de cada evento."
         >
-          <ActionLink href="/events" variant="ghost">Pipeline eventos</ActionLink>
+          <ActionLink href="/events" variant="ghost">Ver eventos</ActionLink>
         </PageHeader>
         {msg ? (
           <FlashMessage variant="error" onDismiss={() => setMsg('')}>

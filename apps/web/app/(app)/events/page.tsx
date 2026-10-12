@@ -4,9 +4,9 @@ import { Suspense, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { AppShell } from '@/components/app-shell/AppShell';
-import { EmptyLite, Pill, SectionHead, Seg } from '@/components/ui/Lite';
+import { EmptyLite, Pill, Seg } from '@/components/ui/Lite';
 import { LoadingBlock } from '@/components/ui/LoadingBlock';
-import { FieldSearch } from '@/components/ui/PageChrome';
+import { FieldSearch, PageHeader } from '@/components/ui/PageChrome';
 import { api } from '@/lib/api';
 import { canAccessEventOps, userHasPermission } from '@/lib/access-matrix';
 import { useUser } from '@/lib/user-context';
@@ -141,9 +141,21 @@ function EventsPageInner() {
   return (
     <AppShell title={SCOPE_TITLE[scope]}>
       <div className="sx-stack page-workspace">
-        <SectionHead
+        <PageHeader
           title={SCOPE_TITLE[scope]}
-          sub={loading ? undefined : `${list.length} ${list.length === 1 ? 'evento' : 'eventos'} · ${entity === 'ARTA' ? 'Arta' : 'Auditorio'}`}
+          description={loading ? undefined : `${list.length} ${list.length === 1 ? 'evento' : 'eventos'} · ${entity === 'ARTA' ? 'Arta' : 'Auditorio'}`}
+          below={
+            <Seg
+              label="Qué eventos ver"
+              value={scope}
+              onChange={(next) => router.push(next === 'active' ? '/events' : `/events?scope=${next}`)}
+              options={[
+                { key: 'active', label: 'Actuales' },
+                { key: 'past', label: 'Pasados' },
+                { key: 'all', label: 'Todos' },
+              ]}
+            />
+          }
         >
           <FieldSearch value={q} onChange={setQ} placeholder="Buscar evento o venue…" label="Buscar evento" maxWidth={240} />
           {canCreate ? (
@@ -151,18 +163,7 @@ function EventsPageInner() {
               + Crear evento
             </Link>
           ) : null}
-        </SectionHead>
-
-        <Seg
-          label="Qué eventos ver"
-          value={scope}
-          onChange={(next) => router.push(next === 'active' ? '/events' : `/events?scope=${next}`)}
-          options={[
-            { key: 'active', label: 'Actuales' },
-            { key: 'past', label: 'Pasados' },
-            { key: 'all', label: 'Todos' },
-          ]}
-        />
+        </PageHeader>
 
         {loading ? (
           <LoadingBlock rows={4} label="Cargando eventos…" />

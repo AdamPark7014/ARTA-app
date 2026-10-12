@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { AppShell } from '@/components/app-shell/AppShell';
 import { DistBar, money } from '@/components/charts/SparkBars';
+import { pipelineStatusLabel } from '@/components/ui/StatusBadge';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { LoadingBlock, LoadingKpis } from '@/components/ui/LoadingBlock';
 import {
@@ -81,9 +82,8 @@ export default function FinancePage() {
     <AppShell title="Finanzas">
       <div className="stack page-workspace">
         <PageHeader
-          description={`Vista de corridas del portfolio: margen, pérdidas y estado de cierre.${
-            canEdit ? ' Tienes permiso de edición.' : ' Acceso de lectura / seguimiento.'
-          }`}
+          title="Finanzas"
+          description={`Corridas de todos los eventos: margen, pérdidas y cierre.${canEdit ? '' : ' Solo lectura.'}`}
           hint="Filtra neto negativo para priorizar shows en pérdida. Abrir lleva directo a la corrida del evento."
         >
           <ActionLink href="/events?scope=active" variant="ghost">
@@ -148,12 +148,13 @@ export default function FinancePage() {
             {data ? (
               <div className="panel">
                 <div className="panel-body">
-                  <div className="muted kpi-sub">Neto por status de evento</div>
+                  <div className="dist-head">Neto por estado del evento</div>
                   <DistBar
+                    variant="mono"
+                    label="Neto por estado del evento"
                     segments={Object.entries(data.byStatus ?? {}).map(([status, v]) => ({
-                      label: status,
+                      label: pipelineStatusLabel(status),
                       value: Math.max(0, v.net) || v.count,
-                      tone: status === 'ACTIVE' ? 'ok' : status === 'CLOSED' ? 'warn' : 'muted',
                     }))}
                   />
                 </div>

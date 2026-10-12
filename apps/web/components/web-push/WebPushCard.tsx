@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { SectionHead } from '@/components/ui/Lite';
+import { SettingsSection } from '@/components/ui/PageChrome';
 import { disableWebPush, enableWebPush, getWebPushStatus, type WebPushStatus } from '@/lib/web-push';
 
 const STATUS_TEXT: Record<Exclude<WebPushStatus, 'hidden'>, string> = {
@@ -41,32 +41,30 @@ export function WebPushCard() {
   }
 
   return (
-    <>
-      <SectionHead title="Avisos en este navegador" sub="Chat, tareas y aprobaciones aunque ARTA no esté abierto." />
-      <section className="surface surface--pad">
-        <div className="fx">
-          <div className="oc-set-row">
-            <span className="inline-note">
-              <span className={`oc-dot ${status === 'enabled' ? 'is-on' : ''}`} aria-hidden />
-              {STATUS_TEXT[status]}
-            </span>
-            {status === 'enabled' ? (
-              <button type="button" className="btn ghost btn-sm" disabled={busy} onClick={() => run(disableWebPush)}>
-                {busy ? 'Desactivando…' : 'Desactivar'}
-              </button>
-            ) : status === 'disabled' ? (
-              <button type="button" className="btn btn-sm" disabled={busy} onClick={() => run(enableWebPush)}>
-                {busy ? 'Activando…' : 'Activar'}
-              </button>
-            ) : null}
-          </div>
-          {error ? (
-            <p className="oc-flash is-error" role="alert">
-              {error}
-            </p>
-          ) : null}
-        </div>
-      </section>
-    </>
+    <SettingsSection
+      title="Avisos en este navegador"
+      description="Chat, tareas y aprobaciones aunque ARTA no esté abierto."
+    >
+      <div className="set-row">
+        <span className="inline-note set-row__text">
+          <span className={`oc-dot ${status === 'enabled' ? 'is-on' : ''}`} aria-hidden />
+          {STATUS_TEXT[status]}
+        </span>
+        {status === 'enabled' ? (
+          <button type="button" className="btn ghost" disabled={busy} onClick={() => run(disableWebPush)}>
+            {busy ? 'Desactivando…' : 'Desactivar'}
+          </button>
+        ) : status === 'disabled' ? (
+          <button type="button" className="btn" disabled={busy} onClick={() => run(enableWebPush)}>
+            {busy ? 'Activando…' : 'Activar'}
+          </button>
+        ) : null}
+      </div>
+      {error ? (
+        <p className="oc-flash is-error" role="alert">
+          {error}
+        </p>
+      ) : null}
+    </SettingsSection>
   );
 }

@@ -15,6 +15,7 @@ import { api } from '@/lib/api';
 import { mxn } from '@/lib/price-list';
 import { REVIEW_LABELS, reviewStep } from '@/lib/review-flow';
 import type { Checklist, EventPanelProps, Tab } from './event-detail.types';
+import { moneyKpi } from '@/lib/format';
 
 type Props = EventPanelProps & {
   editing: boolean;
@@ -125,7 +126,7 @@ export function EventOverviewPanel({
             label="Órdenes de compra"
             value={po.pending}
             tone={po.pending ? 'warn' : undefined}
-            sub={po.toPayAmount ? `por autorizar · ${mxn(po.toPayAmount)} por pagar` : 'por autorizar'}
+            sub={po.toPayAmount ? `por autorizar · ${moneyKpi(po.toPayAmount)} por pagar` : 'por autorizar'}
             onClick={go('ocs')}
           />
         ) : null}

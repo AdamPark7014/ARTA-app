@@ -12,7 +12,7 @@ import {
 } from 'react';
 import { api } from '@/lib/api';
 import { clearDraft, poHandoffKey, readDraft } from '@/lib/draft-store';
-import { EmptyLite, Pill, SectionHead, Seg } from '@/components/ui/Lite';
+import { EmptyLite, Pill, quietTone, SectionHead, Seg } from '@/components/ui/Lite';
 import { PayDaysNote } from '@/components/purchase-orders/PoWindowBanner';
 import { PoProofsBlock } from '@/components/purchase-orders/PoProofsBlock';
 import type { EventPanelProps, Po } from '@/components/events/event-detail.types';
@@ -48,6 +48,7 @@ import {
   poRubroLabel,
   resolvePoRubro,
 } from '@/lib/po-rubro';
+import { moneyKpi } from '@/lib/format';
 
 /**
  * Órdenes de compra del evento (revisión 11-09-2026).
@@ -657,7 +658,7 @@ export function EventPurchaseOrdersPanel({
   const summary = (() => {
     const parts: string[] = [];
     if (stats.auth.count) parts.push(`${stats.auth.count} por autorizar`);
-    if (stats.pay.amount > 0) parts.push(`${mxn(stats.pay.amount)} por pagar`);
+    if (stats.pay.amount > 0) parts.push(`${moneyKpi(stats.pay.amount)} por pagar`);
     if (parts.length) return parts.join(' · ');
     if (!orders.length) return 'Sin órdenes todavía';
     if (stats.paid.count === orders.length) return 'Todo pagado';
@@ -912,6 +913,8 @@ export function EventPurchaseOrdersPanel({
                   const { paymentOther } = splitPoDescription(po.description);
                   const rowBusy = busy === po.id;
                   const who = po.vendorName || 'este proveedor';
+                  // Un solo relleno por fila: si hay botón de acción, el estado va en contorno.
+                  const act = primaryAction(po);
                   return (
                     <Fragment key={po.id}>
                       <tr className={`oc-row ${open ? 'is-open' : ''}`} onClick={() => toggle(po.id)}>
@@ -933,11 +936,11 @@ export function EventPurchaseOrdersPanel({
                         <td className="oc-hide-sm t-small">{poPaymentLabel(method, paymentOther)}</td>
                         <td className="num t-money oc-amount">{mxn(Number(po.amount))}</td>
                         <td>
-                          <Pill tone={pill.tone}>{pill.label}</Pill>
+                          <Pill tone={act ? quietTone(pill.tone) : pill.tone}>{pill.label}</Pill>
                         </td>
                         <td className="col-act" onClick={(e) => e.stopPropagation()}>
                           <div className="oc-actions">
-                            {primaryAction(po)}
+                            {act}
                             <button
                               type="button"
                               className="btn-quiet"

@@ -27,6 +27,20 @@ function toDay(value?: string | null): string | null {
   return Number.isNaN(d.getTime()) ? null : dayKey(d);
 }
 
+function Chevron({ dir }: { dir: 'left' | 'right' }) {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d={dir === 'left' ? 'M15 6l-6 6 6 6' : 'M9 6l6 6-6 6'}
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 /** Mes con los días de cada concepto y del show. Sin librerías. */
 export function MonthCalendar({
   items,
@@ -85,7 +99,7 @@ export function MonthCalendar({
             aria-label="Mes anterior"
             onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1))}
           >
-            ‹
+            <Chevron dir="left" />
           </button>
           <button
             className="btn-quiet"
@@ -103,7 +117,7 @@ export function MonthCalendar({
             aria-label="Mes siguiente"
             onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() + 1, 1))}
           >
-            ›
+            <Chevron dir="right" />
           </button>
         </div>
       </div>
@@ -123,6 +137,7 @@ export function MonthCalendar({
             <div
               key={key}
               className={`mcal__day ${out ? 'is-out' : ''} ${key === todayKey ? 'is-today' : ''} ${onDayClick ? 'is-clickable' : ''}`}
+              aria-current={key === todayKey ? 'date' : undefined}
               onClick={onDayClick ? () => onDayClick(key) : undefined}
               role={onDayClick ? 'button' : undefined}
               tabIndex={onDayClick ? 0 : undefined}

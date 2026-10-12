@@ -3,9 +3,9 @@
 import { FileViewer, PdfEditor, SheetEditor } from '@/components/files/lazy';
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { AppShell } from '@/components/app-shell/AppShell';
-import { EmptyLite, FileRow, SectionHead } from '@/components/ui/Lite';
+import { EmptyLite, FileRow } from '@/components/ui/Lite';
 import { LoadingBlock } from '@/components/ui/LoadingBlock';
-import { FieldSearch, FlashMessage } from '@/components/ui/PageChrome';
+import { FieldSearch, FlashMessage, PageHeader } from '@/components/ui/PageChrome';
 import { replaceFolderFile } from '@/lib/file-save';
 import { api } from '@/lib/api';
 import { useUser } from '@/lib/user-context';
@@ -171,9 +171,9 @@ export default function FoldersPage() {
           <button className="btn-quiet back-link" type="button" onClick={() => setActive(null)}>
             ← Carpetas
           </button>
-          <SectionHead
+          <PageHeader
             title={active.name}
-            sub={active.description || `${active.files.length} ${active.files.length === 1 ? 'archivo' : 'archivos'}`}
+            description={active.description || `${active.files.length} ${active.files.length === 1 ? 'archivo' : 'archivos'}`}
           >
             {canEdit ? (
               <>
@@ -195,7 +195,7 @@ export default function FoldersPage() {
                 </label>
               </>
             ) : null}
-          </SectionHead>
+          </PageHeader>
 
           {flash}
 
@@ -307,7 +307,7 @@ export default function FoldersPage() {
   return (
     <AppShell title="Carpetas">
       <div className="sx-stack page-workspace">
-        <SectionHead title="Carpetas" sub={`Documentos generales · ${entity === 'ARTA' ? 'Arta' : 'Auditorio'}`}>
+        <PageHeader title="Carpetas" description={`Documentos generales · ${entity === 'ARTA' ? 'Arta' : 'Auditorio'}`}>
           {folders.length > 6 ? (
             <FieldSearch value={q} onChange={setQ} placeholder="Buscar carpeta…" label="Buscar carpeta" maxWidth={220} />
           ) : null}
@@ -316,7 +316,7 @@ export default function FoldersPage() {
               + Carpeta
             </button>
           ) : null}
-        </SectionHead>
+        </PageHeader>
 
         {flash}
 

@@ -1,3 +1,5 @@
+import { moneyExact } from './format';
+
 /**
  * Lista de precios de Arta (junta 11-09-2026, págs. 4 y 5 del PDF).
  *
@@ -69,15 +71,13 @@ export function findPrice(concept: string): PriceItem | undefined {
   return BY_KEY.get(normalizeConcept(concept));
 }
 
-/** Pesos sin centavos cuando no hacen falta: $4,558 · $1,756.80. */
+/**
+ * Monto de detalle (fila, tabla, documento): siempre con centavos, $4,558.00 ·
+ * $1,756.80, para que la columna se lea alineada. Las cifras grandes de tarjeta
+ * van con `moneyKpi` (lib/format.ts), sin centavos.
+ */
 export function mxn(value: number | null | undefined): string {
-  const n = Number(value || 0);
-  return n.toLocaleString('es-MX', {
-    style: 'currency',
-    currency: 'MXN',
-    minimumFractionDigits: Number.isInteger(n) ? 0 : 2,
-    maximumFractionDigits: 2,
-  });
+  return moneyExact(value);
 }
 
 /**

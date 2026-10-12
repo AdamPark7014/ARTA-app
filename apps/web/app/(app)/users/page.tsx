@@ -14,8 +14,8 @@ import {
   FormGrid,
   PageHeader,
 } from '@/components/ui/PageChrome';
-import { StatusBadge } from '@/components/ui/StatusBadge';
 import { api } from '@/lib/api';
+import { fullDateTime, shortDate, shortDateTime } from '@/lib/format';
 import { useUser } from '@/lib/user-context';
 import { userHasPermission } from '@/lib/access-matrix';
 import { panelLoginUrl } from '@/lib/domains';
@@ -583,12 +583,14 @@ export default function UsersPage() {
       <div className="page-workspace stack">
         {canManage ? (
           <PageHeader
-            description="Alta, roles, entidades, permisos y bajas. Solo Directores Generales (Arturo y José Luis)."
+            title="Usuarios"
+            description="Altas, roles, entidades, permisos y bajas del equipo. Solo dirección general."
             hint="Alta inmediata: les das correo y contraseña. Invitar: eligen su contraseña con un enlace que dura 7 días."
           />
         ) : (
           <>
             <PageHeader
+              title="Usuarios"
               description={`Alta de gente nueva en ${grantable.map(entityLabel).join(' y ') || 'tus entidades'}: les das correo y contraseña.`}
             />
             {/* `.page-intro__hint` está oculto en todo el panel: este aviso tiene que verse. */}
@@ -654,17 +656,16 @@ export default function UsersPage() {
           </div>
         ) : null}
 
-        {!loading && gov ? (
+        {!loading && gov && Object.keys(gov.byRole ?? {}).length ? (
           <div className="panel">
             <div className="panel-body">
-              <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>
-                Distribución por rol
-              </div>
+              <div className="dist-head">Personas por rol</div>
               <DistBar
-                segments={Object.entries(gov.byRole ?? {}).map(([key, value], i) => ({
+                variant="mono"
+                label="Personas por rol"
+                segments={Object.entries(gov.byRole ?? {}).map(([key, value]) => ({
                   label: roleLabel(key),
                   value,
-                  tone: (['ok', 'warn', 'muted', 'danger'] as const)[i % 4],
                 }))}
               />
             </div>
@@ -950,7 +951,15 @@ Contraseña: ${creds.password}`}</pre>
                 />
               ) : (
                 <div className="table-wrap">
-                  <table className="table table-sticky">
+                  <table className="table table-sticky users-table">
+                    <colgroup>
+                      <col />
+                      <col style={{ width: 150 }} />
+                      <col style={{ width: 96 }} />
+                      <col style={{ width: 104 }} />
+                      <col style={{ width: 108 }} />
+                      {canManage ? <col style={{ width: 128 }} /> : null}
+                    </colgroup>
                     <thead>
                       <tr>
                         <th>Nombre</th>
@@ -958,7 +967,11 @@ Contraseña: ${creds.password}`}</pre>
                         <th>Entidades</th>
                         <th>Estado</th>
                         <th>Último acceso</th>
-                        {canManage ? <th></th> : null}
+                        {canManage ? (
+                          <th>
+                            <span className="sr-only">Acciones</span>
+                          </th>
+                        ) : null}
                       </tr>
                     </thead>
                     <tbody>
@@ -983,22 +996,24 @@ Contraseña: ${creds.password}`}</pre>
                             {u.entities.map(entityLabel).join(' · ') || '—'}
                           </td>
                           <td>
-                            <StatusBadge value={u.active ? 'Activo' : 'Inactivo'} kind="raw" />
-                            {u.locked ? (
-                              <div className="muted kpi-sub">acceso bloqueado</div>
-                            ) : null}
+                            <span className={`state-dot ${u.active ? 'is-on' : ''}`}>{u.active ? 'Activo' : 'Inactivo'}</span>
+                            {u.locked ? <div className="t-alert kpi-sub">Acceso bloqueado</div> : null}
                           </td>
-                          <td className="muted kpi-sub">
-                            {u.lastLoginAt
-                              ? new Date(u.lastLoginAt).toLocaleString('es-MX')
-                              : 'Nunca'}
+                          <td className="muted kpi-sub t-num">
+                            {u.lastLoginAt ? (
+                              <time dateTime={u.lastLoginAt} title={fullDateTime(u.lastLoginAt)}>
+                                {shortDateTime(u.lastLoginAt)}
+                              </time>
+                            ) : (
+                              'Nunca'
+                            )}
                           </td>
                           {/* Editar, reactivar, desbloquear o dar de baja: solo dirección general (users.manage). */}
                           {canManage ? (
                             <td>
-                              <div className="row row--tight" style={{ flexWrap: 'wrap' }}>
+                              <div className="row-actions">
                                 <button
-                                  className="btn btn-sm"
+                                  className="btn ghost btn-sm"
                                   type="button"
                                   onClick={() => openEdit(u)}
                                 >
@@ -1026,12 +1041,14 @@ Contraseña: ${creds.password}`}</pre>
                                 ) : null}
                                 {u.active ? (
                                   <button
-                                    className="btn ghost btn-sm btn-danger"
+                                    className="icon-btn icon-btn--danger"
                                     type="button"
                                     disabled={saving || u.id === me?.id}
+                                    aria-label={`Eliminar acceso de ${u.fullName}`}
+                                    title={u.id === me?.id ? 'No puedes eliminarte a ti mismo' : 'Eliminar acceso'}
                                     onClick={() => void deleteUser(u)}
                                   >
-                                    Eliminar
+                                    <TrashIcon />
                                   </button>
                                 ) : null}
                               </div>
@@ -1074,15 +1091,19 @@ Contraseña: ${creds.password}`}</pre>
                         <td className="muted kpi-sub">
                           {(inv.entities || []).map(entityLabel).join(' · ')}
                         </td>
-                        <td className="muted kpi-sub">
-                          {new Date(inv.expiresAt).toLocaleDateString('es-MX')}
+                        <td className="muted kpi-sub t-num">
+                          <time dateTime={inv.expiresAt} title={fullDateTime(inv.expiresAt)}>
+                            {shortDate(inv.expiresAt)}
+                          </time>
                         </td>
                         <td>
                           <button
-                            className="btn ghost btn-sm btn-danger"
+                            className="btn-quiet btn-quiet--danger"
                             type="button"
                             disabled={saving}
-                            onClick={() => void revokeInvite(inv.id)}
+                            onClick={() => {
+                              if (confirm(`¿Revocar la invitación de ${inv.email}?`)) void revokeInvite(inv.id);
+                            }}
                           >
                             Revocar
                           </button>
@@ -1241,5 +1262,20 @@ Contraseña: ${creds.password}`}</pre>
         ) : null}
       </div>
     </AppShell>
+  );
+}
+
+/** Bote de basura de línea, 16 px, como el resto de iconos del panel. */
+function TrashIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
   );
 }

@@ -4,11 +4,12 @@ import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { AppShell } from '@/components/app-shell/AppShell';
 import { EmptyLite } from '@/components/ui/Lite';
-import { FlashMessage } from '@/components/ui/PageChrome';
+import { FlashMessage, PageHeader } from '@/components/ui/PageChrome';
 import { api } from '@/lib/api';
 import { canAccessEventOps, userHasPermission, visibleNavItems } from '@/lib/access-matrix';
 import { mxn } from '@/lib/price-list';
 import { useUser } from '@/lib/user-context';
+import { moneyKpi } from '@/lib/format';
 
 /** Lo que el inicio usa de `/analytics/overview` (la API trae más; aquí no se inventa nada). */
 type Overview = {
@@ -190,7 +191,7 @@ export default function DashboardPage() {
               key: 'po',
               title: 'Órdenes de compra',
               sub: k.poAgingOver7 ? `${k.poAgingOver7} con más de 7 días` : 'Por autorizar o pagar',
-              amount: mxn(k.poPipelineAmount),
+              amount: moneyKpi(k.poPipelineAmount),
               status: 'Revisar',
               tone: 'fill' as const,
               href: '/purchase-orders',
@@ -224,28 +225,25 @@ export default function DashboardPage() {
   return (
     <AppShell title="Inicio">
       <div className="page-workspace home">
-        <header className="home-hero">
-          <div className="home-hero__copy">
-            <p className="cap home-hero__date">{longDate(now)}</p>
-            <h2 className="home-hero__hello">
+        <PageHeader
+          eyebrow={longDate(now)}
+          title={
+            <>
               {greeting(now)}, <b>{firstName}</b>
-            </h2>
-          </div>
-          {canSeeTasks || canCreate ? (
-            <div className="home-hero__actions">
-              {canSeeTasks ? (
-                <Link className="btn ghost" href="/tasks">
-                  Nueva tarea
-                </Link>
-              ) : null}
-              {canCreate ? (
-                <Link className="btn" href="/events/new">
-                  {entity === 'EXPLANADA' ? 'Nuevo show' : 'Nuevo evento'}
-                </Link>
-              ) : null}
-            </div>
+            </>
+          }
+        >
+          {canSeeTasks ? (
+            <Link className="btn ghost" href="/tasks">
+              Nueva tarea
+            </Link>
           ) : null}
-        </header>
+          {canCreate ? (
+            <Link className="btn" href="/events/new">
+              {entity === 'EXPLANADA' ? 'Nuevo show' : 'Nuevo evento'}
+            </Link>
+          ) : null}
+        </PageHeader>
 
         {!eventOps ? (
           <section className="surface">
@@ -302,7 +300,7 @@ export default function DashboardPage() {
               {canSeePo ? (
                 <Link className="kpi-card" href="/purchase-orders">
                   <span className="cap">Por pagar</span>
-                  <span className="kpi-card__value t-num">{mxn(k.poPipelineAmount)}</span>
+                  <span className="kpi-card__value t-num">{moneyKpi(k.poPipelineAmount)}</span>
                   <span className="kpi-card__detail">
                     {k.poAgingOver7 ? `${k.poAgingOver7} con más de 7 días` : 'Órdenes de compra'}
                   </span>

@@ -157,7 +157,10 @@ export default function VendorPinsPage() {
   return (
     <AppShell title="PIN proveedores">
       <div className="stack page-workspace">
-        <PageHeader description="PINs de acceso limitado para proveedores (archivos / checklists / hospitality). Portal público en /v/[pinId]." />
+        <PageHeader
+          title="Acceso de proveedores"
+          description="Un PIN por proveedor para que vea solo sus archivos, formatos y hospitalidad del evento."
+        />
 
         {msg ? (
           <FlashMessage variant={flashVariant(msg)} onDismiss={() => setMsg('')}>

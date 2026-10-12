@@ -151,7 +151,10 @@ export default function WebhooksPage() {
   return (
     <AppShell title="Webhooks">
       <div className="stack page-workspace">
-        <PageHeader description="Avisa a otros sistemas cuando algo necesita atención: eventos en riesgo, órdenes de compra atrasadas o firmas pendientes. Se revisa cada hora y cada aviso va firmado.">
+        <PageHeader
+          title="Conexiones"
+          description="Avisa a otros sistemas cuando algo necesita atención: eventos en riesgo, órdenes atrasadas o firmas pendientes."
+        >
           <button className="btn ghost" type="button" onClick={() => testDispatch()}>
             Enviar prueba
           </button>

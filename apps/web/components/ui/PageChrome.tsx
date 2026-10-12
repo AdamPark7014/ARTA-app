@@ -2,23 +2,64 @@ import type { ReactNode } from 'react';
 import Link from 'next/link';
 
 type PageHeaderProps = {
-  title?: string;
-  description?: string;
+  /** Etiqueta pequeña arriba del título (fecha, entidad, sección). */
+  eyebrow?: ReactNode;
+  title?: ReactNode;
+  /** Un renglón: qué es la pantalla. La ayuda larga va en la propia pantalla, no aquí. */
+  description?: ReactNode;
+  /** Ayuda larga: oculta en todo el panel (`.page-intro__hint`), se conserva por compatibilidad. */
   hint?: string;
+  /** Acciones a la derecha: buscador, botón secundario y, como mucho, un primario. */
   children?: ReactNode;
+  /** Renglón opcional debajo: pestañas o filtros de la pantalla. */
+  below?: ReactNode;
+  className?: string;
 };
 
-/** Encabezado estándar de módulo con acciones a la derecha. */
-export function PageHeader({ title, description, hint, children }: PageHeaderProps) {
+/**
+ * Encabezado único de pantalla (pulido 12-10-2026): etiqueta opcional, título,
+ * descripción de un renglón, acciones a la derecha y, si hace falta, un renglón
+ * de pestañas o filtros. Mismo espaciado en todo el panel (`styles/_acabado.scss`).
+ */
+export function PageHeader({ eyebrow, title, description, hint, children, below, className = '' }: PageHeaderProps) {
   return (
-    <header className="page-intro">
-      <div className="page-intro__copy">
-        {title ? <h2 className="page-intro__title">{title}</h2> : null}
-        {description ? <p className="muted page-intro__desc">{description}</p> : null}
-        {hint ? <p className="muted page-intro__hint">{hint}</p> : null}
+    <header className={`ph ${className}`.trim()}>
+      <div className="ph__row">
+        <div className="ph__copy">
+          {eyebrow ? <p className="ph__eyebrow">{eyebrow}</p> : null}
+          {title ? <h2 className="ph__title">{title}</h2> : null}
+          {description ? <div className="ph__desc">{description}</div> : null}
+          {hint ? <p className="muted page-intro__hint">{hint}</p> : null}
+        </div>
+        {children ? <div className="ph__actions">{children}</div> : null}
       </div>
-      {children ? <div className="page-intro__actions row">{children}</div> : null}
+      {below ? <div className="ph__below">{below}</div> : null}
     </header>
+  );
+}
+
+type SettingsSectionProps = {
+  title: string;
+  description?: ReactNode;
+  /** Estado o acción breve bajo la descripción (p. ej. «Activa», «Cerrar todas»). */
+  aside?: ReactNode;
+  children: ReactNode;
+};
+
+/**
+ * Sección de una pantalla de ajustes: a la izquierda qué es y por qué; a la
+ * derecha, el control en su tarjeta. En el teléfono se apilan.
+ */
+export function SettingsSection({ title, description, aside, children }: SettingsSectionProps) {
+  return (
+    <section className="set-sec">
+      <div className="set-sec__label">
+        <h2 className="set-sec__title">{title}</h2>
+        {description ? <p className="set-sec__desc">{description}</p> : null}
+        {aside ? <div className="set-sec__aside">{aside}</div> : null}
+      </div>
+      <div className="set-sec__body">{children}</div>
+    </section>
   );
 }
 

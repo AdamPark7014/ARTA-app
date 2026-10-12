@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { AppShell } from '@/components/app-shell/AppShell';
 import { LoadingBlock } from '@/components/ui/LoadingBlock';
-import { SectionHead } from '@/components/ui/Lite';
+import { PageHeader, SettingsSection } from '@/components/ui/PageChrome';
 import { WebPushCard } from '@/components/web-push/WebPushCard';
 import { useUser } from '@/lib/user-context';
 import { userHasPermission } from '@/lib/access-matrix';
@@ -93,43 +93,51 @@ export default function SettingsPage() {
 
   return (
     <AppShell title="Configuración">
-      <div className="sx-stack page-workspace oc-settings">
+      <div className="stack page-workspace settings-page oc-settings">
+        <PageHeader title="Configuración" description="Reglas de la organización y avisos de este navegador." />
+
         <WebPushCard />
-        <SectionHead
+
+        <SettingsSection
           title="Días de cobro"
-          sub="Las órdenes de compra se crean cualquier día; los pagos se registran solo en estos."
-        />
+          description="Las órdenes de compra se crean cualquier día; los pagos se registran solo en los días que marques."
+          aside={
+            state ? (
+              <span className="inline-note">
+                <span className={`oc-dot ${state.config.enabled && state.open ? 'is-on' : ''}`} aria-hidden />
+                {status}
+              </span>
+            ) : null
+          }
+        >
+          {loading ? <LoadingBlock rows={3} label="Cargando configuración…" /> : null}
 
-        {loading ? <LoadingBlock rows={3} label="Cargando configuración…" /> : null}
+          {!loading && !form && msg ? (
+            <p className="oc-flash is-error" role="alert">
+              {msg.text}
+            </p>
+          ) : null}
 
-        {!loading && !form && msg ? (
-          <p className="oc-flash is-error" role="alert">
-            {msg.text}
-          </p>
-        ) : null}
-
-        {form ? (
-          <section className="surface surface--pad">
-            <div className="fx">
-              <div className="oc-set-row">
-                <span className="inline-note">
-                  <span className={`oc-dot ${state?.config.enabled && state.open ? 'is-on' : ''}`} aria-hidden />
-                  {status}
-                </span>
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={form.enabled}
-                  className={`oc-switch ${form.enabled ? 'is-on' : ''}`}
-                  disabled={!canEdit}
-                  onClick={() => edit({ ...form, enabled: !form.enabled })}
-                >
-                  <span className="oc-switch__track" aria-hidden>
-                    <span className="oc-switch__knob" />
+          {form ? (
+            <div className="fx set-form">
+              <button
+                type="button"
+                role="switch"
+                aria-checked={form.enabled}
+                className={`oc-switch set-switch ${form.enabled ? 'is-on' : ''}`}
+                disabled={!canEdit}
+                onClick={() => edit({ ...form, enabled: !form.enabled })}
+              >
+                <span className="set-switch__copy">
+                  <span className="set-switch__label">Limitar pagos a estos días</span>
+                  <span className="set-switch__hint">
+                    {form.enabled ? 'Fuera de estos días no se puede marcar una orden como pagada.' : 'Hoy los pagos se registran cualquier día.'}
                   </span>
-                  Limitar pagos a estos días
-                </button>
-              </div>
+                </span>
+                <span className="oc-switch__track" aria-hidden>
+                  <span className="oc-switch__knob" />
+                </span>
+              </button>
 
               <div className="fx-field">
                 <span>Días</span>
@@ -160,18 +168,20 @@ export default function SettingsPage() {
                   disabled={!canEdit}
                   maxLength={300}
                   onChange={(e) => edit({ ...form, note: e.target.value })}
-                  placeholder="Opcional · se añade al aviso cuando hoy no es día de cobro"
+                  placeholder="Opcional: se añade al aviso cuando hoy no es día de cobro"
                 />
               </label>
 
-              <div className="fx-actions">
+              <div className="set-form__foot">
                 {msg ? (
                   <span className={`oc-flash ${msg.tone === 'error' ? 'is-error' : 'is-ok'}`} role="status">
                     {msg.text}
                   </span>
+                ) : dirty ? (
+                  <span className="set-form__dirty">Cambios sin guardar</span>
                 ) : null}
                 {canEdit ? (
-                  <button type="button" className="btn btn-sm" disabled={saving || !dirty} onClick={save}>
+                  <button type="button" className="btn" disabled={saving || !dirty} onClick={save}>
                     {saving ? 'Guardando…' : 'Guardar'}
                   </button>
                 ) : (
@@ -179,8 +189,8 @@ export default function SettingsPage() {
                 )}
               </div>
             </div>
-          </section>
-        ) : null}
+          ) : null}
+        </SettingsSection>
       </div>
     </AppShell>
   );

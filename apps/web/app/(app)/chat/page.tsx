@@ -53,6 +53,8 @@ import {
 } from '@/components/chat/chat-model';
 import {
   ChannelGlyph,
+  channelDisplayName,
+  channelLabel,
   errorText,
   ICON_EVENT,
   isDirectLike,
@@ -113,7 +115,8 @@ function ChannelRow({
   onSelect: (id: string) => void;
 }) {
   const unread = active ? 0 : c.unreadCount;
-  const preview = plainText(c.lastMessagePreview) || c.topic || '';
+  const label = channelLabel(c);
+  const preview = plainText(c.lastMessagePreview) || label.context || c.topic || '';
   return (
     <button
       type="button"
@@ -124,7 +127,7 @@ function ChannelRow({
       <ChannelGlyph c={c} online={online} />
       <span className="chat-row__main">
         <span className="chat-row__top">
-          <span className="chat-row__name">{c.name}</span>
+          <span className="chat-row__name">{label.title}</span>
           {c.lastMessageAt ? <span className="chat-row__time">{listTime(c.lastMessageAt, now)}</span> : null}
         </span>
         <span className="chat-row__bottom">
@@ -143,6 +146,18 @@ function ChannelRow({
       </span>
     </button>
   );
+}
+
+/** «Mensaje para Bernardo», «Mensaje en #general»; si el nombre es largo, «Escribe un mensaje…». */
+function composerPlaceholder(title: string, o: { isDirect: boolean; isGroup: boolean; eventChannel: boolean }) {
+  const SHORT = 26;
+  if (o.isDirect) {
+    const first = title.split(/\s+/)[0] || '';
+    return first ? `Mensaje para ${first}` : 'Escribe un mensaje…';
+  }
+  if (o.eventChannel) return 'Escribe un mensaje…';
+  if (o.isGroup) return title && title.length <= SHORT ? `Mensaje para ${title}` : 'Escribe un mensaje…';
+  return title && title.length <= SHORT ? `Mensaje en #${title}` : 'Escribe un mensaje…';
 }
 
 function Section({ title, action, children }: { title: string; action?: ReactNode; children: ReactNode }) {
@@ -1151,13 +1166,13 @@ function ChatInner() {
       }}
       onMute={(h) => void setMute(h)}
       onLeave={() => {
-        if (!window.confirm(`¿Salir de ${head.isGroupDm ? head.name : `#${head.name}`}?`)) return;
+        if (!window.confirm(`¿Salir de ${channelDisplayName(head)}?`)) return;
         api(`/chat/channels/${head.id}/leave`, { method: 'POST' })
           .then(closeChannel)
           .catch((e) => showToast(errorText(e)));
       }}
       onArchive={() => {
-        if (!window.confirm(`¿Archivar #${head.name}? Nadie podrá escribir en él.`)) return;
+        if (!window.confirm(`¿Archivar ${channelDisplayName(head)}? Nadie podrá escribir en él.`)) return;
         api(`/chat/channels/${head.id}/archive`, { method: 'POST' })
           .then(closeChannel)
           .catch((e) => showToast(errorText(e)));
@@ -1256,7 +1271,7 @@ function ChatInner() {
 
   const now = new Date();
   const q = fold(query.trim());
-  const visible = channels?.filter((c) => !q || fold(c.name).includes(q)) ?? null;
+  const visible = channels?.filter((c) => !q || fold(`${c.name} ${channelDisplayName(c)}`).includes(q)) ?? null;
   const sections = useMemo(() => {
     if (!visible) return null;
     const order = (c: ChannelSummary) => (isGeneralSlug(c.slug) ? 0 : isAnnouncementsSlug(c.slug) ? 1 : 2);
@@ -1267,7 +1282,10 @@ function ChatInner() {
   }, [visible]);
 
   const summary = channels?.find((c) => c.id === activeId) ?? null;
-  const title = head?.name ?? summary?.name ?? '';
+  const named = head ?? summary;
+  const label = named ? channelLabel(named) : { title: '', context: null, hash: false };
+  const title = label.title;
+  const eventChannel = Boolean(named?.eventId);
   const kind = head?.kind ?? summary?.kind;
   const isDirect = kind === 'DIRECT';
   const isGroup = Boolean(head?.isGroupDm ?? summary?.isGroupDm);
@@ -1284,7 +1302,11 @@ function ChatInner() {
       ? peerOnline
         ? 'En línea'
         : (head?.peer?.title ?? summary?.peer?.title ?? 'Mensaje directo')
-      : head?.topic || summary?.topic || (head ? `${head.memberCount} ${head.memberCount === 1 ? 'miembro' : 'miembros'}` : '');
+      : eventChannel
+        ? label.context ||
+          [head?.topic || summary?.topic].find((t) => t && t !== title && t !== 'Producción del evento') ||
+          (head ? `Canal del evento · ${head.memberCount} ${head.memberCount === 1 ? 'miembro' : 'miembros'}` : 'Canal del evento')
+        : head?.topic || summary?.topic || (head ? `${head.memberCount} ${head.memberCount === 1 ? 'miembro' : 'miembros'}` : '');
 
   const receipt = useCallback(
     (last: ChatMessage) => {
@@ -1418,10 +1440,19 @@ function ChatInner() {
     <div className="chat-intro">
       {head || summary ? <ChannelGlyph c={(head ?? summary)!} size="lg" online={isDirect ? peerOnline : undefined} /> : null}
       <h3 className="chat-intro__title">
-        {isDirect ? `Tu conversación con ${title}` : isGroup ? title : `Este es el inicio de #${title}`}
+        {isDirect
+          ? `Tu conversación con ${title}`
+          : isGroup
+            ? title
+            : eventChannel
+              ? `Aquí empieza el canal de ${title}`
+              : `Este es el inicio de #${title}`}
       </h3>
       <p className="chat-intro__text">
         {head?.description ||
+          (eventChannel
+            ? `${label.context ? `${label.context}. ` : ''}Avisos, archivos y decisiones del evento, con el equipo que lo produce.`
+            : null) ||
           head?.topic ||
           (isDirect
             ? 'Lo que escriban aquí solo lo ven ustedes dos.'
@@ -1772,7 +1803,7 @@ function ChatInner() {
                   onPaste={onPaste('main')}
                   disabled={!canPost}
                   disabledText="Solo dirección publica en este canal"
-                  placeholder={isDirect ? `Mensaje a ${title.split(/\s+/)[0] || ''}` : isGroup ? `Mensaje a ${title}` : `Mensaje en #${title}`}
+                  placeholder={composerPlaceholder(title, { isDirect, isGroup, eventChannel })}
                   inputRef={inputRef}
                   replyTo={activeId ? (replyTo[activeId] ?? null) : null}
                   onCancelReply={() =>

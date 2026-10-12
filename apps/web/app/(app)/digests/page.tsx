@@ -140,7 +140,10 @@ export default function DigestsPage() {
   return (
     <AppShell title="Resúmenes">
       <div className="stack page-workspace">
-        <PageHeader description="Cada mañana a las 8:00 se manda a dirección y gerencias un resumen de lo que necesita atención: eventos en riesgo, órdenes de compra atrasadas y firmas pendientes.">
+        <PageHeader
+          title="Resúmenes"
+          description="Cada mañana a las 8:00, dirección y gerencias reciben lo que necesita atención: eventos en riesgo, órdenes atrasadas y firmas pendientes."
+        >
           <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
             <button className="btn" type="button" disabled={busy} onClick={() => runDaily()}>
               {busy ? 'Generando…' : 'Generar resumen ahora'}

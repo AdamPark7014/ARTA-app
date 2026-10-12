@@ -53,7 +53,8 @@ export default function MaintenancePage() {
     <AppShell title="Mantenimiento">
       <div className="stack page-workspace">
         <PageHeader
-          description="Checklists de mantenimiento para eventos de renta en Explanada / Auditorio Arema."
+          title="Mantenimiento"
+          description="Formatos de mantenimiento para los eventos de renta del Auditorio Arema."
           hint="Solo entidad Explanada. Abre el checklist desde la tarjeta o entra al evento para ver el detalle completo."
         >
           <ActionLink href="/events/new">Nuevo evento Explanada</ActionLink>

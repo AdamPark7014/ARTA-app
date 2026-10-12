@@ -3,8 +3,9 @@
 import Link from 'next/link';
 import { Fragment, useEffect, useMemo, useState } from 'react';
 import { AppShell } from '@/components/app-shell/AppShell';
+import { PageHeader } from '@/components/ui/PageChrome';
 import { LoadingBlock } from '@/components/ui/LoadingBlock';
-import { EmptyLite, Pill, SectionHead, Seg, Tile } from '@/components/ui/Lite';
+import { EmptyLite, Pill, quietTone, Seg, Tile } from '@/components/ui/Lite';
 import { PayDaysNote } from '@/components/purchase-orders/PoWindowBanner';
 import { PoDetail } from '@/components/events/EventPurchaseOrdersPanel';
 import type { Po } from '@/components/events/event-detail.types';
@@ -23,6 +24,7 @@ import {
 import { poRubroLabel } from '@/lib/po-rubro';
 import { useUser } from '@/lib/user-context';
 import { userHasPermission } from '@/lib/access-matrix';
+import { moneyKpi } from '@/lib/format';
 
 /** Fila de `GET /analytics/purchase-orders` → `orders[]`. */
 type PoRow = {
@@ -235,16 +237,16 @@ export default function PurchaseOrdersPage() {
   return (
     <AppShell title="Órdenes de compra">
       <div className="sx-stack page-workspace oc-page">
-        <SectionHead
+        <PageHeader
           title="Pagos y autorizaciones"
-          sub={win?.config.enabled ? <PayDaysNote state={win} /> : undefined}
+          description={win?.config.enabled ? <PayDaysNote state={win} /> : undefined}
         >
           {win?.canEdit ? (
             <Link className="btn-quiet" href="/settings">
               Configurar días
             </Link>
           ) : null}
-        </SectionHead>
+        </PageHeader>
 
         {loading && !rows ? <LoadingBlock rows={5} label="Cargando órdenes…" /> : null}
 
@@ -268,19 +270,19 @@ export default function PurchaseOrdersPage() {
               <Tile
                 label="Por autorizar"
                 value={stats.auth.count}
-                sub={stats.auth.amount > 0 ? mxn(stats.auth.amount) : 'Nada pendiente'}
+                sub={stats.auth.amount > 0 ? moneyKpi(stats.auth.amount) : 'Nada pendiente'}
                 onClick={() => setSection('auth')}
               />
               <Tile
                 label="Por pagar"
-                value={mxn(stats.pay.amount)}
+                value={moneyKpi(stats.pay.amount)}
                 sub={plural(stats.pay.count)}
                 tone="accent"
                 onClick={() => setSection('pay')}
               />
               <Tile
                 label="Pagadas"
-                value={mxn(stats.paid.amount)}
+                value={moneyKpi(stats.paid.amount)}
                 sub={plural(stats.paid.count)}
                 onClick={() => setSection('paid')}
               />
@@ -333,6 +335,8 @@ export default function PurchaseOrdersPage() {
                     const waiting = poIsPending(row.status) || row.status === 'AUTHORIZED';
                     const detail = details[row.id];
                     const closedEvent = !!row.eventStatus && CLOSED_EVENT.has(row.eventStatus);
+                    // Un solo relleno por fila: si hay botón de acción, el estado va en contorno.
+                    const act = action(row);
                     return (
                       <Fragment key={row.id}>
                         <tr className={`oc-row ${open ? 'is-open' : ''}`} onClick={() => toggle(row)}>
@@ -366,10 +370,10 @@ export default function PurchaseOrdersPage() {
                             )}
                           </td>
                           <td>
-                            <Pill tone={pill.tone}>{pill.label}</Pill>
+                            <Pill tone={act ? quietTone(pill.tone) : pill.tone}>{pill.label}</Pill>
                           </td>
                           <td className="col-act" onClick={(e) => e.stopPropagation()}>
-                            <div className="oc-actions">{action(row)}</div>
+                            <div className="oc-actions">{act}</div>
                           </td>
                         </tr>
                         {open ? (

@@ -5,12 +5,13 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { FormEvent, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { AppShell } from '@/components/app-shell/AppShell';
 import { LoadingBlock } from '@/components/ui/LoadingBlock';
-import { EmptyLite, Pill, SectionHead, Seg, Tile } from '@/components/ui/Lite';
-import { FieldSelect, FormGrid } from '@/components/ui/PageChrome';
+import { EmptyLite, Pill, Seg, Tile } from '@/components/ui/Lite';
+import { FieldSelect, FormGrid, PageHeader } from '@/components/ui/PageChrome';
 import { api } from '@/lib/api';
 import { mxn } from '@/lib/price-list';
 import { useUser } from '@/lib/user-context';
 import { userHasPermission } from '@/lib/access-matrix';
+import { moneyKpi } from '@/lib/format';
 
 type EventOpt = { id: string; name: string; entity: string; status?: string };
 type AdvanceStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'PAID';
@@ -211,9 +212,9 @@ function AdvancesPageInner() {
   return (
     <AppShell title="Anticipos">
       <div className="stack page-workspace">
-        <SectionHead
+        <PageHeader
           title="Anticipos"
-          sub="Se solicitan, los aprueba quien autoriza OC en la entidad y después se pagan. Cada paso avisa."
+          description="Se solicitan, los aprueba quien autoriza OC en la entidad y después se pagan. Cada paso avisa."
         >
           {canRequest ? (
             <button type="button" className="btn btn-sm" onClick={() => setShowForm((v) => !v)}>
@@ -223,7 +224,7 @@ function AdvancesPageInner() {
           <Link className="btn-quiet" href="/events">
             Ir a eventos
           </Link>
-        </SectionHead>
+        </PageHeader>
 
         {notice ? (
           <p className={`oc-flash ${notice.tone === 'error' ? 'is-error' : 'is-ok'}`} role="status">
@@ -263,10 +264,10 @@ function AdvancesPageInner() {
           <Tile
             label="Mis solicitudes abiertas"
             value={mine ? myOpen.length : '—'}
-            sub={mine ? (myOpen.length ? mxn(sum(myOpen)) : 'Ninguna en curso') : undefined}
+            sub={mine ? (myOpen.length ? moneyKpi(sum(myOpen)) : 'Ninguna en curso') : undefined}
             onClick={() => setTab('mine')}
           />
-          <Tile label="Pagado en la entidad" value={mxn(paidTotal)} sub="Anticipos ya entregados" tone="accent" />
+          <Tile label="Pagado en la entidad" value={moneyKpi(paidTotal)} sub="Anticipos ya entregados" tone="accent" />
         </div>
 
         <div className="oc-toolbar">
@@ -292,7 +293,7 @@ function AdvancesPageInner() {
 
         {current === 'event' && eventRows && eventRows.length ? (
           <p className="t-muted t-small adv-summary">
-            {plural(eventRows.length)} · pagado {mxn(sum(eventRows.filter((r) => statusOf(r) === 'PAID')))}
+            {plural(eventRows.length)} · pagado {moneyKpi(sum(eventRows.filter((r) => statusOf(r) === 'PAID')))}
           </p>
         ) : null}
 

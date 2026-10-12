@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AppShell } from '@/components/app-shell/AppShell';
-import { SectionHead } from '@/components/ui/Lite';
+import { PageHeader } from '@/components/ui/PageChrome';
 import { MonthCalendar, type CalendarItem } from '@/components/ui/MonthCalendar';
 import { LoadingBlock } from '@/components/ui/LoadingBlock';
 import { api } from '@/lib/api';
@@ -154,14 +154,14 @@ export default function EventsCalendarPage() {
   return (
     <AppShell title="Calendario">
       <div className="sx-stack page-workspace">
-        <SectionHead
+        <PageHeader
           title="Calendario"
-          sub={`Shows de ${entity === 'ARTA' ? 'Arta' : 'Auditorio'} · toca un día para dejar una nota`}
+          description={`Shows de ${entity === 'ARTA' ? 'Arta' : 'Auditorio'} · toca un día para dejar una nota`}
         >
           <Link className="btn-quiet" href="/events">
             Ver lista
           </Link>
-        </SectionHead>
+        </PageHeader>
         {loading ? (
           <LoadingBlock rows={6} label="Cargando calendario…" />
         ) : (

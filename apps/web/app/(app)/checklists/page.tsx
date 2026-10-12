@@ -252,9 +252,44 @@ export default function ChecklistsTemplatesPage() {
     <AppShell title="Plantillas">
       <div className="stack page-workspace">
         <PageHeader
-          description="Cada plantilla es un formato PDF que se copia al crear un evento. El equipo lo llena en pantalla y el PDF embebido se regenera al guardar o firmar."
+          title="Plantillas de formatos"
+          description="Cada formato se copia al crear un evento y el equipo lo llena en pantalla."
           hint={`Entidad activa: ${entity === 'ARTA' ? 'Arta' : 'Auditorio'}. Las versiones nuevas aplican solo a eventos creados después del cambio.`}
-        />
+        >
+          {canManage && !loading ? (
+            <>
+              <label className="btn-quiet hub-upload">
+                Importar Word
+                <input
+                  type="file"
+                  hidden
+                  accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    e.target.value = '';
+                    if (f) void importDocx(f);
+                  }}
+                />
+              </label>
+              <label className="btn-quiet hub-upload">
+                Importar Excel
+                <input
+                  type="file"
+                  hidden
+                  accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    e.target.value = '';
+                    if (f) void importXlsx(f);
+                  }}
+                />
+              </label>
+              <button className="btn" type="button" disabled={busy === 'new'} onClick={createBlank}>
+                {busy === 'new' ? 'Creando…' : 'Nuevo formato'}
+              </button>
+            </>
+          ) : null}
+        </PageHeader>
 
         {msg ? (
           <FlashMessage variant={msgVariant(msg)} onDismiss={() => setMsg('')}>
@@ -271,40 +306,7 @@ export default function ChecklistsTemplatesPage() {
           <LoadingBlock rows={4} label="Cargando plantillas…" />
         ) : (
           <>
-            {canManage ? (
-              <div className="row" role="group" aria-label="Nuevo formato">
-                <button className="btn" type="button" disabled={busy === 'new'} onClick={createBlank}>
-                  {busy === 'new' ? 'Creando…' : 'Nuevo formato'}
-                </button>
-                <label className="btn-quiet hub-upload">
-                  Importar Word
-                  <input
-                    type="file"
-                    hidden
-                    accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                    onChange={(e) => {
-                      const f = e.target.files?.[0];
-                      e.target.value = '';
-                      if (f) void importDocx(f);
-                    }}
-                  />
-                </label>
-                <label className="btn-quiet hub-upload">
-                  Importar Excel
-                  <input
-                    type="file"
-                    hidden
-                    accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                    onChange={(e) => {
-                      const f = e.target.files?.[0];
-                      e.target.value = '';
-                      if (f) void importXlsx(f);
-                    }}
-                  />
-                </label>
-              </div>
-            ) : null}
-            <FilterBar meta={`${filtered.length} de ${templates.length} plantillas · ${entity}`}>
+            <FilterBar meta={`${filtered.length} de ${templates.length} plantillas`}>
               <FieldSearch
                 value={q}
                 onChange={setQ}
@@ -345,46 +347,44 @@ export default function ChecklistsTemplatesPage() {
                 </button>
               </EmptyState>
             ) : (
-              <div className="grid-cards">
+              <div className="tpl-grid">
                 {filtered.map((t) => {
                   const questions = (t.schemaJson?.sections || []).reduce(
                     (n, s) => n + (s.items?.length || 0),
                     0,
                   );
                   return (
-                    <div className="kpi" key={t.id}>
-                      <div className="row">
-                        <span className={`badge ${t.active ? 'ok' : 'warn'}`}>
-                          {t.active ? 'Activa' : 'Inactiva'}
-                        </span>
-                        <span className="kpi-sub muted">v{t.version}</span>
+                    <article className="tpl-card" key={t.id}>
+                      <div className="tpl-card__top">
+                        <span className={`state-dot ${t.active ? 'is-on' : ''}`}>{t.active ? 'Activa' : 'Inactiva'}</span>
+                        <span className="tpl-card__ver">Versión {t.version}</span>
                       </div>
-                      <strong>{t.name}</strong>
-                      <p className="kpi-sub muted">{t.description || 'Sin descripción'}</p>
-                      <div className="kpi-sub muted">
+                      <h3 className="tpl-card__title" data-trunc>
+                        {t.name}
+                      </h3>
+                      <p className="tpl-card__desc" data-trunc>
+                        {t.description || 'Sin descripción'}
+                      </p>
+                      <p className="tpl-card__meta">
                         PDF · {entityLabel(t.entities)}
-                        {questions ? ` · ${questions} campos` : ''}
-                      </div>
-                      <div className="row">
-                        <button
-                          className="btn ghost"
-                          type="button"
-                          onClick={() => openPreview(t, false)}
-                        >
+                        {questions ? ` · ${questions} ${questions === 1 ? 'campo' : 'campos'}` : ''}
+                      </p>
+                      <div className="tpl-card__actions">
+                        {canManage ? (
+                          <button className="btn ghost btn-sm" type="button" onClick={() => openPreview(t, true)}>
+                            Editar
+                          </button>
+                        ) : null}
+                        <button className="btn-quiet" type="button" onClick={() => openPreview(t, false)}>
                           Ver
                         </button>
                         {canManage ? (
-                          <>
-                            <button className="btn" type="button" onClick={() => openPreview(t, true)}>
-                              Editar
-                            </button>
-                            <button className="btn ghost" type="button" onClick={() => toggleActive(t)}>
-                              {t.active ? 'Desactivar' : 'Activar'}
-                            </button>
-                          </>
+                          <button className="btn-quiet tpl-card__toggle" type="button" onClick={() => toggleActive(t)}>
+                            {t.active ? 'Desactivar' : 'Activar'}
+                          </button>
                         ) : null}
                       </div>
-                    </div>
+                    </article>
                   );
                 })}
               </div>

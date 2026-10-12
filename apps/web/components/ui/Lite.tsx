@@ -64,9 +64,17 @@ export function Seg<K extends string>({
   );
 }
 
-/** Píldora de estado con punto de color. `tone`: draft | review | ok | paid | danger | info. */
+/** Píldora de estado con punto de color. `tone`: draft | review | ok | paid | danger | info | quiet. */
 export function Pill({ tone = 'draft', children }: { tone?: string; children: ReactNode }) {
   return <span className={`pill pill--${tone}`}>{children}</span>;
+}
+
+/**
+ * Un solo relleno por fila (pulido 12-10-2026): cuando la fila ya trae su botón de
+ * acción («Autorizar», «Crear»), el estado que pide acción pasa a contorno con punto.
+ */
+export function quietTone(tone: string) {
+  return tone === 'review' || tone === 'fill' ? 'quiet' : tone;
 }
 
 export function ReviewPill({ step }: { step: ReviewStep }) {

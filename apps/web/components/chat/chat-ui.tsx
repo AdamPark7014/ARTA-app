@@ -33,6 +33,47 @@ export function isEvent(c: { eventId?: string | null }) {
   return Boolean(c.eventId);
 }
 
+type Named = { name: string; topic?: string | null; eventId?: string | null; kind?: string; isGroupDm?: boolean | null };
+
+const GENERIC_EVENT_TOPIC = 'Producción del evento';
+
+/** «gira-latinoamericana-sinfonica-2026» → «Gira latinoamericana sinfonica 2026» (último recurso). */
+function unslug(slug: string) {
+  const words = slug.replace(/^evento-/, '').replace(/-[0-9a-f]{6}$/, '').split('-').filter(Boolean);
+  const text = words.join(' ');
+  return text ? text.charAt(0).toUpperCase() + text.slice(1) : slug;
+}
+
+/**
+ * Nombre para mostrar de una conversación (pulido 12-10-2026). Un canal de evento
+ * se llama «Artista · Evento» en el API: el evento va de título y el artista de
+ * contexto, como en las apps (`EventChannelName`). Si el nombre llegó con forma de
+ * identificador («gira-latinoamericana-…»), se usa el nombre del evento que trae el
+ * tema. Los canales de equipo siguen con su «#nombre».
+ */
+export function channelLabel(c: Named): { title: string; context: string | null; hash: boolean } {
+  if (c.kind === 'DIRECT' || c.isGroupDm) return { title: c.name, context: null, hash: false };
+  if (!c.eventId) return { title: c.name, context: null, hash: true };
+  const at = c.name.indexOf(' · ');
+  if (at > 0) {
+    const first = c.name.slice(0, at).trim();
+    const rest = c.name.slice(at + 3).trim();
+    if (first && rest) return { title: rest, context: first, hash: false };
+  }
+  if (/^[a-z0-9]+(?:-[a-z0-9]+)+$/.test(c.name)) {
+    const topic = (c.topic || '').trim();
+    if (topic && topic !== GENERIC_EVENT_TOPIC) return { title: topic, context: null, hash: false };
+    return { title: unslug(c.name), context: null, hash: false };
+  }
+  return { title: c.name, context: null, hash: false };
+}
+
+/** «#general», «Noche de Boleros», «Bernardo Sandoval»: el nombre tal como se lee en la lista. */
+export function channelDisplayName(c: Named) {
+  const l = channelLabel(c);
+  return l.hash ? `#${l.title}` : l.title;
+}
+
 /** Directo o directo de grupo: van juntos en «Mensajes directos». */
 export function isDirectLike(c: { kind: string; isGroupDm?: boolean | null }) {
   return c.kind === 'DIRECT' || Boolean(c.isGroupDm);

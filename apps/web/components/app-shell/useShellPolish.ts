@@ -72,6 +72,14 @@ const SINGLE_LINE_SELECTOR = [
 
 const EDGE = 2;
 
+/** Campos de fecha y hora: vacíos, su «dd/mm/aaaa» se pinta como pista (`data-empty`). */
+const DATE_SELECTOR = 'input[type="date"], input[type="time"], input[type="datetime-local"], input[type="month"]';
+
+function syncEmpty(el: HTMLInputElement) {
+  if (el.value) el.removeAttribute('data-empty');
+  else if (!el.hasAttribute('data-empty')) el.setAttribute('data-empty', '');
+}
+
 function isTruncated(el: HTMLElement) {
   if (el.scrollWidth - el.clientWidth > 1) {
     const cs = getComputedStyle(el);
@@ -125,7 +133,8 @@ function update(el: HTMLElement) {
  * - desvanecidos de borde solo cuando un contenedor de verdad desborda;
  * - `data-scrolled` en <html> para que la barra superior muestre su línea al bajar;
  * - el texto completo en `title` para lo que de verdad se corta (lista curada al
- *   montar y cualquier otro texto o campo al pasar el cursor).
+ *   montar y cualquier otro texto o campo al pasar el cursor);
+ * - `data-empty` en los campos de fecha y hora vacíos (su máscara se lee como pista).
  */
 export function useShellPolish(enabled: boolean) {
   useEffect(() => {
@@ -156,7 +165,14 @@ export function useShellPolish(enabled: boolean) {
         update(el);
       }
       for (const el of Array.from(document.querySelectorAll<HTMLElement>(SINGLE_LINE_SELECTOR))) syncTitle(el);
+      for (const el of Array.from(document.querySelectorAll<HTMLInputElement>(DATE_SELECTOR))) syncEmpty(el);
     };
+
+    const onInput = (ev: Event) => {
+      if (ev.target instanceof HTMLInputElement && ev.target.matches(DATE_SELECTOR)) syncEmpty(ev.target);
+    };
+    document.addEventListener('input', onInput, true);
+    document.addEventListener('change', onInput, true);
 
     // Cualquier otro texto cortado muestra el completo al pasar el cursor.
     const onOver = (ev: PointerEvent) => {
@@ -214,6 +230,8 @@ export function useShellPolish(enabled: boolean) {
       ro.disconnect();
       document.removeEventListener('scroll', onScroll, { capture: true });
       document.removeEventListener('pointerover', onOver);
+      document.removeEventListener('input', onInput, true);
+      document.removeEventListener('change', onInput, true);
       window.removeEventListener('scroll', onPageScroll);
       window.removeEventListener('resize', schedule);
       if (frame) window.cancelAnimationFrame(frame);

@@ -15,7 +15,7 @@ import {
   type Colleague,
   type SavedItem,
 } from './chat-model';
-import { Avatar, ChannelGlyph, errorText, untilLabel } from './chat-ui';
+import { Avatar, ChannelGlyph, channelDisplayName, errorText, untilLabel } from './chat-ui';
 
 /* Paneles laterales: fijados, guardados e información del canal. */
 
@@ -229,7 +229,7 @@ export function ChannelInfo({
       <section className="chat-info__hero">
         <ChannelGlyph c={detail} size="lg" online={isDirect && detail.peer ? isOnline(detail.peer.id) : undefined} />
         <div className="chat-info__hero-copy">
-          <strong>{isDirect || group ? detail.name : `#${detail.name}`}</strong>
+          <strong>{channelDisplayName(detail)}</strong>
           <span>
             {kindLabel} · {detail.memberCount} {detail.memberCount === 1 ? 'miembro' : 'miembros'}
           </span>

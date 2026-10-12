@@ -3,16 +3,17 @@
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AppShell } from '@/components/app-shell/AppShell';
-import { EmptyLite, ReviewPill, SectionHead, Seg, Tile } from '@/components/ui/Lite';
+import { EmptyLite, ReviewPill, Seg, Tile } from '@/components/ui/Lite';
 import { MonthCalendar, type CalendarItem } from '@/components/ui/MonthCalendar';
 import { LoadingBlock } from '@/components/ui/LoadingBlock';
-import { FieldSearch, FlashMessage } from '@/components/ui/PageChrome';
+import { FieldSearch, FlashMessage, PageHeader } from '@/components/ui/PageChrome';
 import { api } from '@/lib/api';
 import { campaignRowsFrom, campaignTotals } from '@/lib/campaign-concepts';
 import { mxn } from '@/lib/price-list';
 import { REVIEW_APPROVER_ROLES, REVIEW_LABELS, reviewStep, type ReviewStep } from '@/lib/review-flow';
 import { useUser } from '@/lib/user-context';
 import type { CampaignData } from '@/components/events/event-detail.types';
+import { moneyKpi } from '@/lib/format';
 
 type CampaignRow = {
   id: string;
@@ -136,12 +137,12 @@ export default function CampaignsPage() {
   return (
     <AppShell title="Campañas">
       <div className="sx-stack page-workspace">
-        <SectionHead
+        <PageHeader
           title="Campañas"
-          sub={`${entity === 'ARTA' ? 'Arta' : 'Auditorio'} · ${enriched.length} campaña${enriched.length === 1 ? '' : 's'}`}
+          description={`${entity === 'ARTA' ? 'Arta' : 'Auditorio'} · ${enriched.length} campaña${enriched.length === 1 ? '' : 's'}`}
         >
           <FieldSearch value={q} onChange={setQ} placeholder="Buscar evento o concepto…" label="Buscar campaña" maxWidth={260} />
-        </SectionHead>
+        </PageHeader>
 
         {msg ? (
           <FlashMessage variant={msg.variant} onDismiss={() => setMsg(null)}>
@@ -161,8 +162,8 @@ export default function CampaignsPage() {
                 sub={inReview.length ? 'esperan autorización' : 'nada pendiente'}
                 onClick={() => setSection('REVIEW')}
               />
-              <Tile label="Autorizadas" value={mxn(authorizedTotal)} sub={`${counts.AUTHORIZED} por pagar · interno`} onClick={() => setSection('AUTHORIZED')} />
-              <Tile label="Pagadas" value={mxn(paidTotal)} tone="accent" sub={`${counts.PAID} campañas · interno`} onClick={() => setSection('PAID')} />
+              <Tile label="Autorizadas" value={moneyKpi(authorizedTotal)} sub={`${counts.AUTHORIZED} por pagar · interno`} onClick={() => setSection('AUTHORIZED')} />
+              <Tile label="Pagadas" value={moneyKpi(paidTotal)} tone="accent" sub={`${counts.PAID} campañas · interno`} onClick={() => setSection('PAID')} />
             </div>
 
             <div className="toolbar-row">
