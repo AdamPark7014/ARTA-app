@@ -61,8 +61,9 @@ enum ArtaColor {
     /// Texto secundario.
     static var muted: Color { light ? Color(hex: 0x55555C) : Color(hex: 0xA1A1AA) }
     static var secondary: Color { muted }
-    /// Texto terciario: etiquetas, horas, detalle de tarjetas.
-    static var tertiary: Color { light ? Color(hex: 0x8B8B92) : Color(hex: 0x85858E) }
+    /// Texto terciario: etiquetas, horas, detalle de tarjetas. Los mismos que la web tras la
+    /// revisión de contraste AA (`#8b8b92` daba 3.4:1 sobre blanco; `#85858e`, 4.4:1 bajo el reflector).
+    static var tertiary: Color { light ? Color(hex: 0x6B6B73) : Color(hex: 0x8A8A93) }
 
     static var line: Color { light ? Color(hex: 0x0C0C0D, opacity: 0.07) : Color(hex: 0xFFFFFF, opacity: 0.07) }
     static var lineStrong: Color { light ? Color(hex: 0x0C0C0D, opacity: 0.12) : Color(hex: 0xFFFFFF, opacity: 0.12) }
@@ -159,8 +160,8 @@ struct ArtaControlShape: InsettableShape {
 enum ArtaFont {
     /// Etiqueta en mayúsculas (10–11 px, 600, tracking 1.6).
     static let cap = Font.system(size: 10.5, weight: .semibold, design: .rounded)
-    /// Estado («REVISAR», «EN CURSO»).
-    static let status = Font.system(size: 10, weight: .semibold, design: .rounded)
+    /// Estado («REVISAR», «EN CURSO»): 10.5 como en la web y en Android.
+    static let status = Font.system(size: 10.5, weight: .semibold, design: .rounded)
     /// Título de panel (600).
     static let panelTitle = Font.system(size: 15, weight: .semibold, design: .rounded)
     /// Título de pantalla y saludo: ligero, con el nombre en 600.
@@ -177,10 +178,12 @@ enum ArtaFont {
 struct CapLabel: View {
     let text: String
     var color: Color?
+    var lines: Int
 
-    init(_ text: String, color: Color? = nil) {
+    init(_ text: String, color: Color? = nil, lines: Int = 1) {
         self.text = text
         self.color = color
+        self.lines = lines
     }
 
     var body: some View {
@@ -188,7 +191,49 @@ struct CapLabel: View {
             .font(ArtaFont.cap)
             .tracking(1.5)
             .foregroundStyle(color ?? ArtaColor.tertiary)
-            .lineLimit(1)
+            .lineLimit(lines)
+            .fixedSize(horizontal: false, vertical: lines > 1)
+    }
+}
+
+/// Encabezado de sección, el mismo en listas, hojas y tarjetas: etiqueta «cap» y, si aplica,
+/// el contador en una insignia discreta. `alert` solo para alertas reales (vencidas).
+struct ArtaSectionHeader: View {
+    let title: String
+    var count: Int?
+    var alert: Bool
+
+    init(_ title: String, count: Int? = nil, alert: Bool = false) {
+        self.title = title
+        self.count = count
+        self.alert = alert
+    }
+
+    var body: some View {
+        HStack(alignment: .center, spacing: ArtaSpace.s) {
+            CapLabel(title, color: alert ? ArtaColor.danger : nil, lines: 2)
+            if let count { QuietCount(count: count) }
+            Spacer(minLength: 0)
+        }
+        .textCase(nil)
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isHeader)
+    }
+}
+
+/// Contador discreto (encabezados, filas de menú): relleno neutro y texto secundario, para no
+/// competir con los estados «llenos», que sí piden acción.
+struct QuietCount: View {
+    let count: Int
+
+    var body: some View {
+        Text(count > 99 ? "99+" : "\(count)")
+            .font(.system(size: 10.5, weight: .semibold, design: .rounded))
+            .monospacedDigit()
+            .foregroundStyle(ArtaColor.muted)
+            .padding(.horizontal, 6)
+            .frame(minWidth: 18, minHeight: 18)
+            .background(ArtaControlShape(squareRadius: 3).fill(ArtaColor.surface2))
     }
 }
 
@@ -268,48 +313,88 @@ extension View {
 // MARK: - Botones
 
 /// Acción principal: tinta con texto blanco (píldora) o plata con texto negro (4 px).
+/// `compact`: la versión chica de las filas (aprobar, corregir).
 struct ArtaPrimaryButtonStyle: ButtonStyle {
     var fullWidth = true
+    var compact = false
 
     func makeBody(configuration: Configuration) -> some View {
-        ArtaButtonBody(configuration: configuration, primary: true, fullWidth: fullWidth)
+        ArtaButtonBody(configuration: configuration, kind: .primary, fullWidth: fullWidth, compact: compact)
     }
 }
 
 /// Acción secundaria: superficie con borde de línea fuerte.
 struct ArtaSecondaryButtonStyle: ButtonStyle {
     var fullWidth = true
+    var compact = false
 
     func makeBody(configuration: Configuration) -> some View {
-        ArtaButtonBody(configuration: configuration, primary: false, fullWidth: fullWidth)
+        ArtaButtonBody(configuration: configuration, kind: .secondary, fullWidth: fullWidth, compact: compact)
     }
 }
 
+/// Acción destructiva (rechazar, pedir corrección): discreta, igual que la secundaria pero con
+/// el texto en el color de peligro; nunca un relleno teñido. Siempre pasa por una confirmación.
+struct ArtaDestructiveButtonStyle: ButtonStyle {
+    var fullWidth = true
+    var compact = false
+
+    func makeBody(configuration: Configuration) -> some View {
+        ArtaButtonBody(configuration: configuration, kind: .destructive, fullWidth: fullWidth, compact: compact)
+    }
+}
+
+private enum ArtaButtonKind { case primary, secondary, destructive }
+
 private struct ArtaButtonBody: View {
     let configuration: ButtonStyleConfiguration
-    let primary: Bool
+    let kind: ArtaButtonKind
     let fullWidth: Bool
+    let compact: Bool
     @Environment(\.isEnabled) private var isEnabled
 
     var body: some View {
         let shape = ArtaControlShape()
         configuration.label
-            .font(.system(.subheadline, design: .rounded).weight(.semibold))
-            .foregroundStyle(primary ? ArtaColor.onAccent : ArtaColor.text)
+            .font(.system(textStyle, design: .rounded).weight(.semibold))
+            .foregroundStyle(foreground)
             .lineLimit(1)
-            .padding(.horizontal, 18)
-            .padding(.vertical, 13)
+            .padding(.horizontal, compact ? 14 : 18)
+            .padding(.vertical, compact ? 8 : 13)
             .frame(maxWidth: fullWidth ? .infinity : nil)
-            .background(shape.fill(primary ? ArtaColor.accentFill : AnyShapeStyle(ArtaColor.surface)))
-            .overlay(shape.strokeBorder(primary ? Color.clear : ArtaColor.lineStrong, lineWidth: 1))
+            .background(shape.fill(fill))
+            .overlay(shape.strokeBorder(border, lineWidth: 1))
             .shadow(
-                color: primary && ArtaTheme.isLight ? Color(hex: 0x0C0C0D, opacity: 0.18) : .clear,
+                color: kind == .primary && isEnabled && !compact && ArtaTheme.isLight ? Color(hex: 0x0C0C0D, opacity: 0.18) : .clear,
                 radius: 8, x: 0, y: 5
             )
             .contentShape(shape)
-            .opacity(isEnabled ? (configuration.isPressed ? 0.82 : 1) : 0.45)
+            .opacity(configuration.isPressed ? 0.82 : 1)
             .scaleEffect(configuration.isPressed ? 0.985 : 1)
             .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
+            .animation(.easeOut(duration: 0.18), value: isEnabled)
+    }
+
+    private var textStyle: Font.TextStyle { compact ? .footnote : .subheadline }
+
+    /// Apagado a propósito, no un negro deslavado: relleno neutro, texto terciario y sin sombra.
+    private var foreground: Color {
+        guard isEnabled else { return ArtaColor.tertiary }
+        switch kind {
+        case .primary: return ArtaColor.onAccent
+        case .secondary: return ArtaColor.text
+        case .destructive: return ArtaColor.danger
+        }
+    }
+
+    private var fill: AnyShapeStyle {
+        if kind == .primary { return isEnabled ? ArtaColor.accentFill : AnyShapeStyle(ArtaColor.surface2) }
+        return AnyShapeStyle(ArtaColor.surface)
+    }
+
+    private var border: Color {
+        if kind == .primary { return .clear }
+        return isEnabled ? ArtaColor.lineStrong : ArtaColor.line
     }
 }
 

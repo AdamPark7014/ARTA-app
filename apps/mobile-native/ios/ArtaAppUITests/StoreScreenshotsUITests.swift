@@ -362,9 +362,15 @@ final class StoreScreenshotsUITests: XCTestCase {
         app.launchArguments = ["-ArtaDemo", "NO", "-AppleLanguages", "(es-MX)", "-AppleLocale", "es_MX"]
         app.launchEnvironment = ["TZ": "America/Mexico_City"]
         app.launch()
-        if buscar([porId("login-email")], timeout: 30) != nil {
+        if let correo = buscar([porId("login-email")], timeout: 30) {
             pausa(1.0)
             revisar("login-01-entrada")
+            // Con el teclado arriba: el formulario sube y nada queda tapado.
+            if correo.isHittable {
+                correo.tap()
+                pausa(1.2)
+                revisar("login-02-teclado")
+            }
         } else {
             omitir("login: no apareció la pantalla de entrada")
             adjuntarJerarquia("dbg-sin-login")
