@@ -1,14 +1,38 @@
 # RELEVO
 
-- **Último turno:** claude-code
-- **Fecha:** 2026-10-11
+- **Último turno:** cursor
+- **Fecha:** 2026-10-12
 - **Rama:** main
   (Adam es el único programador).
 - **Producción:** `ec45283` desplegado desde `main` el 2026-10-12 ~05:40 UTC (bundle `495c11d..main` +
   `update.sh --no-pull`, log `/root/arta-deploy-20261012-pulido.log`; respaldo automático en `/root/arta-backups/`).
   El servidor ya está en el historial nuevo: el bundle incremental hace fast-forward.
 
-## Turno claude-code (2026-10-12, mediodía): acabado visual a medias → Cursor
+## Turno cursor (2026-10-12, tarde): acabado visual listo para revisión de Claude
+
+Ejecutado `.ai/EXEC-PACKET.md` (CERRADO). **Nada desplegado ni subido a tiendas**: producción sigue en `ec45283`.
+- **Hecho (web)**: chat sin slugs también en búsqueda, guardados, hilos, selector rápido y avisos del navegador
+  (`6268d65`, `channelWhere` en `components/chat/chat-ui.tsx`); OC y Campañas como tarjetas a ≤ 640 px
+  (`dtable--cards` en `_acabado.scss`), panel «Hoy» sin hueco, cabecera de evento sin desbordes (lugar que se
+  acorta y menú «Más» hacia dentro), notas del calendario con autor visible en escritorio y barras sin texto en
+  el teléfono, fondo del acceso con líneas de 1 px (arcos ARTA, diagonales Auditorio) y su texto con contraste
+  AA, cifras de mosaicos en color del texto con punto de aviso, «Agregar formato» en el encabezado de la sección
+  (`41999aa`); spec de login con el botón «Confirmar» (`aaa36cb`); reglas nuevas en
+  `docs/diseno/SISTEMA-VISUAL.md` § «Acabado» (`c6ded75`).
+- **Verificado**: auditoría «sin cortes» 0 en todo (texto, recortes, scroll lateral, encimados, contraste) en las
+  2 entidades × 1536×864, 1536×730, 1280×720 y 390×844; 7 specs 47/47; `npm run typecheck` y `npm run build`
+  limpios; Android `assembleDebug testDebugUnitTest` (42 pruebas, 0 fallas); iOS ios-build 38300682548 y
+  ios-screenshots 38307275188 en verde, capturas 01–07 revisadas.
+- **Capturas**: `.ai/scratch/acabado/` (`antes-*` y `despues-*` = `{arta|audi}-{tamaño}-{pantalla}.png`, más
+  `.txt/.json` de la auditoría; iOS en `ios/`). Scripts de apoyo ahí mismo (`serve.mjs`, `run-audit.mjs`,
+  `run-specs.mjs`, `issues.mjs`). La app se sirvió en el 3110 (`node serve.mjs both 3110`).
+- **A medias**: Android **sin revisar en el emulador**: el emulador se cayó con la máquina sin memoria (una
+  corrida de Jest de FINANVOZ-app con 23 procesos) y lanzar el emulador no está permitido a Cursor. Falta revisar
+  entrada, Aprobaciones (Rechazar), evento sin «—», tarea, alta de tarea e Inicio en las dos entidades con la
+  copia `com.artaproducciones.ops.redesign`. El flujo de capturas de iOS solo saca ARTA (cuenta demo).
+- **Siguiente (Claude)**: revisar capturas `despues-*`, pulir, revisar Android en el emulador y desplegar la web.
+
+## Turno claude-code (2026-10-12, mediodía): acabado visual a medias → Cursor (ejecutado arriba)
 
 Adam: «todavía te faltan detalles» y luego «dime qué falta a ver si Cursor puede acabarlo y lo pules». Se
 detuvieron los agentes y se guardaron puntos de control que **compilan** (no verificados en pantalla):

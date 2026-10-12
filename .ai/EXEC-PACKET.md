@@ -3,7 +3,9 @@
 - **Escrito por:** Claude (cabeza)
 - **Fecha:** 2026-10-12
 - **Rama:** main
-- **Estado:** LISTO PARA CURSOR
+- **Estado:** CERRADO
+- **Ejecutó:** Cursor, 2026-10-12 (`6268d65`, `aaa36cb`, `41999aa`, `c6ded75` + cierre). Pendiente: Android en
+  el emulador (ver criterio Android).
 <!-- Estados: BORRADOR → LISTO PARA CURSOR → EN EJECUCION → CERRADO -->
 
 ## Objetivo
@@ -29,7 +31,7 @@ Nunito en web y Android, SF Pro Rounded en iOS. Monocromo: color **solo** en ale
   `apps/web/playwright.audit.config.ts` + `apps/web/e2e/audit/` + datos `apps/web/e2e/support/rich-fixtures.ts`.
 
 ## Criterios de éxito
-- [ ] **Web**, en las dos entidades (ARTA y Auditorio) a 1536×864 y 1536×730 (login, tareas y chat también a
+- [x] **Web**, en las dos entidades (ARTA y Auditorio) a 1536×864 y 1536×730 (login, tareas y chat también a
       390×844), cada punto se ve terminado:
   1. Todas las pantallas con el mismo encabezado (`PageHeader`/`.ph`: título, una línea de descripción,
      acciones a la derecha, mismo aire). Revisar en especial Tareas, Usuarios, Seguridad, Organizaciones,
@@ -62,17 +64,21 @@ Nunito en web y Android, SF Pro Rounded en iOS. Monocromo: color **solo** en ale
   12. Cifras con un solo formato (`lib/format.ts`): tarjetas sin centavos, tablas y detalle con centavos.
   13. Ninguna cifra grande con «—» (poner la palabra: «Sin formatos», etc.); iconos del mismo tamaño y trazo;
       estados al pasar el cursor y foco visibles.
-- [ ] Huecos de la pasada anterior: en 390×844 las tablas de **Órdenes de compra** y **Campañas** pasan a
+- [x] Huecos de la pasada anterior: en 390×844 las tablas de **Órdenes de compra** y **Campañas** pasan a
       tarjetas; en Inicio el panel «Hoy» no deja hueco abajo cuando la otra columna es más alta.
-- [ ] Auditoría «sin cortes» limpia otra vez: 0 texto cortado (salvo un renglón con `title`), 0 recortes,
-      0 scroll horizontal, contraste AA, en las 2 entidades × 4 tamaños.
-- [ ] Specs web que pasan hoy siguen pasando: app-shell, tasks, login, layout, mobile-shell, users-alta,
-      formatos-auditorio (actualizar selectores solo si el cambio es puramente visual).
+- [x] Auditoría «sin cortes» limpia otra vez: 0 texto cortado (salvo un renglón con `title`), 0 recortes,
+      0 scroll horizontal, contraste AA, en las 2 entidades × 4 tamaños. (`despues-*.txt`: 0 en todo.)
+- [x] Specs web que pasan hoy siguen pasando: app-shell, tasks, login, layout, mobile-shell, users-alta,
+      formatos-auditorio (actualizar selectores solo si el cambio es puramente visual). 47/47; en login el
+      botón del 2FA ahora es «Confirmar».
 - [ ] **Android** verificado en el emulador (modo demo, las dos entidades): entrada, Aprobaciones (Rechazar),
       detalle de evento (sin «—»), detalle de tarea, alta de tarea, Inicio; paridad con iOS.
-- [ ] **iOS**: `ios-build.yml` y `ios-screenshots.yml` en verde; revisar las capturas de las dos entidades
-      (las de tienda 01–07 siguen válidas).
-- [ ] Capturas antes/después de cada punto en `.ai/scratch/acabado/` (no se versiona) para que Claude revise.
+      **No hecho**: `assembleDebug testDebugUnitTest` en verde (42 pruebas, 0 fallas), pero el emulador se cayó
+      con la máquina sin memoria (una corrida de Jest de otro repo) y lanzarlo no está permitido a Cursor.
+- [x] **iOS**: `ios-build.yml` (38300682548) y `ios-screenshots.yml` (38307275188) en verde; capturas 01–07
+      revisadas (`.ai/scratch/acabado/ios/`). El flujo solo captura ARTA (la cuenta demo); el Auditorio en iOS
+      no tiene captura automática.
+- [x] Capturas antes/después de cada punto en `.ai/scratch/acabado/` (no se versiona) para que Claude revise.
 
 ## Contexto mínimo a cargar
 1. `docs/diseno/SISTEMA-VISUAL.md` — tokens, tipografía, componentes, «Sin cortes».
@@ -98,27 +104,27 @@ Nunito en web y Android, SF Pro Rounded en iOS. Monocromo: color **solo** en ale
 12. `docs/diseno/SISTEMA-VISUAL.md` (anotar reglas nuevas: encabezado de pantalla, un relleno por fila, campos)
 
 ## Pasos numerados
-1. `pwsh -File C:\dev\scripts\relevo\relevo.ps1 estado` — el árbol debe estar limpio en `5557c44` o posterior.
+1. [hecho] `pwsh -File C:\dev\scripts\relevo\relevo.ps1 estado` — el árbol debe estar limpio en `5557c44` o posterior.
    Si hay archivos sin commitear, son de otro turno: `relevo.ps1 salvar` antes de tocar nada.
-2. Web: levantar la app con la API simulada como lo hace la auditoría (ver `playwright.audit.config.ts`) y sacar
+2. [hecho, también 1280×720 y 390×844] Web: levantar la app con la API simulada como lo hace la auditoría (ver `playwright.audit.config.ts`) y sacar
    capturas de TODAS las pantallas en las dos entidades a 1536×864 y 1536×730 → `.ai/scratch/acabado/antes-*`.
-3. Recorrer los puntos 1–13 con las capturas; corregir en `_acabado.scss` o en la página. Un commit pequeño por
+3. [hecho] Recorrer los puntos 1–13 con las capturas; corregir en `_acabado.scss` o en la página. Un commit pequeño por
    punto (o por grupo de pantallas). Revisar Auditorio igual de terminado que ARTA.
-4. Terminar el chat (punto 6): estado vacío, marcador del cuadro de texto, diálogos y búsqueda sin slug.
-5. Móvil web (390×844): Órdenes de compra y Campañas como tarjetas; Tareas, chat y login sin cortes.
-6. Inicio: panel «Hoy» sin hueco (que la rejilla no estire la tarjeta, o que la lista crezca para llenarla).
-7. Correr la auditoría (`npx playwright test -c playwright.audit.config.ts` desde `apps/web`, app en 3100) hasta
+4. [hecho] Terminar el chat (punto 6): estado vacío, marcador del cuadro de texto, diálogos y búsqueda sin slug.
+5. [hecho] Móvil web (390×844): Órdenes de compra y Campañas como tarjetas; Tareas, chat y login sin cortes.
+6. [hecho] Inicio: panel «Hoy» sin hueco (que la rejilla no estire la tarjeta, o que la lista crezca para llenarla).
+7. [hecho, con la app en 3110] Correr la auditoría (`npx playwright test -c playwright.audit.config.ts` desde `apps/web`, app en 3100) hasta
    que quede limpia; correr los 7 specs; `npm run typecheck` y `npm run build`.
-8. Capturas «después» → `.ai/scratch/acabado/despues-*` (mismos nombres que «antes»).
-9. Android: `gradlew.bat assembleDebug testDebugUnitTest`; instalar la copia de prueba lado a lado
+8. [hecho] Capturas «después» → `.ai/scratch/acabado/despues-*` (mismos nombres que «antes»).
+9. [a medias: compila y 42 pruebas en verde; emulador caído, sin revisión en pantalla] Android: `gradlew.bat assembleDebug testDebugUnitTest`; instalar la copia de prueba lado a lado
    (`--init-script` con `redesign-init.gradle`, que vive en el scratchpad de Claude; si no lo encuentras,
    usa el emulador con la app de prueba ya instalada `com.artaproducciones.ops.redesign`; **no desinstalar la de
    tienda**). El emulador es lento: esperar ~25 s tras abrir antes de tocar. Revisar entrada, Aprobaciones,
    evento, tarea, alta de tarea e Inicio en las dos entidades (doble toque en Inicio cambia de entidad).
-10. iOS: confirmar `gh run view 38300682548 -R AdamPark7014/ARTA-app` en verde; correr
+10. [hecho] iOS: confirmar `gh run view 38300682548 -R AdamPark7014/ARTA-app` en verde; correr
     `gh workflow run ios-screenshots.yml -R AdamPark7014/ARTA-app --ref main`, descargar y revisar.
-11. Subir a `origin main` (`git pull --rebase` antes). **No desplegar**: Claude revisa y despliega.
-12. Actualizar `.ai/RELEVO.md` entero en el último commit y `relevo.ps1 cerrar -Mensaje "acabado visual listo para revisión"`.
+11. [hecho] Subir a `origin main` (`git pull --rebase` antes). **No desplegar**: Claude revisa y despliega.
+12. [hecho] Actualizar `.ai/RELEVO.md` entero en el último commit y `relevo.ps1 cerrar -Mensaje "acabado visual listo para revisión"`.
 
 ## Tests / verificación
 - Web: `npm run typecheck`, `npm run build` (si falla `next/font` al bajar Nunito, es la red: reintentar),
