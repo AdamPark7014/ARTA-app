@@ -3,6 +3,8 @@ package com.artaproducciones.ops.ui.modules
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -102,7 +104,7 @@ internal fun groupByDue(tasks: List<TaskDto>, today: LocalDate): List<Pair<DueBu
         .toSortedMap(compareBy { it.ordinal })
         .map { (bucket, list) -> bucket to list.sortedBy { it.dueAt ?: "9999" } }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun TasksScreen(nav: ModuleNav) {
     var perms by remember { mutableStateOf<ModulesPerms?>(null) }
@@ -174,8 +176,12 @@ fun TasksScreen(nav: ModuleNav) {
                 compactPlaceholder = "Buscar tareas",
                 modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 10.dp, bottom = 6.dp),
             )
-            ChipRow(Modifier.padding(bottom = 4.dp)) {
-                items(StatusFilter.entries) { f ->
+            // Los seis filtros caben en dos renglones: nada se corta en el borde de la pantalla.
+            FlowRow(
+                Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                StatusFilter.entries.forEach { f ->
                     val count = when (f) {
                         StatusFilter.OVERDUE -> overdueCount
                         StatusFilter.REVIEW -> reviewCount
