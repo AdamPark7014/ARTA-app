@@ -25,8 +25,8 @@ object ArtaNotifications {
 
     private const val GROUP = "arta"
 
-    /** Dorado de marca: acento de notificaciones y luz LED. */
-    const val ACCENT_COLOR: Int = 0xFFC9A962.toInt()
+    /** Tinta de marca: acento de notificaciones y luz LED (Android aclara el tono si el panel es oscuro). */
+    const val ACCENT_COLOR: Int = 0xFF0C0C0D.toInt()
 
     private val VIBRATION = longArrayOf(0L, 220L, 120L, 220L)
 

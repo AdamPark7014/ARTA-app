@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="arta_bg">#FF09090B</color>
-    <color name="arta_bg_elev">#FF111113</color>
-    <color name="arta_gold">#FFC9A962</color>
-    <color name="arta_text">#FFFAFAFA</color>
+    <!-- Papel y tinta de ARTA (docs/diseno/SISTEMA-VISUAL.md): arranque, ventana y acento de avisos. -->
+    <color name="arta_bg">#FFF7F6F3</color>
+    <color name="arta_ink">#FF0C0C0D</color>
 </resources>

@@ -1,7 +1,8 @@
 """Ícono de ARTA (iOS y Android) y gráficos de la ficha de Google Play.
 
-El ícono es la «a» redondeada del logo de Arta (`apps/web/public/brand/arta-logo-ink.png`) en dorado
-degradado sobre negro con un brillo suave. Este script es la fuente: todo lo de abajo se regenera aquí.
+El ícono es la «a» redondeada del logo de Arta (`apps/web/public/brand/arta-logo-ink.png`) en tinta negra
+sobre papel claro (opción «A · Papel», elegida por Adam el 11-10-2026 con el sistema visual de
+`docs/diseno/SISTEMA-VISUAL.md`). Este script es la fuente: todo lo de abajo se regenera aquí.
 
   ios/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon-1024.png   ícono de iOS (cuadrado, sin alfa)
   android/app/src/main/res/drawable-nodpi/ic_launcher_background.png  capa de fondo del ícono adaptable
@@ -9,6 +10,8 @@ degradado sobre negro con un brillo suave. Este script es la fuente: todo lo de 
   android/app/src/main/res/drawable-nodpi/ic_launcher_monochrome.png  capa para íconos con tema (Android 13+)
   play-assets/icon-512.png                                            ícono 512×512 de Play
   play-assets/feature-graphic-1024x500.png                            gráfico destacado 1024×500
+  web/public/icons/{apple-touch-icon,icon-192,icon-512,icon-maskable-512}.png   panel instalado (PWA)
+  web/public/icons/badge-96.png                                       insignia blanca de los avisos web
 
 Uso:  python apps/mobile-native/play-assets/generar.py
 """
@@ -24,26 +27,24 @@ LOGO_INK = ROOT / "apps/web/public/brand/arta-logo-ink.png"
 LOGO = ROOT / "apps/web/public/brand/arta-logo.png"
 APP_ICON = MOBILE / "ios/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon-1024.png"
 ANDROID_RES = MOBILE / "android/app/src/main/res/drawable-nodpi"
+WEB_ICONS = ROOT / "apps/web/public/icons"
 
-BG = (10, 10, 11)
-BG_GLOW = (38, 34, 28)
-GOLD = (201, 169, 98)
-GOLD_TOP = (222, 190, 120)
-GOLD_BOTTOM = (176, 138, 62)
-INK = (244, 239, 228)
-MUTED = (185, 178, 163)
+PAPER_TOP = (255, 255, 255)
+PAPER_BOTTOM = (238, 236, 231)
+PAPER = (247, 246, 243)
+INK = (12, 12, 13)
+SECONDARY = (85, 85, 92)
+LINE = (224, 222, 216)
+NUNITO = MOBILE / "android/app/src/main/res/font/nunito.ttf"
 
 # Capa del ícono adaptable: 108 dp a xxxhdpi (4×).
 ADAPTIVE = 432
 
 
-def font(names, size):
-    for name in names:
-        try:
-            return ImageFont.truetype(name, size)
-        except OSError:
-            continue
-    return ImageFont.load_default()
+def nunito(size, weight=b"Regular"):
+    f = ImageFont.truetype(str(NUNITO), size)
+    f.set_variation_by_name(weight)
+    return f
 
 
 def glyph_mask() -> Image.Image:
@@ -62,21 +63,18 @@ def glyph_mask() -> Image.Image:
     return Image.fromarray((letter * 255).astype(np.uint8), "L")
 
 
-def radial(size, inner, outer, center=(0.5, 0.42), radius=0.75) -> Image.Image:
-    yy, xx = np.mgrid[0:size, 0:size]
-    d = np.sqrt((xx / size - center[0]) ** 2 + (yy / size - center[1]) ** 2) / radius
-    d = np.clip(d, 0, 1)[..., None]
-    return Image.fromarray((np.array(inner) * (1 - d) + np.array(outer) * d).astype(np.uint8), "RGB")
-
-
 def vertical(w, h, top, bottom) -> Image.Image:
     t = np.linspace(0, 1, h)[:, None, None]
     col = (np.array(top) * (1 - t) + np.array(bottom) * t).astype(np.uint8)
     return Image.fromarray(np.repeat(col, w, axis=1), "RGB")
 
 
+def paper(size) -> Image.Image:
+    return vertical(size, size, PAPER_TOP, PAPER_BOTTOM)
+
+
 def draw_glyph(canvas: Image.Image, mask: Image.Image, height: float, cy: float, shadow=True):
-    """Pinta la «a» dorada centrada; `height` y `cy` son fracciones del lienzo."""
+    """Pinta la «a» en tinta centrada; `height` y `cy` son fracciones del lienzo."""
     size = canvas.size[0]
     gh = int(size * height)
     gw = int(mask.width * gh / mask.height)
@@ -86,15 +84,14 @@ def draw_glyph(canvas: Image.Image, mask: Image.Image, height: float, cy: float,
     if shadow:
         sh = Image.new("L", canvas.size, 0)
         sh.paste(m, (x, y + int(size * 0.012)))
-        sh = sh.filter(ImageFilter.GaussianBlur(size * 0.02)).point(lambda v: int(v * 0.55))
-        canvas.paste(Image.new(canvas.mode, canvas.size, (0, 0, 0) + ((255,) if canvas.mode == "RGBA" else ())), (0, 0), sh)
-    gold = vertical(gw, gh, GOLD_TOP, GOLD_BOTTOM)
-    canvas.paste(gold, (x, y), m)
+        sh = sh.filter(ImageFilter.GaussianBlur(size * 0.022)).point(lambda v: int(v * 0.10))
+        canvas.paste(Image.new(canvas.mode, canvas.size, INK + ((255,) if canvas.mode == "RGBA" else ())), (0, 0), sh)
+    canvas.paste(Image.new(canvas.mode, (gw, gh), INK + ((255,) if canvas.mode == "RGBA" else ())), (x, y), m)
     return canvas
 
 
 def app_icon(mask):
-    icon = draw_glyph(radial(1024, BG_GLOW, BG), mask, 0.50, 0.52)
+    icon = draw_glyph(paper(1024), mask, 0.46, 0.52)
     icon.save(APP_ICON, optimize=True)  # RGB: App Store rechaza íconos con alfa
     icon.resize((512, 512), Image.LANCZOS).save(HERE / "icon-512.png", optimize=True)
     return icon
@@ -102,13 +99,13 @@ def app_icon(mask):
 
 def android_layers(mask):
     ANDROID_RES.mkdir(parents=True, exist_ok=True)
-    radial(ADAPTIVE, BG_GLOW, BG).save(ANDROID_RES / "ic_launcher_background.png", optimize=True)
-    # La «a» cabe en el círculo seguro de 66 dp: alto 46 dp de 108.
+    paper(ADAPTIVE).save(ANDROID_RES / "ic_launcher_background.png", optimize=True)
+    # La «a» cabe holgada en el círculo seguro de 66 dp: alto 40 dp de 108.
     fg = Image.new("RGBA", (ADAPTIVE, ADAPTIVE), (0, 0, 0, 0))
-    draw_glyph(fg, mask, 46 / 108, 0.52)
+    draw_glyph(fg, mask, 40 / 108, 0.52)
     fg.save(ANDROID_RES / "ic_launcher_foreground.png", optimize=True)
     mono = Image.new("RGBA", (ADAPTIVE, ADAPTIVE), (0, 0, 0, 0))
-    gh = int(ADAPTIVE * 46 / 108)
+    gh = int(ADAPTIVE * 40 / 108)
     gw = int(mask.width * gh / mask.height)
     m = mask.resize((gw, gh), Image.LANCZOS)
     mono.paste(Image.new("RGBA", (gw, gh), (255, 255, 255, 255)), ((ADAPTIVE - gw) // 2, int(ADAPTIVE * 0.52 - gh / 2)), m)
@@ -117,31 +114,54 @@ def android_layers(mask):
 
 def feature_graphic(icon):
     w, h = 1024, 500
-    img = Image.new("RGB", (w, h), BG)
+    img = vertical(w, h, (251, 250, 248), (241, 239, 234))
     draw = ImageDraw.Draw(img)
 
-    # Ícono a la izquierda con las esquinas redondeadas, como se ve en el teléfono.
-    side = 300
+    # Ícono a la izquierda con las esquinas redondeadas, como se ve en el teléfono, con sombra suave.
+    side = 280
+    x0, y0 = 104, (h - side) // 2
     tile = icon.resize((side, side), Image.LANCZOS)
     rounded = Image.new("L", (side, side), 0)
     ImageDraw.Draw(rounded).rounded_rectangle([0, 0, side - 1, side - 1], radius=int(side * 0.225), fill=255)
-    img.paste(tile, (90, 100), rounded)
+    sh = Image.new("L", (w, h), 0)
+    sh.paste(rounded, (x0, y0 + 10))
+    sh = sh.filter(ImageFilter.GaussianBlur(22)).point(lambda v: int(v * 0.16))
+    img.paste(Image.new("RGB", (w, h), INK), (0, 0), sh)
+    img.paste(tile, (x0, y0), rounded)
+    border = Image.new("L", (side, side), 0)
+    ImageDraw.Draw(border).rounded_rectangle([0, 0, side - 1, side - 1], radius=int(side * 0.225), outline=255, width=2)
+    img.paste(Image.new("RGB", (side, side), LINE), (x0, y0), border)
 
-    # Logo de ARTA (blanco sobre transparente) teñido de dorado.
-    x0 = 450
-    logo = Image.open(LOGO).convert("RGBA")
-    scale = 300 / logo.width
-    logo = logo.resize((300, int(logo.height * scale)), Image.LANCZOS)
-    tinted = Image.new("RGBA", logo.size, GOLD + (0,))
-    tinted.putalpha(logo.getchannel("A"))
-    img.paste(tinted, (x0, 120), tinted)
-    y = 120 + logo.height + 28
-
-    title = font(["georgiab.ttf", "georgia.ttf", "DejaVuSerif-Bold.ttf"], 40)
-    body = font(["segoeui.ttf", "arial.ttf", "DejaVuSans.ttf"], 26)
-    draw.text((x0, y), "Producción de eventos", font=title, fill=INK)
-    draw.text((x0, y + 58), "Tareas · Chat · Aprobaciones · Anticipos", font=body, fill=MUTED)
+    # Logo de ARTA en tinta y textos en Nunito.
+    tx = 470
+    logo = Image.open(LOGO_INK).convert("RGBA")
+    lw = 290
+    logo = logo.resize((lw, int(logo.height * lw / logo.width)), Image.LANCZOS)
+    ly = 112
+    img.paste(logo, (tx, ly), logo)
+    y = ly + logo.height + 34
+    draw.text((tx, y), "Producción de eventos", font=nunito(38, b"SemiBold"), fill=INK)
+    draw.text((tx, y + 56), "Tareas · Chat · Aprobaciones · Anticipos", font=nunito(24), fill=SECONDARY)
     img.save(HERE / "feature-graphic-1024x500.png", optimize=True)
+
+
+def web_icons(mask):
+    """Íconos del panel instalado: los mismos que la app; el «maskable» deja la «a» en la zona segura (80 %)."""
+    WEB_ICONS.mkdir(parents=True, exist_ok=True)
+    big = draw_glyph(paper(1024), mask, 0.46, 0.52)
+    for name, side in (("apple-touch-icon", 180), ("icon-192", 192), ("icon-512", 512)):
+        big.resize((side, side), Image.LANCZOS).save(WEB_ICONS / f"{name}.png", optimize=True)
+    draw_glyph(paper(1024), mask, 0.36, 0.52).resize((512, 512), Image.LANCZOS).save(
+        WEB_ICONS / "icon-maskable-512.png", optimize=True
+    )
+    # Insignia de Android en avisos web: solo la silueta en blanco sobre transparente.
+    side = 96
+    gh = int(side * 0.62)
+    gw = int(mask.width * gh / mask.height)
+    m = mask.resize((gw, gh), Image.LANCZOS)
+    badge = Image.new("RGBA", (side, side), (255, 255, 255, 0))
+    badge.paste(Image.new("RGBA", (gw, gh), (255, 255, 255, 255)), ((side - gw) // 2, (side - gh) // 2), m)
+    badge.save(WEB_ICONS / "badge-96.png", optimize=True)
 
 
 if __name__ == "__main__":
@@ -149,4 +169,5 @@ if __name__ == "__main__":
     ios_icon = app_icon(a)
     android_layers(a)
     feature_graphic(ios_icon)
-    print("listo: AppIcon-1024, capas del ícono adaptable, icon-512 y feature graphic")
+    web_icons(a)
+    print("listo: AppIcon-1024, capas del ícono adaptable, icon-512, feature graphic e íconos web")

@@ -1,10 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.Arta" parent="Theme.Material3.Dark.NoActionBar">
+    <!-- ARTA es clara por omisión; Compose pinta cada entidad (Auditorio oscuro) y MainActivity ajusta barras y ventana. -->
+    <style name="Theme.Arta" parent="Theme.Material3.Light.NoActionBar">
         <item name="android:windowBackground">@color/arta_bg</item>
         <item name="android:statusBarColor">@color/arta_bg</item>
         <item name="android:navigationBarColor">@color/arta_bg</item>
-        <item name="colorPrimary">@color/arta_gold</item>
+        <item name="colorPrimary">@color/arta_ink</item>
     </style>
 
     <style name="Theme.Arta.Splash" parent="Theme.SplashScreen">

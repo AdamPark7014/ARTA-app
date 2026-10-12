@@ -30,9 +30,12 @@
         <false/>
     </dict>
     <key>UILaunchScreen</key>
-    <dict/>
+    <dict>
+        <key>UIColorName</key>
+        <string>LaunchBackground</string>
+    </dict>
     <key>UIUserInterfaceStyle</key>
-    <string>Dark</string>
+    <string>Light</string>
     <key>UIApplicationSupportsIndirectInputEvents</key>
     <true/>
     <key>UISupportedInterfaceOrientations</key>

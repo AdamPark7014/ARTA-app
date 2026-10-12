@@ -49,7 +49,7 @@
             android:resource="@drawable/ic_stat_arta" />
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_color"
-            android:resource="@color/arta_gold" />
+            android:resource="@color/arta_ink" />
         <meta-data
             android:name="firebase_analytics_collection_deactivated"
             android:value="true" />
