@@ -58,6 +58,7 @@ import com.artaproducciones.ops.data.api.ModulesSession
 import com.artaproducciones.ops.data.api.TaskDto
 import com.artaproducciones.ops.data.api.userMessage
 import com.artaproducciones.ops.ui.theme.ArtaColors
+import com.artaproducciones.ops.ui.theme.ArtaType
 import com.artaproducciones.ops.ui.theme.Button
 import com.artaproducciones.ops.ui.theme.OutlinedButton
 import com.artaproducciones.ops.ui.theme.TextButton
@@ -208,7 +209,7 @@ fun TaskFormSheet(
             )
 
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text("Responsables", style = MaterialTheme.typography.labelMedium, color = ArtaColors.Muted)
+                Text("RESPONSABLES", style = ArtaType.Cap, color = ArtaColors.Tertiary)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     assigneeIds.forEachIndexed { index, id ->
                         InputChip(
@@ -231,7 +232,7 @@ fun TaskFormSheet(
 
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    Text("Vence", style = MaterialTheme.typography.labelMedium, color = ArtaColors.Muted)
+                    Text("VENCE", style = ArtaType.Cap, color = ArtaColors.Tertiary)
                     Text(due?.let { dueLabel(it.toString()) } ?: "Sin fecha")
                 }
                 if (due != null) TextButton(onClick = { due = null }) { Text("Quitar") }
@@ -304,7 +305,7 @@ private fun FieldRow(label: String, value: String, enabled: Boolean, onClick: ()
             .clickable(enabled = enabled, onClick = onClick)
             .padding(vertical = 4.dp),
     ) {
-        Text(label, style = MaterialTheme.typography.labelMedium, color = ArtaColors.Muted)
+        Text(label.uppercase(ES_MX), style = ArtaType.Cap, color = ArtaColors.Tertiary)
         Text(value, color = if (enabled) ArtaColors.Gold else ArtaColors.Text)
     }
 }

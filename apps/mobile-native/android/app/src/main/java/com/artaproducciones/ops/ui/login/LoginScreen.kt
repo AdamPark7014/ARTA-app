@@ -1,19 +1,26 @@
 package com.artaproducciones.ops.ui.login
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.CircularProgressIndicator
@@ -21,6 +28,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -30,27 +38,45 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.artaproducciones.ops.data.BizEntity
+import com.artaproducciones.ops.R
 import com.artaproducciones.ops.data.Session
 import com.artaproducciones.ops.ui.common.LegalLinks
+import com.artaproducciones.ops.ui.theme.ArtaCard
 import com.artaproducciones.ops.ui.theme.ArtaColors
 import com.artaproducciones.ops.ui.theme.ArtaType
-import com.artaproducciones.ops.ui.theme.BrandMark
 import com.artaproducciones.ops.ui.theme.Button
+import com.artaproducciones.ops.ui.theme.LocalArtaTokens
+import com.artaproducciones.ops.ui.theme.Nunito
 import com.artaproducciones.ops.ui.theme.TextButton
 import kotlinx.coroutines.launch
+import java.util.Locale
 
+/**
+ * Entrada (sin sesión la app es ARTA, papel y tinta), igual que iOS: logotipo con «La experiencia
+ * del Show», tarjeta con «Inicia sesión» y los campos rotulados, la acción principal en el acento
+ * (apagada a propósito mientras falta algo) y el aviso de privacidad y los términos al pie.
+ * Centrada en la pantalla; con el teclado arriba se encoge y se desplaza.
+ */
 @Composable
 fun LoginScreen() {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val t = LocalArtaTokens.current
     var email by rememberSaveable { mutableStateOf("") }
     var password by rememberSaveable { mutableStateOf("") }
     var code by rememberSaveable { mutableStateOf("") }
@@ -83,87 +109,188 @@ fun LoginScreen() {
         }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .imePadding()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 28.dp, vertical = 48.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
-    ) {
-        BrandMark(BizEntity.ARTA, Modifier.height(54.dp))
-        Spacer(Modifier.height(14.dp))
-        Text("OPERACIONES", color = ArtaColors.Tertiary, style = ArtaType.Cap.copy(letterSpacing = 3.sp))
-        Spacer(Modifier.height(40.dp))
+    val ready = if (challengeId == null) email.isNotBlank() && password.length >= 4 else code.length >= 6
 
-        if (challengeId == null) {
-            OutlinedTextField(
-                value = email,
-                onValueChange = { email = it },
-                label = { Text("Correo") },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, imeAction = ImeAction.Next),
-                modifier = Modifier.fillMaxWidth(),
-            )
-            Spacer(Modifier.height(12.dp))
-            OutlinedTextField(
-                value = password,
-                onValueChange = { password = it },
-                label = { Text("Contraseña") },
-                singleLine = true,
-                visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
-                trailingIcon = {
-                    IconButton(onClick = { showPassword = !showPassword }) {
-                        Icon(if (showPassword) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility, "Mostrar contraseña")
-                    }
-                },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
-                keyboardActions = KeyboardActions(onDone = { submit() }),
-                modifier = Modifier.fillMaxWidth(),
-            )
-        } else {
-            Text("Escribe el código de 6 dígitos de tu app de autenticación.", color = ArtaColors.Muted)
-            Spacer(Modifier.height(12.dp))
-            OutlinedTextField(
-                value = code,
-                onValueChange = { v -> code = v.filter { it.isDigit() }.take(8) },
-                label = { Text("Código") },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword, imeAction = ImeAction.Done),
-                keyboardActions = KeyboardActions(onDone = { submit() }),
-                modifier = Modifier.fillMaxWidth(),
-            )
-            TextButton(onClick = {
-                challengeId = null
-                code = ""
-            }) { Text("Usar otra cuenta") }
-        }
-
-        error?.let {
-            Spacer(Modifier.height(12.dp))
-            Text(it, color = ArtaColors.Danger, style = MaterialTheme.typography.bodyMedium)
-        }
-        Spacer(Modifier.height(24.dp))
-        Button(
-            onClick = { submit() },
-            enabled = !busy && (if (challengeId == null) email.isNotBlank() && password.length >= 4 else code.length >= 6),
-            modifier = Modifier.fillMaxWidth().height(52.dp),
+    BoxWithConstraints(Modifier.fillMaxSize().imePadding()) {
+        val screen = maxHeight
+        Column(
+            Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .heightIn(min = screen)
+                .padding(horizontal = 24.dp, vertical = 24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.SpaceBetween,
         ) {
-            if (busy) CircularProgressIndicator(Modifier.height(22.dp), color = ArtaColors.OnAccent, strokeWidth = 2.dp)
-            else Text(if (challengeId == null) "Entrar" else "Verificar")
-        }
+            Spacer(Modifier.height(8.dp))
 
-        // Play pide que el aviso de privacidad se pueda leer antes de entrar.
-        Spacer(Modifier.height(32.dp))
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
-            TextButton(onClick = { LegalLinks.open(context, LegalLinks.PRIVACY) }) {
-                Text("Aviso de privacidad", color = ArtaColors.Muted, style = MaterialTheme.typography.bodySmall)
+            Column(
+                Modifier.widthIn(max = 440.dp).fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Image(
+                    painter = painterResource(R.drawable.arta_logo),
+                    contentDescription = "Arta Producciones",
+                    colorFilter = ColorFilter.tint(t.text),
+                    modifier = Modifier.height(64.dp),
+                )
+                Spacer(Modifier.height(16.dp))
+                Text(
+                    "La experiencia del Show",
+                    style = TextStyle(fontFamily = Nunito, fontWeight = FontWeight.Light, fontSize = 20.sp, lineHeight = 26.sp, letterSpacing = (-0.3).sp),
+                    color = ArtaColors.Muted,
+                    textAlign = TextAlign.Center,
+                )
+                Spacer(Modifier.height(32.dp))
+
+                ArtaCard(contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    if (challengeId == null) {
+                        Heading("Inicia sesión", "Con la misma cuenta del panel web.")
+                        Field("Correo") {
+                            OutlinedTextField(
+                                value = email,
+                                onValueChange = { email = it; error = null },
+                                placeholder = { Text("nombre@empresa.com") },
+                                singleLine = true,
+                                shape = fieldShape(),
+                                colors = fieldColors(),
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, imeAction = ImeAction.Next),
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        }
+                        Field("Contraseña") {
+                            OutlinedTextField(
+                                value = password,
+                                onValueChange = { password = it; error = null },
+                                placeholder = { Text("Tu contraseña") },
+                                singleLine = true,
+                                shape = fieldShape(),
+                                colors = fieldColors(),
+                                visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
+                                trailingIcon = {
+                                    IconButton(onClick = { showPassword = !showPassword }) {
+                                        Icon(
+                                            if (showPassword) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
+                                            if (showPassword) "Ocultar contraseña" else "Mostrar contraseña",
+                                            tint = ArtaColors.Tertiary,
+                                        )
+                                    }
+                                },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
+                                keyboardActions = KeyboardActions(onDone = { if (ready) submit() }),
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        }
+                    } else {
+                        Heading("Verificación en dos pasos", "Escribe el código de 6 dígitos de tu app de autenticación.")
+                        OutlinedTextField(
+                            value = code,
+                            onValueChange = { v -> code = v.filter { it.isDigit() }.take(8); error = null },
+                            placeholder = { Text("000000") },
+                            singleLine = true,
+                            shape = fieldShape(),
+                            colors = fieldColors(),
+                            textStyle = MaterialTheme.typography.titleLarge.copy(letterSpacing = 4.sp, textAlign = TextAlign.Center),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword, imeAction = ImeAction.Done),
+                            keyboardActions = KeyboardActions(onDone = { if (ready) submit() }),
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+
+                    error?.let {
+                        Row(verticalAlignment = Alignment.Top) {
+                            Icon(Icons.Outlined.ErrorOutline, contentDescription = null, tint = ArtaColors.Danger, modifier = Modifier.padding(top = 1.dp).size(16.dp))
+                            Spacer(Modifier.size(6.dp))
+                            Text(it, color = ArtaColors.Danger, style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+
+                    Button(
+                        onClick = { submit() },
+                        enabled = !busy && ready,
+                        modifier = Modifier.fillMaxWidth().height(52.dp),
+                    ) {
+                        if (busy) {
+                            CircularProgressIndicator(Modifier.size(20.dp), color = ArtaColors.OnAccent, strokeWidth = 2.dp)
+                        } else {
+                            Text(if (challengeId == null) "Entrar" else "Verificar", fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+
+                    if (challengeId != null) {
+                        TextButton(
+                            onClick = {
+                                challengeId = null
+                                code = ""
+                                error = null
+                            },
+                            modifier = Modifier.align(Alignment.CenterHorizontally),
+                        ) { Text("Usar otra cuenta", color = ArtaColors.Muted) }
+                    }
+                }
             }
-            Text("·", color = ArtaColors.Tertiary, style = MaterialTheme.typography.bodySmall)
-            TextButton(onClick = { LegalLinks.open(context, LegalLinks.TERMS) }) {
-                Text("Términos", color = ArtaColors.Muted, style = MaterialTheme.typography.bodySmall)
+
+            // Play pide que el aviso de privacidad se pueda leer antes de entrar: discreto pero
+            // claramente un enlace (subrayado fino).
+            Row(
+                Modifier.padding(top = 24.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center,
+            ) {
+                LegalLink("Aviso de privacidad") { LegalLinks.open(context, LegalLinks.PRIVACY) }
+                Text("·", color = ArtaColors.Tertiary, style = MaterialTheme.typography.bodySmall)
+                LegalLink("Términos") { LegalLinks.open(context, LegalLinks.TERMS) }
             }
         }
+    }
+}
+
+@Composable
+private fun Heading(title: String, detail: String) {
+    Column(Modifier.padding(bottom = 4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(
+            title,
+            style = TextStyle(fontFamily = Nunito, fontWeight = FontWeight.SemiBold, fontSize = 22.sp, lineHeight = 28.sp, letterSpacing = (-0.3).sp),
+            color = ArtaColors.Text,
+            modifier = Modifier.semantics { heading() },
+        )
+        Text(detail, style = MaterialTheme.typography.bodyMedium, color = ArtaColors.Muted)
+    }
+}
+
+/** Rótulo en MAYÚSCULAS sobre el campo (más claro que la etiqueta que flota dentro). */
+@Composable
+private fun Field(label: String, content: @Composable () -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(label.uppercase(Locale("es", "MX")), style = ArtaType.Cap, color = ArtaColors.Muted)
+        content()
+    }
+}
+
+@Composable
+private fun fieldShape() = androidx.compose.foundation.shape.RoundedCornerShape(12.dp)
+
+/** Superficie suave con línea fuerte; con el foco, el borde pasa al texto al 45 %. */
+@Composable
+private fun fieldColors() = LocalArtaTokens.current.let { t ->
+    OutlinedTextFieldDefaults.colors(
+        focusedBorderColor = t.text.copy(alpha = 0.45f),
+        unfocusedBorderColor = t.lineStrong,
+        focusedContainerColor = t.surfaceSoft,
+        unfocusedContainerColor = t.surfaceSoft,
+        cursorColor = t.text,
+        focusedPlaceholderColor = t.tertiary,
+        unfocusedPlaceholderColor = t.tertiary,
+    )
+}
+
+@Composable
+private fun LegalLink(text: String, onClick: () -> Unit) {
+    TextButton(onClick = onClick) {
+        Text(
+            text,
+            color = ArtaColors.Muted,
+            style = MaterialTheme.typography.bodySmall.copy(textDecoration = TextDecoration.Underline),
+        )
     }
 }

@@ -302,7 +302,7 @@ private fun KpiRow(p: ModulesPerms, d: InicioData, today: LocalDate, entity: Biz
     val showKpi: Kpi? = next?.let { e ->
         val days = e.startDay()?.let { ChronoUnit.DAYS.between(today, it) }
         val value = when {
-            days == null -> "—"
+            days == null -> "Sin fecha"
             days < 0 -> "En curso"
             days == 0L -> "Hoy"
             days == 1L -> "Mañana"

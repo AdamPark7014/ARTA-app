@@ -57,6 +57,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.artaproducciones.ops.data.ActiveEntity
@@ -71,6 +72,7 @@ import com.artaproducciones.ops.ui.theme.ArtaColors
 import com.artaproducciones.ops.ui.theme.ArtaType
 import com.artaproducciones.ops.ui.theme.Button
 import com.artaproducciones.ops.ui.theme.OutlinedButton
+import com.artaproducciones.ops.ui.theme.SegmentedControl
 import com.artaproducciones.ops.ui.theme.TABULAR
 import com.artaproducciones.ops.ui.theme.TextButton
 import kotlinx.coroutines.async
@@ -267,10 +269,13 @@ fun ApprovalsScreen(nav: ModuleNav, focusAdvanceId: String? = null) {
     Column(Modifier.fillMaxSize()) {
         DetailTopBar("Aprobaciones", onBack = { nav.back() })
         val pending = if (p != null && d != null) d.pendingCount(p) else 0
-        TabRow(selectedTabIndex = tab, containerColor = Color.Transparent, contentColor = ArtaColors.Text) {
-            Tab(selected = tab == 0, onClick = { tab = 0 }, text = { Text(if (pending > 0) "Pendientes · $pending" else "Pendientes") })
-            Tab(selected = tab == 1, onClick = { tab = 1 }, text = { Text("Historial") })
-        }
+        // El mismo segmentado del sistema que en Tareas y en el evento (y que iOS), no pestañas subrayadas.
+        SegmentedControl(
+            options = listOf(if (pending > 0) "Pendientes · $pending" else "Pendientes", "Historial"),
+            selected = tab,
+            onSelect = { tab = it },
+            modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 4.dp),
+        )
         PullToRefreshBox(
             isRefreshing = loading && d != null,
             onRefresh = { tick++ },
@@ -781,10 +786,17 @@ private fun SheetLabel(text: String) {
     Text(text.uppercase(ES_MX), style = ArtaType.Cap, color = ArtaColors.Tertiary, modifier = Modifier.padding(top = 4.dp))
 }
 
+/** Fila «etiqueta: valor» como la de iOS: etiqueta en terciario y el valor alineado a la derecha. */
 @Composable
 private fun InfoLine(label: String, value: String) {
-    Row {
-        Text(label, color = ArtaColors.Muted, modifier = Modifier.width(120.dp), style = MaterialTheme.typography.bodyMedium)
-        Text(value, style = MaterialTheme.typography.bodyMedium.copy(fontFeatureSettings = TABULAR), modifier = Modifier.weight(1f))
+    Row(verticalAlignment = Alignment.Top) {
+        Text(label, color = ArtaColors.Tertiary, style = MaterialTheme.typography.bodyMedium)
+        Spacer(Modifier.width(12.dp))
+        Text(
+            value,
+            style = MaterialTheme.typography.bodyMedium.copy(fontFeatureSettings = TABULAR, textAlign = TextAlign.End),
+            color = ArtaColors.Text,
+            modifier = Modifier.weight(1f),
+        )
     }
 }

@@ -223,7 +223,7 @@ fun TasksScreen(nav: ModuleNav) {
                             }
                         }
                         groups.forEach { (bucket, tasks) ->
-                            item(key = "h-${bucket.name}") { SectionTitle(bucket.label, count = tasks.size) }
+                            item(key = "h-${bucket.name}") { SectionTitle(bucket.label, count = tasks.size, alert = bucket == DueBucket.OVERDUE) }
                             items(tasks, key = { "${bucket.name}-${it.id}" }) { t ->
                                 TaskRow(
                                     task = t,

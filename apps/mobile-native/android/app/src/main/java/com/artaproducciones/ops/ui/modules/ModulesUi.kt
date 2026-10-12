@@ -74,6 +74,7 @@ import com.artaproducciones.ops.ui.theme.ArtaType
 import com.artaproducciones.ops.ui.theme.Button
 import com.artaproducciones.ops.ui.theme.LocalArtaTokens
 import com.artaproducciones.ops.ui.theme.OutlinedButton
+import com.artaproducciones.ops.ui.theme.QuietCount
 import com.artaproducciones.ops.ui.theme.StatusPill
 import com.artaproducciones.ops.ui.theme.TABULAR
 import com.artaproducciones.ops.ui.theme.TextButton
@@ -470,9 +471,18 @@ fun DetailTopBar(title: String, onBack: () -> Unit, actions: @Composable RowScop
     }
 }
 
-/** Etiqueta de sección: MAYÚSCULAS espaciadas en terciario, contador tabular al lado. */
+/**
+ * Etiqueta de sección (la misma que iOS): MAYÚSCULAS espaciadas en terciario y el contador en
+ * insignia discreta. [alert] solo para alertas reales (vencidas).
+ */
 @Composable
-fun SectionTitle(text: String, modifier: Modifier = Modifier, count: Int? = null, trailing: @Composable RowScope.() -> Unit = {}) {
+fun SectionTitle(
+    text: String,
+    modifier: Modifier = Modifier,
+    count: Int? = null,
+    alert: Boolean = false,
+    trailing: @Composable RowScope.() -> Unit = {},
+) {
     Row(
         modifier.fillMaxWidth().heightIn(min = 40.dp).padding(start = 20.dp, end = 12.dp, top = 10.dp, bottom = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -480,12 +490,12 @@ fun SectionTitle(text: String, modifier: Modifier = Modifier, count: Int? = null
         Text(
             text.uppercase(ES_MX),
             style = ArtaType.Cap,
-            color = ArtaColors.Tertiary,
-            modifier = Modifier.semantics { heading() },
+            color = if (alert) ArtaColors.Danger else ArtaColors.Tertiary,
+            modifier = Modifier.weight(1f, fill = false).semantics { heading() },
         )
         if (count != null) {
             Spacer(Modifier.width(8.dp))
-            Text("$count", style = ArtaType.Cap.copy(fontFeatureSettings = TABULAR), color = ArtaColors.Text)
+            QuietCount(count)
         }
         Spacer(Modifier.weight(1f))
         trailing()
@@ -557,8 +567,12 @@ fun EmptyState(
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         if (icon != null) {
-            Box(Modifier.size(60.dp).background(ArtaColors.GoldSoft, CircleShape), contentAlignment = Alignment.Center) {
-                Icon(icon, contentDescription = null, tint = ArtaColors.Muted, modifier = Modifier.size(28.dp))
+            // Igual que iOS: círculo del relleno neutro con línea fina.
+            Box(
+                Modifier.size(60.dp).background(ArtaColors.Surface2, CircleShape).border(1.dp, ArtaColors.Line, CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(icon, contentDescription = null, tint = ArtaColors.Muted, modifier = Modifier.size(26.dp))
             }
             Spacer(Modifier.height(6.dp))
         }
@@ -586,17 +600,17 @@ fun ErrorState(message: String, onRetry: () -> Unit, modifier: Modifier = Modifi
 /** Banda de error sobre contenido que ya estaba cargado (no lo tapa). */
 @Composable
 fun InlineError(message: String, onRetry: () -> Unit) {
+    // Sin relleno teñido: contorno de línea fuerte; el rojo, solo en el texto del error.
     val shape = LocalArtaTokens.current.itemShape
     Row(
         Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)
             .clip(shape)
-            .background(ArtaColors.Danger.copy(alpha = 0.08f))
-            .border(1.dp, ArtaColors.Danger.copy(alpha = 0.25f), shape)
+            .border(1.dp, ArtaColors.LineStrong, shape)
             .padding(start = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(message, color = ArtaColors.Danger, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
-        TextButton(onClick = onRetry, colors = ButtonDefaults.textButtonColors(contentColor = ArtaColors.Danger)) { Text("Reintentar") }
+        TextButton(onClick = onRetry, colors = ButtonDefaults.textButtonColors(contentColor = ArtaColors.Text)) { Text("Reintentar") }
     }
 }
 
@@ -614,10 +628,15 @@ fun ConfirmDialog(
         title = { Text(title) },
         text = text?.let { { Text(it) } },
         confirmButton = {
-            Button(
-                onClick = { onDismiss(); onConfirm() },
-                colors = if (danger) ButtonDefaults.buttonColors(containerColor = ArtaColors.Danger, contentColor = ArtaColors.OnDanger) else null,
-            ) { Text(confirmLabel) }
+            if (danger) {
+                // Lo destructivo es discreto: contorno con el texto en rojo, nunca un botón rojo lleno.
+                OutlinedButton(
+                    onClick = { onDismiss(); onConfirm() },
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = ArtaColors.Danger),
+                ) { Text(confirmLabel) }
+            } else {
+                Button(onClick = { onDismiss(); onConfirm() }) { Text(confirmLabel) }
+            }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar") } },
         containerColor = ArtaColors.BgElev,
@@ -652,11 +671,11 @@ fun ReasonDialog(
             }
         },
         confirmButton = {
-            Button(
+            OutlinedButton(
                 onClick = {
                     if (reason.isBlank()) showError = true else { onDismiss(); onConfirm(reason.trim()) }
                 },
-                colors = ButtonDefaults.buttonColors(containerColor = ArtaColors.Danger, contentColor = ArtaColors.OnDanger),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = ArtaColors.Danger),
             ) { Text(confirmLabel) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar") } },

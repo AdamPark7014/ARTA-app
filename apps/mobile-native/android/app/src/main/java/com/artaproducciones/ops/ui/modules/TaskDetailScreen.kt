@@ -6,6 +6,7 @@ import android.provider.OpenableColumns
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -34,6 +35,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.Event
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.outlined.ErrorOutline
+import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -398,7 +401,7 @@ private fun TaskBody(
                     Text(
                         "Aprobada por ${it.fullName}${task.approvedAt?.let { a -> " · ${stampLabel(a)}" } ?: ""}",
                         style = MaterialTheme.typography.bodySmall,
-                        color = ArtaColors.Ok,
+                        color = ArtaColors.Muted,
                     )
                 }
             }
@@ -506,18 +509,31 @@ private fun PersonLine(name: String, role: String) {
     }
 }
 
+/**
+ * Aviso dentro del detalle: contorno de línea fuerte con su ícono, sin relleno teñido. El rojo va
+ * solo en el ícono y el texto, y solo si es una alerta real (corrección pedida).
+ */
 @Composable
 private fun Banner(text: String, color: androidx.compose.ui.graphics.Color) {
-    Text(
-        text,
-        color = color,
-        style = MaterialTheme.typography.bodyMedium,
-        modifier = Modifier
+    val t = LocalArtaTokens.current
+    val alert = color == ArtaColors.Danger
+    Row(
+        Modifier
             .padding(horizontal = 16.dp)
             .fillMaxWidth()
-            .background(color.copy(alpha = 0.1f), LocalArtaTokens.current.itemShape)
-            .padding(12.dp),
-    )
+            .border(1.dp, t.lineStrong, t.itemShape)
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.Top,
+    ) {
+        Icon(
+            if (alert) Icons.Outlined.ErrorOutline else Icons.Outlined.Lock,
+            contentDescription = null,
+            tint = color,
+            modifier = Modifier.padding(top = 2.dp).size(16.dp),
+        )
+        Spacer(Modifier.width(10.dp))
+        Text(text, color = if (alert) color else ArtaColors.Muted, style = MaterialTheme.typography.bodyMedium)
+    }
 }
 
 @Composable

@@ -328,6 +328,31 @@ fun CountBadge(count: Int, modifier: Modifier = Modifier, inverted: Boolean = fa
     }
 }
 
+/**
+ * Contador discreto de los encabezados de sección y filas de menú: relleno neutro y texto
+ * secundario, para no competir con los estados «llenos», que sí piden acción.
+ */
+@Composable
+fun QuietCount(count: Int, modifier: Modifier = Modifier) {
+    val t = LocalArtaTokens.current
+    val shape = if (t.isPill) RoundedCornerShape(percent = 50) else RoundedCornerShape(3.dp)
+    Box(
+        modifier
+            .defaultMinSize(minWidth = 20.dp, minHeight = 18.dp)
+            .clip(shape)
+            .background(t.fill)
+            .padding(horizontal = 6.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            if (count > 99) "99+" else "$count",
+            color = t.secondary,
+            style = ArtaType.Status.copy(letterSpacing = 0.sp, fontFeatureSettings = TABULAR),
+            maxLines = 1,
+        )
+    }
+}
+
 // ─── Botones (radios y acento de la entidad) ────────────────────────────────
 
 /**
@@ -348,6 +373,7 @@ fun Button(
     content: @Composable RowScope.() -> Unit,
 ) {
     val t = LocalArtaTokens.current
+    // Apagado a propósito (no un negro o una plata deslavados): relleno neutro y texto terciario.
     if (colors == null && t.accentBrush !is SolidColor) {
         Surface(
             onClick = onClick,
@@ -355,14 +381,14 @@ fun Button(
             enabled = enabled,
             shape = shape,
             color = Color.Transparent,
-            contentColor = if (enabled) t.onAccent else t.text.copy(alpha = 0.38f),
+            contentColor = if (enabled) t.onAccent else t.tertiary,
             border = border,
             interactionSource = interactionSource,
         ) {
             ProvideTextStyle(MaterialTheme.typography.labelLarge) {
                 Row(
                     Modifier
-                        .background(if (enabled) t.accentBrush else SolidColor(t.text.copy(alpha = 0.12f)))
+                        .background(if (enabled) t.accentBrush else SolidColor(t.fill))
                         .defaultMinSize(ButtonDefaults.MinWidth, ButtonDefaults.MinHeight)
                         .padding(contentPadding),
                     horizontalArrangement = Arrangement.Center,
@@ -377,7 +403,7 @@ fun Button(
             modifier = modifier,
             enabled = enabled,
             shape = shape,
-            colors = colors ?: ButtonDefaults.buttonColors(),
+            colors = colors ?: ButtonDefaults.buttonColors(disabledContainerColor = t.fill, disabledContentColor = t.tertiary),
             elevation = elevation,
             border = border,
             contentPadding = contentPadding,
@@ -448,13 +474,13 @@ enum class Tone { Action, Info, Strong, Danger, Ok, Warn }
 fun StatusPill(text: String, tone: Tone, modifier: Modifier = Modifier) {
     val t = LocalArtaTokens.current
     val shape = if (t.isPill) RoundedCornerShape(percent = 50) else RoundedCornerShape(3.dp)
+    // «Hecho», «pagado» o «activo» no son alertas: van en monocromo, como en iOS. El rojo queda
+    // solo para lo que de verdad falla (rechazada, bloqueada, cancelada).
     val (fg, border) = when (tone) {
         Tone.Action -> t.onAccent to Color.Transparent
-        Tone.Info -> t.secondary to (if (t.isDark) Color(0x2EFFFFFF) else Color(0x330C0C0D))
-        Tone.Strong -> t.text to t.text.copy(alpha = 0.45f)
+        Tone.Info, Tone.Ok -> t.secondary to (if (t.isDark) Color(0x2EFFFFFF) else Color(0x330C0C0D))
+        Tone.Strong, Tone.Warn -> t.text to t.text.copy(alpha = 0.45f)
         Tone.Danger -> t.danger to t.danger.copy(alpha = 0.5f)
-        Tone.Ok -> t.ok to t.ok.copy(alpha = 0.5f)
-        Tone.Warn -> t.warn to t.warn.copy(alpha = 0.5f)
     }
     val base = modifier.clip(shape)
     val painted = if (tone == Tone.Action) base.background(t.accentBrush) else base.border(1.dp, border, shape)

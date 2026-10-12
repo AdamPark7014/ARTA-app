@@ -117,7 +117,8 @@ data class ArtaTokens(
             fill = Color(0xFFEFEDE8),
             text = Color(0xFF0C0C0D),
             secondary = Color(0xFF55555C),
-            tertiary = Color(0xFF8B8B92),
+            // AA como la web: #8b8b92 daba 3.4:1 sobre blanco.
+            tertiary = Color(0xFF6B6B73),
             line = Color(0x120C0C0D),
             lineStrong = Color(0x1F0C0C0D),
             accent = Color(0xFF0C0C0D),
@@ -156,7 +157,8 @@ data class ArtaTokens(
             fill = Color(0xFF1A1A1E),
             text = Color(0xFFF2F2F4),
             secondary = Color(0xFFA1A1AA),
-            tertiary = Color(0xFF85858E),
+            // AA como la web: bajo el reflector #85858e quedaba en 4.4:1.
+            tertiary = Color(0xFF8A8A93),
             line = Color(0x12FFFFFF),
             lineStrong = Color(0x1FFFFFFF),
             accent = Color(0xFFC7CCD4),

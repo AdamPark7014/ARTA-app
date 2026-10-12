@@ -1,6 +1,10 @@
 package com.artaproducciones.ops.ui.modules
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.shape.RoundedCornerShape
+import com.artaproducciones.ops.ui.theme.ArtaCard
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -164,7 +168,14 @@ fun EventDetailScreen(eventId: String, nav: ModuleNav) {
                     // Siempre el mismo número de renglones antes del encabezado (el título de la barra los cuenta).
                     item { error?.let { msg -> InlineError(msg) { tick++ } } }
                     item { EventHeader(ev) }
-                    item { QuickFacts(ev, p) }
+                    item {
+                        QuickFacts(
+                            ev,
+                            p,
+                            onTasks = { tab = NativeTab.TASKS },
+                            onWeb = { key, label -> nav.openWeb("/events/$eventId?tab=$key", label) },
+                        )
+                    }
                     // Las secciones que viven en la web van en chips que pasan de renglón; las nativas,
                     // en segmentado (caben siempre). Nada se va por el borde de la pantalla.
                     item {
@@ -275,7 +286,8 @@ private fun EventHeader(ev: EventDetailDto) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(ev.name, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
             val label = eventStatusLabel(ev.status) ?: "Activo"
-            Pill(label, if (ev.status == "ACTIVE") ArtaColors.Ok else if (ev.status == "CANCELLED") ArtaColors.Danger else ArtaColors.Muted)
+            // «Activo» es informativo (contorno neutro); solo «Cancelado» lleva el rojo.
+            Pill(label, if (ev.status == "CANCELLED") ArtaColors.Danger else ArtaColors.Muted)
         }
         ev.artist?.takeIf { it.isNotBlank() && it != ev.name }?.let { Text(it, color = ArtaColors.Muted) }
         val until = daysUntilLabel(ev.startsAt)
@@ -300,33 +312,106 @@ private fun FactLine(icon: ImageVector, text: String) {
     }
 }
 
+/** Una tarjeta de cifra del resumen del evento. */
+private data class FactItem(
+    val label: String,
+    val value: String,
+    val sub: String?,
+    val alert: Boolean = false,
+    /** Sin dato: la palabra va en secundario, no con el peso de una cifra. */
+    val quiet: Boolean = false,
+    val progress: Float? = null,
+    val onClick: () -> Unit,
+)
+
+/**
+ * Cifras del evento en renglones de dos tarjetas del mismo alto, como en iOS: etiqueta en
+ * MAYÚSCULAS, cifra ligera y detalle. Sin formatos va la palabra, nunca una raya suelta.
+ */
 @Composable
-private fun QuickFacts(ev: EventDetailDto, p: ModulesPerms) {
+private fun QuickFacts(ev: EventDetailDto, p: ModulesPerms, onTasks: () -> Unit, onWeb: (String, String) -> Unit) {
     val openTasks = ev.tasks.count { it.status != "DONE" }
     val overdue = ev.tasks.count { it.isOverdue() }
     val progress = ev.checklists.mapNotNull { it.progressPct }.takeIf { it.isNotEmpty() }?.average()?.toInt()
-    val pendingPo = ev.purchaseOrders.count { it.status == "PENDING_AUTH" || it.status == "AUTHORIZED" || it.status == "DRAFT" }
-    // Las tres tarjetas del mismo alto aunque una no tenga renglón de detalle.
-    Row(
-        Modifier.fillMaxWidth().height(IntrinsicSize.Min).padding(horizontal = 16.dp, vertical = 12.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Fact("Tareas abiertas", "$openTasks", if (overdue > 0) (if (overdue == 1) "1 vencida" else "$overdue vencidas") else null, Modifier.weight(1f).fillMaxHeight(), alert = overdue > 0)
-        Fact("Formatos", progress?.let { "$it %" } ?: "—", if (ev.checklists.size == 1) "1 en total" else "${ev.checklists.size} en total", Modifier.weight(1f).fillMaxHeight())
-        if (p.canPo) Fact("OC pendientes", "$pendingPo", null, Modifier.weight(1f).fillMaxHeight())
-        else Fact("Documentos", "${ev.files.size}", null, Modifier.weight(1f).fillMaxHeight())
+    val pendingPo = ev.purchaseOrders.filter { it.status == "PENDING_AUTH" || it.status == "DRAFT" }
+    val items = buildList {
+        add(
+            FactItem(
+                "Tareas", "$openTasks",
+                if (overdue > 0) (if (overdue == 1) "1 vencida" else "$overdue vencidas") else if (openTasks == 1) "abierta" else "abiertas",
+                alert = overdue > 0,
+                onClick = onTasks,
+            ),
+        )
+        if (ev.checklists.isEmpty()) {
+            add(FactItem("Formatos", "Sin formatos", "Se crean en la web", quiet = true, onClick = { onWeb("checklists", "Formatos") }))
+        } else {
+            val pct = progress ?: 0
+            add(
+                FactItem(
+                    "Formatos", "$pct %",
+                    if (ev.checklists.size == 1) "1 formato" else "${ev.checklists.size} formatos",
+                    progress = pct / 100f,
+                    onClick = { onWeb("checklists", "Formatos") },
+                ),
+            )
+        }
+        if (p.canPo) {
+            add(
+                FactItem(
+                    "Por autorizar", "${pendingPo.size}",
+                    money(pendingPo.sumOf { it.amount?.toDoubleOrNull() ?: 0.0 }),
+                    onClick = { onWeb("ocs", "Órdenes de compra") },
+                ),
+            )
+        }
+        add(FactItem("Documentos", "${ev.files.size}", if (ev.files.size == 1) "archivo" else "archivos", onClick = { onWeb("files", "Documentos") }))
+    }
+    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        items.chunked(2).forEach { row ->
+            Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                row.forEach { Fact(it, Modifier.weight(1f).fillMaxHeight()) }
+                if (row.size == 1) Spacer(Modifier.weight(1f))
+            }
+        }
     }
 }
 
 @Composable
-private fun Fact(label: String, value: String, sub: String?, modifier: Modifier = Modifier, alert: Boolean = false) {
-    Column(
-        modifier.cardSurface(LocalArtaTokens.current).padding(horizontal = 12.dp, vertical = 11.dp),
-        verticalArrangement = Arrangement.spacedBy(2.dp),
+private fun Fact(item: FactItem, modifier: Modifier = Modifier) {
+    ArtaCard(
+        modifier = modifier,
+        onClick = item.onClick,
+        onClickLabel = "Abrir ${item.label.lowercase()}",
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Text(label, style = MaterialTheme.typography.labelSmall, color = ArtaColors.Tertiary, maxLines = 2, overflow = TextOverflow.Ellipsis)
-        Text(value, style = ArtaType.Kpi.copy(fontSize = 24.sp, lineHeight = 28.sp), color = ArtaColors.Text, maxLines = 1)
-        sub?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = if (alert) ArtaColors.Danger else ArtaColors.Tertiary, maxLines = 2, overflow = TextOverflow.Ellipsis) }
+        Text(item.label.uppercase(ES_MX), style = ArtaType.Cap, color = ArtaColors.Tertiary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(
+            item.value,
+            style = ArtaType.Kpi.copy(fontSize = if (item.quiet) 22.sp else 26.sp, lineHeight = 30.sp),
+            color = when {
+                item.alert -> ArtaColors.Danger
+                item.quiet -> ArtaColors.Muted
+                else -> ArtaColors.Text
+            },
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        item.progress?.let { ProgressLine(it) }
+        Spacer(Modifier.weight(1f))
+        item.sub?.let {
+            Text(it, style = MaterialTheme.typography.labelSmall.copy(fontFeatureSettings = TABULAR), color = if (item.alert) ArtaColors.Danger else ArtaColors.Tertiary, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        }
+    }
+}
+
+/** Barra de avance de 3 dp del sistema: acento sobre la línea (sin verde al llegar al 100 %). */
+@Composable
+private fun ProgressLine(value: Float, modifier: Modifier = Modifier) {
+    val t = LocalArtaTokens.current
+    Box(modifier.fillMaxWidth().height(3.dp).clip(RoundedCornerShape(50)).background(t.line)) {
+        Box(Modifier.fillMaxWidth(value.coerceIn(0f, 1f)).fillMaxHeight().clip(RoundedCornerShape(50)).background(t.accentBrush))
     }
 }
 
@@ -392,15 +477,10 @@ private fun androidx.compose.foundation.lazy.LazyListScope.summaryItems(ev: Even
         ModuleCard(Modifier.padding(horizontal = 16.dp, vertical = 4.dp), onClick = { onOpenChecklist(c.id) }) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(c.title ?: c.template?.name ?: "Formato", modifier = Modifier.weight(1f), maxLines = 2, overflow = TextOverflow.Ellipsis)
-                Text("${pct.toInt()} %", style = MaterialTheme.typography.bodySmall, color = ArtaColors.Muted)
+                Text("${pct.toInt()} %", style = MaterialTheme.typography.bodySmall.copy(fontFeatureSettings = TABULAR), color = ArtaColors.Muted)
             }
-            Spacer(Modifier.height(6.dp))
-            LinearProgressIndicator(
-                progress = { (pct / 100.0).toFloat() },
-                modifier = Modifier.fillMaxWidth(),
-                color = if (pct >= 100.0) ArtaColors.Ok else ArtaColors.Gold,
-                trackColor = ArtaColors.Surface2,
-            )
+            Spacer(Modifier.height(8.dp))
+            ProgressLine((pct / 100.0).toFloat())
         }
     }
 }
