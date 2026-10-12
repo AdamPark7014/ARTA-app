@@ -4,9 +4,40 @@
 - **Fecha:** 2026-10-11
 - **Rama:** main
   (Adam es el único programador).
-- **Producción:** `7cabc06` desplegado desde `main` el 2026-10-07 ~17:05 UTC (bundle + `update.sh --no-pull`,
-  log `/root/arta-deploy-.log`). Incluye reportar/bloquear en el chat (migración `20261006120000`), el candado
-  de Studio/plantillas y la página nueva de «Eliminar cuenta».
+- **Producción:** `495c11d` desplegado desde `main` el 2026-10-11 ~23:15 UTC (bundle `c3cc958..main` +
+  `update.sh --no-pull`, log `/root/arta-deploy-20261011-icono.log`; respaldo automático en `/root/arta-backups/`).
+  El servidor ya está en el historial nuevo: el bundle incremental hace fast-forward.
+
+## Turno claude-code (2026-10-11, tarde): formatos del Auditorio, sistema visual e ícono nuevo
+
+- **Formatos del Auditorio** (`0ac37e2`, migración `20261011150000`): Checklist Auditorio (hojas AUDITORIO +
+  MERCH), Limpieza (15 áreas), Mantenimiento rehecho (20 áreas, fotos como adjuntos por área) y Compromiso de
+  horarios (condiciones y aceptación tal cual, firmas «Producción externa» / «Auditorio Explanada Puebla»). Los
+  8 de ARTA y el libro de Pendones quedan solo ARTA. Contrato en `docs/FORMATOS.md`. En producción se corrió
+  `upgrade-format-templates.ts --add-auditorio-formats --confirm-produccion` (segunda pasada `--dry` sin cambios)
+  y se borraron a mano los 8 formatos de ARTA del evento Omar Camacho (`cmv16n3qy00cjmoc0niy4jed7`), creados
+  solos el 09-10 y nunca editados; respaldo previo `20261011-2216.sql.gz`.
+- **Avance de formatos**: los campos del encabezado que se llenan solos (evento, fecha, hora) cuentan como
+  capturados, igual que en ARTA; por eso un formato nuevo del Auditorio nace en 43–67 %. Se le ofreció a Adam
+  que arranque en 0 %; sin respuesta todavía.
+- **Sistema visual aprobado** (`docs/diseno/SISTEMA-VISUAL.md`, referencia `propuesta-arta-auditorio.png`):
+  ARTA claro (papel/tinta, redondeado) y Auditorio oscuro (negro/plata, recto); Nunito en web y Android, SF Pro
+  Rounded en iOS. Web `c3cc958` (desplegado; terciario oscurecido a `#6b6b73`/`#8a8a93` por contraste AA),
+  iOS `11026e1`+`7e85447` (ios-build y capturas verdes), Android `96927c9`, retoques `a689724`.
+- **Ícono nuevo «A · Papel»** (`495c11d`, elegido por Adam): «a» del logo en tinta sobre papel en iOS, Android,
+  Play (`icon-512`, feature graphic) y el panel web instalado; fuente única `play-assets/generar.py`. iOS arranca
+  en color papel (`LaunchBackground`, `UIUserInterfaceStyle` Light); Android arranca en papel, tema base claro,
+  acento de avisos en tinta y fondo de ventana por entidad.
+- **Tiendas**: iOS 1.0.0 (11) sigue `WAITING_FOR_REVIEW` (envío `c1da1a8a…`); Play 1.0.0 (3) en revisión. Nada
+  de lo de hoy está en las tiendas: va en iOS 1.0.1 (TestFlight con `-f version=1.0.1 -f build=12`, solo con el
+  visto bueno de Adam) y Android versionCode 4 tras la aprobación. Al subirlas, cambiar también el ícono y el
+  feature graphic de la ficha de Play y las capturas (las de iOS ya salen claras en `ios-screenshots.yml`).
+- **E2E web**: además de los que fallaban desde el 07-10, hay specs viejos que esperan textos que ya no existen
+  (calendar, correcciones-0930, editors, event-edit, excel-hf, hotfix-sheet-editor, hub-critical,
+  public-site, purchase-orders). Pasan app-shell, tasks, login, layout, mobile-shell, users-alta y
+  formatos-auditorio.
+- **Emulador**: quedó instalada la copia de prueba `com.artaproducciones.ops.redesign` (otra firma que la app de
+  tienda); se puede desinstalar.
 
 ## Turno claude-code (2026-10-11): ARTA y Auditorio separados (API, web, iOS, Android)
 
@@ -25,10 +56,8 @@ Contrato completo: `docs/entidades-arta-auditorio.md`.
   toque en Inicio (y chip en Inicio, selector en Más) para híbridos, acento dorado/plateado, `?entity=` en
   todo. Sin subir a tiendas todavía (la 1.0.0 sigue en revisión). Pendiente en apps: las vistas web
   dentro de la app siguen en `arta.*` y un aviso de la otra entidad no cambia de entidad al abrirlo.
-- **Propuesta visual** para «una UI más acorde a ARTA en todo el sitio»:
-  https://claude.ai/artifact/7rGqhpHLkLyHqvez6Cidqq (espera visto bueno de Adam antes de aplicarla).
-- **Pendiente**: formatos de Auditorio desde `Downloads\CHECKLIST AUDITORIO.xlsx` (hojas Auditorio,
-  Merch, Limpieza, Mantenimiento) y `Compromiso_Horarios_Produccion_Dia_del_Show_Explanada_Puebla_V2.docx`.
+- **Propuesta visual**: aprobada y aplicada (ver turno de la tarde arriba).
+- **Formatos de Auditorio**: hechos y en producción (ver turno de la tarde arriba).
 
 ## Turno claude-code (2026-10-09): repo público con historial sin contraseñas
 
