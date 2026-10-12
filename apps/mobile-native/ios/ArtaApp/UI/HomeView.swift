@@ -11,10 +11,16 @@ struct SignedInView: View {
 
     var body: some View {
         ZStack {
+            // Debajo, el fondo de la entidad nueva: el cambio pasa por papel o por negro limpios.
+            ArtaScreenBackground()
             HomeView(user: user)
                 .id(activeEntity.current)
-                // Cambio de entidad: la app vieja se funde en la nueva (papel ⇄ negro) en vez de saltar.
-                .transition(.opacity.animation(.easeInOut(duration: 0.32)))
+                // Cambio de entidad: la app vieja se va rápido y la nueva entra suave, sin que
+                // las dos se vean encimadas a media transición.
+                .transition(.asymmetric(
+                    insertion: .opacity.animation(.easeOut(duration: 0.26).delay(0.1)),
+                    removal: .opacity.animation(.easeIn(duration: 0.12))
+                ))
         }
         .overlay(alignment: .top) {
             EntityNoticeBanner(notice: activeEntity.notice)

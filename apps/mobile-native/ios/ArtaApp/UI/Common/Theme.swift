@@ -462,13 +462,49 @@ struct ArtaBottomScrim: View {
     }
 }
 
+/// Franja bajo la barra de estado: lo que sube al desplazarse se desvanece antes de la hora y
+/// las señales, en vez de quedar encimado a ellas. Usa el mismo fondo de la pantalla (con el
+/// brillo del Auditorio) para que no se note la orilla. No intercepta toques.
+struct ArtaStatusBarScrim: View {
+    /// Igual que el fondo de la pantalla: con o sin el brillo del Auditorio.
+    var glow = true
+
+    var body: some View {
+        ArtaScreenBackground(glow: glow)
+            .mask(alignment: .top) {
+                LinearGradient(
+                    stops: [
+                        .init(color: .black, location: 0),
+                        .init(color: .black, location: 0.58),
+                        .init(color: .clear, location: 1),
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .frame(height: Self.height)
+            }
+            .ignoresSafeArea()
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+    }
+
+    /// Alto de la barra de estado más el desvanecido (59–62 pt en los iPhone con isla).
+    @MainActor private static var height: CGFloat {
+        let scene = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first
+        let status = scene?.statusBarManager?.statusBarFrame.height ?? 0
+        return (status > 0 ? status : 54) + 16
+    }
+}
+
 extension View {
     /// Pantallas con la barra de pestañas visible: desvanecido abajo y aire para que el
-    /// último bloque se pueda leer completo al final del desplazamiento.
-    func artaTabBarScrim() -> some View {
+    /// último bloque se pueda leer completo al final del desplazamiento; arriba, nada se
+    /// encima a la barra de estado.
+    func artaTabBarScrim(glow: Bool = true) -> some View {
         self
             .contentMargins(.bottom, ArtaLayout.bottomFade, for: .scrollContent)
             .overlay(alignment: .bottom) { ArtaBottomScrim() }
+            .overlay(alignment: .top) { ArtaStatusBarScrim(glow: glow) }
     }
 
     /// Filas horizontales (chips): los bordes se desvanecen en vez de cortar una etiqueta

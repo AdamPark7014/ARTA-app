@@ -108,6 +108,8 @@ struct ConversationView: View {
                 }
         }
         .background(ArtaColor.bg)
+        // Los mensajes que suben no se enciman a la hora ni a las señales.
+        .overlay(alignment: .top) { ArtaStatusBarScrim(glow: false) }
         .navigationBarTitleDisplayMode(.inline)
         .toolbar { toolbarContent }
         .onAppear {

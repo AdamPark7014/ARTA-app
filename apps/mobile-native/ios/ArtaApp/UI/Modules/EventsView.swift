@@ -147,7 +147,7 @@ struct EventsView: View {
             .listStyle(.insetGrouped)
             .scrollContentBackground(.hidden)
             .refreshable { await load() }
-            .artaTabBarScrim()
+            .artaTabBarScrim(glow: false)
         }
     }
 
@@ -193,7 +193,7 @@ struct EventsView: View {
             .padding(.horizontal, ArtaLayout.gutter)
             .padding(.vertical, ArtaSpace.l)
         }
-        .artaTabBarScrim()
+        .artaTabBarScrim(glow: false)
         .refreshable {
             await load()
             await loadNotes()

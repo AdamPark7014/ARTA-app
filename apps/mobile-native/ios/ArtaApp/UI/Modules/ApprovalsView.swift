@@ -175,7 +175,7 @@ struct ApprovalsView: View {
             .listStyle(.insetGrouped)
             .scrollContentBackground(.hidden)
             .refreshable { await load() }
-            .artaTabBarScrim()
+            .artaTabBarScrim(glow: false)
         }
     }
 
@@ -416,7 +416,7 @@ struct ApprovalsView: View {
             .listStyle(.insetGrouped)
             .scrollContentBackground(.hidden)
             .refreshable { await load() }
-            .artaTabBarScrim()
+            .artaTabBarScrim(glow: false)
         }
     }
 

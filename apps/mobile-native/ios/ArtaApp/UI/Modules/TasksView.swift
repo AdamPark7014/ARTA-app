@@ -132,7 +132,7 @@ struct TasksView: View {
                 if groups.isEmpty { emptyView }
             }
             .refreshable { await load() }
-            .artaTabBarScrim()
+            .artaTabBarScrim(glow: false)
         }
     }
 
