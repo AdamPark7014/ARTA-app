@@ -267,7 +267,7 @@ export function QuickSwitcher({
   const items = useMemo<SwitchItem[]>(() => {
     const f = fold(q.trim());
     const chans = channels
-      .filter((c) => !f || fold(c.name).includes(f))
+      .filter((c) => !f || fold(`${c.name} ${channelDisplayName(c)}`).includes(f))
       .sort((a, b) => Number(b.unreadCount > 0) - Number(a.unreadCount > 0) || (b.lastMessageAt ?? '').localeCompare(a.lastMessageAt ?? ''))
       .slice(0, 10)
       .map<SwitchItem>((c) => ({ kind: 'channel', c }));

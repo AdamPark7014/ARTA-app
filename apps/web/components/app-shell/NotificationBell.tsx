@@ -113,8 +113,12 @@ export function NotificationBell() {
   }>('chat:channel-activity', (p) => {
     if (!p?.notify || !document.hidden || !canNotifyDesktop() || window.Notification.permission !== 'granted') return;
     const who = p.senderName || 'Nuevo mensaje';
+    // Canal de evento: «Artista · Evento» se lee por el evento; un grupo («Ana, Beto») va sin «#».
+    const name = p.channelName?.trim() || '';
+    const dot = name.indexOf(' · ');
+    const place = !name ? '' : dot > 0 ? name.slice(dot + 3) : name.includes(', ') ? name : `#${name}`;
     try {
-      const shown = new window.Notification(p.channelName ? `${who} en #${p.channelName}` : who, {
+      const shown = new window.Notification(place ? `${who} en ${place}` : who, {
         body: p.preview || undefined,
         tag: `chat-${p.channelId}`,
       });

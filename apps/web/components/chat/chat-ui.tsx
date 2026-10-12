@@ -74,6 +74,17 @@ export function channelDisplayName(c: Named) {
   return l.hash ? `#${l.title}` : l.title;
 }
 
+/** Dónde está un mensaje (búsqueda, guardados): el resumen del canal no trae el evento, así que se toma de la lista. */
+export function channelWhere(
+  ch: { id: string; name: string; kind: string; isGroupDm?: boolean | null } | null | undefined,
+  channels?: ReadonlyArray<Named & { id: string }> | null,
+) {
+  if (!ch) return '';
+  const known = channels?.find((c) => c.id === ch.id);
+  if (known) return channelDisplayName(known);
+  return ch.kind === 'DIRECT' || ch.isGroupDm ? ch.name : `#${ch.name}`;
+}
+
 /** Directo o directo de grupo: van juntos en «Mensajes directos». */
 export function isDirectLike(c: { kind: string; isGroupDm?: boolean | null }) {
   return c.kind === 'DIRECT' || Boolean(c.isGroupDm);

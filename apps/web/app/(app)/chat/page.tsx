@@ -55,6 +55,7 @@ import {
   ChannelGlyph,
   channelDisplayName,
   channelLabel,
+  channelWhere,
   errorText,
   ICON_EVENT,
   isDirectLike,
@@ -1538,7 +1539,7 @@ function ChatInner() {
                     key={m.id}
                     m={m}
                     now={now}
-                    where={m.channel?.kind === 'DIRECT' ? m.author.fullName : `#${m.channel?.name ?? ''}`}
+                    where={m.channel?.kind === 'DIRECT' ? m.author.fullName : channelWhere(m.channel, channels)}
                     onClick={() => selectChannel(m.channelId, { msg: m.parentId ?? m.id })}
                   />
                 ))}
@@ -1828,7 +1829,7 @@ function ChatInner() {
         {panel ? (
           <aside className="chat-panel" aria-label={panelTitle}>
             <PanelHead title={panelTitle} onClose={() => setPanel(null)}>
-              {panel.kind === 'thread' && title ? <span className="chat-panel__sub">{directLike ? title : `#${title}`}</span> : null}
+              {panel.kind === 'thread' && title ? <span className="chat-panel__sub">{label.hash ? `#${title}` : title}</span> : null}
             </PanelHead>
             {panel.kind === 'thread' ? (
               <>
@@ -1882,6 +1883,7 @@ function ChatInner() {
               <div className="chat-panel__body">
                 <SavedList
                   items={saved}
+                  channels={channels}
                   error={savedError}
                   now={now}
                   onRetry={loadSaved}

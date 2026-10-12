@@ -11,11 +11,12 @@ import {
   listTime,
   plainText,
   type ChannelDetail,
+  type ChannelSummary,
   type ChatMessage,
   type Colleague,
   type SavedItem,
 } from './chat-model';
-import { Avatar, ChannelGlyph, channelDisplayName, errorText, untilLabel } from './chat-ui';
+import { Avatar, ChannelGlyph, channelDisplayName, channelWhere, errorText, untilLabel } from './chat-ui';
 
 /* Paneles laterales: fijados, guardados e información del canal. */
 
@@ -90,6 +91,7 @@ export function PinsList({ pins, now, onJump }: { pins: ChatMessage[] | null; no
 
 export function SavedList({
   items,
+  channels,
   error,
   now,
   onJump,
@@ -97,6 +99,7 @@ export function SavedList({
   onRetry,
 }: {
   items: SavedItem[] | null;
+  channels?: ChannelSummary[] | null;
   error: boolean;
   now: Date;
   onJump: (it: SavedItem) => void;
@@ -126,7 +129,7 @@ export function SavedList({
         <MessageResult
           key={it.message.id}
           m={it.message}
-          where={it.channel.kind === 'DIRECT' ? it.channel.name : it.channel.isGroupDm ? it.channel.name : `#${it.channel.name}`}
+          where={channelWhere(it.channel, channels)}
           now={now}
           onClick={() => onJump(it)}
           extra={
