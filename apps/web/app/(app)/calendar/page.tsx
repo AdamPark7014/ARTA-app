@@ -186,8 +186,8 @@ export default function EventsCalendarPage() {
                           openForEdit(n);
                         }}
                       >
-                        <span className="mcal__note-text">
-                          {n.text}
+                        <span className="mcal__note-body">
+                          <span className="mcal__note-text">{n.text}</span>
                           {n.createdBy ? <span className="mcal__note-by">{n.createdBy.fullName.split(' ')[0]}</span> : null}
                         </span>
                       </button>

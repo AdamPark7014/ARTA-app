@@ -490,11 +490,10 @@ export function EventChecklistsPanel({
               ? `${counts.ready} de ${all.length} listos${counts.review ? ` · ${counts.review} por autorizar` : ''}`
               : undefined
           }
-        />
-        {!closed ? (
-          <div className="row">
+        >
+          {!closed ? (
             <button
-              className="btn"
+              className={`btn btn-sm ${adding ? 'ghost' : ''}`}
               type="button"
               aria-pressed={adding}
               onClick={async () => {
@@ -515,8 +514,8 @@ export function EventChecklistsPanel({
             >
               {adding ? 'Cerrar' : 'Agregar formato'}
             </button>
-          </div>
-        ) : null}
+          ) : null}
+        </SectionHead>
         {adding ? (
           <div className="surface surface--pad">
             <div className="row">

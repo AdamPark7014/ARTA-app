@@ -315,7 +315,7 @@ export default function PurchaseOrdersPage() {
             ) : null}
 
             <div className="dtable-wrap">
-              <table className="dtable oc-table">
+              <table className="dtable oc-table dtable--cards">
                 <thead>
                   <tr>
                     <th>Evento</th>
@@ -340,7 +340,7 @@ export default function PurchaseOrdersPage() {
                     return (
                       <Fragment key={row.id}>
                         <tr className={`oc-row ${open ? 'is-open' : ''}`} onClick={() => toggle(row)}>
-                          <td onClick={(e) => e.stopPropagation()}>
+                          <td className="card-full" onClick={(e) => e.stopPropagation()}>
                             <Link className="oc-event" href={`/events/${row.eventId}?tab=ocs`}>
                               {row.eventName}
                             </Link>
@@ -372,7 +372,7 @@ export default function PurchaseOrdersPage() {
                           <td>
                             <Pill tone={act ? quietTone(pill.tone) : pill.tone}>{pill.label}</Pill>
                           </td>
-                          <td className="col-act" onClick={(e) => e.stopPropagation()}>
+                          <td className={`col-act ${act ? '' : 'card-empty'}`} onClick={(e) => e.stopPropagation()}>
                             <div className="oc-actions">{act}</div>
                           </td>
                         </tr>

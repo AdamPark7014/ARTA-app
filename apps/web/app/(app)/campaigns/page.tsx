@@ -163,7 +163,7 @@ export default function CampaignsPage() {
                 onClick={() => setSection('REVIEW')}
               />
               <Tile label="Autorizadas" value={moneyKpi(authorizedTotal)} sub={`${counts.AUTHORIZED} por pagar · interno`} onClick={() => setSection('AUTHORIZED')} />
-              <Tile label="Pagadas" value={moneyKpi(paidTotal)} tone="accent" sub={`${counts.PAID} campañas · interno`} onClick={() => setSection('PAID')} />
+              <Tile label="Pagadas" value={moneyKpi(paidTotal)} tone="accent" sub={`${counts.PAID} ${counts.PAID === 1 ? 'campaña' : 'campañas'} · interno`} onClick={() => setSection('PAID')} />
             </div>
 
             <div className="toolbar-row">
@@ -208,7 +208,7 @@ export default function CampaignsPage() {
               </div>
             ) : (
               <div className="dtable-wrap">
-                <table className="dtable">
+                <table className="dtable dtable--cards dtable--cards-3">
                   <thead>
                     <tr>
                       <th>Evento</th>
@@ -222,16 +222,16 @@ export default function CampaignsPage() {
                   <tbody>
                     {filtered.map((r) => (
                       <tr key={r.id}>
-                        <td>
+                        <td className="card-full">
                           <Link href={`/events/${r.event.id}?tab=campaign`}>
                             <strong>{r.event.name}</strong>
                           </Link>
                           <div className="is-muted t-small">{shortDate(r.event.startsAt)}</div>
                         </td>
-                        <td className="num">{r.concepts.length}</td>
-                        <td className="num">{mxn(r.totals.interno)}</td>
-                        <td className="num">{mxn(r.totals.externo)}</td>
-                        <td>
+                        <td className="num" data-label="Conceptos">{r.concepts.length}</td>
+                        <td className="num" data-label="Interna">{mxn(r.totals.interno)}</td>
+                        <td className="num" data-label="Externa">{mxn(r.totals.externo)}</td>
+                        <td className="card-state">
                           <ReviewPill step={r.step} />
                         </td>
                         <td className="col-act">
