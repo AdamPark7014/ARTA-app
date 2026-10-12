@@ -12,6 +12,7 @@ import { NotificationBell } from './NotificationBell';
 import { SidebarNav } from './SidebarNav';
 import { TopbarSearch } from './TopbarSearch';
 import { useEntityTheme } from './useEntityTheme';
+import { useShellPolish } from './useShellPolish';
 import { UserChip } from '@/components/ui/UserChip';
 
 /**
@@ -44,6 +45,8 @@ export function AppShell({
 
   // Mientras carga la sesión manda el tema que dejó el script del layout.
   useEntityTheme(!loading && user ? entity : null);
+  // Desvanecidos de borde, línea de la barra al bajar y textos cortados con su `title`.
+  useShellPolish(!loading && !!user);
 
   useEffect(() => {
     try {
@@ -209,7 +212,7 @@ export function AppShell({
 
         {/* Junta 11-09-2026: el pie del menú era un bloque de texto; ahora es la persona y dos iconos. */}
         <div className="sidebar-foot sidebar-foot--lite">
-          <UserChip name={user.fullName} subtitle={user.title || undefined} />
+          <UserChip name={user.fullName} subtitle={user.title || undefined} short />
           <div className="sidebar-foot__actions">
             <button
               type="button"

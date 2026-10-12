@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useRef } from 'react';
 import type { Tab } from './event-detail.types';
 import { TAB_LABELS } from './useEventTab';
 
@@ -16,6 +17,18 @@ type Props = {
 };
 
 export function EventTabBar({ tab, modules, onSelect }: Props) {
+  // Con la tira desbordada (ventanas angostas), la pestaña activa siempre a la vista.
+  const navRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const nav = navRef.current;
+    const el = nav?.querySelector<HTMLElement>('.tab-bar__btn.is-active');
+    if (!nav || !el) return;
+    const left = el.offsetLeft - nav.offsetLeft;
+    if (left < nav.scrollLeft + 24) nav.scrollLeft = Math.max(0, left - 24);
+    else if (left + el.offsetWidth > nav.scrollLeft + nav.clientWidth - 24)
+      nav.scrollLeft = left + el.offsetWidth - nav.clientWidth + 24;
+  }, [tab]);
+
   return (
     <div className="event-tabs">
       <label className="event-tabs__mobile">
@@ -35,7 +48,7 @@ export function EventTabBar({ tab, modules, onSelect }: Props) {
         </select>
       </label>
 
-      <nav className="tab-bar event-tabs__desktop" aria-label="Módulos del evento">
+      <nav className="tab-bar event-tabs__desktop" aria-label="Módulos del evento" ref={navRef}>
         <button
           className={`tab-bar__btn ${tab === 'overview' ? 'is-active' : ''}`}
           type="button"

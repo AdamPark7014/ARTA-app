@@ -6566,3 +6566,6 @@ textarea.pdffield__input--text {
 
 /* Teléfono y «modo app» (vista web de las apps nativas): siempre al final. */
 @import "./mobile";
+
+/* Pulido sin cortes (11-10-2026): la última palabra, encima de todo lo anterior. */
+@import "./pulido";

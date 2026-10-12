@@ -92,3 +92,27 @@ Los colores semánticos solo en errores y alertas reales, nunca de decoración.
   `#85858e` quedaba en 4.4:1).
 - Letra: Nunito variable y Outfit 800/900 con `next/font` (se sirven desde el propio dominio).
 - La hoja de formatos (`.fsheet`) y los editores de hoja y documento siguen siendo papel claro en los dos temas.
+
+## Sin cortes (pulido web, 11-10-2026)
+
+Pedido de Adam: «tiene muchos cortes no agradables». Reglas (estilos en `apps/web/styles/_pulido.scss`, que va al
+final de `globals.scss`; comportamiento en `components/app-shell/useShellPolish.ts`):
+
+- Títulos y detalles pasan a **dos renglones** (`line-clamp: 2`) en vez de cortarse en uno: filas de Inicio, línea
+  de tiempo, tarjetas de evento y de anticipo, formatos, tareas, archivos. Un solo renglón con «…» solo en filas
+  densas (vista previa del chat, responsables, título de la barra) y siempre con el texto completo en `title`
+  (lo pone el hook; cualquier otro texto o campo cortado lo recibe al pasar el cursor).
+- Listas, pestañas y tablas con scroll propio se **desvanecen** en el borde por donde sigue el contenido, y solo
+  cuando de verdad desbordan (`data-fade-x` / `data-fade-y`). Nunca un ítem partido a la mitad con borde duro.
+- Rejillas de una columna con `minmax(0, 1fr)`: ninguna tira o tabla ensancha la pantalla (a 1280 px el evento se
+  salía por la derecha).
+- Tarjetas de una fila con la misma altura y el detalle abajo; cifras grandes que se ajustan al ancho
+  (`container-type`), tabulares.
+- Menú lateral más compacto en laptops bajas (`max-height: 800px`); pie con nombre corto (nombre + primer
+  apellido) y puesto en dos renglones.
+- Barra superior sin línea arriba; la línea y una sombra suave aparecen al bajar (`html[data-scrolled]`).
+- Entrada del contenido en 180 ms y nada de movimiento con «reducir movimiento».
+- Recorrido de comprobación: `npx playwright test -c playwright.audit.config.ts` (en `apps/web`, con el panel en
+  el puerto 3100) revisa todas las pantallas en las dos entidades a 1536×730, 1536×864, 1280×720 y 390×844:
+  texto cortado, recortes, scroll lateral, controles encimados y contraste. Datos de prueba en
+  `e2e/support/rich-fixtures.ts`.

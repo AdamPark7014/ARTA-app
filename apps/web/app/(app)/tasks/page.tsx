@@ -860,7 +860,7 @@ export default function TasksPage() {
                                     {t.createdBy ? <span>· pidió {t.createdBy.fullName}</span> : null}
                                     {eng ? <span className={`badge ${eng.tone}`}>{eng.label}</span> : null}
                                     {done ? <span className="badge ok">{STATUS_LABEL.DONE}</span> : null}
-                                    {pending ? <span className="badge warn">{STATUS_LABEL.PENDING_APPROVAL}</span> : null}
+                                    {/* «Por aprobar» ya sale en `eng`: antes se veía dos veces. */}
                                   </div>
                                   {t.detail ? <div className="task-row__detail muted">{t.detail}</div> : null}
                                   {t.rejectionNote ? (

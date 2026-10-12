@@ -1,6 +1,8 @@
 type Props = {
   name: string;
   subtitle?: string;
+  /** Nombre corto (nombre + primer apellido) para espacios angostos como el pie del menú. */
+  short?: boolean;
 };
 
 export function initials(name: string) {
@@ -10,15 +12,26 @@ export function initials(name: string) {
   return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
 }
 
-export function UserChip({ name, subtitle }: Props) {
+/**
+ * «Ana Robles Villaseñor» → «Ana Robles»; «José Luis Pérez García» → «José Pérez».
+ * Con tres partes o más: el primer nombre y el primer apellido (penúltima parte).
+ */
+export function shortName(name: string) {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length <= 2) return parts.join(' ');
+  return `${parts[0]} ${parts[parts.length - 2]}`;
+}
+
+export function UserChip({ name, subtitle, short }: Props) {
+  const shown = short ? shortName(name) : name;
   return (
     <div className="user-chip">
       <div className="user-chip__avatar" aria-hidden>
         {initials(name)}
       </div>
       <div className="user-chip__meta">
-        <strong>{name}</strong>
-        {subtitle ? <span>{subtitle}</span> : null}
+        <strong title={shown !== name ? name : undefined}>{shown}</strong>
+        {subtitle ? <span title={subtitle}>{subtitle}</span> : null}
       </div>
     </div>
   );

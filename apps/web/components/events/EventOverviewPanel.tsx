@@ -10,7 +10,7 @@ import {
   eventPayload,
 } from '@/components/events/EventFields';
 import { eventDateLabel } from '@/components/ui/EventHero';
-import { EmptyLite, Tile } from '@/components/ui/Lite';
+import { Tile } from '@/components/ui/Lite';
 import { api } from '@/lib/api';
 import { mxn } from '@/lib/price-list';
 import { REVIEW_LABELS, reviewStep } from '@/lib/review-flow';
@@ -61,6 +61,8 @@ export function EventOverviewPanel({
     ? Math.round(checklists.reduce((s, c) => s + (c.progressPct || 0), 0) / checklists.length)
     : 0;
   const behind = checklists.filter((c) => c.progressPct < 100).length;
+  const noFormats = checklists.length === 0;
+  const [pinsOpen, setPinsOpen] = useState(false);
 
   const po = useMemo(() => {
     const list = event.purchaseOrders || [];
@@ -111,7 +113,13 @@ export function EventOverviewPanel({
   return (
     <div className="sx-stack">
       <div className="tiles">
-        <Tile label="Formatos" value={`${avg}%`} sub={behind ? `${behind} por completar` : 'Todo completo'} onClick={go('checklists')} />
+        {/* Sin formatos no hay avance que medir: «0 % · Todo completo» se contradecía. */}
+        <Tile
+          label="Formatos"
+          value={noFormats ? 'Sin formatos' : `${avg}%`}
+          sub={noFormats ? 'Aún no se agrega ninguno' : behind ? `${behind} por completar` : 'Todo completo'}
+          onClick={go('checklists')}
+        />
         {visibleTabs.has('ocs') ? (
           <Tile
             label="Órdenes de compra"
@@ -145,64 +153,90 @@ export function EventOverviewPanel({
       </div>
 
       <div className="split-2">
-        <section className="surface">
-          <div className="surface__head">
-            <h3 className="surface__title">Datos del evento</h3>
-            {!closed ? (
-              editing ? (
-                <div className="sx-actions">
-                  <button className="btn ghost btn-sm" type="button" onClick={() => setEditing(false)}>
-                    Cancelar
+        <div className="sx-stack">
+          <section className="surface">
+            <div className="surface__head">
+              <h3 className="surface__title">Datos del evento</h3>
+              {!closed ? (
+                editing ? (
+                  <div className="sx-actions">
+                    <button className="btn ghost btn-sm" type="button" onClick={() => setEditing(false)}>
+                      Cancelar
+                    </button>
+                    <button className="btn btn-sm" type="button" disabled={saving || !!problem} onClick={save}>
+                      {saving ? 'Guardando…' : 'Guardar'}
+                    </button>
+                  </div>
+                ) : (
+                  <button className="btn-quiet" type="button" onClick={() => setEditing(true)}>
+                    Editar
                   </button>
-                  <button className="btn btn-sm" type="button" disabled={saving || !!problem} onClick={save}>
-                    {saving ? 'Guardando…' : 'Guardar'}
-                  </button>
-                </div>
+                )
+              ) : null}
+            </div>
+            <div className="surface__body">
+              {editing && !closed ? (
+                <EventFields value={form} onChange={setForm} autoFocus />
               ) : (
-                <button className="btn-quiet" type="button" onClick={() => setEditing(true)}>
-                  Editar
+                <div className="sx-stack">
+                  <dl className="ev-facts">
+                    <div>
+                      <dt>Fecha del evento</dt>
+                      <dd>{eventDateLabel(event.startsAt, event.endsAt)}</dd>
+                    </div>
+                    <div>
+                      <dt>Horario</dt>
+                      <dd>{event.schedule || '—'}</dd>
+                    </div>
+                    <div>
+                      <dt>Funciones</dt>
+                      <dd>{event.functions || '—'}</dd>
+                    </div>
+                    <div>
+                      <dt>Venue</dt>
+                      <dd>{[event.venue, event.city].filter(Boolean).join(', ') || '—'}</dd>
+                    </div>
+                    <div>
+                      <dt>Promotor</dt>
+                      <dd>{event.promoter || '—'}</dd>
+                    </div>
+                  </dl>
+                  {event.description ? (
+                    <p className="ev-description">{event.description}</p>
+                  ) : !closed ? (
+                    <button className="btn-quiet btn-quiet--accent" type="button" onClick={() => setEditing(true)}>
+                      + Agregar descripción
+                    </button>
+                  ) : null}
+                </div>
+              )}
+            </div>
+          </section>
+
+          {canVendorPin ? (
+            <section className="surface ev-pins">
+              <div className="surface__head">
+                <div className="ev-pins__copy">
+                  <h3 className="surface__title">Acceso de proveedores</h3>
+                  <p className="ev-pins__sub">Enlace con PIN para que un proveedor vea solo lo suyo.</p>
+                </div>
+                <button
+                  className="btn ghost btn-sm"
+                  type="button"
+                  aria-expanded={pinsOpen}
+                  onClick={() => setPinsOpen((v) => !v)}
+                >
+                  {pinsOpen ? 'Cerrar' : 'Administrar'}
                 </button>
-              )
-            ) : null}
-          </div>
-          <div className="surface__body">
-            {editing && !closed ? (
-              <EventFields value={form} onChange={setForm} autoFocus />
-            ) : (
-              <div className="sx-stack">
-                <dl className="ev-facts">
-                  <div>
-                    <dt>Fecha del evento</dt>
-                    <dd>{eventDateLabel(event.startsAt, event.endsAt)}</dd>
-                  </div>
-                  <div>
-                    <dt>Horario</dt>
-                    <dd>{event.schedule || '—'}</dd>
-                  </div>
-                  <div>
-                    <dt>Funciones</dt>
-                    <dd>{event.functions || '—'}</dd>
-                  </div>
-                  <div>
-                    <dt>Venue</dt>
-                    <dd>{[event.venue, event.city].filter(Boolean).join(', ') || '—'}</dd>
-                  </div>
-                  <div>
-                    <dt>Promotor</dt>
-                    <dd>{event.promoter || '—'}</dd>
-                  </div>
-                </dl>
-                {event.description ? (
-                  <p className="ev-description">{event.description}</p>
-                ) : !closed ? (
-                  <button className="btn-quiet btn-quiet--accent" type="button" onClick={() => setEditing(true)}>
-                    + Agregar descripción
-                  </button>
-                ) : null}
               </div>
-            )}
-          </div>
-        </section>
+              {pinsOpen ? (
+                <div className="surface__body">
+                  <EventVendorPins eventId={event.id} closed={closed} flash={flash} />
+                </div>
+              ) : null}
+            </section>
+          ) : null}
+        </div>
 
         <div className="sx-stack">
           <section className="surface">
@@ -229,15 +263,15 @@ export function EventOverviewPanel({
 
           <section className="surface">
             <div className="surface__head">
-              <h3 className="surface__title">Formatos más atrasados</h3>
+              <h3 className="surface__title">{behind ? 'Formatos más atrasados' : 'Formatos'}</h3>
               {checklists.length ? (
                 <button className="btn-quiet" type="button" onClick={() => onGoModule('checklists')}>
                   Ver todos
                 </button>
               ) : null}
             </div>
-            <div className="surface__body">
-              {checklists.length ? (
+            {checklists.length ? (
+              <div className="surface__body">
                 <ChecklistPicker
                   checklists={checklists
                     .slice()
@@ -246,20 +280,23 @@ export function EventOverviewPanel({
                   onSelect={(c) => onOpenChecklist(c)}
                   compact
                 />
-              ) : (
-                <EmptyLite icon="✓" title="Sin formatos" />
-              )}
-            </div>
+              </div>
+            ) : (
+              <div className="empty-row">
+                <span className="empty-row__icon" aria-hidden>
+                  ▤
+                </span>
+                <p className="empty-row__text">Este evento aún no tiene formatos.</p>
+                {visibleTabs.has('checklists') && !closed ? (
+                  <button className="btn ghost btn-sm" type="button" onClick={() => onGoModule('checklists')}>
+                    Agregar
+                  </button>
+                ) : null}
+              </div>
+            )}
           </section>
         </div>
       </div>
-
-      {canVendorPin ? (
-        <details className="disclose">
-          <summary>Acceso de proveedores (PIN)</summary>
-          <EventVendorPins eventId={event.id} closed={closed} flash={flash} />
-        </details>
-      ) : null}
     </div>
   );
 }

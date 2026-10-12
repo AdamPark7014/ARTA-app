@@ -203,23 +203,26 @@ function EventsPageInner() {
                   <span className="ev-card__body">
                     <span className="ev-card__name">{e.name}</span>
                     <span className="ev-card__meta">{[whenLabel(e), place].filter(Boolean).join(' · ') || 'Sin fecha'}</span>
-                    {h && scope !== 'past' ? (
-                      <span className="ev-card__progress">
-                        <span className="meter">
-                          <span style={{ width: `${h.avgProgress}%` }} />
+                    {/* Avance y estado en el mismo renglón: el nombre ya no compite con la píldora. */}
+                    <span className="ev-card__foot">
+                      {h && scope !== 'past' ? (
+                        <span className="ev-card__progress">
+                          <span className="meter">
+                            <span style={{ width: `${h.avgProgress}%` }} />
+                          </span>
+                          <span className="t-small t-muted t-num">{h.avgProgress}%</span>
                         </span>
-                        <span className="t-small t-muted">{h.avgProgress}%</span>
+                      ) : null}
+                      <span className="ev-card__flag">
+                        {status ? (
+                          <Pill tone={status.tone}>{status.label}</Pill>
+                        ) : h?.risk === 'critical' ? (
+                          <Pill tone="danger">Urgente</Pill>
+                        ) : h?.risk === 'watch' ? (
+                          <Pill tone="review">Revisar</Pill>
+                        ) : null}
                       </span>
-                    ) : null}
-                  </span>
-                  <span className="ev-card__flag">
-                    {status ? (
-                      <Pill tone={status.tone}>{status.label}</Pill>
-                    ) : h?.risk === 'critical' ? (
-                      <Pill tone="danger">Urgente</Pill>
-                    ) : h?.risk === 'watch' ? (
-                      <Pill tone="review">Revisar</Pill>
-                    ) : null}
+                    </span>
                   </span>
                 </Link>
               );

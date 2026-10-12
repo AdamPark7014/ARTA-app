@@ -1,0 +1,665 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   Pulido (11-10-2026). Pedido de Adam: «profesionaliza más la UI/UX, más premium
+   y agradable visualmente, porque tiene muchos cortes no agradables».
+
+   Mismo sistema visual (docs/diseno/SISTEMA-VISUAL.md); aquí solo acabado:
+   - nada cortado a la mitad: títulos que pasan a dos renglones, listas y pestañas
+     con scroll que se desvanecen en el borde por donde sigue el contenido (solo si
+     de verdad desbordan: `useShellPolish` pone `data-fade-x` / `data-fade-y`);
+   - tarjetas de una fila con la misma altura y el detalle alineado abajo;
+   - movimiento corto (150–200 ms) que respeta «reducir movimiento»;
+   - foco visible, estados de presión, cifras tabulares.
+
+   Va al final de `globals.scss`, después de `_mobile`, para tener la última palabra.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Tokens de acabado ──────────────────────────────────────────────────── */
+
+[data-entity='ARTA'] {
+  --skel-a: #efede8;
+  --skel-b: #f9f8f5;
+  --shadow-card-hover: 0 1px 2px rgba(12, 12, 13, 0.05), 0 14px 34px rgba(12, 12, 13, 0.09);
+  --topbar-scrolled-shadow: 0 10px 24px -20px rgba(12, 12, 13, 0.5);
+  --press: rgba(12, 12, 13, 0.07);
+}
+
+[data-entity='EXPLANADA'] {
+  --skel-a: rgba(255, 255, 255, 0.035);
+  --skel-b: rgba(255, 255, 255, 0.085);
+  --shadow-card-hover: inset 0 1px 0 rgba(255, 255, 255, 0.09);
+  --topbar-scrolled-shadow: 0 12px 28px -22px rgba(0, 0, 0, 0.9);
+  --press: rgba(255, 255, 255, 0.08);
+}
+
+/* ── Movimiento ─────────────────────────────────────────────────────────── */
+
+html[data-entity] {
+  scroll-behavior: smooth;
+}
+
+@keyframes pulido-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Entrada del contenido de cada pantalla: corta y sin rebote. Con `backwards`
+   el transform no se queda puesto al terminar (si se quedara, los modales
+   `position: fixed` de la página se medirían contra este bloque y no contra la
+   ventana). */
+.shell:not(.shell--loading) > .main > .content > * {
+  animation: pulido-in 180ms cubic-bezier(0.2, 0.7, 0.2, 1) backwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html[data-entity] {
+    scroll-behavior: auto;
+  }
+
+  .shell *,
+  .shell *::before,
+  .shell *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+  }
+}
+
+/* ── Rejillas de una columna que no se ensanchan por su hijo más ancho ──────
+   Sin esto la columna implícita crece hasta el min-content del hijo más ancho
+   (la tira de pestañas del evento, una tabla) y a 1280 px toda la pantalla del
+   evento se salía por la derecha. Antes solo se corregía en el teléfono. */
+
+.stack,
+.sx-stack,
+.ev-hero,
+.home {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.event-tabs,
+.tab-bar,
+.split-2 > *,
+.home-panels > * {
+  min-width: 0;
+}
+
+/* ── Desvanecidos de borde (solo con desborde real) ─────────────────────── */
+
+html [data-fade-y='end'] {
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 28px), transparent);
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 28px), transparent);
+}
+
+html [data-fade-y='start'] {
+  -webkit-mask-image: linear-gradient(to top, #000 calc(100% - 28px), transparent);
+  mask-image: linear-gradient(to top, #000 calc(100% - 28px), transparent);
+}
+
+html [data-fade-y='both'] {
+  -webkit-mask-image: linear-gradient(to bottom, transparent, #000 28px, #000 calc(100% - 28px), transparent);
+  mask-image: linear-gradient(to bottom, transparent, #000 28px, #000 calc(100% - 28px), transparent);
+}
+
+html [data-fade-x='end'] {
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 40px), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - 40px), transparent);
+}
+
+html [data-fade-x='start'] {
+  -webkit-mask-image: linear-gradient(to left, #000 calc(100% - 40px), transparent);
+  mask-image: linear-gradient(to left, #000 calc(100% - 40px), transparent);
+}
+
+html [data-fade-x='both'] {
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 40px, #000 calc(100% - 40px), transparent);
+  mask-image: linear-gradient(to right, transparent, #000 40px, #000 calc(100% - 40px), transparent);
+}
+
+/* ── Menú lateral: ritmo más justo, scroll con desvanecido, pie limpio ──── */
+
+.sidebar {
+  gap: 16px;
+  padding: 22px 12px 12px;
+}
+
+.nav {
+  gap: 14px;
+  margin: 0 -12px;
+  padding: 2px 12px 10px;
+  scroll-padding-block: 28px;
+  /* El desvanecido fijo se va: ahora lo pone `data-fade-y` solo si hay más abajo o arriba. */
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+
+.nav-group {
+  gap: 1px;
+  margin: 0;
+}
+
+.nav-group-label {
+  padding: 0 12px 5px;
+}
+
+.nav a {
+  min-height: 34px;
+  padding: 7px 12px;
+}
+
+.nav a:active:not(.active) {
+  background: var(--press);
+}
+
+/* Pie: persona (nombre corto + puesto en dos renglones) y dos iconos apilados. */
+.sidebar-foot--lite {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  margin: 0 -12px;
+  padding: 12px 12px 0;
+  border-top: 1px solid var(--line);
+}
+
+.sidebar-foot--lite .user-chip {
+  gap: 10px;
+  min-width: 0;
+}
+
+.sidebar-foot--lite .user-chip__meta {
+  gap: 2px;
+}
+
+.sidebar-foot--lite .user-chip__meta span {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  font-size: 11px;
+  line-height: 1.3;
+  text-overflow: clip;
+  white-space: normal;
+}
+
+.sidebar-foot__actions {
+  display: grid;
+  gap: 2px;
+}
+
+.sidebar-foot__actions .icon-btn {
+  width: 28px;
+  height: 26px;
+}
+
+/* Laptop de poca altura (1536×730): logo y conmutador más compactos para que
+   quepan más entradas antes de tener que desplazarse. */
+@media (min-width: 901px) and (max-height: 800px) {
+  .sidebar {
+    gap: 12px;
+    padding-top: 16px;
+  }
+
+  .shell-logo {
+    width: 88px;
+  }
+
+  .brand-wordmark__mark {
+    font-size: 21px;
+  }
+
+  .entity-switch button {
+    padding: 6px 0;
+  }
+
+  .nav {
+    gap: 10px;
+  }
+
+  .nav a {
+    min-height: 32px;
+    padding: 6px 12px;
+  }
+
+  .nav-group-label {
+    padding-bottom: 3px;
+  }
+}
+
+/* ── Barra superior: sin línea arriba; la línea y la sombra aparecen al bajar ── */
+
+html[data-entity] .topbar {
+  border-bottom-color: transparent;
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease,
+    background-color 0.2s ease;
+}
+
+html[data-entity][data-scrolled] .topbar {
+  border-bottom-color: var(--line);
+  box-shadow: var(--topbar-scrolled-shadow);
+}
+
+/* El fondo del cajón tapa también la barra superior. */
+.shell-backdrop {
+  z-index: 35;
+}
+
+/* ── Pestañas y tiras de chips: scroll con aire al final, nunca un rótulo partido ── */
+
+.tab-bar {
+  scroll-padding-inline: 24px;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+
+.tab-bar::-webkit-scrollbar {
+  display: none;
+}
+
+/* Aire al final para que la última pestaña no quede pegada al desvanecido. */
+.tab-bar::after {
+  content: '';
+  flex: 0 0 24px;
+}
+
+.tab-bar__btn {
+  flex: 0 0 auto;
+}
+
+.seg {
+  max-width: 100%;
+}
+
+/* En el teléfono el segmentado no se parte en dos renglones: se desliza. */
+@media (max-width: 640px) {
+  .seg {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .seg::-webkit-scrollbar {
+    display: none;
+  }
+
+  .seg > * {
+    flex: 0 0 auto;
+  }
+}
+
+/* Contenedores de tabla con scroll: lo posicionado adentro (textos solo para
+   lector de pantalla, menús) se queda adentro y no ensancha la página. */
+.dtable-wrap,
+.table-wrap {
+  position: relative;
+}
+
+/* ── Títulos que pasan a dos renglones en vez de cortarse ──────────────── */
+
+.ap-row__title,
+.tl__title,
+.ev-card__name,
+.fmt-row__name,
+.task2__title,
+.hub-attach__name,
+.file-row__name,
+.chat-doc__name {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  text-overflow: clip;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+/* La meta de la tarjeta de evento (cuándo · dónde) también en dos renglones. */
+.ev-card__meta {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  text-overflow: clip;
+  white-space: normal;
+}
+
+/* ── Tarjetas de una fila: misma altura y detalle alineado abajo ───────── */
+
+.kpi-row,
+.tiles,
+.home-panels,
+.split-2 {
+  align-items: stretch;
+}
+
+.kpi-card__detail,
+.tile__sub {
+  margin-top: auto;
+}
+
+.tile {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Cifras grandes: se ajustan al ancho de su tarjeta en vez de cortarse. */
+.kpi-card,
+.tile {
+  container-type: inline-size;
+}
+
+.kpi-card__value {
+  overflow: visible;
+  font-size: clamp(24px, 15cqi, 34px);
+  text-overflow: clip;
+}
+
+.tile__value {
+  font-size: clamp(22px, 13cqi, 30px);
+  overflow-wrap: anywhere;
+}
+
+/* En el teléfono, dos cifras por renglón; si quedan nones, la última ocupa el renglón. */
+@media (max-width: 640px) {
+  .tiles {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .tiles > :last-child:nth-child(odd) {
+    grid-column: 1 / -1;
+  }
+
+  .tile {
+    padding: 14px 14px 12px;
+  }
+}
+
+/* Cifras de usuarios y tareas: llenan la fila, todas iguales, cifra abajo. */
+.kpi-grid-dense {
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+}
+
+.grid-cards > .kpi {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.grid-cards > .kpi > :nth-child(2) {
+  margin-top: auto;
+}
+
+/* ── Inicio ─────────────────────────────────────────────────────────────── */
+
+.home-panel .ap-row,
+.home-panel .tl__row {
+  transition: background-color 0.12s ease;
+}
+
+a.ap-row:active,
+a.tl__row:active {
+  background: var(--press);
+}
+
+.ap-row {
+  align-items: center;
+}
+
+.home-panel__head h3 {
+  overflow: visible;
+  white-space: normal;
+}
+
+/* ── Evento: cabecera, resumen y acceso de proveedores ───────────────────── */
+
+/* La cuenta regresiva se queda arriba a la derecha aunque el título sea largo. */
+.ev-hero__top {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  flex-wrap: nowrap;
+}
+
+.ev-hero__top > div:first-child {
+  min-width: 0;
+}
+
+.ev-hero__title {
+  overflow-wrap: anywhere;
+}
+
+.ev-pins__copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.ev-pins__sub {
+  margin: 0;
+  color: var(--text-3);
+  font-size: 12.5px;
+}
+
+/* Vacío en un renglón: ícono, una frase y la acción. */
+.empty-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 20px;
+}
+
+.empty-row__icon {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--fill-soft);
+  color: var(--muted);
+  font-size: 14px;
+}
+
+[data-entity='EXPLANADA'] .empty-row__icon {
+  border-radius: var(--radius-item);
+}
+
+.empty-row__text {
+  flex: 1 1 auto;
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+/* ── Lista de eventos: nombre en dos renglones, estado abajo ───────────── */
+
+.ev-card {
+  align-items: flex-start;
+}
+
+.ev-card .date-chip {
+  margin-top: 2px;
+}
+
+.ev-card__name {
+  line-height: 1.25;
+}
+
+.ev-card__foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin-top: 6px;
+}
+
+.ev-card__foot .ev-card__progress {
+  margin-top: 0;
+}
+
+.ev-card__foot .ev-card__flag {
+  margin-left: auto;
+}
+
+.ev-card__foot .ev-card__flag:empty {
+  display: none;
+}
+
+/* ── Anticipos: estado arriba, título en dos renglones, monto alineado ─── */
+
+.adv-card__top {
+  flex-direction: column-reverse;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.adv-card__title {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  min-height: calc(2 * 1.35em);
+  line-height: 1.35;
+}
+
+.adv-card {
+  gap: 6px;
+  background: var(--card-bg);
+  box-shadow: var(--shadow-card);
+}
+
+.adv-card__amount {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Avisos: la lista se desvanece abajo en vez de cortar un aviso ──────── */
+
+.notif-item__title {
+  line-height: 1.35;
+}
+
+/* ── Calendario ─────────────────────────────────────────────────────────── */
+
+.mcal__day {
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* Días de otro mes: más suaves, pero legibles (antes 1.7:1). */
+.mcal__day.is-out .mcal__num {
+  opacity: 1;
+  color: var(--text-3);
+}
+
+@media (max-width: 640px) {
+  .mcal__dow {
+    padding: 0.45rem 0;
+    font-size: 0.6rem;
+    letter-spacing: 0.04em;
+    text-align: center;
+  }
+
+  .mcal__day {
+    min-height: 3.9rem;
+    padding: 0.3rem 0.22rem;
+    gap: 2px;
+  }
+
+  .mcal__num {
+    font-size: 0.72rem;
+  }
+
+  /* En el teléfono los shows y las notas son barras: el detalle vive en «Ver lista». */
+  .mcal__chip,
+  .mcal__note {
+    display: block;
+    overflow: hidden;
+    height: 5px;
+    padding: 0;
+    border: 0;
+    border-radius: 3px;
+    font-size: 0;
+    line-height: 0;
+  }
+
+  .mcal__note {
+    background: color-mix(in srgb, var(--text) 22%, transparent);
+  }
+
+  .mcal__note > * {
+    display: none;
+  }
+
+  .mcal__add-note {
+    display: none;
+  }
+
+  .mcal__more {
+    font-size: 0.58rem;
+  }
+}
+
+/* ── Documentos del evento en el teléfono: acciones debajo, nada fuera ──── */
+
+.file-row {
+  min-width: 0;
+}
+
+@media (max-width: 640px) {
+  .file-row {
+    flex-wrap: wrap;
+  }
+
+  .file-row__main {
+    flex: 1 1 calc(100% - 56px);
+  }
+
+  .file-row__actions {
+    flex: 1 1 100%;
+    padding-left: 52px;
+  }
+}
+
+/* ── Acabado: presión, foco, esqueleto, sombras, cifras ─────────────────── */
+
+.shell :where(a, button, summary, [role='tab'], [role='button']):focus-visible {
+  outline: 2px solid var(--text);
+  outline-offset: 2px;
+}
+
+.btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+a.kpi-card:active,
+button.tile:active,
+.ev-card:active,
+.adv-card:active,
+.folder-card:active {
+  transform: translateY(0) scale(0.995);
+}
+
+a.kpi-card:hover,
+button.tile:hover,
+.ev-card:hover,
+.adv-card:hover,
+.folder-card:hover {
+  box-shadow: var(--shadow-card-hover);
+}
+
+.skeleton {
+  background: linear-gradient(90deg, var(--skel-a) 0%, var(--skel-b) 50%, var(--skel-a) 100%);
+  background-size: 200% 100%;
+}
+
+.shell :where(table, .t-money, .tile__value, .kpi-card__value, .kpi .value, .tl__time, .ap-row__amount, .date-chip__day) {
+  font-variant-numeric: tabular-nums;
+}
