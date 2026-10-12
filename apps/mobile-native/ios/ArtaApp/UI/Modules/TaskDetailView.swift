@@ -150,12 +150,15 @@ struct TaskDetailView: View {
 
     private func headerCard(_ t: ArtaTask) -> some View {
         ModuleCard {
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: ArtaSpace.s) {
+                // 600 como el nombre del evento (el sistema no usa negritas de 700 en títulos).
                 Text(t.title)
-                    .font(.title3.weight(.bold))
+                    .font(.title3.weight(.semibold))
+                    .tracking(-0.3)
                     .foregroundStyle(ArtaColor.text)
                     .fixedSize(horizontal: false, vertical: true)
                     .textSelection(.enabled)
+                    .padding(.bottom, ArtaSpace.xxs)
                 HStack(spacing: ArtaSpace.s) {
                     StatusPill(text: TaskInfo.statusLabel(t.status), tone: TaskInfo.statusTone(t.status))
                     if !t.isDone, let due = MDate.dueText(t.dueAt) {
@@ -278,7 +281,7 @@ struct TaskDetailView: View {
             if t.people.isEmpty {
                 Text("Sin asignar").font(.subheadline).foregroundStyle(ArtaColor.muted)
             } else {
-                VStack(alignment: .leading, spacing: 10) {
+                VStack(alignment: .leading, spacing: ArtaSpace.m) {
                     ForEach(Array(t.people.enumerated()), id: \.element.id) { index, person in
                         HStack(spacing: ArtaSpace.m) {
                             Avatar(name: person.name, size: 32)
@@ -302,7 +305,7 @@ struct TaskDetailView: View {
         let attach = canAttach(t) && !t.isEventClosed
         if !t.evidenceList.isEmpty || attach {
             ModuleCard(title: "Evidencias y archivos") {
-                VStack(alignment: .leading, spacing: 10) {
+                VStack(alignment: .leading, spacing: ArtaSpace.m) {
                     ForEach(t.evidenceList) { ev in
                         Button {
                             open(ev)
