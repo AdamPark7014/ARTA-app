@@ -116,3 +116,28 @@ final de `globals.scss`; comportamiento en `components/app-shell/useShellPolish.
   el puerto 3100) revisa todas las pantallas en las dos entidades a 1536×730, 1536×864, 1280×720 y 390×844:
   texto cortado, recortes, scroll lateral, controles encimados y contraste. Datos de prueba en
   `e2e/support/rich-fixtures.ts`.
+
+## Acabado (12-10-2026)
+
+Estilos en `apps/web/styles/_acabado.scss`, que va después de `_pulido.scss`. Reglas:
+
+- **Encabezado de pantalla**: el mismo `PageHeader` en todas (título, una línea de detalle, acciones a la
+  derecha). Dentro de un evento, cabecera compacta (estado, nombre, fecha, hora y lugar en una línea que se
+  acorta; «Editar datos» y «Más») y las pestañas pegadas arriba al bajar. El menú «Más» abre hacia dentro de la
+  pantalla, nunca la ensancha.
+- **Un relleno por fila**: como mucho un elemento lleno (la acción principal) por fila o barra; lo demás es
+  contorno o texto. Lo destructivo va discreto y siempre con confirmación. Botones de sección («Agregar formato»)
+  en el encabezado de la sección, no sueltos debajo.
+- **Campos**: los del sistema (superficie suave, borde de línea fuerte, foco con `--ring`), sin estilos propios
+  por pantalla.
+- **Color solo en alertas**: las cifras de mosaicos y tarjetas van en el color del texto; si algo requiere
+  atención, lo dice un punto de 6 px junto a la etiqueta (`--warn`) o un texto pequeño, nunca la cifra en color.
+- **Chat sin slugs**: los canales de evento se leen por su nombre (el tema del canal o el nombre del evento, nunca
+  `gira-sinfonica-2026`); el `#` solo en canales generales (`channelLabel` / `channelDisplayName` /
+  `channelWhere`). Igual en la lista, búsqueda, guardados, hilos, el selector rápido y los avisos del navegador.
+- **Tablas en el teléfono** (≤ 640 px): las tablas con `dtable--cards` pasan a tarjetas (una por fila; el evento
+  ocupa el ancho, montos a la derecha con su etiqueta en `data-label`, la acción abajo a la derecha). Órdenes de
+  compra y Campañas ya lo usan.
+- **Calendario en el teléfono**: shows y notas son barras sin texto; el detalle vive en «Ver lista».
+- **Acceso**: pantalla partida (marca a la izquierda, formulario a la derecha; en el teléfono la marca arriba).
+  El fondo de la marca lleva líneas de 1 px casi imperceptibles: arcos en ARTA, diagonales en el Auditorio.
