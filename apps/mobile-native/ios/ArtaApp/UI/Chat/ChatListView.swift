@@ -268,7 +268,7 @@ struct ChatListView: View {
                     }
                 }
             } header: {
-                sectionHeader("Explorar canales (\(model.explore.count))", unread: 0, open: $exploreOpen)
+                sectionHeader("Explorar canales", count: model.explore.count, unread: 0, open: $exploreOpen)
             }
         }
     }
@@ -286,20 +286,23 @@ struct ChatListView: View {
         }
     }
 
-    private func sectionHeader(_ title: String, unread: Int, open: Binding<Bool>) -> some View {
+    private func sectionHeader(_ title: String, count: Int? = nil, unread: Int, open: Binding<Bool>) -> some View {
         Button {
             withAnimation(.easeInOut(duration: 0.2)) { open.wrappedValue.toggle() }
         } label: {
-            HStack(spacing: 6) {
+            // Mismo encabezado «cap» que el resto de la app, con la flecha para plegar.
+            HStack(spacing: ArtaSpace.s) {
                 Image(systemName: "chevron.right")
-                    .font(.caption2.weight(.bold))
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(ArtaColor.tertiary)
                     .rotationEffect(.degrees(open.wrappedValue ? 90 : 0))
-                Text(title)
-                    .font(.subheadline.weight(.semibold))
+                    .frame(width: 10)
+                CapLabel(title)
+                if let count { QuietCount(count: count) }
                 Spacer()
                 if !open.wrappedValue && unread > 0 { CountBadge(count: unread, muted: false) }
             }
-            .foregroundStyle(ArtaColor.muted)
+            .padding(.vertical, ArtaSpace.xs)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -351,10 +354,7 @@ struct ChatListView: View {
             Section {
                 ForEach(matches) { channel in row(channel) }
             } header: {
-                Text("Conversaciones")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(ArtaColor.muted)
-                    .textCase(nil)
+                ArtaSectionHeader("Conversaciones", count: matches.count)
             }
         }
         if model.searchesMessages {
@@ -387,10 +387,7 @@ struct ChatListView: View {
                     }
                 }
             } header: {
-                Text("Mensajes")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(ArtaColor.muted)
-                    .textCase(nil)
+                ArtaSectionHeader("Mensajes", count: model.results.isEmpty ? nil : model.results.count)
             }
         }
     }
@@ -680,7 +677,7 @@ struct NewConversationSheet: View {
                         Toggle("Privado", isOn: $isPrivate)
                             .tint(ArtaColor.accent)
                     } header: {
-                        Text("Canal")
+                        ArtaSectionHeader("Canal")
                     } footer: {
                         Text(isPrivate ? "Solo lo ven las personas que agregues." : "Cualquiera de la organización puede encontrarlo y unirse.")
                     }

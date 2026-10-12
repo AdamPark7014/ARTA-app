@@ -85,8 +85,8 @@ struct StatusPill: View {
             .tracking(0.6)
             .foregroundStyle(textColor)
             .padding(.horizontal, 8)
-            .padding(.vertical, 3.5)
-            .background(shape.fill(tone.isFilled ? ArtaColor.accentFill : AnyShapeStyle(fillColor)))
+            .padding(.vertical, 3)
+            .background(shape.fill(tone.isFilled ? ArtaColor.accentFill : AnyShapeStyle(Color.clear)))
             .overlay(shape.strokeBorder(tone.isFilled ? Color.clear : borderColor, lineWidth: 1))
             .lineLimit(1)
             .fixedSize()
@@ -107,10 +107,6 @@ struct StatusPill: View {
         case .accent: return ArtaTheme.isLight ? Color(hex: 0x0C0C0D, opacity: 0.35) : Color(hex: 0xC7CCD4, opacity: 0.45)
         default: return ArtaTheme.isLight ? Color(hex: 0x0C0C0D, opacity: 0.2) : Color.white.opacity(0.18)
         }
-    }
-
-    private var fillColor: Color {
-        tone == .danger ? ArtaColor.danger.opacity(0.06) : .clear
     }
 }
 
@@ -172,20 +168,109 @@ struct ModuleEmptyView: View {
     }
 }
 
-/// Tarjeta con título opcional en etiqueta «cap» (fichas de detalle).
+/// Tarjeta con título opcional en etiqueta «cap» (fichas de detalle) y su contador discreto.
 struct ModuleCard<Content: View>: View {
     var title: String? = nil
+    var count: Int? = nil
     @ViewBuilder let content: () -> Content
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: ArtaSpace.m) {
             if let title {
-                CapLabel(title)
+                ArtaSectionHeader(title, count: count)
             }
             content()
         }
         .artaCard()
     }
+}
+
+/// Sección de una lista hecha de tarjetas (Tareas, Aprobaciones): encabezado «cap» afuera,
+/// con su contador, y las filas dentro de una sola tarjeta separadas por línea fina. Así las
+/// esquinas son las de la entidad (16 en ARTA, 6 en Auditorio) y no las de la lista del sistema.
+struct CardSection<Item: Identifiable, Row: View>: View {
+    /// Sin título, solo la tarjeta (cuando el segmentado de arriba ya dice qué es).
+    var title: String? = nil
+    var count: Int? = nil
+    var alert = false
+    let items: [Item]
+    /// Sangría de la línea entre filas (hasta el texto).
+    var dividerInset: CGFloat = 0
+    /// Aire arriba y abajo de cada fila (las filas de tarea ya traen 4 propios).
+    var rowPadding: CGFloat = ArtaSpace.m
+    @ViewBuilder let row: (Item) -> Row
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: ArtaSpace.s) {
+            if let title {
+                ArtaSectionHeader(title, count: count, alert: alert)
+                    .padding(.horizontal, ArtaSpace.xs)
+            }
+            VStack(alignment: .leading, spacing: 0) {
+                ForEach(items) { item in
+                    row(item)
+                        .padding(.horizontal, ArtaSpace.l)
+                        .padding(.vertical, rowPadding)
+                    if item.id != items.last?.id {
+                        ArtaDivider(leading: ArtaSpace.l + dividerInset)
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(ArtaCardBackground())
+        }
+    }
+}
+
+/// Renglón con ícono de los encabezados (fecha, lugar, horario): el ícono en una columna fija
+/// para que todos los textos arranquen en la misma orilla.
+struct InfoLine: View {
+    let icon: String
+    let text: String
+    var color: Color? = nil
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: ArtaSpace.s) {
+            Image(systemName: icon)
+                .font(.system(size: 14, weight: .regular))
+                .foregroundStyle(ArtaColor.tertiary)
+                .frame(width: 20, alignment: .center)
+            Text(text)
+                .font(.subheadline)
+                .monospacedDigit()
+                .foregroundStyle(color ?? ArtaColor.text)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+}
+
+/// Aviso breve abajo de la pantalla (lo hecho: «Entrega aprobada»): píldora del acento.
+struct FlashToast: ViewModifier {
+    let text: String?
+
+    func body(content: Content) -> some View {
+        content
+            .overlay(alignment: .bottom) {
+                if let text {
+                    Text(text)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(ArtaColor.onAccent)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, ArtaSpace.l)
+                        .padding(.vertical, 10)
+                        .background(ArtaControlShape().fill(ArtaColor.accentFill))
+                        .shadow(color: ArtaTheme.isLight ? Color(hex: 0x0C0C0D, opacity: 0.18) : .black.opacity(0.55), radius: 10, y: 5)
+                        .padding(.horizontal, ArtaLayout.gutter)
+                        .padding(.bottom, ArtaSpace.l)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+            }
+            .animation(.easeInOut(duration: 0.2), value: text)
+    }
+}
+
+extension View {
+    func flashToast(_ text: String?) -> some View { modifier(FlashToast(text: text)) }
 }
 
 /// Panel del tablero: título 600 y, a la derecha, un dato o «Ver todo» en terciario.

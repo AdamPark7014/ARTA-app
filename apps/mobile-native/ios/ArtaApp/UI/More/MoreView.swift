@@ -42,7 +42,7 @@ struct MoreView: View {
                     .pickerStyle(.segmented)
                     .accessibilityIdentifier("more-entity-picker")
                 } header: {
-                    Text("Entidad")
+                    ArtaSectionHeader("Entidad")
                 } footer: {
                     Text("Atajo: doble toque en la pestaña Inicio.")
                 }
@@ -50,7 +50,7 @@ struct MoreView: View {
             }
 
             ForEach(sections) { section in
-                Section(section.group) {
+                Section {
                     ForEach(section.modules) { module in
                         NavigationLink(value: AppRoute.web(path: module.path, title: module.label)) {
                             Label {
@@ -60,6 +60,8 @@ struct MoreView: View {
                             }
                         }
                     }
+                } header: {
+                    ArtaSectionHeader(section.group)
                 }
                 .listRowBackground(ArtaColor.bgElev)
             }
@@ -74,7 +76,7 @@ struct MoreView: View {
             }
 
             // Apple (1.2): quien bloquea en el chat puede revisar y deshacer el bloqueo.
-            Section("Chat") {
+            Section {
                 NavigationLink(value: AppRoute.blockedUsers) {
                     Label {
                         Text("Usuarios bloqueados").foregroundStyle(ArtaColor.text)
@@ -83,10 +85,12 @@ struct MoreView: View {
                     }
                 }
                 .accessibilityIdentifier("more-blocked-users")
+            } header: {
+                ArtaSectionHeader("Chat")
             }
             .listRowBackground(ArtaColor.bgElev)
 
-            Section("App") {
+            Section {
                 Button {
                     if let url = URL(string: UIApplication.openNotificationSettingsURLString) {
                         UIApplication.shared.open(url)
@@ -102,15 +106,19 @@ struct MoreView: View {
                 } label: {
                     Label("Abrir en Safari", systemImage: "safari")
                 }
+            } header: {
+                ArtaSectionHeader("App")
             }
             .listRowBackground(ArtaColor.bgElev)
 
             // Apple (5.1.1) exige que privacidad, términos y soporte se abran
             // desde dentro de la app; se leen en hoja sin perder la pestaña.
-            Section("Legal y soporte") {
+            Section {
                 legalRow("Aviso de privacidad", systemImage: "hand.raised", url: ArtaAppMeta.privacidadURL, id: "more-privacy")
                 legalRow("Términos de uso", systemImage: "doc.text", url: ArtaAppMeta.terminosURL, id: "more-terms")
                 legalRow("Soporte", systemImage: "questionmark.circle", url: ArtaAppMeta.soporteURL, id: "more-support")
+            } header: {
+                ArtaSectionHeader("Legal y soporte")
             }
             .listRowBackground(ArtaColor.bgElev)
 

@@ -285,7 +285,7 @@ struct ChannelInfoView: View {
                 }
             }
         } header: {
-            Text("Acerca de")
+            ArtaSectionHeader("Acerca de")
         }
         .listRowBackground(ArtaColor.bgElev)
     }
@@ -325,7 +325,7 @@ struct ChannelInfoView: View {
                 }
             }
         } header: {
-            Text("Notificaciones")
+            ArtaSectionHeader("Notificaciones")
         }
         .listRowBackground(ArtaColor.bgElev)
     }
@@ -362,7 +362,7 @@ struct ChannelInfoView: View {
                 }
             }
         } header: {
-            Text(model.pins.isEmpty ? "Fijados" : "Fijados (\(model.pins.count))")
+            ArtaSectionHeader("Fijados", count: model.pins.isEmpty ? nil : model.pins.count)
         }
         .listRowBackground(ArtaColor.bgElev)
     }
@@ -403,7 +403,7 @@ struct ChannelInfoView: View {
                     }
             }
         } header: {
-            Text(count == 1 ? "1 miembro" : "\(count) miembros")
+            ArtaSectionHeader("Miembros", count: count)
         }
         .listRowBackground(ArtaColor.bgElev)
     }
@@ -505,7 +505,7 @@ private struct EditChannelSheet: View {
                     TextField("De qué se habla aquí", text: $topic, axis: .vertical)
                         .lineLimit(1...3)
                 } header: {
-                    Text("Tema")
+                    ArtaSectionHeader("Tema")
                 } footer: {
                     Text("Se ve debajo del nombre, en el encabezado de la conversación.")
                 }
@@ -514,7 +514,7 @@ private struct EditChannelSheet: View {
                     TextField("Para qué es esta conversación", text: $details, axis: .vertical)
                         .lineLimit(3...8)
                 } header: {
-                    Text("Descripción")
+                    ArtaSectionHeader("Descripción")
                 }
                 .listRowBackground(ArtaColor.bgElev)
                 if failed {

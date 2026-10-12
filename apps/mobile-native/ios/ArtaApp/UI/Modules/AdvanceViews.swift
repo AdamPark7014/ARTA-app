@@ -56,7 +56,7 @@ struct RejectAdvanceSheet: View {
                     TextField("Por qué no procede…", text: $reason, axis: .vertical)
                         .lineLimit(3...8)
                 } header: {
-                    Text("Motivo")
+                    ArtaSectionHeader("Motivo")
                 } footer: {
                     Text("Obligatorio, mínimo 3 caracteres. A quien lo pidió le llega el aviso con tu motivo.")
                 }

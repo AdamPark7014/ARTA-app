@@ -127,25 +127,29 @@ struct EventsView: View {
             }
             .refreshable { await load() }
         } else {
-            List {
-                if let refreshError {
-                    Label(refreshError, systemImage: "exclamationmark.triangle.fill")
-                        .font(.footnote)
-                        .foregroundStyle(ArtaColor.danger)
-                        .listRowBackground(Color.clear)
-                }
-                ForEach(rows) { event in
-                    Button {
-                        router.open(AppRoute.event(event.id))
-                    } label: {
-                        EventRow(event: event)
+            // Una tarjeta de la entidad (16 en ARTA, 6 en Auditorio), no la lista agrupada del sistema.
+            ScrollView {
+                VStack(alignment: .leading, spacing: ArtaSpace.m) {
+                    if let refreshError {
+                        Label(refreshError, systemImage: "exclamationmark.triangle.fill")
+                            .font(.footnote)
+                            .foregroundStyle(ArtaColor.danger)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .padding(.horizontal, ArtaSpace.xs)
                     }
-                    .buttonStyle(.plain)
-                    .listRowBackground(ArtaColor.bgElev)
+                    CardSection(items: rows, dividerInset: 58) { event in
+                        Button {
+                            router.open(AppRoute.event(event.id))
+                        } label: {
+                            EventRow(event: event)
+                        }
+                        .buttonStyle(ArtaPressStyle(scale: 0.99))
+                    }
                 }
+                .padding(.horizontal, ArtaLayout.gutter)
+                .padding(.top, ArtaSpace.s)
+                .padding(.bottom, ArtaSpace.l)
             }
-            .listStyle(.insetGrouped)
-            .scrollContentBackground(.hidden)
             .refreshable { await load() }
             .artaTabBarScrim(glow: false)
         }
@@ -591,13 +595,15 @@ struct CalendarNoteSheet: View {
                 .listRowBackground(ArtaColor.bgElev)
 
                 if draft.note == nil && entities.count > 1 {
-                    Section("Calendario") {
+                    Section {
                         Picker("Entidad", selection: $entity) {
                             ForEach(entities, id: \.self) { key in
                                 Text(EntityInfo.label(key)).tag(key)
                             }
                         }
                         .pickerStyle(.segmented)
+                    } header: {
+                        ArtaSectionHeader("Calendario")
                     }
                     .listRowBackground(ArtaColor.bgElev)
                 }
@@ -606,7 +612,7 @@ struct CalendarNoteSheet: View {
                     TextField("Ensayo, montaje, junta, recordatorio…", text: $text, axis: .vertical)
                         .lineLimit(3...8)
                 } header: {
-                    Text("Nota")
+                    ArtaSectionHeader("Nota")
                 } footer: {
                     Text("\(text.count)/\(Self.maxLength)")
                 }

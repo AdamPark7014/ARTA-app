@@ -233,7 +233,9 @@ struct TaskDetailView: View {
         }
     }
 
-    /// Principal = acento (tinta o plata); secundaria = superficie con borde; corrección en rojo.
+    /// Principal = acento (tinta o plata); secundaria = superficie con borde; la corrección, igual de
+    /// discreta con el texto en rojo (abre la hoja del motivo, con su confirmación).
+    @ViewBuilder
     private func actionButton(
         _ title: String,
         icon: String,
@@ -241,19 +243,14 @@ struct TaskDetailView: View {
         destructive: Bool = false,
         action: @escaping () -> Void
     ) -> some View {
-        let shape = ArtaControlShape()
-        let border: Color = prominent ? .clear : (destructive ? ArtaColor.danger.opacity(0.4) : ArtaColor.lineStrong)
-        return Button(action: action) {
-            Label(title, systemImage: icon)
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(prominent ? ArtaColor.onAccent : (destructive ? ArtaColor.danger : ArtaColor.text))
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 13)
-                .background(shape.fill(prominent ? ArtaColor.accentFill : AnyShapeStyle(ArtaColor.surface)))
-                .overlay(shape.strokeBorder(border, lineWidth: 1))
-                .contentShape(shape)
+        let button = Button(action: action) { Label(title, systemImage: icon) }
+        if prominent {
+            button.buttonStyle(ArtaPrimaryButtonStyle())
+        } else if destructive {
+            button.buttonStyle(ArtaDestructiveButtonStyle())
+        } else {
+            button.buttonStyle(ArtaSecondaryButtonStyle())
         }
-        .buttonStyle(.plain)
     }
 
     @ViewBuilder
@@ -335,20 +332,22 @@ struct TaskDetailView: View {
                         Text("Todavía no hay archivos.").font(.subheadline).foregroundStyle(ArtaColor.muted)
                     }
                     if attach {
-                        HStack(spacing: 12) {
+                        // Botones secundarios de verdad (contorno), no texto suelto que parece etiqueta.
+                        HStack(spacing: ArtaSpace.s) {
                             PhotosPicker(selection: $photoItems, maxSelectionCount: 5, matching: .images) {
                                 Label("Foto", systemImage: "photo")
                             }
+                            .buttonStyle(ArtaSecondaryButtonStyle(fullWidth: false, compact: true))
                             Button {
                                 showImporter = true
                             } label: {
                                 Label("Archivo", systemImage: "doc.badge.plus")
                             }
-                            Spacer()
+                            .buttonStyle(ArtaSecondaryButtonStyle(fullWidth: false, compact: true))
+                            Spacer(minLength: 0)
                             if uploading { ProgressView().tint(ArtaColor.accent) }
                         }
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(ArtaColor.accent)
+                        .padding(.top, ArtaSpace.xs)
                         .disabled(uploading)
                     }
                 }
@@ -560,14 +559,16 @@ struct DeliverTaskSheet: View {
                     Section {
                         Label("Corrección pedida: \(rejection)", systemImage: "exclamationmark.bubble.fill")
                             .font(.footnote)
-                            .foregroundStyle(ArtaColor.warn)
+                            .foregroundStyle(ArtaColor.danger)
                     }
                     .listRowBackground(ArtaColor.bgElev)
                 }
 
-                Section("¿Qué hiciste?") {
+                Section {
                     TextField("Describe lo realizado, referencias, números, contactos…", text: $note, axis: .vertical)
                         .lineLimit(4...10)
+                } header: {
+                    ArtaSectionHeader("¿Qué hiciste?")
                 }
                 .listRowBackground(ArtaColor.bgElev)
 
@@ -590,7 +591,7 @@ struct DeliverTaskSheet: View {
                         Label("Agregar archivo (PDF, Excel…)", systemImage: "doc.badge.plus")
                     }
                 } header: {
-                    Text("Evidencia")
+                    ArtaSectionHeader("Evidencia")
                 } footer: {
                     if !task.evidenceList.isEmpty {
                         Text(task.evidenceList.count == 1
@@ -697,7 +698,7 @@ struct RejectTaskSheet: View {
                     TextField("Qué falta o qué corregir…", text: $note, axis: .vertical)
                         .lineLimit(3...8)
                 } header: {
-                    Text("Motivo")
+                    ArtaSectionHeader("Motivo")
                 } footer: {
                     Text("La tarea vuelve a «En curso» y a sus responsables les llega el aviso con tu motivo.")
                 }

@@ -132,7 +132,7 @@ struct ReportMessageSheet: View {
                     }
                     .padding(.vertical, 2)
                 } header: {
-                    Text("Mensaje")
+                    ArtaSectionHeader("Mensaje")
                 }
                 .listRowBackground(ArtaColor.bgElev)
 

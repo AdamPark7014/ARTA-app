@@ -95,44 +95,35 @@ struct TasksView: View {
                 Task { await load(resetting: true) }
             }
         } else {
-            List {
-                if let flash {
-                    Label(flash, systemImage: "checkmark.circle.fill")
-                        .font(.footnote)
-                        .foregroundStyle(ArtaColor.text)
-                        .listRowBackground(ArtaColor.accentSoft)
-                }
-                ForEach(groups, id: \.bucket) { group in
-                    Section {
-                        ForEach(group.tasks) { task in
+            // Tarjetas propias en vez de la lista agrupada del sistema: esquinas de la entidad
+            // (16 en ARTA, 6 en Auditorio) y encabezados «cap» con su contador, como el resto.
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: ArtaSpace.xl) {
+                    ForEach(groups, id: \.bucket) { group in
+                        CardSection(title: group.bucket.title, count: group.tasks.count, alert: group.bucket == .overdue,
+                                    items: group.tasks, dividerInset: 36, rowPadding: ArtaSpace.s) { task in
                             Button {
                                 router.open(AppRoute.task(task.id))
                             } label: {
                                 TaskRow(task: task)
                             }
-                            .listRowBackground(ArtaColor.bgElev)
-                            .listRowSeparatorTint(ArtaColor.line)
+                            .buttonStyle(ArtaPressStyle(scale: 0.99))
                             // Para la prueba de interfaz de las capturas (detalle de tarea).
                             .accessibilityIdentifier("task-row-\(task.id)")
                         }
-                    } header: {
-                        HStack {
-                            Text(group.bucket.title)
-                            Spacer()
-                            Text("\(group.tasks.count)")
-                                .monospacedDigit()
-                        }
-                        .foregroundStyle(group.bucket == .overdue ? ArtaColor.danger : ArtaColor.muted)
+                    }
+                    if groups.isEmpty {
+                        emptyView
+                            .frame(minHeight: 360)
                     }
                 }
-            }
-            .listStyle(.insetGrouped)
-            .scrollContentBackground(.hidden)
-            .overlay {
-                if groups.isEmpty { emptyView }
+                .padding(.horizontal, ArtaLayout.gutter)
+                .padding(.top, ArtaSpace.s)
+                .padding(.bottom, ArtaSpace.l)
             }
             .refreshable { await load() }
             .artaTabBarScrim(glow: false)
+            .flashToast(flash)
         }
     }
 
@@ -436,7 +427,7 @@ struct TaskFormSheet: View {
                         }
                     }
                 } header: {
-                    Text("Responsables")
+                    ArtaSectionHeader("Responsables")
                 } footer: {
                     Text("La primera persona queda como responsable principal. A cada quien le llega el aviso.")
                 }
@@ -451,7 +442,7 @@ struct TaskFormSheet: View {
                             }
                         }
                     } header: {
-                        Text("Evento")
+                        ArtaSectionHeader("Evento")
                     } footer: {
                         // Los eventos de la lista ya son solo de la entidad activa.
                         Text("Sin evento, la tarea queda en \(EntityContext.entity.brandName).")
@@ -459,19 +450,23 @@ struct TaskFormSheet: View {
                     .listRowBackground(ArtaColor.bgElev)
                 }
 
-                Section("Vencimiento") {
+                Section {
                     Toggle("Con fecha", isOn: $hasDue.animation())
                     if hasDue {
                         Toggle("Con hora", isOn: $withTime.animation())
                         DatePicker("Fecha", selection: $dueDate, displayedComponents: dueComponents)
                             .environment(\.locale, Locale(identifier: "es_MX"))
                     }
+                } header: {
+                    ArtaSectionHeader("Vencimiento")
                 }
                 .tint(ArtaColor.accent)
                 .listRowBackground(ArtaColor.bgElev)
 
-                Section("Módulo") {
+                Section {
                     TextField("producción / campaña…", text: $module)
+                } header: {
+                    ArtaSectionHeader("Módulo")
                 }
                 .listRowBackground(ArtaColor.bgElev)
 

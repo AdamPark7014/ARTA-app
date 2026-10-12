@@ -73,20 +73,7 @@ struct ApprovalsView: View {
             .padding(.vertical, ArtaSpace.s)
             .background(ArtaColor.bg)
         }
-        .overlay(alignment: .bottom) {
-            if let flash {
-                Text(flash)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(ArtaColor.onAccent)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 10)
-                    .background(ArtaControlShape().fill(ArtaColor.accentFill))
-                    .shadow(color: ArtaTheme.isLight ? Color(hex: 0x0C0C0D, opacity: 0.18) : .black.opacity(0.55), radius: 10, y: 5)
-                    .padding(.bottom, 16)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
-            }
-        }
-        .animation(.easeInOut(duration: 0.2), value: flash)
+        .flashToast(flash)
         .navigationTitle("Aprobaciones")
         .navigationBarTitleDisplayMode(.inline)
         .task {
@@ -144,87 +131,84 @@ struct ApprovalsView: View {
                         title: "Nada por aprobar",
                         message: "Cuando alguien entregue una tarea que pediste, haya una orden de compra por autorizar o un anticipo por resolver, aparecerá aquí.")
         } else {
-            List {
-                if let refreshError { errorRow(refreshError) }
-                if let advancesError { errorRow("Anticipos: \(advancesError)") }
-                if !tasks.isEmpty {
-                    Section("Entregas por revisar (\(tasks.count))") {
-                        ForEach(tasks) { task in
+            ScrollView {
+                VStack(alignment: .leading, spacing: ArtaSpace.xl) {
+                    if let refreshError { errorRow(refreshError) }
+                    if let advancesError { errorRow("Anticipos: \(advancesError)") }
+                    if !tasks.isEmpty {
+                        CardSection(title: "Entregas por revisar", count: tasks.count, items: tasks,
+                                    dividerInset: 36, rowPadding: ArtaSpace.s) { task in
                             pendingTaskRow(task)
                         }
                     }
-                    .listRowBackground(ArtaColor.bgElev)
-                }
-                if !pendingOrders.isEmpty {
-                    Section("Órdenes de compra por autorizar (\(pendingOrders.count))") {
-                        ForEach(pendingOrders) { row in
+                    if !pendingOrders.isEmpty {
+                        CardSection(title: "Órdenes de compra por autorizar", count: pendingOrders.count, items: pendingOrders) { row in
                             orderRow(row)
                         }
                     }
-                    .listRowBackground(ArtaColor.bgElev)
-                }
-                if !advances.isEmpty {
-                    Section("Anticipos (\(advances.count))") {
-                        ForEach(advances) { advance in
+                    if !advances.isEmpty {
+                        CardSection(title: "Anticipos", count: advances.count, items: advances) { advance in
                             advanceRow(advance)
                         }
                     }
-                    .listRowBackground(ArtaColor.bgElev)
                 }
+                .padding(.horizontal, ArtaLayout.gutter)
+                .padding(.top, ArtaSpace.m)
+                .padding(.bottom, ArtaSpace.l)
             }
-            .listStyle(.insetGrouped)
-            .scrollContentBackground(.hidden)
             .refreshable { await load() }
             .artaTabBarScrim(glow: false)
         }
     }
 
     private func pendingTaskRow(_ task: ArtaTask) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: ArtaSpace.s) {
             Button {
                 router.open(AppRoute.task(task.id))
             } label: {
                 TaskRow(task: task)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(ArtaPressStyle(scale: 0.99))
             if let note = task.completionNote, !note.isEmpty {
                 Text("«\(note)»")
                     .font(.footnote)
                     .foregroundStyle(ArtaColor.text)
                     .lineLimit(3)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.leading, 36)
             }
-            HStack(spacing: 8) {
-                if !task.evidenceList.isEmpty {
-                    Label("\(task.evidenceList.count)", systemImage: "paperclip")
-                        .font(.caption)
-                        .foregroundStyle(ArtaColor.muted)
+            HStack(spacing: ArtaSpace.s) {
+                VStack(alignment: .leading, spacing: ArtaSpace.xxs) {
+                    if !task.evidenceList.isEmpty {
+                        Label(pluralized(task.evidenceList.count, "archivo", "archivos"), systemImage: "paperclip")
+                            .font(.caption)
+                            .foregroundStyle(ArtaColor.muted)
+                    }
+                    if let submitted = task.submittedAt {
+                        Text("Entregada \(relativeTime(submitted))")
+                            .font(.caption)
+                            .monospacedDigit()
+                            .foregroundStyle(ArtaColor.tertiary)
+                            .lineLimit(1)
+                    }
                 }
-                if let submitted = task.submittedAt {
-                    Text("Entregada \(relativeTime(submitted))")
-                        .font(.caption)
-                        .foregroundStyle(ArtaColor.muted)
-                        .lineLimit(1)
-                }
-                Spacer(minLength: 4)
+                Spacer(minLength: ArtaSpace.xs)
                 if busyTaskId == task.id {
-                    ProgressView()
+                    ProgressView().tint(ArtaColor.accent)
                 } else {
+                    // Corregir abre la hoja del motivo (con su confirmación); no es un botón rojo lleno.
                     Button("Corregir") { rejecting = task }
-                        .buttonStyle(.bordered)
-                        .tint(ArtaColor.danger)
+                        .buttonStyle(ArtaDestructiveButtonStyle(fullWidth: false, compact: true))
                         .disabled(task.isEventClosed)
                     Button("Aprobar") {
                         Task { await approve(task) }
                     }
-                    .buttonStyle(.borderedProminent)
-                    .tint(ArtaColor.accent)
-                    .foregroundStyle(ArtaColor.onAccent)
+                    .buttonStyle(ArtaPrimaryButtonStyle(fullWidth: false, compact: true))
                     .disabled(task.isEventClosed)
                 }
             }
-            .controlSize(.small)
+            .padding(.leading, 36)
         }
-        .padding(.vertical, 4)
     }
 
     private func orderRow(_ row: PurchaseOrderRow) -> some View {
@@ -261,10 +245,9 @@ struct ApprovalsView: View {
                     StatusPill(text: POInfo.statusLabel(row.status), tone: POInfo.statusTone(row.status))
                 }
             }
-            .padding(.vertical, 4)
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(ArtaPressStyle(scale: 0.99))
         // Para la prueba de interfaz de las capturas (detalle de la orden).
         .accessibilityIdentifier("approval-order-\(row.id)")
     }
@@ -279,9 +262,9 @@ struct ApprovalsView: View {
     }
 
     private func advanceRow(_ advance: AdvanceRow) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .top, spacing: 12) {
-                VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: ArtaSpace.m) {
+            HStack(alignment: .top, spacing: ArtaSpace.m) {
+                VStack(alignment: .leading, spacing: ArtaSpace.xs) {
                     Text(AdvanceInfo.title(advance))
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(ArtaColor.text)
@@ -316,23 +299,26 @@ struct ApprovalsView: View {
                     .font(.footnote)
                     .foregroundStyle(ArtaColor.text)
                     .lineLimit(3)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            HStack(spacing: 8) {
+            HStack(spacing: ArtaSpace.s) {
                 if let fileUrl = advance.fileUrl, !fileUrl.isEmpty {
                     Button {
                         openAdvanceFile(fileUrl, name: advance.label)
                     } label: {
                         Label("Ver archivo", systemImage: "paperclip")
-                            .font(.caption.weight(.semibold))
+                            .font(.footnote.weight(.semibold))
+                            .foregroundStyle(ArtaColor.text)
+                            .padding(.vertical, ArtaSpace.xs)
+                            .contentShape(Rectangle())
                     }
-                    .buttonStyle(.borderless)
-                    .tint(ArtaColor.accent)
+                    .buttonStyle(ArtaPressStyle(scale: 0.97))
                 }
-                Spacer(minLength: 4)
+                Spacer(minLength: ArtaSpace.xs)
                 if advance.isPending {
+                    // Rechazar pide el motivo en su hoja antes de mandar nada.
                     Button("Rechazar") { rejectingAdvance = advance }
-                        .buttonStyle(.bordered)
-                        .tint(ArtaColor.danger)
+                        .buttonStyle(ArtaDestructiveButtonStyle(fullWidth: false, compact: true))
                     Button("Aprobar") {
                         Task {
                             await resolveAdvance(advance, done: "Anticipo aprobado.") {
@@ -340,22 +326,16 @@ struct ApprovalsView: View {
                             }
                         }
                     }
-                    .buttonStyle(.borderedProminent)
-                    .tint(ArtaColor.accent)
-                    .foregroundStyle(ArtaColor.onAccent)
+                    .buttonStyle(ArtaPrimaryButtonStyle(fullWidth: false, compact: true))
                 } else if advance.isApproved {
                     Button("Marcar pagado") {
                         payingAdvance = advance
                         confirmPay = true
                     }
-                    .buttonStyle(.borderedProminent)
-                    .tint(ArtaColor.accent)
-                    .foregroundStyle(ArtaColor.onAccent)
+                    .buttonStyle(ArtaPrimaryButtonStyle(fullWidth: false, compact: true))
                 }
             }
-            .controlSize(.small)
         }
-        .padding(.vertical, 4)
     }
 
     private func advanceEventLine(_ advance: AdvanceRow) -> String {
@@ -382,39 +362,39 @@ struct ApprovalsView: View {
                         title: "Sin historial",
                         message: "Aquí verás las entregas que aprobaste y las órdenes de compra ya decididas.")
         } else {
-            List {
-                if let refreshError { errorRow(refreshError) }
-                if !approvedTasks.isEmpty {
-                    Section("Entregas aprobadas") {
-                        ForEach(approvedTasks) { task in
+            ScrollView {
+                VStack(alignment: .leading, spacing: ArtaSpace.xl) {
+                    if let refreshError { errorRow(refreshError) }
+                    if !approvedTasks.isEmpty {
+                        CardSection(title: "Entregas aprobadas", count: approvedTasks.count, items: approvedTasks,
+                                    dividerInset: 36, rowPadding: ArtaSpace.s) { task in
                             Button {
                                 router.open(AppRoute.task(task.id))
                             } label: {
-                                VStack(alignment: .leading, spacing: 4) {
+                                VStack(alignment: .leading, spacing: ArtaSpace.xxs) {
                                     TaskRow(task: task)
                                     if let approved = task.approvedAt {
                                         Text("Aprobada \(relativeTime(approved))")
                                             .font(.caption)
-                                            .foregroundStyle(ArtaColor.muted)
+                                            .monospacedDigit()
+                                            .foregroundStyle(ArtaColor.tertiary)
+                                            .padding(.leading, 36)
                                     }
                                 }
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(ArtaPressStyle(scale: 0.99))
                         }
                     }
-                    .listRowBackground(ArtaColor.bgElev)
-                }
-                if !decidedOrders.isEmpty {
-                    Section("Órdenes de compra") {
-                        ForEach(decidedOrders) { row in
+                    if !decidedOrders.isEmpty {
+                        CardSection(title: "Órdenes de compra", count: decidedOrders.count, items: decidedOrders) { row in
                             orderRow(row)
                         }
                     }
-                    .listRowBackground(ArtaColor.bgElev)
                 }
+                .padding(.horizontal, ArtaLayout.gutter)
+                .padding(.top, ArtaSpace.m)
+                .padding(.bottom, ArtaSpace.l)
             }
-            .listStyle(.insetGrouped)
-            .scrollContentBackground(.hidden)
             .refreshable { await load() }
             .artaTabBarScrim(glow: false)
         }
@@ -442,7 +422,8 @@ struct ApprovalsView: View {
         Label(text, systemImage: "exclamationmark.triangle.fill")
             .font(.footnote)
             .foregroundStyle(ArtaColor.danger)
-            .listRowBackground(Color.clear)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.horizontal, ArtaSpace.xs)
     }
 
     // MARK: Datos
@@ -663,19 +644,26 @@ struct PurchaseOrderSheet: View {
                 }
 
                 ModuleCard(title: "Datos") {
-                    VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: ArtaSpace.s) {
                         if let event = po.event {
                             Button {
                                 onOpen(AppRoute.event(event.id))
                             } label: {
-                                HStack {
-                                    Text("Evento").font(.subheadline).foregroundStyle(ArtaColor.muted)
-                                    Spacer(minLength: 8)
-                                    Text(event.name ?? "Ver evento").font(.subheadline.weight(.semibold)).foregroundStyle(ArtaColor.accent)
-                                    Image(systemName: "chevron.right").font(.caption).foregroundStyle(ArtaColor.accent)
+                                // Misma etiqueta que las demás filas; el valor es el enlace.
+                                HStack(alignment: .firstTextBaseline, spacing: ArtaSpace.m) {
+                                    Text("Evento").font(.subheadline).foregroundStyle(ArtaColor.tertiary).fixedSize()
+                                    Spacer(minLength: ArtaSpace.s)
+                                    Text(event.name ?? "Ver evento")
+                                        .font(.subheadline.weight(.semibold))
+                                        .foregroundStyle(ArtaColor.text)
+                                        .multilineTextAlignment(.trailing)
+                                    Image(systemName: "chevron.right")
+                                        .font(.system(size: 11, weight: .semibold))
+                                        .foregroundStyle(ArtaColor.tertiary)
                                 }
+                                .contentShape(Rectangle())
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(ArtaPressStyle(scale: 0.99))
                         }
                         FactRow(label: "Pidió", value: po.createdBy?.fullName ?? row.createdBy ?? "—")
                         if let created = po.createdAt {
@@ -699,19 +687,23 @@ struct PurchaseOrderSheet: View {
                 }
 
                 if let lines = po.lines, !lines.isEmpty {
-                    ModuleCard(title: "Conceptos") {
-                        VStack(alignment: .leading, spacing: 10) {
+                    ModuleCard(title: "Conceptos", count: lines.count) {
+                        VStack(alignment: .leading, spacing: ArtaSpace.m) {
                             ForEach(lines) { line in
-                                HStack(alignment: .firstTextBaseline) {
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(line.concept ?? "Concepto").font(.subheadline).foregroundStyle(ArtaColor.text)
+                                HStack(alignment: .firstTextBaseline, spacing: ArtaSpace.m) {
+                                    VStack(alignment: .leading, spacing: ArtaSpace.xxs) {
+                                        Text(line.concept ?? "Concepto")
+                                            .font(.subheadline)
+                                            .foregroundStyle(ArtaColor.text)
+                                            .fixedSize(horizontal: false, vertical: true)
                                         if let qty = line.qty?.value, let unit = line.unitPrice?.value {
                                             Text("\(qty.formatted()) × \(Money.mxn(unit))")
                                                 .font(.caption)
-                                                .foregroundStyle(ArtaColor.muted)
+                                                .monospacedDigit()
+                                                .foregroundStyle(ArtaColor.tertiary)
                                         }
                                     }
-                                    Spacer(minLength: 8)
+                                    Spacer(minLength: ArtaSpace.s)
                                     Text(Money.mxn(line.total?.value))
                                         .font(.subheadline.weight(.semibold))
                                         .monospacedDigit()
@@ -723,43 +715,35 @@ struct PurchaseOrderSheet: View {
                     }
                 }
 
-                ModuleCard(title: "Comprobantes") {
+                ModuleCard(title: "Comprobantes", count: (po.proofs ?? []).isEmpty ? nil : (po.proofs ?? []).count) {
                     let proofs = po.proofs ?? []
                     if proofs.isEmpty {
                         Text("Sin comprobantes adjuntos.").font(.subheadline).foregroundStyle(ArtaColor.muted)
                     } else {
-                        VStack(alignment: .leading, spacing: 10) {
+                        VStack(alignment: .leading, spacing: ArtaSpace.m) {
                             ForEach(proofs) { proof in
                                 Button {
                                     open(proof)
                                 } label: {
-                                    HStack(spacing: 12) {
-                                        Image(systemName: "doc.text.magnifyingglass").foregroundStyle(ArtaColor.accent)
-                                        VStack(alignment: .leading, spacing: 2) {
-                                            Text(proofName(proof)).font(.subheadline).foregroundStyle(ArtaColor.text).lineLimit(1)
+                                    HStack(spacing: ArtaSpace.m) {
+                                        Image(systemName: "doc.text.magnifyingglass")
+                                            .foregroundStyle(ArtaColor.accent)
+                                            .frame(width: 24)
+                                        VStack(alignment: .leading, spacing: ArtaSpace.xxs) {
+                                            Text(proofName(proof)).font(.subheadline).foregroundStyle(ArtaColor.text).lineLimit(2)
                                             if let amount = proof.amount?.value {
-                                                Text(Money.mxn(amount)).font(.caption).foregroundStyle(ArtaColor.muted)
+                                                Text(Money.mxn(amount)).font(.caption).monospacedDigit().foregroundStyle(ArtaColor.tertiary)
                                             }
                                         }
-                                        Spacer()
-                                        Image(systemName: "eye").foregroundStyle(ArtaColor.muted)
+                                        Spacer(minLength: ArtaSpace.s)
+                                        Image(systemName: "eye").foregroundStyle(ArtaColor.tertiary)
                                     }
+                                    .contentShape(Rectangle())
                                 }
-                                .buttonStyle(.plain)
+                                .buttonStyle(ArtaPressStyle(scale: 0.99))
                             }
                         }
                     }
-                }
-
-                if let eventId = po.event?.id ?? row.eventId {
-                    Button {
-                        onOpen(AppRoute.web(path: "/events/\(eventId)?tab=ocs", title: "Órdenes de compra"))
-                    } label: {
-                        Label("Ver órdenes del evento en la web", systemImage: "safari")
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(ArtaColor.accent)
-                    }
-                    .buttonStyle(.plain)
                 }
 
                 if let actionError {
@@ -774,34 +758,33 @@ struct PurchaseOrderSheet: View {
                             .font(.footnote)
                             .foregroundStyle(ArtaColor.muted)
                     } else {
-                        HStack(spacing: 12) {
-                            Button {
-                                confirmReject = true
-                            } label: {
-                                Text("Rechazar")
-                                    .font(.subheadline.weight(.semibold))
-                                    .frame(maxWidth: .infinity)
-                                    .padding(.vertical, 13)
-                                    .foregroundStyle(ArtaColor.danger)
-                                    .background(ArtaControlShape().fill(ArtaColor.surface))
-                                    .overlay(ArtaControlShape().strokeBorder(ArtaColor.danger.opacity(0.4), lineWidth: 1))
-                            }
-                            .buttonStyle(.plain)
-                            Button {
-                                confirmAuthorize = true
-                            } label: {
-                                Text("Autorizar")
-                                    .font(.subheadline.weight(.semibold))
-                                    .frame(maxWidth: .infinity)
-                                    .padding(.vertical, 13)
-                                    .foregroundStyle(ArtaColor.onAccent)
-                                    .background(ArtaControlShape().fill(ArtaColor.accentFill))
-                            }
-                            .buttonStyle(.plain)
+                        // Rechazar es discreto y siempre pide confirmación; autorizar es la acción principal.
+                        HStack(spacing: ArtaSpace.m) {
+                            Button("Rechazar") { confirmReject = true }
+                                .buttonStyle(ArtaDestructiveButtonStyle())
+                            Button("Autorizar") { confirmAuthorize = true }
+                                .buttonStyle(ArtaPrimaryButtonStyle())
                         }
                         .disabled(busy)
-                        .opacity(busy ? 0.6 : 1)
+                        .padding(.top, ArtaSpace.xs)
                     }
+                }
+
+                if let eventId = po.event?.id ?? row.eventId {
+                    Button {
+                        onOpen(AppRoute.web(path: "/events/\(eventId)?tab=ocs", title: "Órdenes de compra"))
+                    } label: {
+                        HStack(spacing: ArtaSpace.xs) {
+                            Text("Ver las órdenes del evento en la web")
+                            Image(systemName: "arrow.up.right").font(.system(size: 11, weight: .semibold))
+                        }
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(ArtaColor.muted)
+                        .padding(.vertical, ArtaSpace.s)
+                        .frame(maxWidth: .infinity)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(ArtaPressStyle(scale: 0.98))
                 }
             }
             .padding(.horizontal, ArtaLayout.gutter)
