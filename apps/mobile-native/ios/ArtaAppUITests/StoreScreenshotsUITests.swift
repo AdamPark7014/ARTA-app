@@ -228,12 +228,16 @@ final class StoreScreenshotsUITests: XCTestCase {
         // Tareas: la fila de filtros desplazada al final y el detalle de una tarea.
         if irAPestana(.tareas) {
             pausa(1.0)
+            // Arrastre por coordenadas a la altura de los chips: un `swipe` sobre un chip que
+            // queda fuera de la pantalla aborta la prueba («visible frame is empty»).
             let filtro = porPrefijo("tasks-filter-")
-            if buscar([filtro], timeout: 5) != nil {
-                filtro.swipeLeft()
+            if buscar([filtro], timeout: 5) != nil, filtro.isHittable {
+                let y = filtro.frame.midY
+                let ancho = app.frame.width
+                arrastrar(desde: CGPoint(x: ancho * 0.85, y: y), hasta: CGPoint(x: ancho * 0.1, y: y))
                 pausa(0.8)
                 revisar("arta-08-tareas-filtros-al-final")
-                filtro.swipeRight()
+                arrastrar(desde: CGPoint(x: ancho * 0.1, y: y), hasta: CGPoint(x: ancho * 0.9, y: y))
                 pausa(0.5)
             }
             if abrir([porPrefijo("task-row-")], desde: "Tareas") {
@@ -373,6 +377,14 @@ final class StoreScreenshotsUITests: XCTestCase {
         esperarSinCarga()
         adjuntarCapturaDebug(nombre)
         revisiones.append(nombre)
+    }
+
+    /// Arrastre entre dos puntos de la pantalla (no depende de que un elemento siga visible).
+    private func arrastrar(desde: CGPoint, hasta: CGPoint) {
+        let origen = app.coordinate(withNormalizedOffset: .zero)
+        let inicio = origen.withOffset(CGVector(dx: desde.x, dy: desde.y))
+        let fin = origen.withOffset(CGVector(dx: hasta.x, dy: hasta.y))
+        inicio.press(forDuration: 0.05, thenDragTo: fin)
     }
 
     private func deslizarArriba(_ veces: Int) {

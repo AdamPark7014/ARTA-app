@@ -635,15 +635,19 @@ struct InicioView: View {
             Haptics.tap()
             item.action()
         } label: {
-            HStack(spacing: 10) {
+            HStack(spacing: ArtaSpace.s) {
                 Image(systemName: item.icon)
                     .font(.system(size: 16, weight: item.primary ? .semibold : .regular))
                     .frame(width: 20)
+                // Varias palabras: hasta dos renglones. Una sola («Aprobaciones»): se achica un
+                // poco antes que partirla con guion.
                 Text(item.title)
                     .font(.subheadline.weight(.semibold))
-                    .lineLimit(2)
+                    .lineLimit(item.title.contains(" ") ? 2 : 1)
+                    .minimumScaleFactor(0.75)
                     .multilineTextAlignment(.leading)
                     .fixedSize(horizontal: false, vertical: true)
+                    .layoutPriority(1)
                 Spacer(minLength: 0)
                 if item.badge > 0 { CountBadge(count: item.badge) }
             }

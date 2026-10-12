@@ -157,7 +157,7 @@ struct TasksView: View {
                 .padding(.horizontal, ArtaLayout.gutter)
                 .padding(.vertical, ArtaSpace.xxs)
             }
-            .artaHorizontalEdgeFade(ArtaSpace.m)
+            .artaHorizontalEdgeFade(ArtaLayout.gutter)
         }
         .padding(.vertical, ArtaSpace.s)
         .background(ArtaColor.bg)
