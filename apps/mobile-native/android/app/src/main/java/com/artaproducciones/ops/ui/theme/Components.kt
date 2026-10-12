@@ -1,11 +1,46 @@
 package com.artaproducciones.ops.ui.theme
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.ScrollableState
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -95,6 +130,20 @@ fun Modifier.cardSurface(t: ArtaTokens, shape: Shape = t.cardShape): Modifier {
     return lifted.clip(shape).background(t.cardBrush).border(1.dp, t.line, shape)
 }
 
+/**
+ * Al apretar, la pieza se hunde un poco (como el `ArtaPressStyle` de iOS) además del ripple.
+ * Devuelve el modificador de escala; [interaction] es el mismo que recibe el `clickable`.
+ */
+@Composable
+fun Modifier.pressScale(interaction: MutableInteractionSource, pressed: Float = 0.985f): Modifier {
+    val isPressed by interaction.collectIsPressedAsState()
+    val scale = animateFloatAsState(if (isPressed) pressed else 1f, spring(stiffness = Spring.StiffnessMediumLow), label = "pressScale")
+    return graphicsLayer {
+        scaleX = scale.value
+        scaleY = scale.value
+    }
+}
+
 /** Tarjeta del sistema: panel con padding; si [onClick] no es null, toda la tarjeta es un botón. */
 @Composable
 fun ArtaCard(
@@ -106,12 +155,177 @@ fun ArtaCard(
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val t = LocalArtaTokens.current
-    val click = if (onClick != null) Modifier.clickable(onClickLabel = onClickLabel, role = Role.Button, onClick = onClick) else Modifier
+    val interaction = remember { MutableInteractionSource() }
+    val press = if (onClick != null) Modifier.pressScale(interaction) else Modifier
+    val click = if (onClick != null) {
+        Modifier.clickable(interactionSource = interaction, indication = LocalIndication.current, onClickLabel = onClickLabel, role = Role.Button, onClick = onClick)
+    } else {
+        Modifier
+    }
     Column(
-        modifier.fillMaxWidth().cardSurface(t).then(click).padding(contentPadding),
+        modifier.fillMaxWidth().then(press).cardSurface(t).then(click).padding(contentPadding),
         verticalArrangement = verticalArrangement,
         content = content,
     )
+}
+
+// ─── Bordes que se desvanecen ───────────────────────────────────────────────
+
+/**
+ * Desvanece lo que se va por un borde de la lista en vez de cortarlo en seco: arriba bajo la barra
+ * de estado o bajo los filtros, a la derecha de una fila de chips. Solo aparece cuando de verdad
+ * hay más contenido de ese lado ([state]); en reposo, arriba del todo, no toca nada.
+ */
+@Composable
+fun Modifier.fadingEdges(
+    state: ScrollableState,
+    horizontal: Boolean = false,
+    start: Dp = 0.dp,
+    end: Dp = 0.dp,
+): Modifier {
+    val startAlpha = animateFloatAsState(if (start > 0.dp && state.canScrollBackward) 1f else 0f, tween(160), label = "fadeStart")
+    val endAlpha = animateFloatAsState(if (end > 0.dp && state.canScrollForward) 1f else 0f, tween(160), label = "fadeEnd")
+    return this
+        .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+        .drawWithContent {
+            drawContent()
+            val s = start.toPx()
+            val e = end.toPx()
+            val a = startAlpha.value
+            val b = endAlpha.value
+            if (a > 0f && s > 0f) {
+                val faded = Color.Black.copy(alpha = 1f - a)
+                if (horizontal) {
+                    drawRect(Brush.horizontalGradient(listOf(faded, Color.Black), startX = 0f, endX = s), size = Size(s, size.height), blendMode = BlendMode.DstIn)
+                } else {
+                    drawRect(Brush.verticalGradient(listOf(faded, Color.Black), startY = 0f, endY = s), size = Size(size.width, s), blendMode = BlendMode.DstIn)
+                }
+            }
+            if (b > 0f && e > 0f) {
+                val faded = Color.Black.copy(alpha = 1f - b)
+                if (horizontal) {
+                    val x = size.width - e
+                    drawRect(
+                        Brush.horizontalGradient(listOf(Color.Black, faded), startX = x, endX = size.width),
+                        topLeft = Offset(x, 0f),
+                        size = Size(e, size.height),
+                        blendMode = BlendMode.DstIn,
+                    )
+                } else {
+                    val y = size.height - e
+                    drawRect(
+                        Brush.verticalGradient(listOf(Color.Black, faded), startY = y, endY = size.height),
+                        topLeft = Offset(0f, y),
+                        size = Size(size.width, e),
+                        blendMode = BlendMode.DstIn,
+                    )
+                }
+            }
+        }
+}
+
+/** Fila de chips o filtros: margen de 16 dp en los dos extremos y bordes desvanecidos, nunca un chip cortado en seco. */
+@Composable
+fun ChipRow(modifier: Modifier = Modifier, content: LazyListScope.() -> Unit) {
+    val state = rememberLazyListState()
+    LazyRow(
+        modifier.fillMaxWidth().fadingEdges(state, horizontal = true, start = 20.dp, end = 36.dp),
+        state = state,
+        contentPadding = PaddingValues(horizontal = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        content = content,
+    )
+}
+
+// ─── Esqueletos ─────────────────────────────────────────────────────────────
+
+/**
+ * Relleno de esqueleto con brillo que pasa (shimmer): papel un punto más hondo con brillo cálido
+ * en ARTA; grafito con brillo plata tenue en Auditorio.
+ */
+@Composable
+fun Modifier.skeleton(shape: Shape): Modifier {
+    val t = LocalArtaTokens.current
+    val base = if (t.isDark) Color(0xFF1B1B20) else Color(0xFFECEAE4)
+    val glint = if (t.isDark) Color(0xFF2A2B31) else Color(0xFFF7F6F2)
+    val progress = rememberInfiniteTransition(label = "shimmer").animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(1400, easing = LinearEasing)),
+        label = "shimmerX",
+    )
+    return clip(shape).drawBehind {
+        val band = maxOf(size.width * 0.55f, 96.dp.toPx())
+        val x = -band + (size.width + band * 2) * progress.value
+        drawRect(base)
+        drawRect(Brush.horizontalGradient(listOf(base, glint, base), startX = x, endX = x + band))
+    }
+}
+
+// ─── Buscador ───────────────────────────────────────────────────────────────
+
+/**
+ * Buscador de las listas: superficie suave con línea fuerte, píldora en ARTA y 4 dp en Auditorio.
+ * [compactPlaceholder] se usa con la letra del sistema agrandada, para que la ayuda no se corte.
+ */
+@Composable
+fun SearchField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    placeholder: String,
+    modifier: Modifier = Modifier,
+    leadingIcon: ImageVector = Icons.Outlined.Search,
+    compactPlaceholder: String? = null,
+) {
+    val t = LocalArtaTokens.current
+    val hint = if (compactPlaceholder != null && LocalDensity.current.fontScale > 1.15f) compactPlaceholder else placeholder
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        placeholder = { Text(hint, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+        leadingIcon = { Icon(leadingIcon, contentDescription = null, tint = t.secondary) },
+        trailingIcon = {
+            if (value.isNotEmpty()) IconButton(onClick = { onValueChange("") }) { Icon(Icons.Outlined.Close, contentDescription = "Limpiar") }
+        },
+        singleLine = true,
+        shape = t.controlShape,
+        colors = OutlinedTextFieldDefaults.colors(
+            focusedBorderColor = t.text.copy(alpha = 0.45f),
+            unfocusedBorderColor = t.lineStrong,
+            focusedContainerColor = t.surfaceSoft,
+            unfocusedContainerColor = t.surfaceSoft,
+            cursorColor = t.text,
+            unfocusedPlaceholderColor = t.tertiary,
+            focusedPlaceholderColor = t.tertiary,
+        ),
+        modifier = modifier,
+    )
+}
+
+/** Contador en píldora (aprobaciones, pendientes): acento con su texto y cifras tabulares. */
+@Composable
+fun CountBadge(count: Int, modifier: Modifier = Modifier, inverted: Boolean = false, small: Boolean = false) {
+    val t = LocalArtaTokens.current
+    val shape = if (t.isPill) RoundedCornerShape(percent = 50) else RoundedCornerShape(3.dp)
+    val bg = if (inverted) SolidColor(t.onAccent) else t.accentBrush
+    Box(
+        modifier
+            .defaultMinSize(minWidth = if (small) 17.dp else 22.dp)
+            .clip(shape)
+            .background(bg)
+            // Pequeño y encima de un ícono: un aro del color de la tarjeta lo despega del dibujo.
+            .then(if (small) Modifier.border(1.5.dp, t.surface, shape) else Modifier)
+            .padding(horizontal = if (small) 4.dp else 7.dp, vertical = if (small) 0.dp else 2.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            if (count > 99) "99+" else "$count",
+            color = if (inverted) t.accent else t.onAccent,
+            style = ArtaType.Status.copy(fontSize = if (small) 10.sp else 11.sp, lineHeight = if (small) 15.sp else 14.sp, letterSpacing = 0.sp, fontFeatureSettings = TABULAR),
+            maxLines = 1,
+        )
+    }
 }
 
 // ─── Botones (radios y acento de la entidad) ────────────────────────────────
@@ -287,44 +501,61 @@ fun SegmentedControl(options: List<String>, selected: Int, onSelect: (Int) -> Un
     val outer = if (t.isPill) RoundedCornerShape(12.dp) else RoundedCornerShape(5.dp)
     val inner = if (t.isPill) RoundedCornerShape(9.dp) else RoundedCornerShape(3.dp)
     val track = if (t.isDark) Color(0x09FFFFFF) else t.fill
-    Row(
+    val count = options.size.coerceAtLeast(1)
+    BoxWithConstraints(
         modifier
             .fillMaxWidth()
             .clip(outer)
             .background(track)
             .then(if (t.isDark) Modifier.border(1.dp, Color(0x0FFFFFFF), outer) else Modifier)
-            .padding(3.dp)
-            .selectableGroup(),
-        horizontalArrangement = Arrangement.spacedBy(3.dp),
+            .padding(3.dp),
     ) {
-        options.forEachIndexed { i, label ->
-            val on = i == selected
-            val chosen = when {
-                !on -> Modifier
-                t.isDark -> Modifier.background(t.accentBrush, inner)
-                else -> Modifier.shadow(2.dp, inner, ambientColor = t.shadow, spotColor = t.shadow).background(t.surface, inner)
-            }
+        val gap = 3.dp
+        val cell = (maxWidth - gap * (count - 1)) / count
+        // La opción activa se desliza en vez de saltar.
+        val x by animateDpAsState((cell + gap) * selected.coerceIn(0, count - 1), spring(stiffness = Spring.StiffnessMediumLow), label = "segment")
+        Box(Modifier.matchParentSize()) {
             Box(
                 Modifier
-                    .weight(1f)
-                    .then(chosen)
-                    .clip(inner)
-                    .selectable(selected = on, role = Role.RadioButton, onClick = { onSelect(i) })
-                    .padding(vertical = 8.dp, horizontal = 6.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    label,
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.SemiBold,
-                    color = when {
+                    .offset(x = x)
+                    .fillMaxHeight()
+                    .width(cell)
+                    .then(
+                        if (t.isDark) Modifier.background(t.accentBrush, inner)
+                        else Modifier.shadow(2.dp, inner, ambientColor = t.shadow, spotColor = t.shadow).background(t.surface, inner),
+                    ),
+            )
+        }
+        Row(Modifier.fillMaxWidth().selectableGroup(), horizontalArrangement = Arrangement.spacedBy(gap)) {
+            options.forEachIndexed { i, label ->
+                val on = i == selected
+                val color by animateColorAsState(
+                    when {
                         !on -> t.tertiary
                         t.isDark -> t.onAccent
                         else -> t.text
                     },
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
+                    tween(180),
+                    label = "segmentText",
                 )
+                Box(
+                    Modifier
+                        .weight(1f)
+                        .heightIn(min = 38.dp)
+                        .clip(inner)
+                        .selectable(selected = on, role = Role.RadioButton, onClick = { onSelect(i) })
+                        .padding(vertical = 8.dp, horizontal = 6.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        label,
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.SemiBold,
+                        color = color,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
             }
         }
     }

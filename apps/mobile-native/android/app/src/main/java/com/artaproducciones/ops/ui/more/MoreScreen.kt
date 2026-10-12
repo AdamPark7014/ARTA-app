@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import com.artaproducciones.ops.ui.theme.fadingEdges
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.FactCheck
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
@@ -328,7 +330,9 @@ fun MoreScreen(user: UserDto, nav: ModuleNav) {
         }
     }
 
-    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
+    // El contenido se desvanece al pasar bajo la barra de estado en vez de cortarse en seco.
+    val listState = rememberLazyListState()
+    LazyColumn(Modifier.fillMaxSize().fadingEdges(listState, start = 20.dp, end = 28.dp), state = listState, contentPadding = PaddingValues(bottom = 32.dp)) {
         item { ProfileHeader(user) }
 
         // Solo híbridos: el mismo cambio que el doble toque en Inicio.

@@ -1,8 +1,18 @@
 package com.artaproducciones.ops.ui.modules
 
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material.icons.automirrored.outlined.FormatListBulleted
+import com.artaproducciones.ops.ui.theme.CountBadge
+import com.artaproducciones.ops.ui.theme.cardSurface
+import com.artaproducciones.ops.ui.theme.fadingEdges
+import com.artaproducciones.ops.ui.theme.pressScale
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -161,7 +171,12 @@ fun InicioScreen(user: UserDto, nav: ModuleNav) {
         onRefresh = { tick++ },
         modifier = Modifier.fillMaxSize(),
     ) {
-        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 32.dp)) {
+        val listState = rememberLazyListState()
+        LazyColumn(
+            Modifier.fillMaxSize().fadingEdges(listState, start = 20.dp, end = 28.dp),
+            state = listState,
+            contentPadding = PaddingValues(bottom = 32.dp),
+        ) {
             item { Header(user, today, entity) }
             when {
                 !hasContent && d?.firstError != null -> item { ErrorState(d.firstError, onRetry = { tick++ }) }
@@ -359,44 +374,73 @@ private fun KpiCard(k: Kpi, modifier: Modifier) {
     }
 }
 
-// ─── Acciones rápidas ───────────────────────────────────────────────────────
+// ─── Accesos ────────────────────────────────────────────────────────────────
 
+private class Shortcut(val label: String, val icon: ImageVector, val badge: Int = 0, val primary: Boolean = false, val onClick: () -> Unit)
+
+/**
+ * Accesos en mosaico de dos columnas con renglones del mismo alto, como iOS: nada se va por el
+ * borde de la pantalla. Si sobra uno, ocupa el renglón completo (sin un mosaico huérfano).
+ */
 @Composable
 private fun QuickActions(p: ModulesPerms, approvals: ApprovalsData?, onNewTask: () -> Unit, nav: ModuleNav) {
     val pending = approvals?.pendingCount(p) ?: 0
-    LazyRow(
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    val items = buildList {
+        if (p.canCreateTasks) add(Shortcut("Nueva tarea", Icons.Default.Add, primary = true, onClick = onNewTask))
+        add(Shortcut("Mis tareas", Icons.AutoMirrored.Outlined.FormatListBulleted) { nav.openWeb("/tasks", "Tareas") })
+        if (p.approvesMoney || pending > 0) add(Shortcut("Aprobaciones", Icons.Outlined.FactCheck, badge = pending) { nav.openApprovals() })
+        if (p.opsEntity != null) add(Shortcut("Calendario", Icons.Outlined.CalendarMonth) { nav.openWeb("/calendar", "Calendario") })
+        if (p.canPo) add(Shortcut("Órdenes de compra", Icons.Outlined.ReceiptLong) { nav.openWeb("/purchase-orders", "Órdenes de compra") })
+        if (p.canSeeFinance) add(Shortcut("Anticipos", Icons.Outlined.Payments) { nav.openWeb("/advances", "Anticipos") })
+    }
+    Column(
+        Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 10.dp, bottom = 6.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        if (p.canCreateTasks) item { ActionPill("Nueva tarea", Icons.Default.Add, primary = true, onClick = onNewTask) }
-        if (p.approvesMoney || pending > 0) {
-            item { ActionPill(if (pending > 0) "Aprobaciones · $pending" else "Aprobaciones", Icons.Outlined.FactCheck) { nav.openApprovals() } }
+        items.chunked(2).forEach { row ->
+            Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                row.forEach { ShortcutTile(it, Modifier.weight(1f).fillMaxHeight()) }
+            }
         }
-        if (p.opsEntity != null) item { ActionPill("Calendario", Icons.Outlined.CalendarMonth) { nav.openWeb("/calendar", "Calendario") } }
-        if (p.canPo) item { ActionPill("Órdenes de compra", Icons.Outlined.ReceiptLong) { nav.openWeb("/purchase-orders", "Órdenes de compra") } }
-        if (p.canSeeFinance) item { ActionPill("Anticipos", Icons.Outlined.Payments) { nav.openWeb("/advances", "Anticipos") } }
     }
 }
 
-/** Botón píldora de acción: el principal en acento; los demás, superficie con línea fuerte. */
+/** Mosaico de acceso: el principal en acento; los demás, tarjeta. Etiqueta hasta en dos renglones. */
 @Composable
-private fun ActionPill(label: String, icon: ImageVector, primary: Boolean = false, onClick: () -> Unit) {
+private fun ShortcutTile(s: Shortcut, modifier: Modifier) {
     val t = LocalArtaTokens.current
-    val shape = t.controlShape
-    val fg = if (primary) t.onAccent else t.text
-    val paint = if (primary) Modifier.background(t.accentBrush) else Modifier.background(t.surface).border(1.dp, t.lineStrong, shape)
+    val shape = t.cardShape
+    val fg = if (s.primary) t.onAccent else t.text
+    val interaction = remember { MutableInteractionSource() }
+    val paint = if (s.primary) Modifier.clip(shape).background(t.accentBrush) else Modifier.cardSurface(t)
     Row(
-        Modifier
-            .minimumInteractiveComponentSize()
-            .clip(shape)
+        modifier
+            .heightIn(min = 52.dp)
+            .pressScale(interaction, pressed = 0.97f)
             .then(paint)
-            .clickable(role = Role.Button, onClick = onClick)
-            .padding(start = 12.dp, end = 15.dp, top = 8.dp, bottom = 8.dp),
+            .clickable(interactionSource = interaction, indication = LocalIndication.current, role = Role.Button, onClick = s.onClick)
+            .semantics(mergeDescendants = true) {}
+            .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(icon, contentDescription = null, tint = fg, modifier = Modifier.size(17.dp))
-        Spacer(Modifier.width(7.dp))
-        Text(label, color = fg, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold, maxLines = 1)
+        // El contador va en la esquina del ícono (como un globo): la etiqueta conserva todo el ancho
+        // y «Aprobaciones» no se parte a media palabra con la letra del sistema agrandada.
+        Box {
+            Icon(s.icon, contentDescription = null, tint = if (s.primary) fg else t.secondary, modifier = Modifier.size(19.dp))
+            if (s.badge > 0) {
+                CountBadge(s.badge, inverted = s.primary, small = true, modifier = Modifier.align(Alignment.TopEnd).offset(x = 9.dp, y = (-8).dp))
+            }
+        }
+        Spacer(Modifier.width(if (s.badge > 0) 14.dp else 10.dp))
+        Text(
+            s.label,
+            color = fg,
+            style = MaterialTheme.typography.labelLarge.copy(fontSize = 14.sp, lineHeight = 18.sp),
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
     }
 }
 
@@ -491,8 +535,8 @@ private fun TimelineRow(m: Moment, onClick: () -> Unit) {
         Text(m.time, style = ArtaType.Time, color = ArtaColors.Tertiary, modifier = Modifier.width(52.dp).padding(top = 1.dp))
         Box(Modifier.width(22.dp).padding(top = 4.dp), contentAlignment = Alignment.TopCenter) { TimelineDot(m.done) }
         Column(Modifier.weight(1f).padding(start = 6.dp)) {
-            Text(m.title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium, color = ArtaColors.Text, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            m.detail?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = ArtaColors.Tertiary, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+            Text(m.title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium, color = ArtaColors.Text, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            m.detail?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = ArtaColors.Tertiary, maxLines = 2, overflow = TextOverflow.Ellipsis) }
         }
     }
 }
@@ -542,12 +586,12 @@ private fun ApprovalsPanel(a: ApprovalsData, p: ModulesPerms, nav: ModuleNav) {
         }
         a.actionableAdvances.forEach { ad ->
             val toApprove = ad.advanceStatus == "PENDING"
-            add(Pending("Anticipo · ${ad.conceptLabel()}", joinDetail(ad.who(), ad.event?.name), advanceAmountLabel(ad.amount), if (toApprove) "Aprobar" else "Pagar", true) { nav.openApprovals() })
+            add(Pending(advanceTitle(ad.conceptLabel()), joinDetail(ad.who(), ad.event?.name), advanceAmountLabel(ad.amount), if (toApprove) "Aprobar" else "Pagar", true) { nav.openApprovals() })
         }
     }
     ArtaCard(
         Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
-        contentPadding = PaddingValues(start = 16.dp, end = 10.dp, top = 8.dp, bottom = 6.dp),
+        contentPadding = PaddingValues(start = 16.dp, end = 12.dp, top = 8.dp, bottom = 4.dp),
     ) {
         PanelHeader("Esperan tu visto bueno", "Ver todo", onTrailing = { nav.openApprovals() })
         if (items.isEmpty()) {
@@ -559,7 +603,7 @@ private fun ApprovalsPanel(a: ApprovalsData, p: ModulesPerms, nav: ModuleNav) {
             )
         }
         items.take(5).forEachIndexed { i, item ->
-            if (i > 0) HorizontalDivider(thickness = 1.dp, color = ArtaColors.Line, modifier = Modifier.padding(end = 6.dp))
+            if (i > 0) HorizontalDivider(thickness = 1.dp, color = ArtaColors.Line, modifier = Modifier.padding(end = 4.dp))
             PendingRow(item)
         }
         if (items.size > 5) {
@@ -573,29 +617,43 @@ private fun ApprovalsPanel(a: ApprovalsData, p: ModulesPerms, nav: ModuleNav) {
     }
 }
 
+/**
+ * «Anticipo de hospedaje» ya dice que es anticipo: sin el prefijo repetido («Anticipo · Anticipo
+ * de hospedaje»). Los demás conceptos llevan «Anticipo · » delante.
+ */
+internal fun advanceTitle(concept: String): String =
+    if (concept.trim().startsWith("anticipo", ignoreCase = true)) concept.trim() else "Anticipo · ${concept.trim()}"
+
+/**
+ * Fila de pendiente: título y detalle hasta en dos renglones; el monto y el estado van apilados
+ * a la derecha para no robarle ancho al texto.
+ */
 @Composable
 private fun PendingRow(item: Pending) {
     Row(
         Modifier
             .fillMaxWidth()
             .clickable(onClick = item.open)
-            .padding(top = 11.dp, bottom = 11.dp, end = 6.dp),
+            .padding(top = 12.dp, bottom = 12.dp, end = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Column(Modifier.weight(1f)) {
-            Text(item.title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium, color = ArtaColors.Text, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            item.detail?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = ArtaColors.Tertiary, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(item.title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium, color = ArtaColors.Text, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            item.detail?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = ArtaColors.Tertiary, maxLines = 2, overflow = TextOverflow.Ellipsis) }
         }
-        Spacer(Modifier.width(10.dp))
-        item.amount?.let { amount ->
-            Text(
-                amount,
-                style = MaterialTheme.typography.bodyMedium.merge(TextStyle(fontFeatureSettings = TABULAR)),
-                color = ArtaColors.Text,
-            )
-            Spacer(Modifier.width(10.dp))
+        Spacer(Modifier.width(12.dp))
+        Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            item.amount?.let { amount ->
+                Text(
+                    amount,
+                    style = MaterialTheme.typography.bodyMedium.merge(TextStyle(fontFeatureSettings = TABULAR)),
+                    fontWeight = FontWeight.SemiBold,
+                    color = ArtaColors.Text,
+                    maxLines = 1,
+                )
+            }
+            StatusPill(item.status, if (item.action) Tone.Action else Tone.Info)
         }
-        StatusPill(item.status, if (item.action) Tone.Action else Tone.Info)
     }
 }
 

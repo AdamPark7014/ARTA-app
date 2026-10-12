@@ -1,6 +1,12 @@
 package com.artaproducciones.ops.ui
 
 import android.net.Uri
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.ui.draw.drawWithContent
+import com.artaproducciones.ops.data.BizEntity
+import com.artaproducciones.ops.ui.theme.ArtaTokens
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
@@ -199,12 +205,39 @@ fun ArtaApp(pendingLink: StateFlow<DeepLink?>, onLinkConsumed: () -> Unit) {
     val state by Session.state.collectAsState()
     // Un solo fondo para toda la app (papel en ARTA; negro con reflector en Auditorio): las
     // pantallas van transparentes encima y el cambio de entidad lo repinta todo de una vez.
-    Box(Modifier.fillMaxSize().screenBackground(LocalArtaTokens.current)) {
+    Box(Modifier.fillMaxSize().screenBackground(LocalArtaTokens.current).entitySwitchVeil(LocalActiveEntity.current)) {
         when (val s = state) {
             Session.State.Loading -> Box(Modifier.fillMaxSize())
             Session.State.SignedOut -> LoginScreen()
             is Session.State.SignedIn -> SignedInNav(s.user, pendingLink, onLinkConsumed)
         }
+    }
+}
+
+/**
+ * Transición del cambio de entidad: el primer cuadro con el tema nuevo sale tapado con el fondo de
+ * la entidad anterior y ese velo se desvanece, así ARTA ⇄ Auditorio se funde en vez de saltar.
+ * No recompone nada: el estado de las pantallas (pestaña, scroll, filtros) sigue igual.
+ */
+@Composable
+private fun Modifier.entitySwitchVeil(entity: BizEntity): Modifier {
+    val shown = remember { mutableStateOf(entity) }
+    val veil = remember { Animatable(0f) }
+    // Fondo de la entidad que se deja (se fija en el cuadro del cambio, antes de que `shown` avance).
+    val from = remember(entity) { ArtaTokens.of(shown.value).bg }
+    // En ese mismo cuadro, tapado del todo hasta que arranca la animación (sin destello).
+    val switching = shown.value != entity
+    LaunchedEffect(entity) {
+        if (shown.value != entity) {
+            veil.snapTo(1f)
+            shown.value = entity
+            veil.animateTo(0f, tween(durationMillis = 420, easing = FastOutSlowInEasing))
+        }
+    }
+    return drawWithContent {
+        drawContent()
+        val a = if (switching) 1f else veil.value
+        if (a > 0f) drawRect(from, alpha = a)
     }
 }
 

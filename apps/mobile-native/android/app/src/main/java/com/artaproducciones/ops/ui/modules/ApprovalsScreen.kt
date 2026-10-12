@@ -1,5 +1,9 @@
 package com.artaproducciones.ops.ui.modules
 
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
+import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -501,7 +505,7 @@ private fun ReviewTaskCard(task: TaskDto, busy: Boolean, onOpen: () -> Unit, onA
             style = MaterialTheme.typography.bodySmall,
             color = ArtaColors.Muted,
         )
-        task.event?.let { Text(it.name, style = MaterialTheme.typography.bodySmall, color = ArtaColors.Muted, maxLines = 1) }
+        task.event?.let { Text(it.name, style = MaterialTheme.typography.bodySmall, color = ArtaColors.Muted, maxLines = 2, overflow = TextOverflow.Ellipsis) }
         task.completionNote?.takeIf { it.isNotBlank() }?.let {
             Spacer(Modifier.height(4.dp))
             Text(it, maxLines = 3, overflow = TextOverflow.Ellipsis)
@@ -533,26 +537,37 @@ private fun ReviewTaskCard(task: TaskDto, busy: Boolean, onOpen: () -> Unit, onA
 private fun PoCard(item: PoItem, onClick: () -> Unit) {
     val r = item.row
     ModuleCard(Modifier.padding(horizontal = 16.dp, vertical = 4.dp), onClick = onClick) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(r.vendorName ?: "Sin proveedor", fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-            Spacer(Modifier.width(8.dp))
-            Text(money(r.amount), fontWeight = FontWeight.SemiBold, color = ArtaColors.Text, style = LocalTextStyle.current.copy(fontFeatureSettings = TABULAR))
+        Row(verticalAlignment = Alignment.Top) {
+            Text(r.vendorName ?: "Sin proveedor", fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+            Spacer(Modifier.width(12.dp))
+            Text(money(r.amount), fontWeight = FontWeight.SemiBold, color = ArtaColors.Text, style = LocalTextStyle.current.copy(fontFeatureSettings = TABULAR), maxLines = 1)
         }
-        Text("${poRubroLabel(r.rubro)} · ${r.eventName}", style = MaterialTheme.typography.bodySmall, color = ArtaColors.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        Spacer(Modifier.height(4.dp))
+        Text("${poRubroLabel(r.rubro)} · ${r.eventName}", style = MaterialTheme.typography.bodySmall, color = ArtaColors.Muted, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        Spacer(Modifier.height(6.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             Pill(poStatusLabel(r.status), poStatusColor(r.status))
+            Spacer(Modifier.width(8.dp))
+            // Espera y quién la pidió en un solo texto: si no cabe, pasa de renglón en vez de encimarse.
             val waiting = poIsPending(r.status) || r.status == "AUTHORIZED"
-            if (waiting) {
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    if (r.ageDays == 1) "1 día esperando" else "${r.ageDays} días esperando",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = if (r.ageDays > 7) ArtaColors.Danger else ArtaColors.Muted,
-                )
-            }
-            Spacer(Modifier.weight(1f))
-            r.createdBy?.let { Text("Pidió ${firstName(it)}", style = MaterialTheme.typography.bodySmall, color = ArtaColors.Muted) }
+            val late = waiting && r.ageDays > 7
+            Text(
+                buildAnnotatedString {
+                    if (waiting) {
+                        withStyle(SpanStyle(color = if (late) ArtaColors.Danger else ArtaColors.Muted)) {
+                            append(if (r.ageDays == 1) "1 día esperando" else "${r.ageDays} días esperando")
+                        }
+                    }
+                    r.createdBy?.let {
+                        if (waiting) append("  ·  ")
+                        append("Pidió ${firstName(it)}")
+                    }
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = ArtaColors.Muted,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
         }
     }
 }
@@ -658,7 +673,7 @@ private fun PoSheet(
 
                     if (d.lines.isNotEmpty()) {
                         HorizontalDivider(color = ArtaColors.Line)
-                        Text("Partidas", style = MaterialTheme.typography.labelMedium, color = ArtaColors.Muted)
+                        SheetLabel("Partidas")
                         d.lines.forEach { l ->
                             Row {
                                 Column(Modifier.weight(1f)) {
@@ -669,7 +684,8 @@ private fun PoSheet(
                                         color = ArtaColors.Muted,
                                     )
                                 }
-                                Text(moneyOf(l.total))
+                                Spacer(Modifier.width(12.dp))
+                                Text(moneyOf(l.total), style = LocalTextStyle.current.copy(fontFeatureSettings = TABULAR))
                             }
                         }
                         val total = d.amount?.toDoubleOrNull() ?: row.amount
@@ -682,7 +698,7 @@ private fun PoSheet(
                     }
 
                     HorizontalDivider(color = ArtaColors.Line)
-                    Text("Comprobantes", style = MaterialTheme.typography.labelMedium, color = ArtaColors.Muted)
+                    SheetLabel("Comprobantes")
                     if (d.proofs.isEmpty()) Text("Sin comprobantes", color = ArtaColors.Muted)
                     d.proofs.forEach { proof ->
                         Row(
@@ -691,7 +707,7 @@ private fun PoSheet(
                         ) {
                             Icon(Icons.Default.AttachFile, contentDescription = null, tint = ArtaColors.Gold)
                             Spacer(Modifier.width(8.dp))
-                            Text(proof.label ?: proof.fileUrl.substringAfterLast('/'), modifier = Modifier.weight(1f), maxLines = 1)
+                            Text(proof.label ?: proof.fileUrl.substringAfterLast('/'), modifier = Modifier.weight(1f), maxLines = 2, overflow = TextOverflow.Ellipsis)
                             proof.amount?.let { Text(moneyOf(it), color = ArtaColors.Muted) }
                         }
                     }
@@ -727,7 +743,15 @@ private fun PoSheet(
                     }
                 }
             }
-            TextButton(onClick = { onOpenWeb(ocsPath, "Órdenes de compra") }) { Text("Abrir en la web") }
+            // Alineado con el texto de la hoja (sin la sangría propia del botón de texto).
+            TextButton(
+                onClick = { onOpenWeb(ocsPath, "Órdenes de compra") },
+                contentPadding = PaddingValues(horizontal = 0.dp, vertical = 8.dp),
+            ) {
+                Text("Abrir en la web")
+                Spacer(Modifier.width(6.dp))
+                Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, modifier = Modifier.size(15.dp))
+            }
             Spacer(Modifier.height(8.dp))
         }
     }
@@ -751,10 +775,16 @@ private fun PoSheet(
     }
 }
 
+/** Etiqueta de sección dentro de una hoja: MAYÚSCULAS espaciadas, como las de las listas. */
+@Composable
+private fun SheetLabel(text: String) {
+    Text(text.uppercase(ES_MX), style = ArtaType.Cap, color = ArtaColors.Tertiary, modifier = Modifier.padding(top = 4.dp))
+}
+
 @Composable
 private fun InfoLine(label: String, value: String) {
     Row {
         Text(label, color = ArtaColors.Muted, modifier = Modifier.width(120.dp), style = MaterialTheme.typography.bodyMedium)
-        Text(value, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+        Text(value, style = MaterialTheme.typography.bodyMedium.copy(fontFeatureSettings = TABULAR), modifier = Modifier.weight(1f))
     }
 }

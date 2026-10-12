@@ -2,9 +2,13 @@ package com.artaproducciones.ops.ui.theme
 
 import androidx.compose.foundation.shape.CornerBasedShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.ripple.RippleAlpha
 import androidx.compose.material3.ColorScheme
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.LocalContentColor
+import androidx.compose.material3.LocalRippleConfiguration
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RippleConfiguration
 import androidx.compose.material3.Shapes
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
@@ -315,12 +319,21 @@ private fun shapesFor(t: ArtaTokens): Shapes = if (t.isDark) {
     )
 }
 
+/**
+ * Ripple por entidad: sobre el papel de ARTA un velo de tinta muy tenue (el de Material se ve
+ * sucio); sobre el negro del Auditorio un brillo un punto más presente para que se note.
+ */
+private val RIPPLE_ARTA = RippleAlpha(draggedAlpha = 0.10f, focusedAlpha = 0.10f, hoveredAlpha = 0.05f, pressedAlpha = 0.07f)
+private val RIPPLE_AUDITORIO = RippleAlpha(draggedAlpha = 0.16f, focusedAlpha = 0.14f, hoveredAlpha = 0.08f, pressedAlpha = 0.13f)
+
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ArtaTheme(content: @Composable () -> Unit) {
     val entity = ActiveEntity.current
     val tokens = ArtaTokens.of(entity)
     val scheme = remember(entity) { schemeFor(tokens) }
     val shapes = remember(entity) { shapesFor(tokens) }
+    val ripple = remember(entity) { RippleConfiguration(rippleAlpha = if (tokens.isDark) RIPPLE_AUDITORIO else RIPPLE_ARTA) }
     MaterialTheme(colorScheme = scheme, typography = ArtaTypography, shapes = shapes) {
         // Las pantallas que no viven dentro de un Scaffold/Surface (detalle de tarea y de evento,
         // aprobaciones, eventos) heredaban el color de contenido por omisión de Material3: se fija
@@ -329,6 +342,7 @@ fun ArtaTheme(content: @Composable () -> Unit) {
             LocalArtaTokens provides tokens,
             LocalContentColor provides tokens.text,
             LocalActiveEntity provides entity,
+            LocalRippleConfiguration provides ripple,
             content = content,
         )
     }

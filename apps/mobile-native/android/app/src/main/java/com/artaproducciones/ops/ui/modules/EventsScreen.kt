@@ -56,7 +56,10 @@ import com.artaproducciones.ops.ui.theme.ArtaColors
 import com.artaproducciones.ops.ui.theme.ArtaType
 import com.artaproducciones.ops.ui.theme.LocalActiveEntity
 import com.artaproducciones.ops.ui.theme.LocalArtaTokens
+import com.artaproducciones.ops.ui.theme.SearchField
 import com.artaproducciones.ops.ui.theme.SegmentedControl
+import com.artaproducciones.ops.ui.theme.TABULAR
+import androidx.compose.material.icons.outlined.EventAvailable
 import com.artaproducciones.ops.ui.theme.TextButton
 import java.time.LocalDate
 import java.time.YearMonth
@@ -176,25 +179,21 @@ fun EventsScreen(nav: ModuleNav, showBack: Boolean = true) {
                     onSelect = { selected = it },
                     onOpen = { nav.openEvent(it.id) },
                 )
-                else -> LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 32.dp)) {
+                else -> LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = bottomInset())) {
                     item {
                         SegmentedControl(
                             options = EventSegment.entries.map { it.label },
                             selected = segment.ordinal,
                             onSelect = { segment = EventSegment.entries[it] },
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                            modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 4.dp),
                         )
                     }
                     item {
-                        OutlinedTextField(
+                        SearchField(
                             value = query,
                             onValueChange = { query = it },
-                            placeholder = { Text("Buscar show, artista o lugar") },
-                            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-                            trailingIcon = {
-                                if (query.isNotEmpty()) IconButton(onClick = { query = "" }) { Icon(Icons.Default.Close, contentDescription = "Limpiar") }
-                            },
-                            singleLine = true,
+                            placeholder = "Buscar show, artista o lugar",
+                            compactPlaceholder = "Buscar shows",
                             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
                         )
                     }
@@ -202,10 +201,10 @@ fun EventsScreen(nav: ModuleNav, showBack: Boolean = true) {
                     if (visible.isEmpty()) {
                         item {
                             when {
-                                query.isNotBlank() -> EmptyState("Nada coincide", "Prueba con otro nombre o lugar.")
-                                segment == EventSegment.LIVE -> EmptyState("Ningún show en curso hoy")
-                                segment == EventSegment.PAST -> EmptyState("Sin eventos pasados")
-                                else -> EmptyState("Sin shows próximos", "Los eventos nuevos se crean desde la web.")
+                                query.isNotBlank() -> EmptyState("Nada coincide", "Prueba con otro nombre o lugar.", icon = Icons.Default.Search)
+                                segment == EventSegment.LIVE -> EmptyState("Ningún show en curso hoy", icon = Icons.Outlined.EventAvailable)
+                                segment == EventSegment.PAST -> EmptyState("Sin eventos pasados", icon = Icons.Outlined.EventAvailable)
+                                else -> EmptyState("Sin shows próximos", "Los eventos nuevos se crean desde la web.", icon = Icons.Outlined.EventAvailable)
                             }
                         }
                     }
@@ -218,11 +217,14 @@ fun EventsScreen(nav: ModuleNav, showBack: Boolean = true) {
 
 private val MONTH_SHORT = DateTimeFormatter.ofPattern("MMM", ES_MX)
 
-/** Tarjeta de evento con su fecha en «chip» (como la web). */
+/**
+ * Tarjeta de evento con su fecha en «chip» (como la web). Fecha y lugar van en renglones propios:
+ * el lugar puede ocupar dos en vez de cortarse a media palabra.
+ */
 @Composable
 internal fun EventRow(e: EventSummaryDto, onClick: () -> Unit) {
     ModuleCard(Modifier.padding(horizontal = 16.dp, vertical = 4.dp), onClick = onClick) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(verticalAlignment = Alignment.Top) {
             val start = e.startDay()
             Column(
                 Modifier
@@ -239,18 +241,20 @@ internal fun EventRow(e: EventSummaryDto, onClick: () -> Unit) {
                 )
             }
             Spacer(Modifier.width(12.dp))
-            Column(Modifier.weight(1f)) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
                 Text(e.name, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                val place = listOfNotNull(e.venue?.takeIf { it.isNotBlank() }, e.city?.takeIf { it.isNotBlank() }).joinToString(", ")
                 Text(
-                    listOf(eventWhenLabel(e.startsAt, e.endsAt), place).filter { it.isNotBlank() }.joinToString(" · "),
-                    style = MaterialTheme.typography.bodySmall,
+                    eventWhenLabel(e.startsAt, e.endsAt),
+                    style = MaterialTheme.typography.bodySmall.copy(fontFeatureSettings = TABULAR),
                     color = ArtaColors.Muted,
                     maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
                 )
+                val place = listOfNotNull(e.venue?.takeIf { it.isNotBlank() }, e.city?.takeIf { it.isNotBlank() }).joinToString(", ")
+                if (place.isNotBlank()) {
+                    Text(place, style = MaterialTheme.typography.bodySmall, color = ArtaColors.Muted, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                }
                 e.artist?.takeIf { it.isNotBlank() && it != e.name }?.let {
-                    Text(it, style = MaterialTheme.typography.bodySmall, color = ArtaColors.Muted, maxLines = 1)
+                    Text(it, style = MaterialTheme.typography.bodySmall, color = ArtaColors.Tertiary, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 }
             }
             eventStatusLabel(e.status)?.let {
@@ -280,7 +284,7 @@ private fun MonthView(
     val dayEvents = remember(events, selected) { events.filter { it.occursOn(selected) }.sortedBy { it.startsAt ?: "" } }
     val dayNotes = notesByDay[selected.toString()].orEmpty()
 
-    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 32.dp)) {
+    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = bottomInset())) {
         error?.let { msg -> item { InlineError(msg, onRetry) } }
         item {
             Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {

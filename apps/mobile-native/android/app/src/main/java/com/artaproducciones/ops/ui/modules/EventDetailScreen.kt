@@ -1,6 +1,22 @@
 package com.artaproducciones.ops.ui.modules
 
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material.icons.outlined.TaskAlt
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.style.TextOverflow
+import com.artaproducciones.ops.ui.theme.SegmentedControl
+import com.artaproducciones.ops.ui.theme.fadingEdges
+import com.artaproducciones.ops.ui.theme.TABULAR
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -126,8 +142,12 @@ fun EventDetailScreen(eventId: String, nav: ModuleNav) {
     val p = perms
     val closed = ev?.status in CLOSED_EVENT
 
+    val listState = rememberLazyListState()
+    // El nombre sube a la barra solo cuando el encabezado (que ya lo dice en grande) se fue de vista.
+    val headerGone by remember { derivedStateOf { listState.firstVisibleItemIndex >= 2 } }
+
     Column(Modifier.fillMaxSize()) {
-        DetailTopBar(ev?.name ?: "Evento", onBack = { nav.back() }) {
+        DetailTopBar(if (headerGone && ev != null) ev.name else "Evento", onBack = { nav.back() }) {
             IconButton(onClick = { nav.openWeb("/events/$eventId", ev?.name) }) {
                 Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = "Abrir en la web")
             }
@@ -140,41 +160,23 @@ fun EventDetailScreen(eventId: String, nav: ModuleNav) {
             when {
                 ev == null && error != null -> ErrorState(error!!, onRetry = { tick++ })
                 ev == null || p == null -> SkeletonList(4)
-                else -> LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 32.dp)) {
-                    error?.let { msg -> item { InlineError(msg) { tick++ } } }
+                else -> LazyColumn(Modifier.fillMaxSize().fadingEdges(listState, start = 16.dp), state = listState, contentPadding = PaddingValues(top = 8.dp, bottom = bottomInset())) {
+                    // Siempre el mismo número de renglones antes del encabezado (el título de la barra los cuenta).
+                    item { error?.let { msg -> InlineError(msg) { tick++ } } }
                     item { EventHeader(ev) }
                     item { QuickFacts(ev, p) }
+                    // Las secciones que viven en la web van en chips que pasan de renglón; las nativas,
+                    // en segmentado (caben siempre). Nada se va por el borde de la pantalla.
                     item {
-                        val web = webTabs(p)
-                        ScrollableTabRow(
-                            selectedTabIndex = tab.ordinal,
-                            edgePadding = 16.dp,
-                            containerColor = Color.Transparent,
-                            contentColor = ArtaColors.Text,
-                        ) {
-                            NativeTab.entries.forEach { t ->
-                                Tab(selected = tab == t, onClick = { tab = t }, text = { Text(t.label) })
-                            }
-                            web.forEach { w ->
-                                Tab(
-                                    selected = false,
-                                    onClick = { nav.openWeb("/events/$eventId?tab=${w.key}", w.label) },
-                                    text = {
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Text(w.label, color = ArtaColors.Muted)
-                                            Spacer(Modifier.width(4.dp))
-                                            Icon(
-                                                Icons.AutoMirrored.Filled.OpenInNew,
-                                                contentDescription = null,
-                                                tint = ArtaColors.Muted,
-                                                modifier = Modifier.size(14.dp),
-                                            )
-                                        }
-                                    },
-                                )
-                            }
-                        }
-                        Spacer(Modifier.height(8.dp))
+                        WebLinks(webTabs(p)) { w -> nav.openWeb("/events/$eventId?tab=${w.key}", w.label) }
+                    }
+                    item {
+                        SegmentedControl(
+                            options = NativeTab.entries.map { it.label },
+                            selected = tab.ordinal,
+                            onSelect = { tab = NativeTab.entries[it] },
+                            modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 6.dp),
+                        )
                     }
                     when (tab) {
                         NativeTab.SUMMARY -> summaryItems(ev, onOpenChecklist = { id ->
@@ -197,7 +199,7 @@ fun EventDetailScreen(eventId: String, nav: ModuleNav) {
                                 }
                             }
                             if (ev.tasks.isEmpty()) {
-                                item { EmptyState("Sin tareas en este evento", if (closed) null else "Crea una y asígnala a una o varias personas.") }
+                                item { EmptyState("Sin tareas en este evento", if (closed) null else "Crea una y asígnala a una o varias personas.", icon = Icons.Outlined.TaskAlt) }
                             } else if (open.isEmpty()) {
                                 item { Text("Todo al día.", color = ArtaColors.Muted, modifier = Modifier.padding(horizontal = 16.dp)) }
                             }
@@ -291,10 +293,10 @@ private fun EventHeader(ev: EventDetailDto) {
 
 @Composable
 private fun FactLine(icon: ImageVector, text: String) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Icon(icon, contentDescription = null, tint = ArtaColors.Gold, modifier = Modifier.size(18.dp))
+    Row(verticalAlignment = Alignment.Top) {
+        Icon(icon, contentDescription = null, tint = ArtaColors.Gold, modifier = Modifier.padding(top = 1.dp).size(18.dp))
         Spacer(Modifier.width(8.dp))
-        Text(text, style = MaterialTheme.typography.bodyMedium)
+        Text(text, style = MaterialTheme.typography.bodyMedium.copy(fontFeatureSettings = TABULAR))
     }
 }
 
@@ -304,26 +306,59 @@ private fun QuickFacts(ev: EventDetailDto, p: ModulesPerms) {
     val overdue = ev.tasks.count { it.isOverdue() }
     val progress = ev.checklists.mapNotNull { it.progressPct }.takeIf { it.isNotEmpty() }?.average()?.toInt()
     val pendingPo = ev.purchaseOrders.count { it.status == "PENDING_AUTH" || it.status == "AUTHORIZED" || it.status == "DRAFT" }
+    // Las tres tarjetas del mismo alto aunque una no tenga renglón de detalle.
     Row(
-        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+        Modifier.fillMaxWidth().height(IntrinsicSize.Min).padding(horizontal = 16.dp, vertical = 12.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Fact("Tareas abiertas", "$openTasks", if (overdue > 0) "$overdue vencidas" else null, Modifier.weight(1f))
-        Fact("Formatos", progress?.let { "$it %" } ?: "—", "${ev.checklists.size} en total", Modifier.weight(1f))
-        if (p.canPo) Fact("OC pendientes", "$pendingPo", null, Modifier.weight(1f))
-        else Fact("Documentos", "${ev.files.size}", null, Modifier.weight(1f))
+        Fact("Tareas abiertas", "$openTasks", if (overdue > 0) (if (overdue == 1) "1 vencida" else "$overdue vencidas") else null, Modifier.weight(1f).fillMaxHeight(), alert = overdue > 0)
+        Fact("Formatos", progress?.let { "$it %" } ?: "—", if (ev.checklists.size == 1) "1 en total" else "${ev.checklists.size} en total", Modifier.weight(1f).fillMaxHeight())
+        if (p.canPo) Fact("OC pendientes", "$pendingPo", null, Modifier.weight(1f).fillMaxHeight())
+        else Fact("Documentos", "${ev.files.size}", null, Modifier.weight(1f).fillMaxHeight())
     }
 }
 
 @Composable
-private fun Fact(label: String, value: String, sub: String?, modifier: Modifier = Modifier) {
+private fun Fact(label: String, value: String, sub: String?, modifier: Modifier = Modifier, alert: Boolean = false) {
     Column(
-        modifier.cardSurface(LocalArtaTokens.current).padding(12.dp),
+        modifier.cardSurface(LocalArtaTokens.current).padding(horizontal = 12.dp, vertical = 11.dp),
         verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
-        Text(label, style = MaterialTheme.typography.labelSmall, color = ArtaColors.Muted, maxLines = 1)
-        Text(value, style = ArtaType.Kpi.copy(fontSize = 24.sp, lineHeight = 28.sp), color = ArtaColors.Text)
-        sub?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = if (it.contains("vencid")) ArtaColors.Danger else ArtaColors.Muted, maxLines = 1) }
+        Text(label, style = MaterialTheme.typography.labelSmall, color = ArtaColors.Tertiary, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        Text(value, style = ArtaType.Kpi.copy(fontSize = 24.sp, lineHeight = 28.sp), color = ArtaColors.Text, maxLines = 1)
+        sub?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = if (alert) ArtaColors.Danger else ArtaColors.Tertiary, maxLines = 2, overflow = TextOverflow.Ellipsis) }
+    }
+}
+
+/** Secciones del evento que viven en la web: chips con ↗ que pasan de renglón si no caben. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun WebLinks(tabs: List<WebTab>, onOpen: (WebTab) -> Unit) {
+    if (tabs.isEmpty()) return
+    val t = LocalArtaTokens.current
+    Column(Modifier.fillMaxWidth().padding(bottom = 6.dp)) {
+        SectionTitle("En la web")
+        FlowRow(
+            Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            tabs.forEach { w ->
+                Row(
+                    Modifier
+                        .clip(t.controlShape)
+                        .border(1.dp, t.lineStrong, t.controlShape)
+                        .clickable(role = Role.Button, onClickLabel = "Abrir ${w.label} en la web") { onOpen(w) }
+                        .heightIn(min = 36.dp)
+                        .padding(start = 12.dp, end = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(w.label, style = MaterialTheme.typography.labelLarge, color = t.text, maxLines = 1)
+                    Spacer(Modifier.width(6.dp))
+                    Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, tint = t.tertiary, modifier = Modifier.size(14.dp))
+                }
+            }
+        }
     }
 }
 
@@ -356,7 +391,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.summaryItems(ev: Even
         val pct = (c.progressPct ?: 0.0).coerceIn(0.0, 100.0)
         ModuleCard(Modifier.padding(horizontal = 16.dp, vertical = 4.dp), onClick = { onOpenChecklist(c.id) }) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(c.title ?: c.template?.name ?: "Formato", modifier = Modifier.weight(1f), maxLines = 1)
+                Text(c.title ?: c.template?.name ?: "Formato", modifier = Modifier.weight(1f), maxLines = 2, overflow = TextOverflow.Ellipsis)
                 Text("${pct.toInt()} %", style = MaterialTheme.typography.bodySmall, color = ArtaColors.Muted)
             }
             Spacer(Modifier.height(6.dp))

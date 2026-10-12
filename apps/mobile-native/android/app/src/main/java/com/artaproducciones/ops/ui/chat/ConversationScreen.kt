@@ -126,6 +126,8 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.platform.LocalUriHandler
@@ -163,6 +165,7 @@ import com.artaproducciones.ops.ui.common.parseInstant
 import com.artaproducciones.ops.ui.common.plainText
 import com.artaproducciones.ops.ui.theme.ArtaColors
 import com.artaproducciones.ops.ui.theme.LocalArtaTokens
+import com.artaproducciones.ops.ui.theme.TABULAR
 import com.artaproducciones.ops.ui.theme.TextButton
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -419,20 +422,32 @@ fun ConversationScreen(
     val isDirect = channel?.kind == "DIRECT"
     val isGroupDm = channel?.isGroupDm == true
     val peerOnline = channel?.peer?.id?.let { it in online } == true
+    // Canal de evento: el evento de título y el artista de subtítulo (como iOS), no un título cortado.
+    val channelName = channel?.let { EventChannelName(it.name, isEvent = !isDirect && !isGroupDm && it.eventId != null) }
     val title = when {
         parentId != null -> "Hilo"
         channel == null -> ""
         isDirect || isGroupDm -> channel.name
-        else -> "#${channel.name}"
+        else -> "#${channelName?.title ?: channel.name}"
     }
     val subtitle = when {
         state.typing.isNotEmpty() -> typingText(state.typing)
-        parentId != null && channel != null -> if (isDirect || isGroupDm) channel.name else "#${channel.name}"
+        parentId != null && channel != null -> if (isDirect || isGroupDm) channel.name else "#${channelName?.title ?: channel.name}"
         isDirect -> if (peerOnline) "en línea" else channel?.peer?.title.orEmpty()
         isGroupDm -> "${channel?.memberCount ?: 0} personas"
+        channelName?.context != null -> channelName.context
         channel != null -> channel.topic?.takeIf { it.isNotBlank() } ?: "${channel.memberCount} miembros"
         else -> ""
     }
+    // El texto de ayuda del composer solo si cabe completo; si no, uno corto (nunca «Mensaje en #Trío Luna de Pla…»).
+    val fontScale = LocalDensity.current.fontScale
+    val composerHint = when {
+        parentId != null -> "Responder en el hilo"
+        channel == null -> "Mensaje"
+        isDirect -> "Mensaje para ${channel.name.trim().substringBefore(' ')}"
+        isGroupDm -> "Mensaje al grupo"
+        else -> "Mensaje en #${channelName?.title ?: channel.name}"
+    }.let { hint -> if (hint.length <= (24 / fontScale).toInt()) hint else if ("Escribe un mensaje".length <= (24 / fontScale).toInt()) "Escribe un mensaje" else "Mensaje" }
     val lastMineId = messages.lastOrNull { it.author.id == vm.myId && !it.pending && !it.failed && !it.deleted }?.id
     fun openInfo() {
         if (parentId == null && channel != null) openChat(ChatRoutes.info(channelId))
@@ -482,11 +497,12 @@ fun ConversationScreen(
                         }
                         Column {
                             Row(verticalAlignment = Alignment.CenterVertically) {
+                                // Hasta dos renglones (con el subtítulo cabe en la barra) antes de cortar.
                                 Text(
                                     title,
-                                    maxLines = 1,
+                                    maxLines = if (subtitle.isNotBlank()) 1 else 2,
                                     overflow = TextOverflow.Ellipsis,
-                                    style = MaterialTheme.typography.titleMedium,
+                                    style = MaterialTheme.typography.titleMedium.copy(lineHeight = 20.sp),
                                     fontWeight = FontWeight.SemiBold,
                                     modifier = Modifier.weight(1f, fill = false),
                                 )
@@ -748,12 +764,7 @@ fun ConversationScreen(
                     Composer(
                         value = draft,
                         uploading = state.uploading,
-                        placeholder = when {
-                            parentId != null -> "Responder en el hilo"
-                            channel == null -> "Mensaje"
-                            isDirect || isGroupDm -> "Mensaje para ${channel.name}"
-                            else -> "Mensaje en #${channel.name}"
-                        },
+                        placeholder = composerHint,
                         focusRequester = focusRequester,
                         onChange = {
                             draft = if (it.text.length > ChatDrafts.MAX_CHARS) it.copy(text = it.text.take(ChatDrafts.MAX_CHARS)) else it
@@ -945,7 +956,8 @@ private fun DaySeparator(label: String) {
 
 @Composable
 private fun UnreadDivider() {
-    Row(Modifier.fillMaxWidth().padding(vertical = Space.S), verticalAlignment = Alignment.CenterVertically) {
+    // Línea con aire a los lados: no corta de orilla a orilla.
+    Row(Modifier.fillMaxWidth().padding(horizontal = Space.M, vertical = Space.S), verticalAlignment = Alignment.CenterVertically) {
         HorizontalDivider(Modifier.weight(1f), color = ArtaColors.Gold.copy(alpha = 0.6f))
         Text(
             "Mensajes nuevos",
@@ -1215,7 +1227,7 @@ private fun BubbleContent(
 private fun MetaRow(m: ChatMessage, ticks: Ticks) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
         if (m.editedAt != null && !m.deleted) Text("editado", color = ArtaColors.Muted, style = MaterialTheme.typography.labelSmall)
-        Text(messageTime(m.createdAt), color = ArtaColors.Muted, style = MaterialTheme.typography.labelSmall)
+        Text(messageTime(m.createdAt), color = ArtaColors.Muted, style = MaterialTheme.typography.labelSmall.copy(fontFeatureSettings = TABULAR))
         when (ticks) {
             Ticks.None -> Unit
             Ticks.Failed -> Icon(Icons.Outlined.ErrorOutline, "No enviado", tint = ArtaColors.Danger, modifier = Modifier.size(14.dp))
@@ -1361,13 +1373,20 @@ private fun Composer(
     onMic: () -> Unit,
     onSend: () -> Unit,
 ) {
+    // Línea fina arriba (no un corte de color), aire a los lados y los botones centrados con el campo.
+    val line = ArtaColors.Line
     Row(
-        Modifier.fillMaxWidth().background(ArtaColors.BgElev).padding(horizontal = 6.dp, vertical = 6.dp).navigationBarsPadding(),
+        Modifier
+            .fillMaxWidth()
+            .background(ArtaColors.BgElev)
+            .drawBehind { drawLine(line, Offset(0f, 0f), Offset(size.width, 0f), 1.dp.toPx()) }
+            .padding(start = 4.dp, end = 12.dp, top = 8.dp, bottom = 8.dp)
+            .navigationBarsPadding(),
         verticalAlignment = Alignment.Bottom,
     ) {
         if (canAttach) {
             // Se puede seguir adjuntando mientras sube lo anterior: entra a la cola.
-            IconButton(onClick = onAttach) {
+            IconButton(onClick = onAttach, modifier = Modifier.padding(bottom = 4.dp)) {
                 Icon(Icons.Outlined.AttachFile, "Adjuntar foto, video o documento", tint = if (uploading) ArtaColors.Gold else ArtaColors.Muted)
             }
         }
@@ -1388,15 +1407,18 @@ private fun Composer(
             ),
             modifier = Modifier.weight(1f).focusRequester(focusRequester),
         )
-        Spacer(Modifier.width(6.dp))
+        Spacer(Modifier.width(8.dp))
         if (canAttach && value.text.isBlank()) {
-            MicButton(onClick = onMic)
+            Box(Modifier.padding(bottom = 4.dp)) { MicButton(onClick = onMic) }
             return@Row
         }
         IconButton(
             onClick = onSend,
             enabled = value.text.isNotBlank(),
-            modifier = Modifier.clip(CircleShape).background(if (value.text.isNotBlank()) LocalArtaTokens.current.accentBrush else SolidColor(ArtaColors.Surface2)),
+            modifier = Modifier
+                .padding(bottom = 4.dp)
+                .clip(CircleShape)
+                .background(if (value.text.isNotBlank()) LocalArtaTokens.current.accentBrush else SolidColor(ArtaColors.Surface2)),
         ) { Icon(Icons.AutoMirrored.Filled.Send, "Enviar", tint = if (value.text.isNotBlank()) ArtaColors.OnAccent else ArtaColors.Muted) }
     }
 }

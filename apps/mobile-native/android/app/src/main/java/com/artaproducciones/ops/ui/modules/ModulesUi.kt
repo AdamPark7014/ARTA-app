@@ -4,11 +4,15 @@ import android.content.Context
 import android.os.Build
 import android.view.HapticFeedbackConstants
 import android.widget.Toast
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.Crossfade
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.ui.unit.Dp
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.graphics.vector.ImageVector
+import com.artaproducciones.ops.ui.theme.skeleton
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -412,6 +416,14 @@ fun rememberHaptics(): Haptics {
 
 // ─── Piezas de UI compartidas ───────────────────────────────────────────────
 
+/**
+ * Margen inferior de las listas de pantallas que no viven en el cascarón de pestañas (detalle de
+ * evento, eventos, calendario): [extra] de aire más la barra de gestos, para que lo último no
+ * quede debajo de ella.
+ */
+@Composable
+fun bottomInset(extra: Dp = 32.dp): Dp = extra + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+
 /** Encabezado grande de las pestañas (como «Avisos»): ligero, como el saludo de Inicio. */
 @Composable
 fun ScreenTitle(title: String, modifier: Modifier = Modifier, trailing: @Composable RowScope.() -> Unit = {}) {
@@ -443,15 +455,17 @@ fun DetailTopBar(title: String, onBack: () -> Unit, actions: @Composable RowScop
         verticalAlignment = Alignment.CenterVertically,
     ) {
         IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Atrás") }
-        Text(
-            title,
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold,
-            fontSize = 17.sp,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f),
-        )
+        // Si el título cambia (el nombre del evento aparece al pasar su encabezado), entra suave.
+        Crossfade(title, Modifier.weight(1f), animationSpec = tween(200), label = "detailTitle") { text ->
+            Text(
+                text,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 17.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
         actions()
     }
 }
@@ -502,20 +516,12 @@ fun ModuleCard(modifier: Modifier = Modifier, onClick: (() -> Unit)? = null, con
 
 @Composable
 fun SkeletonBlock(modifier: Modifier = Modifier, height: Int = 14, widthFraction: Float = 1f) {
-    val transition = rememberInfiniteTransition(label = "skeleton")
-    val alpha by transition.animateFloat(
-        initialValue = 0.45f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(800), RepeatMode.Reverse),
-        label = "skeletonAlpha",
-    )
     val shape = if (LocalArtaTokens.current.isPill) RoundedCornerShape(50) else RoundedCornerShape(2.dp)
     Box(
         modifier
             .fillMaxWidth(widthFraction)
             .height(height.dp)
-            .alpha(alpha)
-            .background(ArtaColors.Surface2, shape),
+            .skeleton(shape),
     )
 }
 
@@ -532,13 +538,30 @@ fun SkeletonList(rows: Int = 6, modifier: Modifier = Modifier) {
     }
 }
 
+/**
+ * Vacío del sistema (el mismo que el del chat): ícono en círculo de acento tenue, título y una
+ * línea de ayuda centrados.
+ */
 @Composable
-fun EmptyState(title: String, text: String? = null, actionLabel: String? = null, onAction: (() -> Unit)? = null, modifier: Modifier = Modifier) {
+fun EmptyState(
+    title: String,
+    text: String? = null,
+    actionLabel: String? = null,
+    onAction: (() -> Unit)? = null,
+    modifier: Modifier = Modifier,
+    icon: ImageVector? = null,
+) {
     Column(
-        modifier.fillMaxWidth().padding(horizontal = 32.dp, vertical = 44.dp),
+        modifier.fillMaxWidth().padding(horizontal = 32.dp, vertical = 40.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
+        if (icon != null) {
+            Box(Modifier.size(60.dp).background(ArtaColors.GoldSoft, CircleShape), contentAlignment = Alignment.Center) {
+                Icon(icon, contentDescription = null, tint = ArtaColors.Muted, modifier = Modifier.size(28.dp))
+            }
+            Spacer(Modifier.height(6.dp))
+        }
         Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center, color = ArtaColors.Text)
         if (text != null) Text(text, color = ArtaColors.Muted, style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center)
         if (actionLabel != null && onAction != null) {

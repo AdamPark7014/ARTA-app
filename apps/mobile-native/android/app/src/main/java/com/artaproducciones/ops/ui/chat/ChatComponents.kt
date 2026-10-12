@@ -41,6 +41,7 @@ import com.artaproducciones.ops.ui.common.Avatar
 import com.artaproducciones.ops.ui.theme.ArtaColors
 import com.artaproducciones.ops.ui.theme.Button
 import com.artaproducciones.ops.ui.theme.LocalArtaTokens
+import com.artaproducciones.ops.ui.theme.skeleton
 
 /** Escala de espacios del chat (4/8/12/16/24). */
 object Space {
@@ -51,6 +52,28 @@ object Space {
     val XL = 24.dp
 }
 
+
+/**
+ * Canal de evento «Trío Luna de Plata · Noche de Boleros»: el evento de título y el artista de
+ * contexto, en vez de un título largo cortado a media palabra (igual que `EventChannelName` de iOS).
+ */
+class EventChannelName(name: String, isEvent: Boolean) {
+    val title: String
+    val context: String?
+
+    init {
+        val at = if (isEvent) name.indexOf(" · ") else -1
+        val first = if (at > 0) name.substring(0, at).trim() else ""
+        val rest = if (at > 0) name.substring(at + 3).trim() else ""
+        if (first.isNotEmpty() && rest.isNotEmpty()) {
+            title = rest
+            context = first
+        } else {
+            title = name
+            context = null
+        }
+    }
+}
 
 /** Nombres de un directo de grupo: el API los manda como «Ana, Luis, Marta». */
 fun groupNames(name: String): List<String> = name.split(',').map { it.trim() }.filter { it.isNotBlank() }
@@ -114,11 +137,11 @@ fun skeletonAlpha(): Float {
     return a
 }
 
+@Suppress("UNUSED_PARAMETER")
 @Composable
 fun SkeletonBox(modifier: Modifier, alpha: Float, shape: Shape = RoundedCornerShape(6.dp)) {
-    // Sobre el papel de ARTA el relleno neutro casi no se ve: un gris un punto más hondo.
-    val tone = if (LocalArtaTokens.current.isDark) ArtaColors.Surface2 else Color(0xFFE8E6E0)
-    Box(modifier.alpha(alpha).background(tone, shape))
+    // Mismo brillo que los esqueletos de los módulos (papel hondo en ARTA, grafito en Auditorio).
+    Box(modifier.skeleton(shape))
 }
 
 /** Esqueleto de filas tipo lista (chats, búsqueda, guardados). */

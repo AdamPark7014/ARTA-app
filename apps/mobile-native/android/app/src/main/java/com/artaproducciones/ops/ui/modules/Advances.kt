@@ -101,9 +101,9 @@ internal fun AdvanceCard(
             Text(advanceAmountLabel(advance.amount), fontWeight = FontWeight.SemiBold, color = ArtaColors.Text, style = LocalTextStyle.current.copy(fontFeatureSettings = TABULAR))
         }
         advance.event?.name?.takeIf { it.isNotBlank() }?.let {
-            Text(it, style = MaterialTheme.typography.bodySmall, color = ArtaColors.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(it, style = MaterialTheme.typography.bodySmall, color = ArtaColors.Muted, maxLines = 2, overflow = TextOverflow.Ellipsis)
         }
-        Spacer(Modifier.height(4.dp))
+        Spacer(Modifier.height(6.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             Pill(advanceStatusLabel(advance.advanceStatus), advanceStatusColor(advance.advanceStatus))
             Spacer(Modifier.width(8.dp))
@@ -113,7 +113,7 @@ internal fun AdvanceCard(
                 listOfNotNull(who, stamp).joinToString(" · "),
                 style = MaterialTheme.typography.bodySmall,
                 color = ArtaColors.Muted,
-                maxLines = 1,
+                maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f),
             )

@@ -2,6 +2,13 @@ package com.artaproducciones.ops.ui.notifications
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.NotificationsNone
+import com.artaproducciones.ops.ui.theme.LocalArtaTokens
+import com.artaproducciones.ops.ui.theme.fadingEdges
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -111,36 +118,50 @@ fun NotificationsScreen(openLink: (DeepLink) -> Unit, onUnreadChange: (Int) -> U
             },
             modifier = Modifier.fillMaxSize(),
         ) {
-            LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
+            val listState = rememberLazyListState()
+            LazyColumn(
+                Modifier.fillMaxSize().fadingEdges(listState, start = 16.dp, end = 28.dp),
+                state = listState,
+                contentPadding = PaddingValues(top = 4.dp, bottom = 32.dp),
+            ) {
                 error?.let { item { Text(it, color = ArtaColors.Danger, modifier = Modifier.padding(20.dp)) } }
                 if (!loading && items.isEmpty() && error == null) {
-                    item { EmptyState("No tienes avisos", "Aquí llegan las entregas, aprobaciones y menciones de tu equipo.") }
+                    item { EmptyState("No tienes avisos", "Aquí llegan las entregas, aprobaciones y menciones de tu equipo.", icon = Icons.Outlined.NotificationsNone) }
                 }
-                items(items, key = { it.id }) { n -> NotificationRow(n) { open(n) } }
+                itemsIndexed(items, key = { _, n -> n.id }) { i, n -> NotificationRow(n, divider = i < items.lastIndex) { open(n) } }
             }
         }
     }
 }
 
+/**
+ * Aviso: sin leer = título en SemiBold, punto de acento y un velo muy tenue; leído = plano.
+ * La línea fina entre avisos empieza donde empieza el texto (no corta de orilla a orilla).
+ */
 @Composable
-private fun NotificationRow(n: NotificationDto, onClick: () -> Unit) {
+private fun NotificationRow(n: NotificationDto, divider: Boolean, onClick: () -> Unit) {
     val unread = n.readAt == null
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .background(if (unread) ArtaColors.GoldSoft else Color.Transparent)
-            .clickable(onClick = onClick)
-            .padding(start = 20.dp, end = 16.dp, top = 14.dp, bottom = 14.dp),
-        verticalAlignment = Alignment.Top,
-    ) {
-        Avatar(n.actor?.fullName ?: "ARTA", size = 40.dp)
-        Spacer(Modifier.width(12.dp))
-        Column(Modifier.weight(1f)) {
-            Text(n.title, color = ArtaColors.Text, fontWeight = if (unread) FontWeight.SemiBold else FontWeight.Normal)
-            n.body?.takeIf { it.isNotBlank() }?.let { Text(it, color = ArtaColors.Muted, style = MaterialTheme.typography.bodyMedium) }
-            Text(relativeTime(n.createdAt), color = ArtaColors.Tertiary, style = ArtaType.Time, modifier = Modifier.padding(top = 2.dp))
+    val t = LocalArtaTokens.current
+    val veil = if (t.isDark) Color(0x0DC7CCD4) else Color(0x080C0C0D)
+    Column(Modifier.fillMaxWidth().background(if (unread) veil else Color.Transparent)) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onClick)
+                .padding(start = 20.dp, end = 16.dp, top = 14.dp, bottom = 14.dp),
+            verticalAlignment = Alignment.Top,
+        ) {
+            Avatar(n.actor?.fullName ?: "ARTA", size = 40.dp)
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(n.title, color = ArtaColors.Text, fontWeight = if (unread) FontWeight.SemiBold else FontWeight.Normal)
+                n.body?.takeIf { it.isNotBlank() }?.let { Text(it, color = ArtaColors.Muted, style = MaterialTheme.typography.bodyMedium) }
+                Text(relativeTime(n.createdAt), color = ArtaColors.Tertiary, style = ArtaType.Time)
+            }
+            Spacer(Modifier.width(8.dp))
+            // Mismo ancho leído o no: el texto no brinca al marcarlo.
+            Box(Modifier.padding(top = 7.dp).size(8.dp).background(if (unread) ArtaColors.Gold else Color.Transparent, CircleShape))
         }
-        if (unread) Box(Modifier.padding(top = 7.dp).size(8.dp).background(ArtaColors.Gold, CircleShape))
+        if (divider) HorizontalDivider(color = ArtaColors.Line, thickness = 0.5.dp, modifier = Modifier.padding(start = 72.dp))
     }
-    HorizontalDivider(color = ArtaColors.Line, thickness = 0.5.dp)
 }

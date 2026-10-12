@@ -8,6 +8,15 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.text.style.TextOverflow
+import com.artaproducciones.ops.ui.theme.TABULAR
+import com.artaproducciones.ops.ui.theme.fadingEdges
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -300,8 +309,9 @@ private fun TaskBody(
     onStart: () -> Unit,
     onToggleBlock: () -> Unit,
 ) {
+    val scroll = rememberScrollState()
     Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 24.dp),
+        Modifier.fillMaxSize().fadingEdges(scroll, start = 16.dp).verticalScroll(scroll).padding(top = 8.dp, bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -416,7 +426,7 @@ private fun TaskBody(
                 Icon(Icons.Default.AttachFile, contentDescription = null, tint = ArtaColors.Gold)
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
-                    Text(ev.label ?: ev.fileUrl.substringAfterLast('/'), maxLines = 1)
+                    Text(ev.label ?: ev.fileUrl.substringAfterLast('/'), maxLines = 2, overflow = TextOverflow.Ellipsis)
                     Text(
                         listOfNotNull(ev.uploadedBy?.fullName?.takeIf { it.isNotBlank() }, stampLabel(ev.createdAt).takeIf { it.isNotBlank() })
                             .joinToString(" · "),
@@ -430,29 +440,48 @@ private fun TaskBody(
 
         if (task.activities.isNotEmpty()) {
             SectionTitle("Historial", count = task.activities.size)
-            Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                task.activities.asReversed().forEach { a ->
-                    Row {
-                        Dot(ArtaColors.Gold, 8)
+            // Línea de tiempo: punto alineado al título de cada cambio y un hilo fino que los une.
+            val acts = task.activities.asReversed()
+            val line = ArtaColors.LineStrong
+            Column(Modifier.padding(horizontal = 16.dp)) {
+                acts.forEachIndexed { i, a ->
+                    val last = i == acts.lastIndex
+                    Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
+                        Box(
+                            Modifier
+                                .width(14.dp)
+                                .fillMaxHeight()
+                                .drawBehind {
+                                    if (!last) {
+                                        val x = size.width / 2
+                                        drawLine(line, Offset(x, 18.dp.toPx()), Offset(x, size.height), 1.dp.toPx())
+                                    }
+                                },
+                            contentAlignment = Alignment.TopCenter,
+                        ) {
+                            Box(Modifier.padding(top = 7.dp).size(8.dp).background(if (i == 0) ArtaColors.Gold else ArtaColors.Tertiary, CircleShape))
+                        }
                         Spacer(Modifier.width(12.dp))
-                        Column {
+                        Column(Modifier.weight(1f).padding(bottom = if (last) 0.dp else 14.dp)) {
                             Text(TASK_ACTION_LABEL[a.action] ?: a.action, fontWeight = FontWeight.Medium)
                             a.detail?.takeIf { it.isNotBlank() && a.action != "status_changed" }?.let {
-                                Text(it, style = MaterialTheme.typography.bodySmall)
+                                Text(it, style = MaterialTheme.typography.bodySmall, color = ArtaColors.Muted)
                             }
                             if (a.action == "status_changed") {
-                                Text(statusName(a.detail), style = MaterialTheme.typography.bodySmall)
+                                Text(statusName(a.detail), style = MaterialTheme.typography.bodySmall, color = ArtaColors.Muted)
                             }
                             Text(
                                 listOfNotNull(a.actor?.fullName, stampLabel(a.createdAt)).joinToString(" · "),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = ArtaColors.Muted,
+                                style = MaterialTheme.typography.labelSmall.copy(fontFeatureSettings = TABULAR),
+                                color = ArtaColors.Tertiary,
                             )
                         }
                     }
                 }
             }
         }
+        // Sin barra de acciones abajo, lo último no se queda debajo de la barra de gestos.
+        if (!(can.review || can.deliver || can.markDone || can.reopen)) Spacer(Modifier.navigationBarsPadding())
     }
 }
 

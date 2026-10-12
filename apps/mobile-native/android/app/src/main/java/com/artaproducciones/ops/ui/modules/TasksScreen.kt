@@ -38,6 +38,14 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material.icons.outlined.TaskAlt
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
+import com.artaproducciones.ops.ui.theme.ChipRow
+import com.artaproducciones.ops.ui.theme.SearchField
+import com.artaproducciones.ops.ui.theme.fadingEdges
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -146,6 +154,7 @@ fun TasksScreen(nav: ModuleNav) {
     }
     val overdueCount = remember(rows) { rows.orEmpty().count { it.isOverdue(today) } }
     val reviewCount = remember(rows) { rows.orEmpty().count { it.status == "PENDING_APPROVAL" } }
+    val listState = rememberLazyListState()
 
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
@@ -158,26 +167,14 @@ fun TasksScreen(nav: ModuleNav) {
                     modifier = Modifier.padding(horizontal = 16.dp),
                 )
             }
-            OutlinedTextField(
+            SearchField(
                 value = query,
                 onValueChange = { query = it },
-                placeholder = { Text("Buscar tarea, persona o evento") },
-                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-                trailingIcon = {
-                    if (query.isNotEmpty()) IconButton(onClick = { query = "" }) { Icon(Icons.Default.Close, contentDescription = "Limpiar") }
-                },
-                singleLine = true,
-                shape = LocalArtaTokens.current.controlShape,
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = ArtaColors.Text.copy(alpha = 0.5f),
-                    unfocusedBorderColor = ArtaColors.LineStrong,
-                    focusedContainerColor = ArtaColors.SurfaceSoft,
-                    unfocusedContainerColor = ArtaColors.SurfaceSoft,
-                    cursorColor = ArtaColors.Text,
-                ),
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                placeholder = "Buscar tarea, persona o evento",
+                compactPlaceholder = "Buscar tareas",
+                modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 10.dp, bottom = 6.dp),
             )
-            LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            ChipRow(Modifier.padding(bottom = 4.dp)) {
                 items(StatusFilter.entries) { f ->
                     val count = when (f) {
                         StatusFilter.OVERDUE -> overdueCount
@@ -202,16 +199,20 @@ fun TasksScreen(nav: ModuleNav) {
                 when {
                     current == null && error != null -> ErrorState(error!!, onRetry = { tick++ })
                     current == null -> SkeletonList()
-                    else -> LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 96.dp)) {
+                    else -> LazyColumn(
+                        Modifier.fillMaxSize().fadingEdges(listState, start = 16.dp, end = 28.dp),
+                        state = listState,
+                        contentPadding = PaddingValues(top = 4.dp, bottom = 104.dp),
+                    ) {
                         error?.let { msg -> item { InlineError(msg) { tick++ } } }
                         if (groups.isEmpty()) {
                             item {
                                 val filtered = query.isNotBlank() || filter != StatusFilter.OPEN
                                 when {
-                                    filtered -> EmptyState("Nada coincide", "Prueba con otra búsqueda o filtro.")
-                                    view == TaskView.MINE -> EmptyState("No tienes tareas pendientes", "Cuando alguien te asigne algo aparecerá aquí.")
-                                    view == TaskView.REQUESTED -> EmptyState("No has pedido tareas", "Crea una con «Nueva tarea» y asígnala a una o varias personas.")
-                                    else -> EmptyState("Sin tareas pendientes", "El equipo está al día.")
+                                    filtered -> EmptyState("Nada coincide", "Prueba con otra búsqueda o filtro.", icon = Icons.Default.Search)
+                                    view == TaskView.MINE -> EmptyState("No tienes tareas pendientes", "Cuando alguien te asigne algo aparecerá aquí.", icon = Icons.Outlined.TaskAlt)
+                                    view == TaskView.REQUESTED -> EmptyState("No has pedido tareas", "Crea una con «Nueva tarea» y asígnala a una o varias personas.", icon = Icons.Outlined.TaskAlt)
+                                    else -> EmptyState("Sin tareas pendientes", "El equipo está al día.", icon = Icons.Outlined.TaskAlt)
                                 }
                             }
                         }
@@ -272,30 +273,31 @@ internal fun TaskRow(task: TaskDto, showAssignees: Boolean, onClick: () -> Unit,
             Spacer(Modifier.width(8.dp))
             Pill(taskStatusLabel(task), taskStatusColor(task.status))
         }
-        Spacer(Modifier.height(4.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            if (task.status != "DONE" && task.dueAt != null) {
-                Text(
-                    dueLabel(task.dueAt, today),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = when {
-                        overdue -> ArtaColors.Danger
-                        task.bucket(today) == DueBucket.TODAY -> ArtaColors.Gold
-                        else -> ArtaColors.Muted
-                    },
-                    fontWeight = if (overdue) FontWeight.SemiBold else FontWeight.Normal,
-                )
-                if (showEvent && task.event != null) Text("  ·  ", style = MaterialTheme.typography.bodySmall, color = ArtaColors.Muted)
-            }
-            if (showEvent && task.event != null) {
-                Text(
-                    task.event.name,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = ArtaColors.Muted,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
+        // Vencimiento y evento en un solo texto que puede pasar al segundo renglón (no se corta).
+        val dueColor = when {
+            overdue -> ArtaColors.Danger
+            task.bucket(today) == DueBucket.TODAY -> ArtaColors.Gold
+            else -> ArtaColors.Muted
+        }
+        val showDue = task.status != "DONE" && task.dueAt != null
+        val eventName = task.event?.name?.takeIf { showEvent && it.isNotBlank() }
+        if (showDue || eventName != null) {
+            Spacer(Modifier.height(4.dp))
+            Text(
+                buildAnnotatedString {
+                    if (showDue) {
+                        withStyle(SpanStyle(color = dueColor, fontWeight = if (overdue) FontWeight.SemiBold else FontWeight.Normal)) {
+                            append(dueLabel(task.dueAt, today))
+                        }
+                        if (eventName != null) append("  ·  ")
+                    }
+                    eventName?.let { append(it) }
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = ArtaColors.Muted,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
         val people = task.assigneePeople()
         val who = if (showAssignees) {
@@ -303,7 +305,7 @@ internal fun TaskRow(task: TaskDto, showAssignees: Boolean, onClick: () -> Unit,
         } else {
             task.createdBy?.takeIf { it.id.isNotEmpty() && task.needsApproval() }?.let { "Pidió: ${it.fullName}" }
         }
-        who?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = ArtaColors.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+        who?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = ArtaColors.Muted, maxLines = 2, overflow = TextOverflow.Ellipsis) }
         task.rejectionNote?.takeIf { it.isNotBlank() && task.status != "DONE" }?.let {
             Text("Corrección: $it", style = MaterialTheme.typography.bodySmall, color = ArtaColors.Danger, maxLines = 2, overflow = TextOverflow.Ellipsis)
         }

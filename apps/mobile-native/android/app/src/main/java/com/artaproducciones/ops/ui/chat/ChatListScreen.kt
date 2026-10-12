@@ -16,6 +16,12 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material3.LocalTextStyle
+import com.artaproducciones.ops.ui.theme.CountBadge
+import com.artaproducciones.ops.ui.theme.SearchField
+import com.artaproducciones.ops.ui.theme.TABULAR
+import com.artaproducciones.ops.ui.theme.fadingEdges
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.VolumeOff
 import androidx.compose.material.icons.outlined.Bedtime
@@ -194,6 +200,7 @@ fun ChatListScreen(openChat: (String) -> Unit) {
     }
     val grouped = visible.groupBy(::sectionOf)
     val filtering = query.isNotBlank() || unreadOnly
+    val listState = rememberLazyListState()
 
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
@@ -250,21 +257,12 @@ fun ChatListScreen(openChat: (String) -> Unit) {
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(Space.S),
             ) {
-                OutlinedTextField(
+                SearchField(
                     value = query,
                     onValueChange = { query = it },
-                    placeholder = { Text("Ir a una conversación") },
-                    leadingIcon = { Icon(Icons.Outlined.FilterList, null) },
-                    trailingIcon = { if (query.isNotEmpty()) IconButton(onClick = { query = "" }) { Icon(Icons.Outlined.Close, "Borrar") } },
-                    singleLine = true,
-                    shape = LocalArtaTokens.current.controlShape,
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = ArtaColors.Text.copy(alpha = 0.5f),
-                        unfocusedBorderColor = ArtaColors.LineStrong,
-                        focusedContainerColor = ArtaColors.SurfaceSoft,
-                        unfocusedContainerColor = ArtaColors.SurfaceSoft,
-                        cursorColor = ArtaColors.Text,
-                    ),
+                    placeholder = "Ir a una conversación",
+                    compactPlaceholder = "Filtrar chats",
+                    leadingIcon = Icons.Outlined.FilterList,
                     modifier = Modifier.weight(1f),
                 )
                 FilterChip(
@@ -300,7 +298,11 @@ fun ChatListScreen(openChat: (String) -> Unit) {
                         },
                         Modifier.padding(top = Space.XL),
                     )
-                    else -> LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 96.dp)) {
+                    else -> LazyColumn(
+                        Modifier.fillMaxSize().fadingEdges(listState, start = 16.dp, end = 28.dp),
+                        state = listState,
+                        contentPadding = PaddingValues(bottom = 104.dp),
+                    ) {
                         error?.let { msg ->
                             item {
                                 Row(Modifier.fillMaxWidth().padding(start = Space.L), verticalAlignment = Alignment.CenterVertically) {
@@ -365,56 +367,74 @@ private fun SectionHeader(title: String, unread: Int, open: Boolean, onToggle: (
     }
 }
 
+/**
+ * Conversación de la lista. Un canal de evento lleva el evento de título y el artista debajo
+ * (como iOS); el título y la vista previa pasan a un segundo renglón antes de cortarse.
+ */
 @Composable
 private fun ChannelRow(c: ChannelSummary, online: Boolean, onClick: () -> Unit) {
     val unread = c.unreadCount > 0
     val direct = c.kind == "DIRECT" || c.isGroupDm
+    val name = EventChannelName(c.name, isEvent = !direct && c.eventId != null)
     Row(
         Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
-            .padding(horizontal = Space.L, vertical = Space.S + 2.dp),
-        verticalAlignment = Alignment.CenterVertically,
+            .padding(horizontal = Space.L, vertical = Space.M),
+        verticalAlignment = Alignment.Top,
     ) {
         ConversationAvatar(c.name, c.kind, c.isGroupDm, online = online, size = 44.dp)
         Spacer(Modifier.width(Space.M))
         Column(Modifier.weight(1f)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                if (c.kind == "PRIVATE" && !c.isGroupDm) Icon(Icons.Outlined.Lock, null, tint = ArtaColors.Muted, modifier = Modifier.size(14.dp).padding(end = 2.dp))
-                if (c.postingRestricted) Icon(Icons.Outlined.Campaign, null, tint = ArtaColors.Muted, modifier = Modifier.size(16.dp).padding(end = 2.dp))
+            Row(verticalAlignment = Alignment.Top) {
+                if (c.kind == "PRIVATE" && !c.isGroupDm) Icon(Icons.Outlined.Lock, null, tint = ArtaColors.Muted, modifier = Modifier.padding(top = 3.dp, end = 2.dp).size(14.dp))
+                if (c.postingRestricted) Icon(Icons.Outlined.Campaign, null, tint = ArtaColors.Muted, modifier = Modifier.padding(top = 2.dp, end = 4.dp).size(16.dp))
                 Text(
-                    if (direct) c.name else "#${c.name}",
+                    if (direct) name.title else "#${name.title}",
                     fontWeight = if (unread && !c.muted) FontWeight.Bold else FontWeight.Medium,
                     color = if (c.muted && !unread) ArtaColors.Muted else ArtaColors.Text,
-                    maxLines = 1,
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f),
                 )
+                Spacer(Modifier.width(Space.S))
                 Text(
                     relativeTime(c.lastMessageAt),
-                    color = if (unread && !c.muted) ArtaColors.Gold else ArtaColors.Muted,
-                    style = MaterialTheme.typography.labelSmall,
+                    color = if (unread && !c.muted) ArtaColors.Text else ArtaColors.Tertiary,
+                    style = MaterialTheme.typography.labelSmall.copy(fontFeatureSettings = TABULAR),
+                    fontWeight = if (unread && !c.muted) FontWeight.SemiBold else FontWeight.Normal,
+                    maxLines = 1,
+                    modifier = Modifier.padding(top = 3.dp),
                 )
             }
+            name.context?.let {
+                Text(it, color = ArtaColors.Tertiary, style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
             Spacer(Modifier.height(2.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(verticalAlignment = Alignment.Top) {
                 Text(
                     plainText(c.lastMessagePreview ?: c.topic ?: if (!c.isMember) "Toca para ver el canal" else ""),
                     color = if (unread && !c.muted) ArtaColors.Text else ArtaColors.Muted,
-                    maxLines = 1,
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                     style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.weight(1f),
                 )
-                if (c.muted) Icon(Icons.AutoMirrored.Outlined.VolumeOff, "Silenciado", tint = ArtaColors.Muted, modifier = Modifier.size(16.dp))
+                if (c.muted) Icon(Icons.AutoMirrored.Outlined.VolumeOff, "Silenciado", tint = ArtaColors.Muted, modifier = Modifier.padding(top = 2.dp).size(16.dp))
                 if (unread) {
-                    Spacer(Modifier.width(6.dp))
-                    Badge(containerColor = if (c.muted) ArtaColors.Tertiary else ArtaColors.Gold, contentColor = ArtaColors.OnAccent) {
-                        Text(if (c.unreadCount > 99) "99+" else "${c.unreadCount}")
+                    Spacer(Modifier.width(Space.S))
+                    Box(Modifier.padding(top = 1.dp)) {
+                        if (c.muted) {
+                            Badge(containerColor = ArtaColors.Tertiary, contentColor = ArtaColors.OnAccent) {
+                                Text(if (c.unreadCount > 99) "99+" else "${c.unreadCount}", style = LocalTextStyle.current.copy(fontFeatureSettings = TABULAR))
+                            }
+                        } else {
+                            CountBadge(c.unreadCount)
+                        }
                     }
                 }
             }
         }
     }
-    HorizontalDivider(color = ArtaColors.Line, thickness = 0.5.dp, modifier = Modifier.padding(start = 72.dp))
+    HorizontalDivider(color = ArtaColors.Line, thickness = 0.5.dp, modifier = Modifier.padding(start = 72.dp, end = Space.L))
 }
