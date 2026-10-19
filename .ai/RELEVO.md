@@ -23,7 +23,9 @@ Adam: «Quiero mantener ARTA pública en App Store: aplica los cambios de produc
   llevó también el acabado visual de Cursor del 12-10 (`9c79894`), que seguía sin revisar en pantalla.
 - **~12:10: build 12 (versión 1.0.0, subida hoy; NO la «12» de 1.0.1 del 11-10) elegida en la versión, «Actualizar
   revisión» pulsado (envío `c1da1a8a…` en «Listo para revisión») y el texto B guardado como **borrador** en el
-  Resolution Center. Falta que Adam decida: enviar el borrador + «Volver a enviar» (con o sin re-adjuntar el video).
+  Resolution Center. **12:09: Adam autorizó enviar sin video**: texto B publicado y «Volver a enviar» pulsado →
+  **1.0.0 (12) «Pendiente de revisión»** (envío `c1da1a8a…`). Nada que hacer hasta que Apple conteste; si vuelve
+  3.2, plan B = distribución sin listar (`docs/store/RESPUESTA-APPLE-3.2.md`).
 - **ASC** (ya guardado por la API interna): texto promocional, descripción, URL de marketing
   (`/contratar`) y notas de revisión nuevos (textos en `docs/store/IOS-APP-STORE.md` §7). Falta: elegir el
   build 12, re-adjuntar el video de revisión (el adjunto está vacío), «Actualizar revisión», responder con el
