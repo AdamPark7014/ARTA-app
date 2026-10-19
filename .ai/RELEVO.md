@@ -4,10 +4,31 @@
 - **Fecha:** 2026-10-12
 - **Rama:** main
   (Adam es el único programador).
-- **Producción:** `ec45283` desplegado desde `main` el 2026-10-12 ~05:40 UTC (bundle `495c11d..main` +
+- **Producción:** `34c9258` desplegado desde `main` el 2026-10-19 ~17:40 UTC (antes `ec45283` del 2026-10-12 ~05:40 UTC (bundle `495c11d..main` +
   `update.sh --no-pull`, log `/root/arta-deploy-20261012-pulido.log`; respaldo automático en `/root/arta-backups/`).
   El servidor ya está en el historial nuevo: el bundle incremental hace fast-forward.
 
+## Turno claude-code (2026-10-19, mediodía): ARTA sigue pública — modo demo en tienda, /contratar y ficha nueva
+
+Adam: «Quiero mantener ARTA pública en App Store: aplica los cambios de producto necesarios y prepara el texto B».
+- **iOS** (`34c9258`): modo demo fuera de `#if DEBUG` (`DemoMode` con estado en tiempo de ejecución,
+  `Session.enterDemo`, `DemoBanner` + `DemoWebUnavailableView`, botón «Explorar ARTA con datos de muestra» y
+  enlace a `/contratar` en `LoginView`); `project.yml` ya no excluye `fixtures/` en Release. Las pruebas de
+  interfaz siguen arrancando con `-ArtaDemo YES` (sin pastilla). **Build 1.0.0 (12)** lanzada por
+  `iOS · TestFlight` (corrida `39295923791`, `-f build=12`); al procesar hay que elegirla en la versión 1.0.0.
+- **Web** (`34c9258`, **desplegada** a producción a las ~11:40 por bundle + `update.sh --no-pull`, log
+  `/root/arta-deploy-20261019-contratar.log`; api y web sanos): ruta pública `/contratar` (qué incluye, cómo
+  empezar, contacto de NEXARA), enlace en la navegación legal; soporte/términos/privacidad/eliminar cuenta
+  hablan de «tu organización». Comprobado `https://artaproducciones.com/contratar` → 200. **Ojo:** el deploy
+  llevó también el acabado visual de Cursor del 12-10 (`9c79894`), que seguía sin revisar en pantalla.
+- **ASC** (ya guardado por la API interna): texto promocional, descripción, URL de marketing
+  (`/contratar`) y notas de revisión nuevos (textos en `docs/store/IOS-APP-STORE.md` §7). Falta: elegir el
+  build 12, re-adjuntar el video de revisión (el adjunto está vacío), «Actualizar revisión», responder con el
+  **texto B** de `docs/store/RESPUESTA-APPLE-3.2.md` y «Volver a enviar».
+- **Android sin tocar**: la app publicada 1.0.0 (3) no tiene el botón de demo ni los textos de plataforma; la
+  ficha de Play sigue diciendo «equipo de Arta Producciones» (pendiente, no bloquea a Apple).
+- Docs (`3db205a`): `RESPUESTA-APPLE-3.2.md` reescrito con la decisión, `IOS-APP-STORE.md` §7/§8,
+  `PLAY-STORE.md`, `README.md`.
 ## Turno claude-code (2026-10-19, mañana): rechazo iOS 3.2 del 12-10 y decisión de distribución
 
 - Apple rechazó **1.0.0 (11)** el 12-10 (envío `c1da1a8a…`, iPad Air M3) con **3.2 Business**: app para una
