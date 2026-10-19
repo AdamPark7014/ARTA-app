@@ -20,7 +20,12 @@ rechazo de App Store del 25-09-2026 (3.2, 2.3.10 y 2.1).
 
 Las cuatro también se abren desde la app (inicio de sesión y pestaña «Más»).
 
-## Decisión pendiente de Adam: cómo se distribuye
+## Cómo se distribuye (decisión de Adam, 05-10 y 19-10-2026: tienda abierta)
+
+Apple rechazó la 1.0.0 (11) por 3.2 el 12-10-2026 y Adam decidió seguir en la tienda abierta presentando ARTA
+como **plataforma** para productoras y recintos: modo demo en la build de tienda, página pública
+[`/contratar`](https://artaproducciones.com/contratar) y textos de plataforma. Detalle y respuesta en
+[`RESPUESTA-APPLE-3.2.md`](RESPUESTA-APPLE-3.2.md). La tabla de abajo queda como referencia de las opciones.
 
 ARTA es una app de **una sola organización** (cuentas solo por invitación). Apple rechaza las apps «solo para el
 personal de una empresa» publicadas en la tienda abierta (3.2) y puede pedir que el vendedor sea dueño de la marca

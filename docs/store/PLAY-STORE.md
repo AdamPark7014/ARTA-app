@@ -36,7 +36,7 @@ La prueba interna no pasa revisión y no necesita la ficha completa; sirve como 
 
 | Campo | Valor |
 | --- | --- |
-| Descripción breve (≤80) | `Tareas, chat, aprobaciones y anticipos del equipo de Arta Producciones.` |
+| Descripción breve (≤80) | `Tareas, chat por evento, aprobaciones y anticipos para productoras y recintos.` |
 | Ícono 512×512 | `apps/mobile-native/play-assets/icon-512.png` |
 | Gráfico destacado 1024×500 | `apps/mobile-native/play-assets/feature-graphic-1024x500.png` |
 | Capturas de teléfono | mínimo 2 (16:9 o 9:16), de un Android con la cuenta de revisión; pendientes |

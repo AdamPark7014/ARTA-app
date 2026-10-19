@@ -86,28 +86,30 @@ uso ni diagnósticos (no hay analítica ni reporte de fallos).
 ## 7. Versión 1.0.0
 
 **Texto promocional** (≤170):
-`La operación de tus eventos en el teléfono: tareas, chat del equipo, aprobaciones y anticipos, con la misma cuenta del panel de ARTA.`
+`La operación de tus eventos en el teléfono: tareas, chat por evento, aprobaciones y anticipos. Pruébala sin cuenta con el modo de muestra.`
 
 **Descripción**
 ```
-ARTA es la app de trabajo del equipo de Arta Producciones para producir eventos y espectáculos.
+ARTA es la plataforma de operación de eventos en vivo para productoras y recintos: cada organización tiene su propio espacio aislado y su equipo lo usa desde el teléfono con la misma cuenta del panel web.
 
-Con ARTA puedes:
+Con ARTA tu equipo puede:
 
-• Ver y entregar tus tareas, con evidencia, y saber cuáles vencen hoy.
-• Hablar con tu equipo en canales por evento, mensajes directos y grupos, con fotos, videos, notas de voz y documentos.
+• Ver y entregar sus tareas, con evidencia, y saber cuáles vencen hoy.
+• Hablar por canales de cada evento, mensajes directos y grupos, con fotos, videos, notas de voz y documentos.
 • Aprobar o rechazar tareas, órdenes de compra y anticipos desde el teléfono.
-• Consultar los eventos del mes y el detalle de cada show.
-• Recibir avisos al momento de lo que necesita tu atención.
+• Consultar los eventos del mes y la ficha de cada show.
+• Recibir avisos al momento de lo que necesita su atención.
 • Abrir el resto del panel (formatos, campañas, corrida financiera, carpetas) sin volver a iniciar sesión.
 
-Las cuentas las da de alta el administrador de Arta Producciones; cada persona ve lo que corresponde a su rol.
+¿Tu productora o recinto aún no usa ARTA? Solicita tu espacio en artaproducciones.com/contratar. ¿Quieres verla antes? Abre la app y toca «Explorar ARTA con datos de muestra»: recorres todas las funciones sin cuenta ni conexión.
+
+Cada organización da de alta a las personas de su equipo y decide qué ve cada una. La app no tiene compras ni suscripciones.
 
 Aviso de privacidad: https://artaproducciones.com/legal/privacidad
 ```
 
 **Palabras clave** (≤100): `eventos,producción,conciertos,tareas,chat,equipo,aprobaciones,anticipos,staff,logística`
-**URL de soporte**: https://artaproducciones.com/legal/soporte · **URL de marketing**: https://artaproducciones.com
+**URL de soporte**: https://artaproducciones.com/legal/soporte · **URL de marketing**: https://artaproducciones.com/contratar
 
 **Capturas** (solo iPhone, porque la app es solo iPhone): 6.9" (1320×2868) obligatorias, mínimo 3. Deben ser
 de iPhone (NEXARA fue rechazada por subir capturas de Android). Hoy no hay flujo de capturas como el de NEXARA
@@ -119,41 +121,56 @@ Sugeridas: Inicio · Tareas · Chat · Aprobaciones · Eventos.
 Producciones (5.2.1). Notas (en inglés):
 
 ```
-ARTA is the work app of Arta Producciones (event and concert production, Puebla, Mexico). It is developed and
-published by NEXARA (NEW ENGINEERING EXPERTISE AND RESOURCE ADVANCEMENT S.A. DE C.V.) for its client Arta
-Producciones; the attached letter authorizes NEXARA to publish it with the ARTA name and logo.
+ARTA is a workspace platform for live-event production companies and venues in Mexico: tasks with evidence,
+team chat per event, approval of tasks, purchase orders and cash advances, event calendar and production forms.
+Each customer organization gets an isolated workspace; its administrators create the accounts for their staff
+and vendors. Any production company or venue can contract its own workspace at
+https://artaproducciones.com/contratar (NEXARA contact: https://nexara.com.mx/contacto). The platform is
+developed, operated and published by NEXARA (NEW ENGINEERING EXPERTISE AND RESOURCE ADVANCEMENT S.A. DE C.V.);
+Arta Producciones S.A. de C.V. (Puebla) is the launch customer and lends its name to the platform (signed
+authorization letter in our App Review reply of October 8, 2026).
 
-There is no public sign-up: Arta Producciones' administrator creates accounts for its staff and vendors.
+HOW TO REVIEW WITHOUT AN ACCOUNT
+On the sign-in screen tap "Explorar ARTA con datos de muestra" (Explore ARTA with sample data). Demo mode needs
+no account and no network: it opens the full app (Inicio, Chats, Tareas, Avisos, Más, approvals, events) with
+fictional data from a sample production company and shows a "Modo demostración" pill with "Salir" (exit).
+Sections of "Más" that open the web panel show an explanatory notice in demo mode.
 
-HOW TO REVIEW
-Use the account in the Sign-in information fields. It belongs to an isolated demo organization
-("ARTA Demo · Revisión de tiendas") with fictional events, tasks, approvals and chat; it cannot see real data
-and does not require two-factor authentication.
+DEMO ACCOUNT (real backend)
+The account in Sign-in Information belongs to an isolated demo organization ("ARTA Demo · Revisión de
+tiendas") with fictional data only; no two-factor authentication.
 
 WHAT TO TRY
-Home (pending work) · Tasks (open a task, deliver it) · Chats (channels, direct messages, voice notes) ·
-Notifications · More > Approvals (approve or reject a task, a purchase order or an expense advance) · Events.
-"More" also opens the rest of the web panel inside the app with the same session.
+Inicio (pending work, Aprobaciones: approve or reject a task, a purchase order or a cash advance) · Tareas (open
+a task, deliver it) · Chats (channels, direct messages, voice notes; long-press a message to report it or block
+its author; Más > Usuarios bloqueados to unblock) · Avisos · Más (web panel modules, legal pages, "Eliminar mi
+cuenta", "Cerrar sesión").
 
 PERMISSIONS
 Camera, microphone and photo library are used only when the user attaches a photo, video, voice note or file
-in chat or as task evidence. No location, no background access.
+in chat or as task evidence. No location; the only background mode is remote notifications.
 
-CHAT
-Closed workplace chat between members of the same organization. Members are added by the administrator, who can
-deactivate any account; inappropriate content can be reported to the administrator or to gerencia@nexara.com.mx.
+USER-GENERATED CONTENT (1.2)
+Closed workplace chat between members of the same organization. Users can report any message and block any
+person; reports reach the organization's administrators, who act within 24 hours and can delete content and
+deactivate accounts. Terms of use: https://artaproducciones.com/legal/terminos.
 
-ACCOUNT DELETION
-More > "Eliminar mi cuenta" opens https://artaproducciones.com/legal/eliminar-cuenta (accounts are created by
-the organization, there is no in-app sign-up).
+ACCOUNT DELETION (5.1.1)
+Más > "Eliminar mi cuenta" opens https://artaproducciones.com/legal/eliminar-cuenta.
+
+BUSINESS MODEL (3.2)
+No paid content, no in-app purchases, no subscriptions. Organizations pay NEXARA for the service outside the
+app; users pay nothing.
 
 EXTERNAL SERVICES
 ARTA API (https://arta.artaproducciones.com), Firebase Cloud Messaging and Apple Push Notification service.
-No advertising, no analytics, no tracking, no in-app purchases.
+No advertising, no analytics, no tracking.
 ```
 
 ## 8. Distribución
 
-Opción recomendada: **sin listar** (*Unlisted App Distribution*). Después de crear la app, llena el formulario
-de Apple «Unlisted app distribution request» con el App ID y explica que es la app interna de producción de Arta
-Producciones; al aprobarse, el envío a revisión publica la app solo por enlace.
+**Decisión de Adam (05-10 y 19-10-2026): tienda abierta**, presentada como plataforma para productoras y
+recintos (modo demo en la build de tienda, página pública `/contratar`, textos de plataforma). El rechazo 3.2
+del 12-10 y la respuesta están en [`RESPUESTA-APPLE-3.2.md`](RESPUESTA-APPLE-3.2.md). Plan B si Apple insiste:
+**sin listar** (*Unlisted App Distribution*): formulario de Apple «Unlisted app distribution request» con el
+App ID `6819117925`; al aprobarse, la app se instala solo por enlace.
