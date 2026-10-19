@@ -8,6 +8,17 @@
   `update.sh --no-pull`, log `/root/arta-deploy-20261012-pulido.log`; respaldo automático en `/root/arta-backups/`).
   El servidor ya está en el historial nuevo: el bundle incremental hace fast-forward.
 
+## Turno claude-code (2026-10-19, mañana): rechazo iOS 3.2 del 12-10 y decisión de distribución
+
+- Apple rechazó **1.0.0 (11)** el 12-10 (envío `c1da1a8a…`, iPad Air M3) con **3.2 Business**: app para una
+  organización concreta con distribución pública; cinco preguntas o elegir otra vía. Texto y análisis en
+  `docs/store/RESPUESTA-APPLE-3.2.md`: recomendación **distribución sin listar** (formulario de Apple + respuesta
+  en el Resolution Center, textos listos); texto B solo si Adam insiste en pública (exige cambios de producto).
+- Visto en ASC: 7 capturas de iPhone 6,9" del simulador (correctas), sin juego de iPad, sin vistas previas, pero
+  **el adjunto de App Review está vacío** aunque las notas citan el video `ARTA-app-review-1.0.0-build11.mp4`:
+  volver a subirlo antes de reenviar.
+- Android **1.0.0 (3) publicada** en Google Play desde el 11-10 (178 países, lanzamiento completo).
+- Nada cambiado en código ni en tiendas. Producción sigue en `ec45283`.
 ## Turno cursor (2026-10-12, tarde): acabado visual listo para revisión de Claude
 
 Ejecutado `.ai/EXEC-PACKET.md` (CERRADO). **Nada desplegado ni subido a tiendas**: producción sigue en `ec45283`.
