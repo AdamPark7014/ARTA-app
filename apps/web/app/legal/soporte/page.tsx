@@ -25,16 +25,22 @@ export default function SoportePage() {
       <h1 className={styles.title}>Soporte de {APP_NAME}</h1>
 
       <p className={styles.lead}>
-        {APP_NAME} es la aplicación de trabajo del equipo de {ORGANIZATION}: tareas, chat, aprobaciones, anticipos y
-        eventos en el teléfono, con la misma cuenta del panel web.
+        {APP_NAME} es la aplicación de trabajo de los equipos que producen eventos en vivo (productoras y recintos):
+        tareas, chat, aprobaciones, anticipos y eventos en el teléfono, con la misma cuenta del panel web.{' '}
+        {ORGANIZATION} es la primera organización que la usa.
       </p>
 
       <section className={styles.section}>
         <h2 className={styles.sectionTitle}>Preguntas frecuentes</h2>
         <ul className={styles.list}>
           <li>
-            <strong>¿Cómo obtengo una cuenta?</strong> Te la da de alta un administrador de {ORGANIZATION}; no hay
-            registro abierto. Recibirás una invitación por correo.
+            <strong>¿Cómo obtengo una cuenta?</strong> Te la da de alta un administrador de tu organización; no hay
+            registro abierto en la app. Recibirás una invitación por correo. Si tu productora o recinto aún no usa{' '}
+            {APP_NAME}, pide tu espacio en{' '}
+            <Link className={styles.link} href="/contratar">
+              Contratar {APP_NAME}
+            </Link>
+            ; mientras, puedes recorrer la app con «Explorar {APP_NAME} con datos de muestra».
           </li>
           <li>
             <strong>Olvidé mi contraseña.</strong> Pídele al administrador de tu equipo que la restablezca desde el

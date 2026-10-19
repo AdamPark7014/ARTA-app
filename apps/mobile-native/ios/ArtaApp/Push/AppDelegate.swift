@@ -6,19 +6,15 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
-        #if DEBUG
-        // Modo demo (`-ArtaDemo YES`): también `URLSession.shared` pasa por las fixtures.
+        // Modo demo: también `URLSession.shared` pasa por las fixtures (solo actúa con el demo activo).
         DemoMode.bootstrap()
-        #endif
         // Barras de UIKit con el tema de la entidad (al arrancar, Arta: claro).
         MainActor.assumeIsolated { ArtaAppearance.apply(EntityContext.entity) }
         // El delegado de UNUserNotificationCenter debe quedar puesto antes de que
         // termine el arranque para recibir el toque que abrió la app.
         PushManager.shared.configure()
-        #if DEBUG
-        // Y no se registra el teléfono para push.
+        // Demo activo desde el arranque: no se registra el teléfono para push.
         if DemoMode.isActive { return true }
-        #endif
         if ApiClient.shared.hasSession() {
             application.registerForRemoteNotifications()
         }

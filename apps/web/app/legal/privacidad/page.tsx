@@ -31,7 +31,8 @@ export default function PrivacidadPage() {
       <p className={styles.lead}>
         <strong>{PUBLISHER}</strong> ({PUBLISHER_SHORT}), con domicilio en {PUBLISHER_ADDRESS}, desarrolla y opera
         la aplicación móvil <strong>{APP_NAME}</strong> (identificador <code>{APP_ID}</code>) y el panel web de
-        operación que usa el equipo de <strong>{ORGANIZATION}</strong>. Este aviso explica qué datos personales
+        operación que usan las organizaciones que contratan el servicio, como <strong>{ORGANIZATION}</strong>. Este
+        aviso explica qué datos personales
         se tratan, para qué y cómo ejercer tus derechos, conforme a la Ley Federal de Protección de Datos
         Personales en Posesión de los Particulares.
       </p>

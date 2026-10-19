@@ -1,34 +1,74 @@
-#if DEBUG
 import Foundation
 
-/// Modo demostración: SOLO existe en compilaciones Debug (en Release este archivo
-/// queda vacío). Sirve para sacar las capturas de App Store en el simulador sin
-/// cuenta y sin red (`.github/workflows/ios-screenshots.yml` + `ArtaAppUITests`).
+/// Modo demostración: la app entera con datos ficticios, sin cuenta y sin red.
 ///
-/// Se activa al arrancar con el argumento `-ArtaDemo YES` (dominio de argumentos
-/// de `UserDefaults`) o con la variable de entorno `ARTA_DEMO=1`. Entonces:
-///  - la app entra directo como la persona de `fixtures/auth__me.json`, solo en
-///    memoria: ni cookie, ni `UserDefaults`, ni llavero (`Session.restore`);
+/// Existe en todas las compilaciones, también la de App Store: Apple revisa la app
+/// sin depender de credenciales (guía 2.1) y cualquier persona puede explorarla desde
+/// la ficha (guía 3.2) con el botón «Explorar ARTA con datos de muestra» de la
+/// pantalla de entrada. También lo usan las capturas de tienda
+/// (`.github/workflows/ios-screenshots.yml` + `ArtaAppUITests`), que arrancan con el
+/// argumento `-ArtaDemo YES` (dominio de argumentos de `UserDefaults`) o con la
+/// variable de entorno `ARTA_DEMO=1`.
+///
+/// Con el demo activo:
+///  - la app entra como la persona de `fixtures/auth__me.json`, solo en memoria: ni
+///    cookie, ni `UserDefaults`, ni llavero (`Session.restore` / `Session.enterDemo`);
 ///  - cada petición HTTP la contesta `DemoURLProtocol` con las respuestas grabadas
 ///    por `apps/mobile-native/demo/grabar-fixtures.mjs` (organización ficticia);
 ///    lo que no es del API (fotos de `/uploads`, otros hosts) responde 404;
-///  - no se abre el socket, no se pide permiso de avisos ni se registra push.
+///  - no se abre el socket, no se pide permiso de avisos ni se registra push;
+///  - las secciones que abren el panel web enseñan un aviso (`DemoWebUnavailableView`).
 enum DemoMode {
     static let argumentKey = "ArtaDemo"
     static let environmentKey = "ARTA_DEMO"
 
-    /// Se decide una vez por proceso; seguro de leer desde cualquier hilo.
-    static let isActive: Bool = {
-        // `-ArtaDemo YES` (o 1) llega por el dominio de argumentos de UserDefaults.
+    private static let lock = NSLock()
+    private static var active = launchRequested
+    private static var fromLogin = false
+
+    /// `-ArtaDemo YES` (o 1) por el dominio de argumentos de `UserDefaults`, o
+    /// `ARTA_DEMO=1`. Se decide una vez por proceso: así arrancan las pruebas de interfaz.
+    static let launchRequested: Bool = {
         if UserDefaults.standard.bool(forKey: DemoMode.argumentKey) { return true }
         let raw = (ProcessInfo.processInfo.environment[DemoMode.environmentKey] ?? "").lowercased()
         return ["1", "yes", "true", "on"].contains(raw)
     }()
 
+    /// Seguro de leer desde cualquier hilo (`DemoURLProtocol.canInit` corre en los de URLSession).
+    static var isActive: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return active
+    }
+
+    /// Entró con el botón de la pantalla de entrada (no por argumento de arranque):
+    /// se enseña la pastilla «Modo demostración» con «Salir».
+    static var enteredFromLogin: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return fromLogin
+    }
+
+    /// Botón «Explorar ARTA con datos de muestra».
+    static func activateFromLogin() {
+        lock.lock()
+        active = true
+        fromLogin = true
+        lock.unlock()
+    }
+
+    /// «Salir» de la pastilla o «Cerrar sesión» en Más.
+    static func deactivate() {
+        lock.lock()
+        active = false
+        fromLogin = false
+        lock.unlock()
+    }
+
     /// Al arrancar (`AppDelegate`): `URLSession.shared` (la usa `AsyncImage`) también
-    /// pasa por el interceptor, para que ninguna foto salga a la red.
+    /// pasa por el interceptor. Se registra siempre: con el demo apagado,
+    /// `DemoURLProtocol.canInit` devuelve `false` y no interviene.
     static func bootstrap() {
-        guard isActive else { return }
         _ = sharedRegistration
     }
 
@@ -36,9 +76,9 @@ enum DemoMode {
     private static let sharedRegistration: Bool = URLProtocol.registerClass(DemoURLProtocol.self)
 
     /// Antepone el interceptor a una configuración de `ApiClient`. Hay que llamarlo
-    /// ANTES de crear la `URLSession`: la sesión copia la configuración al nacer.
+    /// ANTES de crear la `URLSession`: la sesión copia la configuración al nacer. Por
+    /// eso va siempre, y es el estado del demo quien decide en cada petición.
     static func install(on config: URLSessionConfiguration) {
-        guard isActive else { return }
         var classes: [AnyClass] = [DemoURLProtocol.self]
         classes.append(contentsOf: config.protocolClasses ?? [])
         config.protocolClasses = classes
@@ -50,7 +90,6 @@ enum DemoMode {
         return (try? JSONDecoder().decode(MeResponse.self, from: data))?.user
     }
 }
-
 /// Respuestas grabadas: carpeta `fixtures` en la raíz del bundle (referencia de
 /// carpeta en `project.yml`), con `index.json` que lleva de clave a archivo.
 enum DemoFixtures {
@@ -188,4 +227,3 @@ enum DemoClock {
         return result as String
     }
 }
-#endif

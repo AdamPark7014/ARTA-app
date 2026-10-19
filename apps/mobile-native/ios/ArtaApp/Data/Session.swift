@@ -39,19 +39,12 @@ final class Session: ObservableObject {
 
     /// Al abrir la app: con cookie guardada se confirma con `/auth/me`; sin red se usa el último usuario.
     func restore() async {
-        #if DEBUG
-        // Modo demo (`-ArtaDemo YES`): dentro como la persona de las fixtures, solo
-        // en memoria. No pasa por `signedIn` para no guardar nada ni abrir socket/push.
+        // Modo demo por argumento de arranque (`-ArtaDemo YES`, pruebas de interfaz):
+        // dentro como la persona de las fixtures, solo en memoria.
         if DemoMode.isActive {
-            if let user = DemoMode.sessionUser() {
-                ActiveEntity.shared.configure(user: user)
-                state = .signedIn(user)
-            } else {
-                state = .signedOut
-            }
+            state = demoState()
             return
         }
-        #endif
         guard ApiClient.shared.hasSession() else {
             state = .signedOut
             return
@@ -65,6 +58,23 @@ final class Session: ObservableObject {
         } catch {
             if let cached = cachedUser() { signedIn(cached) } else { state = .signedOut }
         }
+    }
+
+    /// Botón «Explorar ARTA con datos de muestra» (pantalla de entrada): la app entera
+    /// con datos ficticios, sin cuenta ni red. No pasa por `signedIn` para no guardar
+    /// nada ni abrir socket/push; «Salir» o «Cerrar sesión» vuelven a la entrada.
+    func enterDemo() {
+        DemoMode.activateFromLogin()
+        state = demoState()
+    }
+
+    private func demoState() -> State {
+        guard let user = DemoMode.sessionUser() else {
+            DemoMode.deactivate()
+            return .signedOut
+        }
+        ActiveEntity.shared.configure(user: user)
+        return .signedIn(user)
     }
 
     func login(email: String, password: String) async -> LoginResult {
@@ -106,6 +116,12 @@ final class Session: ObservableObject {
     }
 
     func logout() async {
+        // Modo demo: nada que dar de baja en el servidor; solo apagar el demo y limpiar.
+        if DemoMode.isActive {
+            DemoMode.deactivate()
+            clearLocal()
+            return
+        }
         // Primero la baja del token: después ya no hay cookie para autorizarla.
         await withTimeout(seconds: 5) { await PushManager.shared.unregister() }
         await withTimeout(seconds: 5) { try? await ApiClient.shared.logout() }

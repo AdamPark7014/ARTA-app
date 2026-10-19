@@ -1,7 +1,6 @@
-#if DEBUG
 import Foundation
 
-/// Interceptor HTTP del modo demo (solo Debug). Va primero en las configuraciones
+/// Interceptor HTTP del modo demo. Va primero en las configuraciones
 /// de `ApiClient` (`DemoMode.install(on:)`) y registrado para `URLSession.shared`
 /// (`DemoMode.bootstrap()`): con el demo activo NINGUNA petición http(s) de la app
 /// sale a la red. Las respuestas las decide `DemoBackend`.
@@ -112,4 +111,3 @@ enum DemoBackend {
         Reply(status: status, data: Data(body.utf8))
     }
 }
-#endif

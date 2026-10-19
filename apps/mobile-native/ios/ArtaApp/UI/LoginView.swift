@@ -46,6 +46,9 @@ struct LoginView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(ArtaCardBackground(radius: ArtaRadius.card + 4))
 
+                    demoEntry
+                        .padding(.top, ArtaSpace.l)
+
                     Spacer(minLength: ArtaSpace.xxxl)
                     legalLinks
                         .padding(.bottom, ArtaSpace.s)
@@ -72,7 +75,7 @@ struct LoginView: View {
                 .scaledToFit()
                 .frame(height: 70)
                 .foregroundStyle(ArtaColor.text)
-                .accessibilityLabel("Arta Producciones")
+                .accessibilityLabel("ARTA")
             Text("La experiencia del Show")
                 .font(ArtaFont.display(20, weight: .light))
                 .tracking(-0.3)
@@ -194,6 +197,42 @@ struct LoginView: View {
             .foregroundStyle(ArtaColor.muted)
             .frame(maxWidth: .infinity)
         }
+    }
+
+    // MARK: Modo demostración
+
+    /// Para quien aún no tiene cuenta (y para App Review): la app entera con datos
+    /// ficticios, sin cuenta ni conexión (`Session.enterDemo`). Debajo, cómo contratar.
+    private var demoEntry: some View {
+        VStack(spacing: ArtaSpace.s) {
+            Button {
+                error = nil
+                focus = nil
+                session.enterDemo()
+            } label: {
+                Label("Explorar ARTA con datos de muestra", systemImage: "sparkles")
+                    .font(.subheadline.weight(.semibold))
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+            .tint(ArtaColor.text)
+            .disabled(busy)
+            .accessibilityIdentifier("login-demo")
+            Text("Sin cuenta ni conexión. Datos ficticios de una productora de ejemplo.")
+                .font(.caption)
+                .foregroundStyle(ArtaColor.tertiary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+            Link(destination: ArtaAppMeta.contratarURL) {
+                Text("¿Tu productora o recinto aún no usa ARTA? Solicítala aquí")
+                    .font(.caption.weight(.semibold))
+                    .underline(true, color: ArtaColor.lineStrong)
+                    .multilineTextAlignment(.center)
+            }
+            .foregroundStyle(ArtaColor.muted)
+            .accessibilityIdentifier("login-contratar")
+        }
+        .frame(maxWidth: .infinity)
     }
 
     /// Aviso de privacidad y términos alcanzables antes de entrar (Apple 5.1.1(i)): al pie,

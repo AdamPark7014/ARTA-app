@@ -2,7 +2,7 @@ import XCTest
 
 /// Capturas de la ficha de App Store con el simulador de iPhone (6.9").
 ///
-/// La app arranca en MODO DEMO (`-ArtaDemo YES`, solo existe en Debug): entra sin
+/// La app arranca en MODO DEMO (`-ArtaDemo YES`): entra sin
 /// login como la cuenta de las fixtures y sirve las respuestas grabadas del API
 /// sin red (`ArtaApp/Demo`). La barra de estado (9:41, batería llena) la fija
 /// `simctl status_bar` desde `.github/workflows/ios-screenshots.yml`.

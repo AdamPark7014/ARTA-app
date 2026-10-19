@@ -50,10 +50,12 @@ targets:
       - path: Resources/GoogleService-Info.plist
         optional: true
         buildPhase: resources
-      # Modo demo (solo Debug, `-ArtaDemo YES`): respuestas grabadas del API con
-      # datos ficticios (`demo/grabar-fixtures.mjs`) para las capturas de tienda
-      # sin login ni red. Referencia de carpeta: queda como `fixtures/` en el .app.
-      # En Release se excluye con EXCLUDED_SOURCE_FILE_NAMES (abajo).
+      # Modo demo (`-ArtaDemo YES` en las pruebas de interfaz, o el botón «Explorar
+      # ARTA con datos de muestra» de la entrada): respuestas grabadas del API con
+      # datos ficticios (`demo/grabar-fixtures.mjs`), sin login ni red. Referencia de
+      # carpeta: queda como `fixtures/` en el .app, también en la build de tienda
+      # (~120 KB): Apple revisa sin cuenta (2.1) y cualquiera explora la app desde
+      # la ficha (3.2).
       - path: ../demo/fixtures
         type: folder
         buildPhase: resources
@@ -91,9 +93,6 @@ targets:
           CODE_SIGN_ENTITLEMENTS: Resources/ArtaApp.Debug.entitlements
         Release:
           CODE_SIGN_ENTITLEMENTS: Resources/ArtaApp.Release.entitlements
-          # Las fixtures del modo demo no viajan en la build de tienda (el código
-          # del demo ya va dentro de `#if DEBUG`).
-          EXCLUDED_SOURCE_FILE_NAMES: "fixtures */fixtures"
 
   # Capturas de App Store (XCUITest) en el simulador, con el modo demo. Las usa
   # `.github/workflows/ios-screenshots.yml`. Solo se construyen en la acción

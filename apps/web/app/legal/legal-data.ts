@@ -2,8 +2,9 @@
  * Datos de las páginas legales de la app ARTA.
  *
  * La app (`com.artaproducciones.ops`) la desarrolla y la publica NEXARA en App
- * Store y Google Play; la usa el equipo de Arta Producciones. Mismos datos de
- * empresa que el aviso oficial de NEXARA (nexara.com.mx/legal/privacidad).
+ * Store y Google Play para las organizaciones que la contratan (productoras de
+ * eventos y recintos); Arta Producciones es la primera y presta su nombre. Mismos
+ * datos de empresa que el aviso oficial de NEXARA (nexara.com.mx/legal/privacidad).
  */
 export const PUBLISHER = 'NEW ENGINEERING EXPERTISE AND RESOURCE ADVANCEMENT S.A. DE C.V.';
 export const PUBLISHER_SHORT = 'NEXARA';

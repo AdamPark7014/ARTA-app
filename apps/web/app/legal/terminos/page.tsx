@@ -28,7 +28,8 @@ export default function TerminosPage() {
 
       <p className={styles.lead}>
         La aplicación <strong>{APP_NAME}</strong> y su panel web los desarrolla y opera <strong>{PUBLISHER}</strong>{' '}
-        ({PUBLISHER_SHORT}) para el equipo de <strong>{ORGANIZATION}</strong>. Al usarlos aceptas estos términos.
+        ({PUBLISHER_SHORT}) para las organizaciones que los contratan (productoras de eventos y recintos, como{' '}
+        <strong>{ORGANIZATION}</strong>). Al usarlos aceptas estos términos.
       </p>
 
       <section className={styles.section}>
@@ -43,7 +44,14 @@ export default function TerminosPage() {
       <section className={styles.section}>
         <h2 className={styles.sectionTitle}>Cuentas</h2>
         <ul className={styles.list}>
-          <li>Las cuentas las crea un administrador de {ORGANIZATION}; no hay registro abierto.</li>
+          <li>
+            Las cuentas las crea un administrador de tu organización; no hay registro abierto en la app. Las
+            organizaciones contratan el servicio en{' '}
+            <Link className={styles.link} href="/contratar">
+              Contratar {APP_NAME}
+            </Link>
+            .
+          </li>
           <li>Tu cuenta es personal: no compartas tu contraseña ni tu código de verificación.</li>
           <li>
             Lo que ves depende de tu rol. El administrador puede cambiar tus permisos o desactivar tu cuenta cuando

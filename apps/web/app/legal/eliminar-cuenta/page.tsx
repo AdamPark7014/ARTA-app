@@ -104,8 +104,8 @@ export default function EliminarCuentaPage() {
           <li>Bitácoras de seguridad y de cambios.</li>
         </ul>
         <p className={styles.p}>
-          Esa información solo la ve el equipo de {ORGANIZATION} y se usa para la operación y las obligaciones legales
-          de la organización.
+          Esa información solo la ve tu organización (por ejemplo, {ORGANIZATION}) y se usa para la operación y las
+          obligaciones legales de la organización.
         </p>
       </section>
 

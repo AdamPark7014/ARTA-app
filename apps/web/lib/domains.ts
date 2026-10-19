@@ -73,6 +73,8 @@ export function isPublicPath(pathname: string): boolean {
   if (pathname.startsWith('/p/')) return true;
   // Aviso de privacidad, términos, eliminar cuenta y soporte: los enlazan App Store y Google Play.
   if (pathname.startsWith('/legal')) return true;
+  // Cómo contrata ARTA una organización (lo enlazan la ficha y la entrada de la app).
+  if (pathname === '/contratar') return true;
   if (pathname.startsWith('/v/')) return true;
   if (pathname === '/sitemap.xml' || pathname === '/robots.txt') return true;
   if (pathname.startsWith('/_next')) return true;

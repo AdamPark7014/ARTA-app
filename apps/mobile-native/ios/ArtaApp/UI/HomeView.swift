@@ -27,6 +27,13 @@ struct SignedInView: View {
         .overlay(alignment: .top) {
             EntityNoticeBanner(notice: activeEntity.notice)
         }
+        // Explorando con datos de muestra desde la entrada: pastilla con «Salir». Con
+        // `-ArtaDemo YES` (capturas y video de tienda) no se enseña.
+        .overlay(alignment: .bottom) {
+            if DemoMode.enteredFromLogin {
+                DemoBanner()
+            }
+        }
     }
 }
 
@@ -159,7 +166,12 @@ struct HomeView: View {
         case .approvals:
             ApprovalsView()
         case let .web(path, title):
-            ArtaWebView(path: path, title: title)
+            // En el modo de muestra no hay sesión que compartir con la web.
+            if DemoMode.isActive {
+                DemoWebUnavailableView(title: title)
+            } else {
+                ArtaWebView(path: path, title: title)
+            }
         case let .chat(channelId, messageId):
             ConversationView(channelId: channelId, parentId: nil, focusMessageId: messageId)
         case .blockedUsers:

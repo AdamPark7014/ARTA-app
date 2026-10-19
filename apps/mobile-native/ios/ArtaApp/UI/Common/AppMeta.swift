@@ -12,6 +12,8 @@ enum ArtaAppMeta {
     static let privacidadURL = URL(string: "https://artaproducciones.com/legal/privacidad")!
     static let terminosURL = URL(string: "https://artaproducciones.com/legal/terminos")!
     static let soporteURL = URL(string: "https://artaproducciones.com/legal/soporte")!
+    /// Cómo contrata ARTA una productora o un recinto (Apple 3.2: vía pública de alta).
+    static let contratarURL = URL(string: "https://artaproducciones.com/contratar")!
     /// Solicitud de eliminación de cuenta y datos (guideline 5.1.1(v)). Las
     /// cuentas las crea quien administra la organización (no hay registro desde
     /// la app), así que la baja se gestiona en la web; la app solo abre la página.

@@ -28,6 +28,9 @@ export default function LegalLayout({ children }: { children: React.ReactNode })
         <Link className={styles.link} href="/legal/soporte">
           Soporte
         </Link>
+        <Link className={styles.link} href="/contratar">
+          Contratar ARTA
+        </Link>
       </nav>
     </div>
   );
