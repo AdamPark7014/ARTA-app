@@ -175,7 +175,7 @@ const USER_VIEWS: Record<
     ],
     notes: 'TODO en ambas · usuarios · corrida · cierre',
   },
-  'rodrigo@arema.mx': {
+  'rodrigo@artaproducciones.com': {
     entities: ['EXPLANADA', 'ARTA'],
     homeEntity: 'EXPLANADA',
     modules: [
@@ -373,9 +373,11 @@ const USERS: SeedUser[] = [
     passAlias: 'CHACHO',
   },
   {
-    email: 'rodrigo@arema.mx',
+    // Es del equipo de Arta: supervisa y revisa el Auditorio (21-10-2026, Adam: «arema no tiene nada que
+    // ver en esos usuarios»). Antes `rodrigo@arema.mx`; ver RENAMED_EMAILS.
+    email: 'rodrigo@artaproducciones.com',
     fullName: 'Rodrigo López',
-    title: 'Director Auditorio Arema',
+    title: 'Supervisión del Auditorio',
     roleKey: ROLES.DIR_AUDITORIO,
     entities: ['EXPLANADA', 'ARTA'],
     permissions: [...ROLE_PERMISSIONS[ROLES.DIR_AUDITORIO]],
@@ -479,6 +481,14 @@ const STUDIO_CONTENT: Array<{ sectionKey: string; title: string; contentJson: Re
   },
 ];
 
+/**
+ * Cuentas cuyo correo cambió (viejo → nuevo). Todos los usuarios son del equipo de Arta, también los que
+ * solo supervisan el Auditorio: ninguno lleva dominio de Arema.
+ */
+const RENAMED_EMAILS: Record<string, string> = {
+  'rodrigo@arema.mx': 'rodrigo@artaproducciones.com',
+};
+
 async function main() {
   console.log('Seeding ARTA users, templates, studio…');
 
@@ -502,6 +512,20 @@ async function main() {
     update: {},
   });
   console.log(`  ✓ Organización ${org.slug} (${org.id})`);
+
+  // Correos que cambiaron: se renombra la misma cuenta (historial, sesiones y contraseña intactos). Si el
+  // upsert de abajo viera solo el correo nuevo, crearía a una segunda persona.
+  for (const [from, to] of Object.entries(RENAMED_EMAILS)) {
+    const old = await prisma.user.findUnique({ where: { email: from }, select: { id: true } });
+    if (!old) continue;
+    const taken = await prisma.user.findUnique({ where: { email: to }, select: { id: true } });
+    if (taken) {
+      console.warn(`  ! ${from} → ${to}: ya existe una cuenta con ${to}; no se renombra`);
+      continue;
+    }
+    await prisma.user.update({ where: { id: old.id }, data: { email: to } });
+    console.log(`  ✓ Correo ${from} → ${to}`);
+  }
 
   for (const u of USERS) {
     const plain = passwordFor(u.passAlias);
@@ -682,7 +706,7 @@ async function seedDemoPortfolio() {
   }
 
   const arturo = await prisma.user.findUnique({ where: { email: 'arturo@artaproducciones.com' } });
-  const rodrigo = await prisma.user.findUnique({ where: { email: 'rodrigo@arema.mx' } });
+  const rodrigo = await prisma.user.findUnique({ where: { email: 'rodrigo@artaproducciones.com' } });
   const williams = await prisma.user.findUnique({ where: { email: 'williams@artaproducciones.com' } });
   const creatorId = arturo?.id || rodrigo?.id;
   if (!creatorId) {

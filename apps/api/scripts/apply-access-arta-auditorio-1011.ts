@@ -26,7 +26,7 @@ const CHANGES: Change[] = [
   { email: 'marisol@artaproducciones.com', roleKey: ROLES.DIR_ADJUNTA, entities: ['ARTA'] },
   { email: 'monse@artaproducciones.com', roleKey: ROLES.DIR_ADJUNTA, entities: BOTH },
   { email: 'kika@artaproducciones.com', roleKey: ROLES.DIR_ADJUNTA, entities: BOTH },
-  { email: 'rodrigo@arema.mx', roleKey: ROLES.DIR_ADJUNTA, entities: ['EXPLANADA'] },
+  { email: 'rodrigo@artaproducciones.com', roleKey: ROLES.DIR_ADJUNTA, entities: ['EXPLANADA'] },
   { email: 'williams@artaproducciones.com', roleKey: ROLES.DIR_ADJUNTA, entities: ['EXPLANADA'] },
   { email: 'jp@artaproducciones.com', roleKey: ROLES.DIR_ADJUNTA, entities: ['EXPLANADA'] },
 ];

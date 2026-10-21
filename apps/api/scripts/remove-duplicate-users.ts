@@ -2,7 +2,7 @@
  * 16-09-2026 · Adam: «quita a Melissa y elimina usuarios duplicados».
  *
  * Un seed viejo dio de alta al equipo con `@arta.mx`; el oficial es
- * `@artaproducciones.com` (Rodrigo, `@arema.mx`). Una cuenta `@arta.mx` es
+ * `@artaproducciones.com` (Rodrigo incluido desde el 21-10-2026; antes `@arema.mx`). Una cuenta `@arta.mx` es
  * duplicada si existe otra oficial con el mismo nombre: lo que tenga colgado
  * (eventos, OC, tareas, formatos, bitácora…) pasa a la oficial y la vieja se
  * borra. Sesiones, membresías y notificaciones de la vieja se van con ella.

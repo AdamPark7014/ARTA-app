@@ -37,7 +37,7 @@ const ORG_ID = process.env.ARTA_ORG_ID || 'org_arta_internal';
 const TEAM_EMAILS = [
   'arturo@artaproducciones.com',
   'chacho@artaproducciones.com',
-  'rodrigo@arema.mx',
+  'rodrigo@artaproducciones.com',
   'williams@artaproducciones.com',
   'leida@artaproducciones.com',
   'jp@artaproducciones.com',
