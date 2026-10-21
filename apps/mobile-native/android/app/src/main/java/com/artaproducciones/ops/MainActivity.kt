@@ -22,12 +22,14 @@ import com.artaproducciones.ops.data.ActiveEntity
 import com.artaproducciones.ops.data.BizEntity
 import com.artaproducciones.ops.data.Session
 import com.artaproducciones.ops.data.api.ApiClient
-import com.artaproducciones.ops.data.api.ApiDebugHooks
+import com.artaproducciones.ops.demo.DemoLaunch
+import com.artaproducciones.ops.demo.DemoMode
 import com.artaproducciones.ops.push.ArtaPushRenderer
 import com.artaproducciones.ops.ui.ArtaApp
 import com.artaproducciones.ops.ui.DeepLink
 import com.artaproducciones.ops.ui.theme.ArtaTheme
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 /** Velo de la barra de navegación cuando el sistema no sabe pintar íconos oscuros (el de AndroidX). */
@@ -49,7 +51,7 @@ class MainActivity : ComponentActivity() {
         applySystemBars(ActiveEntity.current)
         splash.setKeepOnScreenCondition { Session.state.value is Session.State.Loading }
         // Solo debug: `--ez arta_demo true` enciende el modo demo; tiene que ir antes de restaurar la sesión.
-        val demoLink = ApiDebugHooks.launch?.invoke(intent)
+        val demoLink = demoLaunch(intent)
         lifecycleScope.launch { Session.restore() }
         // Al recrear (rotación) el sistema vuelve a entregar el mismo intent: no se reabre el aviso.
         if (savedInstanceState == null) handle(intent, demoLink)
@@ -62,9 +64,16 @@ class MainActivity : ComponentActivity() {
                 ArtaApp(pendingLink = pendingLink, onLinkConsumed = { pendingLink.value = null })
             }
         }
-        // Capturas de tienda: sin el diálogo de permisos encima.
-        if (!ApiDebugHooks.demo) requestNotificationPermission()
+        // El permiso de avisos se pide con una sesión real (como iOS): nunca en la entrada ni en el
+        // modo demo, que no registra el teléfono para push.
+        lifecycleScope.launch {
+            Session.state.first { it is Session.State.SignedIn && !DemoMode.isActive }
+            requestNotificationPermission()
+        }
     }
+
+    /** Extras de las capturas de tienda: solo en debug (en la de tienda cualquier app podría mandarlos). */
+    private fun demoLaunch(intent: Intent): DeepLink? = if (BuildConfig.DEBUG) DemoLaunch.onIntent(intent) else null
 
     private fun applySystemBars(entity: BizEntity) {
         window.setBackgroundDrawable(ColorDrawable(if (entity == BizEntity.EXPLANADA) WINDOW_AUDITORIO else WINDOW_ARTA))
@@ -84,7 +93,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        handle(intent, ApiDebugHooks.launch?.invoke(intent))
+        handle(intent, demoLaunch(intent))
     }
 
     private fun handle(intent: Intent?, demoLink: DeepLink? = null) {

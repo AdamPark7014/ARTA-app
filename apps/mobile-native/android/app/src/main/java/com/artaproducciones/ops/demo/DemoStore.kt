@@ -6,6 +6,12 @@ import okhttp3.HttpUrl
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.IOException
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
+import java.time.ZoneOffset
+import java.time.format.DateTimeFormatter
+import java.time.temporal.ChronoUnit
 import java.util.concurrent.ConcurrentHashMap
 
 /**
@@ -72,23 +78,90 @@ internal object DemoEntities {
 }
 
 /**
- * Respuestas grabadas (`assets/fixtures/index.json` → archivo) más lo que se cambió durante
- * esta sesión de demo (mandar un mensaje, aprobar una tarea…), solo en memoria.
+ * Las fixtures traen fechas absolutas del día en que se grabaron (la cuenta se resiembra justo
+ * antes: tareas que vencen «hoy», mensajes de hace minutos, eventos de la semana). Para que el demo
+ * se vea igual cualquier otro día, todas las fechas se mueven los días enteros que separan aquel
+ * día de hoy (calendario local: la hora del reloj se conserva). Igual que `DemoClock` de iOS.
+ */
+internal object DemoClock {
+    /** `2026-10-05T01:08:40.463Z` (con o sin fracción de segundo). */
+    private val ISO = Regex("""\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z""")
+
+    /** Una fecha sola como valor JSON: `"2026-10-29"`. */
+    private val DAY = Regex("""(?<=")\d{4}-\d{2}-\d{2}(?=")""")
+
+    private val WITH_MILLIS = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'").withZone(ZoneOffset.UTC)
+    private val PLAIN = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss'Z'").withZone(ZoneOffset.UTC)
+
+    /**
+     * La fecha más reciente entre [sources] (lista JSON grabada → campo de fecha). Con avisos y
+     * chats es el momento de la grabación: se graba minutos después de sembrar.
+     */
+    fun latest(sources: List<Pair<String?, String>>): Instant? =
+        sources.flatMap { (raw, field) ->
+            val list = raw?.let { runCatching { JSONArray(it) }.getOrNull() }
+            list.objects().mapNotNull { o -> o.str(field)?.let { runCatching { Instant.parse(it) }.getOrNull() } }
+        }.maxOrNull()
+
+    /** Días de calendario (en [zone]) entre la grabación y [today]. Sin grabación, cero. */
+    fun dayOffset(recorded: Instant?, today: LocalDate, zone: ZoneId): Long =
+        if (recorded == null) 0 else ChronoUnit.DAYS.between(recorded.atZone(zone).toLocalDate(), today)
+
+    /** Mueve todas las fechas de [text] [days] días. Sin desfase, no toca nada. */
+    fun shift(text: String, days: Long, zone: ZoneId): String {
+        if (days == 0L) return text
+        val moved = ISO.replace(text) { m ->
+            runCatching {
+                val at = Instant.parse(m.value).atZone(zone).plusDays(days).toInstant()
+                (if ('.' in m.value) WITH_MILLIS else PLAIN).format(at)
+            }.getOrDefault(m.value)
+        }
+        return DAY.replace(moved) { m -> runCatching { LocalDate.parse(m.value).plusDays(days).toString() }.getOrDefault(m.value) }
+    }
+}
+
+/**
+ * Respuestas grabadas (`assets/fixtures/index.json` → archivo, con las fechas movidas a hoy) más
+ * lo que se cambió durante esta sesión de demo (mandar un mensaje, aprobar una tarea…), solo en
+ * memoria: [clear] lo olvida al salir del demo.
  */
 internal class DemoStore(private val context: Context) {
     private val overlay = ConcurrentHashMap<String, String>()
+    private val shifted = ConcurrentHashMap<String, String>()
 
     private val index: Map<String, String> by lazy {
         val raw = asset("index.json") ?: return@lazy emptyMap<String, String>().also {
-            Log.e(TAG, "Sin assets/$DIR/index.json: ¿el build debug incluye apps/mobile-native/demo?")
+            Log.e(TAG, "Sin assets/$DIR/index.json: ¿el build incluye apps/mobile-native/demo?")
         }
         val o = JSONObject(raw)
         o.keys().asSequence().associateWith { o.getString(it) }
     }
 
+    private val zone: ZoneId by lazy { ZoneId.systemDefault() }
+
+    private val dayOffset: Long by lazy {
+        val recorded = DemoClock.latest(
+            listOf(
+                index["notifications"]?.let(::asset) to "createdAt",
+                index["chat/channels"]?.let(::asset) to "lastMessageAt",
+            ),
+        )
+        DemoClock.dayOffset(recorded, LocalDate.now(zone), zone)
+    }
+
     fun keys(): Set<String> = index.keys + overlay.keys
 
-    fun raw(key: String): String? = overlay[key] ?: index[key]?.let(::asset)
+    fun raw(key: String): String? = overlay[key] ?: fixture(key)
+
+    /** Lo grabado no cambia: se lee y se mueve de fecha una sola vez por clave. */
+    private fun fixture(key: String): String? {
+        shifted[key]?.let { return it }
+        val text = index[key]?.let(::asset) ?: return null
+        return DemoClock.shift(text, dayOffset, zone).also { shifted[key] = it }
+    }
+
+    /** Al salir del demo: lo cambiado en esta sesión se olvida. */
+    fun clear() = overlay.clear()
 
     fun obj(key: String): JSONObject? = raw(key)?.let { runCatching { JSONObject(it) }.getOrNull() }
 

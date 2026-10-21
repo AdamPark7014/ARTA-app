@@ -11,8 +11,13 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.FormatListBulleted
 import androidx.compose.material.icons.filled.ChatBubble
@@ -67,6 +72,7 @@ import com.artaproducciones.ops.data.Session
 import com.artaproducciones.ops.data.api.ApiClient
 import com.artaproducciones.ops.data.api.UserDto
 import com.artaproducciones.ops.data.realtime.RealtimeClient
+import com.artaproducciones.ops.demo.DemoMode
 import com.artaproducciones.ops.ui.chat.ChannelInfoScreen
 import com.artaproducciones.ops.ui.chat.ChatListScreen
 import com.artaproducciones.ops.ui.chat.ChatSearchScreen
@@ -75,12 +81,15 @@ import com.artaproducciones.ops.ui.chat.NewConversationScreen
 import com.artaproducciones.ops.ui.chat.SavedMessagesScreen
 import com.artaproducciones.ops.ui.common.entitySwitchedMessage
 import com.artaproducciones.ops.ui.common.toggleEntity
+import com.artaproducciones.ops.ui.demo.DemoBanner
+import com.artaproducciones.ops.ui.demo.DemoWebUnavailableScreen
 import com.artaproducciones.ops.ui.login.LoginScreen
 import com.artaproducciones.ops.ui.modules.ApprovalsScreen
 import com.artaproducciones.ops.ui.modules.EventDetailScreen
 import com.artaproducciones.ops.ui.modules.EventsScreen
 import com.artaproducciones.ops.ui.modules.InicioScreen
 import com.artaproducciones.ops.ui.modules.ModuleNav
+import com.artaproducciones.ops.ui.modules.ModulesStore
 import com.artaproducciones.ops.ui.modules.TaskDetailScreen
 import com.artaproducciones.ops.ui.modules.TasksScreen
 import com.artaproducciones.ops.ui.modules.rememberHaptics
@@ -208,9 +217,31 @@ fun ArtaApp(pendingLink: StateFlow<DeepLink?>, onLinkConsumed: () -> Unit) {
     Box(Modifier.fillMaxSize().screenBackground(LocalArtaTokens.current).entitySwitchVeil(LocalActiveEntity.current)) {
         when (val s = state) {
             Session.State.Loading -> Box(Modifier.fillMaxSize())
-            Session.State.SignedOut -> LoginScreen()
-            is Session.State.SignedIn -> SignedInNav(s.user, pendingLink, onLinkConsumed)
+            Session.State.SignedOut -> {
+                // Lo que quedó en memoria de la sesión anterior (o del demo) no se asoma en la siguiente.
+                LaunchedEffect(Unit) { ModulesStore.clear() }
+                LoginScreen()
+            }
+            is Session.State.SignedIn -> DemoFrame { SignedInNav(s.user, pendingLink, onLinkConsumed) }
         }
+    }
+}
+
+/**
+ * Explorando con datos de muestra desde la entrada: pastilla fija arriba con «Salir» y la app
+ * debajo (no encima: no tapa barras, botones ni el campo del chat). Con los extras de las capturas
+ * de tienda no se enseña.
+ */
+@Composable
+private fun DemoFrame(content: @Composable () -> Unit) {
+    if (!DemoMode.enteredFromLogin) {
+        content()
+        return
+    }
+    Column(Modifier.fillMaxSize()) {
+        DemoBanner(onExit = Session::exitDemo, modifier = Modifier.statusBarsPadding())
+        // La pastilla ya libra la barra de estado: las pantallas de abajo no la vuelven a sumar.
+        Box(Modifier.weight(1f).consumeWindowInsets(WindowInsets.statusBars)) { content() }
     }
 }
 
@@ -343,14 +374,20 @@ private fun SignedInNav(user: UserDto, pendingLink: StateFlow<DeepLink?>, onLink
                 navArgument("title") { type = NavType.StringType; defaultValue = "" },
             ),
         ) { entry ->
-            ArtaWebScreen(
-                path = entry.arguments?.getString("path").orEmpty().ifBlank { "/dashboard" },
-                title = entry.arguments?.getString("title")?.takeIf { it.isNotBlank() },
-                nav = moduleNav,
-                resolveNative = { path ->
-                    DeepLink.parse(path)?.takeIf { it.isNative }?.let { target -> { go(target) } }
-                },
-            )
+            val title = entry.arguments?.getString("title")?.takeIf { it.isNotBlank() }
+            // Modo demo: no hay sesión que compartir con el panel web; se explica en vez de cargarlo.
+            if (DemoMode.isActive) {
+                DemoWebUnavailableScreen(title = title, onBack = moduleNav::back)
+            } else {
+                ArtaWebScreen(
+                    path = entry.arguments?.getString("path").orEmpty().ifBlank { "/dashboard" },
+                    title = title,
+                    nav = moduleNav,
+                    resolveNative = { path ->
+                        DeepLink.parse(path)?.takeIf { it.isNative }?.let { target -> { go(target) } }
+                    },
+                )
+            }
         }
         // Rutas literales de chat: van antes de "chat/{channelId}" y la coincidencia exacta gana.
         composable("chat/buscar") {

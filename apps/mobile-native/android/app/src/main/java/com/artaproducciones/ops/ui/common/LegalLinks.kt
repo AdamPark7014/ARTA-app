@@ -16,6 +16,9 @@ object LegalLinks {
     const val DELETE_ACCOUNT = "https://artaproducciones.com/legal/eliminar-cuenta"
     const val SUPPORT = "https://artaproducciones.com/legal/soporte"
 
+    /** Cómo contrata ARTA una productora o un recinto (vía pública de alta, como en iOS). */
+    const val CONTRACT = "https://artaproducciones.com/contratar"
+
     /**
      * Abre [url] en el navegador del sistema y no en la vista web de la app:
      * son páginas públicas y no deben cargar con la cookie de sesión.

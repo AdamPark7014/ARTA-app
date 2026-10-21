@@ -111,3 +111,23 @@ URL: https://artaproducciones.com/legal/eliminar-cuenta (pública, sin iniciar s
 ## 7. Orden
 1. Crear la app (§2) → 2. Prueba interna con el `.aab` (§3) → 3. Probar en teléfonos del equipo →
 4. Si se quiere en Play visible: ficha (§4) y contenido (§5) → prueba cerrada → producción.
+
+## 8. Modo demo y textos de plataforma (desde 1.0.1, a la par de iOS `34c9258`)
+
+ARTA es una plataforma para productoras y recintos, no la app de una sola empresa. Desde la 1.0.1 la build de
+Play hace lo mismo que la de App Store:
+
+- **Entrada**: debajo de «Entrar», el botón «Explorar ARTA con datos de muestra» abre la app completa con datos
+  ficticios, sin cuenta ni red (`app/src/main/.../demo/`, fixtures de `apps/mobile-native/demo/fixtures` dentro
+  del AAB, con las fechas movidas al día de hoy). Debajo, «¿Tu organización aún no usa ARTA? Conoce cómo
+  contratarlo» abre https://artaproducciones.com/contratar en el navegador.
+- **En el demo**: pastilla fija arriba «Modo demo · datos de muestra» con «Salir» (vuelve a la entrada y olvida lo
+  que se cambió); sin socket, sin registro de push y sin el diálogo de permiso de avisos; lo que abriría el
+  panel web (módulos de «Más», «En la web» del evento, enlaces de avisos) enseña «Disponible con una cuenta de
+  tu organización». En Más, «Cerrar sesión» pasa a «Salir del modo demo».
+- **Permiso de avisos**: se pide después de iniciar sesión con una cuenta real (antes salía en la entrada).
+- **Revisión (§5.1)**: además de la cuenta de revisión, Play puede revisar con el botón de demo.
+- **Capturas de la ficha**: siguen saliendo de la variante debug con extras (`--ez arta_demo true`,
+  `arta_demo_tab`…; ver `demo/DemoLaunch.kt`), sin pastilla. La build de tienda ignora esos extras.
+- **Pendiente en la ficha**: los textos que aún digan «equipo de Arta Producciones» pasan a «tu organización»,
+  como la descripción de `IOS-APP-STORE.md` §7.

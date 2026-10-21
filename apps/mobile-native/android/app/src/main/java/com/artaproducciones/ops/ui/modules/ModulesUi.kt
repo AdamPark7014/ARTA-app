@@ -487,17 +487,21 @@ fun SectionTitle(
         modifier.fillMaxWidth().heightIn(min = 40.dp).padding(start = 20.dp, end = 12.dp, top = 10.dp, bottom = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
-            text.uppercase(ES_MX),
-            style = ArtaType.Cap,
-            color = if (alert) ArtaColors.Danger else ArtaColors.Tertiary,
-            modifier = Modifier.weight(1f, fill = false).semantics { heading() },
-        )
-        if (count != null) {
-            Spacer(Modifier.width(8.dp))
-            QuietCount(count)
+        // La etiqueta toma todo el espacio libre (no la mitad, que la partía en dos renglones sin
+        // necesidad) y lo de la derecha queda siempre pegado al borde.
+        Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text.uppercase(ES_MX),
+                style = ArtaType.Cap,
+                color = if (alert) ArtaColors.Danger else ArtaColors.Tertiary,
+                modifier = Modifier.weight(1f, fill = false).semantics { heading() },
+            )
+            if (count != null) {
+                Spacer(Modifier.width(8.dp))
+                QuietCount(count)
+            }
         }
-        Spacer(Modifier.weight(1f))
+        Spacer(Modifier.width(8.dp))
         trailing()
     }
 }

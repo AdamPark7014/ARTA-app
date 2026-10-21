@@ -245,7 +245,8 @@ fun TaskFormSheet(
 
             error?.let { Text(it, color = ArtaColors.Danger) }
 
-            Button(onClick = { save() }, enabled = !saving, modifier = Modifier.fillMaxWidth()) {
+            // Apagado a propósito mientras falta el título, como «Entrar» en la entrada.
+            Button(onClick = { save() }, enabled = !saving && title.isNotBlank(), modifier = Modifier.fillMaxWidth()) {
                 if (saving) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = ArtaColors.OnAccent)
                 else Text(if (editing) "Guardar cambios" else "Crear tarea")
             }

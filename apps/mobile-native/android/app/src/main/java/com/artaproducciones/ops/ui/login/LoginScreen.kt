@@ -14,12 +14,14 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
@@ -33,6 +35,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -62,6 +65,7 @@ import com.artaproducciones.ops.ui.theme.ArtaType
 import com.artaproducciones.ops.ui.theme.Button
 import com.artaproducciones.ops.ui.theme.LocalArtaTokens
 import com.artaproducciones.ops.ui.theme.Nunito
+import com.artaproducciones.ops.ui.theme.OutlinedButton
 import com.artaproducciones.ops.ui.theme.TextButton
 import kotlinx.coroutines.launch
 import java.util.Locale
@@ -69,7 +73,8 @@ import java.util.Locale
 /**
  * Entrada (sin sesión la app es ARTA, papel y tinta), igual que iOS: logotipo con «La experiencia
  * del Show», tarjeta con «Inicia sesión» y los campos rotulados, la acción principal en el acento
- * (apagada a propósito mientras falta algo) y el aviso de privacidad y los términos al pie.
+ * (apagada a propósito mientras falta algo), debajo «Explorar ARTA con datos de muestra» (modo demo,
+ * sin cuenta) con el enlace a cómo contratarla, y el aviso de privacidad y los términos al pie.
  * Centrada en la pantalla; con el teclado arriba se encoge y se desplaza.
  */
 @Composable
@@ -84,6 +89,7 @@ fun LoginScreen() {
     var showPassword by rememberSaveable { mutableStateOf(false) }
     var busy by rememberSaveable { mutableStateOf(false) }
     var error by rememberSaveable { mutableStateOf<String?>(null) }
+    var enteringDemo by remember { mutableStateOf(false) }
 
     fun apply(result: Session.LoginResult) {
         busy = false
@@ -130,7 +136,7 @@ fun LoginScreen() {
             ) {
                 Image(
                     painter = painterResource(R.drawable.arta_logo),
-                    contentDescription = "Arta Producciones",
+                    contentDescription = "ARTA",
                     colorFilter = ColorFilter.tint(t.text),
                     modifier = Modifier.height(64.dp),
                 )
@@ -228,6 +234,22 @@ fun LoginScreen() {
                         ) { Text("Usar otra cuenta", color = ArtaColors.Muted) }
                     }
                 }
+
+                Spacer(Modifier.height(20.dp))
+                DemoEntry(
+                    enabled = !busy && !enteringDemo,
+                    onExplore = {
+                        if (!enteringDemo) {
+                            error = null
+                            enteringDemo = true
+                            scope.launch {
+                                Session.enterDemo()
+                                enteringDemo = false
+                            }
+                        }
+                    },
+                    onContract = { LegalLinks.open(context, LegalLinks.CONTRACT) },
+                )
             }
 
             // Play pide que el aviso de privacidad se pueda leer antes de entrar: discreto pero
@@ -241,6 +263,40 @@ fun LoginScreen() {
                 Text("·", color = ArtaColors.Tertiary, style = MaterialTheme.typography.bodySmall)
                 LegalLink("Términos") { LegalLinks.open(context, LegalLinks.TERMS) }
             }
+        }
+    }
+}
+
+/**
+ * Para quien aún no tiene cuenta (y para la revisión de las tiendas): la app entera con datos
+ * ficticios, sin cuenta ni conexión (`Session.enterDemo`). Debajo, cómo contratarla.
+ */
+@Composable
+private fun DemoEntry(enabled: Boolean, onExplore: () -> Unit, onContract: () -> Unit) {
+    Column(
+        Modifier.fillMaxWidth(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        OutlinedButton(onClick = onExplore, enabled = enabled, modifier = Modifier.fillMaxWidth().height(48.dp)) {
+            Icon(Icons.Outlined.AutoAwesome, contentDescription = null, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(8.dp))
+            Text("Explorar ARTA con datos de muestra", fontWeight = FontWeight.SemiBold)
+        }
+        Text(
+            "Sin cuenta ni conexión. Datos ficticios de una productora de ejemplo.",
+            color = ArtaColors.Tertiary,
+            style = MaterialTheme.typography.bodySmall,
+            textAlign = TextAlign.Center,
+        )
+        TextButton(onClick = onContract) {
+            Text(
+                "¿Tu organización aún no usa ARTA? Conoce cómo contratarlo",
+                color = ArtaColors.Muted,
+                style = MaterialTheme.typography.bodySmall.copy(textDecoration = TextDecoration.Underline),
+                fontWeight = FontWeight.SemiBold,
+                textAlign = TextAlign.Center,
+            )
         }
     }
 }

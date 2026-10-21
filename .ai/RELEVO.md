@@ -1,12 +1,35 @@
 # RELEVO
 
-- **Último turno:** cursor
-- **Fecha:** 2026-10-12
+- **Último turno:** claude-code
+- **Fecha:** 2026-10-21
 - **Rama:** main
   (Adam es el único programador).
 - **Producción:** `34c9258` desplegado desde `main` el 2026-10-19 ~17:40 UTC (antes `ec45283` del 2026-10-12 ~05:40 UTC (bundle `495c11d..main` +
   `update.sh --no-pull`, log `/root/arta-deploy-20261012-pulido.log`; respaldo automático en `/root/arta-backups/`).
   El servidor ya está en el historial nuevo: el bundle incremental hace fast-forward.
+
+## Turno claude-code (2026-10-21): Android a la par de iOS para la 1.0.1 (EXEC-PACKET cerrado)
+
+Ejecutó Claude (agente) el `.ai/EXEC-PACKET.md` «Android a la par de iOS». **Nada subido a Play ni desplegado**;
+versionCode/versionName, firma y `gradle.properties` sin tocar (siguen 3 / 1.0.0).
+- **Demo en la build de tienda**: `app/src/main/java/.../demo/` (`DemoMode` con estado en tiempo de ejecución,
+  `DemoInterceptor` primero en la cadena de OkHttp, `DemoStore` + `DemoClock` que mueve las fechas de las fixtures
+  a hoy como iOS, `DemoLaunch` con los extras de capturas solo en debug). Fuera `ApiDebugHooks`, el
+  `DemoProvider` y el manifiesto de debug. Fixtures en todas las variantes (`sourceSets["main"]`, sin el `.mjs`).
+- **Entrada**: «Explorar ARTA con datos de muestra» (`Session.enterDemo`) y «¿Tu organización aún no usa ARTA?
+  Conoce cómo contratarlo» → `/contratar`. **En el demo**: pastilla arriba «Modo demo · datos de muestra» con
+  «Salir» (`Session.exitDemo`, olvida lo cambiado); sin socket, push ni permiso de avisos; la vista web y «Abrir
+  en el navegador» enseñan «Disponible con una cuenta de tu organización»; en Más «Salir del modo demo».
+- **Permiso de avisos**: ahora se pide tras iniciar sesión con cuenta real (como iOS), ya no en la entrada.
+- **Pulido**: `SectionTitle` (las etiquetas largas se partían en dos y los totales cortos quedaban a media fila)
+  y «Crear tarea» apagado sin título.
+- **Verificado**: `assembleDebug testDebugUnitTest` 45/45; `:app:assembleRelease` OK (preflight; 54 fixtures en el
+  APK). Emulador con la copia **`com.artaproducciones.ops.demo101`** (la `.redesign` tiene abierta una sesión real
+  y no se cerró): demo desde la entrada, las dos entidades (doble toque en Inicio), avisos web,
+  «Salir» → entrada; 0 líneas de OkHttp y 0 sockets del uid durante el demo; los extras `--ez arta_demo true`
+  siguen abriendo sin pastilla. Capturas en `.ai/scratch/android-1.0.1/` (01–26).
+- **Siguiente (Claude cabeza)**: AAB 1.0.1 (versionCode 4), subirlo a Play y cambiar la ficha a «tu organización»
+  (`docs/store/PLAY-STORE.md` §8).
 
 ## Turno claude-code (2026-10-19, mediodía): ARTA sigue pública — modo demo en tienda, /contratar y ficha nueva
 

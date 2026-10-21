@@ -6,9 +6,9 @@ import android.provider.Settings
 import android.util.Log
 import com.artaproducciones.ops.BuildConfig
 import com.artaproducciones.ops.data.api.ApiClient
-import com.artaproducciones.ops.data.api.ApiDebugHooks
 import com.artaproducciones.ops.data.api.RegisterPushBody
 import com.artaproducciones.ops.data.api.RemovePushBody
+import com.artaproducciones.ops.demo.DemoMode
 import com.google.firebase.FirebaseApp
 import com.google.firebase.messaging.FirebaseMessaging
 import kotlinx.coroutines.CoroutineScope
@@ -39,8 +39,8 @@ object PushRegistration {
     }
 
     fun registerAsync(context: Context, known: String? = null) {
-        // Modo demo (solo debug): la cuenta es ficticia, el teléfono no se da de alta.
-        if (!available || ApiDebugHooks.demo) return
+        // Modo demo: la cuenta es ficticia, el teléfono no se da de alta.
+        if (!available || DemoMode.isActive) return
         val app = context.applicationContext
         scope.launch {
             runCatching {
@@ -56,7 +56,7 @@ object PushRegistration {
     }
 
     suspend fun unregister(context: Context) {
-        if (!available || ApiDebugHooks.demo) return
+        if (!available || DemoMode.isActive) return
         val token = prefs(context).getString(KEY_TOKEN, null) ?: return
         runCatching { ApiClient.api.removePush(RemovePushBody(token)) }
             .onFailure { Log.w(TAG, "No se dio de baja el token: ${it.message}") }

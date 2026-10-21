@@ -2,7 +2,6 @@ package com.artaproducciones.ops.data
 
 import android.content.Context
 import com.artaproducciones.ops.data.api.ApiClient
-import com.artaproducciones.ops.data.api.ApiDebugHooks
 import com.artaproducciones.ops.data.api.LoginBody
 import com.artaproducciones.ops.data.api.LoginResponse
 import com.artaproducciones.ops.data.api.UserDto
@@ -10,6 +9,7 @@ import com.artaproducciones.ops.data.api.VerifyLoginBody
 import com.artaproducciones.ops.data.api.WebSessionBridge
 import com.artaproducciones.ops.data.api.userMessage
 import com.artaproducciones.ops.data.realtime.RealtimeClient
+import com.artaproducciones.ops.demo.DemoMode
 import com.artaproducciones.ops.push.ArtaPushRenderer
 import com.artaproducciones.ops.push.PushRegistration
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -51,11 +51,10 @@ object Session {
 
     /** Al abrir la app: con cookie guardada se confirma con `/auth/me`; sin red se usa el último usuario. */
     suspend fun restore() {
-        // Solo debug: el modo demo entra directo con el usuario de las fixtures (sin cookie ni login).
-        if (ApiDebugHooks.demo) {
-            runCatching { ApiClient.api.me().user }
-                .onSuccess { signedIn(it) }
-                .onFailure { _state.value = State.SignedOut }
+        // Modo demo por extras de arranque (capturas de tienda, solo debug): dentro como la persona
+        // de las fixtures, sin cookie ni login.
+        if (DemoMode.isActive) {
+            demoSignIn()
             return
         }
         if (!ApiClient.hasSession()) {
@@ -70,6 +69,37 @@ object Session {
         } catch (e: Exception) {
             cachedUser()?.let { signedIn(it) } ?: run { _state.value = State.SignedOut }
         }
+    }
+
+    /**
+     * Botón «Explorar ARTA con datos de muestra» (pantalla de entrada): la app entera con datos
+     * ficticios, sin cuenta ni red. No guarda nada ni abre socket/push; «Salir» de la pastilla o
+     * «Cerrar sesión» vuelven a la entrada ([exitDemo]).
+     */
+    suspend fun enterDemo() {
+        DemoMode.activateFromLogin()
+        demoSignIn()
+    }
+
+    /** Dentro como la persona de `fixtures/auth__me.json` (lo contesta el interceptor del demo). */
+    private suspend fun demoSignIn() {
+        runCatching { ApiClient.api.me().user }
+            .onSuccess { signedIn(it) }
+            .onFailure {
+                DemoMode.deactivate()
+                _state.value = State.SignedOut
+            }
+    }
+
+    /**
+     * «Salir» del modo demo: se apaga, se olvida lo que se cambió en él y vuelve a la entrada. La
+     * sesión real que hubiera guardada en el teléfono no se toca.
+     */
+    fun exitDemo() {
+        if (!DemoMode.isActive) return
+        ActiveEntity.reset()
+        _state.value = State.SignedOut
+        DemoMode.deactivate()
     }
 
     suspend fun login(email: String, password: String): LoginResult =
@@ -98,9 +128,9 @@ object Session {
 
     private fun signedIn(user: UserDto) {
         // Antes del estado: la primera pantalla ya pide con la entidad (y el color) de esta persona.
-        ActiveEntity.bind(user, save = !ApiDebugHooks.demo)
+        ActiveEntity.bind(user, save = !DemoMode.isActive)
         // Modo demo: la sesión ficticia vive solo en memoria; no pisa la guardada ni abre socket/push.
-        if (ApiDebugHooks.demo) {
+        if (DemoMode.isActive) {
             _state.value = State.SignedIn(user)
             return
         }
@@ -123,6 +153,11 @@ object Session {
     }
 
     suspend fun logout() {
+        // Modo demo: nada que dar de baja en el servidor; solo apagar el demo.
+        if (DemoMode.isActive) {
+            exitDemo()
+            return
+        }
         // Primero la baja del token: después ya no hay cookie para autorizarla.
         withTimeoutOrNull(5_000) { PushRegistration.unregister(app) }
         withTimeoutOrNull(5_000) { runCatching { ApiClient.api.logout() } }
@@ -132,17 +167,16 @@ object Session {
     /** 401 del API: la sesión se venció o se revocó en «Sesiones» de la web. */
     fun expire() {
         if (_state.value is State.SignedOut) return
+        if (DemoMode.isActive) {
+            exitDemo()
+            return
+        }
         clearLocal()
     }
 
     private fun clearLocal() {
         // La entidad elegida queda guardada por usuario; solo se vuelve al dorado de la pantalla de entrada.
         ActiveEntity.reset()
-        // Modo demo: «Cerrar sesión» no borra la sesión real que hubiera guardada en el teléfono.
-        if (ApiDebugHooks.demo) {
-            _state.value = State.SignedOut
-            return
-        }
         RealtimeClient.disconnect()
         ApiClient.cookies.clear()
         WebSessionBridge.clear()

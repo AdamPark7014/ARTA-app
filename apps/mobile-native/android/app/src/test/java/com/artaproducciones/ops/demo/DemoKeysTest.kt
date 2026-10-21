@@ -6,6 +6,9 @@ import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
 
 class DemoKeysTest {
     private val base = "https://arta.artaproducciones.com/api/".toHttpUrl()
@@ -82,5 +85,38 @@ class DemoEntitiesTest {
     fun objectsAreNotFiltered() {
         val raw = """{"total":4}"""
         assertEquals(raw, DemoEntities.filter("chat/unread", raw, "EXPLANADA", ::eventEntity))
+    }
+}
+
+class DemoClockTest {
+    private val mx = ZoneId.of("America/Mexico_City")
+
+    @Test
+    fun recordingIsTheLatestNoticeOrChat() {
+        val notices = """[{"createdAt":"2026-10-05T00:33:40.463Z"},{"createdAt":null}]"""
+        val chats = """[{"lastMessageAt":"2026-10-05T00:53:40.463Z"}]"""
+        assertEquals(
+            Instant.parse("2026-10-05T00:53:40.463Z"),
+            DemoClock.latest(listOf(notices to "createdAt", chats to "lastMessageAt", null to "createdAt")),
+        )
+        assertNull(DemoClock.latest(listOf(null to "createdAt", "{}" to "createdAt")))
+    }
+
+    @Test
+    fun offsetCountsLocalCalendarDays() {
+        // 00:53 UTC del 5 es todavía el 4 en México: a 21 son 17 días.
+        val recorded = Instant.parse("2026-10-05T00:53:40.463Z")
+        assertEquals(17L, DemoClock.dayOffset(recorded, LocalDate.of(2026, 10, 21), mx))
+        assertEquals(0L, DemoClock.dayOffset(null, LocalDate.of(2026, 10, 21), mx))
+    }
+
+    @Test
+    fun shiftMovesInstantsAndDaysKeepingTheFormat() {
+        val raw = """{"dueAt":"2026-10-05T01:08:40.463Z","at":"2026-10-04T18:00:00Z","date":"2026-10-29","name":"Gira 2026-10-29 x"}"""
+        assertEquals(
+            """{"dueAt":"2026-10-22T01:08:40.463Z","at":"2026-10-21T18:00:00Z","date":"2026-11-15","name":"Gira 2026-10-29 x"}""",
+            DemoClock.shift(raw, 17, mx),
+        )
+        assertEquals(raw, DemoClock.shift(raw, 0, mx))
     }
 }

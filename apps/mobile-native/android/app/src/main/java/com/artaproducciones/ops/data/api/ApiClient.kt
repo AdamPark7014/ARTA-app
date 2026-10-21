@@ -3,6 +3,7 @@ package com.artaproducciones.ops.data.api
 import android.content.Context
 import android.os.Build
 import com.artaproducciones.ops.BuildConfig
+import com.artaproducciones.ops.demo.DemoMode
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -65,8 +66,8 @@ object ApiClient {
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
             .writeTimeout(60, TimeUnit.SECONDS)
-            // Solo debug (modo demo); en release la lista está vacía.
-            .apply { ApiDebugHooks.interceptors.forEach { addInterceptor(it) } }
+            // Modo demo: primero de la cadena; apagado deja pasar todo, encendido nada sale a la red.
+            .addInterceptor(DemoMode.interceptor(context))
             .addInterceptor { chain ->
                 val req = chain.request()
                 val builder = req.newBuilder().header("User-Agent", userAgent)

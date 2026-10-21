@@ -3,7 +3,6 @@ package com.artaproducciones.ops.demo
 import android.content.Context
 import android.util.Log
 import com.artaproducciones.ops.data.api.ApiClient
-import com.artaproducciones.ops.data.api.ApiDebugHooks
 import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.Interceptor
@@ -22,9 +21,9 @@ import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 
 /**
- * Solo debug, modo demo (ver [DemoLaunch]): contesta TODO lo que pase por el OkHttp de la app
- * sin tocar la red. Es el primero de la cadena, así que con el modo encendido nunca se llama
- * a `chain.proceed`.
+ * Modo demo (ver [DemoMode]): contesta TODO lo que pase por el OkHttp de la app sin tocar la
+ * red. Es el primero de la cadena, así que con el modo encendido nunca se llama a
+ * `chain.proceed`; apagado, deja pasar la petición tal cual.
  *
  * - GET del API → fixture por clave exacta (ruta + `entity`/`scope`), luego sin `scope`, luego
  *   sin `entity`, luego sin query. Con `?entity=` y una fixture grabada sin entidad, la lista se
@@ -42,7 +41,7 @@ internal class DemoInterceptor(context: Context) : Interceptor {
 
     override fun intercept(chain: Interceptor.Chain): Response {
         val request = chain.request()
-        if (!ApiDebugHooks.demo) return chain.proceed(request)
+        if (!DemoMode.isActive) return chain.proceed(request)
 
         val path = DemoKeys.apiPath(request.url, base)
         if (path == null) {
@@ -57,6 +56,12 @@ internal class DemoInterceptor(context: Context) : Interceptor {
         }.onFailure { Log.w(TAG, "$method $path", it) }.getOrNull()
         if (body == null) Log.i(TAG, "sin datos: $method $path")
         return respond(request, if (body != null) 200 else 404, (body ?: NOT_FOUND).toResponseBody(JSON))
+    }
+
+    /** Al salir del demo: mensajes, tareas y archivos de esta sesión se olvidan. */
+    fun reset() = synchronized(this) {
+        store.clear()
+        uploads.clear()
     }
 
     private fun respond(request: Request, code: Int, body: okhttp3.ResponseBody): Response = Response.Builder()

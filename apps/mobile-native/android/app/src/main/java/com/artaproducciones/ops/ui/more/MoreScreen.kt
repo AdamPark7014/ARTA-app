@@ -87,11 +87,14 @@ import com.artaproducciones.ops.data.ActiveEntity
 import com.artaproducciones.ops.data.Session
 import com.artaproducciones.ops.data.api.ApiClient
 import com.artaproducciones.ops.data.api.UserDto
+import com.artaproducciones.ops.demo.DemoMode
 import com.artaproducciones.ops.push.PushRegistration
 import com.artaproducciones.ops.ui.chat.ModerationText
 import com.artaproducciones.ops.ui.common.Avatar
 import com.artaproducciones.ops.ui.common.EntitySelector
 import com.artaproducciones.ops.ui.common.LegalLinks
+import com.artaproducciones.ops.ui.demo.DEMO_WEB_DETAIL
+import com.artaproducciones.ops.ui.demo.DEMO_WEB_TITLE
 import com.artaproducciones.ops.ui.modules.ModuleNav
 import com.artaproducciones.ops.ui.theme.ArtaColors
 import com.artaproducciones.ops.ui.theme.ArtaType
@@ -313,6 +316,8 @@ fun MoreScreen(user: UserDto, nav: ModuleNav) {
     var loggingOut by remember { mutableStateOf(false) }
     var dndUntil by remember { mutableStateOf<OffsetDateTime?>(null) }
     var dndDialog by remember { mutableStateOf(false) }
+    var demoWebNotice by remember { mutableStateOf(false) }
+    val demo = DemoMode.isActive
 
     LaunchedEffect(Unit) {
         runCatching { chatPrefs(null) }.getOrNull()?.let { dndUntil = it }
@@ -418,21 +423,37 @@ fun MoreScreen(user: UserDto, nav: ModuleNav) {
                 icon = Icons.AutoMirrored.Outlined.OpenInNew,
                 label = "Abrir en el navegador",
                 onClick = {
-                    runCatching {
-                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(ApiClient.origin + "/dashboard")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                    // Modo demo: el panel pediría iniciar sesión; se explica en vez de abrirlo.
+                    if (demo) {
+                        demoWebNotice = true
+                    } else {
+                        runCatching {
+                            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(ApiClient.origin + "/dashboard")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                        }
                     }
                 },
             )
         }
         item(key = "logout") {
-            MoreRow(
-                icon = Icons.AutoMirrored.Outlined.Logout,
-                label = if (loggingOut) "Cerrando sesión…" else "Cerrar sesión",
-                tint = ArtaColors.Danger,
-                textColor = ArtaColors.Danger,
-                chevron = false,
-                onClick = { if (!loggingOut) confirmLogout = true },
-            )
+            if (demo) {
+                // Sin sesión que cerrar: sale del modo demo de una vez, como «Salir» de la pastilla.
+                MoreRow(
+                    icon = Icons.AutoMirrored.Outlined.Logout,
+                    label = "Salir del modo demo",
+                    supporting = "Vuelve a la pantalla de entrada",
+                    chevron = false,
+                    onClick = Session::exitDemo,
+                )
+            } else {
+                MoreRow(
+                    icon = Icons.AutoMirrored.Outlined.Logout,
+                    label = if (loggingOut) "Cerrando sesión…" else "Cerrar sesión",
+                    tint = ArtaColors.Danger,
+                    textColor = ArtaColors.Danger,
+                    chevron = false,
+                    onClick = { if (!loggingOut) confirmLogout = true },
+                )
+            }
         }
 
         // Política de datos de Play: privacidad, términos y borrado de cuenta a
@@ -494,6 +515,21 @@ fun MoreScreen(user: UserDto, nav: ModuleNav) {
                 }) { Text("Cerrar sesión", color = ArtaColors.Danger) }
             },
             dismissButton = { TextButton(onClick = { confirmLogout = false }) { Text("Cancelar") } },
+        )
+    }
+
+    if (demoWebNotice) {
+        AlertDialog(
+            onDismissRequest = { demoWebNotice = false },
+            title = { Text(DEMO_WEB_TITLE) },
+            text = { Text(DEMO_WEB_DETAIL) },
+            confirmButton = { TextButton(onClick = { demoWebNotice = false }) { Text("Entendido") } },
+            dismissButton = {
+                TextButton(onClick = {
+                    demoWebNotice = false
+                    LegalLinks.open(context, LegalLinks.CONTRACT)
+                }) { Text("Cómo contratar ARTA") }
+            },
         )
     }
 

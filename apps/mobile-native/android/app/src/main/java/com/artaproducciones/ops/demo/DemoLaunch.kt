@@ -2,17 +2,19 @@ package com.artaproducciones.ops.demo
 
 import android.content.Intent
 import android.util.Log
-import com.artaproducciones.ops.data.api.ApiDebugHooks
 import com.artaproducciones.ops.ui.DeepLink
 import com.artaproducciones.ops.ui.Tab
 
 /**
- * Solo debug: extras de arranque del modo demo (capturas de tienda sin login ni red).
+ * Extras de arranque del modo demo (capturas de tienda sin login ni red). Solo los atiende la
+ * variante debug (`MainActivity` lo comprueba con `BuildConfig.DEBUG`): en la de tienda cualquier
+ * app podría mandarlos, y ahí el demo se abre con el botón de la entrada.
  *
  *   adb shell am start -S -n com.artaproducciones.ops/.MainActivity --ez arta_demo true --es arta_demo_tab chats
  *
- * - `arta_demo` (boolean): enciende el modo demo para toda la vida del proceso. Solo cuenta en el
- *   primer arranque del proceso (`-S` lo reinicia): a media sesión real mezclaría datos de los dos.
+ * - `arta_demo` (boolean): enciende el modo demo sin pastilla (hasta «Cerrar sesión» en Más). Solo
+ *   cuenta en el primer arranque del proceso (`-S` lo reinicia): a media sesión real mezclaría datos
+ *   de los dos.
  * - `arta_demo_tab`: home | chats | tasks | notifications | more | approvals | events
  *   (también inicio, tareas, avisos, mas, aprobaciones, eventos).
  * - `arta_demo_channel` / `arta_demo_task` / `arta_demo_event`: abre esa conversación, tarea o evento.
@@ -37,13 +39,13 @@ object DemoLaunch {
         if (first) {
             first = false
             if (wants) {
-                ApiDebugHooks.demo = true
+                DemoMode.activateFromLaunch()
                 Log.i(TAG, "Modo demo encendido: datos de assets/fixtures, sin red")
             }
-        } else if (wants && !ApiDebugHooks.demo) {
+        } else if (wants && !DemoMode.isActive) {
             Log.w(TAG, "arta_demo se ignora con la app ya abierta: arranca con `am start -S`")
         }
-        if (!ApiDebugHooks.demo) return null
+        if (!DemoMode.isActive) return null
         return linkFrom(intent)
     }
 

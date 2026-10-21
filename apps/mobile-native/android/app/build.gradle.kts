@@ -83,9 +83,10 @@ android {
         }
     }
 
-    // Solo debug: las fixtures del modo demo (capturas de tienda, ver src/debug/.../demo) van
-    // como assets `fixtures/…`. Release no las lleva.
-    sourceSets["debug"].assets.srcDir("../../demo")
+    // Modo demo (ver src/main/.../demo/DemoMode.kt): las fixtures con datos ficticios van como assets
+    // `fixtures/…` en todas las variantes, también la de Play (~120 KB): el botón «Explorar ARTA con
+    // datos de muestra» de la entrada las usa, igual que la build de tienda de iOS.
+    sourceSets["main"].assets.srcDir("../../demo")
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -112,8 +113,8 @@ android {
 }
 
 androidComponents {
-    onVariants(selector().withBuildType("debug")) { variant ->
-        // De `demo/` solo hacen falta los JSON: el script que los graba no entra al APK.
+    onVariants(selector().all()) { variant ->
+        // De `demo/` solo hacen falta los JSON: el script que los graba no entra al APK ni al AAB.
         variant.androidResources.ignoreAssetsPatterns.add("!*.mjs")
     }
 }
