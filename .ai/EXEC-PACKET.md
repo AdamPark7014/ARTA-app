@@ -74,7 +74,7 @@ Claude compila el AAB (versionCode 4 / 1.0.1), lo sube a Play y actualiza la fic
 7. Si `adb devices` muestra un emulador (Claude lo deja encendido), instalar la debug como copia lado a lado
    o la debug normal **solo si no está instalada la de tienda** (`adb shell pm list packages | findstr arta`;
    si está `com.artaproducciones.ops` de tienda, NO desinstalarla: usa
-   `--init-script C:\Users\adpoz\AppData\Local\Temp\claude\C--dev\8a455b4a-d5fc-4181-bfa4-53faac6684d2\scratchpad\pulido-android\tools\redesign-init.gradle`
+   `--init-script C:\dev\apps\ARTA-app\.ai\scratch\redesign-init.gradle`
    que instala `com.artaproducciones.ops.redesign`). El emulador es lento: esperar ~25 s tras abrir. Probar el
    botón de demo desde la entrada (sin el extra), la pastilla y «Salir»; luego la revisión visual del criterio.
    Capturas con `adb exec-out screencap -p > archivo.png` en `.ai/scratch/android-1.0.1/`.
