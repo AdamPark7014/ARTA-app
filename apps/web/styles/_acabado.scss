@@ -2213,3 +2213,28 @@ html[data-entity] .lg .pass-field input.field:focus-visible {
     padding: 8px 0;
   }
 }
+
+/* ═══ 4b. Hoja tipo Excel: la selección conserva el verde de Excel (affordance), pero el botón
+   «+ Concepto» y la guía de primer uso no son decoración verde: acento y tonos neutros del tema. ═══ */
+.sheet-ribbon__btn--primary,
+.sheet-ribbon__btn--primary:hover:not(:disabled) {
+  border-color: transparent;
+  background: var(--accent-fill);
+  color: var(--on-accent);
+}
+
+.sheet-ribbon__btn--primary:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.editor-coach {
+  border: 1px solid var(--line-strong);
+  background: var(--bg-soft);
+  color: var(--text);
+}
+
+.editor-coach__dismiss {
+  border: 1px solid var(--line-strong);
+  background: transparent;
+  color: var(--text);
+}
