@@ -26,8 +26,11 @@ el relevo sigue para trabajos separados). Desde la app de escritorio, `cursor-ag
 - **Google Play**: ficha enviada a revisión el 21-10 12:53 (ícono papel y tinta, gráfico, 6 capturas nuevas de
   `.ai/scratch/play-capturas/`, textos de plataforma **sin** la frase del demo, que se regresa con la 1.0.1).
   **AAB 1.0.1 (código 4)** firmado en `Documents\ARTA-builds\arta-1.0.1-4.aab` (+ `-mapping.txt`): pesa 12.9 MB y
-  `file_upload` de Chrome solo admite 10 MB → **Adam lo sube** en Producción → Crear nueva versión; luego Claude
-  pone notas, envía a revisión y regresa la frase del demo a la descripción.
+  `file_upload` de Chrome solo admite 10 MB → lo subió Adam a mano. **Producción 4 (1.0.1), lanzamiento completo,
+  enviada a revisión el 21-10 ~13:30** (notas: diseño nuevo, «Explorar ARTA con datos de muestra», textos sin
+  cortes); 1 advertencia sin bloqueo (sin símbolos de depuración nativos, igual que la 1.0.0; el mapping de R8
+  pesa 85 MB y no se subió). La descripción enviada a las 12:53 ya incluía la frase del demo (el recorte no se
+  guardó), así que ficha y app quedan coherentes cuando Google apruebe las dos.
 - **iOS**: 1.0.0 (12) sigue `WAITING_FOR_REVIEW` (envío del 19-10). Lleva ya todo el diseño, el ícono y el demo.
 
 ## Turno claude-code (2026-10-21): Android a la par de iOS para la 1.0.1 (EXEC-PACKET cerrado)
