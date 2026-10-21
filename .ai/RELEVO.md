@@ -4,9 +4,31 @@
 - **Fecha:** 2026-10-21
 - **Rama:** main
   (Adam es el único programador).
-- **Producción:** `34c9258` desplegado desde `main` el 2026-10-19 ~17:40 UTC (antes `ec45283` del 2026-10-12 ~05:40 UTC (bundle `495c11d..main` +
-  `update.sh --no-pull`, log `/root/arta-deploy-20261012-pulido.log`; respaldo automático en `/root/arta-backups/`).
-  El servidor ya está en el historial nuevo: el bundle incremental hace fast-forward.
+- **Producción:** `0dbccc0` desplegado desde `main` el 2026-10-21 ~17:20 UTC (bundle `c28eda6..main` +
+  `update.sh --no-pull`, log `/root/arta-deploy-20261021-rodrigo.log`; respaldo automático en `/root/arta-backups/`).
+  `aef8585` (Android) no toca API ni web: no hace falta desplegarlo. Bundles: siempre `<base>..main`, con un hash
+  solo da «Refusing to create empty bundle».
+
+## Turno claude-code (2026-10-21, tarde): cierre del acabado, Rodrigo con correo de Arta, Play
+
+Adam: «no ocupes Cursor, corre todo tú» (regla nueva en `~/.claude/CLAUDE.md` y `C:\dev\.claude\rules\cursor-motor.md`;
+el relevo sigue para trabajos separados). Desde la app de escritorio, `cursor-agent` no corre (integridad de código).
+- **Web** (`c28eda6`, desplegado): revisado en pantalla el acabado de Cursor del 12-10; la hoja tipo Excel
+  (Corrida) ya no usa verde en «+ Concepto» ni en la guía (la selección conserva el verde de Excel).
+- **Rodrigo** (`0dbccc0`, desplegado): `rodrigo@arema.mx` → `rodrigo@artaproducciones.com`, puesto «Supervisión
+  del Auditorio». El seed renombra la cuenta (`RENAMED_EMAILS`), no crea otra: verificado en producción (1 fila,
+  misma contraseña). Nadie más tenía dominio de Arema; Melissa ya no existe (borrada el 28-08).
+- **Credenciales para la compañía**: `Documents\ARTA-credenciales-2026-10-21.{pdf,xlsx,md}` = el de agosto con
+  correos de Arta, sin Melissa ni las secciones internas; **mismas contraseñas** (Adam). Las descripciones por
+  grupo siguen siendo las de agosto (los accesos cambiaron el 11-10): ofrecido actualizarlas.
+- **Compromiso de horarios**: Adam no lo encontraba; ya está desde el 11-10 (Auditorio → evento → Formatos). El
+  .docx que reenvió es idéntico a la plantilla.
+- **Google Play**: ficha enviada a revisión el 21-10 12:53 (ícono papel y tinta, gráfico, 6 capturas nuevas de
+  `.ai/scratch/play-capturas/`, textos de plataforma **sin** la frase del demo, que se regresa con la 1.0.1).
+  **AAB 1.0.1 (código 4)** firmado en `Documents\ARTA-builds\arta-1.0.1-4.aab` (+ `-mapping.txt`): pesa 12.9 MB y
+  `file_upload` de Chrome solo admite 10 MB → **Adam lo sube** en Producción → Crear nueva versión; luego Claude
+  pone notas, envía a revisión y regresa la frase del demo a la descripción.
+- **iOS**: 1.0.0 (12) sigue `WAITING_FOR_REVIEW` (envío del 19-10). Lleva ya todo el diseño, el ícono y el demo.
 
 ## Turno claude-code (2026-10-21): Android a la par de iOS para la 1.0.1 (EXEC-PACKET cerrado)
 
