@@ -74,6 +74,10 @@ Adam: «Quiero mantener ARTA pública en App Store: aplica los cambios de produc
   Resolution Center. **12:09: Adam autorizó enviar sin video**: texto B publicado y «Volver a enviar» pulsado →
   **1.0.0 (12) «Pendiente de revisión»** (envío `c1da1a8a…`). Nada que hacer hasta que Apple conteste; si vuelve
   3.2, plan B = distribución sin listar (`docs/store/RESPUESTA-APPLE-3.2.md`).
+- **22-10 (claude-code): APROBADA Y PUBLICADA.** Apple aceptó la 1.0.0 (12) con el texto B (sin video); la
+  versión está en `READY_FOR_DISTRIBUTION` (lanzamiento automático) y la ficha pública ya responde:
+  https://apps.apple.com/mx/app/id6819117925. iOS y Android en tienda. Pendiente solo la paridad Android del
+  demo y los textos de Play (tarjeta propuesta).
 - **ASC** (ya guardado por la API interna): texto promocional, descripción, URL de marketing
   (`/contratar`) y notas de revisión nuevos (textos en `docs/store/IOS-APP-STORE.md` §7). Falta: elegir el
   build 12, re-adjuntar el video de revisión (el adjunto está vacío), «Actualizar revisión», responder con el
