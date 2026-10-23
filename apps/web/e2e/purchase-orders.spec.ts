@@ -61,11 +61,12 @@ async function openOcs(
 }
 
 test.describe('Órdenes de compra · el comprobante', () => {
+  // Junta 23-10-2026: el estado dice qué falta («Autorizada · sin comprobante»),
+  // no solo «Por pagar». Sin `state` del API, el panel lo arma con el estatus.
   test('en efectivo no se pide comprobante y se puede pagar', async ({ page, baseURL }) => {
     await openOcs(page, baseURL!, [po({ paymentMethod: 'EFECTIVO' })]);
 
-    await expect(page.getByText('Lista para pagar')).toBeVisible();
-    await expect(page.getByText(/En efectivo no se pide comprobante/i)).toBeVisible();
+    await expect(page.getByRole('cell', { name: 'Autorizada · sin pagar' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Marcar pagada' })).toBeEnabled();
   });
 
@@ -75,10 +76,12 @@ test.describe('Órdenes de compra · el comprobante', () => {
   }) => {
     await openOcs(page, baseURL!, [po({ paymentMethod: 'TRANSFERENCIA' })]);
 
-    await expect(page.getByText('Falta el comprobante')).toBeVisible();
-    await expect(page.getByText(/sube el comprobante/i)).toBeVisible();
+    await expect(page.getByRole('cell', { name: 'Autorizada · sin comprobante' })).toBeVisible();
     // El botón no está: antes estaba deshabilitado y sin motivo a la vista.
     await expect(page.getByRole('button', { name: 'Marcar pagada' })).toHaveCount(0);
+    // Al abrirla, el detalle dice qué falta y qué hacer.
+    await page.getByRole('button', { name: 'Comprobante' }).click();
+    await expect(page.getByText(/Falta el comprobante: súbelo/i)).toBeVisible();
   });
 
   test('con el comprobante arriba ya se puede pagar', async ({ page, baseURL }) => {
@@ -89,15 +92,88 @@ test.describe('Órdenes de compra · el comprobante', () => {
       }),
     ]);
 
-    await expect(page.getByText('Lista para pagar')).toBeVisible();
+    await expect(page.getByRole('cell', { name: 'Autorizada · sin pagar' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Marcar pagada' })).toBeEnabled();
   });
 
   test('mientras no la autoricen, la orden espera', async ({ page, baseURL }) => {
     await openOcs(page, baseURL!, [po({ status: 'PENDING_AUTH' })]);
 
-    await expect(page.getByText('Falta autorizar')).toBeVisible();
+    await expect(page.getByRole('cell', { name: 'Sin autorizar' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Marcar pagada' })).toHaveCount(0);
+  });
+
+  test('el texto del API manda: fuera de día de cobro se dice tal cual', async ({ page, baseURL }) => {
+    await openOcs(page, baseURL!, [
+      po({
+        paymentMethod: 'EFECTIVO',
+        state: {
+          key: 'off_pay_day',
+          label: 'Fuera de día de cobro',
+          missing: 'Se paga mañana',
+          hint: 'Lista para pagar. En efectivo no se pide comprobante; hoy no es día de cobro: se marca pagada mañana.',
+          tone: 'waiting',
+          section: 'pay',
+        },
+      }),
+    ]);
+
+    await expect(page.getByRole('cell', { name: 'Fuera de día de cobro' })).toBeVisible();
+  });
+
+  test('chips por estado con su cuenta, y filtran', async ({ page, baseURL }) => {
+    await openOcs(page, baseURL!, [
+      po({ id: 'po-1', vendorName: 'Audio Puebla', paymentMethod: 'TRANSFERENCIA' }),
+      po({ id: 'po-2', vendorName: 'Luces Centro', paymentMethod: 'TRANSFERENCIA' }),
+      po({
+        id: 'po-3',
+        vendorName: 'Catering Sol',
+        paymentMethod: 'TRANSFERENCIA',
+        proofs: [{ id: 'pf-1', fileUrl: '/uploads/spei.pdf', label: 'SPEI', amount: 18000 }],
+      }),
+    ]);
+
+    const chips = page.getByRole('group', { name: 'Filtrar por lo que le falta' });
+    await expect(chips.getByRole('button', { name: /Autorizada · sin comprobante\s*2/ })).toBeVisible();
+    await chips.getByRole('button', { name: /Autorizada · sin pagar\s*1/ }).click();
+    await expect(page.getByRole('button', { name: /^Catering Sol/ })).toBeVisible();
+    await expect(page.getByRole('button', { name: /^Audio Puebla/ })).toHaveCount(0);
+  });
+});
+
+test.describe('Órdenes de compra · torre', () => {
+  const row = (over: Record<string, unknown>) => ({
+    id: 'po-1',
+    eventId: 'evt-e2e-1',
+    eventName: 'Noche de Bandas',
+    eventStatus: 'ACTIVE',
+    rubro: 'audio',
+    vendorName: 'Audio Puebla',
+    paymentMethod: 'TRANSFERENCIA',
+    proofCount: 0,
+    status: 'AUTHORIZED',
+    amount: 18000,
+    ageDays: 2,
+    ...over,
+  });
+
+  test('?estado= abre la torre filtrada por lo que falta', async ({ page, baseURL }) => {
+    await seedSession(page, baseURL!);
+    await mockAuthenticatedApi(page, {
+      '/analytics/purchase-orders': {
+        orders: [
+          row({ id: 'po-1', vendorName: 'Audio Puebla' }),
+          row({ id: 'po-2', vendorName: 'Luces Centro', proofCount: 1 }),
+          row({ id: 'po-3', vendorName: 'Catering Sol', status: 'PENDING_AUTH' }),
+        ],
+      },
+    });
+    await page.goto('/purchase-orders?estado=no_proof');
+
+    await expect(page.getByRole('button', { name: /Autorizada · sin comprobante\s*1/, pressed: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: /^Audio Puebla/ })).toBeVisible();
+    await expect(page.getByRole('button', { name: /^Luces Centro/ })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /^Catering Sol/ })).toHaveCount(0);
   });
 });
 

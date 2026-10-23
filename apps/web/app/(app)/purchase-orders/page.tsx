@@ -7,19 +7,26 @@ import { PageHeader } from '@/components/ui/PageChrome';
 import { LoadingBlock } from '@/components/ui/LoadingBlock';
 import { EmptyLite, Pill, quietTone, Seg, Tile } from '@/components/ui/Lite';
 import { PayDaysNote } from '@/components/purchase-orders/PoWindowBanner';
+import { PoStateChips } from '@/components/purchase-orders/PoStateChips';
 import { PoDetail } from '@/components/events/EventPurchaseOrdersPanel';
 import type { Po } from '@/components/events/event-detail.types';
 import { api } from '@/lib/api';
 import { mxn } from '@/lib/price-list';
 import { payBlockedLabel, payDaysLabel, usePoWindow } from '@/lib/po-window';
 import {
+  isPoStateKey,
   poInSection,
   poIsPending,
   poNeedsProof,
+  poSectionOfState,
   poSectionOptions,
   poSectionStats,
-  poStatusPill,
+  poStateChips,
+  poStatePill,
+  poStateView,
   type PoSection,
+  type PoStateKey,
+  type PoStateView,
 } from '@/lib/po-payment';
 import { poRubroLabel } from '@/lib/po-rubro';
 import { useUser } from '@/lib/user-context';
@@ -39,6 +46,8 @@ type PoRow = {
   withIva?: boolean | null;
   proofCount?: number;
   status: string;
+  /** Qué le falta (API `po-state.ts`): «Autorizada · sin comprobante». */
+  state?: PoStateView | null;
   amount: number;
   ageDays: number;
   createdAt?: string;
@@ -82,12 +91,22 @@ export default function PurchaseOrdersPage() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [section, setSection] = useState<PoSection | null>(null);
+  /** Filtro por estado preciso (chips); `?estado=no_proof` lo trae puesto desde el inicio. */
+  const [stateFilter, setStateFilter] = useState<PoStateKey | null>(null);
+  /** `?po=<id>`: el aviso lleva a la orden; se abre en cuanto carga la lista. */
+  const [linkedPo, setLinkedPo] = useState<string | null>(null);
   const [q, setQ] = useState('');
   const [openId, setOpenId] = useState<string | null>(null);
   const [details, setDetails] = useState<Record<string, Po>>({});
   const [loadingDetail, setLoadingDetail] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ text: string; tone: 'ok' | 'error' } | null>(null);
+
+  /** Cambiar de sección quita el chip si ese estado no vive en ella. */
+  function pickSection(k: PoSection) {
+    setSection(k);
+    setStateFilter((cur) => (cur && k !== 'all' && poSectionOfState(cur) !== k ? null : cur));
+  }
 
   async function load() {
     try {
@@ -106,9 +125,30 @@ export default function PurchaseOrdersPage() {
     setRows(null);
     setSection(null);
     setOpenId(null);
+    // Sin `useSearchParams` (pide Suspense en el build): la URL se lee una vez al entrar.
+    const params = new URLSearchParams(window.location.search);
+    const estado = params.get('estado');
+    if (isPoStateKey(estado)) {
+      setStateFilter(estado);
+      setSection(poSectionOfState(estado));
+    } else {
+      setStateFilter(null);
+    }
+    setLinkedPo(params.get('po'));
     load().catch(console.error);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [entity]);
+
+  useEffect(() => {
+    if (!linkedPo || !rows) return;
+    const row = rows.find((r) => r.id === linkedPo);
+    setLinkedPo(null);
+    if (!row) return;
+    setStateFilter(null);
+    setSection('all');
+    openDetail(row).catch(console.error);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [linkedPo, rows]);
 
   useEffect(() => {
     if (!notice) return;
@@ -119,10 +159,14 @@ export default function PurchaseOrdersPage() {
   const stats = useMemo(() => poSectionStats(rows ?? []), [rows]);
   const current: PoSection = section ?? (stats.auth.count > 0 ? 'auth' : 'all');
 
+  const inSection = useMemo(() => (rows ?? []).filter((r) => poInSection(r.status, current)), [rows, current]);
+  /** Chips: qué le falta a las órdenes de esta sección, con cuántas hay en cada estado. */
+  const chips = useMemo(() => poStateChips(inSection.map((r) => poStateView(r))), [inSection]);
+
   const visible = useMemo(() => {
     const n = q.trim().toLowerCase();
-    return (rows ?? [])
-      .filter((r) => poInSection(r.status, current))
+    return inSection
+      .filter((r) => !stateFilter || poStateView(r).key === stateFilter)
       .filter(
         (r) =>
           !n ||
@@ -130,7 +174,7 @@ export default function PurchaseOrdersPage() {
           (r.vendorName || '').toLowerCase().includes(n) ||
           poRubroLabel(r.rubro).toLowerCase().includes(n),
       );
-  }, [rows, current, q]);
+  }, [inSection, stateFilter, q]);
 
   /** Trae las órdenes del evento (con partidas y comprobantes) y las guarda por id. */
   async function fetchEventOrders(eventId: string) {
@@ -271,20 +315,20 @@ export default function PurchaseOrdersPage() {
                 label="Por autorizar"
                 value={stats.auth.count}
                 sub={stats.auth.amount > 0 ? moneyKpi(stats.auth.amount) : 'Nada pendiente'}
-                onClick={() => setSection('auth')}
+                onClick={() => pickSection('auth')}
               />
               <Tile
                 label="Por pagar"
                 value={moneyKpi(stats.pay.amount)}
                 sub={plural(stats.pay.count)}
                 tone="accent"
-                onClick={() => setSection('pay')}
+                onClick={() => pickSection('pay')}
               />
               <Tile
                 label="Pagadas"
                 value={moneyKpi(stats.paid.amount)}
                 sub={plural(stats.paid.count)}
-                onClick={() => setSection('paid')}
+                onClick={() => pickSection('paid')}
               />
             </div>
 
@@ -294,7 +338,7 @@ export default function PurchaseOrdersPage() {
                 value={current}
                 options={poSectionOptions(stats)}
                 onChange={(k) => {
-                  setSection(k);
+                  pickSection(k);
                   setOpenId(null);
                 }}
               />
@@ -307,6 +351,10 @@ export default function PurchaseOrdersPage() {
                 aria-label="Buscar órdenes"
               />
             </div>
+
+            {chips.length > 1 || stateFilter ? (
+              <PoStateChips chips={chips} value={stateFilter} onChange={setStateFilter} />
+            ) : null}
 
             {notice ? (
               <p className={`oc-flash ${notice.tone === 'error' ? 'is-error' : 'is-ok'}`} role="status">
@@ -331,7 +379,8 @@ export default function PurchaseOrdersPage() {
                 <tbody>
                   {visible.map((row) => {
                     const open = openId === row.id;
-                    const pill = poStatusPill(row.status);
+                    const state = poStateView(row);
+                    const pill = poStatePill(state);
                     const waiting = poIsPending(row.status) || row.status === 'AUTHORIZED';
                     const detail = details[row.id];
                     const closedEvent = !!row.eventStatus && CLOSED_EVENT.has(row.eventStatus);
@@ -369,7 +418,7 @@ export default function PurchaseOrdersPage() {
                               <span className="t-muted">—</span>
                             )}
                           </td>
-                          <td>
+                          <td title={state.hint || undefined}>
                             <Pill tone={act ? quietTone(pill.tone) : pill.tone}>{pill.label}</Pill>
                           </td>
                           <td className={`col-act ${act ? '' : 'card-empty'}`} onClick={(e) => e.stopPropagation()}>
@@ -412,7 +461,11 @@ export default function PurchaseOrdersPage() {
                   {!visible.length ? (
                     <tr>
                       <td colSpan={6} className="oc-empty-row">
-                        {q.trim() ? 'Nada coincide con la búsqueda.' : EMPTY_SECTION[current]}
+                        {q.trim()
+                          ? 'Nada coincide con la búsqueda.'
+                          : stateFilter
+                            ? 'Ninguna orden de esta sección está en ese estado.'
+                            : EMPTY_SECTION[current]}
                       </td>
                     </tr>
                   ) : null}

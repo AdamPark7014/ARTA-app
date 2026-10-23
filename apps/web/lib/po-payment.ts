@@ -270,3 +270,137 @@ export function poNextStep(po: {
     tone: 'ready',
   };
 }
+
+/* ── Estado preciso: qué le falta (junta 23-10-2026) ─────────────────────── */
+
+/**
+ * «Por pagar» no decía si faltaba el comprobante, el día de cobro o solo el
+ * clic. El API manda `state` en cada orden (`po-state.ts`, el mismo texto que
+ * ven las apps); aquí solo se elige el tono de la píldora y, si una respuesta
+ * vieja no lo trae, se arma lo mínimo con el estatus.
+ */
+export type PoStateKey =
+  | 'unauthorized'
+  | 'no_proof'
+  | 'unpaid'
+  | 'off_pay_day'
+  | 'paid_no_proof'
+  | 'complete'
+  | 'rejected'
+  | 'cancelled';
+
+export type PoStateView = {
+  key: PoStateKey;
+  /** «Autorizada · sin comprobante» */
+  label: string;
+  /** «Falta el comprobante»; `null` si no falta nada. */
+  missing: string | null;
+  /** Qué hacer y hasta cuándo. */
+  hint: string;
+  tone?: string;
+  section: Exclude<PoSection, 'all'> | null;
+};
+
+export const PO_STATE_ORDER: PoStateKey[] = [
+  'unauthorized',
+  'no_proof',
+  'unpaid',
+  'off_pay_day',
+  'paid_no_proof',
+  'complete',
+  'rejected',
+  'cancelled',
+];
+
+export const PO_STATE_LABELS: Record<PoStateKey, string> = {
+  unauthorized: 'Sin autorizar',
+  no_proof: 'Autorizada · sin comprobante',
+  unpaid: 'Autorizada · sin pagar',
+  off_pay_day: 'Fuera de día de cobro',
+  paid_no_proof: 'Pagada · sin comprobante',
+  complete: 'Pagada · completa',
+  rejected: 'Rechazada',
+  cancelled: 'Cancelada',
+};
+
+/** Tono de `Pill`: lleno solo lo que espera autorización (con botón al lado pasa a contorno). */
+const PO_STATE_TONES: Record<PoStateKey, string> = {
+  unauthorized: 'review',
+  no_proof: 'info',
+  unpaid: 'info',
+  off_pay_day: 'info',
+  paid_no_proof: 'warn',
+  complete: 'paid',
+  rejected: 'danger',
+  cancelled: 'danger',
+};
+
+export function isPoStateKey(v: unknown): v is PoStateKey {
+  return typeof v === 'string' && (PO_STATE_ORDER as string[]).includes(v);
+}
+
+type PoStateSource = {
+  status: string;
+  paymentMethod?: string | null;
+  proofCount?: number;
+  proofs?: unknown[] | null;
+  state?: PoStateView | null;
+};
+
+/** El estado que mandó el API o, si no vino, uno mínimo armado con el estatus (sin días de cobro). */
+export function poStateView(po: PoStateSource): PoStateView {
+  if (po.state && isPoStateKey(po.state.key)) return po.state;
+  const proofs = po.proofCount ?? po.proofs?.length ?? 0;
+  const needsProof = poNeedsProof(po.paymentMethod || 'TRANSFERENCIA');
+  const make = (key: PoStateKey, missing: string | null, hint: string): PoStateView => ({
+    key,
+    label: PO_STATE_LABELS[key],
+    missing,
+    hint,
+    section: poSectionOf(po.status),
+  });
+  switch (po.status) {
+    case 'PENDING_AUTH':
+    case 'DRAFT':
+      return make('unauthorized', 'Falta autorizar', 'Falta autorizar: hasta entonces no se puede pagar.');
+    case 'AUTHORIZED':
+      return needsProof && proofs === 0
+        ? make('no_proof', 'Falta el comprobante', 'Falta el comprobante: súbelo y con eso ya se puede marcar pagada.')
+        : make('unpaid', 'Falta pagar', 'Lista para pagar: márcala pagada en día de cobro.');
+    case 'PAID':
+      return needsProof && proofs === 0
+        ? make('paid_no_proof', 'Falta el comprobante', 'Se marcó pagada sin comprobante: súbelo para cerrarla.')
+        : make('complete', null, 'Pagada. No falta nada.');
+    case 'REJECTED':
+      return make('rejected', null, 'No se autorizó.');
+    case 'CANCELLED':
+      return make('cancelled', null, 'Se dio de baja.');
+    default:
+      return { key: 'unauthorized', label: poStatusPill(po.status).label, missing: null, hint: '', section: null };
+  }
+}
+
+
+/** Píldora del estado preciso; con acción en la fila, el lleno pasa a contorno (un relleno por fila). */
+export function poStatePill(state: PoStateView): { label: string; tone: string } {
+  return { label: state.label, tone: PO_STATE_TONES[state.key] ?? 'draft' };
+}
+
+/** Chips de filtro: estados presentes en la lista, con cuántas órdenes hay en cada uno. */
+export function poStateChips(states: PoStateView[]): Array<{ key: PoStateKey; label: string; count: number }> {
+  const counts = new Map<PoStateKey, number>();
+  for (const s of states) counts.set(s.key, (counts.get(s.key) ?? 0) + 1);
+  return PO_STATE_ORDER.filter((k) => counts.has(k)).map((key) => ({
+    key,
+    label: PO_STATE_LABELS[key],
+    count: counts.get(key) ?? 0,
+  }));
+}
+
+/** Sección de la torre donde vive un estado (para abrir `?estado=` en su pestaña). */
+export function poSectionOfState(key: PoStateKey): PoSection {
+  if (key === 'unauthorized') return 'auth';
+  if (key === 'no_proof' || key === 'unpaid' || key === 'off_pay_day') return 'pay';
+  if (key === 'paid_no_proof' || key === 'complete') return 'paid';
+  return 'all';
+}

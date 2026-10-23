@@ -15,6 +15,7 @@ import { openGeneratedTab } from '@/lib/open-tab';
 import { clearDraft, poHandoffKey, readDraft } from '@/lib/draft-store';
 import { EmptyLite, Pill, quietTone, SectionHead, Seg } from '@/components/ui/Lite';
 import { PayDaysNote } from '@/components/purchase-orders/PoWindowBanner';
+import { PoStateChips } from '@/components/purchase-orders/PoStateChips';
 import { PoProofsBlock } from '@/components/purchase-orders/PoProofsBlock';
 import type { EventPanelProps, Po } from '@/components/events/event-detail.types';
 import { findPrice, mxn, numOrNull, PRICE_LIST } from '@/lib/price-list';
@@ -36,7 +37,10 @@ import {
   poSavedTotals,
   poSectionOptions,
   poSectionStats,
-  poStatusPill,
+  poStateChips,
+  poStatePill,
+  poStateView,
+  type PoStateKey,
   poTotals,
   splitPoDescription,
   type PoPayeeType,
@@ -526,9 +530,16 @@ export function PoDetail({
   ].filter(Boolean);
 
   const showProofs = needsProof && (po.status === 'AUTHORIZED' || po.status === 'PAID' || hasProof);
+  const state = poStateView(po);
 
   return (
     <div className="oc-detail">
+      {state.hint ? (
+        <p className={`oc-next ${state.missing ? 'is-missing' : ''}`}>
+          <span className="oc-next__label">{state.label}</span>
+          <span>{state.hint}</span>
+        </p>
+      ) : null}
       {lines.length ? (
         <table className="oc-mini">
           <thead>
@@ -654,7 +665,11 @@ export function EventPurchaseOrdersPanel({
   /** 'create' · id de la orden · `pdf-<id>` */
   const [busy, setBusy] = useState<string | null>(null);
 
-  const visible = orders.filter((po) => poInSection(po.status, section));
+  /** Chip de estado preciso; se quita al cambiar de sección. */
+  const [stateFilter, setStateFilter] = useState<PoStateKey | null>(null);
+  const inSection = orders.filter((po) => poInSection(po.status, section));
+  const chips = poStateChips(inSection.map((po) => poStateView(po)));
+  const visible = inSection.filter((po) => !stateFilter || poStateView(po).key === stateFilter);
 
   const summary = (() => {
     const parts: string[] = [];
@@ -720,6 +735,7 @@ export function EventPurchaseOrdersPanel({
     if (ok) {
       setCreating(false);
       setSection('auth');
+      setStateFilter(null);
     }
   }
 
@@ -892,8 +908,14 @@ export function EventPurchaseOrdersPanel({
             label="Secciones de órdenes de compra"
             value={section}
             options={poSectionOptions(stats)}
-            onChange={setSection}
+            onChange={(k) => {
+              setSection(k);
+              setStateFilter(null);
+            }}
           />
+          {chips.length > 1 || stateFilter ? (
+            <PoStateChips chips={chips} value={stateFilter} onChange={setStateFilter} />
+          ) : null}
           <div className="dtable-wrap">
             <table className="dtable oc-table">
               <thead>
@@ -913,7 +935,8 @@ export function EventPurchaseOrdersPanel({
                   const open = openId === po.id;
                   const pending = poIsPending(po.status);
                   const editing = editingId === po.id && editable && pending;
-                  const pill = poStatusPill(po.status);
+                  const state = poStateView(po);
+                  const pill = poStatePill(state);
                   const method = po.paymentMethod || 'TRANSFERENCIA';
                   const { paymentOther } = splitPoDescription(po.description);
                   const rowBusy = busy === po.id;
@@ -940,7 +963,7 @@ export function EventPurchaseOrdersPanel({
                         <td className="oc-hide-sm t-muted t-small">{poDateShort(po.createdAt)}</td>
                         <td className="oc-hide-sm t-small">{poPaymentLabel(method, paymentOther)}</td>
                         <td className="num t-money oc-amount">{mxn(Number(po.amount))}</td>
-                        <td>
+                        <td title={state.hint || undefined}>
                           <Pill tone={act ? quietTone(pill.tone) : pill.tone}>{pill.label}</Pill>
                         </td>
                         <td className="col-act" onClick={(e) => e.stopPropagation()}>
@@ -1022,7 +1045,7 @@ export function EventPurchaseOrdersPanel({
                 {!visible.length ? (
                   <tr>
                     <td colSpan={6} className="oc-empty-row">
-                      {EMPTY_SECTION[section]}
+                      {stateFilter ? 'Ninguna orden de esta sección está en ese estado.' : EMPTY_SECTION[section]}
                     </td>
                   </tr>
                 ) : null}

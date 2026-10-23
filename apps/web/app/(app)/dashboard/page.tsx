@@ -34,7 +34,32 @@ type Overview = {
     avgProgress: number;
   }>;
   alerts: Array<{ severity: string; code: string; message: string; href?: string }>;
+  /** OC por estado preciso (`po-state.ts`); un API viejo no lo manda. */
+  poStates?: Array<{ key: string; count: number; amount: number; over7: number; oldestDays: number }>;
 };
+
+/**
+ * Filas de OC en «Esperan tu visto bueno», una por lo que falta (junta 23-10-2026:
+ * «más específicas, como sin pagar, sin tal»). Cada una lleva a la torre ya
+ * filtrada. `who`: quién puede moverla (autoriza o paga); `fill`: hay algo que
+ * hacer hoy (fuera de día de cobro solo se informa).
+ */
+const PO_APPROVAL_ROWS: Array<{
+  key: string;
+  who: 'authorize' | 'pay';
+  title: string;
+  hint: string;
+  status: string;
+  tone: 'fill' | 'line';
+}> = [
+  { key: 'unauthorized', who: 'authorize', title: 'OC sin autorizar', hint: 'esperan tu visto bueno', status: 'Autorizar', tone: 'fill' },
+  { key: 'no_proof', who: 'pay', title: 'OC autorizadas sin comprobante', hint: 'súbelo para poder pagar', status: 'Subir', tone: 'fill' },
+  { key: 'unpaid', who: 'pay', title: 'OC autorizadas sin pagar', hint: 'listas para pagar hoy', status: 'Pagar', tone: 'fill' },
+  { key: 'off_pay_day', who: 'pay', title: 'OC fuera de día de cobro', hint: 'listas; se pagan el próximo día de cobro', status: 'Esperar', tone: 'line' },
+  { key: 'paid_no_proof', who: 'pay', title: 'OC pagadas sin comprobante', hint: 'falta subir el comprobante', status: 'Revisar', tone: 'line' },
+];
+
+const ordenes = (n: number) => `${n} ${n === 1 ? 'orden' : 'órdenes'}`;
 
 type DayEvent = { id: string; name: string; artist?: string | null; startsAt: string; avgProgress: number };
 
@@ -137,6 +162,8 @@ export default function DashboardPage() {
   const eventOps = canAccessEventOps(role, entity);
   const canCreate = eventOps && userHasPermission(role, perms, ['event.create', 'everything']);
   const canSeePo = userHasPermission(role, perms, ['po.authorize', 'po.mark_paid', 'everything']);
+  const canAuthorizePo = userHasPermission(role, perms, ['po.authorize', 'everything']);
+  const canPayPo = userHasPermission(role, perms, ['po.mark_paid', 'everything']);
   const canSeeTasks = useMemo(
     () => (user ? visibleNavItems(user, entity).some((item) => item.href === '/tasks') : false),
     [user, entity],
@@ -184,9 +211,42 @@ export default function DashboardPage() {
   const otherAlerts = (data?.alerts ?? []).filter(
     (a) => !COVERED_ALERTS.has(a.code) && !(a.href && riskIds.has(a.href)),
   );
+  // Con estados precisos, una fila por lo que falta y solo lo que esta persona puede mover.
+  const poRows = data?.poStates
+    ? PO_APPROVAL_ROWS.flatMap((row) => {
+        const st = data.poStates?.find((x) => x.key === row.key);
+        if (!st || st.count === 0) return [];
+        if (row.who === 'authorize' ? !canAuthorizePo : !canPayPo) return [];
+        return [
+          {
+            key: `po-${row.key}`,
+            title: row.title,
+            sub: `${ordenes(st.count)} · ${st.over7 ? `${st.over7} con más de 7 días` : row.hint}`,
+            amount: moneyKpi(st.amount),
+            status: row.status,
+            tone: row.tone,
+            href: `/purchase-orders?estado=${row.key}`,
+          },
+        ];
+      })
+    : null;
+  // «2 sin autorizar · 1 sin comprobante · 3 sin pagar»: qué hay detrás del monto por pagar.
+  const poCount = (keys: string[]) =>
+    (data?.poStates ?? []).filter((x) => keys.includes(x.key)).reduce((n, x) => n + x.count, 0);
+  const poBreakdown = data?.poStates
+    ? [
+        [poCount(['unauthorized']), 'sin autorizar'],
+        [poCount(['no_proof']), 'sin comprobante'],
+        [poCount(['unpaid', 'off_pay_day']), 'sin pagar'],
+      ]
+        .filter(([n]) => (n as number) > 0)
+        .map(([n, label]) => `${n} ${label}`)
+        .join(' · ')
+    : '';
   const approvals = k
     ? [
-        canSeePo && k.poPipelineAmount > 0
+        ...(poRows ?? []),
+        !poRows && canSeePo && k.poPipelineAmount > 0
           ? {
               key: 'po',
               title: 'Órdenes de compra',
@@ -302,7 +362,7 @@ export default function DashboardPage() {
                   <span className="cap">Por pagar</span>
                   <span className="kpi-card__value t-num">{moneyKpi(k.poPipelineAmount)}</span>
                   <span className="kpi-card__detail">
-                    {k.poAgingOver7 ? `${k.poAgingOver7} con más de 7 días` : 'Órdenes de compra'}
+                    {poBreakdown || (k.poAgingOver7 ? `${k.poAgingOver7} con más de 7 días` : 'Órdenes de compra')}
                   </span>
                 </Link>
               ) : null}

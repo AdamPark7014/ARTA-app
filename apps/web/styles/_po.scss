@@ -662,3 +662,57 @@
 .adv-detail__actions {
   margin-top: 0.5rem;
 }
+
+/* ── Estado preciso: qué le falta (junta 23-10-2026) ────────────────────── */
+
+/* Chips por estado con su cuenta, bajo las secciones. Contorno; solo el elegido va lleno. */
+.oc-state-chips {
+  margin-top: -0.25rem;
+}
+
+.chip__count {
+  display: inline-block;
+  min-width: 1.15rem;
+  margin-left: 0.4rem;
+  padding: 0 0.3rem;
+  border-radius: var(--radius-ctl);
+  background: var(--fill-soft);
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 650;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.chip.is-on .chip__count {
+  background: color-mix(in srgb, var(--on-accent) 22%, transparent);
+  color: var(--on-accent);
+}
+
+/* Arriba del detalle: el estado y la frase de qué hacer y hasta cuándo. Texto, sin relleno. */
+.oc-next {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.25rem 0.6rem;
+  margin: 0 0 0.75rem;
+  color: var(--muted);
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+
+.oc-next__label {
+  color: var(--text);
+  font-weight: 650;
+}
+
+.oc-next.is-missing .oc-next__label::before {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 0.4rem;
+  border-radius: 50%;
+  background: var(--warn);
+  vertical-align: 0.12em;
+}
