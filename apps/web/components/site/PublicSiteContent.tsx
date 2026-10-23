@@ -4,19 +4,12 @@ import { HeroCarousel } from '@/components/site/HeroCarousel';
 import { SiteHeader } from '@/components/site/SiteHeader';
 import { VenueMap } from '@/components/site/VenueMap';
 import { panelLoginUrl } from '@/lib/domains';
-import { FALLBACK_SLIDES, type PublicSiteData } from '@/lib/public-site-data';
-import { PUBLIC_FAQ } from '@/lib/site-seo';
-
-const CONTACT = {
-  email: process.env.NEXT_PUBLIC_CONTACT_EMAIL || 'contacto@artaproducciones.com',
-  phone: process.env.NEXT_PUBLIC_CONTACT_PHONE?.trim() || '',
-  city: process.env.NEXT_PUBLIC_CITY || 'Puebla',
-  state: process.env.NEXT_PUBLIC_STATE || 'Puebla',
-};
-
-const VENUE_ADDRESS =
-  process.env.NEXT_PUBLIC_VENUE_ADDRESS ||
-  'Auditorio Arema Explanada, Puebla, Puebla, México';
+import {
+  FALLBACK_MODULE_TILES,
+  FALLBACK_SLIDES,
+  type PublicSiteData,
+} from '@/lib/public-site-data';
+import { CONTACT, PUBLIC_FAQ, VENUE_ADDRESS, socialProfiles } from '@/lib/site-seo';
 
 type PublicSiteContentProps = {
   data: PublicSiteData;
@@ -33,6 +26,8 @@ export function PublicSiteContent({ data }: PublicSiteContentProps) {
   const panelLogin = panelLoginUrl('ARTA');
   const newsItems = news;
   const carouselSlides = slides.length ? slides : FALLBACK_SLIDES;
+  // Los mismos perfiles que declara el JSON-LD (`sameAs`): si no se ven aquí, no se publican allá.
+  const socials = socialProfiles();
 
   return (
     <div className="site site-arta">
@@ -82,14 +77,7 @@ export function PublicSiteContent({ data }: PublicSiteContentProps) {
             'Desde el rider hasta el cierre: formatos editables, firmas digitales y control financiero.'}
         </p>
         <div className="site-grid">
-          {(
-            mods?.tiles || [
-              { title: 'Producción', body: 'Riders, plantas de luz, stage hands y minuto a minuto.' },
-              { title: 'Hospitality', body: 'Hospedaje, transporte, catering y camerinos.' },
-              { title: 'Comercial', body: 'Boletera, patrocinios, artes y campaña autorizada.' },
-              { title: 'Cierre', body: 'Corrida financiera, anticipos y firmas entregado / autorizado.' },
-            ]
-          ).map((t) => (
+          {(mods?.tiles?.length ? mods.tiles : FALLBACK_MODULE_TILES).map((t) => (
             <div className="site-tile" key={t.title}>
               <h3>{t.title}</h3>
               <p>{t.body}</p>
@@ -205,7 +193,7 @@ export function PublicSiteContent({ data }: PublicSiteContentProps) {
 
       <footer className="site-footer-pro">
         <div className="site-footer-brand">
-          <Image src="/brand/arta-logo.png" alt="arta" width={120} height={48} />
+          <Image src="/brand/arta-logo.png" alt="Arta Producciones" width={120} height={67} />
           <p>“La experiencia del Show”</p>
         </div>
         <div className="site-footer-cols">
@@ -224,8 +212,12 @@ export function PublicSiteContent({ data }: PublicSiteContentProps) {
           </div>
           <div>
             <div className="label">Equipo</div>
-            <a href={panelLogin}>Acceso al panel</a>
-            <a href={panelLoginUrl('EXPLANADA')}>Panel Auditorio</a>
+            <a href={panelLogin} rel="nofollow">
+              Acceso al panel
+            </a>
+            <a href={panelLoginUrl('EXPLANADA')} rel="nofollow">
+              Panel Auditorio
+            </a>
           </div>
           <div>
             <div className="label">Contacto</div>
@@ -235,6 +227,16 @@ export function PublicSiteContent({ data }: PublicSiteContentProps) {
               {CONTACT.city}, {CONTACT.state}
             </span>
           </div>
+          {socials.length ? (
+            <div>
+              <div className="label">Redes</div>
+              {socials.map((p) => (
+                <a key={p.url} href={p.url} target="_blank" rel="noopener noreferrer me">
+                  {p.label}
+                </a>
+              ))}
+            </div>
+          ) : null}
         </div>
         <div className="site-footer-bottom">
           <span>© {new Date().getFullYear()} arta PRODUCCIONES</span>

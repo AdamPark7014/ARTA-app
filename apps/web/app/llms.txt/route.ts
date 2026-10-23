@@ -16,12 +16,14 @@ export async function GET() {
 - Feed RSS: ${base}/p/arta/feed.xml
 - FAQ: ${base}/p/arta#faq
 - Contacto: ${base}/p/arta#contacto
+- Contratar la plataforma ARTA: ${base}/contratar
+- Aviso de privacidad: ${base}/legal/privacidad
 - Sitemap: ${base}/sitemap.xml
 
 ## Entity
 
 - Name: ${SITE_NAME}
-- Alternate: ARTA, Arta Producciones S.A. de C.V.
+- Alternate: ARTA
 - Location: Puebla, Puebla, México
 - Venue ally: Auditorio Arema Explanada
 - Contact: ${CONTACT_EMAIL}

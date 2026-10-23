@@ -27,12 +27,11 @@ export function NewsArticleView({ post }: NewsArticleViewProps) {
   return (
     <div className="site site-arta">
       <SiteHeader mode="article" />
-      <article className="site-section news-article" itemScope itemType="https://schema.org/NewsArticle">
+      <article className="site-section news-article">
         <div className="news-article__inner">
           <time
             className="muted news-article__date"
             dateTime={post.publishedAt || undefined}
-            itemProp="datePublished"
           >
             {post.publishedAt
               ? new Date(post.publishedAt).toLocaleDateString('es-MX', {
@@ -42,24 +41,18 @@ export function NewsArticleView({ post }: NewsArticleViewProps) {
                 })
               : ''}
           </time>
-          <h1 className="news-article__title" itemProp="headline">
-            {post.title}
-          </h1>
+          <h1 className="news-article__title">{post.title}</h1>
           {post.excerpt ? (
-            <p className="lead news-article__excerpt" itemProp="description">
-              {post.excerpt}
-            </p>
+            <p className="lead news-article__excerpt">{post.excerpt}</p>
           ) : null}
           {post.coverUrl ? (
             <div className="news-article__cover">
               {/* eslint-disable-next-line @next/next/no-img-element -- URL dinámica de Studio */}
-              <img src={post.coverUrl} alt={post.title} itemProp="image" />
+              <img src={post.coverUrl} alt={post.title} width={1280} height={720} decoding="async" />
             </div>
           ) : null}
           {post.body ? (
-            <div className="article-prose" itemProp="articleBody">
-              {post.body}
-            </div>
+            <div className="article-prose">{post.body}</div>
           ) : null}
         </div>
       </article>

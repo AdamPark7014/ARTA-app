@@ -1,5 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { JsonLd } from '@/components/seo/JsonLd';
+import { buildPublicMetadata, simplePageGraphJsonLd } from '@/lib/site-seo';
 import styles from '../legal.module.css';
 import {
   APP_NAME,
@@ -11,16 +13,23 @@ import {
   PUBLISHER_PHONE_HREF,
 } from '../legal-data';
 
-export const metadata: Metadata = {
-  title: 'Soporte',
+const PAGE = {
+  path: '/legal/soporte',
+  name: `Soporte de la app ${APP_NAME}`,
   description: `Ayuda con la aplicación ${APP_NAME}: acceso, notificaciones y contacto.`,
-  alternates: { canonical: '/legal/soporte' },
 };
+
+export const metadata: Metadata = buildPublicMetadata({
+  title: PAGE.name,
+  description: PAGE.description,
+  path: PAGE.path,
+});
 
 /** URL de soporte que pide App Store Connect. */
 export default function SoportePage() {
   return (
     <main>
+      <JsonLd data={simplePageGraphJsonLd(PAGE)} />
       <p className={styles.eyebrow}>Ayuda</p>
       <h1 className={styles.title}>Soporte de {APP_NAME}</h1>
 

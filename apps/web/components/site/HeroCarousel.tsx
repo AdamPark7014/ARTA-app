@@ -58,9 +58,9 @@ export function HeroCarousel({ slides, hero }: HeroCarouselProps) {
       <div className="hero-content">
         <Image
           src="/brand/arta-logo.png"
-          alt="arta"
+          alt="Arta Producciones"
           width={200}
-          height={80}
+          height={111}
           className="hero-logo"
           priority
         />

@@ -1,5 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { JsonLd } from '@/components/seo/JsonLd';
+import { buildPublicMetadata, simplePageGraphJsonLd } from '@/lib/site-seo';
 import styles from '../legal.module.css';
 import {
   APP_ID,
@@ -15,15 +17,22 @@ import {
   PUBLISHER_SHORT,
 } from '../legal-data';
 
-export const metadata: Metadata = {
-  title: 'Aviso de Privacidad',
-  description: `Aviso de privacidad de la aplicación ${APP_NAME} y del panel de operación de ${ORGANIZATION}.`,
-  alternates: { canonical: '/legal/privacidad' },
+const PAGE = {
+  path: '/legal/privacidad',
+  name: `Aviso de privacidad de la app ${APP_NAME}`,
+  description: `Aviso de privacidad de la aplicación ${APP_NAME} y del panel de operación de ${ORGANIZATION}: qué datos se tratan, para qué y cómo ejercer tus derechos ARCO.`,
 };
+
+export const metadata: Metadata = buildPublicMetadata({
+  title: PAGE.name,
+  description: PAGE.description,
+  path: PAGE.path,
+});
 
 export default function PrivacidadPage() {
   return (
     <main>
+      <JsonLd data={simplePageGraphJsonLd(PAGE)} />
       <p className={styles.eyebrow}>Legal</p>
       <h1 className={styles.title}>Aviso de Privacidad</h1>
       <p className={styles.updated}>Última actualización: {LEGAL_UPDATED}</p>

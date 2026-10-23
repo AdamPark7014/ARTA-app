@@ -1,5 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { JsonLd } from '@/components/seo/JsonLd';
+import { buildPublicMetadata, simplePageGraphJsonLd } from '@/lib/site-seo';
 import styles from '../legal.module.css';
 import {
   APP_ID,
@@ -14,17 +16,24 @@ import {
   PUBLISHER_PHONE_HREF,
 } from '../legal-data';
 
-export const metadata: Metadata = {
-  title: 'Eliminar cuenta',
+const PAGE = {
+  path: '/legal/eliminar-cuenta',
+  name: `Eliminar tu cuenta de ${APP_NAME}`,
   description: `Cómo dar de baja tu cuenta de ${APP_NAME} y qué pasa con lo que creaste.`,
-  alternates: { canonical: '/legal/eliminar-cuenta' },
 };
+
+export const metadata: Metadata = buildPublicMetadata({
+  title: PAGE.name,
+  description: PAGE.description,
+  path: PAGE.path,
+});
 
 const SUBJECT = encodeURIComponent(`Eliminación de cuenta ${APP_NAME}`);
 
 export default function EliminarCuentaPage() {
   return (
     <main>
+      <JsonLd data={simplePageGraphJsonLd(PAGE)} />
       <p className={styles.eyebrow}>Legal</p>
       <h1 className={styles.title}>Eliminar cuenta</h1>
       <p className={styles.updated}>Última actualización: {LEGAL_UPDATED}</p>

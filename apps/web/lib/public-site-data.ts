@@ -1,4 +1,6 @@
-import { apiBase, type PublicNewsPost } from './site-seo';
+import type { PublicNewsPost } from './site-seo';
+
+const apiBase = () => process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 
 export type PublicSiteTile = { title: string; body: string };
 export type PublicSiteStat = { label: string; text: string };
@@ -22,6 +24,7 @@ export type PublicSiteContent = {
 export type PublicSitePage = {
   sectionKey: string;
   contentJson: PublicSiteContent;
+  updatedAt?: string | null;
 };
 
 export type PublicSiteSlide = {
@@ -31,6 +34,7 @@ export type PublicSiteSlide = {
   imageUrl: string;
   ctaLabel?: string | null;
   ctaHref?: string | null;
+  updatedAt?: string | null;
 };
 
 export type PublicSiteNewsItem = {
@@ -39,6 +43,7 @@ export type PublicSiteNewsItem = {
   excerpt?: string | null;
   coverUrl?: string | null;
   publishedAt?: string | null;
+  updatedAt?: string | null;
   slug: string;
 };
 
@@ -73,6 +78,14 @@ export const FALLBACK_SLIDES: PublicSiteSlide[] = [
     ctaLabel: 'Noticias',
     ctaHref: '#noticias',
   },
+];
+
+/** Tarjetas de `#modulos` cuando Studio no trae las suyas (la página y el JSON-LD usan las mismas). */
+export const FALLBACK_MODULE_TILES: PublicSiteTile[] = [
+  { title: 'Producción', body: 'Riders, plantas de luz, stage hands y minuto a minuto.' },
+  { title: 'Hospitality', body: 'Hospedaje, transporte, catering y camerinos.' },
+  { title: 'Comercial', body: 'Boletera, patrocinios, artes y campaña autorizada.' },
+  { title: 'Cierre', body: 'Corrida financiera, anticipos y firmas entregado / autorizado.' },
 ];
 
 /** Server fetch for SSR public site (Studio CMS). */

@@ -55,9 +55,9 @@ export function SiteHeader({ mode = 'home' }: SiteHeaderProps) {
         <Link href={homeHref} className="site-brand" onClick={closeMenu}>
           <Image
             src="/brand/arta-logo.png"
-            alt="arta"
+            alt="Arta Producciones"
             width={140}
-            height={56}
+            height={78}
             className="site-logo-img"
             priority
           />
@@ -98,7 +98,7 @@ export function SiteHeader({ mode = 'home' }: SiteHeaderProps) {
           <a href={`${homeHref}#contacto`} className="btn ghost btn-sm" onClick={closeMenu}>
             Contacto
           </a>
-          <a href={panelLogin} className="btn btn-sm site-nav-panel">
+          <a href={panelLogin} className="btn btn-sm site-nav-panel" rel="nofollow">
             Acceso equipo
           </a>
         </nav>

@@ -1,5 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { JsonLd } from '@/components/seo/JsonLd';
+import { buildPublicMetadata, simplePageGraphJsonLd } from '@/lib/site-seo';
 import styles from '../legal.module.css';
 import {
   APP_NAME,
@@ -13,15 +15,22 @@ import {
   PUBLISHER_SHORT,
 } from '../legal-data';
 
-export const metadata: Metadata = {
-  title: 'Términos de uso',
+const PAGE = {
+  path: '/legal/terminos',
+  name: `Términos de uso de la app ${APP_NAME}`,
   description: `Términos de uso de la aplicación ${APP_NAME} y del panel de operación de ${ORGANIZATION}.`,
-  alternates: { canonical: '/legal/terminos' },
 };
+
+export const metadata: Metadata = buildPublicMetadata({
+  title: PAGE.name,
+  description: PAGE.description,
+  path: PAGE.path,
+});
 
 export default function TerminosPage() {
   return (
     <main>
+      <JsonLd data={simplePageGraphJsonLd(PAGE)} />
       <p className={styles.eyebrow}>Legal</p>
       <h1 className={styles.title}>Términos de uso</h1>
       <p className={styles.updated}>Última actualización: {LEGAL_UPDATED}</p>

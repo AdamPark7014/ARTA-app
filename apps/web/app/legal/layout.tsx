@@ -2,8 +2,8 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import styles from './legal.module.css';
 
+/** Cada página arma sus metadatos completos (título, canonical, Open Graph) con `buildPublicMetadata`. */
 export const metadata: Metadata = {
-  openGraph: { type: 'website', locale: 'es_MX', siteName: 'ARTA' },
   robots: { index: true, follow: true },
 };
 

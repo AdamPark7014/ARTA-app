@@ -1,5 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { JsonLd } from '@/components/seo/JsonLd';
+import { buildPublicMetadata, simplePageGraphJsonLd } from '@/lib/site-seo';
 import LegalLayout from '../legal/layout';
 import styles from '../legal/legal.module.css';
 import {
@@ -12,12 +14,18 @@ import {
   PUBLISHER_SHORT,
 } from '../legal/legal-data';
 
-export const metadata: Metadata = {
-  title: 'Contratar ARTA',
+const PAGE = {
+  path: '/contratar',
+  name: 'Contratar ARTA para tu productora o recinto',
   description:
     'ARTA para productoras de eventos y recintos: tareas, chat por evento, aprobaciones, anticipos y formatos. Solicita el espacio de tu organización.',
-  alternates: { canonical: '/contratar' },
 };
+
+export const metadata: Metadata = buildPublicMetadata({
+  title: PAGE.name,
+  description: PAGE.description,
+  path: PAGE.path,
+});
 
 const NEXARA_CONTACT_URL = 'https://nexara.com.mx/contacto';
 const MAIL_SUBJECT = encodeURIComponent(`Quiero ${APP_NAME} para mi organización`);
@@ -30,6 +38,7 @@ export default function ContratarPage() {
   return (
     <LegalLayout>
       <main>
+        <JsonLd data={simplePageGraphJsonLd(PAGE)} />
         <p className={styles.eyebrow}>Contratar</p>
         <h1 className={styles.title}>{APP_NAME} para tu productora o recinto</h1>
 

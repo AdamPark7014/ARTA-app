@@ -2,16 +2,31 @@ import { NextRequest, NextResponse } from 'next/server';
 import {
   ENTITY_COOKIE,
   HANDOFF_PARAM,
+  ROOT_DOMAIN,
   SESSION_COOKIE,
   entityFromHost,
   isPublicPath,
   safePanelPath,
 } from '@/lib/domains';
 
+/** Paneles fuera de Google: también cubre /p, /legal y /login servidos en arta.* y auditorio.*. */
+function panelNoIndex<T extends NextResponse>(response: T, isPanelHost: boolean): T {
+  if (isPanelHost) response.headers.set('X-Robots-Tag', 'noindex, nofollow');
+  return response;
+}
+
 export function middleware(request: NextRequest) {
   const { pathname, searchParams } = request.nextUrl;
   const hostname = request.headers.get('host') || '';
   const hostEntity = entityFromHost(hostname);
+
+  // www → dominio raíz (permanente): una sola versión del sitio para buscadores y enlaces.
+  if (hostname.toLowerCase().split(':')[0] === `www.${ROOT_DOMAIN}`) {
+    return NextResponse.redirect(
+      new URL(`${pathname}${request.nextUrl.search}`, `https://${ROOT_DOMAIN}`),
+      308,
+    );
+  }
 
   const requestHeaders = new Headers(request.headers);
   if (hostEntity) {
@@ -22,7 +37,7 @@ export function middleware(request: NextRequest) {
   if (hostEntity && pathname === '/') {
     const url = request.nextUrl.clone();
     url.pathname = '/dashboard';
-    return NextResponse.redirect(url);
+    return panelNoIndex(NextResponse.redirect(url), true);
   }
 
   // Apex / www: la raíz siempre es el sitio público (no panel).
@@ -55,11 +70,11 @@ export function middleware(request: NextRequest) {
       loginUrl.pathname = '/login';
       loginUrl.search = '';
       loginUrl.searchParams.set('next', safePanelPath(pathname + (request.nextUrl.search || '')));
-      return NextResponse.redirect(loginUrl);
+      return panelNoIndex(NextResponse.redirect(loginUrl), true);
     }
   }
 
-  return response;
+  return panelNoIndex(response, Boolean(hostEntity));
 }
 
 export const config = {
