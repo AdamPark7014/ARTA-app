@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 
-import { mockAuthenticatedApi, seedSession } from './support/mock-api';
+import { mockAuthenticatedApi, seedSession, TEST_OVERVIEW } from './support/mock-api';
 
 /**
  * Órdenes de compra: en efectivo no hay comprobante.
@@ -205,5 +205,36 @@ test.describe('Órdenes de compra · crear', () => {
 
     await page.getByLabel('Forma de pago').selectOption('EFECTIVO');
     await expect(page.getByText(/no se pide comprobante/i).first()).toBeVisible();
+  });
+});
+
+test.describe('Órdenes de compra · inicio', () => {
+  test('«Esperan tu visto bueno» trae una fila por lo que falta y lleva a la torre filtrada', async ({
+    page,
+    baseURL,
+  }) => {
+    await seedSession(page, baseURL!);
+    await mockAuthenticatedApi(page, {
+      '/analytics/overview': {
+        ...TEST_OVERVIEW,
+        poStates: [
+          { key: 'unauthorized', count: 2, amount: 54000, over7: 1, oldestDays: 9 },
+          { key: 'no_proof', count: 1, amount: 18000, over7: 0, oldestDays: 2 },
+          { key: 'complete', count: 3, amount: 64000, over7: 0, oldestDays: 20 },
+        ],
+      },
+    });
+    await page.goto('/dashboard');
+
+    const panel = page.locator('section[aria-labelledby="home-approvals"]');
+    await expect(panel.getByRole('link', { name: /OC sin autorizar/ })).toHaveAttribute(
+      'href',
+      '/purchase-orders?estado=unauthorized',
+    );
+    await expect(panel.getByRole('link', { name: /OC autorizadas sin comprobante/ })).toBeVisible();
+    await expect(panel.getByText('2 órdenes · 1 con más de 7 días')).toBeVisible();
+    // Lo pagado y completo no espera a nadie.
+    await expect(panel.getByText(/completa/i)).toHaveCount(0);
+    await expect(page.getByText('2 sin autorizar · 1 sin comprobante')).toBeVisible();
   });
 });
