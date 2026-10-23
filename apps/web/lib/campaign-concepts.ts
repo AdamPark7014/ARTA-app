@@ -245,14 +245,85 @@ export function conceptLineTotal(row: ConceptRow, kind: 'interno' | 'externo'): 
   return Number(row.qty ?? 1) * Number(price);
 }
 
+/**
+ * Totales interno y externo, y el ahorro (junta 23-10-2026: «tomar la
+ * diferencia del total externo versus el interno como el ahorro que se
+ * tuvo»). Negativo = lo interno salió más caro que lo externo; se muestra
+ * tal cual, con su signo.
+ */
 export function campaignTotals(rows: ConceptRow[]) {
-  return rows.reduce(
+  const sums = rows.reduce(
     (acc, r) => ({
       interno: acc.interno + (conceptLineTotal(r, 'interno') || 0),
       externo: acc.externo + (conceptLineTotal(r, 'externo') || 0),
     }),
     { interno: 0, externo: 0 },
   );
+  return { ...sums, ahorro: campaignSavings(sums) };
+}
+
+/** Ahorro = total externo − total interno. */
+export function campaignSavings(totals: { interno: number; externo: number }): number {
+  return Math.round((totals.externo - totals.interno) * 100) / 100;
+}
+
+/**
+ * Conceptos con un solo precio: cuentan en un total y no en el otro, así que
+ * el ahorro de la campaña los trae cargados. Se avisa, no se esconde.
+ */
+export function conceptsWithOnePrice(rows: ConceptRow[]): number {
+  return rows.filter((r) => (r.precioInterno == null) !== (r.precioExterno == null)).length;
+}
+
+/* ── Notas finales con fecha (junta 23-10-2026) ─────────────────────────── */
+
+type FinalNoteT = import('@/components/events/event-detail.types').CampaignFinalNote;
+
+const DAY_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+function dayOrNull(value?: string | null): string | null {
+  const v = (value || '').slice(0, 10);
+  return DAY_RE.test(v) ? v : null;
+}
+
+/** Notas con texto o fecha; un rango al revés se voltea. */
+export function cleanFinalNotes(notes?: FinalNoteT[] | null): FinalNoteT[] {
+  return (notes || [])
+    .map((n) => {
+      let from = dayOrNull(n.from);
+      let to = dayOrNull(n.to);
+      if (from && to && to < from) [from, to] = [to, from];
+      return { from, to, text: (n.text || '').trim() };
+    })
+    .filter((n) => n.text || n.from || n.to);
+}
+
+function dayParts(value: string) {
+  const [, y, m, d] = value.match(DAY_RE)!;
+  return new Date(Number(y), Number(m) - 1, Number(d));
+}
+
+function dayMonth(date: Date) {
+  return date.toLocaleDateString('es-MX', { day: 'numeric', month: 'long' });
+}
+
+/**
+ * «Del 1 de noviembre al 15 de diciembre de 2026» · «1 de noviembre de 2026»
+ * · «Hasta el 15 de noviembre de 2026» · «» (nota sin fecha).
+ */
+export function finalNoteWhen(note: Pick<FinalNoteT, 'from' | 'to'>): string {
+  const from = dayOrNull(note.from);
+  const to = dayOrNull(note.to);
+  const a = from ? dayParts(from) : null;
+  const b = to ? dayParts(to) : null;
+  if (a && b && from !== to) {
+    return a.getFullYear() === b.getFullYear()
+      ? `Del ${dayMonth(a)} al ${dayMonth(b)} de ${b.getFullYear()}`
+      : `Del ${dayMonth(a)} de ${a.getFullYear()} al ${dayMonth(b)} de ${b.getFullYear()}`;
+  }
+  if (a) return `${dayMonth(a)} de ${a.getFullYear()}`;
+  if (b) return `Hasta el ${dayMonth(b)} de ${b.getFullYear()}`;
+  return '';
 }
 
 /** Convenios del catálogo base con la descripción de lo que entrega cada medio. */
@@ -260,38 +331,78 @@ export const CONVENIO_CATALOG: Array<{ concept: string; description: string }> =
   (c) => c.convenio,
 ).map((c) => ({ concept: c.concept, description: c.description || '' }));
 
+/* ── Convenios con varias zonas (junta 23-10-2026) ─────────────────────── */
+
+type ConvenioZoneT = import('@/components/events/event-detail.types').ConvenioZone;
+
+/**
+ * Zonas de un convenio. Lo guardado antes del 23-10-2026 traía una sola zona
+ * en el renglón (`zona`, `qty`, `price`): se lee como un convenio de una zona,
+ * sin tocar la base, y al guardar ya se escribe con `zonas`.
+ */
+export function convenioZonesOf(row: ConvenioRowT): ConvenioZoneT[] {
+  if (Array.isArray(row.zonas)) {
+    return row.zonas.map((z) => ({ zona: z?.zona || '', qty: z?.qty ?? null, price: z?.price ?? null }));
+  }
+  if ((row.zona || '').trim() || row.qty != null || row.price != null) {
+    return [{ zona: row.zona || '', qty: row.qty ?? null, price: row.price ?? null }];
+  }
+  return [];
+}
+
+/** Convenio con la forma nueva: concepto, descripción y lista de zonas. */
+export function normalizeConvenioRow(row: ConvenioRowT): ConvenioRowT {
+  return { concept: row.concept || '', description: row.description || '', zonas: convenioZonesOf(row) };
+}
+
+function zoneFilled(z: ConvenioZoneT) {
+  return !!z.zona.trim() || z.qty != null || z.price != null;
+}
+
 export function cleanConvenioRows(rows: ConvenioRowT[]): ConvenioRowT[] {
   return rows
     .filter((r) => r.concept.trim())
     .map((r) => ({
       concept: r.concept.trim(),
       description: (r.description || '').trim(),
-      zona: (r.zona || '').trim(),
-      qty: r.qty ?? null,
-      price: r.price ?? null,
+      zonas: convenioZonesOf(r)
+        .filter(zoneFilled)
+        .map((z) => ({ zona: z.zona.trim(), qty: z.qty ?? null, price: z.price ?? null })),
     }));
 }
 
+export function convenioZoneTotal(zone: ConvenioZoneT): number | null {
+  if (zone.qty == null || zone.price == null) return null;
+  return Number(zone.qty) * Number(zone.price);
+}
+
+/** Total del convenio: la suma de sus zonas; `null` si ninguna tiene cantidad y precio. */
 export function convenioLineTotal(row: ConvenioRowT): number | null {
-  if (row.qty == null || row.price == null) return null;
-  return Number(row.qty) * Number(row.price);
+  let total: number | null = null;
+  for (const z of convenioZonesOf(row)) {
+    const t = convenioZoneTotal(z);
+    if (t != null) total = (total ?? 0) + t;
+  }
+  return total;
 }
 
 export function conveniosTotal(rows: ConvenioRowT[]) {
   return rows.reduce((s, r) => s + (convenioLineTotal(r) || 0), 0);
 }
 
-/** Cortesías agrupadas por zona: «Oro · 12 boletos · $9,600». */
+/** Cortesías agrupadas por zona entre todos los convenios: «Oro · 12 boletos · $9,600». */
 export function convenioZones(rows: ConvenioRowT[]) {
   const map = new Map<string, { zona: string; qty: number; total: number }>();
   for (const r of rows) {
-    const zona = (r.zona || '').trim();
-    if (!zona || r.qty == null) continue;
-    const key = zona.toUpperCase();
-    const prev = map.get(key) || { zona, qty: 0, total: 0 };
-    prev.qty += Number(r.qty);
-    prev.total += convenioLineTotal(r) || 0;
-    map.set(key, prev);
+    for (const z of convenioZonesOf(r)) {
+      const zona = z.zona.trim();
+      if (!zona || z.qty == null) continue;
+      const key = zona.toUpperCase();
+      const prev = map.get(key) || { zona, qty: 0, total: 0 };
+      prev.qty += Number(z.qty);
+      prev.total += convenioZoneTotal(z) || 0;
+      map.set(key, prev);
+    }
   }
   return Array.from(map.values());
 }

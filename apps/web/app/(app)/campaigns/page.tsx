@@ -41,7 +41,8 @@ function shortDate(iso?: string | null) {
 
 /**
  * Campañas del portafolio (junta 11-09-2026): estado de cada una, totales
- * interno/externo y un calendario con lo que corre cada día.
+ * interno/externo y un calendario con lo que corre cada día. Desde el
+ * 23-10-2026 también el ahorro (total externo − total interno).
  */
 export default function CampaignsPage() {
   const { user, entity } = useUser();
@@ -120,6 +121,9 @@ export default function CampaignsPage() {
     .filter((r) => r.step === 'AUTHORIZED')
     .reduce((s, r) => s + r.totals.interno, 0);
   const paidTotal = enriched.filter((r) => r.step === 'PAID').reduce((s, r) => s + r.totals.interno, 0);
+  // Junta 23-10-2026: ahorro = total externo − total interno, de las campañas con conceptos.
+  const priced = enriched.filter((r) => r.concepts.length);
+  const savingsTotal = priced.reduce((s, r) => s + r.totals.ahorro, 0);
 
   async function authorize(r: CampaignRow) {
     try {
@@ -164,6 +168,12 @@ export default function CampaignsPage() {
               />
               <Tile label="Autorizadas" value={moneyKpi(authorizedTotal)} sub={`${counts.AUTHORIZED} por pagar · interno`} onClick={() => setSection('AUTHORIZED')} />
               <Tile label="Pagadas" value={moneyKpi(paidTotal)} tone="accent" sub={`${counts.PAID} ${counts.PAID === 1 ? 'campaña' : 'campañas'} · interno`} onClick={() => setSection('PAID')} />
+              <Tile
+                label="Ahorro"
+                value={moneyKpi(savingsTotal)}
+                tone={savingsTotal < 0 ? 'warn' : undefined}
+                sub={`externo − interno · ${priced.length} ${priced.length === 1 ? 'campaña' : 'campañas'}`}
+              />
             </div>
 
             <div className="toolbar-row">
@@ -208,13 +218,14 @@ export default function CampaignsPage() {
               </div>
             ) : (
               <div className="dtable-wrap">
-                <table className="dtable dtable--cards dtable--cards-3">
+                <table className="dtable dtable--cards dtable--cards-3 campaigns-list">
                   <thead>
                     <tr>
                       <th>Evento</th>
                       <th className="num">Conceptos</th>
                       <th className="num">Interna</th>
                       <th className="num">Externa</th>
+                      <th className="num" title="Total externo − total interno">Ahorro</th>
                       <th>Estado</th>
                       <th className="col-act" />
                     </tr>
@@ -228,9 +239,10 @@ export default function CampaignsPage() {
                           </Link>
                           <div className="is-muted t-small">{shortDate(r.event.startsAt)}</div>
                         </td>
-                        <td className="num" data-label="Conceptos">{r.concepts.length}</td>
+                        <td className="num c-count" data-label="Conceptos">{r.concepts.length}</td>
                         <td className="num" data-label="Interna">{mxn(r.totals.interno)}</td>
                         <td className="num" data-label="Externa">{mxn(r.totals.externo)}</td>
+                        <td className="num" data-label="Ahorro">{r.concepts.length ? mxn(r.totals.ahorro) : <span className="is-muted">—</span>}</td>
                         <td className="card-state">
                           <ReviewPill step={r.step} />
                         </td>

@@ -9,7 +9,10 @@ import {
   campaignRowsFrom,
   campaignTotals,
   cleanCampaignRows,
+  cleanFinalNotes,
   conceptLineTotal,
+  conceptsWithOnePrice,
+  finalNoteWhen,
 } from '@/lib/campaign-concepts';
 import { clearDraft, poHandoffKey, readDraft, writeDraft } from '@/lib/draft-store';
 import { patchEventFileCells, replaceEventFile } from '@/lib/file-save';
@@ -21,6 +24,7 @@ import { ReviewActions } from './ReviewActions';
 import {
   CAMPAIGN_FILE_MODULE,
   type CampaignConceptRow,
+  type CampaignFinalNote,
   type EventFile,
   type EventPanelProps,
 } from './event-detail.types';
@@ -62,6 +66,10 @@ function blankRow(): CampaignConceptRow {
   return { concept: '', qty: 1, from: null, to: null, precioInterno: null, precioExterno: null };
 }
 
+function blankNote(): CampaignFinalNote {
+  return { from: null, to: null, text: '' };
+}
+
 export function EventCampaignPanel({
   event,
   closed,
@@ -75,15 +83,23 @@ export function EventCampaignPanel({
   const slot = useMemo(() => (event.slots || []).find((s) => s.kind === 'CAMPAIGN') || null, [event.slots]);
   const replaced = slot?.status === 'REPLACED';
   const saved = useMemo(() => campaignRowsFrom(event.campaign?.dataJson?.concepts), [event.campaign?.dataJson]);
+  const savedNotes = useMemo(() => cleanFinalNotes(event.campaign?.dataJson?.finalNotes), [event.campaign?.dataJson]);
   const draftKey = `arta.draft.campaign.${event.id}`;
+  const notesDraftKey = `arta.draft.campaign-notes.${event.id}`;
   const [rows, setRows] = useState<CampaignConceptRow[]>(() => readDraft<CampaignConceptRow[]>(draftKey) ?? saved);
-  const [dirty, setDirty] = useState(() => readDraft(draftKey) !== null);
+  const [notes, setNotes] = useState<CampaignFinalNote[]>(() => readDraft<CampaignFinalNote[]>(notesDraftKey) ?? savedNotes);
+  const [dirty, setDirty] = useState(() => readDraft(draftKey) !== null || readDraft(notesDraftKey) !== null);
 
   // Lo tecleado sin guardar sobrevive a cambiar de pestaña.
   useEffect(() => {
-    if (dirty) writeDraft(draftKey, rows);
-    else clearDraft(draftKey);
-  }, [draftKey, dirty, rows]);
+    if (dirty) {
+      writeDraft(draftKey, rows);
+      writeDraft(notesDraftKey, notes);
+    } else {
+      clearDraft(draftKey);
+      clearDraft(notesDraftKey);
+    }
+  }, [draftKey, notesDraftKey, dirty, rows, notes]);
   const [view, setView] = useState<'conceptos' | 'calendario'>('conceptos');
   const [busy, setBusy] = useState(false);
   const [picker, setPicker] = useState(false);
@@ -91,14 +107,19 @@ export function EventCampaignPanel({
   const [sheetMode, setSheetMode] = useState<'view' | 'edit' | null>(null);
 
   useEffect(() => {
-    if (!dirty) setRows(saved);
+    if (!dirty) {
+      setRows(saved);
+      setNotes(savedNotes);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [saved]);
+  }, [saved, savedNotes]);
 
   const step = reviewStep(event.campaign?.status, event.campaign?.authorized);
   const editable = canEdit && !closed && reviewEditable(step);
   const filled = rows.filter((r) => r.concept.trim());
   const totals = campaignTotals(filled);
+  const onePrice = conceptsWithOnePrice(filled);
+  const shownNotes = cleanFinalNotes(notes);
 
   const campaignFiles = useMemo(
     () => event.files.filter((f) => f.module === CAMPAIGN_FILE_MODULE).sort((a, b) => stamp(b) - stamp(a)),
@@ -135,6 +156,21 @@ export function EventCampaignPanel({
     setDirty(true);
   }
 
+  function patchNote(i: number, next: Partial<CampaignFinalNote>) {
+    setNotes((prev) => prev.map((n, idx) => (idx === i ? { ...n, ...next } : n)));
+    setDirty(true);
+  }
+
+  function addNote() {
+    setNotes((prev) => [...prev, blankNote()]);
+    setDirty(true);
+  }
+
+  function removeNote(i: number) {
+    setNotes((prev) => prev.filter((_, idx) => idx !== i));
+    setDirty(true);
+  }
+
   function addFromList() {
     const add = PRICE_LIST.filter((p) => picked.has(p.concept)).map((p) => ({
       ...blankRow(),
@@ -152,7 +188,7 @@ export function EventCampaignPanel({
     try {
       await api(`/campaigns/event/${event.id}`, {
         method: 'POST',
-        body: JSON.stringify({ dataJson: { concepts: cleanCampaignRows(rows) } }),
+        body: JSON.stringify({ dataJson: { concepts: cleanCampaignRows(rows), finalNotes: cleanFinalNotes(notes) } }),
       });
       setDirty(false);
       if (!quiet) flash('Campaña guardada');
@@ -291,7 +327,7 @@ export function EventCampaignPanel({
   async function pdf(kind: 'interna' | 'externa') {
     try {
       const { buildCampaignPdf, campaignPdfName } = await import('@/lib/campaign-pdf');
-      const blob = await buildCampaignPdf({ event, rows, kind });
+      const blob = await buildCampaignPdf({ event, rows, kind, finalNotes: notes });
       downloadBlob(blob, campaignPdfName(event.name, kind));
     } catch (e) {
       flash(e instanceof Error ? e.message : 'No se pudo generar el PDF', 'error');
@@ -583,6 +619,11 @@ export function EventCampaignPanel({
                       <button className="btn-quiet" type="button" onClick={() => setPicker(true)}>
                         Desde lista de precios
                       </button>
+                      {!notes.length ? (
+                        <button className="btn-quiet" type="button" onClick={addNote}>
+                          + Nota final
+                        </button>
+                      ) : null}
                     </div>
                   ) : (
                     <span className="is-muted t-small">Total</span>
@@ -592,10 +633,84 @@ export function EventCampaignPanel({
                 <td className="num t-money">{mxn(totals.externo)}</td>
                 {editable ? <td /> : null}
               </tr>
+              {/* Junta 23-10-2026: el ahorro es la diferencia del total externo contra el interno. */}
+              <tr className="campaign-savings">
+                <td colSpan={6}>
+                  <span className="campaign-savings__label">Ahorro · externo − interno</span>
+                  {onePrice ? (
+                    <span className="campaign-savings__note">
+                      {onePrice} {onePrice === 1 ? 'concepto lleva' : 'conceptos llevan'} un solo precio
+                    </span>
+                  ) : null}
+                </td>
+                <td className="num t-money" colSpan={2} aria-label="Ahorro">
+                  {mxn(totals.ahorro)}
+                </td>
+                {editable ? <td /> : null}
+              </tr>
             </tfoot>
           </table>
         </div>
       )}
+
+      {view === 'conceptos' && (notes.length > 0 || (!editable && shownNotes.length > 0)) ? (
+        <section className="surface" aria-label="Notas finales">
+          <div className="surface__head">
+            <h3 className="surface__title">Notas finales</h3>
+            <span className="is-muted t-small">Opcional · van al final de los PDF interna y externa</span>
+          </div>
+          <div className="surface__body final-notes">
+            {editable ? (
+              <>
+                {notes.map((n, i) => (
+                  <div key={i} className="final-notes__row">
+                    <input
+                      type="date"
+                      value={n.from || ''}
+                      aria-label={`Nota ${i + 1}: desde`}
+                      onChange={(e) => patchNote(i, { from: e.target.value || null })}
+                    />
+                    <input
+                      type="date"
+                      min={n.from || undefined}
+                      value={n.to || ''}
+                      aria-label={`Nota ${i + 1}: hasta (opcional)`}
+                      onChange={(e) => patchNote(i, { to: e.target.value || null })}
+                    />
+                    <input
+                      className="final-notes__text"
+                      value={n.text}
+                      placeholder="Ej. Propuesta válida en estas fechas · fecha límite de pago"
+                      aria-label={`Nota ${i + 1}`}
+                      onChange={(e) => patchNote(i, { text: e.target.value })}
+                    />
+                    <button
+                      className="icon-btn icon-btn--danger"
+                      type="button"
+                      aria-label={`Quitar nota ${i + 1}`}
+                      onClick={() => removeNote(i)}
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+                <div className="sx-actions">
+                  <button className="btn-quiet btn-quiet--accent" type="button" onClick={addNote}>
+                    + Nota final
+                  </button>
+                </div>
+              </>
+            ) : (
+              shownNotes.map((n, i) => (
+                <div key={i} className="final-notes__read">
+                  <span className="final-notes__when">{finalNoteWhen(n) || '—'}</span>
+                  <span>{n.text}</span>
+                </div>
+              ))
+            )}
+          </div>
+        </section>
+      ) : null}
 
       {dirty ? (
         <div className="savebar" role="status">
@@ -606,6 +721,7 @@ export function EventCampaignPanel({
               type="button"
               onClick={() => {
                 setRows(saved);
+                setNotes(savedNotes);
                 setDirty(false);
               }}
             >

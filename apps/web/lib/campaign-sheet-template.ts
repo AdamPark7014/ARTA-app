@@ -22,6 +22,7 @@ import {
   type CampaignConceptPrice,
   type CampaignSheetMeta,
   convenioZones,
+  convenioZonesOf,
   resolveConceptUnitCost,
 } from './campaign-concepts';
 import type { CampaignConceptRow, ConvenioRow } from '@/components/events/event-detail.types';
@@ -287,16 +288,25 @@ export function buildCampaignWorkbook(meta: CampaignWorkbookMeta, concepts: Camp
   return wb;
 }
 
-/** Campaña de convenios: zona, cantidad, precio y total — sin interno/externo. */
+/**
+ * Campaña de convenios: zona, cantidad, precio y total — sin interno/externo.
+ * Un renglón por zona (junta 23-10-2026: un convenio puede llevar varias); el
+ * convenio y su descripción van en el primero.
+ */
 export function buildConveniosWorkbook(meta: CampaignWorkbookMeta, rows: ConvenioRow[]): XLSX.WorkBook {
   const wb = XLSX.utils.book_new();
   const aoa = sheetHeader('CAMPAÑA DE CONVENIOS', meta);
   aoa.push(['CONVENIO', 'DESCRIPCIÓN', 'ZONA', 'CANTIDAD', 'PRECIO', 'TOTAL']);
   const firstData = aoa.length + 1;
   for (const r of rows) {
-    aoa.push([r.concept, r.description || '', r.zona || '', r.qty ?? '', r.price ?? '', '']);
+    const zonas = convenioZonesOf(r);
+    if (!zonas.length) aoa.push([r.concept, r.description || '', '', '', '', '']);
+    zonas.forEach((z, i) => {
+      aoa.push([i === 0 ? r.concept : '', i === 0 ? r.description || '' : '', z.zona || '', z.qty ?? '', z.price ?? '', '']);
+    });
   }
-  const lastData = firstData + rows.length - 1;
+  const dataRows = aoa.length - (firstData - 1);
+  const lastData = firstData + dataRows - 1;
   aoa.push([]);
   aoa.push(['TOTAL', '', '', '', '', '']);
   const totalIdx = aoa.length - 1;
@@ -308,11 +318,11 @@ export function buildConveniosWorkbook(meta: CampaignWorkbookMeta, rows: Conveni
     for (const z of zones) aoa.push([z.zona.toUpperCase(), z.qty, z.total]);
   }
   const ws = XLSX.utils.aoa_to_sheet(aoa);
-  rows.forEach((_, i) => {
+  for (let i = 0; i < dataRows; i += 1) {
     const excelRow = firstData + i;
     ws[XLSX.utils.encode_cell({ r: excelRow - 1, c: 5 })] = { t: 'n', f: `D${excelRow}*E${excelRow}` };
-  });
-  ws[XLSX.utils.encode_cell({ r: totalIdx, c: 5 })] = rows.length
+  }
+  ws[XLSX.utils.encode_cell({ r: totalIdx, c: 5 })] = dataRows
     ? { t: 'n', f: `SUM(F${firstData}:F${lastData})` }
     : { t: 'n', v: 0 };
   ws['!cols'] = [{ wch: 30 }, { wch: 60 }, { wch: 14 }, { wch: 11 }, { wch: 12 }, { wch: 14 }];

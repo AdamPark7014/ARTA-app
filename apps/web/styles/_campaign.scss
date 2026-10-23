@@ -33,7 +33,104 @@
 }
 
 .convenios-table .c-zone {
-  width: 8.5rem;
+  width: 12rem;
+}
+
+/* Junta 23-10-2026: un convenio con varias zonas. El convenio y su descripción
+   abarcan sus zonas; entre convenios, línea fuerte. */
+.convenios-table .c-name,
+.convenios-table .c-desc {
+  vertical-align: top;
+}
+
+.convenios-table textarea.cell {
+  min-height: 2.1rem;
+  resize: vertical;
+  line-height: 1.35;
+  font-family: inherit;
+}
+
+.convenios-table tbody.convenio-group:not(:last-of-type) > tr:last-child > td,
+.convenios-table tbody.convenio-group:not(:last-of-type) > tr:first-child > td[rowspan] {
+  border-bottom: 1px solid var(--line-strong);
+}
+
+.convenios-table .convenio-group__foot td {
+  padding-top: 0.3rem;
+  padding-bottom: 0.3rem;
+}
+
+.convenios-table tbody.convenio-group:hover td[rowspan] {
+  background: transparent;
+}
+
+/* ── Ahorro de la campaña (externo − interno) ───────────────────────────── */
+
+.campaign-table tfoot .campaign-savings td {
+  border-top: 1px solid var(--line);
+  font-weight: 500;
+}
+
+.campaign-savings__label {
+  color: var(--muted);
+}
+
+.campaign-savings__note {
+  margin-left: 0.5rem;
+  color: var(--text-3);
+  font-size: 0.78rem;
+  font-weight: 400;
+}
+
+/* ── Notas finales con fecha ─────────────────────────────────────────────── */
+
+.final-notes {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.final-notes__row {
+  display: grid;
+  grid-template-columns: 9.5rem 9.5rem minmax(0, 1fr) auto;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.final-notes__when {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.final-notes__read {
+  display: grid;
+  grid-template-columns: minmax(10rem, 16rem) minmax(0, 1fr);
+  gap: 0.25rem 1rem;
+  padding: 0.35rem 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.final-notes__read:last-child {
+  border-bottom: 0;
+}
+
+@media (max-width: 640px) {
+  .final-notes__row {
+    grid-template-columns: 1fr 1fr auto;
+  }
+
+  .final-notes__row .final-notes__text {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+
+  .final-notes__read {
+    grid-template-columns: 1fr;
+  }
+
+  /* En tarjetas caben tres cifras por renglón: interna, externa y ahorro. */
+  .dtable--cards.campaigns-list td.num.c-count {
+    display: none;
+  }
 }
 
 /* ── Lista de precios para armar la campaña ─────────────────────────────── */

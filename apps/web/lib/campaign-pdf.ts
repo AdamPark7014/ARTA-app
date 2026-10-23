@@ -1,20 +1,25 @@
 /**
  * PDFs de campaña (junta 11-09-2026): «generar 2 PDFs diferentes e
- * independientes (interna y externa)» y el de la campaña de convenios.
+ * independientes (interna y externa)» y los de la campaña de convenios, que
+ * desde el 23-10-2026 también son dos: interno (con precio y total) y externo
+ * (sin un solo monto).
  *
  * Mismo encabezado que el Excel de Arta — PROMOTOR | EVENTO, FECHA | VENUE,
  * HORARIO | CIUDAD — y una tabla que pagina sola si hay muchos conceptos.
  */
 import type { PDFPage } from 'pdf-lib';
-import type { CampaignConceptRow, ConvenioRow } from '@/components/events/event-detail.types';
+import type { CampaignConceptRow, CampaignFinalNote, ConvenioRow } from '@/components/events/event-detail.types';
 import {
   campaignTotals,
   cleanCampaignRows,
   cleanConvenioRows,
+  cleanFinalNotes,
   conceptLineTotal,
-  convenioLineTotal,
+  convenioZoneTotal,
   convenioZones,
+  convenioZonesOf,
   conveniosTotal,
+  finalNoteWhen,
 } from './campaign-concepts';
 import {
   LETTER,
@@ -42,8 +47,9 @@ export type CampaignPdfEvent = {
 const MARGIN = 48;
 const WIDTH = LETTER[0] - MARGIN * 2;
 const BOTTOM = 70;
+const CELL_SIZE = 8.8;
 
-type Col = { title: string; width: number; align?: 'left' | 'right' };
+export type Col = { title: string; width: number; align?: 'left' | 'right' };
 
 function longDate(iso?: string | null) {
   if (!iso) return '';
@@ -165,34 +171,119 @@ class Sheet {
     this.y -= 26;
   }
 
-  row(cols: Col[], cells: string[]) {
+  private wrapCell(c: Col, text: string, maxLines = 5) {
+    return c.align === 'right' ? [pdfSafe(text)] : wrapText(text, this.kit.regular, CELL_SIZE, c.width - 14).slice(0, maxLines);
+  }
+
+  private static heightOf(wrapped: string[][]) {
+    return Math.max(1, ...wrapped.map((w) => w.length)) * 11 + 9;
+  }
+
+  /** Pinta las celdas `wrapped` en las columnas desde `first`, con su borde superior en `top`. */
+  private drawCells(cols: Col[], first: number, wrapped: string[][], top: number) {
     const { kit } = this;
-    const size = 8.8;
-    const wrapped = cols.map((c, i) =>
-      c.align === 'right' ? [pdfSafe(cells[i] || '')] : wrapText(cells[i] || '', kit.regular, size, c.width - 14).slice(0, 5),
-    );
-    const lines = Math.max(1, ...wrapped.map((w) => w.length));
-    const height = lines * 11 + 9;
+    let x = MARGIN + cols.slice(0, first).reduce((s, c) => s + c.width, 0);
+    wrapped.forEach((lines, k) => {
+      const i = first + k;
+      const c = cols[i];
+      lines.forEach((line, li) => {
+        const yy = top - 9 - li * 11;
+        if (c.align === 'right') drawRight(this.page, line, x + c.width - 7, yy, CELL_SIZE, kit.regular, kit.colors.ink);
+        else this.page.drawText(line, { x: x + 7, y: yy, size: CELL_SIZE, font: i === 0 ? kit.bold : kit.regular, color: kit.colors.ink });
+      });
+      x += c.width;
+    });
+  }
+
+  private divider(y: number, fromX = MARGIN, strong = false) {
+    this.page.drawLine({
+      start: { x: fromX, y },
+      end: { x: MARGIN + WIDTH, y },
+      thickness: strong ? 0.4 : 0.25,
+      color: this.kit.colors.line,
+    });
+  }
+
+  row(cols: Col[], cells: string[]) {
+    const wrapped = cols.map((c, i) => this.wrapCell(c, cells[i] || ''));
+    const height = Sheet.heightOf(wrapped);
     if (this.y - height < BOTTOM) {
       this.newPage(false);
       this.tableHead(cols);
     }
-    let x = MARGIN;
-    cols.forEach((c, i) => {
-      wrapped[i].forEach((line, li) => {
-        const yy = this.y - 9 - li * 11;
-        if (c.align === 'right') drawRight(this.page, line, x + c.width - 7, yy, size, kit.regular, kit.colors.ink);
-        else this.page.drawText(line, { x: x + 7, y: yy, size, font: i === 0 ? kit.bold : kit.regular, color: kit.colors.ink });
-      });
-      x += c.width;
-    });
+    this.drawCells(cols, 0, wrapped, this.y);
     this.y -= height;
-    this.page.drawLine({
-      start: { x: MARGIN, y: this.y + 2 },
-      end: { x: MARGIN + WIDTH, y: this.y + 2 },
-      thickness: 0.4,
-      color: kit.colors.line,
+    this.divider(this.y + 2, MARGIN, true);
+  }
+
+  /**
+   * Un renglón con varias líneas: las primeras `lead.length` columnas (el
+   * convenio y su descripción) se pintan una vez y abarcan todas las líneas
+   * (las zonas). Si el grupo no cabe, pasa entero a la hoja siguiente; si ni
+   * así cabe, se parte y el convenio se repite con «(cont.)».
+   */
+  group(cols: Col[], lead: string[], lines: string[][]) {
+    const leadWrapped = lead.map((t, i) => this.wrapCell(cols[i], t, 8));
+    const leadH = Sheet.heightOf(leadWrapped);
+    const rest = cols.slice(lead.length);
+    const body = (lines.length ? lines : [rest.map(() => '')]).map((cells) =>
+      rest.map((c, j) => this.wrapCell(c, cells[j] || '')),
+    );
+    const heights = body.map((w) => Sheet.heightOf(w));
+    const need = Math.max(leadH, heights.reduce((a, b) => a + b, 0));
+    // Lo que cabe en una hoja de continuación (encabezado corto + títulos de la tabla).
+    const freshRoom = LETTER[1] - 68 - 26 - BOTTOM;
+    const fitsHere = this.y - need >= BOTTOM;
+    const startsHere = this.y - Math.max(leadH, heights[0]) >= BOTTOM;
+    // Pasa entero a la hoja siguiente si ahí cabe; si es más largo que una hoja, empieza aquí.
+    if (!fitsHere && (need <= freshRoom || !startsHere)) {
+      this.newPage(false);
+      this.tableHead(cols);
+    }
+    const restX = MARGIN + cols.slice(0, lead.length).reduce((s, c) => s + c.width, 0);
+    let top = this.y;
+    let leadBottom = top - leadH;
+    this.drawCells(cols, 0, leadWrapped, top);
+    body.forEach((wrapped, k) => {
+      if (top - heights[k] < BOTTOM) {
+        this.divider(Math.min(top, leadBottom) + 2, MARGIN, true);
+        this.newPage(false);
+        this.tableHead(cols);
+        top = this.y;
+        const cont = this.wrapCell(cols[0], `${lead[0] || ''} (cont.)`, 2);
+        this.drawCells(cols, 0, [cont], top);
+        leadBottom = top - Sheet.heightOf([cont]);
+      }
+      this.drawCells(cols, lead.length, wrapped, top);
+      top -= heights[k];
+      if (k < body.length - 1) this.divider(top + 2, restX);
     });
+    this.y = Math.min(top, leadBottom);
+    this.divider(this.y + 2, MARGIN, true);
+  }
+
+  /** Notas finales: la fecha (o el rango) en negritas y el texto debajo. */
+  notes(title: string, items: Array<{ when: string; text: string }>) {
+    if (!items.length) return;
+    const { kit } = this;
+    const size = 9;
+    const lead = 12.5;
+    this.section(title);
+    for (const it of items) {
+      const lines = [
+        ...(it.when ? wrapText(it.when, kit.bold, size, WIDTH).map((t) => ({ t, font: kit.bold })) : []),
+        ...(it.text ? wrapText(it.text, kit.regular, size, WIDTH).map((t) => ({ t, font: kit.regular })) : []),
+      ];
+      const height = lines.length * lead + 8;
+      if (this.y - height < BOTTOM) {
+        this.newPage(false);
+        this.section(title);
+      }
+      lines.forEach((line, i) =>
+        this.page.drawText(line.t, { x: MARGIN, y: this.y - 10 - i * lead, size, font: line.font, color: kit.colors.ink }),
+      );
+      this.y -= height;
+    }
   }
 
   empty(text: string) {
@@ -217,6 +308,10 @@ class Sheet {
       drawRight(page, it.value, MARGIN + WIDTH, this.y - (it.strong ? 1 : 0), it.strong ? 13 : 10, kit.bold, kit.colors.ink);
       this.y -= it.strong ? 22 : 16;
     }
+  }
+
+  space(points: number) {
+    this.y -= points;
   }
 
   section(title: string) {
@@ -244,15 +339,28 @@ class Sheet {
 
 const money = (n: number | null) => (n == null ? '' : pdfMoney(n));
 
-/** Campaña interna (precio interno) o externa (precio externo): dos PDFs distintos. */
+/** Con su signo: un ahorro negativo se imprime «-$1,200.00», nunca se esconde. */
+const signedMoney = (n: number) => (n < 0 ? `-${pdfMoney(-n)}` : pdfMoney(n));
+
+function finalNoteItems(notes?: CampaignFinalNote[] | null) {
+  return cleanFinalNotes(notes).map((n) => ({ when: finalNoteWhen(n), text: n.text }));
+}
+
+/**
+ * Campaña interna (precio interno) o externa (precio externo): dos PDFs
+ * distintos. Solo la interna lleva el total externo y el ahorro; las notas
+ * finales salen en las dos.
+ */
 export async function buildCampaignPdf({
   event,
   rows,
   kind,
+  finalNotes,
 }: {
   event: CampaignPdfEvent;
   rows: CampaignConceptRow[];
   kind: 'interna' | 'externa';
+  finalNotes?: CampaignFinalNote[] | null;
 }): Promise<Blob> {
   const kit = await createPdfKit();
   const sheet = new Sheet(kit, {
@@ -282,53 +390,93 @@ export async function buildCampaignPdf({
     ]);
   }
   const totals = campaignTotals(clean);
-  sheet.totals([{ label: 'TOTAL', value: pdfMoney(totals[field]), strong: true }]);
+  if (kind === 'interna') {
+    sheet.totals([
+      { label: 'TOTAL', value: pdfMoney(totals.interno), strong: true },
+      { label: 'TOTAL EXTERNO', value: pdfMoney(totals.externo) },
+      { label: 'AHORRO (EXTERNO - INTERNO)', value: signedMoney(totals.ahorro) },
+    ]);
+  } else {
+    sheet.totals([{ label: 'TOTAL', value: pdfMoney(totals.externo), strong: true }]);
+  }
+  sheet.notes('NOTAS FINALES', finalNoteItems(finalNotes));
   sheet.finish();
   return savePdf(kit);
 }
 
+/** Columnas de cada PDF de convenios: el externo no lleva ni un peso. */
+export function conveniosPdfColumns(kind: 'interno' | 'externo'): Col[] {
+  if (kind === 'externo') {
+    return [
+      { title: 'CONVENIO', width: 130 },
+      { title: 'DESCRIPCIÓN', width: 216 },
+      { title: 'ZONA', width: 120 },
+      { title: 'CANT.', width: 50, align: 'right' },
+    ];
+  }
+  return [
+    { title: 'CONVENIO', width: 104 },
+    { title: 'DESCRIPCIÓN', width: 146 },
+    { title: 'ZONA', width: 94 },
+    { title: 'CANT.', width: 40, align: 'right' },
+    { title: 'PRECIO', width: 62, align: 'right' },
+    { title: 'TOTAL', width: 70, align: 'right' },
+  ];
+}
+
+/**
+ * Convenios (junta 23-10-2026): «un PDF interno y externo: que solo salgan
+ * externo convenio, descripción, zona, cantidad; e interno todo eso más
+ * precio y total». Cada convenio con todas sus zonas, una línea por zona.
+ */
 export async function buildConveniosPdf({
   event,
   rows,
+  kind,
 }: {
   event: CampaignPdfEvent;
   rows: ConvenioRow[];
+  kind: 'interno' | 'externo';
 }): Promise<Blob> {
+  const internal = kind === 'interno';
   const kit = await createPdfKit();
-  const sheet = new Sheet(kit, { eyebrow: 'CAMPAÑA DE CONVENIOS', title: 'Convenios', event });
+  const sheet = new Sheet(kit, {
+    eyebrow: 'CAMPAÑA DE CONVENIOS',
+    title: internal ? 'Convenios internos' : 'Convenios externos',
+    event,
+  });
   const clean = cleanConvenioRows(rows);
-  const cols: Col[] = [
-    { title: 'CONVENIO', width: 112 },
-    { title: 'DESCRIPCIÓN', width: 172 },
-    { title: 'ZONA', width: 62 },
-    { title: 'CANT.', width: 40, align: 'right' },
-    { title: 'PRECIO', width: 60, align: 'right' },
-    { title: 'TOTAL', width: 70, align: 'right' },
-  ];
+  const cols = conveniosPdfColumns(kind);
   sheet.tableHead(cols);
   if (!clean.length) sheet.empty('Sin convenios capturados.');
   for (const r of clean) {
-    sheet.row(cols, [
-      r.concept,
-      r.description || '',
-      (r.zona || '').toUpperCase(),
-      r.qty == null ? '' : String(r.qty),
-      money(r.price ?? null),
-      money(convenioLineTotal(r)),
-    ]);
+    const lines = convenioZonesOf(r).map((z) => {
+      const base = [z.zona.toUpperCase(), z.qty == null ? '' : String(z.qty)];
+      return internal ? [...base, money(z.price ?? null), money(convenioZoneTotal(z))] : base;
+    });
+    sheet.group(cols, [r.concept, r.description || ''], lines);
   }
-  sheet.totals([{ label: 'TOTAL', value: pdfMoney(conveniosTotal(clean)), strong: true }]);
+  if (internal) sheet.totals([{ label: 'TOTAL', value: pdfMoney(conveniosTotal(clean)), strong: true }]);
+  else sheet.space(16);
 
   const zones = convenioZones(clean);
   if (zones.length) {
     sheet.section('CORTESÍAS POR ZONA');
-    const zoneCols: Col[] = [
-      { title: 'ZONA', width: 260 },
-      { title: 'BOLETOS', width: 120, align: 'right' },
-      { title: 'VALOR', width: 136, align: 'right' },
-    ];
+    const zoneCols: Col[] = internal
+      ? [
+          { title: 'ZONA', width: 260 },
+          { title: 'BOLETOS', width: 120, align: 'right' },
+          { title: 'VALOR', width: 136, align: 'right' },
+        ]
+      : [
+          { title: 'ZONA', width: 380 },
+          { title: 'BOLETOS', width: 136, align: 'right' },
+        ];
     sheet.tableHead(zoneCols);
-    for (const z of zones) sheet.row(zoneCols, [z.zona.toUpperCase(), String(z.qty), pdfMoney(z.total)]);
+    for (const z of zones) {
+      const cells = [z.zona.toUpperCase(), z.qty.toLocaleString('es-MX')];
+      sheet.row(zoneCols, internal ? [...cells, pdfMoney(z.total)] : cells);
+    }
   }
   sheet.finish();
   return savePdf(kit);
@@ -338,6 +486,6 @@ export function campaignPdfName(eventName: string, kind: 'interna' | 'externa') 
   return `CAMPANA-${kind.toUpperCase()}-${fileSlug(eventName, 'evento')}.pdf`;
 }
 
-export function conveniosPdfName(eventName: string) {
-  return `CONVENIOS-${fileSlug(eventName, 'evento')}.pdf`;
+export function conveniosPdfName(eventName: string, kind: 'interno' | 'externo') {
+  return `CONVENIOS-${kind.toUpperCase()}-${fileSlug(eventName, 'evento')}.pdf`;
 }

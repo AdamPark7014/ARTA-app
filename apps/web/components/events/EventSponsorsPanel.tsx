@@ -7,9 +7,11 @@ import {
   CONVENIO_CATALOG,
   cleanConvenioRows,
   convenioLineTotal,
+  convenioZoneTotal,
   convenioZones,
   conveniosFileName,
   conveniosTotal,
+  normalizeConvenioRow,
 } from '@/lib/campaign-concepts';
 import { clearDraft, readDraft, writeDraft } from '@/lib/draft-store';
 import { downloadBlob } from '@/lib/pdf-kit';
@@ -29,6 +31,7 @@ import { ReviewActions } from './ReviewActions';
 import {
   SPONSORS_FILE_MODULE,
   type ConvenioRow,
+  type ConvenioZone,
   type EventFile,
   type EventPanelProps,
   type Sponsor,
@@ -38,9 +41,13 @@ import {
  * Convenios (junta 11-09-2026).
  *
  * «No hay precio interno ni externo: va zona, cantidad, precio y total». Los
- * medios se pagan en especie —cortesías de una zona—, así que la zona sugiere
- * las de la boletera y trae su precio. De la tabla sale la campaña de
- * convenios (Excel + PDF) y tiene su propia revisión.
+ * medios se pagan en especie —cortesías—, así que la zona sugiere las de la
+ * boletera y trae su precio. De la tabla sale la campaña de convenios (Excel +
+ * PDF) y tiene su propia revisión.
+ *
+ * Junta 23-10-2026: un convenio lleva varias zonas, cada una con su cantidad
+ * y su precio, y hay dos PDFs: el externo (convenio, descripción, zona y
+ * cantidad, sin montos) y el interno (además precio y total).
  *
  * Los patrocinadores de siempre quedan abajo, plegados.
  */
@@ -61,8 +68,12 @@ const STEP_OK: Record<ReviewStep, string> = {
   PAID: 'Convenios marcados como pagados',
 };
 
+function blankZone(): ConvenioZone {
+  return { zona: '', qty: null, price: null };
+}
+
 function blank(): ConvenioRow {
-  return { concept: '', description: '', zona: '', qty: null, price: null };
+  return { concept: '', description: '', zonas: [blankZone()] };
 }
 
 function pillTone(tone: string) {
@@ -83,19 +94,15 @@ export function EventSponsorsPanel({
   onChanged,
   flash,
 }: Props) {
+  // Lo guardado con una sola zona por renglón se lee como un convenio de una zona.
   const saved = useMemo<ConvenioRow[]>(
-    () =>
-      (event.campaign?.dataJson?.convenios || []).map((r) => ({
-        concept: r.concept || '',
-        description: r.description || '',
-        zona: r.zona || '',
-        qty: r.qty ?? null,
-        price: r.price ?? null,
-      })),
+    () => (event.campaign?.dataJson?.convenios || []).map(normalizeConvenioRow),
     [event.campaign?.dataJson],
   );
   const draftKey = `arta.draft.convenios.${event.id}`;
-  const [rows, setRows] = useState<ConvenioRow[]>(() => readDraft<ConvenioRow[]>(draftKey) ?? saved);
+  const [rows, setRows] = useState<ConvenioRow[]>(
+    () => readDraft<ConvenioRow[]>(draftKey)?.map(normalizeConvenioRow) ?? saved,
+  );
   const [dirty, setDirty] = useState(() => readDraft(draftKey) !== null);
   const [busy, setBusy] = useState(false);
 
@@ -133,9 +140,40 @@ export function EventSponsorsPanel({
     patch(i, { concept: value, ...(match && !rows[i].description ? { description: match.description } : {}) });
   }
 
-  function setZona(i: number, value: string) {
+  function patchZone(i: number, k: number, next: Partial<ConvenioZone>) {
+    setRows((prev) =>
+      prev.map((r, idx) =>
+        idx === i ? { ...r, zonas: (r.zonas || []).map((z, zi) => (zi === k ? { ...z, ...next } : z)) } : r,
+      ),
+    );
+    setDirty(true);
+  }
+
+  /** La zona de la boletera trae su precio, si el renglón aún no tiene uno. */
+  function setZona(i: number, k: number, value: string) {
     const zone = zones.find((z) => z.zona.trim().toUpperCase() === value.trim().toUpperCase());
-    patch(i, { zona: value, ...(zone && rows[i].price == null ? { price: Number(zone.precio) || null } : {}) });
+    const current = rows[i].zonas?.[k];
+    patchZone(i, k, { zona: value, ...(zone && current?.price == null ? { price: Number(zone.precio) || null } : {}) });
+  }
+
+  function addZone(i: number) {
+    setRows((prev) => prev.map((r, idx) => (idx === i ? { ...r, zonas: [...(r.zonas || []), blankZone()] } : r)));
+    setDirty(true);
+  }
+
+  function removeZone(i: number, k: number) {
+    setRows((prev) =>
+      prev.map((r, idx) => (idx === i ? { ...r, zonas: (r.zonas || []).filter((_, zi) => zi !== k) } : r)),
+    );
+    setDirty(true);
+  }
+
+  function removeConvenio(i: number) {
+    const r = rows[i];
+    const hasData = r.concept.trim() || (r.description || '').trim() || (r.zonas || []).some((z) => z.zona.trim() || z.qty != null);
+    if (hasData && !confirm(`¿Quitar ${r.concept.trim() || 'este convenio'} con sus zonas?`)) return;
+    setRows((prev) => prev.filter((_, idx) => idx !== i));
+    setDirty(true);
   }
 
   async function save(quiet = false) {
@@ -210,10 +248,11 @@ export function EventSponsorsPanel({
     }
   }
 
-  async function pdf() {
+  /** Externo: convenio, descripción, zona y cantidad. Interno: además precio y total. */
+  async function pdf(kind: 'interno' | 'externo') {
     try {
       const { buildConveniosPdf, conveniosPdfName } = await import('@/lib/campaign-pdf');
-      downloadBlob(await buildConveniosPdf({ event, rows }), conveniosPdfName(event.name));
+      downloadBlob(await buildConveniosPdf({ event, rows, kind }), conveniosPdfName(event.name, kind));
     } catch (e) {
       flash(e instanceof Error ? e.message : 'No se pudo generar el PDF', 'error');
     }
@@ -247,8 +286,23 @@ export function EventSponsorsPanel({
           )}
         </div>
         <div className="sx-actions">
-          <button className="btn ghost btn-sm" type="button" disabled={!filled.length} onClick={pdf}>
-            PDF
+          <button
+            className="btn ghost btn-sm"
+            type="button"
+            disabled={!filled.length}
+            title="Con precio y total"
+            onClick={() => pdf('interno')}
+          >
+            PDF interno
+          </button>
+          <button
+            className="btn ghost btn-sm"
+            type="button"
+            disabled={!filled.length}
+            title="Convenio, descripción, zona y cantidad · sin montos"
+            onClick={() => pdf('externo')}
+          >
+            PDF externo
           </button>
           {canCampaignEdit && !closed ? (
             <button className="btn btn-sm" type="button" disabled={busy || !filled.length} onClick={generate}>
@@ -299,106 +353,148 @@ export function EventSponsorsPanel({
                 {editable ? <th className="col-act" /> : null}
               </tr>
             </thead>
-            <tbody>
-              {rows.map((r, i) => {
-                const t = convenioLineTotal(r);
-                return (
-                  <tr key={i}>
-                    <td className="c-name">
-                      {editable ? (
-                        <input
-                          className="cell"
-                          list="convenio-catalog"
-                          value={r.concept}
-                          placeholder="Medio"
-                          aria-label={`Convenio ${i + 1}`}
-                          onChange={(e) => setConcept(i, e.target.value)}
-                        />
-                      ) : (
-                        <strong>{r.concept}</strong>
-                      )}
-                    </td>
-                    <td className="c-desc">
-                      {editable ? (
-                        <input
-                          className="cell"
-                          value={r.description || ''}
-                          placeholder="Qué entrega"
-                          aria-label="Descripción"
-                          onChange={(e) => patch(i, { description: e.target.value })}
-                        />
-                      ) : (
-                        <span className="is-muted">{r.description}</span>
-                      )}
-                    </td>
-                    <td className="c-zone">
-                      {editable ? (
-                        <input
-                          className="cell"
-                          list="convenio-zones"
-                          value={r.zona || ''}
-                          placeholder="Zona"
-                          aria-label="Zona"
-                          onChange={(e) => setZona(i, e.target.value)}
-                        />
-                      ) : (
-                        r.zona
-                      )}
-                    </td>
-                    <td className="num c-qty">
-                      {editable ? (
-                        <input
-                          className="cell num"
-                          type="number"
-                          min={0}
-                          step={1}
-                          value={r.qty ?? ''}
-                          placeholder="—"
-                          aria-label="Cantidad"
-                          onChange={(e) => patch(i, { qty: numOrNull(e.target.value) })}
-                        />
-                      ) : (
-                        r.qty ?? '—'
-                      )}
-                    </td>
-                    <td className="num c-price">
-                      {editable ? (
-                        <input
-                          className="cell num"
-                          type="number"
-                          min={0}
-                          step="any"
-                          value={r.price ?? ''}
-                          placeholder="—"
-                          aria-label="Precio"
-                          onChange={(e) => patch(i, { price: numOrNull(e.target.value) })}
-                        />
-                      ) : r.price == null ? (
-                        '—'
-                      ) : (
-                        mxn(r.price)
-                      )}
-                    </td>
-                    <td className="num">{t == null ? <span className="is-muted">—</span> : mxn(t)}</td>
-                    {editable ? (
-                      <td className="col-act">
-                        <button
-                          className="icon-btn icon-btn--danger"
-                          type="button"
-                          aria-label={`Quitar ${r.concept || 'convenio'}`}
-                          onClick={() => {
-                            setRows((prev) => prev.filter((_, idx) => idx !== i));
-                            setDirty(true);
-                          }}
-                        >
-                          ×
-                        </button>
+            {rows.map((r, i) => {
+              const zonas = r.zonas || [];
+              // Al menos una línea; el pie lleva «+ Zona» (al editar) y el total del convenio (si hay varias).
+              const lines: Array<ConvenioZone | null> = zonas.length ? zonas : [null];
+              const foot = editable || zonas.length > 1;
+              const span = lines.length + (foot ? 1 : 0);
+              const label = r.concept.trim() || `convenio ${i + 1}`;
+              return (
+                <tbody key={i} className="convenio-group">
+                  {lines.map((z, k) => {
+                    const t = z ? convenioZoneTotal(z) : null;
+                    return (
+                      <tr key={k}>
+                        {k === 0 ? (
+                          <>
+                            <td className="c-name" rowSpan={span}>
+                              {editable ? (
+                                <input
+                                  className="cell"
+                                  list="convenio-catalog"
+                                  value={r.concept}
+                                  placeholder="Medio"
+                                  aria-label={`Convenio ${i + 1}`}
+                                  onChange={(e) => setConcept(i, e.target.value)}
+                                />
+                              ) : (
+                                <strong>{r.concept}</strong>
+                              )}
+                            </td>
+                            <td className="c-desc" rowSpan={span}>
+                              {editable ? (
+                                <textarea
+                                  className="cell"
+                                  rows={Math.max(1, Math.min(4, span))}
+                                  value={r.description || ''}
+                                  placeholder="Qué entrega"
+                                  aria-label={`Descripción de ${label}`}
+                                  onChange={(e) => patch(i, { description: e.target.value })}
+                                />
+                              ) : (
+                                <span className="is-muted">{r.description}</span>
+                              )}
+                            </td>
+                          </>
+                        ) : null}
+                        {z ? (
+                          <>
+                            <td className="c-zone">
+                              {editable ? (
+                                <input
+                                  className="cell"
+                                  list="convenio-zones"
+                                  value={z.zona}
+                                  placeholder="Zona"
+                                  aria-label={`Zona ${k + 1} de ${label}`}
+                                  onChange={(e) => setZona(i, k, e.target.value)}
+                                />
+                              ) : (
+                                z.zona || <span className="is-muted">—</span>
+                              )}
+                            </td>
+                            <td className="num c-qty">
+                              {editable ? (
+                                <input
+                                  className="cell num"
+                                  type="number"
+                                  min={0}
+                                  step={1}
+                                  value={z.qty ?? ''}
+                                  placeholder="—"
+                                  aria-label={`Cantidad, zona ${k + 1} de ${label}`}
+                                  onChange={(e) => patchZone(i, k, { qty: numOrNull(e.target.value) })}
+                                />
+                              ) : (
+                                z.qty ?? '—'
+                              )}
+                            </td>
+                            <td className="num c-price">
+                              {editable ? (
+                                <input
+                                  className="cell num"
+                                  type="number"
+                                  min={0}
+                                  step="any"
+                                  value={z.price ?? ''}
+                                  placeholder="—"
+                                  aria-label={`Precio, zona ${k + 1} de ${label}`}
+                                  onChange={(e) => patchZone(i, k, { price: numOrNull(e.target.value) })}
+                                />
+                              ) : z.price == null ? (
+                                '—'
+                              ) : (
+                                mxn(z.price)
+                              )}
+                            </td>
+                            <td className="num">{t == null ? <span className="is-muted">—</span> : mxn(t)}</td>
+                          </>
+                        ) : (
+                          <td colSpan={4} className="is-muted t-small">
+                            Sin zonas
+                          </td>
+                        )}
+                        {editable ? (
+                          <td className="col-act">
+                            {z && zonas.length > 1 ? (
+                              <button
+                                className="icon-btn icon-btn--danger"
+                                type="button"
+                                aria-label={`Quitar zona ${z.zona || k + 1} de ${label}`}
+                                onClick={() => removeZone(i, k)}
+                              >
+                                ×
+                              </button>
+                            ) : null}
+                          </td>
+                        ) : null}
+                      </tr>
+                    );
+                  })}
+                  {foot ? (
+                    <tr className="convenio-group__foot">
+                      <td colSpan={3}>
+                        {editable ? (
+                          <div className="sx-actions">
+                            <button className="btn-quiet btn-quiet--accent" type="button" onClick={() => addZone(i)}>
+                              + Zona
+                            </button>
+                            <button className="btn-quiet" type="button" onClick={() => removeConvenio(i)}>
+                              Quitar convenio
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="is-muted t-small">Total del convenio</span>
+                        )}
                       </td>
-                    ) : null}
-                  </tr>
-                );
-              })}
-            </tbody>
+                      <td className="num t-money">{zonas.length > 1 ? mxn(convenioLineTotal(r) ?? 0) : null}</td>
+                      {editable ? <td /> : null}
+                    </tr>
+                  ) : null}
+                </tbody>
+              );
+            })}
             <tfoot>
               <tr>
                 <td colSpan={5}>

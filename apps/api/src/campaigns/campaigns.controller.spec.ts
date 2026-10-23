@@ -69,7 +69,54 @@ describe('CampaignsController · revisión', () => {
     });
     const args = upsert.mock.calls[0][0] as { update: { dataJson: Record<string, unknown> } };
     expect(args.update.dataJson.concepts).toEqual(base.dataJson.concepts);
-    expect(args.update.dataJson.convenios).toHaveLength(1);
+    // Llega con el formato de una zona (pestaña vieja) y se guarda con la lista de zonas.
+    expect(args.update.dataJson.convenios).toEqual([
+      { concept: 'TV AZTECA', description: '', zonas: [{ zona: 'Oro', qty: 4, price: 800 }] },
+    ]);
+  });
+
+  it('un convenio con varias zonas se guarda completo', async () => {
+    const { controller, upsert } = setup(base);
+    await controller.upsert({ user: user('dir_general') }, 'ev1', {
+      dataJson: {
+        convenios: [
+          {
+            concept: 'RADIO ORO',
+            description: 'Spots de 20"',
+            zonas: [
+              { zona: 'Oro', qty: 10, price: 1200 },
+              { zona: 'Plata', qty: 20, price: 650 },
+            ],
+          },
+        ],
+      },
+    });
+    const args = upsert.mock.calls[0][0] as { update: { dataJson: { convenios: Array<{ zonas: unknown[] }> } } };
+    expect(args.update.dataJson.convenios[0].zonas).toHaveLength(2);
+  });
+
+  it('las notas finales se cierran con la campaña en revisión', async () => {
+    const { controller, upsert } = setup({ ...base, status: 'REVIEW' });
+    await expect(
+      controller.upsert({ user: user('dir_general') }, 'ev1', {
+        dataJson: { finalNotes: [{ from: '2026-11-01', to: '2026-11-30', text: 'Vigencia' }] },
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(upsert).not.toHaveBeenCalled();
+  });
+
+  it('en borrador las notas finales se guardan limpias junto a los conceptos', async () => {
+    const { controller, upsert } = setup(base);
+    await controller.upsert({ user: user('dir_general') }, 'ev1', {
+      dataJson: {
+        concepts: base.dataJson.concepts,
+        finalNotes: [{ from: '2026-11-30', to: '2026-11-01', text: ' Válida para venta a terceros ' }],
+      },
+    });
+    const args = upsert.mock.calls[0][0] as { update: { dataJson: Record<string, unknown> } };
+    expect(args.update.dataJson.finalNotes).toEqual([
+      { from: '2026-11-01', to: '2026-11-30', text: 'Válida para venta a terceros' },
+    ]);
   });
 
   it('enviar a revisión avisa a dirección y a la gerencia de esa entidad, no a la de otra', async () => {

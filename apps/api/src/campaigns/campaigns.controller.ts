@@ -26,6 +26,7 @@ import {
   type RoleKey,
 } from '../common/rbac/roles';
 import { CampaignExcelService, type CampaignRow } from './campaign-excel.service';
+import { normalizeCampaignData } from './campaign-data';
 import { ExcelPdfService } from '../uploads/excel-pdf.service';
 import { uploadRoot } from '../uploads/upload-storage';
 import { createHash } from 'crypto';
@@ -323,11 +324,19 @@ export class CampaignsController {
      * candado, cualquiera con la tabla abierta cambiaba precios de una campaña
      * que dirección ya había aprobado.
      */
-    const incoming = body.dataJson && typeof body.dataJson === 'object' ? body.dataJson : null;
+    const incoming =
+      body.dataJson && typeof body.dataJson === 'object' && !Array.isArray(body.dataJson)
+        ? normalizeCampaignData(body.dataJson)
+        : null;
     if (incoming && existing) {
-      const locked = (key: 'concepts' | 'convenios', status: string) =>
+      const locked = (key: 'concepts' | 'finalNotes' | 'convenios', status: string) =>
         key in incoming && asStatus(status) !== null && asStatus(status) !== 'DRAFT';
-      if (locked('concepts', existing.status) || locked('convenios', existing.convenioStatus)) {
+      // Las notas finales van en los PDFs de la campaña: se cierran con sus conceptos.
+      if (
+        locked('concepts', existing.status) ||
+        locked('finalNotes', existing.status) ||
+        locked('convenios', existing.convenioStatus)
+      ) {
         throw new BadRequestException('Está en revisión o autorizada: regrésala a borrador para editarla');
       }
     }

@@ -212,8 +212,20 @@ export type CampaignData = {
   timeline?: string;
   /** Conceptos de la campaña: cantidad, fechas y precio interno / externo. */
   concepts?: CampaignConceptRow[];
-  /** Campaña de convenios: zona, cantidad, precio y total. */
+  /**
+   * Notas finales con fecha, opcionales (junta 23-10-2026): «Válida del … al
+   * …», fecha límite de pago… Salen al pie de los PDFs interna y externa.
+   */
+  finalNotes?: CampaignFinalNote[];
+  /** Campaña de convenios: zonas con cantidad, precio y total. */
   convenios?: ConvenioRow[];
+};
+
+/** Nota final de la campaña: una fecha, un rango o ninguna, y el texto. */
+export type CampaignFinalNote = {
+  from?: string | null;
+  to?: string | null;
+  text: string;
 };
 
 /** Fila de la campaña publicitaria. */
@@ -233,10 +245,22 @@ export type CampaignConceptRow = {
   included?: boolean;
 };
 
-/** Fila de la campaña de convenios: se paga en especie, sin precio interno/externo. */
+/** Zona de un convenio: cortesías de esa zona, con su precio. */
+export type ConvenioZone = {
+  zona: string;
+  qty?: number | null;
+  price?: number | null;
+};
+
+/**
+ * Convenio de la campaña de convenios: se paga en especie, sin precio
+ * interno/externo. Desde el 23-10-2026 lleva varias zonas (`zonas`).
+ */
 export type ConvenioRow = {
   concept: string;
   description?: string;
+  zonas?: ConvenioZone[];
+  /** Formato anterior: una sola zona en el renglón. Se lee como `zonas: [{…}]`. */
   zona?: string;
   qty?: number | null;
   price?: number | null;
