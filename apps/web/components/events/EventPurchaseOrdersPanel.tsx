@@ -11,6 +11,7 @@ import {
   type ReactNode,
 } from 'react';
 import { api } from '@/lib/api';
+import { openGeneratedTab } from '@/lib/open-tab';
 import { clearDraft, poHandoffKey, readDraft } from '@/lib/draft-store';
 import { EmptyLite, Pill, quietTone, SectionHead, Seg } from '@/components/ui/Lite';
 import { PayDaysNote } from '@/components/purchase-orders/PoWindowBanner';
@@ -763,8 +764,12 @@ export function EventPurchaseOrdersPanel({
   async function downloadPdf(po: Po) {
     setBusy(`pdf-${po.id}`);
     try {
-      const res = await api<{ url: string }>(`/purchase-orders/${po.id}/export`, { method: 'POST', body: JSON.stringify({}) });
-      window.open(res.url, '_blank', 'noopener');
+      // Safari: la pestaña se abre dentro del clic, no después del await.
+      await openGeneratedTab(
+        async () =>
+          (await api<{ url: string }>(`/purchase-orders/${po.id}/export`, { method: 'POST', body: JSON.stringify({}) }))
+            .url,
+      );
     } catch (e) {
       flash('No se pudo generar el PDF', 'error');
     } finally {
