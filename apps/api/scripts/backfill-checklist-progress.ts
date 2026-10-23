@@ -22,7 +22,9 @@
  *   docker exec -w /app/apps/api arta-api npx ts-node --transpile-only \
  *     scripts/backfill-checklist-progress.ts --confirm-produccion
  *
- * Opciones: `--event <id>` (solo los formatos de ese evento).
+ * Opciones: `--event <id>` (solo los formatos de ese evento) ·
+ * `--solo-mandados` (solo sube a 100 % los mandados; no corrige el avance de
+ * los demás aunque esté desfasado de lo capturado).
  *
  * Idempotente: solo escribe las filas cuyo porcentaje cambia y no toca datos,
  * estados, firmas, revisiones ni PDFs (el porcentaje no se imprime en el PDF).
@@ -52,6 +54,7 @@ function arg(name: string): string | null {
 async function main() {
   const dry = has('--dry');
   const onlyEvent = arg('event');
+  const onlySent = has('--solo-mandados');
   if (!dry && !isLocalDb() && !has('--confirm-produccion')) {
     throw new Error('Base no local: corre primero con --dry y aplica con --confirm-produccion');
   }
@@ -76,10 +79,14 @@ async function main() {
       orderBy: { createdAt: 'asc' },
     });
 
-    console.log(`${tag}Revisando ${rows.length} formato(s)${onlyEvent ? ` del evento ${onlyEvent}` : ''}…`);
+    console.log(
+      `${tag}Revisando ${rows.length} formato(s)${onlyEvent ? ` del evento ${onlyEvent}` : ''}` +
+        `${onlySent ? ' · solo los mandados' : ''}…`,
+    );
 
     const changes: Array<{ id: string; event: string; title: string; before: number; after: number; sent: boolean }> = [];
     for (const row of rows) {
+      if (onlySent && !isFormatSent(row)) continue;
       const next = formatProgress(row.dataJson, row);
       if (next === row.progressPct) continue;
       changes.push({
