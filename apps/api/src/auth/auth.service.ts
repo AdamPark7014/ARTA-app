@@ -7,11 +7,12 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
 import { randomBytes } from 'crypto';
-import { generateSecret, generateURI, verifySync } from 'otplib';
+import { generateSecret, generateURI } from 'otplib';
 import * as QRCode from 'qrcode';
 import { EntityKey } from '@prisma/client';
 import { Response } from 'express';
 import { PrismaService } from '../common/prisma/prisma.service';
+import { verifyTotpCode } from './totp';
 import { sha256Hex as hash } from '../common/crypto';
 import { hasPermission, type Permission, type RoleKey } from '../common/rbac/roles';
 import { DEFAULT_ORG_ID } from '../common/tenant';
@@ -193,7 +194,7 @@ export class AuthService {
     if (!row.user.totpSecret || !row.user.totpEnabled) {
       throw new BadRequestException('2FA no configurado');
     }
-    const ok = verifySync({ token: code.replace(/\s/g, ''), secret: row.user.totpSecret }).valid;
+    const ok = verifyTotpCode(code, row.user.totpSecret);
     if (!ok) throw new UnauthorizedException('Código 2FA inválido');
 
     await this.prisma.totpChallenge.update({
@@ -281,7 +282,7 @@ export class AuthService {
   async enableTotp(userId: string, code: string) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user?.totpSecret) throw new BadRequestException('Primero inicia setup 2FA');
-    if (!verifySync({ token: code.replace(/\s/g, ''), secret: user.totpSecret }).valid) {
+    if (!verifyTotpCode(code, user.totpSecret)) {
       throw new UnauthorizedException('Código inválido');
     }
     await this.prisma.user.update({
@@ -308,7 +309,7 @@ export class AuthService {
   ) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user?.totpSecret) throw new BadRequestException('Primero inicia setup 2FA');
-    if (!verifySync({ token: code.replace(/\s/g, ''), secret: user.totpSecret }).valid) {
+    if (!verifyTotpCode(code, user.totpSecret)) {
       throw new UnauthorizedException('Código inválido');
     }
     await this.prisma.user.update({
