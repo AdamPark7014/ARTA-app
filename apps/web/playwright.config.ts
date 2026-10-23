@@ -40,7 +40,19 @@ export default defineConfig({
     },
   },
 
-  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
+  projects: [
+    { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
+    // Motor de Safari, a pedido: `E2E_WEBKIT=1 npx playwright test --project=webkit`.
+    // No va en la suite normal ni en CI: no se ha visto pasar entera. En Windows,
+    // lanzado desde la app de escritorio de Claude, la política de integridad de
+    // código bloquea el sqlite3.dll sin firmar de Playwright WebKit; en macOS o
+    // Linux corre (`npx playwright install --with-deps webkit`), pero ahí
+    // `arta.localhost` tiene que resolver a 127.0.0.1 (/etc/hosts): la regla
+    // `--host-resolver-rules` de arriba es solo de Chromium.
+    ...(process.env.E2E_WEBKIT
+      ? [{ name: 'webkit', use: { ...devices['Desktop Safari'], launchOptions: {} } }]
+      : []),
+  ],
 
   webServer: {
     command: 'npm run build && npm run start:e2e',

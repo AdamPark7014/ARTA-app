@@ -33,22 +33,33 @@ function LoginForm() {
     if (!loading && user) router.replace(nextPath);
   }, [loading, user, router, nextPath]);
 
-  async function onSubmit(e: FormEvent) {
+  async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    // Safari (Llavero, códigos de verificación de Contraseñas/Mensajes) puede
+    // rellenar los campos sin que React se entere: manda lo que de verdad está
+    // escrito en el formulario, no solo lo que quedó en el estado.
+    const fd = new FormData(e.currentTarget);
+    const typedEmail = String(fd.get('email') ?? email);
+    const typedPassword = String(fd.get('password') ?? password);
+    // El código TOTP son solo dígitos; el autollenado puede traer «123 456» o «123-456».
+    const typedCode = String(fd.get('code') ?? totpCode).replace(/\D/g, '');
+    setEmail(typedEmail);
+    setPassword(typedPassword);
+    setTotpCode(typedCode);
     setBusy(true);
     setError('');
     try {
       if (enrollToken) {
-        await completeEnrollment(enrollToken, totpCode.trim());
+        await completeEnrollment(enrollToken, typedCode);
         router.replace(nextPath);
         return;
       }
       if (challengeId) {
-        await verify2fa(challengeId, totpCode.trim());
+        await verify2fa(challengeId, typedCode);
         router.replace(nextPath);
         return;
       }
-      const result = await login(email.trim().toLowerCase(), password);
+      const result = await login(typedEmail.trim().toLowerCase(), typedPassword);
       if ('requires2fa' in result && result.requires2fa) {
         setChallengeId(result.challengeId);
         return;
@@ -217,6 +228,7 @@ function LoginForm() {
                   Código de la app autenticadora
                   <input
                     className="field"
+                    name="code"
                     value={totpCode}
                     onChange={(e) => setTotpCode(e.target.value)}
                     inputMode="numeric"
@@ -233,6 +245,7 @@ function LoginForm() {
                 Código de verificación
                 <input
                   className="field"
+                  name="code"
                   value={totpCode}
                   onChange={(e) => setTotpCode(e.target.value)}
                   inputMode="numeric"
@@ -249,11 +262,10 @@ function LoginForm() {
                 {error}
               </div>
             ) : null}
-            <button
-              className="btn btn-login"
-              type="submit"
-              disabled={busy || (!in2faStep && (!email || !password)) || (in2faStep && !totpCode)}
-            >
+            {/* Sin «deshabilitado si está vacío»: si Safari autollenó sin avisar a
+                React, el botón se quedaba gris aunque los campos tuvieran datos. Los
+                `required` del formulario ya frenan el envío vacío. */}
+            <button className="btn btn-login" type="submit" disabled={busy}>
               {busy ? 'Verificando…' : enrollToken ? 'Activar y entrar' : challengeId ? 'Confirmar' : 'Entrar'}
             </button>
             {in2faStep ? (

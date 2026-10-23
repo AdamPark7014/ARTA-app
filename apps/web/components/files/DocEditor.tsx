@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { api } from '@/lib/api';
+import { openGeneratedTab } from '@/lib/open-tab';
 import { ExpandBox } from '@/components/ui/ExpandBox';
 import { RevisionHistory } from '@/components/ui/RevisionHistory';
 import { useSaveHotkey } from '@/lib/use-save-hotkey';
@@ -254,17 +255,20 @@ export function DocEditor({ doc, canEdit, onSaved, onDeleted, onClose }: Props) 
     setExporting(true);
     setError('');
     try {
-      if (dirty && canEdit) await save();
-      const res = await api<{ url: string; version: number }>(`/documents/${doc.id}/pdf`, {
-        method: 'POST',
-      });
-      setPdfUrl(res.url);
-      setPdfStale(false);
-      setMsg('PDF listo. Para seguir editando, vuelve aquí — no al archivo Word.');
-      setRevKey((k) => k + 1);
+      // Safari: la pestaña se abre dentro del clic y recibe el PDF cuando está listo.
+      await openGeneratedTab(async () => {
+        if (dirty && canEdit) await save();
+        const res = await api<{ url: string; version: number }>(`/documents/${doc.id}/pdf`, {
+          method: 'POST',
+        });
+        setPdfUrl(res.url);
+        setPdfStale(false);
+        setMsg('PDF listo. Para seguir editando, vuelve aquí — no al archivo Word.');
+        setRevKey((k) => k + 1);
+        return res.url;
+      }, 'Generando el PDF…');
       const refreshed = await api<EventDocumentRow>(`/documents/${doc.id}`);
       onSaved(refreshed);
-      window.open(res.url, '_blank', 'noopener');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'No se pudo generar el PDF');
     } finally {

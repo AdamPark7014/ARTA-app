@@ -10,6 +10,7 @@ import { BoleteraFields } from '@/components/ticketing/BoleteraFields';
 import { TicketZonesEditor } from '@/components/ticketing/TicketZonesEditor';
 import { EmptyLite, SectionHead } from '@/components/ui/Lite';
 import { api } from '@/lib/api';
+import { openGeneratedTab, openPendingTab } from '@/lib/open-tab';
 import {
   boleteraChoiceOf,
   boleteraDateLabel,
@@ -303,6 +304,8 @@ export function EventTicketingPanel({ event, closed, canEdit, onChanged, flash }
 
     const wasEditing = editingId !== null;
     setBusy(true);
+    // Safari solo abre pestañas dentro del clic: se abre ya y recibe el PDF al final.
+    const tab = openPendingTab('Generando el PDF de la boletera…');
     let saved: TicketingSetup;
     try {
       saved = wasEditing
@@ -315,6 +318,7 @@ export function EventTicketingPanel({ event, closed, canEdit, onChanged, flash }
             body: JSON.stringify(payload),
           });
     } catch (e) {
+      tab.close();
       flash(e instanceof Error ? e.message : 'No se pudo guardar la boletera', 'error');
       setBusy(false);
       return;
@@ -324,9 +328,10 @@ export function EventTicketingPanel({ event, closed, canEdit, onChanged, flash }
     const done = wasEditing ? 'Boletera actualizada' : 'Boletera creada';
     try {
       const res = await api<{ url: string }>(`/ticketing/${saved.id}/pdf`, { method: 'POST', body: '{}' });
-      window.open(res.url, '_blank', 'noopener');
+      tab.go(res.url);
       flash(`${done} · PDF descargado`, 'success');
     } catch {
+      tab.close();
       flash(`${done}, pero el PDF no se generó. Usa «Descargar PDF».`, 'warn');
     }
     try {
@@ -356,8 +361,10 @@ export function EventTicketingPanel({ event, closed, canEdit, onChanged, flash }
   async function download(setup: TicketingSetup) {
     setPdfId(setup.id);
     try {
-      const res = await api<{ url: string }>(`/ticketing/${setup.id}/pdf`, { method: 'POST', body: '{}' });
-      window.open(res.url, '_blank', 'noopener');
+      await openGeneratedTab(
+        async () => (await api<{ url: string }>(`/ticketing/${setup.id}/pdf`, { method: 'POST', body: '{}' })).url,
+        'Generando el PDF de la boletera…',
+      );
     } catch {
       flash('No se pudo generar el PDF', 'error');
     } finally {

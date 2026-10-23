@@ -1,4 +1,5 @@
 import type { DocBlock } from '@/components/files/DocEditor';
+import { loadPdfjs } from '@/lib/pdfjs';
 
 type Line = { y: number; x: number; text: string };
 
@@ -18,8 +19,7 @@ export async function pdfToBlocks(url: string): Promise<DocBlock[]> {
   if (!res.ok) throw new Error(`No se pudo abrir el PDF (${res.status})`);
   const buf = await res.arrayBuffer();
 
-  const pdfjs = await import('pdfjs-dist');
-  pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
+  const pdfjs = await loadPdfjs();
   const doc = await pdfjs.getDocument({ data: new Uint8Array(buf) }).promise;
 
   const blocks: DocBlock[] = [];

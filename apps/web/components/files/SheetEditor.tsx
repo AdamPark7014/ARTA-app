@@ -19,6 +19,7 @@ import FastFormulaParser from 'fast-formula-parser';
 import { createEvaluator } from '@/lib/sheet-evaluator';
 import type { SaveFile } from '@/lib/file-save';
 import { api } from '@/lib/api';
+import { openGeneratedTab } from '@/lib/open-tab';
 import { ExpandBox } from '@/components/ui/ExpandBox';
 import { RevisionHistory } from '@/components/ui/RevisionHistory';
 import { useSaveHotkey } from '@/lib/use-save-hotkey';
@@ -1147,13 +1148,16 @@ export function SheetEditor({
     setError('');
     setPdfUrl('');
     try {
-      if (dirty && canEdit) await save();
-      const res = await api<{ url: string; message?: string }>(`/uploads/${fileId}/pdf`, { method: 'POST' });
-      setPdfUrl(res.url);
-      setMsg(res.message || 'PDF de salida listo');
-      setRevKey((k) => k + 1);
+      // Safari: la pestaña se abre dentro del clic y recibe el PDF cuando está listo.
+      await openGeneratedTab(async () => {
+        if (dirty && canEdit) await save();
+        const res = await api<{ url: string; message?: string }>(`/uploads/${fileId}/pdf`, { method: 'POST' });
+        setPdfUrl(res.url);
+        setMsg(res.message || 'PDF de salida listo');
+        setRevKey((k) => k + 1);
+        return res.url;
+      }, 'Generando el PDF…');
       await onSaved?.();
-      window.open(res.url, '_blank', 'noopener');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'No se pudo generar el PDF');
     } finally {

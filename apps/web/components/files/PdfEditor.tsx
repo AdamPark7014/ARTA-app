@@ -6,6 +6,7 @@ import { ExpandBox } from '@/components/ui/ExpandBox';
 import { useElementWidth } from '@/lib/use-element-width';
 import { useSaveHotkey } from '@/lib/use-save-hotkey';
 import { useDirtyGuard } from '@/lib/use-dirty-guard';
+import { loadPdfjs } from '@/lib/pdfjs';
 
 type Props = {
   url: string;
@@ -100,8 +101,7 @@ export function PdfEditor({ url, fileName, canEdit, onSave, onSaved, note, saveL
       if (cancelled) return;
       bytesRef.current = new Uint8Array(buf.slice(0));
 
-      const pdfjs = await import('pdfjs-dist');
-      pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
+      const pdfjs = await loadPdfjs();
       const doc = await pdfjs.getDocument({ data: new Uint8Array(buf.slice(0)) }).promise;
       if (cancelled) return;
 
@@ -133,7 +133,7 @@ export function PdfEditor({ url, fileName, canEdit, onSave, onSaved, note, saveL
     let cancelled = false;
 
     (async () => {
-      const pdfjs = await import('pdfjs-dist');
+      const pdfjs = await loadPdfjs();
       const doc = await pdfjs.getDocument({ data: bytesRef.current!.slice(0) }).promise;
 
       for (const info of pages) {

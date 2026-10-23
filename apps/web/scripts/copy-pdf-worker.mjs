@@ -5,6 +5,9 @@
  * en vez de versionarlo para que worker y librería sean SIEMPRE de la misma
  * versión de pdfjs-dist: si se desfasan, pdf.js falla en runtime con "The API
  * version does not match the Worker version".
+ *
+ * Es el worker del build «legacy», el mismo que importa `lib/pdfjs.ts`: el
+ * moderno usa `Promise.withResolvers` sin polyfill y no corre en Safari < 17.4.
  */
 import { copyFileSync, mkdirSync, existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -14,7 +17,7 @@ import { createRequire } from 'node:module';
 const here = dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
 
-const src = join(dirname(require.resolve('pdfjs-dist/package.json')), 'build', 'pdf.worker.min.mjs');
+const src = join(dirname(require.resolve('pdfjs-dist/package.json')), 'legacy', 'build', 'pdf.worker.min.mjs');
 const destDir = join(here, '..', 'public');
 const dest = join(destDir, 'pdf.worker.min.mjs');
 
