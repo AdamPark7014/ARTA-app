@@ -260,10 +260,6 @@ input.hub-search {
   padding: 0.7rem 0.9rem 0.7rem 1.2rem;
 }
 
-.hub-drawer .sig-grid {
-  gap: 1.1rem;
-}
-
 /* ── Barra de herramientas del formulario ───────────────────────────────── */
 
 .hub-toolbar__group {
@@ -563,10 +559,6 @@ select.hub-jump {
 
   .hub-doc__status {
     margin-left: 0;
-  }
-
-  .hub-drawer .sig-grid {
-    grid-template-columns: 1fr;
   }
 
   .hub-sec__body {

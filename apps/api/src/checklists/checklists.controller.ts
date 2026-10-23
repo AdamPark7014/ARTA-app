@@ -15,7 +15,7 @@ import { DocStatus, DocType, Prisma } from '@prisma/client';
 import { createHash } from 'crypto';
 import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { PrismaService } from '../common/prisma/prisma.service';
-import { calcProgress } from '../common/checklist-progress';
+import { calcProgress, formatProgress } from '../common/checklist-progress';
 import { diffChecklistData } from '../common/doc-diff';
 import { bindFormatToEvent, normalizeFormatData, type FormatData, type FormatItem, type FormatSection } from '../common/format-schema';
 import {
@@ -530,7 +530,9 @@ export class ChecklistsController {
       throw new BadRequestException('Falta el contenido del formato (dataJson)');
     }
 
-    const progressPct = calcProgress(body.dataJson);
+    // Un formato ya mandado (firma de entrega, en revisión…) sigue en 100 %
+    // aunque se corrija algo mientras se revisa.
+    const progressPct = formatProgress(body.dataJson, existing);
     const draft = body.draft === true;
     const base = body.baseRevision;
 
@@ -682,10 +684,20 @@ export class ChecklistsController {
       },
     });
 
+    /*
+     * Firmar es terminar y mandar el formato: desde aquí cuenta 100 % aunque no
+     * se haya palomeado todo (cada evento usa solo parte de cada checklist).
+     */
+    const progressPct = formatProgress(existing.dataJson, {
+      ...existing,
+      ...(body.kind === 'ENTREGADO' ? { deliveredAt: signedAt } : { authorizedAt: signedAt }),
+    });
+
     if (body.kind === 'ENTREGADO') {
       await this.prisma.checklistInstance.update({
         where: { id },
         data: {
+          progressPct,
           deliveredAt: signedAt,
           deliveredById: req.user.id,
           deliveredSignature: signaturePayload,
@@ -697,6 +709,7 @@ export class ChecklistsController {
       await this.prisma.checklistInstance.update({
         where: { id },
         data: {
+          progressPct,
           authorizedAt: signedAt,
           authorizedById: req.user.id,
           authorizedSignature: signaturePayload,
@@ -780,10 +793,14 @@ export class ChecklistsController {
     else assertCanTransition(req.user.roleKey, to, body.reason);
 
     const now = new Date();
+    // Mandar a revisión, aprobar o sellar lo pone en 100 %; volver a borrador
+    // sin firma regresa al avance de lo capturado.
+    const progressPct = formatProgress(existing.dataJson, { ...existing, status: to });
     const updated = await this.prisma.checklistInstance.update({
       where: { id },
       data: {
         status: to,
+        progressPct,
         revision: { increment: 1 },
         ...(to === DocStatus.REVIEW ? { submittedById: req.user.id, submittedAt: now } : {}),
         ...(to === DocStatus.APPROVED ? { approvedById: req.user.id, approvedAt: now } : {}),
@@ -974,7 +991,7 @@ export class ChecklistsController {
     }
 
     const dataJson = version.dataJson as object;
-    const progressPct = calcProgress(dataJson);
+    const progressPct = formatProgress(dataJson, existing);
 
     await this.prisma.checklistInstance.update({
       where: { id },

@@ -219,7 +219,10 @@ function EventDetailInner() {
               x.id === c.id
                 ? {
                     ...x,
+                    // Mandar a revisión o firmar deja el formato en 100 %: la
+                    // píldora de la lista tiene que cambiar a la vez que la barra.
                     progressPct: c.progressPct,
+                    status: c.status ?? x.status,
                     pdfUrl: c.pdfUrl ?? x.pdfUrl,
                     pdfGeneratedAt: c.pdfGeneratedAt ?? x.pdfGeneratedAt,
                     deliveredAt: c.deliveredAt ?? x.deliveredAt,

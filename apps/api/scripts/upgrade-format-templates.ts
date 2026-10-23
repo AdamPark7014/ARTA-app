@@ -45,7 +45,7 @@
  * En Docker: `docker exec -w /app/apps/api arta-api npx ts-node --transpile-only scripts/upgrade-format-templates.ts --dry`
  */
 import { DocStatus, EntityKey, EventStatus, Prisma, PrismaClient } from '@prisma/client';
-import { calcProgress } from '../src/common/checklist-progress';
+import { calcProgress, formatProgress } from '../src/common/checklist-progress';
 import {
   bindFormatToEvent,
   carryFormatValues,
@@ -233,7 +233,8 @@ async function main() {
           continue;
         }
         const next = bindFormatToEvent(carryFormatValues(normalizeFormatData(format.schema), inst.dataJson), inst.event);
-        const progressPct = calcProgress(next);
+        // Uno en revisión o con firma de entrega ya se mandó: sigue en 100 %.
+        const progressPct = formatProgress(next, inst);
         console.log(
           `${tag}   · ${inst.event.name} — ${inst.title}: migrado (avance ${inst.progressPct}% → ${progressPct}%)` +
             (lost.length ? ` · se queda en Versiones: ${lost.join(' · ')}` : ''),

@@ -2,9 +2,9 @@
 
 import { FileViewer, PdfEditor } from '@/components/files/lazy';
 import { ExpandBox } from '@/components/ui/ExpandBox';
-import { FormatSheet, GrowingText } from '@/components/events/FormatSheet';
+import { FormatSheet, FormatSignatures, GrowingText, type SignPermissions } from '@/components/events/FormatSheet';
 import { useEffect, useMemo, useState } from 'react';
-import { SignaturePad } from '@/components/ui/SignaturePad';
+import { isDirectionRole } from '@arta/rbac';
 import { createEventFile } from '@/lib/file-save';
 import { EmptyLite, FileRow, SectionHead, Seg } from '@/components/ui/Lite';
 import { SaveStatus } from '@/components/ui/SaveStatus';
@@ -16,6 +16,7 @@ import { useAutosave } from '@/lib/use-autosave';
 import { useDirtyGuard } from '@/lib/use-dirty-guard';
 import { useSaveHotkey } from '@/lib/use-save-hotkey';
 import { DocStatusBadge, DocStatusControl } from '@/components/ui/DocStatusControl';
+import { checklistProgress } from '@/components/events/checklist-progress';
 import {
   isCheckItem,
   isItemDone,
@@ -66,8 +67,11 @@ type EventChecklistsPanelProps = {
   onFilesChanged: () => void | Promise<void>;
 };
 
-/** Cajón abierto bajo el formato: firmas, PDF, adjuntos o historial. */
-type Drawer = 'firmas' | 'pdf' | 'archivos' | 'historial' | null;
+/**
+ * Cajón abierto bajo el encabezado: PDF, adjuntos o historial. Las firmas ya
+ * no van aquí: viven al final del documento (junta del 23-10-2026).
+ */
+type Drawer = 'pdf' | 'archivos' | 'historial' | null;
 
 /** Casilla con nota corta opcional (proveedor, quién, cuándo…). */
 function CheckRow({
@@ -224,9 +228,9 @@ function FieldControl({
  * Formatos del evento.
  *
  * Dos pantallas y nada más: la lista de formatos con su avance, y el formato
- * abierto con sus secciones. Lo demás —firmas, PDF, adjuntos e historial—
- * vive en «Más» y se abre como un cajón bajo el formato, para que capturar no
- * compita con cuatro bloques siempre desplegados.
+ * abierto con sus secciones y, al final, sus renglones de firma. PDF, adjuntos
+ * e historial viven en «Más» y se abren como un cajón, para que capturar no
+ * compita con tres bloques siempre desplegados.
  */
 export function EventChecklistsPanel({
   event,
@@ -354,6 +358,17 @@ export function EventChecklistsPanel({
   );
   /** Nombre de cada firma (el Compromiso de horarios firma Producción externa / Auditorio). */
   const sigLabels = useMemo(() => signatureLabels(activeChecklist?.dataJson), [activeChecklist?.dataJson]);
+  /** Misma regla que el API: «Autorizado» lo firma gerencia de la entidad o dirección. */
+  const canSign = useMemo<SignPermissions>(
+    () => ({
+      delivered: true,
+      authorized:
+        isDirectionRole(roleKey) ||
+        (roleKey === 'gerente_arta' && event.entity === 'ARTA') ||
+        (roleKey === 'dir_auditorio' && event.entity === 'EXPLANADA'),
+    }),
+    [roleKey, event.entity],
+  );
 
   const stats = useMemo(() => {
     const perSection = sections.map((s) => {
@@ -467,6 +482,14 @@ export function EventChecklistsPanel({
 
   function openDrawer(next: Drawer) {
     setDrawer((cur) => (cur === next ? null : next));
+  }
+
+  /** Las firmas están al final del documento: «Más → Firmas» lleva hasta ellas. */
+  function goToSignatures() {
+    document.querySelector('details.hub-more')?.removeAttribute('open');
+    requestAnimationFrame(() => {
+      document.getElementById('fmt-firmas')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
   }
 
   /* ── Lista de formatos ──────────────────────────────────────────────── */
@@ -587,9 +610,13 @@ export function EventChecklistsPanel({
 
   /* ── Formato abierto ────────────────────────────────────────────────── */
 
-  const progressPct = stats.total
-    ? Math.round((stats.done / stats.total) * 100)
-    : activeChecklist.progressPct || 0;
+  /*
+   * Terminado y mandado (firma de entrega, en revisión, aprobado…) cuenta
+   * 100 % aunque no se haya palomeado todo: cada evento usa solo parte de
+   * cada checklist. Lo capturado de verdad se enseña al lado.
+   */
+  const progress = checklistProgress(activeChecklist, sections);
+  const progressPct = progress.pct;
 
   return (
     <div className="sx-stack">
@@ -630,8 +657,8 @@ export function EventChecklistsPanel({
             <details className="ev-more hub-more">
               <summary className="btn ghost btn-sm">Más</summary>
               <div className="ev-more__menu" role="menu">
-                <button type="button" onClick={() => openDrawer('firmas')}>
-                  Firmas
+                <button type="button" onClick={goToSignatures}>
+                  Firmas (al final)
                 </button>
                 <button type="button" onClick={() => openDrawer('pdf')}>
                   {activeChecklist.pdfUrl ? 'Ver el PDF' : 'Generar el PDF'}
@@ -677,11 +704,18 @@ export function EventChecklistsPanel({
         </div>
 
         <div className="hub-doc__meta">
-          <span className="hub-doc__progress">
+          <span
+            className="hub-doc__progress"
+            title={
+              progress.sent
+                ? 'Terminado y mandado: cuenta 100 % aunque no se haya palomeado todo'
+                : undefined
+            }
+          >
             <span className={`hub-bar ${progressPct >= 100 ? 'is-done' : ''}`} aria-hidden>
               <span style={{ width: `${progressPct}%` }} />
             </span>
-            {progressPct}% · {stats.done}/{stats.total} campos
+            {progressPct}%{progress.sent ? ' · mandado' : ''} · {progress.done}/{progress.total} campos
           </span>
           {activeChecklist.lastEditedBy ? <span>Última edición: {activeChecklist.lastEditedBy.fullName}</span> : null}
           {activeChecklist.sealedAt ? (
@@ -718,33 +752,6 @@ export function EventChecklistsPanel({
       ) : null}
 
       {/* ── Cajones ── */}
-
-      {drawer === 'firmas' ? (
-        <section className="surface hub-drawer">
-          <div className="surface__head">
-            <h3 className="surface__title">Firmas</h3>
-            <button className="icon-btn" type="button" aria-label="Cerrar" onClick={() => setDrawer(null)}>
-              ×
-            </button>
-          </div>
-          <div className="surface__body">
-            <div className="sig-grid">
-              <SignaturePad
-                label={sigLabels.delivered}
-                signerName={userFullName}
-                existing={activeChecklist.deliveredSignature}
-                onSign={(p) => onSignChecklist('ENTREGADO', p)}
-              />
-              <SignaturePad
-                label={sigLabels.authorized}
-                signerName={userFullName}
-                existing={activeChecklist.authorizedSignature}
-                onSign={(p) => onSignChecklist('AUTORIZADO', p)}
-              />
-            </div>
-          </div>
-        </section>
-      ) : null}
 
       {drawer === 'pdf' ? (
         <section className="surface hub-drawer">
@@ -987,13 +994,11 @@ export function EventChecklistsPanel({
             files={checklistFiles}
             onUpdateItem={onUpdateItem}
             onUpload={readOnly ? undefined : onUpload}
+            progress={progress}
             signatureLabels={sigLabels}
-            onOpenSignatures={() => {
-              openDrawer('firmas');
-              requestAnimationFrame(() => {
-                document.querySelector('.hub-drawer')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-              });
-            }}
+            signerName={userFullName}
+            canSign={canSign}
+            onSign={onSignChecklist}
           />
         </ExpandBox>
       ) : (
@@ -1094,6 +1099,22 @@ export function EventChecklistsPanel({
               );
             })
           )}
+          <section className="surface hub-sec hub-sec--firmas">
+            <div className="hub-sec__head">
+              <h3 className="hub-sec__title">Firmas</h3>
+            </div>
+            <div className="hub-sec__body">
+              <FormatSignatures
+                labels={sigLabels}
+                delivered={activeChecklist.deliveredSignature}
+                authorized={activeChecklist.authorizedSignature}
+                readOnly={readOnly}
+                signerName={userFullName}
+                canSign={canSign}
+                onSign={onSignChecklist}
+              />
+            </div>
+          </section>
         </div>
       )}
     </div>

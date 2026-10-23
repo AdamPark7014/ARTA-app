@@ -8,9 +8,11 @@ type Props = {
   onSign: (payload: { imageDataUrl: string; signerName: string }) => Promise<void> | void;
   disabled?: boolean;
   existing?: { signerName?: string; imageDataUrl?: string; signedAt?: string } | null;
+  /** Cerrar sin firmar (el lienzo abierto dentro del renglón de firmas del formato). */
+  onCancel?: () => void;
 };
 
-export function SignaturePad({ label, signerName, onSign, disabled, existing }: Props) {
+export function SignaturePad({ label, signerName, onSign, disabled, existing, onCancel }: Props) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const drawing = useRef(false);
   const [name, setName] = useState(signerName);
@@ -120,6 +122,11 @@ export function SignaturePad({ label, signerName, onSign, disabled, existing }: 
         onPointerLeave={onPointerUp}
       />
       <div className="row" style={{ marginTop: 8 }}>
+        {onCancel ? (
+          <button type="button" className="btn ghost" onClick={onCancel} disabled={busy}>
+            Cancelar
+          </button>
+        ) : null}
         <button type="button" className="btn ghost" onClick={clear} disabled={disabled || busy}>
           Limpiar
         </button>

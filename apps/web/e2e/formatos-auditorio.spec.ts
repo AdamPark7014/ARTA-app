@@ -123,12 +123,27 @@ const STUBS = {
   '/checklists/chk-compromiso': CHECKLIST,
 };
 
-async function openCompromiso(page: import('@playwright/test').Page, baseURL: string) {
+async function openCompromiso(
+  page: import('@playwright/test').Page,
+  baseURL: string,
+  extra: Record<string, unknown> = {},
+) {
   await seedSession(page, baseURL);
-  await mockAuthenticatedApi(page, STUBS);
+  await mockAuthenticatedApi(page, { ...STUBS, ...extra });
   await page.setViewportSize({ width: 1500, height: 1100 });
-  await page.goto('/events/evt-e2e-aud?tab=checklists&checklist=chk-compromiso');
+  await page.goto(`${baseURL}/events/evt-e2e-aud?tab=checklists&checklist=chk-compromiso`);
   await page.locator('.fsheet').waitFor({ timeout: 25000 });
+}
+
+/** Un trazo cualquiera sobre el lienzo de firma. */
+async function scribble(page: import('@playwright/test').Page, canvas: import('@playwright/test').Locator) {
+  const box = (await canvas.boundingBox())!;
+  await page.mouse.move(box.x + 20, box.y + box.height * 0.6);
+  await page.mouse.down();
+  for (let i = 1; i <= 12; i += 1) {
+    await page.mouse.move(box.x + 20 + i * 14, box.y + box.height * (0.5 + 0.25 * Math.sin(i)));
+  }
+  await page.mouse.up();
 }
 
 test.describe('Formatos del Auditorio', () => {
@@ -160,5 +175,93 @@ test.describe('Formatos del Auditorio', () => {
     // Modo Lista: el texto fijo también se lee como texto.
     await page.getByRole('tab', { name: 'Lista', exact: true }).click();
     await expect(page.locator('.hub-para').first()).toContainText(CONDICIONES[0]);
+  });
+
+  /*
+   * Junta del 23-10-2026: «que las firmas vengan abajo inmersas dentro del
+   * documento, no hasta arriba» y «en cuanto se termine y se mande se tome
+   * como 100 por ciento aunque no se haya palomeado todo».
+   */
+  test('las firmas van al final del documento, se firma ahí mismo y el formato firmado cuenta 100 %', async ({
+    page,
+    baseURL,
+  }) => {
+    let signedAs = '';
+    await openCompromiso(page, baseURL!, {
+      '/checklists/chk-compromiso/sign': async (route: import('@playwright/test').Route) => {
+        const body = JSON.parse(route.request().postData() || '{}');
+        signedAs = body.kind;
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            ...CHECKLIST,
+            progressPct: 100,
+            deliveredAt: '2026-11-15T22:10:00.000Z',
+            deliveredSignature: {
+              signerName: body.signerName,
+              imageDataUrl: body.imageDataUrl,
+              signedAt: '2026-11-15T22:10:00.000Z',
+            },
+          }),
+        });
+      },
+    });
+    const sheet = page.locator('.fsheet');
+
+    // Abajo, dentro de la hoja: después de la última sección y antes del pie.
+    const firmas = sheet.locator('.fsheet__sign');
+    const lastSection = await sheet.locator('.fsheet__sec').last().boundingBox();
+    const firmasBox = await firmas.boundingBox();
+    const footer = await sheet.locator('.fsheet__foot').boundingBox();
+    expect(firmasBox!.y).toBeGreaterThan(lastSection!.y + lastSection!.height - 1);
+    expect(firmasBox!.y + firmasBox!.height).toBeLessThanOrEqual(footer!.y + 1);
+    // Ningún cajón de firmas arriba del documento.
+    await expect(page.locator('.hub-drawer')).toHaveCount(0);
+
+    // Sin firmar: borrador con lo capturado, renglones con el nombre de cada parte.
+    await expect(page.locator('.hub-doc__progress')).not.toContainText('mandado');
+    await expect(firmas.locator('.fsign__role')).toHaveText(['Producción externa', 'Auditorio Explanada Puebla']);
+
+    // Se firma en el renglón, ahí mismo.
+    await firmas.getByRole('button', { name: 'Firmar: Producción externa' }).click();
+    const canvas = firmas.locator('.sig-canvas');
+    await expect(canvas).toBeVisible();
+    await scribble(page, canvas);
+    await firmas.getByRole('button', { name: 'Firmar producción externa' }).click();
+
+    await expect(firmas.getByRole('img', { name: 'Firma: Producción externa' })).toBeVisible();
+    expect(signedAs).toBe('ENTREGADO');
+    await expect(firmas.locator('.fsign__col').first()).toContainText('Ana Robles');
+    await expect(firmas.locator('.fsign__col').first()).toContainText('Fecha:');
+    // Firmado = mandado: 100 % aunque no se haya llenado todo, y lo capturado sigue a la vista.
+    await expect(page.locator('.hub-doc__progress')).toContainText(/100% · mandado · \d+\/\d+ campos/);
+    await expect(page.locator('.fsheet-outline__pct')).toHaveText('100%');
+
+    await firmas.scrollIntoViewIfNeeded();
+    await page.screenshot({ path: 'e2e/.output/formatos-firmas-arta.png', fullPage: true });
+
+    // «Lista»: las firmas también al final, después de la última sección.
+    await page.getByRole('tab', { name: 'Lista', exact: true }).click();
+    const secciones = page.locator('.hub-sections > section');
+    await expect(secciones.last()).toHaveClass(/hub-sec--firmas/);
+    await expect(secciones.last().getByRole('img', { name: 'Firma: Producción externa' })).toBeVisible();
+  });
+
+  test('Auditorio (tema oscuro): las firmas al final de la hoja, en papel', async ({ page }) => {
+    const origin = 'http://auditorio.localhost:' + (process.env.E2E_PORT || '3100');
+    await openCompromiso(page, origin, {
+      '/checklists/chk-compromiso': {
+        ...CHECKLIST,
+        status: 'REVIEW',
+        progressPct: 100,
+      },
+    });
+    const firmas = page.locator('.fsheet .fsheet__sign');
+    await expect(firmas.locator('.fsign__role')).toHaveText(['Producción externa', 'Auditorio Explanada Puebla']);
+    // Mandado a revisión: cuenta 100 % aunque falten campos.
+    await expect(page.locator('.hub-doc__progress')).toContainText('100% · mandado');
+    await firmas.scrollIntoViewIfNeeded();
+    await page.screenshot({ path: 'e2e/.output/formatos-firmas-auditorio.png', fullPage: true });
   });
 });

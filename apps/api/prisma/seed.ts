@@ -856,13 +856,15 @@ async function seedDemoPortfolio() {
     for (const t of applicable) {
       const schema = (t.schemaJson || { sections: [] }) as Schema;
       const { data, progressPct } = applyProgress(schema, d.progressBias + (Math.random() * 10 - 5));
+      // Con firma de entrega ya se mandó: cuenta 100 % (regla de `formatProgress`).
+      const delivered = progressPct > 70;
       await prisma.checklistInstance.create({
         data: {
           eventId: event.id,
           templateId: t.id,
           title: t.name,
           dataJson: data as Prisma.InputJsonValue,
-          progressPct: Math.max(0, Math.min(100, Math.round(progressPct))),
+          progressPct: delivered ? 100 : Math.max(0, Math.min(100, Math.round(progressPct))),
           lastEditedById: williams?.id || creatorId,
           lastEditedAt: new Date(now.getTime() - Math.random() * 5 * 86_400_000),
           deliveredAt: progressPct > 70 ? new Date(now.getTime() - 2 * 86_400_000) : undefined,

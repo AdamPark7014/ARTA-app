@@ -20,7 +20,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { hasPermission, canAccessEventOps, isDirectionRole, PERMISSIONS, type EntityKey, type RoleKey } from '../common/rbac/roles';
 import { assertSameTenant, tenantIdOf } from '../common/tenant';
 import { assertEventNotClosed } from '../common/event-guards';
-import { calcProgress } from '../common/checklist-progress';
+import { formatProgress } from '../common/checklist-progress';
 import { diffFinanceRows } from '../common/doc-diff';
 import { actorFrom, RevisionService } from '../common/revisions/revision.service';
 import { withServerTotals, type FinancePayload } from './finance-totals';
@@ -323,8 +323,9 @@ export class FinanceController {
     if (summaryIdx >= 0) nextSections[summaryIdx] = summarySection;
     else nextSections = [...nextSections, summarySection];
 
-    // Misma fórmula que el resto del sistema (una sola implementación).
-    const progressPct = calcProgress({ sections: nextSections });
+    // Misma regla que el resto del sistema (una sola implementación): si la
+    // corrida ya se mandó o firmó, se queda en 100 %.
+    const progressPct = formatProgress({ sections: nextSections }, instance);
 
     await this.prisma.checklistInstance.update({
       where: { id: instance.id },

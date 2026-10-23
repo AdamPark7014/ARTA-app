@@ -11,6 +11,8 @@ import { bindFormatToEvent, walkFormat, YES } from '../common/format-schema';
  * `generate()` solo necesita el disco.
  */
 describe('ChecklistPdfService.generate', () => {
+  // Doce formatos reales con imágenes de marca: con la máquina cargada pasan de 5 s.
+  jest.setTimeout(30_000);
   let dir: string;
   const previousUploadDir = process.env.UPLOAD_DIR;
 
@@ -72,6 +74,39 @@ describe('ChecklistPdfService.generate', () => {
     }
   });
 
+  /*
+   * Junta del 23-10-2026: «que las firmas vengan abajo inmersas dentro del
+   * documento, no hasta arriba». El Checklist de hospedaje lleno dejaba las
+   * firmas solas al principio de la hoja 2; ahora la última sección (o su
+   * último tramo, si cruza de hoja) se va con ellas y quedan debajo.
+   */
+  it.each(STANDARD_FORMATS.map((f) => [f.key, f] as const))('%s: las firmas van al final, junto a la última sección', async (_key, format) => {
+    const data = bindFormatToEvent(format.schema, event);
+    for (const { item } of walkFormat(data)) {
+      if (item.type === 'table') {
+        const cols = item.columns ?? [];
+        item.rows = Array.from({ length: Math.max(4, item.rows?.length ?? 0) }, (_, r) =>
+          Object.fromEntries(cols.map((c) => [c.id, c.type === 'number' || c.type === 'money' ? r + 1 : `${c.label} ${r + 1}`])),
+        );
+      } else if (item.type === 'check' || !item.type) item.done = true;
+      else if (item.type === 'yesno') item.value = YES;
+      else item.value = item.type === 'longtext' ? 'Texto largo de ejemplo para el recuadro del formato.' : 'Dato';
+    }
+    const { layout } = await svc().generate(`test-firmas-${format.key}`, {
+      title: format.name,
+      eventName: event.name,
+      entity: 'ARTA',
+      data,
+      delivered: null,
+      authorized: null,
+      statusLabel: 'Borrador',
+    });
+    // Sin salto de hoja entre lo último escrito y las firmas: nunca solas arriba.
+    expect(layout.signatures).toEqual(layout.contentEnd);
+    expect(layout.lastSection).not.toBeNull();
+    expect(layout.signatures.page).toBeGreaterThanOrEqual(layout.lastSection!.page);
+  });
+
   it('con datos, tablas largas y firmas sigue cabiendo y pagina', async () => {
     const format = STANDARD_FORMATS.find((f) => f.key === 'HOSPEDAJE')!;
     const data = bindFormatToEvent(format.schema, event);
@@ -87,7 +122,7 @@ describe('ChecklistPdfService.generate', () => {
       imageDataUrl:
         'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
     };
-    const { filePath, fieldMap } = await svc().generate(
+    const { filePath, fieldMap, layout } = await svc().generate(
       'test-largo',
       {
         title: format.name,
@@ -103,6 +138,10 @@ describe('ChecklistPdfService.generate', () => {
       7,
     );
     expect(filePath.endsWith('test-largo-r7.pdf')).toBe(true);
+    // 40 renglones por tabla: aunque el documento pagine, las firmas cierran
+    // la última hoja junto a la última sección («Confirmaciones»).
+    expect(layout.signatures).toEqual(layout.contentEnd);
+    expect(layout.signatures.page).toBe(layout.lastSection!.page);
     const pages = (readFileSync(filePath, 'latin1').match(/\/Type\s*\/Page[^s]/g) || []).length;
     expect(pages).toBeGreaterThanOrEqual(2);
     expect(Math.max(...fieldMap.fields.map((f) => f.page))).toBeGreaterThanOrEqual(0);

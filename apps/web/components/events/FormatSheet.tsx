@@ -1,17 +1,19 @@
 'use client';
 
-import { useEffect, useRef, useMemo } from 'react';
+import { useEffect, useRef, useMemo, useState } from 'react';
 import { AttachmentField, TableField } from '@/components/events/ChecklistFieldControls';
+import { SignaturePad } from '@/components/ui/SignaturePad';
+import { checklistProgress } from '@/components/events/checklist-progress';
 import {
   NO_LABEL,
   YES_LABEL,
   isCheckItem,
-  isItemDone,
   isParagraphItem,
   type Checklist,
   type ChecklistItem,
   type ChecklistSection,
   type EventFile,
+  type SigPayload,
 } from '@/components/events/event-detail.types';
 
 /**
@@ -22,25 +24,46 @@ import {
  *
  * Misma estructura que `checklist-pdf.service.ts`: encabezado en rejilla,
  * secciones, casillas a dos columnas, línea por dato, SÍ/NO, recuadro de texto
- * largo, tablas con totales, adjuntos y firmas.
+ * largo, tablas con totales, adjuntos y, al final, los renglones de firma.
  */
+
+export type SignKind = 'ENTREGADO' | 'AUTORIZADO';
+export type SignHandler = (kind: SignKind, payload: { imageDataUrl: string; signerName: string }) => Promise<void>;
+export type SignPermissions = { delivered: boolean; authorized: boolean };
 
 type Props = {
   event: { name: string; artist?: string | null; venue?: string | null; city?: string | null; entity: string };
   checklist: Pick<
     Checklist,
-    'title' | 'status' | 'revision' | 'lastEditedAt' | 'lastEditedBy' | 'deliveredSignature' | 'authorizedSignature'
+    | 'title'
+    | 'status'
+    | 'revision'
+    | 'progressPct'
+    | 'lastEditedAt'
+    | 'lastEditedBy'
+    | 'deliveredAt'
+    | 'authorizedAt'
+    | 'deliveredSignature'
+    | 'authorizedSignature'
   >;
   sections: ChecklistSection[];
   readOnly: boolean;
   files: EventFile[];
   onUpdateItem: (sectionId: string, itemId: string, patch: Partial<ChecklistItem>) => void;
   onUpload?: (file: File) => Promise<EventFile | void>;
-  /** Abre el cajón de firmas al tocar una firma pendiente. */
-  onOpenSignatures?: () => void;
+  /** Avance del formato completo (las secciones pueden venir filtradas por la búsqueda). */
+  progress?: { pct: number; done: number; total: number; sent: boolean };
+  /** Firmar en el renglón de firmas del final del documento. */
+  onSign?: SignHandler;
+  /** Nombre que se propone al firmar (quien tiene la sesión abierta). */
+  signerName?: string;
+  /** Qué renglón puede firmar quien mira (Autorizado: gerencia de la entidad o dirección). */
+  canSign?: SignPermissions;
   /** Nombre de cada firma en este formato (por defecto Entregado / Autorizado). */
   signatureLabels?: { delivered: string; authorized: string };
 };
+
+const ALL_CAN_SIGN: SignPermissions = { delivered: true, authorized: true };
 
 const STATUS_LABEL: Record<string, string> = {
   DRAFT: 'Borrador',
@@ -73,23 +96,15 @@ export function FormatSheet({
   files,
   onUpdateItem,
   onUpload,
-  onOpenSignatures,
+  progress,
+  onSign,
+  signerName = '',
+  canSign = ALL_CAN_SIGN,
   signatureLabels,
 }: Props) {
-  const completion = useMemo(() => {
-    let total = 0;
-    let filled = 0;
-    for (const s of sections) {
-      for (const item of s.items) {
-        // El texto fijo (condiciones) no se llena; la lista que trae la plantilla no cuenta como captura.
-        if (isParagraphItem(item)) continue;
-        total += 1;
-        if (isItemDone(item)) filled += 1;
-      }
-    }
-    const pct = total ? Math.round((filled / total) * 100) : 0;
-    return { total, filled, pct };
-  }, [sections]);
+  // Misma cuenta que el servidor: mandado = 100 %; si no, lo capturado.
+  const fallback = useMemo(() => checklistProgress(checklist, sections), [checklist, sections]);
+  const completion = progress ?? fallback;
   const entityLabel = event.entity === 'EXPLANADA' ? 'AUDITORIO AREMA · EXPLANADA' : 'ARTA PRODUCCIONES';
   const sub = [event.name, event.artist, event.venue, event.city]
     .map((v) => (v ?? '').trim())
@@ -107,12 +122,19 @@ export function FormatSheet({
           <strong>Avance</strong>
           <span className="fsheet-outline__pct">{completion.pct}%</span>
         </div>
+        <p className="fsheet-outline__sub">
+          {completion.sent ? 'Mandado · ' : ''}
+          {completion.done}/{completion.total} campos
+        </p>
         <ol className="fsheet-outline__list">
           {sections.map((s) => (
             <li key={s.id}>
               <a href={`#sec-${s.id}`}>{s.title}</a>
             </li>
           ))}
+          <li>
+            <a href="#fmt-firmas">Firmas</a>
+          </li>
         </ol>
       </aside>
       <article className={`fsheet ${event.entity === 'EXPLANADA' ? 'fsheet--explanada' : ''}`} aria-label={checklist.title}>
@@ -260,23 +282,16 @@ export function FormatSheet({
           ),
         )}
 
-        <section className="fsheet__sign" aria-label="Firmas">
-          <h2 className="fsheet__sec-title fsheet__sec-title--ink">Firmas</h2>
-          <div className="fsheet__sign-grid">
-            <SignatureBox
-              label={signatureLabels?.delivered || 'Entregado'}
-              sig={checklist.deliveredSignature}
-              readOnly={readOnly}
-              onOpen={onOpenSignatures}
-            />
-            <SignatureBox
-              label={signatureLabels?.authorized || 'Autorizado'}
-              sig={checklist.authorizedSignature}
-              readOnly={readOnly}
-              onOpen={onOpenSignatures}
-            />
-          </div>
-        </section>
+        <FormatSignatures
+          className="fsheet__sign"
+          labels={signatureLabels}
+          delivered={checklist.deliveredSignature}
+          authorized={checklist.authorizedSignature}
+          readOnly={readOnly}
+          signerName={signerName}
+          canSign={canSign}
+          onSign={onSign}
+        />
 
         <footer className="fsheet__foot">
           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -428,37 +443,113 @@ function CheckLine({
   );
 }
 
-function SignatureBox({
+/**
+ * Renglones de firma al final del documento, como en un Word impreso: el
+ * trazo encima de la línea y debajo el nombre, a quién corresponde y la fecha.
+ * Se firma ahí mismo, dentro de la hoja (junta del 23-10-2026: «que las firmas
+ * vengan abajo inmersas dentro del documento, no hasta arriba»). El PDF
+ * (`checklist-pdf.service.ts`) imprime lo mismo.
+ */
+export function FormatSignatures({
+  className = '',
+  labels,
+  delivered,
+  authorized,
+  readOnly,
+  signerName = '',
+  canSign = ALL_CAN_SIGN,
+  onSign,
+}: {
+  className?: string;
+  labels?: { delivered: string; authorized: string };
+  delivered?: SigPayload | null;
+  authorized?: SigPayload | null;
+  readOnly: boolean;
+  signerName?: string;
+  canSign?: SignPermissions;
+  onSign?: SignHandler;
+}) {
+  return (
+    <section className={`fsign ${className}`} id="fmt-firmas" aria-label="Firmas">
+      <div className="fsign__grid">
+        <SignatureLine
+          kind="ENTREGADO"
+          label={labels?.delivered || 'Entregado'}
+          sig={delivered}
+          editable={!readOnly && !!onSign && canSign.delivered}
+          signerName={signerName}
+          onSign={onSign}
+        />
+        <SignatureLine
+          kind="AUTORIZADO"
+          label={labels?.authorized || 'Autorizado'}
+          sig={authorized}
+          editable={!readOnly && !!onSign && canSign.authorized}
+          hint={!readOnly && !canSign.authorized ? 'Firma gerencia o dirección' : undefined}
+          signerName={signerName}
+          onSign={onSign}
+        />
+      </div>
+    </section>
+  );
+}
+
+function SignatureLine({
+  kind,
   label,
   sig,
-  readOnly,
-  onOpen,
+  editable,
+  hint,
+  signerName,
+  onSign,
 }: {
+  kind: SignKind;
   label: string;
-  sig?: { signerName?: string; imageDataUrl?: string; signedAt?: string } | null;
-  readOnly: boolean;
-  onOpen?: () => void;
+  sig?: SigPayload | null;
+  editable: boolean;
+  /** Por qué no se puede firmar aquí (en vez de «Pendiente de firma»). */
+  hint?: string;
+  signerName: string;
+  onSign?: SignHandler;
 }) {
   const signed = !!sig?.imageDataUrl;
+  const [signing, setSigning] = useState(false);
+  // Cuando la firma vuelve del servidor el lienzo se cierra solo; si falló, sigue abierto.
+  useEffect(() => {
+    if (signed) setSigning(false);
+  }, [signed]);
+
+  if (signing && onSign && !signed) {
+    return (
+      <div className="fsign__col fsign__col--pad">
+        <SignaturePad
+          label={label}
+          signerName={signerName}
+          onSign={(payload) => onSign(kind, payload)}
+          onCancel={() => setSigning(false)}
+        />
+      </div>
+    );
+  }
+
+  const date = fmtDateTime(sig?.signedAt);
   return (
-    <div className="fsheet__sig">
-      <span className="fsheet__lbl">{label}</span>
-      {signed ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img className="fsheet__sig-img" src={sig!.imageDataUrl} alt={`Firma: ${label}`} />
-      ) : (
-        <button
-          type="button"
-          className="fsheet__sig-empty"
-          disabled={readOnly || !onOpen}
-          onClick={onOpen}
-          aria-label={`${label}: pendiente de firma`}
-        >
-          {readOnly ? 'Pendiente de firma' : 'Pendiente de firma · toca para firmar'}
-        </button>
-      )}
-      <span className="fsheet__sig-name">{sig?.signerName || 'Nombre y firma'}</span>
-      {sig?.signedAt ? <span className="fsheet__sig-date">{fmtDateTime(sig.signedAt)}</span> : null}
+    <div className={`fsign__col ${signed ? 'is-signed' : ''}`}>
+      <div className="fsign__area">
+        {signed ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img className="fsign__img" src={sig!.imageDataUrl} alt={`Firma: ${label}`} />
+        ) : editable ? (
+          <button type="button" className="fsign__cta" onClick={() => setSigning(true)} aria-label={`Firmar: ${label}`}>
+            Firmar aquí
+          </button>
+        ) : (
+          <span className="fsign__pending">{hint || 'Pendiente de firma'}</span>
+        )}
+      </div>
+      <span className={`fsign__name ${sig?.signerName ? '' : 'is-blank'}`}>{sig?.signerName || 'Nombre y firma'}</span>
+      <span className="fsign__role">{label}</span>
+      <span className="fsign__date">{date ? `Fecha: ${date}` : 'Fecha:'}</span>
     </div>
   );
 }

@@ -1,4 +1,11 @@
-import { calcProgress, isItemComplete, scoringItems } from './checklist-progress';
+import {
+  calcProgress,
+  captureCount,
+  formatProgress,
+  isFormatSent,
+  isItemComplete,
+  scoringItems,
+} from './checklist-progress';
 
 /**
  * El bug que motivó extraer esto: el seed añade una sección `firmas` a TODAS
@@ -130,5 +137,66 @@ describe('checklist-progress', () => {
     }));
     // 1/3 = 33.33 → 33
     expect(calcProgress({ sections: [{ id: 's', title: 'S', items }] })).toBe(33);
+  });
+});
+
+/**
+ * Junta del 23-10-2026: cada evento usa solo parte de cada checklist, así que
+ * un formato terminado y mandado vale 100 % aunque no se haya palomeado todo.
+ */
+describe('formatProgress · formato mandado = 100 %', () => {
+  // 1 de 4 casillas: lo que deja un evento que no usa la mitad del checklist.
+  const data = {
+    sections: [
+      {
+        id: 'produccion',
+        title: 'Producción',
+        items: [
+          { id: 'a', label: 'Audio', type: 'check', done: true },
+          { id: 'b', label: 'Luces', type: 'check', done: false },
+          { id: 'c', label: 'Pantallas', type: 'check', done: false },
+          { id: 'd', label: 'Planta de luz', type: 'check', done: false },
+        ],
+      },
+      FIRMAS_SECTION,
+    ],
+  };
+
+  it('en borrador y sin firma cuenta lo capturado', () => {
+    expect(formatProgress(data, { status: 'DRAFT', deliveredAt: null, authorizedAt: null })).toBe(25);
+    expect(formatProgress(data, null)).toBe(25);
+    expect(isFormatSent({ status: 'DRAFT' })).toBe(false);
+  });
+
+  it('con la firma de entrega cuenta 100 % aunque falten casillas', () => {
+    expect(formatProgress(data, { status: 'DRAFT', deliveredAt: new Date('2026-10-23T18:00:00Z') })).toBe(100);
+    // Llega como ISO desde la API o como Date desde Prisma: los dos valen.
+    expect(formatProgress(data, { deliveredAt: '2026-10-23T18:00:00.000Z' })).toBe(100);
+  });
+
+  it('con la firma de autorización también', () => {
+    expect(formatProgress(data, { status: 'DRAFT', authorizedAt: new Date() })).toBe(100);
+  });
+
+  it('mandar a revisión, aprobar o sellar es mandarlo', () => {
+    for (const status of ['REVIEW', 'APPROVED', 'SEALED']) {
+      expect(formatProgress(data, { status })).toBe(100);
+      expect(isFormatSent({ status })).toBe(true);
+    }
+  });
+
+  it('una firma guardada sin fecha (datos viejos) cuenta como mandado', () => {
+    expect(formatProgress(data, { authorizedSignature: { signerName: 'Dirección', imageDataUrl: 'data:image/png;base64,AA' } })).toBe(100);
+    expect(formatProgress(data, { deliveredSignature: null, authorizedSignature: null })).toBe(25);
+  });
+
+  it('volver a borrador sin firma regresa a lo capturado; con firma de entrega se queda en 100 %', () => {
+    expect(formatProgress(data, { status: 'DRAFT', deliveredAt: null })).toBe(25);
+    expect(formatProgress(data, { status: 'DRAFT', deliveredAt: new Date() })).toBe(100);
+  });
+
+  it('lo capturado de verdad se sigue pudiendo enseñar aparte', () => {
+    expect(captureCount(data)).toEqual({ done: 1, total: 4 });
+    expect(calcProgress(data)).toBe(25);
   });
 });

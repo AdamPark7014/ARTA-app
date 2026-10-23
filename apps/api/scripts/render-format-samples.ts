@@ -6,9 +6,11 @@
  *   (PowerShell: $env:OUT_DIR='C:\tmp\formatos'; npx ts-node ...)
  *
  * Deja `<KEY>.pdf` y `<KEY>.fields.json` por formato. `--empty` los imprime
- * sin datos (como los recibe un evento recién creado).
+ * sin datos (como los recibe un evento recién creado). Con
+ * `SAMPLE_SIGNATURE=<firma.png>` los imprime firmados (entrega y autorización)
+ * para revisar el renglón de firmas al final del documento.
  */
-import { mkdirSync, writeFileSync } from 'fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { STANDARD_FORMATS } from '../src/checklists/format-catalog';
 import { ChecklistPdfService } from '../src/checklists/checklist-pdf.service';
@@ -110,9 +112,21 @@ function filled(schema: FormatData): FormatData {
   };
 }
 
+/** Firmas de muestra si se pasó una imagen (`SAMPLE_SIGNATURE`). */
+function sampleSignatures() {
+  const path = process.env.SAMPLE_SIGNATURE;
+  if (!path) return { delivered: null, authorized: null };
+  const imageDataUrl = `data:image/png;base64,${readFileSync(path).toString('base64')}`;
+  return {
+    delivered: { signerName: 'Rodrigo López', imageDataUrl, signedAt: '2026-11-15T22:10:00.000Z' },
+    authorized: { signerName: 'Arturo Taja', imageDataUrl, signedAt: '2026-11-16T01:05:00.000Z' },
+  };
+}
+
 async function main() {
   mkdirSync(OUT, { recursive: true });
   const empty = process.argv.includes('--empty');
+  const signatures = sampleSignatures();
   const svc = new ChecklistPdfService(null as never);
   for (const format of STANDARD_FORMATS) {
     const base = bindFormatToEvent(format.schema, EVENT);
@@ -128,11 +142,10 @@ async function main() {
         city: EVENT.city,
         templateKey: format.key,
         data,
-        delivered: null,
-        authorized: null,
+        ...signatures,
         editedBy: 'Adam Pozo',
         editedAt: new Date(),
-        statusLabel: 'Borrador',
+        statusLabel: signatures.delivered ? 'En revisión' : 'Borrador',
       },
       3,
     );

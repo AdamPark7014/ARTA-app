@@ -91,6 +91,15 @@ const TOP = 40;
 /** Alto reservado al pie (banda del cliente + folio). */
 const FOOT_H = 64;
 const BOTTOM = PAGE_H - 30 - FOOT_H;
+/** Dónde empieza el contenido en una hoja de continuación (logo chico + filete). */
+const CONTINUATION_TOP = TOP + 24 + 12 + 10;
+/**
+ * Alto del renglón de firmas al final del documento: aire tras el contenido,
+ * espacio para la firma, línea, nombre, a quién corresponde y fecha.
+ */
+const SIGN_GAP = 18;
+const SIGN_IMG_H = 46;
+const SIGN_H = SIGN_GAP + SIGN_IMG_H + 4 + 38;
 
 const FONT = 'Helvetica';
 const BOLD = 'Helvetica-Bold';
@@ -178,6 +187,27 @@ type Cursor = {
   footer: string | null;
   revisionLabel: string;
   isDraft: boolean;
+  /** Índice (en `data.sections`) de la sección que se está dibujando. */
+  section: number;
+  /** Dónde arranca cada ítem de la sección en curso. */
+  itemStarts: Array<{ item: number; page: number; y: number }>;
+  /** Segunda composición: antes de qué se pasa de hoja para que las firmas no queden solas. */
+  breakAt: PageBreak | null;
+};
+
+/** Pasar de hoja antes de una sección (`item: null`) o de uno de sus ítems. */
+type PageBreak = { section: number; item: number | null };
+
+type Mark = { page: number; y: number };
+
+/** Dónde quedaron las firmas respecto al contenido: lo que prueba que van juntas. */
+export type PdfSignatureLayout = {
+  /** Hoja (desde 0) y altura donde empieza el renglón de firmas. */
+  signatures: Mark;
+  /** Dónde terminó el contenido del formato, justo antes de las firmas. */
+  contentEnd: Mark;
+  /** Dónde empieza la última sección con contenido. */
+  lastSection: Mark | null;
 };
 
 @Injectable()
@@ -211,65 +241,116 @@ export class ChecklistPdfService {
      * borraba el documento anterior, firmas incluidas.
      */
     revision?: number,
-  ): Promise<{ url: string; filePath: string; fieldMap: PdfFieldMap }> {
+  ): Promise<{ url: string; filePath: string; fieldMap: PdfFieldMap; layout: PdfSignatureLayout }> {
     const dir = this.uploadRoot();
     const fileName = revision === undefined ? `${checklistId}.pdf` : `${checklistId}-r${revision}.pdf`;
     const filePath = join(dir, fileName);
     const data = normalizeFormatData(input.data);
 
-    const fields: PdfField[] = [];
+    /*
+     * Las firmas van ABAJO, dentro del documento, como los renglones de firma
+     * de un Word impreso (junta del 23-10-2026). Si no caben en la última hoja
+     * no se quedan solas hasta arriba de una hoja nueva: se vuelve a componer
+     * llevándose con ellas la última sección («conservar con el siguiente»).
+     * Solo cuando hace falta se compone dos veces; lo normal es una.
+     */
+    let pass = this.compose(input, data, revision, null);
+    if (pass.keepWithSignatures) {
+      pass = this.compose(input, data, revision, pass.keepWithSignatures);
+    }
+    const { cur, lastSection } = pass;
+    const contentEnd = { page: cur.page, y: cur.y };
+
+    const signatures = this.drawSignatures(cur);
+    this.stampFooters(cur);
 
     await new Promise<void>((resolve, reject) => {
-      const doc = new PDFDocument({
-        size: 'LETTER',
-        margin: 0,
-        autoFirstPage: false,
-        bufferPages: true,
-        info: { Title: `${input.title} - ${input.eventName}`, Author: 'Arta Producciones' },
-      });
       const stream = createWriteStream(filePath);
-      doc.pipe(stream);
-
-      const cur: Cursor = {
-        doc,
-        page: -1,
-        y: TOP,
-        accent: input.entity === 'EXPLANADA' ? GREEN : GOLD,
-        fields,
-        input,
-        logo: brandAsset('arta-logo-ink.png'),
-        footer: brandAsset('arta-footer.png'),
-        revisionLabel: revision === undefined ? '' : `Rev. ${revision}`,
-        isDraft: !/^(aprobado|sellado)$/i.test(String(input.statusLabel || '').trim()),
-      };
-
-      // La primera página lleva el logo, el título del formato y la línea del
-      // evento; la cabecera genérica del servicio de marca no sustituye eso.
-      this.newPage(cur, true);
-
-      for (const section of data.sections) {
-        if (section.id === SIGNATURES_SECTION_ID) continue;
-        if (!section.items.length) continue;
-        if (section.layout === 'header' || section.id === HEADER_SECTION_ID) {
-          this.drawHeaderSection(cur, section);
-          continue;
-        }
-        this.drawSection(cur, section);
-      }
-
-      this.drawSignatures(cur);
-      this.stampFooters(cur);
-
-      doc.end();
       stream.on('finish', () => resolve());
       stream.on('error', reject);
+      cur.doc.pipe(stream);
+      cur.doc.end();
     });
 
     return {
       url: `/uploads/checklists/${fileName}`,
       filePath,
-      fieldMap: { pageWidth: PAGE_W, pageHeight: PAGE_H, fields },
+      fieldMap: { pageWidth: PAGE_W, pageHeight: PAGE_H, fields: cur.fields },
+      layout: { signatures, contentEnd, lastSection },
     };
+  }
+
+  /**
+   * Compone la hoja entera menos firmas y pie. Con `breakAt` esa sección (o
+   * ese ítem de la sección) arranca en hoja nueva. Devuelve, si las firmas no
+   * caben al final, dónde habría que pasar de hoja para que vayan juntas.
+   */
+  private compose(input: PdfInput, data: FormatData, revision: number | undefined, breakAt: PageBreak | null) {
+    const doc = new PDFDocument({
+      size: 'LETTER',
+      margin: 0,
+      autoFirstPage: false,
+      bufferPages: true,
+      info: { Title: `${input.title} - ${input.eventName}`, Author: 'Arta Producciones' },
+    });
+
+    const cur: Cursor = {
+      doc,
+      page: -1,
+      y: TOP,
+      accent: input.entity === 'EXPLANADA' ? GREEN : GOLD,
+      fields: [],
+      input,
+      logo: brandAsset('arta-logo-ink.png'),
+      footer: brandAsset('arta-footer.png'),
+      revisionLabel: revision === undefined ? '' : `Rev. ${revision}`,
+      isDraft: !/^(aprobado|sellado)$/i.test(String(input.statusLabel || '').trim()),
+      section: -1,
+      itemStarts: [],
+      breakAt,
+    };
+
+    // La primera página lleva el logo, el título del formato y la línea del
+    // evento; la cabecera genérica del servicio de marca no sustituye eso.
+    this.newPage(cur, true);
+
+    let lastIndex: number | null = null;
+    let lastSection: Mark | null = null;
+    for (let index = 0; index < data.sections.length; index += 1) {
+      const section = data.sections[index];
+      if (section.id === SIGNATURES_SECTION_ID) continue;
+      if (!section.items.length) continue;
+      const isHeader = section.layout === 'header' || section.id === HEADER_SECTION_ID;
+      if (!isHeader && !section.items.some((i) => i.type !== 'signature')) continue;
+      cur.section = index;
+      cur.itemStarts = [];
+      if (breakAt?.section === index && breakAt.item === null) this.newPage(cur);
+      // El mismo mínimo que pide el título de sección: así el inicio que se
+      // anota es donde de verdad empieza, no el final de la hoja anterior.
+      else if (!isHeader) this.ensure(cur, 40);
+      lastIndex = index;
+      lastSection = { page: cur.page, y: cur.y };
+      if (isHeader) this.drawHeaderSection(cur, section);
+      else this.drawSection(cur, section);
+    }
+
+    let keepWithSignatures: PageBreak | null = null;
+    const fits = cur.y + SIGN_H <= BOTTOM;
+    if (!fits && breakAt === null && lastIndex !== null && lastSection) {
+      const canCarry = (start: Mark) =>
+        start.page === cur.page && // empieza en la última hoja (no la cruza)
+        start.y > CONTINUATION_TOP + 1 && // no está ya al principio de una hoja
+        cur.y - start.y + SIGN_H <= BOTTOM - CONTINUATION_TOP; // y cabe junto a las firmas
+      if (canCarry(lastSection)) {
+        keepWithSignatures = { section: lastIndex, item: null };
+      } else {
+        // La última sección cruza de hoja: se lleva con las firmas su último tramo.
+        const tail = [...cur.itemStarts].reverse().find((start) => start.item > 0 && canCarry(start));
+        if (tail) keepWithSignatures = { section: lastIndex, item: tail.item };
+      }
+    }
+
+    return { cur, lastSection, keepWithSignatures };
   }
 
   /* ── Páginas ──────────────────────────────────────────────────────────── */
@@ -457,7 +538,10 @@ export class ChecklistPdfService {
     // Texto fijo: varios párrafos seguidos son las viñetas del documento.
     const bullets = items.filter((i) => isParagraphType(i.type)).length > 1;
 
-    for (const item of items) {
+    for (let index = 0; index < items.length; index += 1) {
+      const item = items[index];
+      if (cur.breakAt?.section === cur.section && cur.breakAt.item === index) this.newPage(cur);
+      cur.itemStarts.push({ item: index, page: cur.page, y: cur.y });
       if (isParagraphType(item.type)) {
         this.drawParagraph(cur, item, bullets);
       } else if (isCheckType(item.type)) {
@@ -801,54 +885,63 @@ export class ChecklistPdfService {
 
   /* ── Firmas ───────────────────────────────────────────────────────────── */
 
-  private drawSignatures(cur: Cursor) {
-    const { doc, input } = cur;
-    const blockH = 126;
-    this.ensure(cur, blockH + 16);
-    cur.y += 6;
-    doc.moveTo(M, cur.y).lineTo(RIGHT, cur.y).lineWidth(0.8).strokeColor(cur.accent).stroke();
-    cur.y += 10;
-    doc.font(BOLD).fontSize(8.5).fillColor(INK);
-    doc.text('FIRMAS', M, cur.y, { lineBreak: false });
-    cur.y += 14;
-    const colW = (W - 24) / 2;
+  /**
+   * Renglones de firma al final del documento, como en un Word impreso: el
+   * trazo encima de la línea y debajo el nombre, a quién corresponde (con el
+   * nombre propio de cada formato: «Producción externa», «Auditorio Explanada
+   * Puebla»…) y la fecha. Sin recuadros ni título aparte: es parte de la hoja.
+   */
+  private drawSignatures(cur: Cursor): { page: number; y: number } {
+    const { input } = cur;
+    this.ensure(cur, SIGN_H);
+    const at = { page: cur.page, y: cur.y };
+    const top = cur.y + SIGN_GAP;
+    const gap = 40;
+    const colW = (W - gap) / 2;
     const labels = signatureLabels(input.data);
-    this.drawSignatureBlock(doc, M, cur.y, colW, upper(labels.delivered), input.delivered);
-    this.drawSignatureBlock(doc, M + colW + 24, cur.y, colW, upper(labels.authorized), input.authorized);
-    cur.y += blockH - 30;
+    this.drawSignatureLine(cur, M, top, colW, labels.delivered, input.delivered);
+    this.drawSignatureLine(cur, M + colW + gap, top, colW, labels.authorized, input.authorized);
+    cur.y += SIGN_H;
+    return at;
   }
 
-  private drawSignatureBlock(
-    doc: PDFKit.PDFDocument,
+  private drawSignatureLine(
+    cur: Cursor,
     x: number,
     y: number,
     width: number,
     label: string,
     sig?: SignaturePayload | null,
   ) {
-    doc.font(BOLD).fontSize(7).fillColor(MUTED).text(label, x, y, { lineBreak: false });
+    const { doc } = cur;
     const img = dataUrlToBuffer(sig?.imageDataUrl);
-    const imgY = y + 11;
-    const imgH = 56;
     if (img) {
       try {
-        doc.image(img, x, imgY, { fit: [width, imgH] });
+        doc.image(img, x + 14, y, { fit: [width - 28, SIGN_IMG_H], align: 'center', valign: 'bottom' });
       } catch {
-        doc.rect(x, imgY, width, imgH).lineWidth(0.5).strokeColor(LINE).stroke();
+        // Una imagen dañada no tumba el PDF: queda el renglón para firmar a mano.
       }
-    } else {
-      doc.rect(x, imgY, width, imgH).lineWidth(0.5).dash(2, { space: 2 }).strokeColor(LINE).stroke().undash();
-      doc.font(ITALIC).fontSize(7.5).fillColor(MUTED).text('Pendiente de firma', x + 8, imgY + 24, { lineBreak: false });
     }
-    const lineY = imgY + imgH + 6;
-    doc.moveTo(x, lineY).lineTo(x + width, lineY).lineWidth(0.6).strokeColor(INK).stroke();
-    doc.font(FONT).fontSize(8.5).fillColor(INK);
-    doc.text(safe(sig?.signerName || 'Nombre y firma'), x, lineY + 4, { width, lineBreak: false });
-    if (sig?.signedAt) {
-      const d = new Date(sig.signedAt);
-      doc.font(FONT).fontSize(7).fillColor(MUTED);
-      doc.text(Number.isNaN(d.getTime()) ? '' : fmtDateTime(d), x, lineY + 15, { width, lineBreak: false });
-    }
+    const lineY = y + SIGN_IMG_H + 4;
+    doc.moveTo(x, lineY).lineTo(x + width, lineY).lineWidth(0.7).strokeColor(INK).stroke();
+
+    const name = safe(sig?.signerName).trim();
+    doc.font(FONT).fontSize(8.8).fillColor(name ? INK : MUTED);
+    doc.text(this.fit(doc, name || 'Nombre y firma', 8.8, width), x, lineY + 4, {
+      width,
+      align: 'center',
+      lineBreak: false,
+    });
+    doc.font(BOLD).fontSize(7.2).fillColor(INK);
+    doc.text(this.fit(doc, upper(label), 7.2, width), x, lineY + 16, { width, align: 'center', lineBreak: false });
+    const when = sig?.signedAt ? new Date(sig.signedAt) : null;
+    const date = when && !Number.isNaN(when.getTime()) ? fmtDateTime(when) : '';
+    doc.font(FONT).fontSize(7).fillColor(MUTED);
+    doc.text(date ? `Fecha: ${safe(date)}` : 'Fecha: ______________________', x, lineY + 27, {
+      width,
+      align: 'center',
+      lineBreak: false,
+    });
   }
 
   /* ── Texto ────────────────────────────────────────────────────────────── */
