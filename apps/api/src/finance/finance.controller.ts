@@ -25,7 +25,7 @@ import { diffFinanceRows } from '../common/doc-diff';
 import { actorFrom, RevisionService } from '../common/revisions/revision.service';
 import { withServerTotals, type FinancePayload } from './finance-totals';
 import { NotificationsService } from '../notifications/notifications.service';
-import { shortName } from '../notifications/notification-push-meta';
+import { advanceNotice, financeNotice } from '../notifications/notification-text';
 
 type AuthUser = {
   id: string;
@@ -77,12 +77,6 @@ export function canPayAdvance(p: Person, entity: string): boolean {
     return false;
   }
   return canAccessEventOps(p.entities as EntityKey[], role, entity as EntityKey);
-}
-
-function mxn(amount: Prisma.Decimal | number | null | undefined) {
-  return amount != null
-    ? Number(amount).toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })
-    : 'Sin monto';
 }
 
 @Controller('finance')
@@ -212,6 +206,17 @@ export class FinanceController {
         userAgent: req.headers?.['user-agent']?.slice(0, 300),
       },
     });
+  }
+
+  /** Nombre de quien pidió algo, para el aviso; sin él, el aviso sale igual. */
+  private async personName(userId: string | null | undefined): Promise<string | null> {
+    if (!userId) return null;
+    try {
+      const u = await this.prisma.user.findUnique({ where: { id: userId }, select: { fullName: true } });
+      return u?.fullName ?? null;
+    } catch {
+      return null;
+    }
   }
 
   /** Avisos de anticipos: siempre llevan a la tarjeta en `/advances`. Uno que falla no tumba la operación. */
@@ -394,8 +399,13 @@ export class FinanceController {
       {
         userIds: approvers,
         type: 'advance.requested',
-        title: `${shortName(req.user.fullName) || 'Alguien del equipo'} pidió un anticipo`,
-        body: `${created.label} · ${mxn(amount)} · ${event.name}`,
+        ...advanceNotice('requested', {
+          actor: req.user.fullName,
+          label: created.label,
+          amount,
+          event,
+          note: created.note,
+        }),
       },
     ]);
     return created;
@@ -492,14 +502,20 @@ export class FinanceController {
       requestedBy: advance.uploadedById,
     });
 
-    const who = shortName(req.user.fullName) || 'Dirección';
-    const detail = `${advance.label || 'Anticipo'} · ${mxn(advance.amount)} · ${advance.event.name}`;
     const payers = (await this.orgPeople(advance.event.organizationId))
       .filter((p) => canPayAdvance(p, advance.event.entity))
       .map((p) => p.id);
+    const requester = await this.personName(advance.uploadedById);
+    const facts = {
+      actor: req.user.fullName,
+      label: advance.label,
+      amount: advance.amount,
+      event: advance.event,
+      requester,
+    };
     await this.notifyAdvance(req.user, advance.event, id, [
-      { userIds: [advance.uploadedById || ''], type: 'advance.approved', title: `${who} aprobó tu anticipo`, body: detail },
-      { userIds: payers, type: 'advance.to_pay', title: `Anticipo aprobado por pagar · ${who}`, body: detail },
+      { userIds: [advance.uploadedById || ''], type: 'advance.approved', ...advanceNotice('approved', facts) },
+      { userIds: payers, type: 'advance.to_pay', ...advanceNotice('to_pay', facts) },
     ]);
     return updated;
   }
@@ -533,13 +549,17 @@ export class FinanceController {
       reason,
     });
 
-    const who = shortName(req.user.fullName) || 'Dirección';
     await this.notifyAdvance(req.user, advance.event, id, [
       {
         userIds: [advance.uploadedById || ''],
         type: 'advance.rejected',
-        title: `${who} rechazó tu anticipo`,
-        body: `${advance.label || 'Anticipo'} · ${mxn(advance.amount)} · ${advance.event.name} · Motivo: ${reason}`,
+        ...advanceNotice('rejected', {
+          actor: req.user.fullName,
+          label: advance.label,
+          amount: advance.amount,
+          event: advance.event,
+          reason,
+        }),
       },
     ]);
     return updated;
@@ -568,13 +588,17 @@ export class FinanceController {
       hasProof: !!proofUrl,
     });
 
-    const who = shortName(req.user.fullName) || 'Finanzas';
     await this.notifyAdvance(req.user, advance.event, id, [
       {
         userIds: [advance.uploadedById || ''],
         type: 'advance.paid',
-        title: 'Tu anticipo ya se pagó',
-        body: `${advance.label || 'Anticipo'} · ${mxn(advance.amount)} · ${advance.event.name} · ${who}`,
+        ...advanceNotice('paid', {
+          actor: req.user.fullName,
+          label: advance.label,
+          amount: advance.amount,
+          event: advance.event,
+          hasProof: !!proofUrl || !!advance.fileUrl,
+        }),
       },
     ]);
     return updated;
@@ -678,14 +702,8 @@ export class FinanceController {
     if (!existing.locked && updated.locked) {
       const event = await this.prisma.event.findUnique({ where: { id: updated.eventId } });
       if (event) {
-        await this.notifyFinance(
-          req.user,
-          event,
-          'finance.sealed',
-          `${shortName((req.user as { fullName?: string }).fullName) || 'Finanzas'} selló la corrida financiera`,
-          event.name,
-          true,
-        );
+        const text = financeNotice('sealed', { actor: (req.user as { fullName?: string }).fullName, event });
+        await this.notifyFinance(req.user, event, 'finance.sealed', text.title, text.body, true);
       }
     }
 
@@ -760,14 +778,8 @@ export class FinanceController {
 
     const event = await this.prisma.event.findUnique({ where: { id: existing.eventId } });
     if (event) {
-      await this.notifyFinance(
-        req.user,
-        event,
-        'finance.unlocked',
-        `${shortName((req.user as { fullName?: string }).fullName) || 'Dirección'} quitó el sello de la corrida`,
-        `${event.name} · ${reason}`,
-        true,
-      );
+      const text = financeNotice('unlocked', { actor: (req.user as { fullName?: string }).fullName, event, reason });
+      await this.notifyFinance(req.user, event, 'finance.unlocked', text.title, text.body, true);
     }
 
     return updated;

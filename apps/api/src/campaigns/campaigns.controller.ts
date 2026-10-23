@@ -16,6 +16,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { assertSameTenant, tenantIdOf } from '../common/tenant';
 import { assertEventNotClosed } from '../common/event-guards';
 import { NotificationsService } from '../notifications/notifications.service';
+import { campaignNotice } from '../notifications/notification-text';
 import {
   canAccessEventOps,
   eventOpsEntities,
@@ -178,9 +179,7 @@ export class CampaignsController {
     to: ReviewStatus,
   ) {
     const tab = scope === 'convenios' ? 'sponsors' : 'campaign';
-    const what = scope === 'convenios' ? 'la campaña de convenios' : 'la campaña';
     const linkUrl = `/events/${event.id}?tab=${tab}`;
-    const who = user.fullName || 'Alguien del equipo';
     const organizationId = event.organizationId ?? tenantIdOf(user);
 
     if (to === 'REVIEW') {
@@ -196,8 +195,7 @@ export class CampaignsController {
             organizationId,
             actorId: user.id,
             type: `${scope}.review`,
-            title: `${who} envió a revisión ${what}`,
-            body: event.name,
+            ...campaignNotice('REVIEW', { actor: user.fullName, scope, event }),
             linkUrl,
             entity: event.entity,
           })),
@@ -216,14 +214,12 @@ export class CampaignsController {
       select: { userId: true },
     });
     if (!sent?.userId) return;
-    const verb = to === 'AUTHORIZED' ? 'autorizó' : to === 'PAID' ? 'marcó como pagada' : 'regresó a borrador';
     await this.notifications.notify({
       userId: sent.userId,
       organizationId,
       actorId: user.id,
       type: `${scope}.${to.toLowerCase()}`,
-      title: `${who} ${verb} ${what}`,
-      body: event.name,
+      ...campaignNotice(to as 'AUTHORIZED' | 'PAID' | 'DRAFT', { actor: user.fullName, scope, event }),
       linkUrl,
       entity: event.entity,
     });

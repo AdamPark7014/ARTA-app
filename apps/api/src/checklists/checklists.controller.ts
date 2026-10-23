@@ -49,6 +49,7 @@ import {
 import { ChecklistPdfService } from './checklist-pdf.service';
 import { VISIBLE_CHECKLIST_WHERE } from './checklist-visibility';
 import { NotificationsService } from '../notifications/notifications.service';
+import { checklistNotice, type ChecklistNoticeKind } from '../notifications/notification-text';
 import { Optional } from '@nestjs/common';
 
 type AuthUser = {
@@ -865,8 +866,7 @@ export class ChecklistsController {
     const organizationId = doc.event.organizationId ?? null;
     const entity = doc.event.entity as EntityKey;
     const linkUrl = `/events/${doc.eventId}?tab=checklists&checklist=${doc.id}`;
-    const body = `${doc.title} · ${doc.event.name}`;
-    const who = actor.fullName || 'Alguien del equipo';
+    const text = (kind: ChecklistNoticeKind) => checklistNotice(kind, { actor: actor.fullName, doc, event: doc.event });
 
     if (to === DocStatus.REVIEW) {
       const people = await this.prisma.user.findMany({
@@ -892,8 +892,7 @@ export class ChecklistsController {
           organizationId,
           actorId: actor.id,
           type: 'checklist.submitted',
-          title: `${who} mandó un formato a revisión`,
-          body,
+          ...text('submitted'),
           linkUrl,
           entity,
         })),
@@ -903,12 +902,12 @@ export class ChecklistsController {
 
     const owner = doc.submittedById;
     if (!owner || owner === actor.id) return;
-    const copy: Partial<Record<DocStatus, { type: string; title: string }>> = {
-      APPROVED: { type: 'checklist.approved', title: `${who} aprobó tu formato` },
-      SEALED: { type: 'checklist.sealed', title: `${who} selló tu formato` },
+    const copy: Partial<Record<DocStatus, { type: string; kind: ChecklistNoticeKind }>> = {
+      APPROVED: { type: 'checklist.approved', kind: 'approved' },
+      SEALED: { type: 'checklist.sealed', kind: 'sealed' },
       DRAFT: reopening
-        ? { type: 'checklist.reopened', title: `${who} reabrió un formato sellado` }
-        : { type: 'checklist.returned', title: `${who} regresó tu formato a borrador` },
+        ? { type: 'checklist.reopened', kind: 'reopened' }
+        : { type: 'checklist.returned', kind: 'returned' },
     };
     const msg = from === to ? undefined : copy[to];
     if (!msg) return;
@@ -917,8 +916,7 @@ export class ChecklistsController {
       organizationId,
       actorId: actor.id,
       type: msg.type,
-      title: msg.title,
-      body,
+      ...text(msg.kind),
       linkUrl,
       entity,
     });
@@ -950,23 +948,20 @@ export class ChecklistsController {
       linkUrl: `/events/${doc.eventId}?tab=checklists&checklist=${doc.id}`,
       entity,
     };
-    const who = actor.fullName || 'Alguien del equipo';
     if (kind === 'ENTREGADO') {
       if (doc.authorizedAt) return;
       const signers = await this.notifications.whoCan({ organizationId, entity, exclude: actor.id });
       await this.notifications.notifyUsers(signers, {
         ...base,
         type: 'checklist.signature_needed',
-        title: `${who} firmó la entrega de un formato`,
-        body: `${doc.title} · ${doc.event.name} · falta la firma de autorización`,
+        ...checklistNotice('signature_needed', { actor: actor.fullName, doc, event: doc.event }),
       });
       return;
     }
     await this.notifications.notifyUsers([doc.deliveredById, doc.submittedById], {
       ...base,
       type: 'checklist.signed',
-      title: `${who} firmó como Autorizado tu formato`,
-      body: `${doc.title} · ${doc.event.name}`,
+      ...checklistNotice('signed', { actor: actor.fullName, doc, event: doc.event }),
     });
   }
 
