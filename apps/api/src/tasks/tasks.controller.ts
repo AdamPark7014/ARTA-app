@@ -21,6 +21,7 @@ import { IsArray, IsIn, IsOptional, IsString } from 'class-validator';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { NotificationsService, type NotifyInput } from '../notifications/notifications.service';
+import { taskNotice, type TaskNoticeInput, type TaskNoticeKind } from '../notifications/notification-text';
 import { assertSameTenant, tenantIdOf } from '../common/tenant';
 import { assertEventNotClosed } from '../common/event-guards';
 import { canSeeEntity, entityForNew, entityScope, userEntities } from '../common/entity-scope';
@@ -80,11 +81,6 @@ const TASK_INCLUDE = {
     take: 80,
   },
 } satisfies Prisma.TaskAssignmentInclude;
-
-function dueLabel(dueAt?: Date | null) {
-  if (!dueAt) return '';
-  return ` · vence ${dueAt.toLocaleDateString('es-MX')}`;
-}
 
 /** Forma del contrato móvil: la app abre la tarea nativa con estos enlaces. */
 export function taskLink(eventId?: string | null, taskId?: string | null) {
@@ -197,14 +193,19 @@ export class TasksController {
     event: { id: string; name: string; entity: NotifyInput['entity'] } | null | undefined,
     kind: 'task.assigned' | 'task.reassigned',
   ) {
+    const text = taskNotice(kind === 'task.assigned' ? 'assigned' : 'reassigned', {
+      actor: actor.fullName,
+      task,
+      event,
+    });
     for (const person of people) {
       await this.notifications.notify({
         userId: person.id,
         organizationId: task.organizationId,
         actorId: actor.id,
         type: kind,
-        title: kind === 'task.assigned' ? `${actor.fullName} te asignó una tarea` : `${actor.fullName} te pasó una tarea`,
-        body: `${task.title}${event ? ` · ${event.name}` : ''}${dueLabel(task.dueAt)}`,
+        title: text.title,
+        body: text.body,
         linkUrl: taskLink(event?.id, task.id),
         entity: event?.entity ?? task.entity ?? undefined,
       });
@@ -454,8 +455,12 @@ export class TasksController {
       organizationId: task.organizationId,
       actorId: req.user.id,
       type: 'task.evidence',
-      title: `${req.user.fullName} subió evidencia a una tarea`,
-      body: `${task.title} · ${evidence.label || file.originalname}`,
+      ...taskNotice('evidence', {
+        actor: req.user.fullName,
+        task,
+        event: task.event,
+        evidence: evidence.label || file.originalname,
+      }),
       linkUrl: taskLink(task.eventId, task.id),
       entity: task.event?.entity ?? task.entity ?? undefined,
     });
@@ -524,7 +529,6 @@ export class TasksController {
 
     const updated = await this.fetchTask(id);
     const link = taskLink(updated?.eventId, id);
-    const eventName = updated?.event?.name;
 
     if (needsReview) {
       // Si quien la pidió ya no está activo, la revisa dirección o la gerencia de la entidad.
@@ -543,8 +547,7 @@ export class TasksController {
         organizationId: task.organizationId,
         actorId: req.user.id,
         type: 'task.submitted',
-        title: `${req.user.fullName} entregó una tarea para tu revisión`,
-        body: `${task.title}${eventName ? ` · ${eventName}` : ''}`,
+        ...taskNotice('submitted', { actor: req.user.fullName, task, event: updated?.event ?? task.event }),
         linkUrl: link,
         entity: task.event?.entity ?? task.entity ?? undefined,
       });
@@ -554,8 +557,7 @@ export class TasksController {
         organizationId: task.organizationId,
         actorId: req.user.id,
         type: 'task.done',
-        title: `${req.user.fullName} completó una tarea que pediste`,
-        body: `${task.title}${eventName ? ` · ${eventName}` : ''}`,
+        ...taskNotice('done', { actor: req.user.fullName, task, event: updated?.event ?? task.event }),
         linkUrl: link,
         entity: task.event?.entity ?? task.entity ?? undefined,
       });
@@ -595,8 +597,7 @@ export class TasksController {
         organizationId: task.organizationId,
         actorId: req.user.id,
         type: 'task.approved',
-        title: `${req.user.fullName} aprobó tu entrega`,
-        body: task.title,
+        ...taskNotice('approved', { actor: req.user.fullName, task, event: task.event }),
         linkUrl: taskLink(task.eventId, task.id),
         entity: task.event?.entity ?? task.entity ?? undefined,
       });
@@ -646,8 +647,7 @@ export class TasksController {
         organizationId: task.organizationId,
         actorId: req.user.id,
         type: 'task.rejected',
-        title: `${req.user.fullName} pidió corrección en tu entrega`,
-        body: `${task.title}: ${note}`,
+        ...taskNotice('rejected', { actor: req.user.fullName, task, event: task.event, note }),
         linkUrl: taskLink(task.eventId, task.id),
         entity: task.event?.entity ?? task.entity ?? undefined,
       });
@@ -740,8 +740,8 @@ export class TasksController {
     const updated = withAssignees(saved);
 
     const link = taskLink(updated.eventId, id);
-    const eventName = updated.event?.name;
-    const where = `${updated.title}${eventName ? ` · ${eventName}` : ''}`;
+    const text = (kind: TaskNoticeKind, extra: Partial<TaskNoticeInput> = {}) =>
+      taskNotice(kind, { actor: req.user.fullName, task: updated, event: updated.event, ...extra });
     const base = {
       organizationId: updated.organizationId,
       actorId: req.user.id,
@@ -759,8 +759,7 @@ export class TasksController {
         ...base,
         linkUrl: '/tasks',
         type: 'task.unassigned',
-        title: `${req.user.fullName} te quitó de una tarea`,
-        body: where,
+        ...text('unassigned'),
       });
     }
 
@@ -768,8 +767,7 @@ export class TasksController {
       await this.notifications.notifyUsers(stayed, {
         ...base,
         type: 'task.reopened',
-        title: `${req.user.fullName} reabrió una tarea`,
-        body: where,
+        ...text('reopened'),
       });
     } else {
       const changes = taskChanges(task, body);
@@ -778,10 +776,7 @@ export class TasksController {
         await this.notifications.notifyUsers(stayed, {
           ...base,
           type: dueOnly ? 'task.due_changed' : 'task.updated',
-          title: dueOnly
-            ? `${req.user.fullName} cambió la fecha de una tarea`
-            : `${req.user.fullName} actualizó una tarea`,
-          body: dueOnly ? `${where}${dueLabel(updated.dueAt) || ' · sin fecha'}` : `${where} · ${changes.join(', ')}`,
+          ...(dueOnly ? text('due_changed') : text('updated', { changes })),
         });
       }
     }
@@ -809,8 +804,7 @@ export class TasksController {
           organizationId: updated.organizationId,
           actorId: req.user.id,
           type: 'task.blocked',
-          title: `${req.user.fullName} bloqueó una tarea que pediste`,
-          body: `${updated.title}${eventName ? ` · ${eventName}` : ''}`,
+          ...text('blocked'),
           linkUrl: link,
           entity: updated.event?.entity,
         });
@@ -822,8 +816,7 @@ export class TasksController {
           organizationId: updated.organizationId,
           actorId: req.user.id,
           type: 'task.done',
-          title: `${req.user.fullName} completó una tarea que pediste`,
-          body: `${updated.title}${eventName ? ` · ${eventName}` : ''}`,
+          ...text('done'),
           linkUrl: link,
           entity: updated.event?.entity,
         });
@@ -834,8 +827,7 @@ export class TasksController {
         await this.notifications.notifyUsers(stayed, {
           ...base,
           type: 'task.status_changed',
-          title: `${req.user.fullName} cambió el estado de una tarea`,
-          body: `${where} · ${TASK_STATUS_LABEL[body.status] ?? body.status}`,
+          ...text('status_changed', { status: TASK_STATUS_LABEL[body.status] ?? body.status }),
         });
       }
     }
@@ -854,8 +846,7 @@ export class TasksController {
       organizationId: task.organizationId,
       actorId: req.user.id,
       type: 'task.deleted',
-      title: `${req.user.fullName} eliminó una tarea`,
-      body: `${task.title}${task.event ? ` · ${task.event.name}` : ''}`,
+      ...taskNotice('deleted', { actor: req.user.fullName, task, event: task.event }),
       linkUrl: taskLink(task.eventId),
       entity: task.event?.entity ?? task.entity ?? undefined,
     });

@@ -315,7 +315,7 @@ export class TicketingController {
       const before = Array.isArray(existing.zonesJson) ? (existing.zonesJson as ZoneRow[]) : [];
       const after = Array.isArray(updated.zonesJson) ? (updated.zonesJson as ZoneRow[]) : [];
       const milestone = crossedMilestone(soldPct(before), soldPct(after));
-      if (milestone) void this.sync.notifyMilestone(existing.event, milestone).catch(() => undefined);
+      if (milestone) void this.sync.notifyMilestone(existing.event, milestone, after).catch(() => undefined);
     }
     return updated;
   }

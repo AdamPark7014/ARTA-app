@@ -36,6 +36,8 @@ import { uploadRoot } from '../uploads/upload-storage';
 import { createHash } from 'crypto';
 import { join } from 'path';
 import { readFileSync } from 'fs';
+import { poNotice, type PoNoticeKind } from '../notifications/notification-text';
+import { payDayOf, payWindowFor, withPoState } from './po-state';
 import {
   DEFAULT_PO_WINDOW,
   describeSchedule,
@@ -98,30 +100,34 @@ export class PurchaseOrdersController {
   /**
    * Una OC nueva le llega a quien la puede autorizar en esa entidad. Antes se
    * quedaba «Por autorizar» hasta que dirección entrara a la torre de OC.
+   * El texto dice qué OC, de quién, cuánto, en qué evento y qué se espera.
    */
   private async notifyAuthorizers(
     user: { id: string; fullName?: string },
-    event: { id: string; name: string; entity: string; organizationId: string | null },
+    event: { id: string; name: string; entity: string; organizationId: string | null; startsAt?: Date | null },
     order: { id: string; vendorName: string | null; amount: Prisma.Decimal | number },
     kind: 'po.requested' | 'po.updated' | 'po.deleted' = 'po.requested',
+    previousAmount?: Prisma.Decimal | number | null,
   ) {
     const organizationId = event.organizationId ?? null;
     const recipients = await this.authorizersOf(event);
-    const amount = Number(order.amount).toLocaleString('es-MX', { style: 'currency', currency: 'MXN' });
-    const who = user.fullName || 'Alguien del equipo';
-    const title = {
-      'po.requested': `${who} pidió una orden de compra`,
-      'po.updated': `${who} cambió una orden de compra por autorizar`,
-      'po.deleted': `${who} eliminó una orden de compra por autorizar`,
-    }[kind];
+    const text = poNotice(
+      kind === 'po.requested' ? 'requested' : kind === 'po.updated' ? 'updated' : 'deleted',
+      {
+        actor: user.fullName,
+        order: { id: order.id, vendorName: order.vendorName, amount: order.amount },
+        event,
+        previousAmount: previousAmount == null ? null : Number(previousAmount),
+      },
+    );
     await this.notifications.notifyMany(
       recipients.map((p) => ({
         userId: p.id,
         organizationId,
         actorId: user.id,
         type: kind,
-        title,
-        body: `${order.vendorName || 'Sin proveedor'} · ${amount} · ${event.name}`,
+        title: text.title,
+        body: text.body,
         // Con acción pendiente, la app abre Aprobaciones nativas.
         linkUrl: kind === 'po.deleted' ? `/events/${event.id}?tab=ocs` : `/purchase-orders?po=${order.id}`,
         entity: event.entity as EntityKey,
@@ -149,39 +155,59 @@ export class PurchaseOrdersController {
 
   /**
    * Cada cambio de estatus le avisa a quien pidió la OC; al autorizarse, además
-   * a quien la puede pagar en esa entidad. Nunca al que hizo el cambio.
+   * a quien la puede pagar en esa entidad. Nunca al que hizo el cambio. Cada
+   * aviso dice qué sigue: el comprobante, el día de cobro o nada.
    */
   private async notifyStatusChange(
     actor: { id: string; fullName?: string },
-    event: { id: string; name: string; entity: string; organizationId: string | null },
-    order: { createdById: string | null; vendorName: string | null; amount: Prisma.Decimal | number },
+    event: { id: string; name: string; entity: string; organizationId: string | null; startsAt?: Date | null },
+    order: {
+      id: string;
+      createdById: string | null;
+      vendorName: string | null;
+      amount: Prisma.Decimal | number;
+      paymentMethod?: string | null;
+      proofs?: unknown[] | null;
+    },
     status: PoStatus,
   ) {
     const organizationId = event.organizationId ?? null;
-    const amount = Number(order.amount).toLocaleString('es-MX', { style: 'currency', currency: 'MXN' });
-    const who = actor.fullName || 'Dirección';
-    const detail = `${order.vendorName || 'Sin proveedor'} · ${amount} · ${event.name}`;
     const linkUrl = `/events/${event.id}?tab=ocs`;
     const entity = event.entity as EntityKey;
-    const copy: Partial<Record<PoStatus, { type: string; title: string }>> = {
-      AUTHORIZED: { type: 'po.authorized', title: `${who} autorizó tu orden de compra` },
-      PAID: { type: 'po.paid', title: 'Tu orden de compra ya se pagó' },
-      REJECTED: { type: 'po.rejected', title: `${who} rechazó tu orden de compra` },
-      CANCELLED: { type: 'po.cancelled', title: `${who} canceló tu orden de compra` },
-      PENDING_AUTH: { type: 'po.reverted', title: `${who} regresó tu orden de compra a «Por autorizar»` },
-      DRAFT: { type: 'po.reverted', title: `${who} regresó tu orden de compra a borrador` },
+    const kinds: Partial<Record<PoStatus, { type: string; kind: PoNoticeKind }>> = {
+      AUTHORIZED: { type: 'po.authorized', kind: 'authorized' },
+      PAID: { type: 'po.paid', kind: 'paid' },
+      REJECTED: { type: 'po.rejected', kind: 'rejected' },
+      CANCELLED: { type: 'po.cancelled', kind: 'cancelled' },
+      PENDING_AUTH: { type: 'po.reverted', kind: 'reverted' },
+      DRAFT: { type: 'po.reverted', kind: 'reverted_draft' },
     };
-    const msg = copy[status];
+    const msg = kinds[status];
     if (!msg) return;
+    const payDay = payDayOf(await payWindowFor(this.prisma, organizationId));
+    const input = {
+      actor: actor.fullName,
+      order: {
+        id: order.id,
+        vendorName: order.vendorName,
+        amount: order.amount,
+        paymentMethod: order.paymentMethod,
+        proofCount: order.proofs?.length ?? 0,
+      },
+      event,
+      payDay,
+    };
     const items: Parameters<NotificationsService['notifyMany']>[0] = [];
     if (order.createdById && order.createdById !== actor.id) {
-      items.push({ userId: order.createdById, organizationId, actorId: actor.id, type: msg.type, title: msg.title, body: detail, linkUrl, entity });
+      const text = poNotice(msg.kind, input);
+      items.push({ userId: order.createdById, organizationId, actorId: actor.id, type: msg.type, title: text.title, body: text.body, linkUrl, entity });
     }
     if (status === 'AUTHORIZED') {
       const people = await this.prisma.user.findMany({
         where: { active: true, ...(organizationId ? { organizationId } : {}) },
         select: { id: true, roleKey: true, entities: true, permissions: true },
       });
+      const toPay = poNotice('to_pay', input);
       for (const p of people) {
         const role = p.roleKey as RoleKey;
         if (p.id === actor.id || p.id === order.createdById) continue;
@@ -192,14 +218,19 @@ export class PurchaseOrdersController {
           organizationId,
           actorId: actor.id,
           type: 'po.to_pay',
-          title: `OC autorizada por pagar · ${who}`,
-          body: detail,
+          title: toPay.title,
+          body: toPay.body,
           linkUrl,
           entity,
         });
       }
     }
     if (items.length) await this.notifications.notifyMany(items);
+  }
+
+  /** Días de cobro de hoy para pegar el estado preciso a las órdenes. */
+  private async stateWindow(organizationId: string | null | undefined) {
+    return payWindowFor(this.prisma, organizationId);
   }
 
   /** Días de cobro del tenant (con los defaults de Arta: lunes, miércoles y viernes). */
@@ -371,17 +402,22 @@ export class PurchaseOrdersController {
     @Req() req: { user: { entities: string[]; roleKey: string } },
     @Param('eventId') eventId: string,
   ) {
-    await this.assertEventOps(req.user, eventId);
-    return this.prisma.purchaseOrder.findMany({
-      where: { eventId },
-      orderBy: { updatedAt: 'desc' },
-      include: {
-        createdBy: { select: { fullName: true } },
-        authorizedBy: { select: { fullName: true } },
-        lines: true,
-        proofs: true,
-      },
-    });
+    const event = await this.assertEventOps(req.user, eventId);
+    const [orders, win] = await Promise.all([
+      this.prisma.purchaseOrder.findMany({
+        where: { eventId },
+        orderBy: { updatedAt: 'desc' },
+        include: {
+          createdBy: { select: { fullName: true } },
+          authorizedBy: { select: { fullName: true } },
+          lines: true,
+          proofs: true,
+        },
+      }),
+      this.stateWindow(event.organizationId),
+    ]);
+    // `state`: qué le falta a cada orden, el mismo texto en panel y apps.
+    return orders.map((o) => withPoState(o, win, event.status));
   }
 
   @Get(':id')
@@ -397,8 +433,8 @@ export class PurchaseOrdersController {
       },
     });
     if (!order) throw new NotFoundException('OC no encontrada');
-    await this.assertEventOps(req.user, order.eventId);
-    return order;
+    const event = await this.assertEventOps(req.user, order.eventId);
+    return withPoState(order, await this.stateWindow(event.organizationId), order.event.status);
   }
 
   @Post()
@@ -468,7 +504,7 @@ export class PurchaseOrdersController {
     });
     // Un aviso que falla no deshace la orden.
     await this.notifyAuthorizers(req.user, event, created).catch(() => undefined);
-    return created;
+    return withPoState(created, await this.stateWindow(event.organizationId), event.status);
   }
 
   @Patch(':id')
@@ -563,9 +599,9 @@ export class PurchaseOrdersController {
       (body.vendorName !== undefined && body.vendorName !== order.vendorName) ||
       (body.paymentMethod !== undefined && body.paymentMethod !== order.paymentMethod);
     if (order.status === 'PENDING_AUTH' && relevant) {
-      await this.notifyAuthorizers(req.user, event, updated, 'po.updated').catch(() => undefined);
+      await this.notifyAuthorizers(req.user, event, updated, 'po.updated', order.amount).catch(() => undefined);
     }
-    return updated;
+    return withPoState(updated, await this.stateWindow(event.organizationId), event.status);
   }
 
   @Post(':id/proofs')
@@ -620,15 +656,20 @@ export class PurchaseOrdersController {
       amount: Number(proof.amount ?? 0),
     });
     if (order.createdById && order.createdById !== req.user.id) {
-      const who = (req.user as { fullName?: string }).fullName || 'Finanzas';
-      const amount = Number(proof.amount ?? order.amount).toLocaleString('es-MX', { style: 'currency', currency: 'MXN' });
+      const text = poNotice('proof', {
+        actor: (req.user as { fullName?: string }).fullName,
+        order,
+        event: order.event,
+        proofAmount: proof.amount ?? order.amount,
+        payDay: payDayOf(await this.stateWindow(order.event.organizationId)),
+      });
       await this.notifications.notify({
         userId: order.createdById,
         organizationId: order.event.organizationId,
         actorId: req.user.id,
         type: 'po.proof',
-        title: `${who} subió el comprobante de tu orden de compra`,
-        body: `${order.vendorName || 'Sin proveedor'} · ${amount} · ${order.event.name}`,
+        title: text.title,
+        body: text.body,
         linkUrl: `/events/${order.eventId}?tab=ocs`,
         entity: order.event.entity as EntityKey,
       });
@@ -690,8 +731,10 @@ export class PurchaseOrdersController {
         amount: Number(order.amount),
         paymentMethod: authorized.paymentMethod,
       });
-      await this.notifyStatusChange(req.user, order.event, order, 'AUTHORIZED').catch(() => undefined);
-      return authorized;
+      await this.notifyStatusChange(req.user, order.event, { ...order, paymentMethod: authorized.paymentMethod }, 'AUTHORIZED').catch(
+        () => undefined,
+      );
+      return withPoState(authorized, await this.stateWindow(order.event.organizationId), order.event.status);
     }
     if (body.status === 'PAID') {
       if (!hasPermission(role, req.user.permissions, PERMISSIONS.PO_MARK_PAID)) {
@@ -754,8 +797,8 @@ export class PurchaseOrdersController {
         paymentMethod: method,
         proofCount,
       });
-      await this.notifyStatusChange(req.user, order.event, order, 'PAID').catch(() => undefined);
-      return paid;
+      await this.notifyStatusChange(req.user, order.event, { ...order, paymentMethod: method }, 'PAID').catch(() => undefined);
+      return withPoState(paid, await this.stateWindow(order.event.organizationId), order.event.status);
     }
     // Any other transition (REJECTED/CANCELLED/DRAFT/PENDING_AUTH) is still an
     // authorization-flow action — gate it the same as approving, not left open.
@@ -776,7 +819,7 @@ export class PurchaseOrdersController {
       amount: Number(order.amount),
     });
     await this.notifyStatusChange(req.user, order.event, order, body.status).catch(() => undefined);
-    return moved;
+    return withPoState(moved, await this.stateWindow(order.event.organizationId), order.event.status);
   }
 
   @Delete(':id')
@@ -821,14 +864,17 @@ export class PurchaseOrdersController {
       withIva: !!order.withIva,
       status: order.status,
     });
-    const who = (req.user as { fullName?: string }).fullName || 'Alguien del equipo';
-    const amount = Number(order.amount).toLocaleString('es-MX', { style: 'currency', currency: 'MXN' });
+    const text = poNotice('deleted_mine', {
+      actor: (req.user as { fullName?: string }).fullName,
+      order,
+      event,
+    });
     await this.notifications.notifyUsers([order.createdById], {
       organizationId: event.organizationId,
       actorId: req.user.id,
       type: 'po.deleted',
-      title: `${who} eliminó tu orden de compra`,
-      body: `${order.vendorName || 'Sin proveedor'} · ${amount} · ${event.name}`,
+      title: text.title,
+      body: text.body,
       linkUrl: `/events/${event.id}?tab=ocs`,
       entity: event.entity as EntityKey,
     });

@@ -90,7 +90,10 @@ describe('TasksController · avisos', () => {
     await controller.reject(asUser('pide'), 't1', { note: 'Falta la firma' });
     const calls = notifications.notify.mock.calls.map((c: any[]) => c[0]);
     expect(calls.map((c: any) => c.userId).sort()).toEqual(['ana', 'carla']);
-    expect(calls[0]).toEqual(expect.objectContaining({ type: 'task.rejected', body: 'Rider de audio: Falta la firma' }));
+    expect(calls[0]).toEqual(
+      expect.objectContaining({ type: 'task.rejected', body: expect.stringContaining('«Falta la firma»') }),
+    );
+    expect(calls[0].title).toMatch(/pide corregir: Rider de audio$/);
   });
 
   it('reabrir avisa a los responsables', async () => {

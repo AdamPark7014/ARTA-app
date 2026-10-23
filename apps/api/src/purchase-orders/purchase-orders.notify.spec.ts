@@ -92,6 +92,30 @@ describe('PurchaseOrdersController · avisos', () => {
     expect(notifyMany.mock.calls[0][0]).toEqual([expect.objectContaining({ userId: 'u-pide', type: 'po.reverted' })]);
   });
 
+  it('el aviso dice qué OC, cuánto, de qué evento y qué falta (junta 23-10)', async () => {
+    await controller.setStatus({ user: user('u-gerente', 'gerente_arta') } as never, 'po-1', {
+      status: 'AUTHORIZED' as never,
+    });
+    const items = notifyMany.mock.calls[0][0];
+    const mine = items.find((i: any) => i.userId === 'u-pide');
+    expect(mine.title).toBe('Gerencia A. autorizó tu OC PO-1');
+    expect(mine.body).toBe(
+      'Audio Puebla · $18,000 · Concierto. Falta el comprobante de transferencia y pagarla hoy, día de cobro.',
+    );
+    const toPay = items.find((i: any) => i.type === 'po.to_pay');
+    expect(toPay.title).toBe('Gerencia A. autorizó la OC PO-1: falta pagarla');
+    expect(toPay.body).toContain('Sube el comprobante');
+  });
+
+  it('las respuestas traen `state`: qué le falta a la orden', async () => {
+    const res: any = await controller.setStatus({ user: user('u-gerente', 'gerente_arta') } as never, 'po-1', {
+      status: 'AUTHORIZED' as never,
+    });
+    expect(res.state).toEqual(
+      expect.objectContaining({ key: 'no_proof', label: 'Autorizada · sin comprobante', section: 'pay' }),
+    );
+  });
+
   it('borrar una OC avisa a quien la pidió', async () => {
     await controller.remove({ user: user('u-dir', 'dir_general') } as never, 'po-1');
     expect(notifyUsers).toHaveBeenCalledWith(['u-pide'], expect.objectContaining({ type: 'po.deleted' }));

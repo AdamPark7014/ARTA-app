@@ -352,7 +352,12 @@ describe('Chat v2', () => {
       expect.objectContaining({ kind: 'PRIVATE', isGroupDm: true, dmKey: 'g:u1:u2:u3', name: 'Ana, Luis, Pepe' }),
     );
     expect(notifications.notifyMany).toHaveBeenCalledWith([
-      expect.objectContaining({ userId: 'u2', type: 'chat.added', title: 'Nuevo grupo', linkUrl: '/chat?channel=g2' }),
+      expect.objectContaining({
+        userId: 'u2',
+        type: 'chat.added',
+        title: 'Ana R. te agregó al grupo Ana, Luis, Pepe',
+        linkUrl: '/chat?channel=g2',
+      }),
       expect.objectContaining({ userId: 'u3', type: 'chat.added' }),
     ]);
   });
@@ -369,7 +374,7 @@ describe('Chat v2', () => {
       skipDuplicates: true,
     });
     expect(notifications.notifyMany).toHaveBeenCalledWith([
-      expect.objectContaining({ userId: 'u5', type: 'chat.added', title: 'Nuevo grupo' }),
+      expect.objectContaining({ userId: 'u5', type: 'chat.added', title: 'Ana R. te agregó al grupo Ana, Luis' }),
     ]);
   });
 
@@ -438,7 +443,12 @@ describe('Chat v2', () => {
     );
     await service.removeMember(director, 'c1', 'u2');
     expect(notifications.notify).toHaveBeenCalledWith(
-      expect.objectContaining({ userId: 'u2', type: 'chat.removed', title: 'Te quitaron de #produccion', linkUrl: '/chat' }),
+      expect.objectContaining({
+        userId: 'u2',
+        type: 'chat.removed',
+        title: expect.stringMatching(/ te quitó de #produccion$/),
+        linkUrl: '/chat',
+      }),
     );
   });
 });
@@ -484,7 +494,12 @@ describe('Reportar y bloquear', () => {
     // Ni quien reporta ni la persona reportada (aunque sea de dirección).
     expect(sent.map((n) => n.userId)).toEqual(['u9', 'u7']);
     expect(sent[0]).toEqual(
-      expect.objectContaining({ type: 'chat.report', title: 'Reporte en el chat', organizationId: ORG, linkUrl: '/chat' }),
+      expect.objectContaining({
+        type: 'chat.report',
+        title: 'Reportaron un mensaje en #produccion',
+        organizationId: ORG,
+        linkUrl: '/chat',
+      }),
     );
     expect(sent[0].body).toContain('Acoso o intimidación');
     expect(sent[0].body).toContain('eres un inútil');

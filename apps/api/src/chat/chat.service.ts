@@ -11,6 +11,7 @@ import { ALL_ROLES, isDirectionRole, type EntityKey } from '../common/rbac/roles
 import { canSeeEntity, ENTITY_KEYS, entityForNew, entityScope, userEntities } from '../common/entity-scope';
 import { NotificationsService } from '../notifications/notifications.service';
 import { shortName } from '../notifications/notification-push-meta';
+import { chatMembershipNotice, chatReportNotice } from '../notifications/notification-text';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
 import {
   chatPreview,
@@ -537,15 +538,15 @@ export class ChatService {
     userIds: string[],
   ) {
     if (!userIds.length) return;
-    const author = user.fullName || 'Alguien';
+    const text = chatMembershipNotice('added', { actor: user.fullName, channel });
     await this.notifications.notifyMany(
       userIds.map((uid) => ({
         userId: uid,
         organizationId: channel.organizationId,
         actorId: user.id,
         type: 'chat.added',
-        title: channel.isGroupDm ? 'Nuevo grupo' : `Te agregaron a #${channel.name}`,
-        body: channel.isGroupDm ? `${author} te agregó a ${channel.name}` : `${author} te agregó al canal`,
+        title: text.title,
+        body: text.body,
         linkUrl: `/chat?channel=${channel.id}`,
       })),
     );
@@ -755,8 +756,7 @@ export class ChatService {
         organizationId: channel.organizationId,
         actorId: user.id,
         type: 'chat.removed',
-        title: channel.isGroupDm ? `Te quitaron del grupo ${channel.name}` : `Te quitaron de #${channel.name}`,
-        body: `${user.fullName || 'Alguien'} te quitó de la conversación`,
+        ...chatMembershipNotice('removed', { actor: user.fullName, channel }),
         linkUrl: '/chat',
       });
     }
@@ -1555,8 +1555,17 @@ export class ChatService {
       (id) => id !== user.id && id !== message.senderId,
     );
     if (!recipients.length) return;
-    const author = message.sender.fullName;
-    const body = `${REPORT_REASON_LABELS[reason]} · ${shortName(author) || author}: «${chatPreview(pushText(message), 100)}»`;
+    const text = chatReportNotice({
+      where:
+        channel.kind === ChatChannelKind.DIRECT
+          ? 'un directo'
+          : channel.isGroupDm
+            ? `el grupo ${channel.name}`
+            : `#${channel.name}`,
+      reason: REPORT_REASON_LABELS[reason],
+      author: message.sender.fullName,
+      preview: chatPreview(pushText(message), 100),
+    });
     const messageUrl = `/chat?channel=${channel.id}&msg=${message.id}`;
     await this.notifications.notifyMany(
       recipients.map((uid) => ({
@@ -1564,8 +1573,8 @@ export class ChatService {
         organizationId: channel.organizationId,
         actorId: user.id,
         type: 'chat.report',
-        title: 'Reporte en el chat',
-        body,
+        title: text.title,
+        body: text.body,
         entity: channel.entity ?? undefined,
         // Un privado o directo ajeno no se abre: el enlace queda en el chat.
         linkUrl: channel.kind === ChatChannelKind.PUBLIC || members.has(uid) ? messageUrl : '/chat',

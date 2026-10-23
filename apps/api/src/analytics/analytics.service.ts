@@ -3,6 +3,7 @@ import { ChecklistTemplateKey, EntityKey } from '@prisma/client';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { financeTotals } from '../finance/finance-totals';
 import { VISIBLE_CHECKLIST_WHERE } from '../checklists/checklist-visibility';
+import { payWindowFor, poStateCounts, poStateOf, PO_STATE_ORDER, type PoStateKey } from '../purchase-orders/po-state';
 
 function monthKey(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
@@ -111,6 +112,8 @@ export class AnalyticsService {
           paidAt: true,
           rubro: true,
           vendorName: true,
+          paymentMethod: true,
+          _count: { select: { proofs: true } },
         },
       }),
       this.prisma.taskAssignment.findMany({
@@ -219,6 +222,10 @@ export class AnalyticsService {
         })(),
       }));
 
+    // Qué le falta a cada OC (inicio: «Esperan tu visto bueno» por estado preciso).
+    const payWindow = await payWindowFor(this.prisma, organizationId, now);
+    const eventStatusById = new Map(events.map((e) => [e.id, e.status as string]));
+    const poStateAcc = new Map<PoStateKey, { count: number; amount: number; over7: number; oldestDays: number }>();
     const poByStatus: Record<string, { count: number; amount: number }> = {};
     let poPipeline = 0;
     let poPaid = 0;
@@ -236,7 +243,28 @@ export class AnalyticsService {
       ) {
         poAgingOver7 += 1;
       }
+      const state = poStateOf(
+        {
+          status: po.status,
+          paymentMethod: po.paymentMethod,
+          proofCount: po._count?.proofs ?? 0,
+          eventStatus: eventStatusById.get(po.eventId) ?? null,
+        },
+        payWindow,
+      );
+      const age = daysBetween(po.createdAt, now);
+      const acc = poStateAcc.get(state.key) ?? { count: 0, amount: 0, over7: 0, oldestDays: 0 };
+      acc.count += 1;
+      acc.amount += amt;
+      if (age > 7) acc.over7 += 1;
+      acc.oldestDays = Math.max(acc.oldestDays, age);
+      poStateAcc.set(state.key, acc);
     }
+    const poStates = PO_STATE_ORDER.filter((k) => poStateAcc.has(k)).map((key) => ({
+      key,
+      ...poStateAcc.get(key)!,
+      amount: Math.round(poStateAcc.get(key)!.amount * 100) / 100,
+    }));
 
     let portfolioIncome = 0;
     let portfolioExpense = 0;
@@ -367,6 +395,8 @@ export class AnalyticsService {
         advanceTotal,
         activity90d: activity90,
       },
+      /** OC por estado preciso: `{ key, count, amount, over7, oldestDays }`. */
+      poStates,
       eventsByStatus: byStatus,
       checklistByTemplate: byTemplate,
       poByStatus,
@@ -471,6 +501,7 @@ export class AnalyticsService {
 
   async purchaseOrders(entity: EntityKey, organizationId: string) {
     const now = new Date();
+    const payWindow = await payWindowFor(this.prisma, organizationId, now);
     const orders = await this.prisma.purchaseOrder.findMany({
       where: { event: { entity, organizationId } },
       include: {
@@ -526,6 +557,11 @@ export class AnalyticsService {
         withIva: o.withIva,
         proofCount: o._count.proofs,
         status: o.status,
+        // Qué le falta, con el mismo texto que el detalle y las apps.
+        state: poStateOf(
+          { status: o.status, paymentMethod: o.paymentMethod, proofCount: o._count.proofs, eventStatus: o.event.status },
+          payWindow,
+        ),
         amount,
         ageDays,
         createdBy: o.createdBy?.fullName,
@@ -566,6 +602,8 @@ export class AnalyticsService {
         .sort((a, b) => b.amount - a.amount)
         .slice(0, 10),
       agingBuckets,
+      /** Conteo y monto por estado preciso (chips de filtro de la torre). */
+      byState: poStateCounts(enriched),
       agingQueue: enriched
         .filter((o) => o.status === 'PENDING_AUTH' || o.status === 'AUTHORIZED')
         .sort((a, b) => b.ageDays - a.ageDays)

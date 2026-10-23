@@ -35,7 +35,8 @@ import { uploadRoot } from '../uploads/upload-storage';
 import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { createHash } from 'crypto';
 import { NotificationsService } from '../notifications/notifications.service';
-import { shortName } from '../notifications/notification-push-meta';
+import { payWindowFor, withPoState } from '../purchase-orders/po-state';
+import { eventNotice, type Notice } from '../notifications/notification-text';
 import { withAssignees } from '../tasks/task-workflow';
 
 class CreateEventDto {
@@ -122,26 +123,17 @@ export class EventsController {
     user: AuthUser & { fullName?: string },
     event: { id: string; name: string; entity: EntityKey; organizationId: string | null },
     type: string,
-    title: string,
-    body?: string,
+    text: Notice,
   ) {
     await this.notifications.notifyEventTeam(event.id, {
       organizationId: event.organizationId,
       actorId: user.id,
       type,
-      title,
-      body: body ?? event.name,
+      title: text.title,
+      body: text.body,
       linkUrl: `/events/${event.id}`,
       entity: event.entity,
     });
-  }
-
-  private who(user: { fullName?: string }) {
-    return shortName(user.fullName) || 'Dirección';
-  }
-
-  private when(date: Date) {
-    return date.toLocaleString('es-MX', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'America/Mexico_City' });
   }
 
   private assertEntity(user: AuthUser, entity: EntityKey) {
@@ -316,8 +308,11 @@ export class EventsController {
     this.assertEntity(req.user, event.entity);
     // Se pidieron los ÚLTIMOS 12 movimientos (`desc`), pero el panel los pinta
     // en orden de sucesión: se devuelven ascendentes, como el resto del API.
+    // Cada OC trae `state`: qué le falta (comprobante, día de cobro…), el mismo texto que la torre.
+    const payWindow = await payWindowFor(this.prisma, event.organizationId);
     return {
       ...event,
+      purchaseOrders: event.purchaseOrders.map((o) => withPoState(o, payWindow, event.status)),
       tasks: event.tasks.map((t) => withAssignees({ ...t, activities: [...t.activities].reverse() })),
     };
   }
@@ -477,8 +472,7 @@ export class EventsController {
       organizationId,
       actorId: req.user.id,
       type: 'event.created',
-      title: `${this.who(req.user)} creó un evento`,
-      body: `${event.name}${event.startsAt ? ` · ${this.when(event.startsAt)}` : ''}`,
+      ...eventNotice('created', { actor: req.user.fullName, event }),
       linkUrl: `/events/${event.id}`,
       entity: event.entity,
     });
@@ -511,7 +505,7 @@ export class EventsController {
     await this.prisma.auditLog.create({
       data: { userId: req.user.id, action: 'event.close', resource: 'Event', resourceId: id },
     });
-    await this.notifyTeam(req.user, event, 'event.closed', `${this.who(req.user)} cerró el evento`);
+    await this.notifyTeam(req.user, event, 'event.closed', eventNotice('closed', { actor: req.user.fullName, event }));
     return event;
   }
 
@@ -531,7 +525,7 @@ export class EventsController {
     await this.prisma.auditLog.create({
       data: { userId: req.user.id, action: 'event.reopen', resource: 'Event', resourceId: id },
     });
-    await this.notifyTeam(req.user, event, 'event.reopened', `${this.who(req.user)} reabrió el evento`);
+    await this.notifyTeam(req.user, event, 'event.reopened', eventNotice('reopened', { actor: req.user.fullName, event }));
     return event;
   }
 
@@ -552,7 +546,7 @@ export class EventsController {
     await this.prisma.auditLog.create({
       data: { userId: req.user.id, action: 'event.cancel', resource: 'Event', resourceId: id },
     });
-    await this.notifyTeam(req.user, event, 'event.cancelled', `${this.who(req.user)} canceló el evento`);
+    await this.notifyTeam(req.user, event, 'event.cancelled', eventNotice('cancelled', { actor: req.user.fullName, event }));
     return event;
   }
 
@@ -575,8 +569,7 @@ export class EventsController {
       organizationId: existing.organizationId,
       actorId: req.user.id,
       type: 'event.deleted',
-      title: `${this.who(req.user)} eliminó un evento`,
-      body: existing.name,
+      ...eventNotice('deleted', { actor: req.user.fullName, event: existing }),
       linkUrl: '/events',
       entity: existing.entity,
     });
@@ -627,17 +620,11 @@ export class EventsController {
     });
 
     if (event.startsAt && existing.startsAt?.getTime() !== event.startsAt.getTime()) {
-      const when = event.startsAt.toLocaleString('es-MX', {
-        dateStyle: 'medium',
-        timeStyle: 'short',
-        timeZone: 'America/Mexico_City',
-      });
       await this.notifyTeam(
         req.user,
         event,
         'event.rescheduled',
-        `${this.who(req.user)} cambió la fecha del evento`,
-        `${event.name} · ${when}`,
+        eventNotice('rescheduled', { actor: req.user.fullName, event, previousStartsAt: existing.startsAt }),
       );
     } else {
       const changed = eventKeyChanges(existing, event);
@@ -646,8 +633,7 @@ export class EventsController {
           req.user,
           event,
           'event.updated',
-          `${this.who(req.user)} actualizó el evento`,
-          `${event.name} · ${changed.join(', ')}`,
+          eventNotice('updated', { actor: req.user.fullName, event, changes: changed }),
         );
       }
     }
