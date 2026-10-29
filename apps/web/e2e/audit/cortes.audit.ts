@@ -221,6 +221,19 @@ for (const entity of ENTITIES) {
             await step.action(page);
             await page.waitForTimeout(350);
           }
+          // Lo que el panel deja para el siguiente cuadro (los desvanecidos de
+          // `useShellPolish` se ponen en un requestAnimationFrame): se mide después.
+          // WebKit sin ventana a veces lo atrasa; el tope evita colgarse.
+          const frameMs = await page.evaluate(
+            () =>
+              new Promise<number>((resolve) => {
+                const t0 = performance.now();
+                const done = () => resolve(Math.round(performance.now() - t0));
+                setTimeout(done, 2000);
+                requestAnimationFrame(() => requestAnimationFrame(done));
+              }),
+          );
+          if (frameMs > 300) console.log(`${entity} ${vpName} ${step.name}: dos cuadros tardaron ${frameMs} ms`);
           const res = clean(await page.evaluate(domAudit));
           results.push({ name: step.name, ...res });
           if (SHOTS) {
