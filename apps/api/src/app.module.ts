@@ -19,6 +19,7 @@ import { CampaignsModule } from './campaigns/campaigns.module';
 import { TicketingModule } from './ticketing/ticketing.module';
 import { TasksModule } from './tasks/tasks.module';
 import { CalendarModule } from './calendar/calendar.module';
+import { CleaningInventoryModule } from './cleaning-inventory/cleaning-inventory.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { DocumentsModule } from './documents/documents.module';
 import { SponsorsModule } from './sponsors/sponsors.module';
@@ -63,6 +64,7 @@ import { DirectionService } from './common/rbac/direction.service';
     TicketingModule,
     TasksModule,
     CalendarModule,
+    CleaningInventoryModule,
     NotificationsModule,
     DocumentsModule,
     SponsorsModule,
