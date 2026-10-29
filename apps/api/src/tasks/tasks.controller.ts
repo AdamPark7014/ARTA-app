@@ -25,7 +25,14 @@ import { taskNotice, type TaskNoticeInput, type TaskNoticeKind } from '../notifi
 import { assertSameTenant, tenantIdOf } from '../common/tenant';
 import { assertEventNotClosed } from '../common/event-guards';
 import { canSeeEntity, entityForNew, entityScope, userEntities } from '../common/entity-scope';
-import { canAccessEventOps, eventOpsEntities, isDirectionRole, type EntityKey, type RoleKey } from '../common/rbac/roles';
+import {
+  canAccessEventOps,
+  canCreateTasks,
+  eventOpsEntities,
+  isDirectionRole,
+  type EntityKey,
+  type RoleKey,
+} from '../common/rbac/roles';
 import { MULTER_OPTIONS, contentMatchesExtension, discardUpload } from '../uploads/upload-storage';
 import {
   assertCanReview,
@@ -368,9 +375,14 @@ export class TasksController {
 
   @Post()
   async create(@Req() req: { user: AuthUser }, @Body() dto: CreateTaskDto) {
-    // Junta 11-09-2026: «solo carpetas generales» consulta, no asigna trabajo.
-    if (req.user.roleKey === 'solo_carpetas') {
-      throw new ForbiddenException('Tu acceso es solo a carpetas generales');
+    // Junta 11-09-2026: «solo carpetas generales» consulta, no asigna trabajo. Junta 23-10-2026: el
+    // practicante tampoco (su acceso es el sitio y el calendario).
+    if (!canCreateTasks(req.user.roleKey)) {
+      throw new ForbiddenException(
+        req.user.roleKey === 'solo_carpetas'
+          ? 'Tu acceso es solo a carpetas generales'
+          : 'Tu acceso es al sitio web y al calendario; no asignas tareas',
+      );
     }
     const event = dto.eventId ? await this.assertEventOpen(req.user, dto.eventId) : null;
     const entity = (event?.entity as EntityKey | undefined) ?? entityForNew(req.user, dto.entity);

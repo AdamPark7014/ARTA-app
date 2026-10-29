@@ -582,6 +582,15 @@ export class EventsController {
     @Param('id') id: string,
     @Body() dto: UpdateEventDto,
   ) {
+    // Los datos del show son de producción. Todo rol operativo trae `checklist.edit` o `event.create`;
+    // contabilidad (junta 23-10-2026) ve el evento para pagar, pero no lo edita.
+    const role = req.user.roleKey as RoleKey;
+    if (
+      !hasPermission(role, req.user.permissions, PERMISSIONS.CHECKLIST_EDIT) &&
+      !hasPermission(role, req.user.permissions, PERMISSIONS.EVENT_CREATE)
+    ) {
+      throw new ForbiddenException('Sin permiso para editar los datos del evento');
+    }
     const existing = await this.prisma.event.findUnique({ where: { id } });
     if (!existing) throw new BadRequestException('Evento no encontrado');
     assertSameTenant(req.user, existing.organizationId);

@@ -2,12 +2,39 @@ import { BadRequestException, Body, Controller, ForbiddenException, Get, Optiona
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../common/prisma/prisma.service';
-import { canAccessEventOps, isDirectionRole, type EntityKey, type RoleKey } from '../common/rbac/roles';
+import {
+  canAccessEventOps,
+  hasPermission,
+  isDirectionRole,
+  PERMISSIONS,
+  type EntityKey,
+  type Permission,
+  type RoleKey,
+} from '../common/rbac/roles';
 import { assertSameTenant } from '../common/tenant';
 import { extname } from 'path';
 import { DirectionService } from '../common/rbac/direction.service';
 
 type AuthUser = { id: string; roleKey: string; permissions: string[]; entities: string[]; organizationId?: string | null };
+
+/**
+ * Además de `checklist.edit` (que traen todos los roles operativos), quién reemplaza cada documento:
+ * el permiso de su sección. Contabilidad (junta 23-10-2026) reemplaza corrida, campaña y boletera,
+ * nunca un formato de producción.
+ */
+const SLOT_SECTION_PERMISSION: Record<string, Permission | undefined> = {
+  CAMPAIGN: PERMISSIONS.CAMPAIGN_EDIT,
+  CORRIDA: PERMISSIONS.FINANCE_EDIT,
+  BOLETERA: PERMISSIONS.TICKETING_EDIT,
+};
+
+export function canReplaceSlot(user: { roleKey: string; permissions?: string[] }, kind: string): boolean {
+  const role = user.roleKey as RoleKey;
+  const perms = user.permissions || [];
+  if (hasPermission(role, perms, PERMISSIONS.CHECKLIST_EDIT)) return true;
+  const section = SLOT_SECTION_PERMISSION[kind];
+  return !!section && hasPermission(role, perms, section);
+}
 
 const SLOT_LABEL: Record<string, string> = {
   CHECKLIST: 'Formato',
@@ -81,6 +108,9 @@ export class SlotsController {
       note?: string;
     },
   ) {
+    if (!canReplaceSlot(req.user, body?.kind)) {
+      throw new ForbiddenException('Sin permiso para reemplazar este documento');
+    }
     const event = await this.assertEvent(req.user, eventId);
     const file = await this.prisma.eventFile.findUnique({ where: { id: body.fileId } });
     if (!file || file.eventId !== event.id) throw new BadRequestException('Archivo no encontrado en el evento');

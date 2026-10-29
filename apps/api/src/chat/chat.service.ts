@@ -7,7 +7,7 @@ import {
 import { ChatChannelKind, ChatMessageKind, Prisma } from '@prisma/client';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { tenantIdOf } from '../common/tenant';
-import { ALL_ROLES, isDirectionRole, type EntityKey } from '../common/rbac/roles';
+import { ALL_ROLES, canJoinEventChannels, isDirectionRole, type EntityKey } from '../common/rbac/roles';
 import { canSeeEntity, ENTITY_KEYS, entityForNew, entityScope, userEntities } from '../common/entity-scope';
 import { NotificationsService } from '../notifications/notifications.service';
 import { shortName } from '../notifications/notification-push-meta';
@@ -313,6 +313,19 @@ export class ChatService {
   }
 
   /**
+   * Canales que la persona ve: los públicos y aquellos de los que es miembro. Contabilidad y
+   * practicantes (junta 23-10-2026) no ven los públicos de un evento —la conversación de
+   * producción— salvo que alguien los haya agregado.
+   */
+  private visibleChannelsWhere(user: ChatUser): Prisma.ChatChannelWhereInput {
+    const mine: Prisma.ChatChannelWhereInput = { members: { some: { userId: user.id } } };
+    const open: Prisma.ChatChannelWhereInput = canJoinEventChannels(user.roleKey)
+      ? { kind: ChatChannelKind.PUBLIC }
+      : { kind: ChatChannelKind.PUBLIC, eventId: null };
+    return { OR: [open, mine] };
+  }
+
+  /**
    * Acceso a un canal de mi organización. Los públicos admiten a cualquiera (se
    * une solo al abrirlo); privados y directos exigen ser miembro.
    */
@@ -328,6 +341,10 @@ export class ChatService {
     if (!membership) {
       if (channel.kind !== ChatChannelKind.PUBLIC) {
         throw new ForbiddenException('No tienes acceso a esta conversación');
+      }
+      // Canal de un evento: contabilidad y practicantes entran solo si alguien los agregó.
+      if (channel.eventId && !canJoinEventChannels(user.roleKey)) {
+        throw new ForbiddenException('Los canales de los eventos son del equipo de producción');
       }
       membership = await this.prisma.chatChannelMember.upsert({
         where: { channelId_userId: { channelId, userId: user.id } },
@@ -387,7 +404,7 @@ export class ChatService {
         organizationId: orgId,
         isArchived: false,
         AND: [
-          { OR: [{ kind: ChatChannelKind.PUBLIC }, { members: { some: { userId: user.id } } }] },
+          this.visibleChannelsWhere(user),
           // Directos y grupos (sin entidad) se ven en las dos; lo demás solo en su entidad.
           { OR: [{ entity: null }, { entity: { in: scope } }] },
         ],
@@ -659,7 +676,11 @@ export class ChatService {
     });
     if (!event || !canSeeEntity(user, event.entity)) throw new NotFoundException('Evento no encontrado');
     const existing = await this.prisma.chatChannel.findUnique({ where: { eventId }, select: { id: true } });
+    // Sin entrada propia al canal (contabilidad, practicante): solo el que ya existe y si es miembro.
     if (existing) return this.getChannel(user, existing.id);
+    if (!canJoinEventChannels(user.roleKey)) {
+      throw new ForbiddenException('Los canales de los eventos son del equipo de producción');
+    }
 
     const label = (event.artist ? `${event.artist} · ${event.name}` : event.name).slice(0, 80);
     const slug = `evento-${slugify(label, 40) || 'show'}-${event.id.slice(-6)}`;
@@ -1262,7 +1283,7 @@ export class ChatService {
             organizationId: tenantIdOf(user),
             isArchived: false,
             AND: [
-              { OR: [{ kind: ChatChannelKind.PUBLIC }, { members: { some: { userId: user.id } } }] },
+              this.visibleChannelsWhere(user),
               { OR: [{ entity: null }, { entity: { in: userEntities(user) } }] },
             ],
           },
@@ -1389,7 +1410,7 @@ export class ChatService {
               organizationId: tenantIdOf(user),
               isArchived: false,
               AND: [
-                { OR: [{ kind: ChatChannelKind.PUBLIC }, { members: { some: { userId: user.id } } }] },
+                this.visibleChannelsWhere(user),
                 { OR: [{ entity: null }, { entity: { in: scope } }] },
               ],
             },

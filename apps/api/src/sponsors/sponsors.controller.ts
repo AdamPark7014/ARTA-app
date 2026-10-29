@@ -20,8 +20,7 @@ import { assertSameTenant } from '../common/tenant';
 import { assertEventNotClosed } from '../common/event-guards';
 import {
   canAccessEventOps,
-  hasPermission,
-  PERMISSIONS,
+  canEditSponsors,
   type EntityKey,
   type RoleKey,
 } from '../common/rbac/roles';
@@ -95,14 +94,9 @@ export class SponsorsController {
     });
   }
 
+  /** Quien edita formatos o quien lleva el dinero (contabilidad, junta 23-10-2026). */
   private assertSponsorEdit(user: AuthUser) {
-    if (
-      !hasPermission(
-        user.roleKey as RoleKey,
-        user.permissions || [],
-        PERMISSIONS.CHECKLIST_EDIT,
-      )
-    ) {
+    if (!canEditSponsors(user.roleKey as RoleKey, user.permissions || [])) {
       throw new ForbiddenException('Sin permiso para editar patrocinadores');
     }
   }

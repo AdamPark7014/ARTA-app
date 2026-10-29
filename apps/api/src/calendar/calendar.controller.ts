@@ -19,7 +19,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { assertSameTenant, tenantIdOf } from '../common/tenant';
-import { canAccessEventOps, type EntityKey, type RoleKey } from '../common/rbac/roles';
+import { canAccessEventOps, canSeeEventCalendar, type EntityKey, type RoleKey } from '../common/rbac/roles';
 
 type AuthUser = {
   id: string;
@@ -113,6 +113,43 @@ export class CalendarController {
     }
   }
 
+  /** Leer el calendario: quien opera eventos y, en solo lectura, el practicante (junta 23-10-2026). */
+  private assertCalendarRead(user: AuthUser, entity: EntityKey) {
+    if (!canSeeEventCalendar(user.entities as EntityKey[], user.roleKey as RoleKey, entity)) {
+      throw new ForbiddenException(`Sin acceso a ${entity}`);
+    }
+  }
+
+  /**
+   * Shows de una entidad para pintar el mes: solo lo que lleva el calendario (nombre, fechas,
+   * lugar). Lo usa quien no abre eventos (practicante) para preparar publicaciones del sitio.
+   */
+  @Get('events')
+  async events(@Req() req: { user: AuthUser }, @Query('entity') entity: EntityKey) {
+    if (entity !== 'ARTA' && entity !== 'EXPLANADA') throw new BadRequestException('Falta la entidad');
+    this.assertCalendarRead(req.user, entity);
+    return this.prisma.event.findMany({
+      where: {
+        organizationId: tenantIdOf(req.user),
+        entity,
+        status: { not: 'CANCELLED' },
+        startsAt: { not: null },
+      },
+      select: {
+        id: true,
+        name: true,
+        artist: true,
+        venue: true,
+        city: true,
+        status: true,
+        startsAt: true,
+        endsAt: true,
+      },
+      orderBy: { startsAt: 'desc' },
+      take: 500,
+    });
+  }
+
   private assertDate(date: string) {
     if (!DATE_RE.test(date)) throw new BadRequestException('Fecha inválida (usa AAAA-MM-DD)');
   }
@@ -126,7 +163,7 @@ export class CalendarController {
     @Query('to') to?: string,
   ) {
     if (!entity) throw new BadRequestException('Falta la entidad');
-    this.assertEntity(req.user, entity);
+    this.assertCalendarRead(req.user, entity);
     const where: { organizationId: string; entity: EntityKey; date?: { gte?: string; lte?: string } } = {
       organizationId: tenantIdOf(req.user),
       entity,

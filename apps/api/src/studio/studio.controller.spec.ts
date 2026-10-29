@@ -10,10 +10,12 @@ describe('StudioController · escrituras solo desde la organización de Arta', (
   function setup() {
     const model = () => ({
       findMany: jest.fn(async () => []),
+      findUnique: jest.fn(async () => ({ id: 'x', published: false, active: false })),
       create: jest.fn(async () => ({ id: 'nuevo' })),
       update: jest.fn(async () => ({ id: 'x' })),
       upsert: jest.fn(async () => ({ id: 'pagina' })),
       delete: jest.fn(async () => ({ id: 'x' })),
+      deleteMany: jest.fn(async () => ({ count: 0 })),
     });
     const prisma = {
       pageContent: model(),

@@ -12,6 +12,10 @@ export const ROLES = {
   CONVENIOS: 'convenios',
   ENLACE_GOBIERNO: 'enlace_gobierno',
   SOLO_CARPETAS: 'solo_carpetas',
+  /** Junta 23-10-2026 · Paula Farfán: temas contables y comerciales de Arta y Auditorio. */
+  CONTABILIDAD: 'contabilidad',
+  /** Junta 23-10-2026 · practicantes de Montse: sitio público (Studio) y calendario, nada más. */
+  PRACTICANTE: 'practicante',
 } as const;
 
 export type RoleKey = (typeof ROLES)[keyof typeof ROLES];
@@ -29,6 +33,8 @@ export const ROLE_LABELS: Record<RoleKey, string> = {
   convenios: 'Convenios y patrocinios',
   enlace_gobierno: 'Enlace gobierno y pagos',
   solo_carpetas: 'Solo carpetas',
+  contabilidad: 'Contabilidad y comercial',
+  practicante: 'Practicante (sitio y redes)',
 };
 
 /** Nombre del rol para pantalla: una clave desconocida se lee como texto, nunca como `cosa_cosa`. */
@@ -52,6 +58,10 @@ export const ROLE_HINTS: Record<RoleKey, string> = {
   convenios: 'Patrocinios y convenios; ve tareas de todos.',
   enlace_gobierno: 'Pagos gobierno, marcar OC pagadas.',
   solo_carpetas: 'Ve las carpetas generales de sus entidades; no edita.',
+  contabilidad:
+    'Paga OC y anticipos (sube comprobantes y facturas), corrida, campañas, convenios y boletera. No autoriza OC ni toca usuarios ni formatos.',
+  practicante:
+    'Edita el sitio público en Studio como borrador (dirección publica) y ve el calendario de shows. Nada más.',
 };
 
 export const PERMISSION_LABELS: Record<string, string> = {
@@ -65,6 +75,7 @@ export const PERMISSION_LABELS: Record<string, string> = {
   'event.close': 'Cerrar eventos',
   'checklist.edit': 'Editar checklists',
   'studio.edit': 'Editar Studio / sitio',
+  'studio.publish': 'Publicar en el sitio (Studio)',
   'ticketing.edit': 'Editar boletera',
   'folders.edit': 'Editar carpetas',
   'vendor.pin': 'PINs de proveedor',
@@ -83,6 +94,9 @@ export const ROLE_DEFAULT_ENTITIES: Record<RoleKey, EntityKey[]> = {
   convenios: ['ARTA', 'EXPLANADA'],
   enlace_gobierno: ['ARTA', 'EXPLANADA'],
   solo_carpetas: ['ARTA', 'EXPLANADA'],
+  contabilidad: ['ARTA', 'EXPLANADA'],
+  // El sitio público es solo de Arta (Studio).
+  practicante: ['ARTA'],
 };
 
 export const PERMISSIONS = {
@@ -100,6 +114,11 @@ export const PERMISSIONS = {
   EVENT_CLOSE: 'event.close',
   CHECKLIST_EDIT: 'checklist.edit',
   STUDIO_EDIT: 'studio.edit',
+  /**
+   * Publicar en el sitio (noticias, slides activos, secciones). Quien edita Studio publica, salvo el
+   * practicante: él deja borradores y los publica dirección (`canPublishStudio`).
+   */
+  STUDIO_PUBLISH: 'studio.publish',
   TICKETING_EDIT: 'ticketing.edit',
   FOLDERS_EDIT: 'folders.edit',
   VENDOR_PIN: 'vendor.pin',
@@ -119,6 +138,7 @@ export const ASSIGNABLE_PERMISSIONS: Permission[] = [
   PERMISSIONS.EVENT_CLOSE,
   PERMISSIONS.CHECKLIST_EDIT,
   PERMISSIONS.STUDIO_EDIT,
+  PERMISSIONS.STUDIO_PUBLISH,
   PERMISSIONS.TICKETING_EDIT,
   PERMISSIONS.FOLDERS_EDIT,
   PERMISSIONS.VENDOR_PIN,
@@ -138,6 +158,7 @@ export const ROLE_PERMISSIONS: Record<RoleKey, Permission[]> = {
     PERMISSIONS.EVENT_CLOSE,
     PERMISSIONS.CHECKLIST_EDIT,
     PERMISSIONS.STUDIO_EDIT,
+    PERMISSIONS.STUDIO_PUBLISH,
     PERMISSIONS.TICKETING_EDIT,
     PERMISSIONS.FOLDERS_EDIT,
     PERMISSIONS.VENDOR_PIN,
@@ -160,6 +181,7 @@ export const ROLE_PERMISSIONS: Record<RoleKey, Permission[]> = {
     PERMISSIONS.EVENT_CLOSE,
     PERMISSIONS.CHECKLIST_EDIT,
     PERMISSIONS.STUDIO_EDIT,
+    PERMISSIONS.STUDIO_PUBLISH,
     PERMISSIONS.TICKETING_EDIT,
     PERMISSIONS.FOLDERS_EDIT,
     PERMISSIONS.VENDOR_PIN,
@@ -173,6 +195,7 @@ export const ROLE_PERMISSIONS: Record<RoleKey, Permission[]> = {
     PERMISSIONS.EVENT_CLOSE,
     PERMISSIONS.CHECKLIST_EDIT,
     PERMISSIONS.STUDIO_EDIT,
+    PERMISSIONS.STUDIO_PUBLISH,
     PERMISSIONS.TICKETING_EDIT,
     PERMISSIONS.FOLDERS_EDIT,
     PERMISSIONS.VENDOR_PIN,
@@ -204,6 +227,26 @@ export const ROLE_PERMISSIONS: Record<RoleKey, Permission[]> = {
    * entran únicamente a las carpetas generales de Arta y Auditorio, a ver.
    */
   solo_carpetas: [],
+  /**
+   * Junta 23-10-2026 · Paula Farfán: «Auditorio y Arta en temas contables, accesos muy puntuales a
+   * temas comerciales y contables». Paga (OC y anticipos, con comprobante), lleva la corrida, edita
+   * campañas, convenios y boletera. No autoriza OC ni anticipos, no edita formatos ni toca usuarios;
+   * tampoco entra a los canales de chat de los eventos (`canJoinEventChannels`).
+   */
+  contabilidad: [
+    PERMISSIONS.FINANCE_VIEW,
+    PERMISSIONS.FINANCE_EDIT,
+    PERMISSIONS.PO_MARK_PAID,
+    PERMISSIONS.CAMPAIGN_VIEW,
+    PERMISSIONS.CAMPAIGN_EDIT,
+    PERMISSIONS.TICKETING_EDIT,
+  ],
+  /**
+   * Junta 23-10-2026 · «Montse redes sociales: acceso para practicantes». Edita el sitio en Studio
+   * como borrador (publica dirección: `canPublishStudio`) y ve el calendario de shows en solo
+   * lectura (`canSeeEventCalendar`). Sin eventos, finanzas, OC, formatos, carpetas ni tareas.
+   */
+  practicante: [PERMISSIONS.STUDIO_EDIT],
 };
 
 export function hasPermission(
@@ -245,10 +288,64 @@ export function canAccessEventOps(
 ): boolean {
   if (!canAccessEntity(userEntities, roleKey, entity)) return false;
   if (roleKey === ROLES.SOLO_CARPETAS) return false;
+  // El practicante no opera eventos: solo consulta el calendario (`canSeeEventCalendar`).
+  if (roleKey === ROLES.PRACTICANTE) return false;
   if (roleKey === ROLES.DIR_AUDITORIO && entity === 'ARTA') return false;
   return true;
 }
 
 export function eventOpsEntities(userEntities: EntityKey[], roleKey: RoleKey): EntityKey[] {
   return userEntities.filter((e) => canAccessEventOps(userEntities, roleKey, e));
+}
+
+/**
+ * Calendario de shows. Quien opera eventos lo ve completo; el practicante lo consulta en solo
+ * lectura para preparar sus publicaciones (sin abrir el evento ni escribir notas).
+ */
+export function canSeeEventCalendar(
+  userEntities: EntityKey[],
+  roleKey: RoleKey,
+  entity: EntityKey,
+): boolean {
+  if (canAccessEventOps(userEntities, roleKey, entity)) return true;
+  return roleKey === ROLES.PRACTICANTE && canAccessEntity(userEntities, roleKey, entity);
+}
+
+/**
+ * Publicar en el sitio público (noticia publicada, slide activo, sección publicada). Quien edita
+ * Studio publica como siempre; el practicante solo deja borradores, salvo que dirección le dé
+ * `studio.publish` como permiso extra.
+ */
+export function canPublishStudio(roleKey: RoleKey, extra: string[]): boolean {
+  if (hasPermission(roleKey, extra, PERMISSIONS.STUDIO_PUBLISH)) return true;
+  return roleKey !== ROLES.PRACTICANTE && hasPermission(roleKey, extra, PERMISSIONS.STUDIO_EDIT);
+}
+
+/**
+ * Patrocinios (convenios) de un evento: quien edita formatos, como siempre, o quien lleva el
+ * dinero (`finance.edit`: contabilidad registra montos y condiciones de pago).
+ */
+export function canEditSponsors(roleKey: RoleKey, extra: string[]): boolean {
+  return (
+    hasPermission(roleKey, extra, PERMISSIONS.CHECKLIST_EDIT) ||
+    hasPermission(roleKey, extra, PERMISSIONS.FINANCE_EDIT)
+  );
+}
+
+/**
+ * Canales de chat de un evento (la conversación de producción). Contabilidad y practicantes no
+ * entran por su cuenta; si alguien los agrega al canal, entonces sí.
+ */
+export function canJoinEventChannels(roleKey: string | null | undefined): boolean {
+  return roleKey !== ROLES.CONTABILIDAD && roleKey !== ROLES.PRACTICANTE;
+}
+
+/** Carpetas generales: todos los que trabajan en la entidad menos el practicante (solo sitio y calendario). */
+export function canSeeGeneralFolders(roleKey: string | null | undefined): boolean {
+  return roleKey !== ROLES.PRACTICANTE;
+}
+
+/** Crear y asignar tareas: no quien solo consulta carpetas ni el practicante. */
+export function canCreateTasks(roleKey: string | null | undefined): boolean {
+  return roleKey !== ROLES.SOLO_CARPETAS && roleKey !== ROLES.PRACTICANTE;
 }

@@ -1,5 +1,6 @@
 import { PrismaClient, EntityKey, ChecklistTemplateKey, Prisma } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
+import { randomBytes } from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
 import { ROLES, ROLE_PERMISSIONS, type RoleKey } from '../src/common/rbac/roles';
@@ -351,6 +352,8 @@ type SeedUser = {
   permissions: string[];
   /** Override password via env SEED_PASS_<ALIAS> */
   passAlias: string;
+  /** Sin SEED_PASS_<ALIAS>: contraseña aleatoria (no SEED_PASSWORD). Ver new-team-members.ts. */
+  randomPasswordUnlessEnv?: boolean;
 };
 
 const USERS: SeedUser[] = [
@@ -417,9 +420,12 @@ const USERS: SeedUser[] = [
   ...NEW_TEAM_MEMBERS,
 ];
 
-function passwordFor(alias: string) {
+function passwordFor(alias: string, randomUnlessEnv = false) {
   const specific = process.env[`SEED_PASS_${alias}`];
   if (specific && specific.length >= 6) return specific;
+  // Altas nuevas en producción: el seed corre en cada arranque y no debe dejarles una contraseña
+  // conocida. Nadie sabe esta; la real se fija con el script de alta de esa persona.
+  if (randomUnlessEnv) return `Arta-${randomBytes(18).toString('base64url')}`;
   const fallback = process.env.SEED_PASSWORD;
   if (fallback && fallback.length >= 6) return fallback;
   // Dev-only fallback — never shown on login UI
@@ -528,7 +534,7 @@ async function main() {
   }
 
   for (const u of USERS) {
-    const plain = passwordFor(u.passAlias);
+    const plain = passwordFor(u.passAlias, u.randomPasswordUnlessEnv);
     const passwordHash = await bcrypt.hash(plain, 12);
     const views = USER_VIEWS[u.email];
     const user = await prisma.user.upsert({

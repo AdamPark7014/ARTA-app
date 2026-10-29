@@ -27,6 +27,7 @@ import { PrismaService } from '../common/prisma/prisma.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import {
   canAccessEntity,
+  canSeeGeneralFolders,
   hasPermission,
   isDirectionRole,
   PERMISSIONS,
@@ -149,8 +150,12 @@ export class FoldersController {
     return hasPermission(user.roleKey as RoleKey, user.permissions, PERMISSIONS.FOLDERS_EDIT);
   }
 
+  /**
+   * Carpeta sin roles = de todos los de la entidad, menos el practicante (junta 23-10-2026): él solo
+   * ve las carpetas que dirección comparta con su rol a propósito (`allowedRoles: ['practicante']`).
+   */
   private canSeeFolder(user: AuthUser, allowedRoles: string[]) {
-    if (!allowedRoles.length) return true;
+    if (!allowedRoles.length) return canSeeGeneralFolders(user.roleKey);
     if (isDirectionRole(user.roleKey)) return true;
     return allowedRoles.includes(user.roleKey);
   }

@@ -10,6 +10,11 @@ export type TeamMember = {
   permissions: string[];
   /** Contraseña inicial vía env SEED_PASS_<passAlias> */
   passAlias: string;
+  /**
+   * Sin SEED_PASS_<passAlias>, el seed le pone una contraseña aleatoria que nadie conoce (no la de
+   * SEED_PASSWORD ni la de desarrollo). La de verdad se fija con su script de alta y se entrega aparte.
+   */
+  randomPasswordUnlessEnv?: boolean;
 };
 
 /**
@@ -53,5 +58,20 @@ export const NEW_TEAM_MEMBERS: TeamMember[] = [
     entities: ['ARTA', 'EXPLANADA'],
     permissions: [...ROLE_PERMISSIONS[ROLES.LOGISTICA]],
     passAlias: 'KIKA',
+  },
+  /**
+   * Junta 23-10-2026 · «Paula Farfán: Auditorio y Arta en temas contables, que tenga accesos muy
+   * puntuales a temas comerciales y contables». Rol `contabilidad` en las dos entidades. En
+   * producción se da de alta con scripts/alta-paula-contabilidad-2310.ts (contraseña a un archivo).
+   */
+  {
+    email: 'paula@artaproducciones.com',
+    fullName: 'Paula Farfán',
+    title: 'Contabilidad y comercial',
+    roleKey: ROLES.CONTABILIDAD,
+    entities: ['ARTA', 'EXPLANADA'],
+    permissions: [...ROLE_PERMISSIONS[ROLES.CONTABILIDAD]],
+    passAlias: 'PAULA',
+    randomPasswordUnlessEnv: true,
   },
 ];
