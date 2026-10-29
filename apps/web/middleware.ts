@@ -40,11 +40,12 @@ export function middleware(request: NextRequest) {
     return panelNoIndex(NextResponse.redirect(url), true);
   }
 
-  // Apex / www: la raíz siempre es el sitio público (no panel).
+  // Apex / www: la raíz siempre es el sitio público (no panel). Permanente (308): la portada canónica es
+  // /p/arta y Google consolida ahí la raíz; con 307 la trataba como temporal y no pasaba la relevancia.
   if (!hostEntity && pathname === '/') {
     const url = request.nextUrl.clone();
     url.pathname = '/p/arta';
-    return NextResponse.redirect(url);
+    return NextResponse.redirect(url, 308);
   }
 
   const response = NextResponse.next({
