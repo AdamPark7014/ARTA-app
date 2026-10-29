@@ -336,6 +336,15 @@ export const NAV_ITEMS: NavItem[] = [
     requiresEventOps: true,
     keywords: 'insumos semanal limpieza consumo existencias faltantes inventario',
   },
+  // Junta 23-10-2026: inventario de limpieza semanal del Auditorio (no cuelga de un evento).
+  {
+    href: '/maintenance/inventario-limpieza',
+    label: 'Inventario de limpieza',
+    entities: ['EXPLANADA'],
+    group: 'Operación',
+    requiresEventOps: true,
+    keywords: 'insumos semanal limpieza consumo existencias faltantes inventario',
+  },
   {
     href: '/vendor',
     label: 'PIN proveedores',
