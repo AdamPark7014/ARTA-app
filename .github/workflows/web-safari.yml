@@ -1,0 +1,256 @@
+name: Web · Safari (WebKit)
+
+# El panel en el motor de Safari: toda la suite de Playwright (API de mentira,
+# como ci.yml) en WebKit de escritorio y en iPhone, cada una contra su par de
+# Chromium, más el recorrido de «cortes» (e2e/audit) a 1536×864 y 390×844 en las
+# dos entidades. El veredicto lo da el job «Comparar»: falla solo si una prueba
+# pasa en Chromium y falla en WebKit (eso es un fallo de Safari). Lo que falla en
+# los dos motores sale en el resumen, pero no tumba este flujo.
+# WebKit no corre en la máquina de Adam (Windows bloquea sus DLL sin firmar), así
+# que se prueba aquí. Guía: docs/SAFARI.md.
+
+on:
+  workflow_dispatch:
+    inputs:
+      macos:
+        description: 'También la prueba corta en macOS (WebKit con las bibliotecas de Mac)'
+        type: boolean
+        default: true
+  push:
+    branches: [main]
+    paths:
+      - 'apps/web/**'
+      - 'packages/**'
+      - 'package-lock.json'
+      - '.github/workflows/web-safari.yml'
+
+concurrency:
+  group: web-safari-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  NEXT_PUBLIC_API_URL: http://127.0.0.1:4000
+  NEXT_PUBLIC_ROOT_DOMAIN: artaproducciones.com
+  NEXT_PUBLIC_ARTA_HOST: arta.artaproducciones.com
+  NEXT_PUBLIC_AUDITORIO_HOST: auditorio.artaproducciones.com
+  # Proyectos webkit, webkit-iphone y chromium-iphone de playwright.config.ts.
+  E2E_WEBKIT: '1'
+  # El paso «Build» ya construyó .next: el webServer de Playwright solo lo sirve.
+  E2E_PREBUILT: '1'
+
+jobs:
+  suite:
+    name: Suite · ${{ matrix.project }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        project: [webkit, webkit-iphone, chromium, chromium-iphone]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # WebKit no tiene la regla --host-resolver-rules de Chromium.
+      - name: arta.localhost y auditorio.localhost → 127.0.0.1
+        run: echo "127.0.0.1 arta.localhost auditorio.localhost" | sudo tee -a /etc/hosts
+
+      - name: Install Playwright browser
+        working-directory: apps/web
+        run: npx playwright install --with-deps ${{ startsWith(matrix.project, 'webkit') && 'webkit' || 'chromium' }}
+
+      - name: Build
+        working-directory: apps/web
+        run: npm run build
+
+      # No tumba el job: el veredicto es la comparación contra Chromium.
+      - name: Playwright · ${{ matrix.project }}
+        id: e2e
+        continue-on-error: true
+        working-directory: apps/web
+        env:
+          PLAYWRIGHT_JSON_OUTPUT_NAME: results/${{ matrix.project }}.json
+          PLAYWRIGHT_HTML_OUTPUT_DIR: playwright-report-${{ matrix.project }}
+          PLAYWRIGHT_HTML_OPEN: never
+        run: >-
+          npx playwright test
+          --project=${{ matrix.project }}
+          --grep-invert "Stack real"
+          --workers=3 --retries=1
+          --trace=retain-on-failure
+          --reporter=list,html,json
+
+      - name: Upload results (JSON)
+        uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: results-${{ matrix.project }}
+          path: apps/web/results
+          retention-days: 14
+          if-no-files-found: warn
+
+      - name: Upload report, traces and screens
+        uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: report-${{ matrix.project }}
+          path: |
+            apps/web/playwright-report-${{ matrix.project }}
+            apps/web/e2e/.output
+            apps/web/e2e/__mobile__
+          retention-days: 14
+          if-no-files-found: ignore
+
+  cortes:
+    name: Cortes · ${{ matrix.project }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        project: [webkit, chromium]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: arta.localhost y auditorio.localhost → 127.0.0.1
+        run: echo "127.0.0.1 arta.localhost auditorio.localhost" | sudo tee -a /etc/hosts
+
+      - name: Install Playwright browser
+        working-directory: apps/web
+        run: npx playwright install --with-deps ${{ matrix.project }}
+
+      - name: Build
+        working-directory: apps/web
+        run: npm run build
+
+      - name: Recorrido de cortes · ARTA y Auditorio · 1536×864 y 390×844
+        working-directory: apps/web
+        env:
+          AUDIT_VP: 1536x864,390x844
+          AUDIT_TAG: ${{ matrix.project }}
+          AUDIT_OUT: ${{ github.workspace }}/apps/web/cortes
+        run: npx playwright test -c playwright.audit.config.ts --project=${{ matrix.project }}
+
+      - name: Resumen
+        if: ${{ !cancelled() }}
+        run: |
+          echo "## Cortes · ${{ matrix.project }}" >> "$GITHUB_STEP_SUMMARY"
+          cat apps/web/cortes/*.txt >> "$GITHUB_STEP_SUMMARY" || true
+
+      - name: Upload cortes (JSON + capturas)
+        uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: cortes-${{ matrix.project }}
+          path: apps/web/cortes
+          retention-days: 14
+          if-no-files-found: warn
+
+  macos:
+    name: macOS · WebKit (prueba corta)
+    if: ${{ github.event_name == 'push' || inputs.macos }}
+    runs-on: macos-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: arta.localhost y auditorio.localhost → 127.0.0.1
+        run: sudo sh -c 'printf "127.0.0.1 arta.localhost auditorio.localhost\n" >> /etc/hosts'
+
+      - name: Install Playwright WebKit
+        working-directory: apps/web
+        run: npx playwright install webkit
+
+      - name: Build
+        working-directory: apps/web
+        run: npm run build
+
+      - name: Playwright · webkit + webkit-iphone (Safari, login, shell, móvil)
+        working-directory: apps/web
+        env:
+          PLAYWRIGHT_HTML_OUTPUT_DIR: playwright-report-macos
+          PLAYWRIGHT_HTML_OPEN: never
+        run: >-
+          npx playwright test
+          e2e/safari-compat.spec.ts e2e/login.spec.ts e2e/app-shell.spec.ts e2e/mobile-shell.spec.ts e2e/tasks.spec.ts
+          --project=webkit --project=webkit-iphone
+          --workers=2 --retries=1
+          --trace=retain-on-failure
+          --reporter=list,html
+
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: report-macos
+          path: |
+            apps/web/playwright-report-macos
+            apps/web/e2e/.output
+          retention-days: 14
+          if-no-files-found: ignore
+
+  comparar:
+    name: Comparar WebKit contra Chromium
+    needs: [suite, cortes]
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: results-*
+          path: results
+          merge-multiple: true
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: cortes-*
+          path: cortes
+
+      - name: Safari de escritorio, iPhone y cortes
+        run: |
+          set +e
+          S=apps/web/scripts/compare-pw-results.mjs
+          node $S suite results/chromium.json results/webkit.json "Safari de escritorio (WebKit) contra Chrome" > desktop.md
+          A=$?
+          node $S suite results/chromium-iphone.json results/webkit-iphone.json "iPhone 15 (WebKit) contra Chrome con el mismo tamaño" > iphone.md
+          B=$?
+          node $S audit cortes/cortes-chromium cortes/cortes-webkit chromium webkit > cortes.md
+          cat desktop.md iphone.md cortes.md | tee -a "$GITHUB_STEP_SUMMARY"
+          if [ $A -ne 0 ] || [ $B -ne 0 ]; then
+            echo "::error::Hay pruebas que pasan en Chromium y fallan en WebKit (ver el resumen)."
+            exit 1
+          fi
+
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: comparacion
+          path: '*.md'
+          retention-days: 14

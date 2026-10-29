@@ -20,9 +20,14 @@ export default defineConfig({
       args: ['--host-resolver-rules=MAP *.localhost 127.0.0.1'],
     },
   },
-  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
+  projects: [
+    { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
+    // Motor de Safari (CI: .github/workflows/web-safari.yml). El tamaño y el modo
+    // móvil los pone cada prueba en su contexto; aquí solo cambia el motor.
+    ...(process.env.E2E_WEBKIT ? [{ name: 'webkit', use: { ...devices['Desktop Safari'], launchOptions: {} } }] : []),
+  ],
   webServer: {
-    command: 'npm run build && npm run start:e2e',
+    command: process.env.E2E_PREBUILT ? 'npm run start:e2e' : 'npm run build && npm run start:e2e',
     url: `http://127.0.0.1:${PORT}/login`,
     reuseExistingServer: true,
     timeout: 300_000,

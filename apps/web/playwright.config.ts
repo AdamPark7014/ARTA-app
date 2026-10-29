@@ -43,19 +43,27 @@ export default defineConfig({
   projects: [
     { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
     // Motor de Safari, a pedido: `E2E_WEBKIT=1 npx playwright test --project=webkit`.
-    // No va en la suite normal ni en CI: no se ha visto pasar entera. En Windows,
-    // lanzado desde la app de escritorio de Claude, la política de integridad de
-    // código bloquea el sqlite3.dll sin firmar de Playwright WebKit; en macOS o
-    // Linux corre (`npx playwright install --with-deps webkit`), pero ahí
-    // `arta.localhost` tiene que resolver a 127.0.0.1 (/etc/hosts): la regla
-    // `--host-resolver-rules` de arriba es solo de Chromium.
+    // Corre en CI en `.github/workflows/web-safari.yml` (docs/SAFARI.md), que
+    // compara cada proyecto WebKit contra su par de Chromium. En Windows, lanzado
+    // desde la app de escritorio de Claude, la política de integridad de código
+    // bloquea las DLL sin firmar de Playwright WebKit; en macOS o Linux corre
+    // (`npx playwright install --with-deps webkit`), pero ahí `arta.localhost`
+    // tiene que resolver a 127.0.0.1 (/etc/hosts): la regla `--host-resolver-rules`
+    // de arriba es solo de Chromium.
     ...(process.env.E2E_WEBKIT
-      ? [{ name: 'webkit', use: { ...devices['Desktop Safari'], launchOptions: {} } }]
+      ? [
+          { name: 'webkit', use: { ...devices['Desktop Safari'], launchOptions: {} } },
+          { name: 'webkit-iphone', use: { ...devices['iPhone 15'], launchOptions: {} } },
+          // Línea base del iPhone: el mismo tamaño y UA, con el motor de Chrome.
+          // Lo que falla aquí también no es de Safari, es de la pantalla chica.
+          { name: 'chromium-iphone', use: { ...devices['iPhone 15'], browserName: 'chromium' as const } },
+        ]
       : []),
   ],
 
   webServer: {
-    command: 'npm run build && npm run start:e2e',
+    // E2E_PREBUILT=1: el .next ya está construido (CI lo construye en su paso).
+    command: process.env.E2E_PREBUILT ? 'npm run start:e2e' : 'npm run build && npm run start:e2e',
     url: `http://127.0.0.1:${PORT}/login`,
     reuseExistingServer: !process.env.CI,
     timeout: 300_000,
