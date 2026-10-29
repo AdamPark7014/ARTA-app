@@ -630,3 +630,25 @@
     height: 36px;
   }
 }
+
+/* Galería dentro de la hoja (papel claro en los dos temas) */
+.fsheet__block--gallery .hub-gallery__media {
+  border-color: var(--paper-rule);
+  border-radius: 2px;
+  background: #f1f1f4;
+}
+
+.fsheet__block--gallery .hub-gallery__tile.is-video .hub-gallery__media {
+  background: #1b1b1f;
+}
+
+.fsheet__block--gallery .hub-gallery__name {
+  color: var(--paper-ink);
+}
+
+.fsheet__block--gallery .hub-gallery__count,
+.fsheet__block--gallery .hub-gallery__when,
+.fsheet__block--gallery .hub-gallery__busy,
+.fsheet__block--gallery .hub-gallery__hint {
+  color: #6b6b72;
+}

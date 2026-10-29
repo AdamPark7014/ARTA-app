@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { GalleryField } from '@/components/events/GalleryField';
 import {
   NO_LABEL,
   YES_LABEL,
@@ -49,25 +50,35 @@ export function YesNoField({ item, readOnly, onPatch }: { item: ChecklistItem; r
 
 const isHttp = (v: string) => /^https?:\/\/\S+$/i.test(v.trim());
 
-/**
- * Lo que en el Word del cliente era un «BOTÓN»: el archivo vive en el propio
- * formato (se sube aquí mismo o se elige entre sus adjuntos) o es un link.
- * Nada obliga a salir del sistema para consultarlo.
- */
-export function AttachmentField({
-  item,
-  readOnly,
-  files,
-  onPatch,
-  onUpload,
-}: {
+type AttachmentProps = {
   item: ChecklistItem;
   readOnly: boolean;
   /** Adjuntos ya subidos a este formato. */
   files: EventFile[];
   onPatch: Patch;
   onUpload?: (file: File) => Promise<EventFile | void>;
-}) {
+};
+
+/**
+ * Adjunto del formato. Con `multiple` (Recorrido de seguridad, junta
+ * 23-10-2026) es una galería de fotos y videos; si no, un archivo o un link.
+ */
+export function AttachmentField(props: AttachmentProps) {
+  return props.item.multiple ? <GalleryField {...props} /> : <SingleAttachmentField {...props} />;
+}
+
+/**
+ * Lo que en el Word del cliente era un «BOTÓN»: el archivo vive en el propio
+ * formato (se sube aquí mismo o se elige entre sus adjuntos) o es un link.
+ * Nada obliga a salir del sistema para consultarlo.
+ */
+function SingleAttachmentField({
+  item,
+  readOnly,
+  files,
+  onPatch,
+  onUpload,
+}: AttachmentProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [linking, setLinking] = useState(false);

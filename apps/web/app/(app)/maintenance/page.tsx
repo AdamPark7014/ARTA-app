@@ -57,6 +57,9 @@ export default function MaintenancePage() {
           description="Formatos de mantenimiento para los eventos de renta del Auditorio Arema."
           hint="Solo entidad Explanada. Abre el checklist desde la tarjeta o entra al evento para ver el detalle completo."
         >
+          <ActionLink href="/maintenance/inventario-limpieza" variant="ghost">
+            Inventario de limpieza semanal
+          </ActionLink>
           <ActionLink href="/events/new">Nuevo evento Explanada</ActionLink>
         </PageHeader>
 

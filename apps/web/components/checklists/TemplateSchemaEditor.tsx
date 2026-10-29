@@ -27,6 +27,10 @@ export type SchemaItem = {
   minRows?: number;
   /** No cuenta para el avance si está vacío. */
   optional?: boolean;
+  /** Adjunto: galería de varios archivos (fotos y videos). */
+  multiple?: boolean;
+  accept?: 'media' | 'any';
+  files?: unknown[];
 };
 
 export type SchemaSection = {
@@ -330,6 +334,24 @@ export function TemplateSchemaEditor({ templateId, initial, onSaved }: Props) {
                                 onChange={(e) => patchItem(sIdx, iIdx, { optional: e.target.checked || undefined })}
                               />
                               <span className="muted kpi-sub">Opcional (vacío no resta avance)</span>
+                            </label>
+                          ) : null}
+                          {item.type === 'attachment' ? (
+                            <label className="row" style={{ gap: '0.4rem', alignItems: 'center' }}>
+                              <input
+                                type="checkbox"
+                                checked={!!item.multiple}
+                                onChange={(e) =>
+                                  patchItem(
+                                    sIdx,
+                                    iIdx,
+                                    e.target.checked
+                                      ? { multiple: true, accept: 'media', files: [] }
+                                      : { multiple: undefined, accept: undefined, files: undefined },
+                                  )
+                                }
+                              />
+                              <span className="muted kpi-sub">Galería: varias fotos y videos (cámara del teléfono)</span>
                             </label>
                           ) : null}
                         </div>

@@ -256,6 +256,21 @@ export function FormatSheet({
                       </div>
                     );
                   }
+                  if (item.type === 'attachment' && item.multiple) {
+                    // Galería (fotos y videos del recorrido): bloque a lo ancho, como en el PDF.
+                    return (
+                      <div key={item.id} className="fsheet__block fsheet__block--gallery">
+                        <span className="fsheet__lbl">{item.label}:</span>
+                        <AttachmentField
+                          item={item}
+                          readOnly={readOnly}
+                          files={files}
+                          onPatch={patch(section, item)}
+                          onUpload={readOnly ? undefined : onUpload}
+                        />
+                      </div>
+                    );
+                  }
                   if (item.type === 'attachment') {
                     return (
                       <div key={item.id} className="fsheet__line fsheet__line--attach">

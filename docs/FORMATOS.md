@@ -63,6 +63,49 @@ Decisiones:
   guarda la suya (`formatVersion`): los de Arta siguen en 3, así que el script
   no reescribe sus formatos vivos.
 
+## Seguridad del Auditorio y galería de fotos y videos (junta 23-10-2026)
+
+Pedido del cliente: «subir fotos y videos de recorridos de seguridad durante y
+post evento, y formatos de seguridad interna y promotor». No hay documento del
+cliente: los campos siguen la forma de los formatos del Auditorio. Catálogo v5;
+solo `EXPLANADA`. Los formatos vivos de Arta (v3) y los del Auditorio del 11-10
+(v4) no se migran.
+
+| Plantilla | Cómo se captura |
+|---|---|
+| `RECORRIDO_SEGURIDAD` «Recorrido de seguridad» | Encabezado (evento, fecha, showtime y empresa/promotor desde el evento; coordinador de seguridad). Dos secciones, **Durante el evento** y **Post evento**, cada una con hora del recorrido, responsable, **tabla de áreas** (Área · Estatus · Observaciones, nace con 15 áreas del recinto; post agrega bodega, oficinas y «Recinto desalojado y cerrado»), **galería de fotos y videos** y observaciones (opcional). Firmas *Responsable del recorrido* / *Auditorio Explanada Puebla* |
+| `SEGURIDAD_INTERNA` «Seguridad interna» | Encabezado (jefe de seguridad, contacto). Número de elementos y **personal asignado** (nombre, puesto, entrada, salida, radio); **puestos y horarios** con total de elementos; **radios y equipo** (canal de radio y tabla que nace con radios, baterías, detectores, linternas, chalecos/gafetes y botiquín); **incidencias** (hora, lugar, descripción, acción, reportó; opcional = sin incidencias); observaciones. Firmas *Jefe de seguridad* / *Auditorio Explanada Puebla* |
+| `SEGURIDAD_PROMOTOR` «Seguridad del promotor» | Encabezado (productor/empresa desde el evento). **Empresa de seguridad**: empresa, responsable, número de elementos, personal con gafete o uniforme (SÍ/NO); **puestos y horarios** con total; **registro de acceso** (nombre, puesto, identificación, hora de entrada y salida); incidencias; observaciones. Firmas *Producción externa* / *Auditorio Explanada Puebla*, como el Compromiso de horarios |
+
+**Galería** (`attachment` con `multiple: true`, `accept: 'media'`, `files: []`):
+
+- Un campo guarda N archivos en `files` (`fileId`, `name`, `url`, `mimeType`,
+  `sizeBytes`, `at`). Es aditivo: un adjunto de un archivo sigue igual
+  (`value` + `fileId`) y, si una plantilla lo vuelve galería, ese archivo
+  aparece primero (`attachmentFiles`). Avance (vacía no cuenta), historial
+  («2 fotos · 1 video: …»), migración y normalización lo conocen. En
+  «Plantillas» cualquier adjunto se puede volver galería con su casilla.
+- **Subida** (`POST /uploads`, `MEDIA_MULTER_OPTIONS`): además de lo de siempre
+  acepta HEIC/HEIF, mp4, mov, m4v, webm y 3gp, con revisión del contenido
+  (firma ISO BMFF/EBML, igual que el chat). **Videos hasta 250 MB** (≈ 4 min de
+  iPhone en 1080p; un 4K largo se graba en 1080p o se recorta); fotos y
+  documentos siguen en **40 MB**. Las otras subidas (carpetas, tareas,
+  documentos) no cambian. Traefik no limita el cuerpo.
+- **Panel** (`components/events/GalleryField.tsx`): «Agregar fotos o videos»
+  abre la cámara o la galería del teléfono con selección múltiple; cada foto
+  se reduce a 2560 px en JPG antes de subir (en Safari también las HEIC); se
+  ven en rejilla con visor a pantalla completa (anterior/siguiente, video con
+  controles, «Abrir original»). También «Pegar link de álbum» y «Agregar de los
+  adjuntos». Quitar de la galería no borra el adjunto.
+- **PDF**: rejilla de 4 miniaturas por renglón. JPG/PNG se imprimen (hasta 36
+  por galería y 8 MB por foto; el resto queda en el sistema con una nota);
+  video, HEIC y links van como recuadro con su nombre, hora y peso. Cada
+  recuadro abre el archivo en el panel de su entidad (`WEB_ORIGIN`; el del
+  Auditorio si está en la lista). Un archivo en la papelera se lista sin link.
+
+En eventos que ya existían se agregan con el paso `--add-auditorio-formats`
+limitado a estos tres (ver «Formatos de seguridad en eventos abiertos»).
+
 Los «BOTÓN» del Word (rider, layout, party A/B, confirmaciones, artes) eran un
 archivo aparte. Ahora son un **adjunto del propio formato** (se sube desde el
 campo o se elige entre los adjuntos del formato) o una **tabla** que se llena
@@ -220,6 +263,24 @@ docker exec -w /app/apps/api arta-api npx ts-node --transpile-only scripts/upgra
 Los formatos de Arta que un evento del Auditorio recibió antes de la separación
 se quedan donde están (el script no borra nada); se quitan a mano si sobran.
 
+### Formatos de seguridad en eventos abiertos (29-10-2026)
+
+`--formats` limita el paso anterior a esas plantillas, para no volver a poner
+un formato del 11-10 que alguien quitó a propósito de un evento.
+
+```bash
+# 0) Desplegar: las migraciones 20261029130000_formatos_seguridad_auditorio (claves del enum) y
+#    20261029130100_inventario_limpieza (tabla) corren con prisma migrate deploy; el seed del
+#    arranque crea las tres plantillas nuevas.
+# 1) Simulación
+docker exec -w /app/apps/api arta-api npx ts-node --transpile-only scripts/upgrade-format-templates.ts --dry --skip-instances --add-auditorio-formats --formats RECORRIDO_SEGURIDAD,SEGURIDAD_INTERNA,SEGURIDAD_PROMOTOR
+# 2) Aplicar
+docker exec -w /app/apps/api arta-api npx ts-node --transpile-only scripts/upgrade-format-templates.ts --skip-instances --add-auditorio-formats --formats RECORRIDO_SEGURIDAD,SEGURIDAD_INTERNA,SEGURIDAD_PROMOTOR --confirm-produccion
+```
+
+`--skip-instances` deja intactos los formatos ya creados (los de seguridad son
+nuevos; los demás ya están en su versión).
+
 ## El seed ya no pisa plantillas
 
 `prisma/seed.ts` corre en cada arranque del contenedor. Antes reescribía todas
@@ -243,9 +304,16 @@ npx -w apps/api ts-node --transpile-only scripts/render-format-samples.ts --empt
   migración de respuestas (casilla → SÍ/NO, ids que cambian de sección), listas
   `prefilled`, texto fijo, nombres de firma y `droppedFormatValues` (qué se
   perdería al migrar).
-- `format-catalog.spec.ts`: los doce formatos y su entidad, encabezado enlazado,
+- `format-catalog.spec.ts`: los quince formatos y su entidad, encabezado enlazado,
   ids únicos, columnas válidas, ids estables por módulo, los 42 puntos de Evento
-  general, y cada formato del Auditorio contra su Excel / Word.
+  general, cada formato del Auditorio contra su Excel / Word y los tres de
+  seguridad (secciones, áreas, galerías, firmas, avance inicial).
+- `format-schema.spec.ts` (galería): tipo por MIME o extensión, completitud,
+  adjunto de uno como primero, resumen e historial, normalización, migración.
+- `upload-storage.spec.ts`: mp4/mov/HEIC de verdad, renombrados rechazados,
+  topes por tipo; las demás subidas no aceptan video.
+- `checklist-pdf.service.spec.ts`: el Recorrido imprime la foto, deja un link
+  por recuadro y no enlaza lo borrado.
 - `apps/web/e2e/formatos-auditorio.spec.ts`: el Compromiso de horarios en la
   hoja (texto fijo, concepto largo completo, firmas con nombre).
 - `checklist-pdf.service.spec.ts`: el generador real imprime cada formato y

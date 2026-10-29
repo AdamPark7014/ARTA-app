@@ -79,6 +79,23 @@ export type ChecklistColumn = {
 
 export type ChecklistRow = Record<string, string | number | null>;
 
+/**
+ * Un archivo de una galería (adjunto con `multiple`): foto, video o link a un
+ * álbum. Espejo de `FormatAttachmentFile` del API (junta 23-10-2026: fotos y
+ * videos de los recorridos de seguridad).
+ */
+export type ChecklistAttachmentFile = {
+  fileId?: string | null;
+  name?: string | null;
+  url?: string | null;
+  mimeType?: string | null;
+  sizeBytes?: number | null;
+  /** Cuándo se agregó (ISO). */
+  at?: string | null;
+};
+
+export type MediaKind = 'image' | 'video' | 'link' | 'file';
+
 export type ChecklistItem = {
   id: string;
   label: string;
@@ -95,6 +112,12 @@ export type ChecklistItem = {
   totalLabel?: string;
   /** Adjunto del formato (EventFile.id); el nombre o link queda en `value`. */
   fileId?: string | null;
+  /** Adjunto que admite varios archivos (galería de fotos y videos). */
+  multiple?: boolean;
+  /** Archivos de la galería, en el orden en que se agregaron. */
+  files?: ChecklistAttachmentFile[];
+  /** `media` = el selector ofrece fotos y videos (cámara del teléfono). */
+  accept?: 'media' | 'any';
   /** No cuenta para el avance si está vacío. */
   optional?: boolean;
   /** Se rellenó desde el evento al crear el formato. */
@@ -141,11 +164,59 @@ export function capturedRows(it: Pick<ChecklistItem, 'rows' | 'columns'>): Check
   );
 }
 
+const IMAGE_EXT = /\.(jpe?g|png|gif|webp|heic|heif)$/i;
+const VIDEO_EXT = /\.(mp4|m4v|mov|webm|3gp)$/i;
+const isHttpUrl = (value: unknown) => typeof value === 'string' && /^https?:\/\/\S+$/i.test(value.trim());
+
+/** Foto, video, link o archivo (espejo de `mediaKind` del API). */
+export function mediaKind(file: Pick<ChecklistAttachmentFile, 'mimeType' | 'name' | 'url' | 'fileId'>): MediaKind {
+  const mime = String(file.mimeType ?? '').toLowerCase();
+  if (mime.startsWith('image/')) return 'image';
+  if (mime.startsWith('video/')) return 'video';
+  const name = String(file.name ?? '');
+  const path = String(file.url ?? '').split(/[?#]/)[0];
+  if (IMAGE_EXT.test(name) || IMAGE_EXT.test(path)) return 'image';
+  if (VIDEO_EXT.test(name) || VIDEO_EXT.test(path)) return 'video';
+  if (!file.fileId && isHttpUrl(file.url)) return 'link';
+  return 'file';
+}
+
+/** Los archivos de un adjunto: el de uno (`value` + `fileId`) primero y luego la galería, sin repetir. */
+export function attachmentFiles(it: Pick<ChecklistItem, 'value' | 'fileId' | 'files'>): ChecklistAttachmentFile[] {
+  const out: ChecklistAttachmentFile[] = [];
+  const seen = new Set<string>();
+  const push = (f: ChecklistAttachmentFile) => {
+    const key = f.fileId ? `id:${f.fileId}` : f.url ? `url:${String(f.url).trim()}` : '';
+    if (!key || seen.has(key)) return;
+    seen.add(key);
+    out.push(f);
+  };
+  if (hasText(it.fileId)) push({ fileId: String(it.fileId), name: hasText(it.value) ? String(it.value).trim() : null });
+  else if (isHttpUrl(it.value)) push({ url: String(it.value).trim(), name: String(it.value).trim() });
+  for (const f of Array.isArray(it.files) ? it.files : []) {
+    if (!f || typeof f !== 'object') continue;
+    push({ ...f, fileId: hasText(f.fileId) ? String(f.fileId) : null, url: hasText(f.url) ? String(f.url).trim() : null });
+  }
+  return out;
+}
+
+/** «4 fotos · 1 video». */
+export function gallerySummary(files: Array<Pick<ChecklistAttachmentFile, 'mimeType' | 'name' | 'url' | 'fileId'>>): string {
+  const n = { image: 0, video: 0, link: 0, file: 0 };
+  for (const f of files) n[mediaKind(f)] += 1;
+  const parts: string[] = [];
+  if (n.image) parts.push(`${n.image} ${n.image === 1 ? 'foto' : 'fotos'}`);
+  if (n.video) parts.push(`${n.video} ${n.video === 1 ? 'video' : 'videos'}`);
+  if (n.link) parts.push(`${n.link} ${n.link === 1 ? 'link' : 'links'}`);
+  if (n.file) parts.push(`${n.file} ${n.file === 1 ? 'archivo' : 'archivos'}`);
+  return parts.join(' · ');
+}
+
 /** Misma regla que el servidor (`isFormatItemComplete`). */
 export function isItemDone(it: ChecklistItem): boolean {
   if (isCheckItem(it)) return !!it.done;
   if (it.type === 'table') return capturedRows(it).length > 0;
-  if (it.type === 'attachment') return hasText(it.value) || hasText(it.fileId);
+  if (it.type === 'attachment') return hasText(it.value) || hasText(it.fileId) || attachmentFiles(it).length > 0;
   if (it.type === 'signature' || isParagraphItem(it)) return true;
   return hasText(it.value);
 }
@@ -416,6 +487,8 @@ export type EventDetail = {
     kind?: string | null;
     /** Sección: campaign | finance | checklist | general | oc … */
     module?: string | null;
+    mimeType?: string | null;
+    sizeBytes?: number | null;
     /** Si cuelga de un formato concreto del evento. */
     checklistId?: string | null;
     /** `false` si el libro trae gráficas o tablas dinámicas: se ve, no se edita. */
