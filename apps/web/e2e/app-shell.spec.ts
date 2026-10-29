@@ -64,7 +64,9 @@ test.describe('App shell', () => {
     await expect(nav.getByRole('link', { name: 'Eventos actuales' })).toHaveCount(0);
   });
 
-  test('desde el sidebar se llega al portafolio de eventos', async ({ page, baseURL }) => {
+  test('desde el sidebar se llega al portafolio de eventos', async ({ page, baseURL, isMobile }) => {
+    // En teléfono el menú es un cajón: lo prueba mobile-shell.spec.ts.
+    test.skip(isMobile, 'barra lateral de escritorio');
     await seedSession(page, baseURL!);
     await mockAuthenticatedApi(page);
 
@@ -105,7 +107,8 @@ test.describe('App shell', () => {
     await expect(nav.getByRole('link', { name: 'Usuarios' })).toHaveCount(0);
   });
 
-  test('«Más herramientas» abre las vistas de portafolio sin buscar', async ({ page, baseURL }) => {
+  test('«Más herramientas» abre las vistas de portafolio sin buscar', async ({ page, baseURL, isMobile }) => {
+    test.skip(isMobile, 'barra lateral de escritorio');
     await seedSession(page, baseURL!);
     await mockAuthenticatedApi(page);
 

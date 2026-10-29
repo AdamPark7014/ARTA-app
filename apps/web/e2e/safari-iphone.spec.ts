@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 
 import { mockApi, mockAuthenticatedApi, seedSession, TEST_EVENTS } from './support/mock-api';
+import { RICH_STUBS } from './support/rich-fixtures';
 
 /**
  * Lo que en Safari de iPhone se nota y en Chrome de escritorio no.
@@ -121,4 +122,51 @@ test.describe('Safari de iPhone · campos de 16 px', () => {
       expect(await smallFields(page), `${url}: campos que harían zoom en iPhone`).toEqual([]);
     });
   }
+});
+
+test.describe('Safari de iPhone · listas con scroll', () => {
+  // El recorrido de cortes en WebKit marcó la campana a 390 px: el último aviso
+  // quedaba cortado en seco, sin el desvanecido que en Chrome sí sale.
+  test('la campana con más avisos de los que caben se desvanece abajo', async ({ page, baseURL }) => {
+    await seedSession(page, baseURL!);
+    await mockAuthenticatedApi(page, {
+      '/notifications': RICH_STUBS['/notifications'],
+      '/notifications/unread-count': RICH_STUBS['/notifications/unread-count'],
+    });
+
+    await page.goto('/dashboard');
+    await settle(page);
+    await page.locator('.notif-btn').tap();
+    const body = page.locator('.notif-panel__body');
+    await expect(body.locator('.notif-item').first()).toBeVisible();
+
+    const state = () =>
+      body.evaluate(async (el) => {
+        const cs = getComputedStyle(el);
+        const raf = await Promise.race([
+          new Promise((r) => requestAnimationFrame(() => r('raf ok'))),
+          new Promise((r) => setTimeout(() => r('raf NO llegó en 1 s'), 1000)),
+        ]);
+        return {
+          fade: el.getAttribute('data-fade-y'),
+          fadeX: el.getAttribute('data-fade-x'),
+          mask: (cs as unknown as Record<string, string>).webkitMaskImage || cs.maskImage,
+          scrollHeight: el.scrollHeight,
+          clientHeight: el.clientHeight,
+          scrollWidth: el.scrollWidth,
+          clientWidth: el.clientWidth,
+          scrollTop: el.scrollTop,
+          overflowY: cs.overflowY,
+          visibility: document.visibilityState,
+          raf,
+        };
+      });
+    await expect
+      .poll(async () => (await state()).fade, { message: 'data-fade-y de la campana', timeout: 4000 })
+      .toBe('end')
+      .catch(async (e) => {
+        throw new Error(`${e instanceof Error ? e.message : e}\nestado: ${JSON.stringify(await state())}`);
+      });
+    expect((await state()).mask).toContain('gradient');
+  });
 });
