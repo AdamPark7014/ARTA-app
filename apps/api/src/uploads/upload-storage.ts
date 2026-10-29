@@ -25,6 +25,49 @@ export const ALLOWED_EXTENSIONS = new Set([
   '.docx',
 ]);
 
+/**
+ * Fotos y videos del teléfono (iPhone manda HEIC y .mov; Android, .mp4). Solo
+ * los acepta `POST /uploads` (adjuntos de un evento o de un formato, p. ej. la
+ * galería del Recorrido de seguridad, junta 23-10-2026); el resto de las
+ * subidas sigue con `ALLOWED_EXTENSIONS`.
+ */
+export const MEDIA_EXTENSIONS = new Set(['.heic', '.heif', '.mp4', '.m4v', '.mov', '.webm', '.3gp']);
+export const VIDEO_EXTENSIONS = new Set(['.mp4', '.m4v', '.mov', '.webm', '.3gp']);
+
+/** Tope de un documento o foto (lo de siempre). */
+export const MAX_UPLOAD_BYTES = 40 * 1024 * 1024;
+/**
+ * Tope de un video: un minuto de iPhone en 1080p (H.264) pesa ~60 MB y en HEVC
+ * ~40 MB; 250 MB dejan unos 4 minutos. Un 4K largo no entra: se graba en 1080p
+ * o se recorta. Traefik no limita el cuerpo y el API escribe a disco (multer).
+ */
+export const MAX_VIDEO_BYTES = 250 * 1024 * 1024;
+
+/** Tipo que se guarda y se sirve: el `Content-Type` del cliente no siempre viene (HEIC, .mov en Windows). */
+const MEDIA_MIME: Record<string, string> = {
+  '.heic': 'image/heic',
+  '.heif': 'image/heif',
+  '.mp4': 'video/mp4',
+  '.m4v': 'video/mp4',
+  '.mov': 'video/quicktime',
+  '.webm': 'video/webm',
+  '.3gp': 'video/3gpp',
+};
+
+export function isVideoFile(fileName: string): boolean {
+  return VIDEO_EXTENSIONS.has(extname(fileName || '').toLowerCase());
+}
+
+/** MIME de un archivo de fotos o video por su extensión; `null` si no es de esos. */
+export function mediaMimeFor(fileName: string): string | null {
+  return MEDIA_MIME[extname(fileName || '').toLowerCase()] ?? null;
+}
+
+/** El tope que le toca a un archivo según su tipo. */
+export function maxBytesFor(fileName: string): number {
+  return isVideoFile(fileName) ? MAX_VIDEO_BYTES : MAX_UPLOAD_BYTES;
+}
+
 export function ensureDir(path: string) {
   if (!existsSync(path)) mkdirSync(path, { recursive: true });
 }
@@ -42,24 +85,51 @@ export function fileFilter(
   cb(null, true);
 }
 
+const diskUploads = diskStorage({
+  destination: (_req: unknown, _file: unknown, cb: (e: Error | null, dest: string) => void) => {
+    ensureDir(uploadRoot);
+    cb(null, uploadRoot);
+  },
+  filename: (
+    _req: unknown,
+    file: Express.Multer.File,
+    cb: (e: Error | null, name: string) => void,
+  ) => {
+    const unique = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+    cb(null, `${unique}${extname(file.originalname).toLowerCase()}`);
+  },
+});
+
 /** Opciones de multer compartidas por todo lo que recibe archivos. */
 export const MULTER_OPTIONS = {
-  storage: diskStorage({
-    destination: (_req: unknown, _file: unknown, cb: (e: Error | null, dest: string) => void) => {
-      ensureDir(uploadRoot);
-      cb(null, uploadRoot);
-    },
-    filename: (
-      _req: unknown,
-      file: Express.Multer.File,
-      cb: (e: Error | null, name: string) => void,
-    ) => {
-      const unique = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
-      cb(null, `${unique}${extname(file.originalname).toLowerCase()}`);
-    },
-  }),
-  limits: { fileSize: 40 * 1024 * 1024 },
+  storage: diskUploads,
+  limits: { fileSize: MAX_UPLOAD_BYTES },
   fileFilter,
+};
+
+/** Lo de siempre más fotos y videos del teléfono. */
+export function mediaFileFilter(
+  _req: unknown,
+  file: Express.Multer.File,
+  cb: (error: Error | null, acceptFile: boolean) => void,
+) {
+  const ext = extname(file.originalname).toLowerCase();
+  if (!ALLOWED_EXTENSIONS.has(ext) && !MEDIA_EXTENSIONS.has(ext)) {
+    cb(new BadRequestException(`Tipo de archivo no permitido: ${ext || '(sin extensión)'}`), false);
+    return;
+  }
+  cb(null, true);
+}
+
+/**
+ * `POST /uploads`: admite fotos y videos. Multer corta en el tope de video;
+ * el de documentos y fotos (40 MB) lo aplica el controlador con `maxBytesFor`
+ * en cuanto el archivo llega, y lo que se pase se borra del disco.
+ */
+export const MEDIA_MULTER_OPTIONS = {
+  storage: diskUploads,
+  limits: { fileSize: MAX_VIDEO_BYTES },
+  fileFilter: mediaFileFilter,
 };
 
 /**
@@ -73,7 +143,21 @@ export const MULTER_OPTIONS = {
  */
 const OLE2 = Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]);
 
+const ascii = (h: Buffer, from: number, to: number) => h.subarray(from, to).toString('latin1');
+/** ISO BMFF (mp4, mov, m4v, 3gp): «ftyp» en el byte 4; los .mov viejos empiezan con otro átomo. Igual que el chat. */
+const isoBox = (h: Buffer) => ['ftyp', 'moov', 'mdat', 'wide', 'free', 'skip', 'pnot'].includes(ascii(h, 4, 8));
+const HEIF_BRANDS = new Set(['heic', 'heix', 'hevc', 'hevx', 'heim', 'heis', 'mif1', 'msf1', 'avif']);
+const heif = (h: Buffer) => ascii(h, 4, 8) === 'ftyp' && HEIF_BRANDS.has(ascii(h, 8, 12));
+const ebml = (h: Buffer) => h[0] === 0x1a && h[1] === 0x45 && h[2] === 0xdf && h[3] === 0xa3;
+
 const MAGIC_BY_EXT: Record<string, (head: Buffer) => boolean> = {
+  '.heic': heif,
+  '.heif': heif,
+  '.mp4': isoBox,
+  '.m4v': isoBox,
+  '.mov': isoBox,
+  '.3gp': isoBox,
+  '.webm': ebml,
   '.pdf': (h) => h.subarray(0, 4).toString('latin1') === '%PDF',
   // xlsx/docx son zips (OOXML); xls/doc son contenedores OLE2 antiguos
   '.xlsx': (h) => h.subarray(0, 4).toString('latin1') === 'PK\x03\x04',

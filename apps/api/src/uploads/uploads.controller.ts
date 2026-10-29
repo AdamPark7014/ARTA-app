@@ -12,6 +12,7 @@ import {
   BadRequestException,
   NotFoundException,
   ForbiddenException,
+  PayloadTooLargeException,
   Body,
   Req,
   Optional,
@@ -25,7 +26,16 @@ import { DocType } from '@prisma/client';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { canAccessEventOps, hasPermission, isDirectionRole, PERMISSIONS, type EntityKey, type RoleKey } from '../common/rbac/roles';
-import { MULTER_OPTIONS, contentMatchesExtension, discardUpload, uploadRoot } from './upload-storage';
+import {
+  MEDIA_MULTER_OPTIONS,
+  MULTER_OPTIONS,
+  contentMatchesExtension,
+  discardUpload,
+  isVideoFile,
+  maxBytesFor,
+  mediaMimeFor,
+  uploadRoot,
+} from './upload-storage';
 import { assertSameTenant } from '../common/tenant';
 import { assertEventNotClosed } from '../common/event-guards';
 import { actorFrom, RevisionService } from '../common/revisions/revision.service';
@@ -210,6 +220,23 @@ export class UploadsController {
     }
   }
 
+  /**
+   * Fotos y videos entran por la misma puerta (galería del Recorrido de
+   * seguridad), pero el tope de 40 MB sigue para todo lo que no es video.
+   */
+  private assertSizeFor(file: Express.Multer.File) {
+    const max = maxBytesFor(file.originalname);
+    if (file.size > max) {
+      discardUpload(file.path);
+      const mb = Math.round(max / (1024 * 1024));
+      throw new PayloadTooLargeException(
+        isVideoFile(file.originalname)
+          ? `El video pesa más de ${mb} MB: grábalo en 1080p o recórtalo`
+          : `El archivo pesa más de ${mb} MB`,
+      );
+    }
+  }
+
   private assertOrphanFileEdit(user: AuthUser) {
     const allowed =
       hasPermission(user.roleKey as RoleKey, user.permissions, PERMISSIONS.CHECKLIST_EDIT) ||
@@ -218,21 +245,24 @@ export class UploadsController {
   }
 
   @Post()
-  @UseInterceptors(FileInterceptor('file', MULTER_OPTIONS))
+  @UseInterceptors(FileInterceptor('file', MEDIA_MULTER_OPTIONS))
   async upload(
     @Req() req: { user: AuthUser },
     @UploadedFile() file: Express.Multer.File,
     @Body() body: { eventId?: string; checklistId?: string; kind?: string; module?: string },
   ) {
     if (!file) throw new BadRequestException('Archivo requerido');
+    this.assertSizeFor(file);
     this.assertRealFileType(file);
-    const mime = file.mimetype || 'application/octet-stream';
+    // HEIC y .mov llegan sin tipo (o como octet-stream) desde varios navegadores: manda la extensión.
+    const mime = mediaMimeFor(file.originalname) || file.mimetype || 'application/octet-stream';
     let kind = body.kind || 'other';
     if (!body.kind) {
       if (mime.includes('pdf')) kind = 'pdf';
       else if (mime.includes('sheet') || mime.includes('excel') || file.originalname.match(/\.xlsx?$/i))
         kind = 'excel';
       else if (mime.startsWith('image/')) kind = 'image';
+      else if (mime.startsWith('video/')) kind = 'video';
     }
 
     const url = `/uploads/${file.filename}`;

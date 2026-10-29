@@ -1,5 +1,6 @@
 import { calcProgress } from './checklist-progress';
 import {
+  attachmentFiles,
   bindFormatToEvent,
   capturedRows,
   carryFormatValues,
@@ -8,7 +9,9 @@ import {
   eventDateValue,
   eventTimeValue,
   formatItemDisplay,
+  gallerySummary,
   isFormatItemComplete,
+  mediaKind,
   normalizeFormatData,
   signatureLabels,
   tableRows,
@@ -16,6 +19,7 @@ import {
   YES,
   NO,
   type FormatData,
+  type FormatItem,
 } from './format-schema';
 
 describe('format-schema · completitud por tipo', () => {
@@ -332,5 +336,119 @@ describe('format-schema · droppedFormatValues (no migrar a ciegas)', () => {
       sections: [{ id: 's', title: 'S', items: [{ id: 'hallazgos', label: 'Hallazgos', type: 'text', value: '' }] }],
     };
     expect(droppedFormatValues(tablaATexto, viejo({ rows: [{ area: 'Baños' }] }))).toContain('Inspección del venue › Hallazgos');
+  });
+});
+
+/*
+ * Galería (junta 23-10-2026: «subir fotos y videos de recorridos de seguridad»).
+ * Un adjunto con `multiple` guarda N archivos en `files`; el adjunto de uno
+ * (`value` + `fileId`) sigue igual y, si se vuelve galería, es el primero.
+ */
+describe('format-schema · galería de fotos y videos', () => {
+  const gallery = (files: FormatItem['files'], extra: Partial<FormatItem> = {}): FormatItem => ({
+    id: 'evidencia',
+    label: 'Fotos y videos',
+    type: 'attachment',
+    multiple: true,
+    accept: 'media',
+    value: '',
+    fileId: null,
+    files,
+    ...extra,
+  });
+
+  it('tipo por MIME o, si no viene, por extensión (HEIC y .mov del iPhone incluidos)', () => {
+    expect(mediaKind({ mimeType: 'image/jpeg' })).toBe('image');
+    expect(mediaKind({ mimeType: 'video/quicktime' })).toBe('video');
+    expect(mediaKind({ name: 'IMG_0001.HEIC' })).toBe('image');
+    expect(mediaKind({ name: 'recorrido.MOV' })).toBe('video');
+    expect(mediaKind({ url: '/uploads/123-456.mp4?v=2' })).toBe('video');
+    expect(mediaKind({ url: 'https://photos.app.goo.gl/abc' })).toBe('link');
+    expect(mediaKind({ fileId: 'f', name: 'acta.pdf' })).toBe('file');
+  });
+
+  it('vacía no cuenta; con un archivo o un link, sí', () => {
+    expect(isFormatItemComplete(gallery([]))).toBe(false);
+    expect(isFormatItemComplete(gallery(undefined))).toBe(false);
+    expect(isFormatItemComplete(gallery([{ fileId: 'f1', name: 'IMG_1.jpg' }]))).toBe(true);
+    expect(isFormatItemComplete(gallery([{ url: 'https://drive.google.com/x', name: 'Álbum' }]))).toBe(true);
+    // Basura en la lista no cuenta como captura.
+    expect(isFormatItemComplete(gallery([null as never, { name: 'sin archivo' }]))).toBe(false);
+  });
+
+  it('el adjunto de uno de antes es el primero de la galería, sin repetirse', () => {
+    const item = gallery([{ fileId: 'f1', name: 'IMG_1.jpg' }, { fileId: 'f2', name: 'IMG_2.jpg' }], {
+      fileId: 'f1',
+      value: 'IMG_1.jpg',
+    });
+    expect(attachmentFiles(item).map((f) => f.fileId)).toEqual(['f1', 'f2']);
+    expect(attachmentFiles({ value: 'https://drive.google.com/x' }).map((f) => f.url)).toEqual(['https://drive.google.com/x']);
+    expect(attachmentFiles({ value: 'rider.pdf' })).toEqual([]);
+  });
+
+  it('resumen e historial: cuántas fotos y videos, y cuáles', () => {
+    const files = [
+      { fileId: 'a', name: 'IMG_1.jpg', mimeType: 'image/jpeg' },
+      { fileId: 'b', name: 'IMG_2.HEIC' },
+      { fileId: 'c', name: 'accesos.mov', mimeType: 'video/quicktime' },
+    ];
+    expect(gallerySummary(files)).toBe('2 fotos · 1 video');
+    expect(formatItemDisplay(gallery(files))).toBe('2 fotos · 1 video: IMG_1.jpg, IMG_2.HEIC, accesos.mov');
+    expect(formatItemDisplay(gallery([]))).toBeNull();
+    // Un adjunto de uno se sigue leyendo como antes.
+    expect(formatItemDisplay({ id: 'r', label: 'Rider', type: 'attachment', value: 'rider.pdf' })).toBe('rider.pdf');
+  });
+
+  it('normalizar limpia la lista y no toca un adjunto de uno', () => {
+    const data = normalizeFormatData({
+      sections: [
+        {
+          id: 's',
+          title: 'S',
+          items: [
+            gallery([{ fileId: 'f1', name: 'a.jpg' }, 'x' as never, { name: 'sin nada' }]),
+            { id: 'rider', label: 'Rider', type: 'attachment', value: 'rider.pdf', fileId: 'r1' },
+          ],
+        },
+      ],
+    });
+    expect(data.sections[0].items[0].files).toEqual([{ fileId: 'f1', name: 'a.jpg' }]);
+    expect(data.sections[0].items[1].files).toBeUndefined();
+  });
+
+  it('migrar conserva la galería; si la forma nueva es de un solo archivo, el primero queda en el campo', () => {
+    const files = [
+      { fileId: 'f1', name: 'IMG_1.jpg' },
+      { fileId: 'f2', name: 'IMG_2.jpg' },
+    ];
+    const old = { sections: [{ id: 'durante', title: 'Durante', items: [gallery(files)] }] };
+    const asGallery: FormatData = { sections: [{ id: 'durante', title: 'Durante', items: [gallery([])] }] };
+    expect(carryFormatValues(asGallery, old).sections[0].items[0].files).toEqual(files);
+    expect(droppedFormatValues(asGallery, old)).toEqual([]);
+
+    const single: FormatData = {
+      sections: [{ id: 'durante', title: 'Durante', items: [{ id: 'evidencia', label: 'Evidencia', type: 'attachment', value: '', fileId: null }] }],
+    };
+    const carried = carryFormatValues(single, old).sections[0].items[0];
+    expect(carried.fileId).toBe('f1');
+    expect(carried.value).toBe('IMG_1.jpg');
+    expect(attachmentFiles(carried).map((f) => f.fileId)).toEqual(['f1', 'f2']);
+  });
+
+  it('el avance cuenta la galería como un campo', () => {
+    const data: FormatData = {
+      sections: [
+        {
+          id: 's',
+          title: 'S',
+          items: [
+            { id: 'hora', label: 'Hora', type: 'time', value: '21:00' },
+            gallery([{ fileId: 'f1', name: 'a.jpg' }]),
+            gallery([], { id: 'post' }),
+          ],
+        },
+      ],
+    };
+    expect(calcProgress(data)).toBe(67);
   });
 });

@@ -38,19 +38,25 @@ import {
  * v3 (30-09-2026): Rueda de Prensa con Convocatoria y Timeline.
  * v4 (11-10-2026): formatos del Auditorio (Checklist Auditorio, Limpieza,
  *   Compromiso de horarios) y Mantenimiento rehecho con el Excel del Auditorio.
+ * v5 (29-10-2026): seguridad del Auditorio (junta 23-10): Recorrido de
+ *   seguridad con galería de fotos y videos, Seguridad interna y Seguridad del
+ *   promotor. Los cuatro del 11-10 siguen en v4.
  *
  * Cada formato guarda en `formatVersion` la versión del catálogo en la que
  * cambió por última vez. El script de actualización solo sube (y migra) los
  * que están por debajo de la suya: un formato nuevo del Auditorio no reescribe
  * los formatos vivos de Arta.
  */
-export const STANDARD_FORMAT_VERSION = 4;
+export const STANDARD_FORMAT_VERSION = 5;
 
 /** Última versión en la que cambiaron los formatos de Arta. */
 const ARTA_FORMATS_VERSION = 3;
 
-/** Versión de los formatos del Auditorio. */
+/** Versión de los formatos del Auditorio del 11-10-2026. */
 const AUDITORIO_FORMATS_VERSION = 4;
+
+/** Versión de los formatos de seguridad del Auditorio (junta 23-10-2026). */
+const SEGURIDAD_FORMATS_VERSION = 5;
 
 export type StandardFormat = {
   key: ChecklistTemplateKey;
@@ -221,6 +227,94 @@ const schema = (...sections: FormatSection[]): FormatData => versioned(ARTA_FORM
 const auditorio = (sections: FormatSection[], firmas?: FormatSection): FormatData =>
   versioned(AUDITORIO_FORMATS_VERSION, sections, firmas);
 
+/** Formato de seguridad del Auditorio. */
+const seguridad = (sections: FormatSection[], firmas?: FormatSection): FormatData =>
+  versioned(SEGURIDAD_FORMATS_VERSION, sections, firmas);
+
+/**
+ * Galería de fotos y videos: el campo guarda N archivos (desde la cámara del
+ * teléfono, la galería o un link a un álbum). Ver `attachmentFiles`.
+ */
+const gallery = (id: string, label: string, extra: Partial<FormatItem> = {}): FormatItem => ({
+  ...attachment(id, label),
+  multiple: true,
+  accept: 'media',
+  files: [],
+  ...extra,
+});
+
+/** Encabezado de los formatos de seguridad: evento, fecha y showtime desde el evento. */
+function seguridadHeader(title: string, extra: FormatItem[]): FormatSection {
+  return {
+    id: HEADER_SECTION_ID,
+    title,
+    layout: 'header',
+    items: [
+      text('evento', 'Evento', { bind: 'event.name', cols: 6 }),
+      date('fecha', 'Fecha', { bind: 'event.date', cols: 3 }),
+      text('showtime', 'Showtime', { bind: 'event.time', cols: 3, placeholder: '20:00' }),
+      ...extra,
+    ],
+  };
+}
+
+/** Incidencias: lo que pasó, dónde, a qué hora y qué se hizo. Vacía = sin incidencias. */
+const incidenciasTable = (id = 'incidencias') =>
+  table(
+    id,
+    'Incidencias',
+    [
+      col('hora', 'Hora', { type: 'time', width: 0.9 }),
+      col('lugar', 'Lugar', { width: 1.5 }),
+      col('descripcion', 'Descripción', { width: 3 }),
+      col('accion', 'Acción tomada', { width: 2.2 }),
+      col('reporta', 'Reportó', { width: 1.3 }),
+    ],
+    { minRows: 5, optional: true },
+  );
+
+/** Puestos de seguridad con sus elementos y horario (el total suma los elementos). */
+const puestosTable = () =>
+  table(
+    'puestos',
+    'Puestos y horarios',
+    [
+      col('puesto', 'Puesto', { width: 2.4 }),
+      col('elementos', 'Elementos', { type: 'number', width: 1, total: true }),
+      col('entrada', 'Entrada', { type: 'time', width: 1 }),
+      col('salida', 'Salida', { type: 'time', width: 1 }),
+      col('observaciones', 'Observaciones', { width: 2.4 }),
+    ],
+    { minRows: 6, totalLabel: 'Total de elementos' },
+  );
+
+/**
+ * Un recorrido (durante o post evento): hora, responsable, áreas revisadas con
+ * su estatus y la galería de evidencia. Los ids llevan el prefijo del momento.
+ */
+function recorrido(prefix: 'durante' | 'post', title: string, areas: string[]): FormatSection {
+  return {
+    id: prefix,
+    title,
+    items: [
+      time(`${prefix}_hora`, 'Hora del recorrido'),
+      text(`${prefix}_responsable`, 'Responsable del recorrido', { placeholder: 'Nombre y puesto' }),
+      listTable(
+        `${prefix}_areas`,
+        'Áreas revisadas',
+        [
+          col('area', 'Área', { width: 2.4 }),
+          col('estatus', 'Estatus', { width: 1.2 }),
+          col('observaciones', 'Observaciones', { width: 3.4 }),
+        ],
+        areas,
+      ),
+      gallery(`${prefix}_evidencia`, 'Fotos y videos del recorrido'),
+      longtext(`${prefix}_observaciones`, 'Observaciones', { optional: true }),
+    ],
+  };
+}
+
 /* ── Listas de los documentos del Auditorio (tal cual, en su orden) ───── */
 
 /** Hoja LIMPIEZA. */
@@ -264,6 +358,47 @@ const MANTENIMIENTO_AREAS = [
   'Pintura en pasillos planta baja',
   'Pintura en pasillos primer piso',
   'Pintura en pasillos segundo piso',
+];
+
+/**
+ * Recorrido de seguridad: las áreas del recinto con los nombres de las hojas
+ * LIMPIEZA y MANTENIMIENTO, más accesos, salidas y explanada. La tabla deja
+ * agregar o renombrar áreas.
+ */
+const SEGURIDAD_AREAS_DURANTE = [
+  'Accesos y puertas principales',
+  'Taquilla',
+  'Vestíbulo planta baja',
+  'Sala planta baja',
+  'Sala nivel 1',
+  'Sala nivel 2',
+  'Suites',
+  'Escenario y foso',
+  'Camerinos',
+  'Baños planta baja',
+  'Baños nivel 1',
+  'Baños nivel 2',
+  'Escaleras eléctricas y elevador',
+  'Salidas de emergencia y rutas de evacuación',
+  'Explanada y estacionamiento',
+];
+
+/** Post evento: las mismas áreas, más lo que se cierra al final de la noche. */
+const SEGURIDAD_AREAS_POST = [
+  ...SEGURIDAD_AREAS_DURANTE,
+  'Bodega',
+  'Oficinas',
+  'Recinto desalojado y cerrado',
+];
+
+/** Equipo que se entrega a la seguridad interna. */
+const SEGURIDAD_EQUIPO = [
+  'Radios',
+  'Baterías de repuesto',
+  'Detectores de metal (paletas)',
+  'Linternas',
+  'Chalecos / gafetes de identificación',
+  'Botiquín',
 ];
 
 /** Compromiso de horarios: el renglón vacío del Word queda para un concepto libre. */
@@ -995,6 +1130,142 @@ export const STANDARD_FORMATS: StandardFormat[] = [
         },
       ],
       // El Word cierra con las firmas de las dos partes (nombre, firma y fecha).
+      signaturesSection({ delivered: 'Producción externa', authorized: 'Auditorio Explanada Puebla' }),
+    ),
+  },
+
+  /*
+   * ── Seguridad del Auditorio (junta con el cliente, 23-10-2026) ─────────
+   * «Subir fotos y videos de recorridos de seguridad durante y post evento, y
+   * formatos de seguridad interna y promotor». No hay documento del cliente:
+   * los campos siguen la forma de los formatos del Auditorio (encabezado desde
+   * el evento, tablas que nacen con la lista, firmas con nombre).
+   */
+  {
+    key: 'RECORRIDO_SEGURIDAD',
+    name: 'Recorrido de seguridad',
+    description: 'Recorridos durante y después del show: hora, responsable, áreas revisadas y fotos y videos de evidencia',
+    entities: ['EXPLANADA'],
+    schema: seguridad(
+      [
+        seguridadHeader('Datos del recorrido', [
+          text('coordinador', 'Coordinador de seguridad', { cols: 6, placeholder: 'Nombre y contacto' }),
+          text('promotor', 'Empresa / promotor', { bind: 'event.promoter', cols: 6 }),
+        ]),
+        recorrido('durante', 'Durante el evento', SEGURIDAD_AREAS_DURANTE),
+        recorrido('post', 'Post evento', SEGURIDAD_AREAS_POST),
+      ],
+      signaturesSection({ delivered: 'Responsable del recorrido', authorized: 'Auditorio Explanada Puebla' }),
+    ),
+  },
+
+  {
+    key: 'SEGURIDAD_INTERNA',
+    name: 'Seguridad interna',
+    description: 'Seguridad propia del Auditorio: personal asignado, puestos y horarios, radios y equipo, incidencias',
+    entities: ['EXPLANADA'],
+    schema: seguridad(
+      [
+        seguridadHeader('Seguridad interna del Auditorio', [
+          text('jefe', 'Jefe de seguridad', { cols: 6, placeholder: 'Nombre' }),
+          text('contacto', 'Contacto', { cols: 6, placeholder: 'Teléfono o canal de radio' }),
+        ]),
+        {
+          id: 'personal',
+          title: 'Personal asignado',
+          items: [
+            number('elementos', 'Número de elementos'),
+            table(
+              'personal',
+              'Personal asignado',
+              [
+                col('nombre', 'Nombre', { width: 2.6 }),
+                col('puesto', 'Puesto', { width: 2 }),
+                col('entrada', 'Entrada', { type: 'time', width: 1 }),
+                col('salida', 'Salida', { type: 'time', width: 1 }),
+                col('radio', 'Radio', { width: 0.9 }),
+              ],
+              { minRows: 8 },
+            ),
+          ],
+        },
+        { id: 'puestos', title: 'Puestos y horarios', items: [puestosTable()] },
+        {
+          id: 'equipo',
+          title: 'Radios y equipo',
+          items: [
+            text('canal_radio', 'Canal de radio', { placeholder: 'Canal y clave del evento' }),
+            listTable(
+              'equipo',
+              'Radios y equipo',
+              [
+                col('equipo', 'Equipo', { width: 2.4 }),
+                col('cantidad', 'Cantidad', { type: 'number', width: 1 }),
+                col('asignado', 'Asignado a', { width: 2.2 }),
+                col('devuelto', 'Devuelto', { width: 1.1 }),
+              ],
+              SEGURIDAD_EQUIPO,
+            ),
+          ],
+        },
+        { id: 'incidencias', title: 'Incidencias', items: [incidenciasTable()] },
+        {
+          id: 'observaciones',
+          title: 'Observaciones',
+          items: [longtext('observaciones', 'Observaciones', { optional: true })],
+        },
+      ],
+      signaturesSection({ delivered: 'Jefe de seguridad', authorized: 'Auditorio Explanada Puebla' }),
+    ),
+  },
+
+  {
+    key: 'SEGURIDAD_PROMOTOR',
+    name: 'Seguridad del promotor',
+    description: 'Empresa de seguridad de la producción: responsable, elementos, puestos, horarios, registro de acceso e incidencias',
+    entities: ['EXPLANADA'],
+    schema: seguridad(
+      [
+        seguridadHeader('Seguridad del promotor', [
+          text('promotor', 'Productor / empresa', { bind: 'event.promoter', cols: 12 }),
+        ]),
+        {
+          id: 'empresa',
+          title: 'Empresa de seguridad',
+          items: [
+            text('empresa', 'Empresa de seguridad'),
+            text('responsable', 'Responsable', { placeholder: 'Nombre y contacto del jefe de seguridad' }),
+            number('elementos', 'Número de elementos'),
+            yesno('identificacion', 'Personal con gafete o uniforme de la empresa'),
+          ],
+        },
+        { id: 'puestos', title: 'Puestos y horarios', items: [puestosTable()] },
+        {
+          id: 'acceso',
+          title: 'Registro de acceso',
+          items: [
+            table(
+              'registro',
+              'Registro de acceso',
+              [
+                col('nombre', 'Nombre', { width: 2.6 }),
+                col('puesto', 'Puesto', { width: 1.8 }),
+                col('identificacion', 'Identificación', { width: 1.5 }),
+                col('entrada', 'Hora de entrada', { type: 'time', width: 1.1 }),
+                col('salida', 'Hora de salida', { type: 'time', width: 1.1 }),
+              ],
+              { minRows: 10 },
+            ),
+          ],
+        },
+        { id: 'incidencias', title: 'Incidencias', items: [incidenciasTable()] },
+        {
+          id: 'observaciones',
+          title: 'Observaciones',
+          items: [longtext('observaciones', 'Observaciones', { optional: true })],
+        },
+      ],
+      // Como el Compromiso de horarios: firman la producción externa y el Auditorio.
       signaturesSection({ delivered: 'Producción externa', authorized: 'Auditorio Explanada Puebla' }),
     ),
   },

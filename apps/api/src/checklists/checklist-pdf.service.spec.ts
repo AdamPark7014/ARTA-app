@@ -189,4 +189,57 @@ describe('ChecklistPdfService.generate', () => {
     expect(sections.has('aceptacion')).toBe(false);
     expect(sections.has('cargo_extension')).toBe(true);
   });
+
+  /*
+   * Junta 23-10-2026: fotos y videos de los recorridos de seguridad. Las fotos
+   * se imprimen en rejilla; video, HEIC y archivos borrados van como recuadro
+   * con su nombre, y cada recuadro abre el archivo en el panel.
+   */
+  it('Recorrido de seguridad: imprime las fotos de la galería y deja un link por archivo', async () => {
+    const format = STANDARD_FORMATS.find((f) => f.key === 'RECORRIDO_SEGURIDAD')!;
+    const data = bindFormatToEvent(format.schema, event);
+    const photo = join(__dirname, '..', '..', 'prisma', 'seed-assets', 'seed-news-1.jpg');
+    const durante = data.sections.find((s) => s.id === 'durante')!.items.find((i) => i.id === 'durante_evidencia')!;
+    durante.files = [
+      { fileId: 'foto', name: 'IMG_1.jpg', at: '2026-11-16T03:10:00.000Z' },
+      { fileId: 'video', name: 'accesos.mov' },
+      { fileId: 'heic', name: 'IMG_2.HEIC' },
+      { fileId: 'borrado', name: 'IMG_3.jpg' },
+      { url: 'https://photos.app.goo.gl/album', name: 'Álbum del recorrido' },
+    ];
+    const media = {
+      foto: { path: photo, url: '/uploads/foto.jpg', name: 'IMG_1.jpg', mimeType: 'image/jpeg' },
+      video: { path: null, url: '/uploads/accesos.mov', name: 'accesos.mov', mimeType: 'video/quicktime', sizeBytes: 50_000_000 },
+      heic: { path: null, url: '/uploads/b.heic', name: 'IMG_2.HEIC', mimeType: 'image/heic' },
+      borrado: { path: null, url: '/uploads/c.jpg', name: 'IMG_3.jpg', mimeType: 'image/jpeg', deleted: true },
+    };
+    const input = (withMedia: boolean) => ({
+      title: format.name,
+      eventName: event.name,
+      entity: 'EXPLANADA',
+      data,
+      delivered: null,
+      authorized: null,
+      statusLabel: 'Borrador',
+      media: withMedia ? media : undefined,
+      linkBase: 'https://auditorio.artaproducciones.com',
+    });
+    const sin = await svc().generate('test-recorrido-sin-fotos', input(false));
+    const con = await svc().generate('test-recorrido', input(true));
+
+    // La foto va dentro del PDF (pesa lo que la foto) y hay un link por recuadro con archivo.
+    expect(statSync(con.filePath).size - statSync(sin.filePath).size).toBeGreaterThan(statSync(photo).size * 0.9);
+    const raw = readFileSync(con.filePath, 'latin1');
+    expect(raw).toContain('https://auditorio.artaproducciones.com/uploads/foto.jpg');
+    expect(raw).toContain('https://auditorio.artaproducciones.com/uploads/accesos.mov');
+    expect(raw).toContain('https://photos.app.goo.gl/album');
+    // Lo borrado se lista pero no abre nada.
+    expect(raw).not.toContain('/uploads/c.jpg');
+
+    // La galería deja su renglón en el mapa de campos, dentro de la hoja.
+    const keys = new Set(con.fieldMap.fields.map((f) => `${f.sectionId}:${f.itemId}`));
+    expect(keys.has('durante:durante_evidencia')).toBe(true);
+    expect(keys.has('post:post_evidencia')).toBe(true);
+    for (const f of con.fieldMap.fields) expect(f.y + f.h).toBeLessThan(con.fieldMap.pageHeight - 90);
+  });
 });

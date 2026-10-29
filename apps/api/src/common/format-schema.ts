@@ -49,6 +49,26 @@ export type FormatColumn = {
 
 export type FormatRow = Record<string, string | number | null>;
 
+/**
+ * Un archivo de una galería (`attachment` con `multiple`): foto, video o link
+ * a un álbum. Junta del 23-10-2026: «subir fotos y videos de recorridos de
+ * seguridad durante y post evento» — un campo guarda N archivos, no uno.
+ */
+export type FormatAttachmentFile = {
+  /** Adjunto del formato (EventFile.id). */
+  fileId?: string | null;
+  /** Nombre del archivo o del link. */
+  name?: string | null;
+  /** `/uploads/…` del archivo o un link externo (álbum de Drive / Fotos). */
+  url?: string | null;
+  mimeType?: string | null;
+  sizeBytes?: number | null;
+  /** Cuándo se agregó (ISO). */
+  at?: string | null;
+};
+
+export type MediaKind = 'image' | 'video' | 'link' | 'file';
+
 /** De dónde se rellena un campo al crear el formato desde el evento. */
 export type FormatBind =
   | 'event.name'
@@ -78,6 +98,16 @@ export type FormatItem = {
   totalLabel?: string;
   /** Adjunto del formato (EventFile.id) — el nombre queda en `value`. */
   fileId?: string | null;
+  /**
+   * Adjunto que admite varios archivos (galería de fotos y videos). Aditivo:
+   * un adjunto de un solo archivo sigue igual (`value` + `fileId`) y, si una
+   * plantilla lo vuelve galería, ese archivo aparece como el primero.
+   */
+  multiple?: boolean;
+  /** Archivos de la galería, en el orden en que se agregaron. */
+  files?: FormatAttachmentFile[];
+  /** Qué ofrece el selector: `media` = fotos y videos (cámara del teléfono); por defecto, cualquiera. */
+  accept?: 'media' | 'any';
   /** No cuenta para el avance si está vacío. */
   optional?: boolean;
   /** Se rellena desde el evento al crear el formato (si está vacío). */
@@ -174,11 +204,70 @@ export function columnTotal(item: Pick<FormatItem, 'rows'>, columnId: string): n
   return any ? sum : null;
 }
 
+const IMAGE_EXT = /\.(jpe?g|png|gif|webp|heic|heif)$/i;
+const VIDEO_EXT = /\.(mp4|m4v|mov|webm|3gp)$/i;
+const isHttp = (value: unknown) => typeof value === 'string' && /^https?:\/\/\S+$/i.test(value.trim());
+
+/** Foto, video, link o archivo, por tipo MIME o, si no viene, por extensión. */
+export function mediaKind(file: Pick<FormatAttachmentFile, 'mimeType' | 'name' | 'url' | 'fileId'>): MediaKind {
+  const mime = String(file.mimeType ?? '').toLowerCase();
+  if (mime.startsWith('image/')) return 'image';
+  if (mime.startsWith('video/')) return 'video';
+  const name = String(file.name ?? '');
+  const path = String(file.url ?? '').split(/[?#]/)[0];
+  if (IMAGE_EXT.test(name) || IMAGE_EXT.test(path)) return 'image';
+  if (VIDEO_EXT.test(name) || VIDEO_EXT.test(path)) return 'video';
+  if (!file.fileId && isHttp(file.url)) return 'link';
+  return 'file';
+}
+
+/**
+ * Los archivos de un adjunto, sea de uno (`value` + `fileId`, el de siempre)
+ * o galería (`files`). El de uno va primero; nada se repite.
+ */
+export function attachmentFiles(item: Pick<FormatItem, 'value' | 'fileId' | 'files'>): FormatAttachmentFile[] {
+  const out: FormatAttachmentFile[] = [];
+  const seen = new Set<string>();
+  const push = (f: FormatAttachmentFile) => {
+    const key = f.fileId ? `id:${f.fileId}` : f.url ? `url:${String(f.url).trim()}` : '';
+    if (!key || seen.has(key)) return;
+    seen.add(key);
+    out.push(f);
+  };
+  if (hasText(item.fileId)) {
+    push({ fileId: String(item.fileId), name: hasText(item.value) ? String(item.value).trim() : null });
+  } else if (isHttp(item.value)) {
+    push({ url: String(item.value).trim(), name: String(item.value).trim() });
+  }
+  for (const f of Array.isArray(item.files) ? item.files : []) {
+    if (!f || typeof f !== 'object') continue;
+    push({ ...f, fileId: hasText(f.fileId) ? String(f.fileId) : null, url: hasText(f.url) ? String(f.url).trim() : null });
+  }
+  return out;
+}
+
+/** «4 fotos · 1 video» para el PDF, la hoja y el historial. */
+export function gallerySummary(files: Array<Pick<FormatAttachmentFile, 'mimeType' | 'name' | 'url' | 'fileId'>>): string {
+  const count = { image: 0, video: 0, link: 0, file: 0 };
+  for (const f of files) count[mediaKind(f)] += 1;
+  const parts: string[] = [];
+  if (count.image) parts.push(`${count.image} ${count.image === 1 ? 'foto' : 'fotos'}`);
+  if (count.video) parts.push(`${count.video} ${count.video === 1 ? 'video' : 'videos'}`);
+  if (count.link) parts.push(`${count.link} ${count.link === 1 ? 'link' : 'links'}`);
+  if (count.file) parts.push(`${count.file} ${count.file === 1 ? 'archivo' : 'archivos'}`);
+  return parts.join(' · ');
+}
+
+/** ¿El adjunto trae algo? (un archivo, un link o al menos un archivo de la galería). */
+function hasAttachment(item: FormatItem): boolean {
+  return hasText(item.value) || hasText(item.fileId) || attachmentFiles(item).length > 0;
+}
+
 /** Un ítem está resuelto cuando tiene respuesta, según su tipo. */
 export function isFormatItemComplete(item: FormatItem): boolean {
   if (isCheckType(item.type)) return !!item.done;
   if (item.type === 'table') return capturedRows(item).length > 0;
-  if (item.type === 'attachment') return hasText(item.value) || hasText(item.fileId);
+  if (item.type === 'attachment') return hasAttachment(item);
   if (item.type === 'signature' || isParagraphType(item.type)) return true;
   return hasText(item.value);
 }
@@ -224,6 +313,13 @@ export function formatItemDisplay(item: FormatItem): string | null {
       .join(' | ');
   }
   if (item.type === 'attachment') {
+    if (item.multiple) {
+      // Galería: cuántos y cuáles, para que el historial diga qué se agregó o quitó.
+      const files = attachmentFiles(item);
+      if (!files.length) return null;
+      const names = files.map((f) => String(f.name || f.url || 'archivo').trim()).join(', ');
+      return `${gallerySummary(files)}: ${names}`;
+    }
     if (hasText(item.value)) return String(item.value).trim();
     return hasText(item.fileId) ? 'Adjunto' : null;
   }
@@ -369,6 +465,13 @@ function normalizeItem(item: FormatItem): FormatItem {
       ? out.rows.filter((r): r is FormatRow => !!r && typeof r === 'object').map((r) => ({ ...r }))
       : [];
   }
+  if (out.type === 'attachment' && out.files !== undefined) {
+    out.files = Array.isArray(out.files)
+      ? out.files
+          .filter((f): f is FormatAttachmentFile => !!f && typeof f === 'object' && (hasText(f.fileId) || hasText(f.url)))
+          .map((f) => ({ ...f }))
+      : [];
+  }
   if (out.type === 'yesno' && typeof out.value === 'string') {
     const v = out.value.trim().toUpperCase();
     out.value = v === 'SI' || v === 'SÍ' || v === 'YES' || v === 'TRUE' ? YES : v === 'NO' || v === 'FALSE' ? NO : out.value;
@@ -407,7 +510,7 @@ export function walkFormat(data: FormatData): Array<{ section: FormatSection; it
 function hasCapture(item: FormatItem): boolean {
   if (isCheckType(item.type)) return !!item.done || hasText(item.note);
   if (item.type === 'table') return capturedRows(item).length > 0;
-  if (item.type === 'attachment') return hasText(item.value) || hasText(item.fileId);
+  if (item.type === 'attachment') return hasAttachment(item);
   return hasText(item.value);
 }
 
@@ -473,6 +576,16 @@ export function carryFormatValues(target: FormatData, previous: unknown): Format
         if (item.type === 'attachment') {
           if (hasText(old.value)) next.value = old.value;
           if (hasText(old.fileId)) next.fileId = old.fileId;
+          // La galería pasa entera; si la forma nueva es de un solo archivo, el
+          // primero de la galería queda en `value`/`fileId` y el resto no se pierde.
+          if (Array.isArray(old.files) && old.files.length) {
+            next.files = old.files.map((f) => ({ ...f }));
+            if (!item.multiple && !hasText(next.fileId) && !hasText(next.value)) {
+              const [first] = attachmentFiles(old);
+              if (first?.fileId) next.fileId = first.fileId;
+              next.value = first?.name || first?.url || next.value;
+            }
+          }
           return next;
         }
         if (item.type === 'yesno') {

@@ -8,13 +8,22 @@
  * Deja `<KEY>.pdf` y `<KEY>.fields.json` por formato. `--empty` los imprime
  * sin datos (como los recibe un evento recién creado). Con
  * `SAMPLE_SIGNATURE=<firma.png>` los imprime firmados (entrega y autorización)
- * para revisar el renglón de firmas al final del documento.
+ * para revisar el renglón de firmas al final del documento. Las galerías
+ * (Recorrido de seguridad) salen con fotos de `prisma/seed-assets`, un video y
+ * una foto HEIC (estos dos como recuadro con link).
  */
-import { mkdirSync, readFileSync, writeFileSync } from 'fs';
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { STANDARD_FORMATS } from '../src/checklists/format-catalog';
-import { ChecklistPdfService } from '../src/checklists/checklist-pdf.service';
-import { bindFormatToEvent, walkFormat, YES, type FormatData, type FormatItem } from '../src/common/format-schema';
+import { ChecklistPdfService, type PdfMedia } from '../src/checklists/checklist-pdf.service';
+import {
+  bindFormatToEvent,
+  walkFormat,
+  YES,
+  type FormatAttachmentFile,
+  type FormatData,
+  type FormatItem,
+} from '../src/common/format-schema';
 
 const OUT = process.env.OUT_DIR || join(process.cwd(), 'tmp', 'formatos');
 process.env.UPLOAD_DIR = OUT;
@@ -54,6 +63,45 @@ const SAMPLE_TEXT: Record<string, string> = {
   show: EVENT.name,
 };
 
+/** Fotos de muestra (las del seed) más un video y una HEIC sin archivo en disco. */
+const SAMPLE_PHOTOS = ['seed-hero-1.jpg', 'seed-news-1.jpg', 'seed-hero-2.jpg', 'seed-news-2.jpg', 'seed-hero-3.jpg'];
+
+function sampleMedia(): Record<string, PdfMedia> {
+  const dir = join(__dirname, '..', 'prisma', 'seed-assets');
+  const media: Record<string, PdfMedia> = {};
+  SAMPLE_PHOTOS.forEach((file, i) => {
+    const path = join(dir, file);
+    if (!existsSync(path)) return;
+    media[`foto-${i}`] = {
+      path,
+      url: `/uploads/${file}`,
+      name: `IMG_${4120 + i}.jpg`,
+      mimeType: 'image/jpeg',
+      sizeBytes: statSync(path).size,
+    };
+  });
+  media.video = { path: null, url: '/uploads/recorrido.mov', name: 'Recorrido accesos.mov', mimeType: 'video/quicktime', sizeBytes: 86 * 1024 * 1024 };
+  media.heic = { path: null, url: '/uploads/salida.heic', name: 'IMG_4131.HEIC', mimeType: 'image/heic', sizeBytes: 2_400_000 };
+  return media;
+}
+
+const MEDIA = sampleMedia();
+
+function sampleGallery(index: number): FormatAttachmentFile[] {
+  const at = (min: number) => new Date(Date.UTC(2026, 10, 16, 2 + Math.floor(min / 60), min % 60)).toISOString();
+  const ids = Object.keys(MEDIA);
+  // Durante: todo; post: tres fotos y el video.
+  const pick = index % 2 ? ids : [ids[0], ids[1], ids[2], 'video'].filter((id) => MEDIA[id]);
+  return pick.map((id, i) => ({
+    fileId: id,
+    name: MEDIA[id].name,
+    url: MEDIA[id].url,
+    mimeType: MEDIA[id].mimeType,
+    sizeBytes: MEDIA[id].sizeBytes,
+    at: at(15 + i * 7),
+  }));
+}
+
 function sampleValue(item: FormatItem, index: number): FormatItem {
   const it: FormatItem = { ...item };
   switch (item.type) {
@@ -84,6 +132,10 @@ function sampleValue(item: FormatItem, index: number): FormatItem {
       it.value = item.options?.[2] ?? item.options?.[0] ?? '';
       break;
     case 'attachment':
+      if (item.multiple) {
+        it.files = sampleGallery(index);
+        break;
+      }
       it.value = index % 2 ? 'https://drive.google.com/drive/folders/1IJ_ntDodKv7dd2Jg6y6dTB7UG3cHA6yB' : `${item.label}.pdf`;
       break;
     case 'table': {
@@ -146,6 +198,8 @@ async function main() {
         editedBy: 'Adam Pozo',
         editedAt: new Date(),
         statusLabel: signatures.delivered ? 'En revisión' : 'Borrador',
+        media: MEDIA,
+        linkBase: 'https://auditorio.artaproducciones.com',
       },
       3,
     );

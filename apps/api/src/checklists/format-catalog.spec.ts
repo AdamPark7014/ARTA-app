@@ -2,6 +2,7 @@ import { calcProgress } from '../common/checklist-progress';
 import {
   HEADER_SECTION_ID,
   SIGNATURES_SECTION_ID,
+  attachmentFiles,
   bindFormatToEvent,
   isFormatItemComplete,
   signatureLabels,
@@ -28,7 +29,11 @@ const ARTA_KEYS = [
   'RUEDA_PRENSA',
   'TRANSPORTACION',
 ];
-const AUDITORIO_KEYS = ['CHECKLIST_AUDITORIO', 'COMPROMISO_HORARIOS', 'LIMPIEZA', 'MANTENIMIENTO'];
+/** Los cuatro del 11-10-2026 (v4). */
+const AUDITORIO_V4_KEYS = ['CHECKLIST_AUDITORIO', 'COMPROMISO_HORARIOS', 'LIMPIEZA', 'MANTENIMIENTO'];
+/** Seguridad del Auditorio, junta 23-10-2026 (v5). */
+const SEGURIDAD_KEYS = ['RECORRIDO_SEGURIDAD', 'SEGURIDAD_INTERNA', 'SEGURIDAD_PROMOTOR'];
+const AUDITORIO_KEYS = [...AUDITORIO_V4_KEYS, ...SEGURIDAD_KEYS].sort();
 
 /** El ítem `id` del formato `key` (falla si no existe). */
 function itemOf(key: string, id: string): FormatItem {
@@ -49,7 +54,7 @@ const STABLE_IDS: Record<string, string[]> = {
 };
 
 describe('format-catalog', () => {
-  it('trae los ocho formatos de Arta y los cuatro del Auditorio, con versión y firmas al final', () => {
+  it('trae los ocho formatos de Arta y los siete del Auditorio, con versión y firmas al final', () => {
     expect(STANDARD_FORMATS.map((f) => f.key).sort()).toEqual([...ARTA_KEYS, ...AUDITORIO_KEYS].sort());
     for (const f of STANDARD_FORMATS) {
       expect(storedFormatVersion(f.schema)).toBeGreaterThanOrEqual(3);
@@ -67,10 +72,12 @@ describe('format-catalog', () => {
     expect(EXTRA_TEMPLATE_ENTITIES).toContainEqual({ key: 'CUSTOM', name: 'Distribución de Pendones (Excel)', entities: ['ARTA'] });
   });
 
-  it('subir el catálogo por el Auditorio no migra los formatos vivos de Arta', () => {
+  it('subir el catálogo por el Auditorio no migra los formatos vivos de Arta ni los del 11-10', () => {
     // El script de actualización compara contra la versión de CADA formato.
     for (const key of ARTA_KEYS) expect(storedFormatVersion(standardFormat(key)!.schema)).toBe(3);
-    for (const key of AUDITORIO_KEYS) expect(storedFormatVersion(standardFormat(key)!.schema)).toBe(4);
+    for (const key of AUDITORIO_V4_KEYS) expect(storedFormatVersion(standardFormat(key)!.schema)).toBe(4);
+    for (const key of SEGURIDAD_KEYS) expect(storedFormatVersion(standardFormat(key)!.schema)).toBe(5);
+    expect(STANDARD_FORMAT_VERSION).toBe(5);
   });
 
   it('cada formato abre con el encabezado enlazado al evento', () => {
@@ -324,6 +331,103 @@ describe('format-catalog', () => {
     // El texto fijo no se captura ni cuenta: evento, fecha y productor vienen del evento → 3 de 7.
     expect(walkFormat(f.schema).some(({ item }) => item.type === 'paragraph')).toBe(false);
     expect(calcProgress(bindFormatToEvent(f.schema, event))).toBe(43);
+  });
+
+  /* ── Seguridad del Auditorio (junta con el cliente, 23-10-2026) ───────── */
+
+  it('Recorrido de seguridad: durante y post evento, cada uno con hora, responsable, áreas y galería de fotos y videos', () => {
+    const f = standardFormat('RECORRIDO_SEGURIDAD')!;
+    expect(f.schema.sections.map((s) => s.id)).toEqual([HEADER_SECTION_ID, 'durante', 'post', SIGNATURES_SECTION_ID]);
+    expect(labelsOf('RECORRIDO_SEGURIDAD', HEADER_SECTION_ID)).toEqual([
+      'Evento',
+      'Fecha',
+      'Showtime',
+      'Coordinador de seguridad',
+      'Empresa / promotor',
+    ]);
+    for (const prefix of ['durante', 'post']) {
+      expect(f.schema.sections.find((s) => s.id === prefix)!.items.map((i) => i.id)).toEqual([
+        `${prefix}_hora`,
+        `${prefix}_responsable`,
+        `${prefix}_areas`,
+        `${prefix}_evidencia`,
+        `${prefix}_observaciones`,
+      ]);
+      expect(itemOf('RECORRIDO_SEGURIDAD', `${prefix}_hora`).type).toBe('time');
+      const areas = itemOf('RECORRIDO_SEGURIDAD', `${prefix}_areas`);
+      expect(areas.columns!.map((c) => c.label)).toEqual(['Área', 'Estatus', 'Observaciones']);
+      expect(areas.rows!.length).toBeGreaterThanOrEqual(15);
+      expect(areas.rows![0].area).toBe('Accesos y puertas principales');
+      const gallery = itemOf('RECORRIDO_SEGURIDAD', `${prefix}_evidencia`);
+      expect(gallery).toMatchObject({ type: 'attachment', multiple: true, accept: 'media', files: [] });
+      expect(gallery.optional).toBeFalsy();
+      expect(isFormatItemComplete(gallery)).toBe(false);
+      expect(isFormatItemComplete({ ...gallery, files: [{ fileId: 'f1', name: 'IMG_1.jpg' }] })).toBe(true);
+    }
+    expect(itemOf('RECORRIDO_SEGURIDAD', 'post_areas').rows!.map((r) => r.area)).toContain('Recinto desalojado y cerrado');
+    expect(signatureLabels(f.schema)).toEqual({ delivered: 'Responsable del recorrido', authorized: 'Auditorio Explanada Puebla' });
+    // Del evento: evento, fecha, showtime y promotor; las observaciones son opcionales (4 de 13).
+    expect(calcProgress(bindFormatToEvent(f.schema, event))).toBe(31);
+  });
+
+  it('Seguridad interna: personal, puestos con total de elementos, radios y equipo, incidencias opcionales', () => {
+    const f = standardFormat('SEGURIDAD_INTERNA')!;
+    expect(f.schema.sections.map((s) => s.id)).toEqual([
+      HEADER_SECTION_ID,
+      'personal',
+      'puestos',
+      'equipo',
+      'incidencias',
+      'observaciones',
+      SIGNATURES_SECTION_ID,
+    ]);
+    expect(labelsOf('SEGURIDAD_INTERNA', HEADER_SECTION_ID)).toEqual(['Evento', 'Fecha', 'Showtime', 'Jefe de seguridad', 'Contacto']);
+    expect(itemOf('SEGURIDAD_INTERNA', 'personal').columns!.map((c) => c.label)).toEqual(['Nombre', 'Puesto', 'Entrada', 'Salida', 'Radio']);
+    const puestos = itemOf('SEGURIDAD_INTERNA', 'puestos');
+    expect(puestos.columns!.filter((c) => c.total).map((c) => c.id)).toEqual(['elementos']);
+    expect(puestos.totalLabel).toBe('Total de elementos');
+    expect(itemOf('SEGURIDAD_INTERNA', 'equipo').rows!.map((r) => r.equipo)).toContain('Radios');
+    expect(itemOf('SEGURIDAD_INTERNA', 'canal_radio').type).toBe('text');
+    expect(itemOf('SEGURIDAD_INTERNA', 'incidencias').optional).toBe(true);
+    expect(signatureLabels(f.schema)).toEqual({ delivered: 'Jefe de seguridad', authorized: 'Auditorio Explanada Puebla' });
+  });
+
+  it('Seguridad del promotor: empresa, elementos, puestos, registro de acceso, incidencias y firmas como el Compromiso', () => {
+    const f = standardFormat('SEGURIDAD_PROMOTOR')!;
+    expect(f.schema.sections.map((s) => s.id)).toEqual([
+      HEADER_SECTION_ID,
+      'empresa',
+      'puestos',
+      'acceso',
+      'incidencias',
+      'observaciones',
+      SIGNATURES_SECTION_ID,
+    ]);
+    expect(labelsOf('SEGURIDAD_PROMOTOR', 'empresa')).toEqual([
+      'Empresa de seguridad',
+      'Responsable',
+      'Número de elementos',
+      'Personal con gafete o uniforme de la empresa',
+    ]);
+    expect(itemOf('SEGURIDAD_PROMOTOR', 'registro').columns!.map((c) => c.label)).toEqual([
+      'Nombre',
+      'Puesto',
+      'Identificación',
+      'Hora de entrada',
+      'Hora de salida',
+    ]);
+    const bound = bindFormatToEvent(f.schema, event);
+    expect(bound.sections[0].items.find((i) => i.id === 'promotor')!.value).toBe('Promotora Uno');
+    expect(signatureLabels(f.schema)).toEqual(signatureLabels(standardFormat('COMPROMISO_HORARIOS')!.schema));
+  });
+
+  it('solo el Recorrido lleva galerías y las galerías nacen vacías', () => {
+    for (const fmt of STANDARD_FORMATS) {
+      const galleries = walkFormat(fmt.schema).filter(({ item }) => item.multiple);
+      if (fmt.key === 'RECORRIDO_SEGURIDAD') expect(galleries).toHaveLength(2);
+      else expect(galleries).toHaveLength(0);
+      for (const { item } of galleries) expect(attachmentFiles(item)).toEqual([]);
+    }
   });
 
   it('los formatos de Arta conservan las firmas ENTREGADO / AUTORIZADO', () => {

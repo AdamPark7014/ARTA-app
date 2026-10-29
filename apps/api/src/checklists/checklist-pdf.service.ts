@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import PDFDocument = require('pdfkit');
-import { createWriteStream, existsSync, mkdirSync, readFileSync } from 'fs';
+import { createWriteStream, existsSync, mkdirSync, readFileSync, statSync } from 'fs';
 import { join } from 'path';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../common/prisma/prisma.service';
@@ -11,10 +11,13 @@ import {
   SIGNATURES_SECTION_ID,
   NO,
   YES,
+  attachmentFiles,
   bindFormatToEvent,
   cellDisplay,
   columnTotal,
+  gallerySummary,
   isCheckType,
+  mediaKind,
   isParagraphType,
   normalizeFormatData,
   signatureLabels,
@@ -58,6 +61,21 @@ export type PdfFieldMap = {
   fields: PdfField[];
 };
 
+/**
+ * Un archivo de galería ya resuelto contra la base: dónde está en disco (para
+ * imprimir la foto) y su `/uploads/…` (para el link). Lo arma
+ * `regenerateInstance`; el script de muestras lo pasa a mano.
+ */
+export type PdfMedia = {
+  path: string | null;
+  url: string;
+  name: string;
+  mimeType?: string | null;
+  sizeBytes?: number | null;
+  /** El adjunto se borró del evento (papelera): se lista, sin foto ni link. */
+  deleted?: boolean;
+};
+
 type PdfInput = {
   title: string;
   eventName: string;
@@ -73,11 +91,20 @@ type PdfInput = {
   editedAt?: Date | null;
   /** Borrador · En revisión · Aprobado · Sellado. */
   statusLabel?: string | null;
+  /**
+   * Marca de agua BORRADOR. Por defecto, mientras no esté aprobado o sellado;
+   * un documento sin flujo de aprobación (inventario semanal) pasa `false`.
+   */
+  watermark?: boolean;
   /** Optional ticketing brand for header (name + logo file path). */
   boleteraName?: string | null;
   boleteraLogoPath?: string | null;
   /** Optional folio id rendered in footer. */
   folio?: string | null;
+  /** Archivos de las galerías por `fileId` (fotos y videos de un recorrido). */
+  media?: Record<string, PdfMedia>;
+  /** Origen del panel (`https://auditorio…`) para que los links de fotos y videos abran fuera del sistema. */
+  linkBase?: string | null;
 };
 
 /* ── Hoja ───────────────────────────────────────────────────────────────── */
@@ -168,6 +195,40 @@ function valueDisplay(item: FormatItem): string {
 
 function isHttpUrl(value: string): boolean {
   return /^https?:\/\/\S+$/i.test(value.trim());
+}
+
+/** Fotos que se imprimen por galería: el resto queda en el sistema (un PDF de 40 fotos pesa decenas de MB). */
+const GALLERY_MAX_PRINTED = 36;
+/** Una foto más pesada que esto no se incrusta (las que sube el panel ya llegan reducidas). */
+const GALLERY_MAX_IMAGE_BYTES = 8 * 1024 * 1024;
+
+/**
+ * Origen del panel para los links del PDF. `WEB_ORIGIN` puede traer varios
+ * (Arta y Auditorio): cada entidad abre en el suyo.
+ */
+export function panelOrigin(entity?: string | null): string | null {
+  const list = [process.env.WEB_ORIGIN, process.env.NEXT_PUBLIC_APP_URL, process.env.PUBLIC_WEB_URL]
+    .filter(Boolean)
+    .join(',')
+    .split(',')
+    .map((o) => o.trim().replace(/\/$/, ''))
+    .filter((o) => /^https?:\/\//i.test(o));
+  if (!list.length) return null;
+  const want = entity === 'EXPLANADA' ? /auditorio/i : /\/\/arta\./i;
+  return list.find((o) => want.test(o)) ?? list[0];
+}
+
+function fmtTime(iso?: string | null): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toLocaleTimeString('es-MX', { timeZone: 'America/Mexico_City', hour: '2-digit', minute: '2-digit', hour12: false });
+}
+
+function fmtSize(bytes?: number | null): string {
+  if (!bytes || bytes <= 0) return '';
+  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(bytes >= 10 * 1024 * 1024 ? 0 : 1)} MB`;
+  return `${Math.max(1, Math.round(bytes / 1024))} KB`;
 }
 
 function fmtDateTime(d: Date): string {
@@ -304,7 +365,7 @@ export class ChecklistPdfService {
       logo: brandAsset('arta-logo-ink.png'),
       footer: brandAsset('arta-footer.png'),
       revisionLabel: revision === undefined ? '' : `Rev. ${revision}`,
-      isDraft: !/^(aprobado|sellado)$/i.test(String(input.statusLabel || '').trim()),
+      isDraft: input.watermark ?? !/^(aprobado|sellado)$/i.test(String(input.statusLabel || '').trim()),
       section: -1,
       itemStarts: [],
       breakAt,
@@ -555,6 +616,8 @@ export class ChecklistPdfService {
       } else if (item.type === 'yesno') {
         this.ensure(cur, 20);
         this.drawYesNo(cur, section, item);
+      } else if (item.type === 'attachment' && item.multiple) {
+        this.drawGallery(cur, section, item);
       } else {
         this.drawValueLine(cur, section, item);
       }
@@ -698,6 +761,123 @@ export class ChecklistPdfService {
       h: 13,
     });
     cur.y += 18;
+  }
+
+  /**
+   * Galería de fotos y videos (Recorrido de seguridad): la etiqueta con cuántos
+   * hay y una rejilla de miniaturas. La foto (JPG/PNG) se imprime; video, HEIC
+   * o link van como recuadro con su nombre, y cada recuadro abre el archivo.
+   */
+  private drawGallery(cur: Cursor, section: FormatSection, item: FormatItem) {
+    const { doc, input } = cur;
+    const files = attachmentFiles(item);
+    const media = input.media ?? {};
+    const cols = 4;
+    const gap = 8;
+    const tileW = (W - gap * (cols - 1)) / cols;
+    const imgH = Math.round(tileW * 0.72);
+    const captionH = 21;
+    const rowH = imgH + captionH + 6;
+
+    // Etiqueta y resumen, como un dato más del formato.
+    const label = `${upper(item.label)}:`;
+    this.ensure(cur, 18 + (files.length ? rowH : 0));
+    const y = cur.y;
+    doc.font(BOLD).fontSize(7.5).fillColor(MUTED);
+    const labelW = Math.min(doc.widthOfString(label) + 2, W * 0.55);
+    doc.text(this.fit(doc, label, 7.5, labelW), M, y + 2.5, { width: labelW + 4, lineBreak: false });
+    const valueX = M + labelW + 6;
+    const valueW = RIGHT - valueX;
+    if (files.length) {
+      doc.font(FONT).fontSize(9.5).fillColor(INK);
+      doc.text(this.fit(doc, gallerySummary(files), 9.5, valueW), valueX, y, { width: valueW + 4, lineBreak: false });
+    } else {
+      doc.font(ITALIC).fontSize(8).fillColor(MUTED);
+      doc.text(this.fit(doc, 'Sin fotos ni videos (se suben desde el formato en el sistema)', 8, valueW), valueX, y + 1, {
+        width: valueW + 4,
+        lineBreak: false,
+      });
+    }
+    doc.moveTo(valueX, y + 12).lineTo(RIGHT, y + 12).lineWidth(0.6).strokeColor(LINE).stroke();
+    cur.fields.push({ sectionId: section.id, itemId: item.id, type: 'value', page: cur.page, x: valueX, y: y - 1, w: valueW, h: 13 });
+    cur.y += 18;
+    if (!files.length) return;
+
+    let printed = 0;
+    let skipped = 0;
+    files.forEach((file, index) => {
+      const col = index % cols;
+      if (col === 0) this.ensure(cur, rowH);
+      const x = M + col * (tileW + gap);
+      const top = cur.y;
+      const m = file.fileId ? media[file.fileId] : undefined;
+      const url = m?.url || file.url || '';
+      const name = safe(m?.name || file.name || url.split('/').pop() || 'Archivo').trim();
+      const kind = mediaKind({ mimeType: m?.mimeType || file.mimeType, name, url, fileId: file.fileId });
+      const deleted = !!m?.deleted;
+
+      let drewImage = false;
+      if (kind === 'image' && m?.path && !deleted && /\.(jpe?g|png)$/i.test(m.path)) {
+        if (printed >= GALLERY_MAX_PRINTED) {
+          skipped += 1;
+        } else {
+          let size = m.sizeBytes ?? 0;
+          try {
+            size = size || statSync(m.path).size;
+          } catch {
+            size = 0;
+          }
+          if (size && size <= GALLERY_MAX_IMAGE_BYTES) {
+            try {
+              doc.rect(x, top, tileW, imgH).fillColor(SOFT).fill();
+              doc.image(m.path, x, top, { fit: [tileW, imgH], align: 'center', valign: 'center' });
+              drewImage = true;
+              printed += 1;
+            } catch {
+              // Una foto dañada no tumba el PDF: queda el recuadro con su nombre.
+            }
+          }
+        }
+      }
+      if (!drewImage) {
+        const dark = kind === 'video';
+        doc.rect(x, top, tileW, imgH).fillColor(dark ? '#1b1b1f' : SOFT).fill();
+        const cx = x + tileW / 2;
+        const cy = top + imgH / 2 - 6;
+        if (kind === 'video') {
+          doc.circle(cx, cy, 13).fillColor('#ffffff').fill();
+          doc.polygon([cx - 4, cy - 7], [cx - 4, cy + 7], [cx + 7, cy]).fillColor('#1b1b1f').fill();
+        }
+        const ext = (name.split('.').pop() || '').toUpperCase().slice(0, 6);
+        const tag = kind === 'video' ? 'VIDEO' : kind === 'link' ? 'LINK' : kind === 'image' ? `FOTO${ext ? ` ${ext}` : ''}` : ext || 'ARCHIVO';
+        doc.font(BOLD).fontSize(7).fillColor(dark ? '#e7e7ea' : MUTED);
+        doc.text(deleted ? 'BORRADO' : tag, x, kind === 'video' ? cy + 18 : cy + 2, { width: tileW, align: 'center', lineBreak: false });
+      }
+      doc.rect(x, top, tileW, imgH).lineWidth(0.5).strokeColor(LINE).stroke();
+
+      // Pie: nombre y, si se sabe, hora en que se subió y peso.
+      doc.font(FONT).fontSize(7).fillColor(INK);
+      doc.text(this.fit(doc, name, 7, tileW), x, top + imgH + 3, { width: tileW + 2, lineBreak: false });
+      const meta = [fmtTime(file.at), fmtSize(m?.sizeBytes ?? file.sizeBytes)].filter(Boolean).join(' · ');
+      if (meta) {
+        doc.font(FONT).fontSize(6.5).fillColor(MUTED);
+        doc.text(this.fit(doc, meta, 6.5, tileW), x, top + imgH + 12, { width: tileW + 2, lineBreak: false });
+      }
+
+      const abs = /^https?:\/\//i.test(url) ? url : url && input.linkBase ? `${input.linkBase}${url}` : '';
+      if (abs && !deleted) doc.link(x, top, tileW, imgH + captionH, abs);
+
+      if (col === cols - 1 || index === files.length - 1) cur.y += rowH;
+    });
+
+    if (skipped) {
+      this.ensure(cur, 14);
+      doc.font(ITALIC).fontSize(7.5).fillColor(MUTED);
+      const note = `Se imprimen ${printed} fotos; las otras ${skipped} están en el formato dentro del sistema.`;
+      doc.text(this.fit(doc, note, 7.5, W), M, cur.y, { width: W + 4, lineBreak: false });
+      cur.y += 14;
+    }
+    cur.y += 4;
   }
 
   /** Texto fijo del documento (condiciones, aceptación), tal cual; con viñeta si son varios. */
@@ -1029,6 +1209,7 @@ export class ChecklistPdfService {
     // El encabezado (show, fecha, hora, ciudad, venue) se completa desde el
     // evento si la persona no lo escribió; lo capturado manda.
     const data = bindFormatToEvent(normalizeFormatData(item.dataJson), item.event);
+    const media = await this.galleryMedia(item.eventId, data);
 
     const shortId = item.event.id.replace(/-/g, '').slice(0, 6).toUpperCase();
     const folio = `ARTA-${shortId}-${(item.template?.key || item.title || 'FORMATO').toString().toUpperCase()}-V${item.revision ?? 1}`;
@@ -1056,6 +1237,8 @@ export class ChecklistPdfService {
         boleteraName: ticketing?.boletera || null,
         boleteraLogoPath: this.resolveUploadPath(ticketing?.logoUrl),
         folio,
+        media,
+        linkBase: panelOrigin(item.event.entity),
       },
       item.revision,
     );
@@ -1076,6 +1259,38 @@ export class ChecklistPdfService {
         files: true,
       },
     });
+  }
+
+  /**
+   * Los archivos de las galerías del formato, solo de ESTE evento (un `fileId`
+   * de otro evento escrito a mano en el JSON no se imprime).
+   */
+  async galleryMedia(eventId: string, data: FormatData): Promise<Record<string, PdfMedia>> {
+    const ids = new Set<string>();
+    for (const section of data.sections) {
+      for (const it of section.items) {
+        if (it.type !== 'attachment' || !it.multiple) continue;
+        for (const f of attachmentFiles(it)) if (f.fileId) ids.add(f.fileId);
+      }
+    }
+    if (!ids.size) return {};
+    const rows = await this.prisma.eventFile.findMany({
+      where: { id: { in: [...ids] }, eventId },
+      select: { id: true, url: true, fileName: true, mimeType: true, sizeBytes: true, deletedAt: true },
+    });
+    return Object.fromEntries(
+      rows.map((r) => [
+        r.id,
+        {
+          path: r.deletedAt ? null : this.resolveUploadPath(r.url),
+          url: r.url,
+          name: r.fileName,
+          mimeType: r.mimeType,
+          sizeBytes: r.sizeBytes,
+          deleted: !!r.deletedAt,
+        },
+      ]),
+    );
   }
 
   /** After boletera/logo changes, refresh draft checklist PDFs for the event.

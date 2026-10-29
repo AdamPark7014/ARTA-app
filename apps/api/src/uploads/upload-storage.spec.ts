@@ -1,7 +1,17 @@
 import { closeSync, mkdtempSync, openSync, rmSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { ALLOWED_EXTENSIONS, contentMatchesExtension, discardUpload } from './upload-storage';
+import {
+  ALLOWED_EXTENSIONS,
+  MAX_UPLOAD_BYTES,
+  MAX_VIDEO_BYTES,
+  MEDIA_EXTENSIONS,
+  contentMatchesExtension,
+  discardUpload,
+  maxBytesFor,
+  mediaFileFilter,
+  mediaMimeFor,
+} from './upload-storage';
 
 /**
  * La lista blanca de extensiones no bastaba: el nombre y el `Content-Type` los
@@ -90,5 +100,72 @@ describe('contentMatchesExtension', () => {
     const fd = openSync(p, 'r');
     closeSync(fd);
     expect(contentMatchesExtension(p, 'muchas.pdf')).toBe(true);
+  });
+});
+
+/*
+ * Fotos y videos del teléfono para la galería del Recorrido de seguridad
+ * (junta 23-10-2026): HEIC y .mov del iPhone, .mp4 de Android. Entran solo por
+ * `POST /uploads` (`MEDIA_MULTER_OPTIONS`) y también se revisa su contenido.
+ */
+describe('fotos y videos del teléfono', () => {
+  let dir: string;
+
+  beforeAll(() => {
+    dir = mkdtempSync(join(tmpdir(), 'arta-media-'));
+  });
+
+  afterAll(() => {
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  function write(name: string, bytes: Buffer): string {
+    const path = join(dir, name);
+    writeFileSync(path, bytes);
+    return path;
+  }
+
+  const box = (type: string, brand: string) =>
+    Buffer.concat([Buffer.from([0, 0, 0, 0x18]), Buffer.from(type + brand, 'latin1'), Buffer.alloc(16)]);
+
+  it('acepta mp4, mov y HEIC de verdad', () => {
+    expect(contentMatchesExtension(write('a.mp4', box('ftyp', 'isom')), 'a.mp4')).toBe(true);
+    expect(contentMatchesExtension(write('a.mov', box('ftyp', 'qt  ')), 'IMG_0001.MOV')).toBe(true);
+    expect(contentMatchesExtension(write('viejo.mov', box('wide', '\0\0\0\0')), 'viejo.mov')).toBe(true);
+    expect(contentMatchesExtension(write('a.heic', box('ftyp', 'heic')), 'IMG_0001.HEIC')).toBe(true);
+  });
+
+  it('rechaza un ejecutable o un JPG renombrados a video o HEIC', () => {
+    const exe = write('malo.mp4', Buffer.from('MZ\x90\x00\x03\x00\x00\x00\x04\x00\x00\x00', 'latin1'));
+    expect(contentMatchesExtension(exe, 'malo.mp4')).toBe(false);
+    const jpg = write('foto.heic', Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]));
+    expect(contentMatchesExtension(jpg, 'foto.heic')).toBe(false);
+  });
+
+  it('el filtro de medios deja pasar documentos, fotos y videos, pero no HTML ni SVG', () => {
+    const accept = (name: string) =>
+      new Promise<boolean>((resolve) => mediaFileFilter(null, { originalname: name } as Express.Multer.File, (err, ok) => resolve(!err && ok)));
+    return Promise.all([
+      accept('IMG_0001.MOV'),
+      accept('IMG_0002.HEIC'),
+      accept('recorrido.mp4'),
+      accept('acta.pdf'),
+      accept('pagina.html'),
+      accept('logo.svg'),
+    ]).then((r) => expect(r).toEqual([true, true, true, true, false, false]));
+  });
+
+  it('los videos no entran por las demás subidas (la lista de siempre no cambia)', () => {
+    for (const ext of MEDIA_EXTENSIONS) expect(ALLOWED_EXTENSIONS.has(ext)).toBe(false);
+  });
+
+  it('tope por tipo y MIME por extensión', () => {
+    expect(maxBytesFor('recorrido.mov')).toBe(MAX_VIDEO_BYTES);
+    expect(maxBytesFor('IMG_1.HEIC')).toBe(MAX_UPLOAD_BYTES);
+    expect(maxBytesFor('acta.pdf')).toBe(MAX_UPLOAD_BYTES);
+    expect(MAX_VIDEO_BYTES).toBeGreaterThan(MAX_UPLOAD_BYTES);
+    expect(mediaMimeFor('IMG_1.MOV')).toBe('video/quicktime');
+    expect(mediaMimeFor('IMG_1.heic')).toBe('image/heic');
+    expect(mediaMimeFor('acta.pdf')).toBeNull();
   });
 });

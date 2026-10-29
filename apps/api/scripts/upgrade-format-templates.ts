@@ -31,6 +31,8 @@
  *     (no cerrado ni cancelado) le agrega los formatos del Auditorio que le
  *     falten, como «Agregar formato». Nunca borra ni modifica los formatos que
  *     el evento ya tiene: si ya existe uno de esa plantilla, no se crea otro.
+ *     `--formats A,B` lo limita a esas plantillas (29-10-2026: solo los de
+ *     seguridad, para no volver a poner uno que alguien quitó a propósito).
  *
  *   npx ts-node --transpile-only scripts/upgrade-format-templates.ts --dry
  *   npx ts-node --transpile-only scripts/upgrade-format-templates.ts
@@ -39,8 +41,12 @@
  * `--keep-duplicates` (no retira) · `--force` (reescribe aunque la plantilla ya
  * esté en la versión) · `--allow-data-loss` (migra aunque se pierda algo
  * capturado) · `--add-auditorio-formats` (paso 7) · `--event <id>` (paso 7
- * solo para ese evento) · `--include-seed` (paso 7 también en eventos
- * [SEED_DEMO]). Fuera de una base local exige además `--confirm-produccion`.
+ * solo para ese evento) · `--formats <CLAVE,CLAVE>` (paso 7 solo con esas
+ * plantillas) · `--include-seed` (paso 7 también en eventos [SEED_DEMO]).
+ * Fuera de una base local exige además `--confirm-produccion`.
+ *
+ * Formatos de seguridad (junta 23-10-2026) en los eventos abiertos del Auditorio:
+ *   ... upgrade-format-templates.ts --dry --add-auditorio-formats --formats RECORRIDO_SEGURIDAD,SEGURIDAD_INTERNA,SEGURIDAD_PROMOTOR
  *
  * En Docker: `docker exec -w /app/apps/api arta-api npx ts-node --transpile-only scripts/upgrade-format-templates.ts --dry`
  */
@@ -89,12 +95,26 @@ async function main() {
   const allowDataLoss = has('--allow-data-loss');
   const addAuditorio = has('--add-auditorio-formats');
   const onlyEvent = arg('event');
+  const onlyFormats = (arg('formats') || '')
+    .split(',')
+    .map((k) => k.trim().toUpperCase())
+    .filter(Boolean);
   const includeSeed = has('--include-seed');
   if (!dry && !isLocalDb() && !has('--confirm-produccion')) {
     throw new Error('Base no local: corre primero con --dry y aplica con --confirm-produccion');
   }
   if (onlyEvent && !addAuditorio) {
     throw new Error('--event solo aplica con --add-auditorio-formats');
+  }
+  if (onlyFormats.length && !addAuditorio) {
+    throw new Error('--formats solo aplica con --add-auditorio-formats');
+  }
+  const auditorioKeys = new Set(
+    STANDARD_FORMATS.filter((f) => f.entities.includes(EntityKey.EXPLANADA)).map((f) => String(f.key)),
+  );
+  const unknown = onlyFormats.filter((k) => !auditorioKeys.has(k));
+  if (unknown.length) {
+    throw new Error(`--formats: ${unknown.join(', ')} no es formato del Auditorio (${[...auditorioKeys].join(', ')})`);
   }
 
   const prisma = new PrismaClient();
@@ -308,7 +328,7 @@ async function main() {
     }
 
     if (addAuditorio) {
-      await addAuditorioFormats(prisma, pdfs, { dry, tag, onlyEvent, includeSeed, summary });
+      await addAuditorioFormats(prisma, pdfs, { dry, tag, onlyEvent, onlyFormats, includeSeed, summary });
     }
 
     console.log(
@@ -338,12 +358,17 @@ async function addAuditorioFormats(
     dry: boolean;
     tag: string;
     onlyEvent: string | null;
+    /** Vacío = todos los del Auditorio. */
+    onlyFormats: string[];
     includeSeed: boolean;
     summary: { added: number; pdfErrors: number };
   },
 ) {
-  const { dry, tag, onlyEvent, includeSeed, summary } = opts;
-  const formats = STANDARD_FORMATS.filter((f) => f.entities.includes(EntityKey.EXPLANADA));
+  const { dry, tag, onlyEvent, onlyFormats, includeSeed, summary } = opts;
+  const formats = STANDARD_FORMATS.filter(
+    (f) => f.entities.includes(EntityKey.EXPLANADA) && (!onlyFormats.length || onlyFormats.includes(String(f.key))),
+  );
+  if (onlyFormats.length) console.log(`${tag} Solo: ${formats.map((f) => f.name).join(' · ')}`);
   const events = await prisma.event.findMany({
     where: {
       entity: EntityKey.EXPLANADA,
