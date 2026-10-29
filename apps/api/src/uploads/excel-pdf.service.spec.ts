@@ -35,6 +35,8 @@ describe('ExcelPdfService.render', () => {
       // Pendones cabe en una carta; la corrida en una o dos; la campaña en pocas.
       expect(pages).toBeLessThanOrEqual(name.startsWith('DISTRIB') ? 1 : 4);
     },
+    // Renderizar la corrida real tarda más de los 5 s por omisión cuando la máquina está cargada.
+    30_000,
   );
 
   it('un libro sin hojas con contenido produce una página con aviso', async () => {
