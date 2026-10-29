@@ -91,6 +91,10 @@ enum ChecklistTemplateKey {
   CHECKLIST_AUDITORIO
   LIMPIEZA
   COMPROMISO_HORARIOS
+  // Seguridad del Auditorio (junta 23-10-2026).
+  RECORRIDO_SEGURIDAD
+  SEGURIDAD_INTERNA
+  SEGURIDAD_PROMOTOR
 }
 
 enum OrgPlan {
@@ -125,6 +129,7 @@ model Organization {
   tasks            TaskAssignment[]
   notifications    Notification[]
   calendarNotes    CalendarNote[]
+  cleaningInv      CleaningInventory[]
 }
 
 model OrgInvite {
@@ -205,6 +210,8 @@ model User {
   notificationsSent    Notification[]             @relation("NotificationActor")
   calendarNotesCreated CalendarNote[]             @relation("CalendarNoteCreator")
   calendarNotesEdited  CalendarNote[]             @relation("CalendarNoteEditor")
+  cleaningInvCreated   CleaningInventory[]        @relation("CleaningInventoryCreator")
+  cleaningInvEdited    CleaningInventory[]        @relation("CleaningInventoryEditor")
   auditLogs            AuditLog[]
   purchaseOrders       PurchaseOrder[]            @relation("PoCreator")
   poAuthorizations     PurchaseOrder[]            @relation("PoAuthorizer")
@@ -1324,4 +1331,32 @@ model CalendarNote {
   updatedAt      DateTime     @updatedAt
 
   @@index([organizationId, entity, date])
+}
+
+/// Inventario semanal de insumos de limpieza del Auditorio (junta 23-10-2026).
+/// No cuelga de un evento: una fila por semana (lunes) y entidad. Ver docs/INVENTARIO-LIMPIEZA.md.
+model CleaningInventory {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  entity         EntityKey
+  /// Lunes de la semana en formato YYYY-MM-DD (como CalendarNote.date: sin hora ni zona).
+  weekStart      String
+  /// Quién hizo el conteo de la semana.
+  responsible    String?
+  notes          String?
+  /// Renglones: [{ id, insumo, unidad, inicial, entradas, consumo, final, minimo, faltantes, observaciones }].
+  itemsJson      Json
+  /// Contador de guardados y token de bloqueo optimista (como ChecklistInstance.revision).
+  revision       Int          @default(1)
+  pdfUrl         String?
+  pdfGeneratedAt DateTime?
+  createdById    String?
+  createdBy      User?        @relation("CleaningInventoryCreator", fields: [createdById], references: [id])
+  updatedById    String?
+  updatedBy      User?        @relation("CleaningInventoryEditor", fields: [updatedById], references: [id])
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([organizationId, entity, weekStart])
 }
