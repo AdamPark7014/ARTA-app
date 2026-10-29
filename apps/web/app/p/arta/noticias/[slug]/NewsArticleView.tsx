@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { SiteHeader } from '@/components/site/SiteHeader';
 import { EmptyState } from '@/components/ui/EmptyState';
 import type { PublicNewsPost } from '@/lib/site-seo';
+import { eventDateLabel, isSafeCtaHref } from '@/lib/studio-templates';
 
 type NewsArticleViewProps = {
   post: PublicNewsPost | null;
@@ -24,6 +25,11 @@ export function NewsArticleView({ post }: NewsArticleViewProps) {
     );
   }
 
+  const showDate = eventDateLabel(post.eventDate);
+  // El botón de la plantilla (p. ej. «Comprar boletos»): solo enlaces seguros, como valida la API.
+  const cta = post.ctaLabel && post.ctaHref && isSafeCtaHref(post.ctaHref) ? post.ctaHref : null;
+  const external = !!cta && /^https?:\/\//i.test(cta);
+
   return (
     <div className="site site-arta">
       <SiteHeader mode="article" />
@@ -42,6 +48,11 @@ export function NewsArticleView({ post }: NewsArticleViewProps) {
               : ''}
           </time>
           <h1 className="news-article__title">{post.title}</h1>
+          {showDate ? (
+            <p className="news-article__event-date">
+              <strong>Fecha del show:</strong> {showDate}
+            </p>
+          ) : null}
           {post.excerpt ? (
             <p className="lead news-article__excerpt">{post.excerpt}</p>
           ) : null}
@@ -53,6 +64,17 @@ export function NewsArticleView({ post }: NewsArticleViewProps) {
           ) : null}
           {post.body ? (
             <div className="article-prose">{post.body}</div>
+          ) : null}
+          {cta ? (
+            <p className="news-article__cta">
+              <a
+                className="btn"
+                href={cta}
+                {...(external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
+              >
+                {post.ctaLabel}
+              </a>
+            </p>
           ) : null}
         </div>
       </article>

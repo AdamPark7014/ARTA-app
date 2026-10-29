@@ -45,6 +45,9 @@ export type PublicSiteNewsItem = {
   publishedAt?: string | null;
   updatedAt?: string | null;
   slug: string;
+  /** «Evento destacado»: la tarjeta muestra la fecha del show (junta 23-10-2026). */
+  template?: string | null;
+  eventDate?: string | null;
 };
 
 export type PublicSiteData = {

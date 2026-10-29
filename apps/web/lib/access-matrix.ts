@@ -7,6 +7,7 @@ import {
   ROLE_PERMISSIONS,
   hasPermission,
   canAccessEventOps as rbacCanAccessEventOps,
+  canSeeEventCalendar as rbacCanSeeEventCalendar,
   type EntityKey as RbacEntity,
   type Permission,
   type RoleKey as RbacRole,
@@ -22,7 +23,9 @@ export type RoleKey =
   | 'logistica'
   | 'convenios'
   | 'enlace_gobierno'
-  | 'solo_carpetas';
+  | 'solo_carpetas'
+  | 'contabilidad'
+  | 'practicante';
 
 export type NavItem = {
   href: string;
@@ -34,6 +37,8 @@ export type NavItem = {
   entities?: EntityKey[];
   /** Requiere operación de eventos (oculta a dir_auditorio en ARTA) */
   requiresEventOps?: boolean;
+  /** Calendario de shows: quien opera eventos y, en solo lectura, el practicante (junta 23-10-2026). */
+  requiresCalendar?: boolean;
   group?: string;
   /** Query string del enlace, p. ej. `scope=past` */
   query?: string;
@@ -105,15 +110,16 @@ export const NAV_ITEMS: NavItem[] = [
     href: '/calendar',
     label: 'Calendario',
     group: 'Operación',
-    requiresEventOps: true,
+    requiresCalendar: true,
     keywords: 'agenda mes semana fechas shows',
   },
   {
     href: '/tasks',
     label: 'Tareas',
     group: 'Operación',
-    // Junta 11-09-2026: «solo carpetas generales» no ve tareas.
-    roles: ['super_admin', 'dir_general', 'dir_adjunta', 'gerente_arta', 'dir_auditorio', 'logistica', 'convenios', 'enlace_gobierno'],
+    // Junta 11-09-2026: «solo carpetas generales» no ve tareas. Junta 23-10-2026: contabilidad sí
+    // (le piden pagos por tarea); el practicante no.
+    roles: ['super_admin', 'dir_general', 'dir_adjunta', 'gerente_arta', 'dir_auditorio', 'logistica', 'convenios', 'enlace_gobierno', 'contabilidad'],
     keywords: 'pendientes apoyo asignar workload',
   },
 
@@ -321,6 +327,15 @@ export const NAV_ITEMS: NavItem[] = [
     requiresEventOps: true,
     hidden: true,
   },
+  // Junta 23-10-2026: inventario de limpieza semanal del Auditorio (no cuelga de un evento).
+  {
+    href: '/maintenance/inventario-limpieza',
+    label: 'Inventario de limpieza',
+    entities: ['EXPLANADA'],
+    group: 'Operación',
+    requiresEventOps: true,
+    keywords: 'insumos semanal limpieza consumo existencias faltantes inventario',
+  },
   {
     href: '/vendor',
     label: 'PIN proveedores',
@@ -385,6 +400,14 @@ export function activeNavKey(
 const FOLDER_CENTRIC_ROLES: RoleKey[] = ['convenios', 'enlace_gobierno', 'solo_carpetas'];
 
 /**
+ * Vistas de portafolio que para un rol son su trabajo diario y salen del buscador al menú.
+ * Contabilidad (junta 23-10-2026): la corrida de todos los eventos y los anticipos por pagar.
+ */
+const ROLE_SURFACED: Partial<Record<RoleKey, string[]>> = {
+  contabilidad: ['/finance', '/advances'],
+};
+
+/**
  * Items que le tocan a este usuario en esta entidad.
  *
  * Excepción deliberada: **las carpetas generales vuelven al menú** para quien
@@ -399,10 +422,15 @@ export function visibleNavItems(
   user: { roleKey: string; permissions: string[]; entities: EntityKey[] },
   entity: EntityKey,
 ): NavItem[] {
-  const items = NAV_ITEMS.filter((item) => canSeeNavItem(user, item, entity));
+  const surfaced = ROLE_SURFACED[user.roleKey as RoleKey] ?? [];
+  const items = NAV_ITEMS.filter((item) => canSeeNavItem(user, item, entity)).map((item) =>
+    surfaced.includes(item.href) ? { ...item, hidden: false, group: 'Control' } : item,
+  );
+  // El practicante no trabaja con carpetas generales: su menú es Studio y calendario.
   const needsFolders =
-    !canAccessEventOps(user.roleKey, entity) ||
-    FOLDER_CENTRIC_ROLES.includes(user.roleKey as RoleKey);
+    user.roleKey !== 'practicante' &&
+    (!canAccessEventOps(user.roleKey, entity) ||
+      FOLDER_CENTRIC_ROLES.includes(user.roleKey as RoleKey));
   if (!needsFolders) return items;
   return items.map((item) =>
     item.href === '/folders' ? { ...item, hidden: false, group: 'Equipo' } : item,
@@ -428,6 +456,12 @@ export function canAccessEventOps(roleKey: string, entity: EntityKey): boolean {
   return rbacCanAccessEventOps([entity] as RbacEntity[], roleKey as RbacRole, entity as RbacEntity);
 }
 
+/** Calendario de shows: quien opera eventos o, en solo lectura, el practicante. */
+export function canSeeCalendar(roleKey: string, entity: EntityKey): boolean {
+  if (roleKey === 'super_admin' || roleKey === 'dir_general') return true;
+  return rbacCanSeeEventCalendar([entity] as RbacEntity[], roleKey as RbacRole, entity as RbacEntity);
+}
+
 export function userHasPermission(
   roleKey: string,
   permissions: string[],
@@ -448,6 +482,7 @@ export function canSeeNavItem(
 ): boolean {
   if (item.entities?.length && !item.entities.includes(entity)) return false;
   if (item.requiresEventOps && !canAccessEventOps(user.roleKey, entity)) return false;
+  if (item.requiresCalendar && !canSeeCalendar(user.roleKey, entity)) return false;
   if (item.roles?.length && !item.roles.includes(user.roleKey as RoleKey)) {
     if (user.roleKey !== 'super_admin' && user.roleKey !== 'dir_general') return false;
   }
@@ -465,6 +500,8 @@ export const ROLE_SCOPE: Record<string, string> = {
   convenios: 'Carpetas · patrocinios · checklists',
   enlace_gobierno: 'Carpetas · pagos · marcar OC pagado',
   solo_carpetas: 'Solo carpetas generales · Arta y Auditorio',
+  contabilidad: 'Pagos de OC y anticipos · corrida · campañas · convenios · boletera',
+  practicante: 'Studio (borradores, publica dirección) · calendario de shows',
 };
 
 /** Expuesto para pantallas de gobierno */

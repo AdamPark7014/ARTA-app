@@ -21,6 +21,8 @@ type Props = EventPanelProps & {
   editing: boolean;
   setEditing: (v: boolean) => void;
   canVendorPin: boolean;
+  /** Editar los datos del show (contabilidad lo ve, pero no lo edita — junta 23-10-2026). */
+  canEdit?: boolean;
   onOpenChecklist: (c: Checklist) => Promise<void>;
   onGoModule: (tab: Tab) => void;
   /** Pestañas que este usuario puede abrir (para que los mosaicos no lleven a la nada). */
@@ -39,6 +41,7 @@ export function EventOverviewPanel({
   editing,
   setEditing,
   canVendorPin,
+  canEdit = true,
   onOpenChecklist,
   onGoModule,
   visibleTabs,
@@ -158,7 +161,7 @@ export function EventOverviewPanel({
           <section className="surface">
             <div className="surface__head">
               <h3 className="surface__title">Datos del evento</h3>
-              {!closed ? (
+              {!closed && canEdit ? (
                 editing ? (
                   <div className="sx-actions">
                     <button className="btn ghost btn-sm" type="button" onClick={() => setEditing(false)}>
@@ -176,7 +179,7 @@ export function EventOverviewPanel({
               ) : null}
             </div>
             <div className="surface__body">
-              {editing && !closed ? (
+              {editing && !closed && canEdit ? (
                 <EventFields value={form} onChange={setForm} autoFocus />
               ) : (
                 <div className="sx-stack">
@@ -204,7 +207,7 @@ export function EventOverviewPanel({
                   </dl>
                   {event.description ? (
                     <p className="ev-description">{event.description}</p>
-                  ) : !closed ? (
+                  ) : !closed && canEdit ? (
                     <button className="btn-quiet btn-quiet--accent" type="button" onClick={() => setEditing(true)}>
                       + Agregar descripción
                     </button>
@@ -243,7 +246,7 @@ export function EventOverviewPanel({
           <section className="surface">
             <div className="surface__head">
               <h3 className="surface__title">Notas</h3>
-              {!closed && notes !== (event.notes || '') ? (
+              {!closed && canEdit && notes !== (event.notes || '') ? (
                 <button className="btn btn-sm" type="button" onClick={saveNotes}>
                   Guardar
                 </button>
@@ -253,7 +256,7 @@ export function EventOverviewPanel({
               <textarea
                 className="notes-area"
                 rows={4}
-                disabled={closed}
+                disabled={closed || !canEdit}
                 aria-label="Notas del evento"
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}

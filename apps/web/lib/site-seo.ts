@@ -81,6 +81,11 @@ export type PublicNewsPost = {
   coverUrl?: string | null;
   publishedAt?: string | null;
   updatedAt?: string | null;
+  /** Plantilla de Studio (publicacion | evento) y sus campos (junta 23-10-2026). */
+  template?: string | null;
+  eventDate?: string | null;
+  ctaLabel?: string | null;
+  ctaHref?: string | null;
 };
 
 export async function fetchPublicNews(slug: string): Promise<PublicNewsPost | null> {

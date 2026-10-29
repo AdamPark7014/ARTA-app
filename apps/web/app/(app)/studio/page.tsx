@@ -14,8 +14,18 @@ import {
   FormGrid,
   PageHeader,
 } from '@/components/ui/PageChrome';
+import { canPublishStudio, type RoleKey } from '@arta/rbac';
 import { api } from '@/lib/api';
 import { useUser } from '@/lib/user-context';
+import {
+  NEWS_TEMPLATES,
+  eventDateLabel,
+  missingForNews,
+  newsTemplate,
+  slugify,
+  type NewsDraft,
+  type NewsTemplateKey,
+} from '@/lib/studio-templates';
 
 type Page = {
   id: string;
@@ -44,7 +54,51 @@ type News = {
   body?: string | null;
   coverUrl?: string | null;
   published: boolean;
+  template?: string | null;
+  eventDate?: string | null;
+  ctaLabel?: string | null;
+  ctaHref?: string | null;
+  /** El practicante la mandó a revisión (junta 23-10-2026). */
+  reviewRequestedAt?: string | null;
 };
+
+/**
+ * Propuesta de un practicante sobre una sección del inicio: fila aparte, nunca publicada (la API
+ * la guarda así; ver studio.controller.ts · PROPOSAL_SUFFIX).
+ */
+const PROPOSAL_SUFFIX = '__propuesta';
+const isProposal = (p: Page) => p.sectionKey.endsWith(PROPOSAL_SUFFIX);
+
+type NewsForm = NewsDraft & { published: boolean };
+
+const EMPTY_NEWS: NewsForm = {
+  slug: '',
+  title: '',
+  excerpt: '',
+  body: '',
+  coverUrl: '',
+  published: true,
+  template: '',
+  eventDate: '',
+  ctaLabel: '',
+  ctaHref: '',
+};
+
+/** La noticia guardada, de vuelta al formulario (fecha del show como AAAA-MM-DD). */
+function newsToForm(n: News): NewsForm {
+  return {
+    slug: n.slug,
+    title: n.title,
+    excerpt: n.excerpt || '',
+    body: n.body || '',
+    coverUrl: n.coverUrl || '',
+    published: n.published,
+    template: (newsTemplate(n.template)?.key ?? '') as NewsTemplateKey | '',
+    eventDate: n.eventDate ? n.eventDate.slice(0, 10) : '',
+    ctaLabel: n.ctaLabel || '',
+    ctaHref: n.ctaHref || '',
+  };
+}
 
 type Tab = 'sections' | 'carousel' | 'news';
 
@@ -96,14 +150,9 @@ export default function StudioPage() {
     ctaLabel: 'Ver más',
     ctaHref: '#modulos',
   });
-  const [newsForm, setNewsForm] = useState({
-    slug: '',
-    title: '',
-    excerpt: '',
-    body: '',
-    coverUrl: '',
-    published: true,
-  });
+  const [newsForm, setNewsForm] = useState<NewsForm>(EMPTY_NEWS);
+  /** Noticia que se está editando en el formulario (null = nueva). */
+  const [editingNewsId, setEditingNewsId] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [editSlideId, setEditSlideId] = useState<string | null>(null);
   const [editSlideDraft, setEditSlideDraft] = useState({
@@ -117,18 +166,37 @@ export default function StudioPage() {
   const [aboutStatsDraft, setAboutStatsDraft] = useState<Array<{ label: string; text: string }>>([]);
   const [aboutLocation, setAboutLocation] = useState('');
 
+  /**
+   * Junta 23-10-2026: el practicante deja borradores (noticias, slides inactivos y propuestas de
+   * sección) y dirección publica. La API aplica la misma regla (`canPublishStudio`).
+   */
+  const canPublish = !!user && canPublishStudio(user.roleKey as RoleKey, user.permissions || []);
+  const sectionPages = useMemo(() => pages.filter((p) => !isProposal(p)), [pages]);
+  const proposals = useMemo(
+    () => new Map(pages.filter(isProposal).map((p) => [p.sectionKey.slice(0, -PROPOSAL_SUFFIX.length), p])),
+    [pages],
+  );
+  const inReview = news.filter((n) => !n.published && n.reviewRequestedAt).length;
+
   const draftsCount = useMemo(
     () =>
-      pages.filter((p) => !p.published).length +
+      sectionPages.filter((p) => !p.published).length +
+      proposals.size +
       news.filter((n) => !n.published).length +
       slides.filter((s) => !s.active).length,
-    [pages, news, slides],
+    [sectionPages, proposals, news, slides],
   );
 
   const tabCounts: Record<Tab, number> = useMemo(
-    () => ({ carousel: slides.length, news: news.length, sections: pages.length }),
-    [slides.length, news.length, pages.length],
+    () => ({ carousel: slides.length, news: news.length, sections: sectionPages.length }),
+    [slides.length, news.length, sectionPages.length],
   );
+
+  // Los avisos de «Enviar a revisión» llegan con ?tab=news|carousel|sections.
+  useEffect(() => {
+    const wanted = new URLSearchParams(window.location.search).get('tab');
+    if (wanted === 'news' || wanted === 'carousel' || wanted === 'sections') setTab(wanted);
+  }, []);
 
   async function uploadAsset(file: File): Promise<string> {
     const fd = new FormData();
@@ -147,22 +215,10 @@ export default function StudioPage() {
     setPages(p);
     setSlides(s);
     setNews(n);
-    const current = p.find((x) => x.sectionKey === sectionKey) || p[0];
-    if (current) {
-      setSectionKey(current.sectionKey);
-      const c = current.contentJson || {};
-      setDraft({
-        brand: String(c.brand || ''),
-        brandSub: String(c.brandSub || ''),
-        headline: String(c.headline || ''),
-        sub: String(c.sub || c.lead || ''),
-        body: String(c.body || ''),
-        cta: String(c.cta || ''),
-        ctaHref: String(c.ctaHref || ''),
-        lead: String(c.lead || ''),
-      });
-      setPublished(current.published);
-    }
+    // El editor se llena en el efecto de abajo (sección o, para el practicante, su propuesta).
+    const real = p.filter((x) => !isProposal(x));
+    const current = real.find((x) => x.sectionKey === sectionKey) || real[0];
+    if (current) setSectionKey(current.sectionKey);
   }
 
   useEffect(() => {
@@ -182,9 +238,8 @@ export default function StudioPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
-  useEffect(() => {
-    const page = pages.find((p) => p.sectionKey === sectionKey);
-    if (!page) return;
+  /** Llena el editor con una sección (o una propuesta de practicante). */
+  function fillSectionDraft(page: Page) {
     const c = page.contentJson || {};
     setDraft({
       brand: String(c.brand || ''),
@@ -196,7 +251,6 @@ export default function StudioPage() {
       ctaHref: String(c.ctaHref || ''),
       lead: String(c.lead || ''),
     });
-    setPublished(page.published);
     if (sectionKey === 'home_modulos') {
       const tiles = (page.contentJson as { tiles?: Array<{ title: string; body: string }> })?.tiles;
       setTileDraft(
@@ -224,7 +278,17 @@ export default function StudioPage() {
             ],
       );
     }
-  }, [sectionKey, pages]);
+  }
+
+  useEffect(() => {
+    const real = pages.find((p) => p.sectionKey === sectionKey);
+    // El practicante sigue editando su propuesta si ya tiene una; dirección ve la sección publicada.
+    const page = (!canPublish && proposals.get(sectionKey)) || real || proposals.get(sectionKey);
+    if (!page) return;
+    fillSectionDraft(page);
+    if (real) setPublished(real.published);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sectionKey, pages, canPublish]);
 
   async function saveSection() {
     setMsg('');
@@ -235,7 +299,8 @@ export default function StudioPage() {
         body: JSON.stringify({
           sectionKey,
           title: SECTION_META[sectionKey] || sectionKey,
-          published,
+          // El practicante no manda `published`: la API guarda su versión como propuesta.
+          ...(canPublish ? { published } : {}),
           contentJson: {
             brand: draft.brand,
             brandSub: draft.brandSub,
@@ -257,7 +322,13 @@ export default function StudioPage() {
           },
         }),
       });
-      setMsg(published ? 'Sección publicada' : 'Borrador guardado');
+      setMsg(
+        !canPublish
+          ? 'Propuesta guardada: la sección publicada no cambia hasta que dirección la revise'
+          : published
+            ? 'Sección publicada'
+            : 'Borrador guardado',
+      );
       await load();
     } catch (e) {
       setMsg(e instanceof Error ? e.message : 'Error');
@@ -275,10 +346,10 @@ export default function StudioPage() {
     try {
       await api('/studio/slides', {
         method: 'POST',
-        body: JSON.stringify({ ...slideForm, sortOrder: slides.length, active: true }),
+        body: JSON.stringify({ ...slideForm, sortOrder: slides.length, active: canPublish }),
       });
       setSlideForm({ title: '', subtitle: '', imageUrl: '', ctaLabel: 'Ver más', ctaHref: '#modulos' });
-      setMsg('Slide agregado al carrusel');
+      setMsg(canPublish ? 'Slide agregado al carrusel' : 'Slide guardado como borrador: mándalo a revisión cuando esté listo');
       await load();
     } catch (e) {
       setMsg(e instanceof Error ? e.message : 'Error');
@@ -360,16 +431,68 @@ export default function StudioPage() {
     await load();
   }
 
+  /** Elegir plantilla: deja el texto guía y el botón sugerido sin pisar lo ya escrito. */
+  function pickTemplate(key: NewsTemplateKey | '') {
+    const tpl = newsTemplate(key);
+    setNewsForm((f) => ({
+      ...f,
+      template: key,
+      body: f.body.trim() || !tpl ? f.body : tpl.bodyStarter,
+      ctaLabel: f.ctaLabel.trim() || !tpl ? f.ctaLabel : tpl.cta.label,
+      ctaHref: f.ctaHref.trim() || !tpl ? f.ctaHref : tpl.cta.href,
+    }));
+  }
+
+  function resetNewsForm() {
+    setNewsForm({ ...EMPTY_NEWS, published: canPublish });
+    setEditingNewsId(null);
+  }
+
+  function editNews(n: News) {
+    setEditingNewsId(n.id);
+    setNewsForm(newsToForm(n));
+    setTab('news');
+  }
+
+  const publishNews = canPublish && newsForm.published;
+  const newsMissing = missingForNews(newsForm);
+  const activeTemplate = newsTemplate(newsForm.template);
+
   async function addNews() {
-    if (!newsForm.title || !newsForm.slug) return;
+    if (!newsForm.title || !newsForm.slug) {
+      setMsg('Error: la noticia necesita título y slug');
+      return;
+    }
+    if (publishNews && newsMissing.length) {
+      setMsg(`Error: para publicar falta ${newsMissing.join(', ')}`);
+      return;
+    }
     setSaving(true);
     try {
-      await api('/studio/news', {
-        method: 'POST',
-        body: JSON.stringify(newsForm),
+      const payload = {
+        slug: newsForm.slug,
+        title: newsForm.title,
+        excerpt: newsForm.excerpt,
+        body: newsForm.body,
+        coverUrl: newsForm.coverUrl,
+        published: publishNews,
+        template: newsForm.template || null,
+        eventDate: newsForm.eventDate || null,
+        ctaLabel: newsForm.ctaLabel || null,
+        ctaHref: newsForm.ctaHref || null,
+      };
+      await api(editingNewsId ? `/studio/news/${editingNewsId}` : '/studio/news', {
+        method: editingNewsId ? 'PUT' : 'POST',
+        body: JSON.stringify(payload),
       });
-      setNewsForm({ slug: '', title: '', excerpt: '', body: '', coverUrl: '', published: true });
-      setMsg(newsForm.published ? 'Noticia publicada' : 'Borrador de noticia guardado');
+      resetNewsForm();
+      setMsg(
+        publishNews
+          ? 'Noticia publicada'
+          : canPublish
+            ? 'Borrador de noticia guardado'
+            : 'Borrador de noticia guardado: mándalo a revisión cuando esté listo',
+      );
       await load();
     } catch (e) {
       setMsg(e instanceof Error ? e.message : 'Error');
@@ -378,19 +501,57 @@ export default function StudioPage() {
     }
   }
 
+  /** «Enviar a revisión» (practicante): le avisa a quien publica. */
+  async function requestReview(kind: 'news' | 'slide' | 'section', id: string) {
+    setSaving(true);
+    try {
+      const res = await api<{ notified: number }>('/studio/review', {
+        method: 'POST',
+        body: JSON.stringify({ kind, id }),
+      });
+      setMsg(
+        res.notified
+          ? `Enviado a revisión: avisamos a ${res.notified} persona${res.notified === 1 ? '' : 's'} de dirección`
+          : 'Enviado a revisión',
+      );
+      await load();
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : 'Error');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function discardProposal(key: string) {
+    if (!confirm('¿Descartar la propuesta del practicante para esta sección?')) return;
+    try {
+      await api(`/studio/pages/${key}/proposal`, { method: 'DELETE' });
+      setMsg('Propuesta descartada');
+      await load();
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : 'Error');
+    }
+  }
+
   async function toggleNews(n: News) {
-    await api(`/studio/news/${n.id}`, {
-      method: 'PUT',
-      body: JSON.stringify({
-        slug: n.slug,
-        title: n.title,
-        excerpt: n.excerpt,
-        body: n.body,
-        coverUrl: n.coverUrl,
-        published: !n.published,
-      }),
-    });
-    await load();
+    try {
+      await api(`/studio/news/${n.id}`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          slug: n.slug,
+          title: n.title,
+          excerpt: n.excerpt,
+          body: n.body,
+          coverUrl: n.coverUrl,
+          published: !n.published,
+        }),
+      });
+      setMsg(n.published ? 'Noticia regresada a borrador' : 'Noticia publicada');
+      await load();
+    } catch (e) {
+      // P. ej. un «Evento destacado» sin fecha del show no se publica.
+      setMsg(e instanceof Error ? e.message : 'Error');
+    }
   }
 
   async function removeNews(id: string) {
@@ -407,7 +568,11 @@ export default function StudioPage() {
       <div className="stack page-workspace">
         <PageHeader
           title="Studio"
-          description="Carrusel, noticias y secciones del sitio público de Arta. Guarda como borrador o publica."
+          description={
+            canPublish
+              ? 'Carrusel, noticias y secciones del sitio público de Arta. Guarda como borrador o publica.'
+              : 'Carrusel, noticias y secciones del sitio de Arta. Lo tuyo queda como borrador: mándalo a revisión y dirección lo publica.'
+          }
         >
           <Link className="btn" href="/p/arta" target="_blank" rel="noopener noreferrer">
             Ver sitio live
@@ -427,8 +592,8 @@ export default function StudioPage() {
             <div className="grid-cards kpi-grid-dense">
               <div className="kpi">
                 <div className="label">Secciones</div>
-                <div className="value">{pages.length}</div>
-                <div className="kpi-sub muted">{pages.filter((p) => p.published).length} publicadas</div>
+                <div className="value">{sectionPages.length}</div>
+                <div className="kpi-sub muted">{sectionPages.filter((p) => p.published).length} publicadas</div>
               </div>
               <div className="kpi">
                 <div className="label">Slides</div>
@@ -443,7 +608,11 @@ export default function StudioPage() {
               <div className={`kpi ${draftsCount ? 'kpi--danger' : ''}`}>
                 <div className="label">Borradores</div>
                 <div className="value">{draftsCount}</div>
-                <div className="kpi-sub muted">Incluye slides inactivos</div>
+                <div className="kpi-sub muted">
+                  {inReview || proposals.size
+                    ? `${inReview + proposals.size} en revisión · incluye slides inactivos`
+                    : 'Incluye slides inactivos'}
+                </div>
               </div>
             </div>
 
@@ -553,7 +722,7 @@ export default function StudioPage() {
                         </label>
                       </FormGrid>
                       <button className="btn" type="button" disabled={saving} onClick={addSlide}>
-                        {saving ? 'Guardando…' : 'Agregar al carrusel'}
+                        {saving ? 'Guardando…' : canPublish ? 'Agregar al carrusel' : 'Guardar como borrador'}
                       </button>
                     </div>
                   </div>
@@ -574,25 +743,29 @@ export default function StudioPage() {
                       <div className="studio-slide-grid">
                         {slides.map((s) => {
                           const editing = editSlideId === s.id;
+                          // Un slide activo está en el sitio: el practicante no lo cambia.
+                          const locked = !canPublish && s.active;
                           return (
                           <div className={`studio-slide-card ${s.active ? '' : 'is-off'}`} key={s.id}>
                             <div className="studio-slide-card__media">
                               <img src={s.imageUrl} alt={s.title || 'Slide del carrusel'} />
                               <div className="studio-slide-card__media-actions">
-                                <label className="btn ghost btn-sm">
-                                  {uploading ? 'Subiendo…' : 'Cambiar imagen'}
-                                  <input
-                                    type="file"
-                                    hidden
-                                    accept="image/*"
-                                    onChange={(e) => {
-                                      const f = e.target.files?.[0];
-                                      if (f) void replaceSlideImage(s, f);
-                                      e.target.value = '';
-                                    }}
-                                  />
-                                </label>
-                                {!editing ? (
+                                {locked ? null : (
+                                  <label className="btn ghost btn-sm">
+                                    {uploading ? 'Subiendo…' : 'Cambiar imagen'}
+                                    <input
+                                      type="file"
+                                      hidden
+                                      accept="image/*"
+                                      onChange={(e) => {
+                                        const f = e.target.files?.[0];
+                                        if (f) void replaceSlideImage(s, f);
+                                        e.target.value = '';
+                                      }}
+                                    />
+                                  </label>
+                                )}
+                                {!editing && !locked ? (
                                   <button
                                     className="btn ghost btn-sm"
                                     type="button"
@@ -694,16 +867,29 @@ export default function StudioPage() {
                                     {s.ctaLabel || 'Botón'} → {s.ctaHref || '#'}
                                   </div>
                                   <div className="row row--tight">
-                                    <button className="btn ghost btn-sm" type="button" onClick={() => toggleSlide(s)}>
-                                      {s.active ? 'Desactivar' : 'Activar'}
-                                    </button>
-                                    <button
-                                      className="btn ghost btn-sm btn-danger"
-                                      type="button"
-                                      onClick={() => removeSlide(s.id)}
-                                    >
-                                      Eliminar
-                                    </button>
+                                    {canPublish ? (
+                                      <button className="btn ghost btn-sm" type="button" onClick={() => toggleSlide(s)}>
+                                        {s.active ? 'Desactivar' : 'Activar'}
+                                      </button>
+                                    ) : !s.active ? (
+                                      <button
+                                        className="btn ghost btn-sm"
+                                        type="button"
+                                        disabled={saving}
+                                        onClick={() => void requestReview('slide', s.id)}
+                                      >
+                                        Enviar a revisión
+                                      </button>
+                                    ) : null}
+                                    {locked ? null : (
+                                      <button
+                                        className="btn ghost btn-sm btn-danger"
+                                        type="button"
+                                        onClick={() => removeSlide(s.id)}
+                                      >
+                                        Eliminar
+                                      </button>
+                                    )}
                                   </div>
                                 </>
                               )}
@@ -722,27 +908,50 @@ export default function StudioPage() {
               <div className="dash-split">
                 <div className="panel">
                   <div className="panel-head">
-                    <h2>Nueva noticia</h2>
+                    <h2>{editingNewsId ? 'Editar noticia' : 'Nueva noticia'}</h2>
+                    {editingNewsId ? (
+                      <button className="btn ghost btn-sm" type="button" onClick={resetNewsForm}>
+                        Nueva en blanco
+                      </button>
+                    ) : null}
                   </div>
                   <div className="panel-body">
                     <div className="form">
+                      {/* Junta 23-10-2026: plantillas de página para las publicaciones de redes. */}
+                      <div className="stack">
+                        <div className="label">Plantilla</div>
+                        <div className="row row--tight" role="radiogroup" aria-label="Plantilla de la publicación">
+                          {[...NEWS_TEMPLATES, null].map((tpl) => {
+                            const key = tpl?.key ?? '';
+                            const active = newsForm.template === key;
+                            return (
+                              <button
+                                key={key || 'libre'}
+                                type="button"
+                                role="radio"
+                                aria-checked={active}
+                                className={`btn btn-sm ${active ? '' : 'ghost'}`}
+                                onClick={() => pickTemplate(key)}
+                                title={tpl?.description ?? 'Sin guía: título, texto y portada'}
+                              >
+                                {tpl?.label ?? 'Libre'}
+                              </button>
+                            );
+                          })}
+                        </div>
+                        {activeTemplate ? <p className="kpi-sub muted">{activeTemplate.description}</p> : null}
+                      </div>
                       <FormGrid>
                         <label>
                           Título
                           <input
                             value={newsForm.title}
+                            placeholder={activeTemplate?.hints.title}
                             onChange={(e) =>
                               setNewsForm({
                                 ...newsForm,
                                 title: e.target.value,
-                                slug:
-                                  newsForm.slug ||
-                                  e.target.value
-                                    .toLowerCase()
-                                    .normalize('NFD')
-                                    .replace(/[\u0300-\u036f]/g, '')
-                                    .replace(/[^a-z0-9]+/g, '-')
-                                    .replace(/(^-|-$)/g, ''),
+                                slug: newsForm.slug || slugify(e.target.value),
                               })
                             }
                           />
@@ -755,10 +964,21 @@ export default function StudioPage() {
                           />
                         </label>
                       </FormGrid>
+                      {activeTemplate?.requiresEventDate ? (
+                        <label>
+                          Fecha del show
+                          <input
+                            type="date"
+                            value={newsForm.eventDate}
+                            onChange={(e) => setNewsForm({ ...newsForm, eventDate: e.target.value })}
+                          />
+                        </label>
+                      ) : null}
                       <label>
-                        Extracto
+                        {activeTemplate ? 'Entrada (se ve en la tarjeta y al compartir)' : 'Extracto'}
                         <textarea
                           rows={2}
+                          placeholder={activeTemplate?.hints.excerpt}
                           value={newsForm.excerpt}
                           onChange={(e) => setNewsForm({ ...newsForm, excerpt: e.target.value })}
                         />
@@ -766,7 +986,8 @@ export default function StudioPage() {
                       <label>
                         Cuerpo
                         <textarea
-                          rows={5}
+                          rows={activeTemplate ? 7 : 5}
+                          placeholder={activeTemplate?.hints.body}
                           value={newsForm.body}
                           onChange={(e) => setNewsForm({ ...newsForm, body: e.target.value })}
                         />
@@ -800,13 +1021,49 @@ export default function StudioPage() {
                           }}
                         />
                       </label>
-                      <FieldCheck
-                        checked={newsForm.published}
-                        onChange={(checked) => setNewsForm({ ...newsForm, published: checked })}
-                        label="Publicar al crear"
-                      />
+                      <FormGrid>
+                        <label>
+                          Botón (opcional)
+                          <input
+                            value={newsForm.ctaLabel}
+                            placeholder={activeTemplate?.cta.label || 'Ej. Comprar boletos'}
+                            onChange={(e) => setNewsForm({ ...newsForm, ctaLabel: e.target.value })}
+                          />
+                        </label>
+                        <label>
+                          Enlace del botón
+                          <input
+                            value={newsForm.ctaHref}
+                            placeholder="https://… o #contacto"
+                            onChange={(e) => setNewsForm({ ...newsForm, ctaHref: e.target.value })}
+                          />
+                        </label>
+                      </FormGrid>
+                      {newsForm.title || newsForm.coverUrl ? (
+                        <div className="studio-preview__stage" aria-label="Vista previa de la publicación">
+                          {newsForm.coverUrl ? (
+                            <img className="studio-preview__thumb" src={newsForm.coverUrl} alt="Portada" />
+                          ) : null}
+                          {newsForm.eventDate ? (
+                            <div className="kpi-sub muted">{eventDateLabel(newsForm.eventDate)}</div>
+                          ) : null}
+                          <h3 className="studio-preview__headline">{newsForm.title || 'Título'}</h3>
+                          {newsForm.excerpt ? <p className="studio-preview__body">{newsForm.excerpt}</p> : null}
+                          {newsForm.ctaLabel ? <span className="studio-preview__cta">{newsForm.ctaLabel}</span> : null}
+                        </div>
+                      ) : null}
+                      {newsMissing.length && (newsForm.title || newsForm.template) ? (
+                        <p className="kpi-sub muted">Para publicar falta: {newsMissing.join(', ')}.</p>
+                      ) : null}
+                      {canPublish ? (
+                        <FieldCheck
+                          checked={newsForm.published}
+                          onChange={(checked) => setNewsForm({ ...newsForm, published: checked })}
+                          label={editingNewsId ? 'Publicada en el sitio' : 'Publicar al crear'}
+                        />
+                      ) : null}
                       <button className="btn" type="button" disabled={saving} onClick={addNews}>
-                        {saving ? 'Guardando…' : newsForm.published ? 'Publicar noticia' : 'Guardar borrador'}
+                        {saving ? 'Guardando…' : publishNews ? 'Publicar noticia' : 'Guardar borrador'}
                       </button>
                     </div>
                   </div>
@@ -848,22 +1105,43 @@ export default function StudioPage() {
                                 <td className="muted">{n.slug}</td>
                                 <td>
                                   <span className={`badge ${n.published ? 'ok' : 'warn'}`}>
-                                    {n.published ? 'Publicada' : 'Borrador'}
+                                    {n.published ? 'Publicada' : n.reviewRequestedAt ? 'En revisión' : 'Borrador'}
                                   </span>
+                                  {newsTemplate(n.template) ? (
+                                    <div className="kpi-sub muted">{newsTemplate(n.template)?.label}</div>
+                                  ) : null}
                                 </td>
                                 <td>
                                   <div className="row">
-                                    <button className="btn ghost" type="button" onClick={() => toggleNews(n)}>
-                                      {n.published ? 'Despublicar' : 'Publicar'}
-                                    </button>
+                                    {canPublish || !n.published ? (
+                                      <button className="btn ghost" type="button" onClick={() => editNews(n)}>
+                                        Editar
+                                      </button>
+                                    ) : null}
+                                    {canPublish ? (
+                                      <button className="btn ghost" type="button" onClick={() => toggleNews(n)}>
+                                        {n.published ? 'Despublicar' : 'Publicar'}
+                                      </button>
+                                    ) : !n.published && !n.reviewRequestedAt ? (
+                                      <button
+                                        className="btn ghost"
+                                        type="button"
+                                        disabled={saving}
+                                        onClick={() => void requestReview('news', n.id)}
+                                      >
+                                        Enviar a revisión
+                                      </button>
+                                    ) : null}
                                     {n.published ? (
                                       <Link className="btn ghost" href={`/p/arta/noticias/${n.slug}`} target="_blank">
                                         Ver
                                       </Link>
                                     ) : null}
-                                    <button className="btn ghost" type="button" onClick={() => removeNews(n.id)}>
-                                      Eliminar
-                                    </button>
+                                    {canPublish || !n.published ? (
+                                      <button className="btn ghost" type="button" onClick={() => removeNews(n.id)}>
+                                        Eliminar
+                                      </button>
+                                    ) : null}
                                   </div>
                                 </td>
                               </tr>
@@ -881,9 +1159,13 @@ export default function StudioPage() {
               <div className="stack">
                 <FilterBar
                   meta={
-                    <span className={`badge ${published ? 'ok' : 'warn'}`}>
-                      {published ? 'Publicado' : 'Borrador'}
-                    </span>
+                    proposals.has(sectionKey) ? (
+                      <span className="badge warn">Propuesta en revisión</span>
+                    ) : (
+                      <span className={`badge ${published ? 'ok' : 'warn'}`}>
+                        {published ? 'Publicado' : 'Borrador'}
+                      </span>
+                    )
                   }
                 >
                   <nav className="tab-bar" aria-label="Secciones del home">
@@ -897,7 +1179,9 @@ export default function StudioPage() {
                           onClick={() => setSectionKey(key)}
                         >
                           {SECTION_META[key]}
-                          {page ? (
+                          {proposals.has(key) ? (
+                            <span className="tab-bar__count">propuesta</span>
+                          ) : page ? (
                             <span className="tab-bar__count">{page.published ? 'on' : 'off'}</span>
                           ) : null}
                         </button>
@@ -905,6 +1189,44 @@ export default function StudioPage() {
                     })}
                   </nav>
                 </FilterBar>
+
+                {canPublish && proposals.has(sectionKey) ? (
+                  <FlashMessage variant="warn">
+                    Un practicante propuso cambios a esta sección.{' '}
+                    <button
+                      className="btn ghost btn-sm"
+                      type="button"
+                      onClick={() => {
+                        const proposal = proposals.get(sectionKey);
+                        if (proposal) fillSectionDraft(proposal);
+                        setMsg('Propuesta cargada en el editor: revísala y guarda para publicarla');
+                      }}
+                    >
+                      Cargar propuesta
+                    </button>{' '}
+                    <button className="btn ghost btn-sm btn-danger" type="button" onClick={() => void discardProposal(sectionKey)}>
+                      Descartar
+                    </button>
+                  </FlashMessage>
+                ) : null}
+                {!canPublish ? (
+                  <FlashMessage variant="info">
+                    Tus cambios se guardan como propuesta: la sección del sitio no cambia hasta que dirección la revise.
+                    {proposals.has(sectionKey) ? (
+                      <>
+                        {' '}
+                        <button
+                          className="btn ghost btn-sm"
+                          type="button"
+                          disabled={saving}
+                          onClick={() => void requestReview('section', sectionKey)}
+                        >
+                          Enviar a revisión
+                        </button>
+                      </>
+                    ) : null}
+                  </FlashMessage>
+                ) : null}
 
                 <div className="studio-split">
                   <div className="panel">
@@ -1090,13 +1412,21 @@ export default function StudioPage() {
                             </button>
                           </div>
                         ) : null}
-                        <FieldCheck
-                          checked={published}
-                          onChange={setPublished}
-                          label="Publicado en sitio live"
-                        />
+                        {canPublish ? (
+                          <FieldCheck
+                            checked={published}
+                            onChange={setPublished}
+                            label="Publicado en sitio live"
+                          />
+                        ) : null}
                         <button className="btn" type="button" disabled={saving} onClick={saveSection}>
-                          {saving ? 'Guardando…' : published ? 'Guardar y publicar' : 'Guardar borrador'}
+                          {saving
+                            ? 'Guardando…'
+                            : !canPublish
+                              ? 'Guardar propuesta'
+                              : published
+                                ? 'Guardar y publicar'
+                                : 'Guardar borrador'}
                         </button>
                       </div>
                     </div>

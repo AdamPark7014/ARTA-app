@@ -7,6 +7,7 @@ import { PageHeader } from '@/components/ui/PageChrome';
 import { MonthCalendar, type CalendarItem } from '@/components/ui/MonthCalendar';
 import { LoadingBlock } from '@/components/ui/LoadingBlock';
 import { api } from '@/lib/api';
+import { canAccessEventOps } from '@/lib/access-matrix';
 import { useUser } from '@/lib/user-context';
 
 type EventRow = {
@@ -40,6 +41,9 @@ function noteTitle(n: NoteRow): string {
  * calendario». Cualquier día se toca y se deja una nota corta — un
  * recordatorio compartido, no una tarea con flujo. Todo el equipo con acceso
  * a la entidad la ve y la puede editar o borrar.
+ *
+ * Junta 23-10-2026: el practicante (sitio y redes) lo consulta en solo lectura para preparar
+ * publicaciones: los shows salen de `/calendar/events`, sin abrir el evento y sin notas nuevas.
  */
 export default function EventsCalendarPage() {
   const { entity, user } = useUser();
@@ -51,12 +55,15 @@ export default function EventsCalendarPage() {
   const [draft, setDraft] = useState('');
   const [saving, setSaving] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  // Sin operación de eventos (practicante): solo lectura, sin entrar al evento ni dejar notas.
+  const eventOps = user ? canAccessEventOps(user.roleKey, entity) : false;
+  const readOnly = !!user && !eventOps;
 
   useEffect(() => {
     if (!user || !entity) return;
     setLoading(true);
     Promise.all([
-      api<EventRow[]>(`/events?entity=${entity}&scope=all`),
+      api<EventRow[]>(readOnly ? `/calendar/events?entity=${entity}` : `/events?entity=${entity}&scope=all`),
       api<NoteRow[]>(`/calendar/notes?entity=${entity}`),
     ])
       .then(([ev, no]) => {
@@ -65,7 +72,7 @@ export default function EventsCalendarPage() {
       })
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, [user, entity]);
+  }, [user, entity, readOnly]);
 
   useEffect(() => {
     if (openDay) textareaRef.current?.focus();
@@ -81,9 +88,9 @@ export default function EventsCalendarPage() {
           from: e.startsAt as string,
           to: e.endsAt || e.startsAt,
           tone: 'show' as const,
-          href: `/events/${e.id}`,
+          href: readOnly ? undefined : `/events/${e.id}`,
         })),
-    [events],
+    [events, readOnly],
   );
 
   const notesByDay = useMemo(() => {
@@ -156,20 +163,35 @@ export default function EventsCalendarPage() {
       <div className="sx-stack page-workspace">
         <PageHeader
           title="Calendario"
-          description={`Shows de ${entity === 'ARTA' ? 'Arta' : 'Auditorio'} · toca un día para dejar una nota`}
+          description={
+            readOnly
+              ? `Shows de ${entity === 'ARTA' ? 'Arta' : 'Auditorio'} · solo consulta, para preparar publicaciones del sitio`
+              : `Shows de ${entity === 'ARTA' ? 'Arta' : 'Auditorio'} · toca un día para dejar una nota`
+          }
         >
-          <Link className="btn-quiet" href="/events">
-            Ver lista
-          </Link>
+          {readOnly ? null : (
+            <Link className="btn-quiet" href="/events">
+              Ver lista
+            </Link>
+          )}
         </PageHeader>
         {loading ? (
           <LoadingBlock rows={6} label="Cargando calendario…" />
         ) : (
           <MonthCalendar
             items={items}
-            onDayClick={(day) => (openDay === day ? closeCompose() : openForDay(day))}
+            onDayClick={readOnly ? undefined : (day) => (openDay === day ? closeCompose() : openForDay(day))}
             renderDay={(day) => {
               const dayNotes = notesByDay.get(day) || [];
+              if (readOnly) {
+                return dayNotes.map((n) => (
+                  <span key={n.id} className="mcal__note" title={noteTitle(n)}>
+                    <span className="mcal__note-body">
+                      <span className="mcal__note-text">{n.text}</span>
+                    </span>
+                  </span>
+                ));
+              }
               const isOpen = openDay === day;
               return (
                 <>

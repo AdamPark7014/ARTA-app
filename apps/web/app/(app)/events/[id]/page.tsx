@@ -100,6 +100,9 @@ function EventDetailInner() {
   const canAuthorize = has(['po.authorize']);
   const canMarkPaid = has(['po.mark_paid']);
   const canChecklistEdit = has(['checklist.edit']);
+  // Junta 23-10-2026: contabilidad (finance.edit) también edita convenios, pero no los datos del show.
+  const canSponsorEdit = has(['checklist.edit', 'finance.edit']);
+  const canEditEvent = has(['checklist.edit', 'event.create']);
   const canPo = has(['checklist.edit', 'po.authorize', 'po.mark_paid']);
   const canApproveCampaign = REVIEW_APPROVER_ROLES.has(role);
   const canReopen = role === 'dir_general' || role === 'dir_adjunta' || role === 'super_admin';
@@ -608,7 +611,7 @@ function EventDetailInner() {
           event={event}
           actions={
             <>
-              {!closed ? (
+              {!closed && canEditEvent ? (
                 <button
                   className="btn ghost btn-sm"
                   type="button"
@@ -645,6 +648,7 @@ function EventDetailInner() {
             editing={editingMeta}
             setEditing={setEditingMeta}
             canVendorPin={canVendorPin}
+            canEdit={canEditEvent}
             onOpenChecklist={openChecklist}
             onGoModule={selectModule}
             visibleTabs={visibleTabs}
@@ -710,7 +714,7 @@ function EventDetailInner() {
         {tab === 'sponsors' && (
           <EventSponsorsPanel
             {...panel}
-            canEdit={canChecklistEdit}
+            canEdit={canSponsorEdit}
             canCampaignEdit={canCampaign}
             canApprove={canApproveCampaign}
             canMarkPaid={canMarkPaid}

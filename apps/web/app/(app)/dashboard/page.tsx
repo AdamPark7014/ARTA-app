@@ -305,7 +305,23 @@ export default function DashboardPage() {
           ) : null}
         </PageHeader>
 
-        {!eventOps ? (
+        {role === 'practicante' ? (
+          // Junta 23-10-2026: el practicante entra al sitio (Studio) y al calendario, nada más.
+          <section className="surface">
+            <EmptyLite
+              icon="✎"
+              title="El sitio de Arta"
+              text="Prepara noticias, eventos destacados y slides en Studio. Quedan como borrador: cuando estén listos, mándalos a revisión y dirección los publica."
+            >
+              <Link className="btn btn-sm" href="/studio">
+                Abrir Studio
+              </Link>
+              <Link className="btn ghost btn-sm" href="/calendar">
+                Ver calendario
+              </Link>
+            </EmptyLite>
+          </section>
+        ) : !eventOps ? (
           <section className="surface">
             <EmptyLite
               icon="▤"

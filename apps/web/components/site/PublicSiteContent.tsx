@@ -109,15 +109,28 @@ export function PublicSiteContent({ data }: PublicSiteContentProps) {
                   />
                 </div>
                 <div className="news-body">
-                  <time className="muted" dateTime={n.publishedAt || undefined}>
-                    {n.publishedAt
-                      ? new Date(n.publishedAt).toLocaleDateString('es-MX', {
-                          day: 'numeric',
-                          month: 'long',
-                          year: 'numeric',
-                        })
-                      : ''}
-                  </time>
+                  {n.eventDate ? (
+                    // «Evento destacado» (junta 23-10-2026): la tarjeta lleva la fecha del show.
+                    <time className="muted" dateTime={n.eventDate}>
+                      Evento ·{' '}
+                      {new Date(n.eventDate).toLocaleDateString('es-MX', {
+                        day: 'numeric',
+                        month: 'long',
+                        year: 'numeric',
+                        timeZone: 'UTC',
+                      })}
+                    </time>
+                  ) : (
+                    <time className="muted" dateTime={n.publishedAt || undefined}>
+                      {n.publishedAt
+                        ? new Date(n.publishedAt).toLocaleDateString('es-MX', {
+                            day: 'numeric',
+                            month: 'long',
+                            year: 'numeric',
+                          })
+                        : ''}
+                    </time>
+                  )}
                   <h3>{n.title}</h3>
                   <p>{n.excerpt}</p>
                 </div>
