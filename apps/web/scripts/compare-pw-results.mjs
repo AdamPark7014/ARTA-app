@@ -109,6 +109,17 @@ function suite([baseFile, targetFile, title]) {
     for (const [key] of flaky) lines.push(`- ${key}`);
     lines.push('');
   }
+  // Falla en los dos, pero por otra cosa en WebKit: puede esconder un fallo de Safari.
+  const norm = (e) => e.replace(/\d+(\.\d+)?\s*(ms|px|s)\b/g, '').replace(/\s+/g, ' ').trim();
+  const differ = both.filter(([, t, b]) => norm(t.error) !== norm(b.error));
+  if (differ.length) {
+    lines.push(`### ⚠️ Fallan en los dos, pero con otro error en WebKit (${differ.length}) — revisar a mano`);
+    lines.push('');
+    lines.push('| Prueba | Chromium | WebKit |');
+    lines.push('|---|---|---|');
+    for (const [key, t, b] of differ) lines.push(`| ${cell(key)} | ${cell(b.error)} | ${cell(t.error)} |`);
+    lines.push('');
+  }
   if (both.length) {
     lines.push(`<details><summary>Fallan en los dos motores (${both.length}) — no son de Safari</summary>`);
     lines.push('');

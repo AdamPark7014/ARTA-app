@@ -25,13 +25,23 @@ export function clearToken() {
   }
 }
 
+// Safari con «Bloquear todas las cookies» (o la vista web de otra app) lanza
+// SecurityError al tocar localStorage: la entidad cae a ARTA en vez de romper.
 export function getActiveEntity(): EntityKey {
   if (typeof window === 'undefined') return 'ARTA';
-  return (localStorage.getItem(ENTITY_KEY) as EntityKey) || 'ARTA';
+  try {
+    return (localStorage.getItem(ENTITY_KEY) as EntityKey) || 'ARTA';
+  } catch {
+    return 'ARTA';
+  }
 }
 
 export function setActiveEntity(entity: EntityKey) {
-  localStorage.setItem(ENTITY_KEY, entity);
+  try {
+    localStorage.setItem(ENTITY_KEY, entity);
+  } catch {
+    /* sin almacenamiento local */
+  }
 }
 
 function readCookie(name: string): string | null {

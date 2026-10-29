@@ -325,6 +325,9 @@ export function PdfEditor({ url, fileName, canEdit, onSave, onSaved, note, saveL
               onPointerUp={() => {
                 dragRef.current = null;
               }}
+              onPointerCancel={() => {
+                dragRef.current = null;
+              }}
             >
               {notes
                 .filter((n) => n.page === p.pageNumber)

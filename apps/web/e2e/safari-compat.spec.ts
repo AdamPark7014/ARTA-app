@@ -132,8 +132,9 @@ test.describe('Safari · PDF en otra pestaña', () => {
       route.fulfill({ status: 200, contentType: 'text/plain', body: 'PDF de la boletera' }),
     );
 
-    await page.goto('/events/evt-e2e-1');
-    await page.getByRole('navigation', { name: 'Módulos del evento' }).getByRole('button', { name: 'Boletera' }).click();
+    // Directo a la pestaña: en teléfono la barra de módulos es otro control, y
+    // esto también tiene que pasar en el iPhone (proyecto webkit-iphone).
+    await page.goto('/events/evt-e2e-1?tab=ticketing');
 
     const popup = page.waitForEvent('popup');
     await page.getByRole('button', { name: 'Descargar PDF' }).click();
@@ -190,8 +191,7 @@ test.describe('Safari · visor de PDF', () => {
       route.fulfill({ status: 200, contentType: 'application/pdf', body: bytes }),
     );
 
-    await page.goto('/events/evt-e2e-1');
-    await page.getByRole('navigation', { name: 'Módulos del evento' }).getByRole('button', { name: 'Documentos' }).click();
+    await page.goto('/events/evt-e2e-1?tab=files');
     await page.getByRole('button', { name: 'Escribir encima' }).first().click();
 
     await expect(page.locator('canvas').first()).toBeVisible({ timeout: 20_000 });

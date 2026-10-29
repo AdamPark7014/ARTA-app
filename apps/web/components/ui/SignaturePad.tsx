@@ -120,6 +120,9 @@ export function SignaturePad({ label, signerName, onSign, disabled, existing, on
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerLeave={onPointerUp}
+        // iPhone cancela el trazo si un gesto del sistema toma el dedo; sin esto
+        // el siguiente toque seguía la línea desde donde se quedó.
+        onPointerCancel={onPointerUp}
       />
       <div className="row" style={{ marginTop: 8 }}>
         {onCancel ? (

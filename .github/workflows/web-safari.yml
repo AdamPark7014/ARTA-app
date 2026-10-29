@@ -69,9 +69,11 @@ jobs:
         working-directory: apps/web
         run: npx playwright install --with-deps ${{ startsWith(matrix.project, 'webkit') && 'webkit' || 'chromium' }}
 
+      # next/font baja Nunito y Outfit de Google al construir; si esa petición
+      # falla («Cannot read properties of null» en next/font), se reintenta.
       - name: Build
         working-directory: apps/web
-        run: npm run build
+        run: npm run build || { sleep 20; npm run build; } || { sleep 60; npm run build; }
 
       # No tumba el job: el veredicto es la comparación contra Chromium.
       - name: Playwright · ${{ matrix.project }}
@@ -137,9 +139,11 @@ jobs:
         working-directory: apps/web
         run: npx playwright install --with-deps ${{ matrix.project }}
 
+      # next/font baja Nunito y Outfit de Google al construir; si esa petición
+      # falla («Cannot read properties of null» en next/font), se reintenta.
       - name: Build
         working-directory: apps/web
-        run: npm run build
+        run: npm run build || { sleep 20; npm run build; } || { sleep 60; npm run build; }
 
       - name: Recorrido de cortes · ARTA y Auditorio · 1536×864 y 390×844
         working-directory: apps/web
@@ -187,9 +191,11 @@ jobs:
         working-directory: apps/web
         run: npx playwright install webkit
 
+      # next/font baja Nunito y Outfit de Google al construir; si esa petición
+      # falla («Cannot read properties of null» en next/font), se reintenta.
       - name: Build
         working-directory: apps/web
-        run: npm run build
+        run: npm run build || { sleep 20; npm run build; } || { sleep 60; npm run build; }
 
       - name: Playwright · webkit + webkit-iphone (Safari, login, shell, móvil)
         working-directory: apps/web
@@ -198,7 +204,7 @@ jobs:
           PLAYWRIGHT_HTML_OPEN: never
         run: >-
           npx playwright test
-          e2e/safari-compat.spec.ts e2e/login.spec.ts e2e/app-shell.spec.ts e2e/mobile-shell.spec.ts e2e/tasks.spec.ts
+          e2e/safari-compat.spec.ts e2e/safari-iphone.spec.ts e2e/login.spec.ts e2e/app-shell.spec.ts e2e/mobile-shell.spec.ts e2e/tasks.spec.ts
           --project=webkit --project=webkit-iphone
           --workers=2 --retries=1
           --trace=retain-on-failure
@@ -237,12 +243,13 @@ jobs:
         run: |
           set +e
           S=apps/web/scripts/compare-pw-results.mjs
-          node $S suite results/chromium.json results/webkit.json "Safari de escritorio (WebKit) contra Chrome" > desktop.md
+          mkdir -p comparacion
+          node $S suite results/chromium.json results/webkit.json "Safari de escritorio (WebKit) contra Chrome" > comparacion/desktop.md
           A=$?
-          node $S suite results/chromium-iphone.json results/webkit-iphone.json "iPhone 15 (WebKit) contra Chrome con el mismo tamaño" > iphone.md
+          node $S suite results/chromium-iphone.json results/webkit-iphone.json "iPhone 15 (WebKit) contra Chrome con el mismo tamaño" > comparacion/iphone.md
           B=$?
-          node $S audit cortes/cortes-chromium cortes/cortes-webkit chromium webkit > cortes.md
-          cat desktop.md iphone.md cortes.md | tee -a "$GITHUB_STEP_SUMMARY"
+          node $S audit cortes/cortes-chromium cortes/cortes-webkit chromium webkit > comparacion/cortes.md
+          cat comparacion/desktop.md comparacion/iphone.md comparacion/cortes.md | tee -a "$GITHUB_STEP_SUMMARY"
           if [ $A -ne 0 ] || [ $B -ne 0 ]; then
             echo "::error::Hay pruebas que pasan en Chromium y fallan en WebKit (ver el resumen)."
             exit 1
@@ -252,5 +259,5 @@ jobs:
         if: ${{ !cancelled() }}
         with:
           name: comparacion
-          path: '*.md'
+          path: comparacion
           retention-days: 14

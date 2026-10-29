@@ -2,6 +2,13 @@
    nativas (docs/PARIDAD-MOVIL-CONTRATO.md §3). Va al final de globals para
    ganar en cascada sin tocar las reglas de escritorio. */
 
+/* Safari de iPhone, en horizontal, agranda el texto por su cuenta («text
+   autosizing») y descuadra tablas y barras: el tamaño es el que dice el CSS. */
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
 /* ── Modo app: la navegación, el título y los avisos los pone la app ─────── */
 
 html[data-shell='app'],
@@ -152,6 +159,8 @@ body[data-shell='app'] {
     left: 0.5rem;
     right: 0.5rem;
     width: auto;
+    /* Safari < 15.4 no conoce dvh y tiraba el tope entero: vh de respaldo. */
+    max-height: calc(100vh - 5rem);
     max-height: calc(100dvh - 5rem);
     overflow-y: auto;
   }

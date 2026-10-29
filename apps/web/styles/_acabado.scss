@@ -1952,6 +1952,14 @@ html[data-entity] .lg-form input.field {
   font-weight: 400;
 }
 
+/* Con menos de 16 px, Safari de iPhone acerca la página al tocar el campo y el
+   login queda descuadrado (correo, contraseña y código 2FA). */
+@media (max-width: 768px) {
+  html[data-entity] .lg-form input.field {
+    font-size: 16px;
+  }
+}
+
 /* Contraseña: el borde es del contenedor; el campo y «Ver» van lado a lado, sin encimarse. */
 .lg .pass-field {
   position: static;

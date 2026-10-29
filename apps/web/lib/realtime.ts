@@ -38,8 +38,35 @@ function ensureSocket(): Socket | null {
     statusListeners.forEach((fn) => fn(true));
   });
   s.on('disconnect', () => statusListeners.forEach((fn) => fn(false)));
+
+  // iPhone congela la pestaña en segundo plano y el sistema corta el socket sin
+  // avisarle a la página: al volver, Socket.IO lo daba por vivo hasta que vencía
+  // el ping (~45 s) y en ese rato no llegaba nada. Tras más de 30 s oculta, o al
+  // volver del historial (bfcache de Safari) o de estar sin red, se reconecta de
+  // una vez, y `onReconnect` vuelve a pedir lo que llegó mientras tanto.
+  const revive = () => {
+    s.disconnect();
+    s.connect();
+  };
+  let hiddenAt = document.hidden ? Date.now() : 0;
   document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+      hiddenAt = Date.now();
+    } else {
+      const away = hiddenAt ? Date.now() - hiddenAt : 0;
+      hiddenAt = 0;
+      if (away > 30_000 && hasSessionHint()) {
+        revive();
+        return;
+      }
+    }
     if (s.connected) presence(s);
+  });
+  window.addEventListener('pageshow', (e) => {
+    if (e.persisted && hasSessionHint()) revive();
+  });
+  window.addEventListener('online', () => {
+    if (!s.connected && hasSessionHint()) revive();
   });
   socket = s;
   return s;

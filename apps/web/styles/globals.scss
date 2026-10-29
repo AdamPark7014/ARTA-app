@@ -5590,6 +5590,12 @@ body.site-nav-open {
   color: var(--on-danger);
 }
 
+/* En iPhone y iPad arrastrar la caja movía la página (y el navegador cancelaba
+   el arrastre): el asa no deja que el dedo haga scroll. */
+.pdfedit__grip {
+  touch-action: none;
+}
+
 /* Documento tipo Word — hoja blanca sobre lienzo suave */
 .docedit-app {
   display: grid;
