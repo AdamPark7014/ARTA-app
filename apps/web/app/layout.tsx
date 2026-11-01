@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { Nunito, Outfit } from 'next/font/google';
+import localFont from 'next/font/local';
 import '../styles/globals.scss';
 import { UserProvider } from '@/lib/user-context';
 import { ROOT_DOMAIN } from '@/lib/domains';
@@ -30,20 +30,22 @@ export const metadata: Metadata = {
 
 /**
  * Letra del panel (docs/diseno/SISTEMA-VISUAL.md): Nunito en toda la interfaz y
- * Outfit solo para la palabra «EXPLANADA» del Auditorio. Se sirven desde el
- * propio dominio (next/font), sin pedirle nada a Google en cada visita.
- * Nunito va como fuente variable: cubre del 300 al 800 del sistema y también
- * los pesos intermedios (560, 650) que usan títulos y etiquetas.
+ * Outfit solo para la palabra «EXPLANADA» del Auditorio. Viven en el repo: con
+ * `next/font/google` cada despliegue dependía de lo que contestara Google, y ya
+ * tumbó dos construcciones. Las dos son variables y traen el subconjunto latino
+ * (español completo): Nunito cubre del 300 al 800 del sistema y los pesos
+ * intermedios (560, 650) que usan títulos y etiquetas.
  */
-const nunito = Nunito({
-  subsets: ['latin'],
+const nunito = localFont({
+  src: './fonts/nunito-latin.woff2',
+  weight: '200 1000',
   display: 'swap',
   variable: '--font-nunito',
 });
 
-const outfit = Outfit({
-  subsets: ['latin'],
-  weight: ['800', '900'],
+const outfit = localFont({
+  src: './fonts/outfit-latin.woff2',
+  weight: '800 900',
   display: 'swap',
   variable: '--font-outfit',
 });
