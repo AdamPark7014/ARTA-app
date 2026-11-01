@@ -607,6 +607,15 @@ export function chatReportNotice(input: {
 /* ── Boletera ────────────────────────────────────────────────────────────── */
 
 /** «Boletos agotados: Noche de Boleros» · «1,200 de 1,200 boletos · el evento es el sáb 25 oct». */
+/** Acuse: ya vieron lo que mandaste. Uno por persona cada vez que abre la campana, aunque sean varios avisos. */
+export function seenReceiptNotice(input: { viewer?: string | null; titles: string[] }): Notice {
+  const viewer = who(input.viewer);
+  const count = input.titles.length;
+  if (count === 1) return notice(`${viewer} ya vio tu aviso`, clip(input.titles[0], 170));
+  const shown = input.titles.slice(0, 2).map((t) => clip(t, 80));
+  return notice(`${viewer} ya vio ${count} de tus avisos`, shown.join(' · '), count > 2 ? `Y ${count - 2} más.` : null);
+}
+
 export type ChatRefRole =
   | 'task_owner'
   | 'task_requester'

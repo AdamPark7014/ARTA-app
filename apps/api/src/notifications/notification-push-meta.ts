@@ -115,6 +115,33 @@ export function pushCategoryFor(actions: PushAction[]): string | null {
   return null;
 }
 
+/**
+ * Lo que alguien le manda a otra persona esperando que lo vea: a quien lo mandó le llega el
+ * acuse cuando abre la campana. Lo que solo informa (subió un archivo, cambió una fecha) no.
+ */
+const RECEIPT_TYPES = new Set([
+  ...APPROVAL_TYPES,
+  'checklist.returned',
+  'task.assigned',
+  'task.reassigned',
+  'task.rejected',
+  'task.reopened',
+  'task.blocked',
+  'task.mention',
+  'task.comment',
+  'chat.mention',
+  'advance.to_pay',
+  'advance.rejected',
+]);
+
+export const RECEIPT_TYPE_LIST = [...RECEIPT_TYPES];
+export const RECEIPT_REF_PREFIX = 'chat.ref.';
+
+export function wantsReceipt(type: string): boolean {
+  const t = (type || '').toLowerCase();
+  return RECEIPT_TYPES.has(t) || t.startsWith(RECEIPT_REF_PREFIX);
+}
+
 /** «Arturo Taja Ramírez» → «Arturo T.»: cabe en el título de un aviso. */
 export function shortName(fullName?: string | null): string {
   const parts = (fullName || '').trim().split(/\s+/).filter(Boolean);

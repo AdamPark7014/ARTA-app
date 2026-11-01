@@ -7,10 +7,14 @@ import {
   pushActionsFor,
   pushCategoryFor,
   pushMetaFor,
+  RECEIPT_REF_PREFIX,
+  RECEIPT_TYPE_LIST,
   targetFromLink,
+  wantsReceipt,
   type PushTarget,
   type PushTargetKind,
 } from './notification-push-meta';
+import { seenReceiptNotice } from './notification-text';
 import {
   canAccessEventOps,
   hasPermission,
@@ -260,6 +264,127 @@ export class NotificationsService {
       this.logger.warn(`Push falló (${payload.type ?? 'sin tipo'}): ${String(err)}`);
       return 0;
     }
+  }
+
+  /**
+   * La persona abrió la campana con estos avisos a la vista. A quien se los mandó le llega el
+   * acuse, sin sonar: uno por cada quien mandó, aunque sean varios avisos. Nunca lanza.
+   */
+  async markSeen(userId: string, ids: string[]) {
+    if (ids.length === 0) return 0;
+    try {
+      const rows = await this.prisma.notification.findMany({
+        where: { userId, id: { in: ids }, seenAt: null },
+        select: {
+          id: true,
+          type: true,
+          title: true,
+          linkUrl: true,
+          actorId: true,
+          organizationId: true,
+          entity: true,
+          targetKind: true,
+          targetId: true,
+          createdAt: true,
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+      if (rows.length === 0) return 0;
+      const at = new Date();
+      await this.prisma.notification.updateMany({
+        where: { id: { in: rows.map((r) => r.id) }, seenAt: null },
+        data: { seenAt: at },
+      });
+
+      // «Sin abrir» de la tarea se apaga: quien la pidió ya sabe que la vieron.
+      const tasks = rows.filter((r) => r.targetKind === 'task' && r.targetId && wantsReceipt(r.type));
+      if (tasks.length) {
+        await this.prisma.taskAssignment.updateMany({
+          where: { id: { in: tasks.map((r) => r.targetId as string) }, seenAt: null },
+          data: { seenAt: at },
+        });
+      }
+
+      const bySender = new Map<string, typeof rows>();
+      for (const row of rows) {
+        if (!row.actorId || row.actorId === userId || !wantsReceipt(row.type)) continue;
+        bySender.set(row.actorId, [...(bySender.get(row.actorId) ?? []), row]);
+      }
+      if (bySender.size === 0) return rows.length;
+
+      const viewer = await this.prisma.user.findUnique({ where: { id: userId }, select: { fullName: true } });
+      for (const [senderId, seen] of bySender) {
+        const one = seen.length === 1 ? seen[0] : null;
+        const entities = new Set(seen.map((r) => r.entity ?? null));
+        await this.notify({
+          userId: senderId,
+          actorId: userId,
+          organizationId: seen[0].organizationId,
+          type: 'notice.seen',
+          ...seenReceiptNotice({ viewer: viewer?.fullName, titles: seen.map((r) => r.title) }),
+          linkUrl: one?.linkUrl ?? '/notifications?tab=enviados',
+          entity: entities.size === 1 ? (seen[0].entity ?? null) : null,
+          target: one?.targetKind && one.targetId ? { kind: one.targetKind, id: one.targetId } : null,
+        });
+        this.realtime?.emitToUser(senderId, 'notification:seen', {
+          notificationIds: seen.map((r) => r.id),
+          userId,
+          at: at.toISOString(),
+        });
+      }
+      return rows.length;
+    } catch (err) {
+      this.logger.warn(`No se pudo registrar lo visto: ${String(err)}`);
+      return 0;
+    }
+  }
+
+  /**
+   * «Enviados»: lo que esta persona mandó y quién ya lo vio. El mismo aviso a varias personas va
+   * en una fila; solo lo que pide acuse.
+   */
+  async sentBy(userId: string, opts: { take?: number; entities?: EntityKey[] } = {}) {
+    const rows = await this.prisma.notification.findMany({
+      where: {
+        actorId: userId,
+        OR: [{ type: { in: RECEIPT_TYPE_LIST } }, { type: { startsWith: RECEIPT_REF_PREFIX } }],
+        ...(opts.entities ? { AND: [{ OR: [{ entity: null }, { entity: { in: opts.entities } }] }] } : {}),
+      },
+      select: {
+        id: true,
+        type: true,
+        title: true,
+        body: true,
+        linkUrl: true,
+        createdAt: true,
+        seenAt: true,
+        readAt: true,
+        user: { select: { id: true, fullName: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 300,
+    });
+    const groups = new Map<
+      string,
+      {
+        key: string;
+        type: string;
+        title: string;
+        body: string | null;
+        linkUrl: string | null;
+        createdAt: Date;
+        recipients: Array<{ id: string; fullName: string; seenAt: Date | null; readAt: Date | null }>;
+      }
+    >();
+    for (const row of rows) {
+      const key = `${row.type}|${row.linkUrl ?? ''}|${row.title}`;
+      const group =
+        groups.get(key) ??
+        { key, type: row.type, title: row.title, body: row.body, linkUrl: row.linkUrl, createdAt: row.createdAt, recipients: [] };
+      group.recipients.push({ id: row.user.id, fullName: row.user.fullName, seenAt: row.seenAt, readAt: row.readAt });
+      groups.set(key, group);
+    }
+    return [...groups.values()].slice(0, Math.min(Math.max(opts.take ?? 60, 1), 100));
   }
 
   async unreadCount(userId: string) {

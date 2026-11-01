@@ -729,8 +729,11 @@ model Notification {
   /// De qué trata el aviso, para sus botones: task | event | po | format | doc | advance | message.
   targetKind     String?
   targetId       String?
+  /// Abrió la campana con este aviso a la vista. Leer es otra cosa: es tocarlo.
+  seenAt         DateTime?
 
   @@index([userId, readAt, createdAt])
+  @@index([actorId, createdAt])
   @@index([organizationId, createdAt])
 }
 

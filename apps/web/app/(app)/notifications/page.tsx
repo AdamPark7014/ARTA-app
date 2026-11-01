@@ -2,9 +2,10 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AppShell } from '@/components/app-shell/AppShell';
-import { NoticeRow, type Notice } from '@/components/app-shell/NoticeRow';
+import { NoticeRow, reportSeen, type Notice } from '@/components/app-shell/NoticeRow';
+import { SentNotices } from '@/components/app-shell/SentNotices';
 import { LoadingBlock } from '@/components/ui/LoadingBlock';
 import { PageHeader } from '@/components/ui/PageChrome';
 import { api } from '@/lib/api';
@@ -14,7 +15,7 @@ import { useUser } from '@/lib/user-context';
 
 const PAGE = 50;
 
-type Filter = 'all' | 'unread' | 'action' | NoticeChannel;
+type Filter = 'all' | 'unread' | 'action' | 'sent' | NoticeChannel;
 
 /**
  * Todos los avisos de la entidad activa: la campana enseña los últimos, aquí está
@@ -29,6 +30,12 @@ export default function NotificationsPage() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState('');
   const [filter, setFilter] = useState<Filter>('all');
+  const seenSent = useRef(new Set<string>());
+
+  // `?tab=enviados`: el acuse de varios avisos lleva aquí.
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get('tab') === 'enviados') setFilter('sent');
+  }, []);
 
   const load = useCallback(async () => {
     setError('');
@@ -99,16 +106,24 @@ export default function NotificationsPage() {
 
   const unread = items.filter((i) => !i.readAt).length;
   const shown = items.filter((i) => {
+    if (filter === 'sent') return false;
     if (filter === 'all') return true;
     if (filter === 'unread') return !i.readAt;
     if (filter === 'action') return !i.readAt && needsAction(i.type);
     return channelOf(i.type) === filter;
   });
 
+  // Lo que está en pantalla ya se vio: a quien lo mandó le llega el acuse.
+  useEffect(() => {
+    if (!loading && filter !== 'sent') reportSeen(shown, seenSent.current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, filter, items]);
+
   const tabs: Array<{ key: Filter; label: string }> = [
     { key: 'all', label: 'Todos' },
     { key: 'unread', label: unread ? `Sin leer · ${unread}` : 'Sin leer' },
     { key: 'action', label: 'Por atender' },
+    { key: 'sent', label: 'Enviados' },
     ...channels.map((c) => ({ key: c as Filter, label: CHANNEL_LABELS[c] })),
   ];
 
@@ -135,7 +150,7 @@ export default function NotificationsPage() {
             </div>
           }
         >
-          {unread ? (
+          {unread && filter !== 'sent' ? (
             <button type="button" className="btn ghost btn-sm" onClick={markAll}>
               Marcar todo leído
             </button>
@@ -151,7 +166,9 @@ export default function NotificationsPage() {
           </p>
         ) : null}
 
-        {loading ? (
+        {filter === 'sent' ? (
+          <SentNotices entity={entity} />
+        ) : loading ? (
           <LoadingBlock rows={6} label="Cargando avisos…" />
         ) : !shown.length ? (
           <div className="surface nt-empty nt-empty--page">
@@ -173,7 +190,7 @@ export default function NotificationsPage() {
           </div>
         )}
 
-        {more ? (
+        {more && filter !== 'sent' ? (
           <div className="nt-page__more">
             <button type="button" className="btn ghost" disabled={loadingMore} onClick={loadMore}>
               {loadingMore ? 'Cargando…' : 'Ver avisos anteriores'}

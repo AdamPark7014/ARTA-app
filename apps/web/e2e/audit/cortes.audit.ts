@@ -43,6 +43,13 @@ type Step = { name: string; path: string; action?: (page: Page) => Promise<void>
 /** Capas que se abren encima de una pantalla: campana, cuenta, buscador y cajón del menú. */
 const OVERLAYS: Step[] = [
   {
+    name: 'enviados',
+    path: '/notifications?tab=enviados',
+    action: async (page) => {
+      await page.locator('.sent-row').first().waitFor();
+    },
+  },
+  {
     name: 'tablero',
     path: '/tasks',
     action: async (page) => {

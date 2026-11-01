@@ -8,7 +8,7 @@ import { groupNotices, needsAction } from '@/lib/notification-kinds';
 import { useRealtime, useRealtimeStatus } from '@/lib/realtime';
 import { useUser } from '@/lib/user-context';
 import { LiveToasts, type LiveToast } from './LiveToasts';
-import { NoticeRow, type Notice } from './NoticeRow';
+import { NoticeRow, reportSeen, type Notice } from './NoticeRow';
 
 const POLL_MS = 120_000;
 const PANEL_TAKE = 30;
@@ -113,6 +113,12 @@ export function NotificationBell() {
       setLoading(false);
     }
   }, [entity]);
+
+  // Campana abierta = lo que está a la vista ya se vio.
+  const seenSent = useRef(new Set<string>());
+  useEffect(() => {
+    if (open && !loading) reportSeen(items, seenSent.current);
+  }, [open, loading, items]);
 
   const pushToast = useCallback((toast: LiveToast) => {
     setToasts((prev) => [toast, ...prev.filter((t) => t.key !== toast.key)].slice(0, 3));
@@ -346,6 +352,9 @@ export function NotificationBell() {
           <div className="notif-panel__foot">
             <Link href="/notifications" className="btn-quiet" onClick={() => setOpen(false)}>
               Ver todos los avisos
+            </Link>
+            <Link href="/notifications?tab=enviados" className="btn-quiet" onClick={() => setOpen(false)}>
+              Enviados
             </Link>
             <Link href="/settings#avisos" className="btn-quiet" onClick={() => setOpen(false)}>
               Preferencias

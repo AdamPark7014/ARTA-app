@@ -86,6 +86,24 @@ terminada); la OC y el anticipo, quien los pidió; el formato, quien lo llenó a
 evento no avisa: es contexto. Una persona recibe un solo aviso por mensaje, y ninguno si ya la mencionaron o si bloqueó
 al autor. Quien no puede leer esa conversación recibe el aviso **sin el texto** y con liga a la cosa, no al mensaje.
 
+## Acuse de visto
+
+Para que nadie se quede con la duda de si vieron lo que mandó (Adam, 01-11-2026).
+
+- **Visto** (`Notification.seenAt`) es abrir la campana o la pantalla de Avisos con ese aviso a la vista. No es lo mismo
+  que **leído** (`readAt`, tocarlo), y ninguno de los dos quiere decir que ya se resolvió. Que llegue al teléfono no cuenta.
+- `POST /notifications/seen { ids }` (hasta 200) lo registra una sola vez. Tocar un aviso (`PATCH :id/read`) y «Marcar todo
+  leído» también cuentan, así que las apps ya instaladas mandan acuse al tocar.
+- **Quién recibe acuse:** quien mandó algo esperando que lo vieran (`wantsReceipt`): tareas asignadas, corregidas o
+  comentadas, menciones, arrobas, autorizaciones. Lo que solo informa no, y lo que manda el sistema tampoco.
+- **Cómo llega:** aviso `notice.seen` en la categoría General, sin sonar. Un acuse por cada persona que mandó algo cada vez que
+  se abre la campana: «Beto S. ya vio tu aviso» lleva a lo mismo que el aviso; «Beto S. ya vio 3 de tus avisos» lleva a Enviados.
+  El socket `notification:seen { notificationIds, userId, at }` refresca Enviados en vivo. El acuse no pide acuse.
+- **Enviados** (`GET /notifications/sent?entity=&take=`, en Avisos o `?tab=enviados`): lo que mandaste y quién ya lo vio, con el
+  mismo aviso a varias personas en una fila: `[{ key, type, title, body, linkUrl, createdAt, recipients: [{ id, fullName,
+  seenAt, readAt }] }]`.
+- Al verse el aviso de una tarea también se apaga «Sin abrir» de esa tarea (`TaskAssignment.seenAt`).
+
 ## Correo
 
 **No hay SMTP configurado en producción**: los resúmenes y las invitaciones se quedan en `NotificationOutbox` como

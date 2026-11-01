@@ -119,6 +119,24 @@ describe('Chat con referencias (e2e, base real)', () => {
     expect(notice).toMatchObject({ targetKind: 'task', targetId: taskId });
   });
 
+  it('al abrir la campana queda visto y a quien lo mandó le llega el acuse', async () => {
+    const notice = await prisma.notification.findFirstOrThrow({ where: { userId: ids.owner, type: 'chat.ref.task' } });
+    expect(notice.seenAt).toBeNull();
+    await expect(notifications.markSeen(ids.owner, [notice.id])).resolves.toBe(1);
+
+    const seen = await prisma.notification.findUniqueOrThrow({ where: { id: notice.id } });
+    expect(seen.seenAt).not.toBeNull();
+    expect(seen.readAt).toBeNull();
+    const receipt = await prisma.notification.findFirst({ where: { userId: ids.author, type: 'notice.seen' } });
+    expect(receipt).toMatchObject({ actorId: ids.owner, title: expect.stringContaining('ya vio tu aviso') });
+
+    await expect(notifications.markSeen(ids.owner, [notice.id])).resolves.toBe(0);
+    await expect(prisma.notification.count({ where: { userId: ids.author, type: 'notice.seen' } })).resolves.toBe(1);
+
+    const sent = await notifications.sentBy(ids.author, { entities: ['ARTA'] });
+    expect(sent[0].recipients[0]).toMatchObject({ id: ids.owner, seenAt: expect.any(Date) });
+  });
+
   it('el otro negocio ve la etiqueta, sin estado ni liga', async () => {
     const cards = await refs.cards(viewer('stranger', ['EXPLANADA'], 'dir_auditorio'), [{ kind: 'task', id: taskId }]);
     expect(cards.get(`task:${taskId}`)).toMatchObject({ canOpen: false, statusLabel: null, href: null });

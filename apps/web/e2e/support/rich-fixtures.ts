@@ -3097,6 +3097,27 @@ export const RICH_STUBS: ApiStubs = {
   '/chat/presence': { online: [BETO.id, OCTAVIO.id, PAULINA.id, MARIELA.id] },
   '/chat/prefs': { dndUntil: null },
   '/chat/colleagues': CHAT_COLLEAGUES,
+  '/notifications/sent': [
+    {
+      key: 'rich-1',
+      type: 'task.assigned',
+      title: 'Ana R. te asignó: Cotizar luces y dimmers',
+      linkUrl: '/tasks?task=tsk-rich-ref',
+      createdAt: minutesAgo(190),
+      recipients: [
+        { id: BETO.id, fullName: BETO.fullName, seenAt: minutesAgo(120), readAt: null },
+        { id: OCTAVIO.id, fullName: OCTAVIO.fullName, seenAt: null, readAt: null },
+      ],
+    },
+    {
+      key: 'rich-2',
+      type: 'po.requested',
+      title: 'Ana R. pide autorizar la OC 4F2A9C',
+      linkUrl: '/purchase-orders?po=po-rich-ref',
+      createdAt: minutesAgo(340),
+      recipients: [{ id: MARIELA.id, fullName: MARIELA.fullName, seenAt: minutesAgo(25), readAt: minutesAgo(20) }],
+    },
+  ],
   '/chat/saved': [
     {
       savedAt: minutesAgo(55),

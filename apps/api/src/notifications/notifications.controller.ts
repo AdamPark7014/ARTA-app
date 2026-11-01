@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Get,
+  HttpCode,
   NotFoundException,
   Param,
   Patch,
@@ -11,6 +12,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
+import { ArrayMaxSize, IsArray, IsString } from 'class-validator';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { entityScope } from '../common/entity-scope';
@@ -18,6 +20,10 @@ import { NotificationsService } from './notifications.service';
 import { normalizePrefs } from './notification-prefs';
 
 type AuthUser = { id: string; roleKey: string; entities?: string[] | null };
+
+class SeenDto {
+  @IsArray() @ArrayMaxSize(200) @IsString({ each: true }) ids!: string[];
+}
 
 @Controller('notifications')
 @UseGuards(JwtAuthGuard)
@@ -91,6 +97,19 @@ export class NotificationsController {
     return { count };
   }
 
+  /** Abrió la campana o la pantalla de Avisos con estos a la vista. A quien los mandó le llega el acuse. */
+  @Post('seen')
+  @HttpCode(200)
+  async seen(@Req() req: { user: AuthUser }, @Body() dto: SeenDto) {
+    return { seen: await this.notifications.markSeen(req.user.id, dto.ids) };
+  }
+
+  /** Lo que mandé y quién ya lo vio. */
+  @Get('sent')
+  sent(@Req() req: { user: AuthUser }, @Query('take') take?: string, @Query('entity') entity?: string) {
+    return this.notifications.sentBy(req.user.id, { take: Number(take) || undefined, entities: entityScope(req.user, entity) });
+  }
+
   @Patch(':id/read')
   async markRead(@Req() req: { user: AuthUser }, @Param('id') id: string) {
     const found = await this.prisma.notification.findUnique({ where: { id } });
@@ -98,17 +117,19 @@ export class NotificationsController {
     if (found.readAt) return found;
     const updated = await this.prisma.notification.update({ where: { id }, data: { readAt: new Date() } });
     void this.notifications.syncRead(req.user.id, id).catch(() => undefined);
+    // Quien lo toca ya lo vio (las apps instaladas todavía no avisan al abrir la campana).
+    void this.notifications.markSeen(req.user.id, [id]);
     return updated;
   }
 
   /** «Marcar todo como leído»; con `entity=`, solo lo de esa entidad (y lo que no tiene). */
   @Post('read-all')
   async markAllRead(@Req() req: { user: AuthUser }, @Query('entity') entity?: string) {
-    const res = await this.prisma.notification.updateMany({
-      where: { userId: req.user.id, readAt: null, ...this.scopeWhere(req.user, entity) },
-      data: { readAt: new Date() },
-    });
+    const where = { userId: req.user.id, readAt: null, ...this.scopeWhere(req.user, entity) };
+    const pending = await this.prisma.notification.findMany({ where, select: { id: true }, take: 200 });
+    const res = await this.prisma.notification.updateMany({ where, data: { readAt: new Date() } });
     if (res.count > 0) void this.notifications.syncRead(req.user.id, null).catch(() => undefined);
+    void this.notifications.markSeen(req.user.id, pending.map((n) => n.id));
     return { ok: true, updated: res.count };
   }
 }

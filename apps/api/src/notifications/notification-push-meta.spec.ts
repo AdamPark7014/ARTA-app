@@ -1,4 +1,4 @@
-import { pushMetaFor, shortName, pushActionsFor, pushCategoryFor, targetFromLink } from './notification-push-meta';
+import { pushMetaFor, shortName, pushActionsFor, pushCategoryFor, targetFromLink, wantsReceipt } from './notification-push-meta';
 
 describe('pushMetaFor', () => {
   it.each([
@@ -83,5 +83,23 @@ describe('botones del aviso por caso de uso', () => {
     expect(pushCategoryFor(['review'])).toBe('ARTA_APPROVAL');
     expect(pushCategoryFor(['reply', 'open'])).toBeNull();
     expect(pushCategoryFor([])).toBeNull();
+  });
+});
+
+describe('qué pide acuse de visto', () => {
+  it('lo que se manda esperando que lo vean', () => {
+    for (const t of ['task.assigned', 'task.rejected', 'task.submitted', 'chat.mention', 'chat.ref.task', 'chat.ref.po', 'po.requested', 'advance.requested', 'task.comment']) {
+      expect(wantsReceipt(t)).toBe(true);
+    }
+  });
+
+  it('no lo que solo informa ni el acuse mismo: si no, sería un bucle', () => {
+    for (const t of ['notice.seen', 'file.uploaded', 'event.updated', 'task.updated', 'task.evidence', 'chat.added']) {
+      expect(wantsReceipt(t)).toBe(false);
+    }
+  });
+
+  it('el acuse entra a la bandeja sin sonar', () => {
+    expect(pushMetaFor('notice.seen')).toEqual({ channel: 'general', priority: 'normal' });
   });
 });
