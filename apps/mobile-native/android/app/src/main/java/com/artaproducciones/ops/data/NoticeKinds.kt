@@ -2,6 +2,7 @@ package com.artaproducciones.ops.data
 
 import com.artaproducciones.ops.data.api.NotificationDto
 import com.artaproducciones.ops.data.api.NotificationPrefsDto
+import com.artaproducciones.ops.data.api.SentRecipientDto
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -34,12 +35,16 @@ enum class NoticeFilter(val label: String, val unreadOnly: Boolean) {
     ALL("Todos", false),
     UNREAD("Sin leer", true),
     ACTION("Por atender", true),
+
+    /** Lo que mandé y quién ya lo vio: es otra lista (`GET /notifications/sent`), no algo de la bandeja. */
+    SENT("Enviados", false),
     ;
 
     fun matches(n: NotificationDto): Boolean = when (this) {
         ALL -> true
         UNREAD -> n.readAt == null
         ACTION -> n.readAt == null && NoticeKinds.needsAction(n.type)
+        SENT -> false
     }
 }
 
@@ -157,6 +162,58 @@ object NoticeKinds {
             if (last?.day == day) groups[groups.lastIndex] = last.copy(items = last.items + item) else groups += NoticeGroup(day, listOf(item))
         }
         return groups
+    }
+
+    // ─── Acuse de visto (docs/AVISOS.md) ─────────────────────────────────────
+
+    /** Tope de ids en una llamada a `POST /notifications/seen` (`SeenDto` del API). */
+    private const val SEEN_BATCH = 200
+
+    /** «Beto S. ya vio tu aviso»: no pide nada, así que va en contorno y con el ojo. */
+    fun isSeenReceipt(type: String?): Boolean = type.orEmpty().lowercase(Locale.ROOT) == "notice.seen"
+
+    /**
+     * Lo que falta por reportar de [onScreen], en tandas que caben en una llamada: sin lo que ya se
+     * vio o se leyó (el servidor ya lo sabe) ni lo que ya se mandó en esta sesión ([alreadySent]).
+     */
+    fun seenBatches(onScreen: List<NotificationDto>, alreadySent: Set<String>): List<List<String>> =
+        onScreen.filter { it.seenAt == null && it.readAt == null && it.id !in alreadySent }
+            .map { it.id }
+            .distinct()
+            .chunked(SEEN_BATCH)
+
+    /** La fila cuenta como a la vista con al menos la mitad dentro de la lista: la que apenas asoma, no. */
+    fun isOnScreen(offset: Int, size: Int, viewportStart: Int, viewportEnd: Int): Boolean =
+        size > 0 && (minOf(offset + size, viewportEnd) - maxOf(offset, viewportStart)) * 2 >= size
+
+    fun wasSeen(r: SentRecipientDto): Boolean = r.seenAt != null || r.readAt != null
+
+    /** La píldora de una fila de Enviados. Igual que `summary` de `SentNotices.tsx`. */
+    fun sentSummary(recipients: List<SentRecipientDto>): String {
+        val seen = recipients.count { wasSeen(it) }
+        return when {
+            recipients.size == 1 -> if (seen == 1) "Visto" else "Sin ver"
+            recipients.isNotEmpty() && seen == recipients.size -> "Visto por todos"
+            seen > 0 -> "Visto por $seen de ${recipients.size}"
+            else -> "Nadie lo ha visto"
+        }
+    }
+
+    /** «Visto hace 5 min», «Visto el 20 oct» o «Sin ver». */
+    fun recipientStatus(r: SentRecipientDto, now: Instant = Instant.now(), zone: ZoneId = ZoneId.systemDefault()): String =
+        if (wasSeen(r)) stamped("Visto", r.seenAt ?: r.readAt, now, zone) else "Sin ver"
+
+    /** «Mandado hace 3 h» o «Mandado el 20 oct». */
+    fun sentAge(iso: String?, now: Instant = Instant.now(), zone: ZoneId = ZoneId.systemDefault()): String =
+        stamped("Mandado", iso, now, zone)
+
+    private fun stamped(label: String, iso: String?, now: Instant, zone: ZoneId): String {
+        val ago = age(iso, now, zone)
+        return when {
+            ago.isEmpty() -> label
+            ago == "ahora" || ago.startsWith("hace") -> "$label $ago"
+            else -> "$label el $ago"
+        }
     }
 
     // ─── Preferencias ───────────────────────────────────────────────────────

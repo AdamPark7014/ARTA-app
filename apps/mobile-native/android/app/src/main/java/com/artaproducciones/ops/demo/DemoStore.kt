@@ -84,6 +84,11 @@ internal object DemoEntities {
 internal object DemoNotices {
     const val PREFS_KEY = "notifications/preferences"
     const val DEFAULT_PREFS = """{"muted":[],"quietHours":{"enabled":false,"start":"22:00","end":"07:00"}}"""
+    const val SENT_PATH = "notifications/sent"
+    const val SEEN_PATH = "notifications/seen"
+
+    /** En el demo nadie recibe acuses: se acepta y no cambia nada. */
+    const val SEEN_ACCEPTED = """{"seen":0}"""
 
     private val CHANNELS = listOf("chat", "approvals", "tasks", "finance", "events", "documents", "general")
     private val HHMM = Regex("^([01]\\d|2[0-3]):[0-5]\\d\$")
@@ -99,6 +104,71 @@ internal object DemoNotices {
             .filter { n -> before == null || createdAt(n)?.isBefore(before) == true }
             .sortedByDescending { createdAt(it) ?: Instant.EPOCH }
             .take(take)
+        return JSONArray(rows).toString()
+    }
+
+    /**
+     * Como `GET /notifications/sent` del API, de lo más nuevo a lo más viejo: las tareas que la cuenta
+     * de demo pidió (`tasks/requested` de las fixtures) y su equipo. Las fechas salen de [now]: «Visto
+     * hace 5 min» se lee igual cualquier día. [entity] null = todas.
+     */
+    fun sent(now: Instant, entity: String?): String {
+        val mateo = "c7c0ae50aaa46fda9060d0947" to "Mateo Ríos Calderón"
+        val lucia = "c56ea4d06e6e4b57237532cd4" to "Lucía Méndez Arriaga"
+        val valeria = "ce08d1dd4a18c703877519be3" to "Valeria Ortega Luna"
+        val hospedaje = "/events/cbf9b2784b0797342c1629b09?tab=tasks&task=c40c99ec13d86f7ea7b453962"
+        val medios = "/events/c159b2f535555db3effcb05ba?tab=tasks&task=ced2acc3fbe422e89ea322ed0"
+
+        fun ago(minutes: Long?): Any = minutes?.let { now.minus(it, ChronoUnit.MINUTES).toString() } ?: JSONObject.NULL
+        fun recipient(person: Pair<String, String>, seen: Long? = null, read: Long? = null) = JSONObject()
+            .put("id", person.first)
+            .put("fullName", person.second)
+            .put("seenAt", ago(seen))
+            .put("readAt", ago(read))
+        fun row(type: String, title: String, body: String, link: String, minutes: Long, recipients: List<JSONObject>) = JSONObject()
+            .put("key", "$type|$link|$title")
+            .put("type", type)
+            .put("title", title)
+            .put("body", body)
+            .put("linkUrl", link)
+            .put("createdAt", ago(minutes))
+            .put("recipients", JSONArray(recipients))
+
+        val arta = listOf(
+            row("task.rejected", "Demo R. pide corregir: Reservar hospedaje para el trío", "Noche de Boleros", hospedaje, 12, listOf(recipient(mateo))),
+            row(
+                "task.mention",
+                "Demo R. te mencionó en: Reservar hospedaje para el trío",
+                "«Pidan factura a nombre de Arta».",
+                hospedaje,
+                190,
+                listOf(recipient(mateo, seen = 5), recipient(lucia, read = 95), recipient(valeria)),
+            ),
+            row("task.assigned", "Demo R. te asignó: Reservar hospedaje para el trío", "Noche de Boleros", hospedaje, 1560, listOf(recipient(mateo, seen = 1500, read = 1490))),
+        )
+        val auditorio = listOf(
+            row(
+                "task.mention",
+                "Demo R. te mencionó en: Cerrar la lista de medios para la rueda de prensa",
+                "«Falta confirmar la radio».",
+                medios,
+                40,
+                listOf(recipient(lucia), recipient(valeria)),
+            ),
+            row(
+                "task.assigned",
+                "Demo R. te asignó: Cerrar la lista de medios para la rueda de prensa",
+                "Eco de Volcanes · Gira 2026",
+                medios,
+                310,
+                listOf(recipient(mateo, seen = 300), recipient(lucia, seen = 45, read = 44)),
+            ),
+        )
+        val rows = when (entity) {
+            "ARTA" -> arta
+            "EXPLANADA" -> auditorio
+            else -> (arta + auditorio).sortedByDescending { createdAt(it) ?: Instant.EPOCH }
+        }
         return JSONArray(rows).toString()
     }
 

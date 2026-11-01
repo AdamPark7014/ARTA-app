@@ -12,10 +12,11 @@ struct NoticeSection: Identifiable {
 /// Bandeja de avisos con dos paginaciones: «Todos» recorre `GET notifications` y «Sin leer» /
 /// «Por atender» recorren `unread=1`. Las dos alimentan la misma lista (sin repetidos, de lo más
 /// nuevo a lo más viejo), así marcar uno como leído se ve igual en cualquier filtro.
+/// «Enviados» es otra lista con su propio modelo (`SentNoticesModel`): aquí no pinta nada.
 @MainActor
 final class NotificationsModel: ObservableObject {
     enum Filter: String, CaseIterable, Identifiable {
-        case all, unread, action
+        case all, unread, action, sent
 
         var id: String { rawValue }
 
@@ -24,8 +25,12 @@ final class NotificationsModel: ObservableObject {
             case .all: return "Todos"
             case .unread: return "Sin leer"
             case .action: return "Por atender"
+            case .sent: return "Enviados"
             }
         }
+
+        /// «Sin leer» y «Por atender» recorren `unread=1`.
+        var usesUnreadPages: Bool { self == .unread || self == .action }
     }
 
     private struct Cursor {
@@ -36,6 +41,8 @@ final class NotificationsModel: ObservableObject {
     }
 
     private static let pageSize = 50
+    /// Tope de `POST notifications/seen`.
+    private static let seenBatch = 200
 
     @Published private(set) var items: [NotificationDto] = []
     @Published private(set) var filter: Filter = .all
@@ -55,6 +62,15 @@ final class NotificationsModel: ObservableObject {
     private var serverUnread: Int?
     private var flashTask: Task<Void, Never>?
     private var bag = Set<AnyCancellable>()
+
+    // Acuse de visto (docs/AVISOS.md). Nada de esto se publica: no cambia lo que se pinta.
+    /// La pantalla dice que se está viendo. La lista también se trae en segundo plano (socket) y eso no cuenta.
+    private var screenVisible = false
+    /// Filas que la lista tiene pintadas ahora: de 50 bajadas, a la vista solo están unas cuantas.
+    private var rowsInView = Set<String>()
+    /// Ya mandados o en camino. Si la llamada falla se olvidan y se reintenta la próxima vez que estén a la vista.
+    private var seenSent = Set<String>()
+    private var seenFlush: Task<Void, Never>?
 
     init() {
         let rt = RealtimeClient.shared
@@ -76,6 +92,7 @@ final class NotificationsModel: ObservableObject {
         case .all: return items
         case .unread: return items.filter { !$0.isRead }
         case .action: return items.filter { !$0.isRead && NoticeKinds.needsAction($0.type) }
+        case .sent: return []
         }
     }
 
@@ -92,8 +109,11 @@ final class NotificationsModel: ObservableObject {
 
     /// Hay más que traer, o la primera página de este filtro falló y se puede reintentar.
     var canLoadMore: Bool {
-        if filter == .all { return allCursor.hasMore }
-        return unreadCursor.loaded ? unreadCursor.hasMore : moreError != nil
+        switch filter {
+        case .all: return allCursor.hasMore
+        case .unread, .action: return unreadCursor.loaded ? unreadCursor.hasMore : moreError != nil
+        case .sent: return false
+        }
     }
 
     // MARK: Carga
@@ -113,12 +133,13 @@ final class NotificationsModel: ObservableObject {
             if replace {
                 items = Self.sorted(fresh)
                 unreadCursor = Cursor()
+                scheduleSeen()
             } else {
                 merge(fresh)
             }
             loadError = nil
             loading = false
-            if replace && filter != .all { await loadFirstUnreadPage() }
+            if replace && filter.usesUnreadPages { await loadFirstUnreadPage() }
             await refreshUnreadTotal()
         } catch {
             // Se canceló (salió de la pestaña): la siguiente vez que aparezca vuelve a cargar.
@@ -147,7 +168,7 @@ final class NotificationsModel: ObservableObject {
         Haptics.selection()
         withAnimation(.snappy(duration: 0.22)) { filter = next }
         moreError = nil
-        if next != .all && !unreadCursor.loaded {
+        if next.usesUnreadPages && !unreadCursor.loaded {
             Task { await loadFirstUnreadPage() }
         }
     }
@@ -167,8 +188,8 @@ final class NotificationsModel: ObservableObject {
     }
 
     func loadMore() async {
-        guard !loadingMore, !filterLoading else { return }
-        let unreadOnly = filter != .all
+        guard !loadingMore, !filterLoading, filter != .sent else { return }
+        let unreadOnly = filter.usesUnreadPages
         let cursor = unreadOnly ? unreadCursor : allCursor
         if unreadOnly && !cursor.loaded {
             await loadFirstUnreadPage()
@@ -201,12 +222,68 @@ final class NotificationsModel: ObservableObject {
         for row in rows { byId[row.id] = row }
         items = Self.sorted(Array(byId.values))
         updateUnreadTotal()
+        scheduleSeen()
     }
 
     private static func sorted(_ rows: [NotificationDto]) -> [NotificationDto] {
         rows.sorted { a, b in
             a.createdAt == b.createdAt ? a.id > b.id : a.createdAt > b.createdAt
         }
+    }
+
+    // MARK: Visto
+
+    /// Se ve o se dejó de ver la bandeja. Salir antes de que salga la llamada no cuenta como visto.
+    func setOnScreen(_ onScreen: Bool) {
+        screenVisible = onScreen
+        if onScreen {
+            scheduleSeen()
+        } else {
+            seenFlush?.cancel()
+            seenFlush = nil
+        }
+    }
+
+    func rowAppeared(_ id: String) {
+        rowsInView.insert(id)
+        scheduleSeen()
+    }
+
+    func rowDisappeared(_ id: String) {
+        rowsInView.remove(id)
+    }
+
+    /// Las filas aparecen en ráfaga al pintar o al desplazar: una sola llamada, y lo que pasó de
+    /// largo en un deslizón rápido no alcanza a contar.
+    private func scheduleSeen() {
+        guard screenVisible, seenFlush == nil else { return }
+        seenFlush = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 400_000_000)
+            guard !Task.isCancelled else { return }
+            self?.flushSeen()
+        }
+    }
+
+    /// Manda lo que está a la vista justo ahora. La pestaña y la pila se preguntan aquí otra vez: una
+    /// pestaña oculta puede enterarse tarde de que ya no se ve. Un error nunca se le enseña a la persona.
+    private func flushSeen() {
+        seenFlush = nil
+        let router = AppRouter.shared
+        guard screenVisible, router.tab == .avisos, router.avisosPath.isEmpty, !DemoMode.isActive else { return }
+        let pending = visible.filter { row in
+            rowsInView.contains(row.id) && row.seenAt == nil && row.readAt == nil && !seenSent.contains(row.id)
+        }
+        guard !pending.isEmpty else { return }
+        let ids = pending.prefix(Self.seenBatch).map { $0.id }
+        seenSent.formUnion(ids)
+        Task { [weak self] in
+            do {
+                try await ApiClient.shared.notificationsSeen(ids)
+            } catch {
+                self?.seenSent.subtract(ids)
+            }
+        }
+        if pending.count > ids.count { scheduleSeen() }
     }
 
     // MARK: Leídos
@@ -307,11 +384,19 @@ struct NotificationsView: View {
     let onUnreadChange: (Int) -> Void
 
     @EnvironmentObject private var router: AppRouter
+    @Environment(\.scenePhase) private var scenePhase
     @StateObject private var model = NotificationsModel()
+    /// Aquí y no dentro de «Enviados»: al cambiar de filtro no se pierde lo ya bajado.
+    @StateObject private var sent = SentNoticesModel()
     /// «hace 5 min» sigue siendo cierto mientras la pantalla está abierta.
     @State private var now = Date()
 
     private static let minuteTicker = Timer.publish(every: 60, on: .main, in: .common).autoconnect()
+
+    /// La bandeja se está viendo: su pestaña, sin nada encima y con la app en primer plano.
+    private var isOnScreen: Bool {
+        scenePhase == .active && router.tab == .avisos && router.avisosPath.isEmpty
+    }
 
     var body: some View {
         content
@@ -321,7 +406,7 @@ struct NotificationsView: View {
             // Con el filtro fijo arriba el título grande no se muestra (igual que Tareas).
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                if model.unreadTotal > 0 {
+                if model.unreadTotal > 0 && model.filter != .sent {
                     ToolbarItem(placement: .topBarLeading) {
                         Button("Leer todo") { model.readAll() }
                             .accessibilityIdentifier("notice-read-all")
@@ -346,13 +431,24 @@ struct NotificationsView: View {
             }
             .onChange(of: model.unreadTotal) { _, total in onUnreadChange(total) }
             .onReceive(Self.minuteTicker) { now = $0 }
+            .onAppear { model.setOnScreen(isOnScreen) }
+            .onDisappear { model.setOnScreen(false) }
+            .onChange(of: isOnScreen) { _, visible in model.setOnScreen(visible) }
+            // `initial`: si el aviso abre la app, la pantalla nace con el pedido ya hecho.
+            .onChange(of: router.wantsSentNotices, initial: true) { _, wanted in
+                guard wanted else { return }
+                router.wantsSentNotices = false
+                model.select(.sent)
+            }
     }
 
     // MARK: Contenido
 
     @ViewBuilder
     private var content: some View {
-        if model.loading && model.items.isEmpty {
+        if model.filter == .sent {
+            SentNoticesView(model: sent, now: now) { row in openSent(row) }
+        } else if model.loading && model.items.isEmpty {
             NotificationsSkeleton()
         } else if let error = model.loadError, model.items.isEmpty {
             ModuleErrorView(message: error) { model.retry() }
@@ -408,6 +504,8 @@ struct NotificationsView: View {
             }
         }
         .accessibilityIdentifier("notice-row-\(item.id)")
+        .onAppear { model.rowAppeared(item.id) }
+        .onDisappear { model.rowDisappeared(item.id) }
     }
 
     private var footer: some View {
@@ -459,6 +557,8 @@ struct NotificationsView: View {
                         EmptyState(icon: "checkmark.circle", title: "Todo al día", message: "No tienes avisos sin leer.")
                     case .action:
                         EmptyState(icon: "checkmark.seal", title: "Nada por atender", message: "Cuando algo espere tu decisión aparecerá aquí.")
+                    case .sent:
+                        EmptyView()
                     }
                 }
             }
@@ -468,18 +568,25 @@ struct NotificationsView: View {
     }
 
     private var filterBar: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: ArtaSpace.s) {
-                ForEach(NotificationsModel.Filter.allCases) { item in
-                    FilterChip(title: chipTitle(item), isOn: model.filter == item) {
-                        model.select(item)
+        ScrollViewReader { proxy in
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: ArtaSpace.s) {
+                    ForEach(NotificationsModel.Filter.allCases) { item in
+                        FilterChip(title: chipTitle(item), isOn: model.filter == item) {
+                            model.select(item)
+                        }
+                        .accessibilityIdentifier("notice-filter-\(item.rawValue)")
+                        .id(item)
                     }
-                    .accessibilityIdentifier("notice-filter-\(item.rawValue)")
                 }
+                .padding(.horizontal, ArtaLayout.gutter)
             }
-            .padding(.horizontal, ArtaLayout.gutter)
+            .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
+            // Con cuatro filtros, «Enviados» puede quedar cortado al abrirlo desde un aviso.
+            .onChange(of: model.filter) { _, next in
+                withAnimation(.snappy(duration: 0.22)) { proxy.scrollTo(next, anchor: .center) }
+            }
         }
-        .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
         .artaHorizontalEdgeFade(ArtaLayout.gutter)
         .padding(.vertical, ArtaSpace.xxs)
         .background(ArtaColor.bg)
@@ -494,6 +601,13 @@ struct NotificationsView: View {
         model.markRead(item)
         // Lo que no tiene pantalla nativa se abre en la vista web dentro de la app.
         if let target = PanelLink.target(channelId: nil, messageId: nil, url: item.linkUrl, type: item.type) {
+            router.follow(target)
+        }
+    }
+
+    /// Sin tipo: quien pidió una autorización no es quien aprueba, así que va a su liga y no a Aprobaciones.
+    private func openSent(_ row: SentNotice) {
+        if let target = PanelLink.target(channelId: nil, messageId: nil, url: row.linkUrl, type: nil) {
             router.follow(target)
         }
     }
@@ -514,7 +628,7 @@ private struct NotificationRow: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: ArtaSpace.m) {
-            NoticeIcon(channel: channel, filled: NoticeKinds.needsAction(item.type))
+            NoticeIcon(channel: channel, filled: NoticeKinds.needsAction(item.type), symbol: NoticeKinds.symbol(item.type))
             VStack(alignment: .leading, spacing: ArtaSpace.xs) {
                 Text(item.title)
                     .font(.subheadline.weight(item.isRead ? .regular : .semibold))
@@ -564,10 +678,12 @@ struct NoticeIcon: View {
     let channel: NoticeChannel
     var filled = false
     var size: CGFloat = 36
+    /// Ícono propio del tipo (`NoticeKinds.symbol`); sin él, el de la categoría.
+    var symbol: String? = nil
 
     var body: some View {
         let shape = ArtaControlShape()
-        Image(systemName: channel.icon)
+        Image(systemName: symbol ?? channel.icon)
             .font(.system(size: size * 0.42, weight: .medium))
             .foregroundStyle(filled ? ArtaColor.onAccent : ArtaColor.muted)
             .frame(width: size, height: size)
@@ -577,8 +693,8 @@ struct NoticeIcon: View {
     }
 }
 
-/// Esqueleto de avisos mientras llega la primera carga.
-private struct NotificationsSkeleton: View {
+/// Esqueleto de avisos mientras llega la primera carga (bandeja y «Enviados»).
+struct NotificationsSkeleton: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 22) {
             SkeletonBar(width: 44, height: 9)

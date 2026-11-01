@@ -107,6 +107,12 @@ enum NoticeKinds {
             || t == "chat.mention"
     }
 
+    /// Ícono propio del tipo; `nil` = el de su categoría. El acuse de visto lleva un ojo y, como no
+    /// pide nada, va en contorno y no entra a `needsAction`.
+    static func symbol(_ type: String?) -> String? {
+        (type ?? "").lowercased() == "notice.seen" ? "eye" : nil
+    }
+
     private static let dayMonth: DateFormatter = formatter("d MMM")
     private static let dayMonthYear: DateFormatter = formatter("d MMM yyyy")
 
@@ -128,6 +134,14 @@ enum NoticeKinds {
         let cal = Calendar.current
         let sameYear = cal.component(.year, from: date) == cal.component(.year, from: now)
         return (sameYear ? dayMonth : dayMonthYear).string(from: date).replacingOccurrences(of: ".", with: "")
+    }
+
+    /// «Visto hace 5 min», «Visto ahora», «Visto el 3 nov». Sin fecha legible, solo «Visto».
+    static func stamp(_ verb: String, _ iso: String?, now: Date = Date()) -> String {
+        guard let iso else { return verb }
+        let when = age(iso, now: now)
+        if when.isEmpty { return verb }
+        return when == "ahora" || when.hasPrefix("hace ") ? "\(verb) \(when)" : "\(verb) el \(when)"
     }
 
     /// «Hoy», «Ayer» o «Antes».

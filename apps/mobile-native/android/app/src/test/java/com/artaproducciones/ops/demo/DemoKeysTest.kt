@@ -1,5 +1,10 @@
 package com.artaproducciones.ops.demo
 
+import com.artaproducciones.ops.data.NoticeKinds
+import com.artaproducciones.ops.data.api.SentNoticeDto
+import com.squareup.moshi.Moshi
+import com.squareup.moshi.Types
+import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import org.json.JSONArray
 import org.json.JSONObject
@@ -78,6 +83,26 @@ class DemoNoticesTest {
     @Test
     fun unreadLeavesOnlyUnread() {
         assertEquals(listOf("a", "c"), ids("take=30&unread=1"))
+    }
+
+    /** Enviados de muestra: se leen como lo del API, por entidad y con todos los estados de la píldora. */
+    @Test
+    fun sentSamplesLookLikeTheApi() {
+        val now = Instant.parse("2026-11-01T18:00:00Z")
+        val adapter = Moshi.Builder().add(KotlinJsonAdapterFactory()).build()
+            .adapter<List<SentNoticeDto>>(Types.newParameterizedType(List::class.java, SentNoticeDto::class.java))
+        val arta = adapter.fromJson(DemoNotices.sent(now, "ARTA"))!!
+        val auditorio = adapter.fromJson(DemoNotices.sent(now, "EXPLANADA"))!!
+        val all = adapter.fromJson(DemoNotices.sent(now, null))!!
+
+        assertEquals(arta.size + auditorio.size, all.size)
+        assertEquals(all.size, all.map { it.key }.toSet().size)
+        assertEquals(all.map { it.createdAt }.sortedByDescending { it }, all.map { it.createdAt })
+        assertEquals(arta.map { it.createdAt }.sortedByDescending { it }, arta.map { it.createdAt })
+        assertEquals(
+            setOf("Visto", "Sin ver", "Visto por 2 de 3", "Visto por todos", "Nadie lo ha visto"),
+            all.map { NoticeKinds.sentSummary(it.recipients) }.toSet(),
+        )
     }
 
     @Test

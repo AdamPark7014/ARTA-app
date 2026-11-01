@@ -71,6 +71,11 @@ object RealtimeClient {
     /** Aviso leído en esta u otra pantalla (id; null = se marcaron todos). */
     val notificationRead: SharedFlow<String?> = _notificationRead
 
+    private val _notificationSeen = MutableSharedFlow<Unit>(extraBufferCapacity = 8)
+
+    /** Alguien acaba de ver algo que mandé: Enviados se vuelve a pedir. */
+    val notificationSeen: SharedFlow<Unit> = _notificationSeen
+
     private fun obj(args: Array<out Any?>): JSONObject? = args.firstOrNull() as? JSONObject
 
     private fun message(o: JSONObject): ChatMessage? = runCatching { messageAdapter.fromJson(o.toString()) }
@@ -134,6 +139,7 @@ object RealtimeClient {
     private val onNotificationRead = Emitter.Listener { args ->
         obj(args)?.let { o -> _notificationRead.tryEmit(if (o.isNull("notificationId")) null else o.optString("notificationId").takeIf { id -> id.isNotBlank() }) }
     }
+    private val onNotificationSeen = Emitter.Listener { _notificationSeen.tryEmit(Unit) }
 
     private val onConnect = Emitter.Listener {
         _connected.value = true
@@ -181,6 +187,7 @@ object RealtimeClient {
         s.on("chat:refs-changed", onRefsChanged)
         s.on("notification:new", onNotification)
         s.on("notification:read", onNotificationRead)
+        s.on("notification:seen", onNotificationSeen)
         socket = s
         s.connect()
     }

@@ -94,6 +94,7 @@ internal class DemoInterceptor(context: Context) : Interceptor {
             s.size == 4 && s[0] == "chat" && s[1] == "channels" && s[3] == "pins" -> """{"messages":[]}"""
             path == "analytics/purchase-orders" -> """{"orders":[]}"""
             path == DemoNotices.PREFS_KEY -> DemoNotices.DEFAULT_PREFS
+            path == DemoNotices.SENT_PATH -> DemoNotices.sent(Instant.now(), entity)
             path in LISTS || path.startsWith("tasks/event/") -> "[]"
             else -> null
         }
@@ -167,6 +168,7 @@ internal class DemoInterceptor(context: Context) : Interceptor {
             path == "chat/channels" || path == "chat/group-dm" -> null
             // Avisos
             path == DemoNotices.PREFS_KEY -> DemoNotices.normalizePrefs(body).toString().also { store.put(path, it) }
+            path == DemoNotices.SEEN_PATH -> DemoNotices.SEEN_ACCEPTED
             s.size == 3 && s[0] == "notifications" && s[2] == "read" -> notificationRead(s[1])
             path == "notifications/read-all" -> {
                 // Con `?entity=`, como el API: solo los de esa entidad (y los que no tienen).

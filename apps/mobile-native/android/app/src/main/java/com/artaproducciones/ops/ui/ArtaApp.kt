@@ -156,6 +156,9 @@ sealed interface DeepLink {
     data class Advance(val advanceId: String) : DeepLink
     data object Events : DeepLink
     data class Section(val tab: Tab) : DeepLink
+
+    /** Avisos › Enviados (`/notifications?tab=enviados`): el acuse de varios avisos lleva aquí. */
+    data object SentNotices : DeepLink
     data class Web(val path: String, val title: String? = null) : DeepLink
 
     val isNative: Boolean get() = this !is Web
@@ -194,7 +197,7 @@ sealed interface DeepLink {
 
             return when (segments.firstOrNull()) {
                 null, "dashboard" -> Section(Tab.Inicio)
-                "notifications" -> Section(Tab.Avisos)
+                "notifications" -> if (q("tab") == "enviados") SentNotices else Section(Tab.Avisos)
                 "chat" -> q("channel")?.let { Chat(it, q("msg")) } ?: Section(Tab.Chats)
                 "tasks" -> (segments.getOrNull(1) ?: q("task"))?.let(::Task) ?: Section(Tab.Tareas)
                 "calendar" -> Events
@@ -292,6 +295,8 @@ private fun Modifier.entitySwitchVeil(entity: BizEntity): Modifier {
 private fun SignedInNav(user: UserDto, pendingLink: StateFlow<DeepLink?>, onLinkConsumed: () -> Unit) {
     val nav = rememberNavController()
     var tab by rememberSaveable { mutableStateOf(Tab.Inicio) }
+    // Una liga pidió Avisos › Enviados; la pantalla lo apaga en cuanto la abre.
+    var showSentNotices by remember { mutableStateOf(false) }
     val link by pendingLink.collectAsState()
 
     fun go(target: DeepLink) {
@@ -305,6 +310,11 @@ private fun SignedInNav(user: UserDto, pendingLink: StateFlow<DeepLink?>, onLink
             is DeepLink.Section -> {
                 nav.popBackStack("home", inclusive = false)
                 tab = target.tab
+            }
+            DeepLink.SentNotices -> {
+                nav.popBackStack("home", inclusive = false)
+                tab = Tab.Avisos
+                showSentNotices = true
             }
             is DeepLink.Web -> nav.navigate("web?path=${Uri.encode(target.path)}&title=${Uri.encode(target.title.orEmpty())}")
         }
@@ -371,6 +381,8 @@ private fun SignedInNav(user: UserDto, pendingLink: StateFlow<DeepLink?>, onLink
                 openChat = { id -> nav.navigate("chat/$id") },
                 moduleNav = moduleNav,
                 openLink = ::go,
+                showSentNotices = showSentNotices,
+                onSentNoticesShown = { showSentNotices = false },
             )
         }
         composable(
@@ -490,6 +502,8 @@ private fun HomeScreen(
     openChat: (String) -> Unit,
     moduleNav: ModuleNav,
     openLink: (DeepLink) -> Unit,
+    showSentNotices: Boolean,
+    onSentNoticesShown: () -> Unit,
 ) {
     var chatUnread by remember { mutableIntStateOf(0) }
     var noticeUnread by remember { mutableIntStateOf(0) }
@@ -647,6 +661,8 @@ private fun HomeScreen(
                             openLink = openLink,
                             onUnreadChange = { noticeUnread = it },
                             openPrefs = moduleNav::openNotificationPrefs,
+                            showSent = showSentNotices,
+                            onSentShown = onSentNoticesShown,
                         )
                         Tab.Mas -> MoreScreen(user = user, nav = moduleNav)
                     }

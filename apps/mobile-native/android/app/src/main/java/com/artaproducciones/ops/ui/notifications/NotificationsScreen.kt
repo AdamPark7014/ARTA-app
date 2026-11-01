@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListLayoutInfo
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
@@ -32,6 +33,7 @@ import androidx.compose.material.icons.outlined.NotificationsNone
 import androidx.compose.material.icons.outlined.Payments
 import androidx.compose.material.icons.outlined.TaskAlt
 import androidx.compose.material.icons.outlined.Tune
+import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -47,6 +49,7 @@ import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -65,6 +68,7 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.heading
@@ -72,6 +76,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
 import com.artaproducciones.ops.data.ActiveEntity
 import com.artaproducciones.ops.data.NoticeChannel
 import com.artaproducciones.ops.data.NoticeFeed
@@ -79,6 +84,7 @@ import com.artaproducciones.ops.data.NoticeFilter
 import com.artaproducciones.ops.data.NoticeKinds
 import com.artaproducciones.ops.data.api.ApiClient
 import com.artaproducciones.ops.data.api.NotificationDto
+import com.artaproducciones.ops.data.api.NotificationsSeenBody
 import com.artaproducciones.ops.data.api.userMessage
 import com.artaproducciones.ops.data.realtime.RealtimeClient
 import com.artaproducciones.ops.ui.DeepLink
@@ -106,6 +112,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.launch
 import java.time.Instant
@@ -117,23 +124,33 @@ import java.time.Instant
 internal val noticeScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
 private const val MINUTE_MS = 60_000L
-private const val REALTIME_DEBOUNCE_MS = 250L
+internal const val REALTIME_DEBOUNCE_MS = 250L
 
 /** Filas antes del final en las que se pide la página siguiente. */
 private const val LOAD_MORE_MARGIN = 4
 
+/** Lo que pasa de largo al deslizar no se vio: la lista tiene que quedarse quieta este rato. */
+private const val SEEN_SETTLE_MS = 500L
+
 /**
  * Avisos de todos los procesos (la campana del panel web): por día, con filtro arriba, deslizar para
  * marcar leído y más al llegar abajo. La caché de [ModulesStore] evita el esqueleto al volver.
+ * [showSent]: una liga pidió la pestaña Enviados.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun NotificationsScreen(openLink: (DeepLink) -> Unit, onUnreadChange: (Int) -> Unit, openPrefs: () -> Unit) {
+fun NotificationsScreen(
+    openLink: (DeepLink) -> Unit,
+    onUnreadChange: (Int) -> Unit,
+    openPrefs: () -> Unit,
+    showSent: Boolean = false,
+    onSentShown: () -> Unit = {},
+) {
     val scope = rememberCoroutineScope()
     val haptics = rememberHaptics()
     val entity = LocalActiveEntity.current
     val snackbar = remember { SnackbarHostState() }
-    var filter by rememberSaveable { mutableStateOf(NoticeFilter.ALL) }
+    var filter by rememberSaveable { mutableStateOf(if (showSent) NoticeFilter.SENT else NoticeFilter.ALL) }
     var feeds by remember(entity) { mutableStateOf(ModulesStore.noticeFeeds.toMap()) }
     var unreadTotal by remember(entity) { mutableIntStateOf(0) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -146,6 +163,13 @@ fun NotificationsScreen(openLink: (DeepLink) -> Unit, onUnreadChange: (Int) -> U
         while (true) {
             delay(MINUTE_MS)
             value = Instant.now()
+        }
+    }
+
+    LaunchedEffect(showSent) {
+        if (showSent) {
+            filter = NoticeFilter.SENT
+            onSentShown()
         }
     }
 
@@ -262,7 +286,8 @@ fun NotificationsScreen(openLink: (DeepLink) -> Unit, onUnreadChange: (Int) -> U
     fun loadMore() {
         val current = feeds[unreadOnly] ?: return
         val cursor = current.items.lastOrNull()?.createdAt ?: return
-        if (loadingMore || moreFailed || !current.hasMore) return
+        // En Enviados esta lista no está en pantalla: parecería que ya se llegó abajo.
+        if (filter == NoticeFilter.SENT || loadingMore || moreFailed || !current.hasMore) return
         val query = unreadOnly
         val forEntity = entity
         loadingMore = true
@@ -293,10 +318,26 @@ fun NotificationsScreen(openLink: (DeepLink) -> Unit, onUnreadChange: (Int) -> U
     // Otro filtro es otra lista: empieza arriba. Al volver a la pestaña, en cambio, sigue donde iba.
     var listedFilter by rememberSaveable { mutableStateOf(filter) }
     LaunchedEffect(filter) {
-        if (listedFilter != filter) {
+        // Enviados tiene su propia lista; esta sigue donde iba y no se mueve fuera de pantalla.
+        if (filter != NoticeFilter.SENT && listedFilter != filter) {
             listedFilter = filter
             listState.scrollToItem(0)
         }
+    }
+
+    // Lo que está a la vista ya se vio (docs/AVISOS.md › Acuse de visto). Con la app en segundo plano
+    // o con otra pantalla encima baja de RESUMED; el push, el globo y traer la lista no pasan por aquí.
+    val lifecycleState by LocalLifecycleOwner.current.lifecycle.currentStateFlow.collectAsState()
+    val inFront = lifecycleState.isAtLeast(Lifecycle.State.RESUMED)
+    val shownById = remember(shown) { shown.associateBy { it.id } }
+    LaunchedEffect(listState, shownById, filter, inFront, tick) {
+        if (!inFront || filter == NoticeFilter.SENT) return@LaunchedEffect
+        snapshotFlow { noticesOnScreen(listState.layoutInfo, shownById) }
+            .distinctUntilChanged()
+            .collectLatest { onScreen ->
+                delay(SEEN_SETTLE_MS)
+                reportSeen(onScreen)
+            }
     }
 
     // Al llegar abajo, la página siguiente. También sirve con listas cortas: «Por atender» filtra lo
@@ -316,60 +357,67 @@ fun NotificationsScreen(openLink: (DeepLink) -> Unit, onUnreadChange: (Int) -> U
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text("Avisos", style = ArtaType.ScreenTitle, color = ArtaColors.Text, modifier = Modifier.weight(1f).semantics { heading() })
-                if (unreadTotal > 0) {
+                if (unreadTotal > 0 && filter != NoticeFilter.SENT) {
                     IconButton(onClick = ::markAll) { Icon(Icons.Outlined.DoneAll, contentDescription = "Marcar todo leído") }
                 }
                 IconButton(onClick = openPrefs) { Icon(Icons.Outlined.Tune, contentDescription = "Preferencias de avisos") }
             }
             // Con la letra del sistema agrandada el contador ya no cabe sin cortar «Sin leer».
-            val roomForCount = LocalDensity.current.fontScale <= 1.15f
+            val roomForCount = LocalDensity.current.fontScale <= 1.05f
+            val filterLabels = NoticeFilter.entries.map {
+                if (it == NoticeFilter.UNREAD && roomForCount && unreadTotal in 1..99) "${it.label} · $unreadTotal" else it.label
+            }
             SegmentedControl(
-                options = NoticeFilter.entries.map {
-                    if (it == NoticeFilter.UNREAD && roomForCount && unreadTotal in 1..99) "${it.label} · $unreadTotal" else it.label
-                },
+                options = filterLabels,
                 selected = filter.ordinal,
                 onSelect = { filter = NoticeFilter.entries[it] },
+                // «Por atender» no cabe en una cuarta parte de un teléfono de 360 dp.
+                weights = filterLabels.map { it.length + 4f },
                 modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 8.dp),
             )
-            PullToRefreshBox(
-                isRefreshing = refreshing,
-                onRefresh = {
-                    refreshing = true
-                    tick++
-                },
-                modifier = Modifier.fillMaxSize(),
-            ) {
-                PhaseSwap(listPhase(feed != null, error)) { phase ->
-                    when (phase) {
-                        ListPhase.Error -> ErrorState(error.orEmpty(), onRetry = { tick++ })
-                        ListPhase.Loading -> ListSkeleton(8)
-                        ListPhase.Ready -> LazyColumn(
-                            Modifier.fillMaxSize().fadingEdges(listState, start = 16.dp, end = 28.dp),
-                            state = listState,
-                            contentPadding = PaddingValues(top = 2.dp, bottom = 32.dp),
-                        ) {
-                            error?.let { msg -> item(key = "error") { InlineError(msg) { tick++ } } }
-                            if (shown.isEmpty() && feed?.hasMore != true) {
-                                item(key = "empty") { NoticesEmpty(filter, Modifier.animateItem()) }
-                            }
-                            groups.forEach { group ->
-                                item(key = "h-${group.day.name}", contentType = "header") {
-                                    SectionTitle(group.day.label, Modifier.animateItem())
+            if (filter == NoticeFilter.SENT) {
+                SentNotices(now = now, openLink = openLink)
+            } else {
+                PullToRefreshBox(
+                    isRefreshing = refreshing,
+                    onRefresh = {
+                        refreshing = true
+                        tick++
+                    },
+                    modifier = Modifier.fillMaxSize(),
+                ) {
+                    PhaseSwap(listPhase(feed != null, error)) { phase ->
+                        when (phase) {
+                            ListPhase.Error -> ErrorState(error.orEmpty(), onRetry = { tick++ })
+                            ListPhase.Loading -> ListSkeleton(8)
+                            ListPhase.Ready -> LazyColumn(
+                                Modifier.fillMaxSize().fadingEdges(listState, start = 16.dp, end = 28.dp),
+                                state = listState,
+                                contentPadding = PaddingValues(top = 2.dp, bottom = 32.dp),
+                            ) {
+                                error?.let { msg -> item(key = "error") { InlineError(msg) { tick++ } } }
+                                if (shown.isEmpty() && feed?.hasMore != true) {
+                                    item(key = "empty") { NoticesEmpty(filter, Modifier.animateItem()) }
                                 }
-                                items(group.items, key = { it.id }, contentType = { "notice" }) { n ->
-                                    NoticeRow(
-                                        n = n,
-                                        now = now,
-                                        divider = n !== group.items.last(),
-                                        modifier = Modifier.animateItem(),
-                                        onOpen = { open(n) },
-                                        onMarkRead = { markRead(n, undoOnFailure = true) },
-                                    )
+                                groups.forEach { group ->
+                                    item(key = "h-${group.day.name}", contentType = "header") {
+                                        SectionTitle(group.day.label, Modifier.animateItem())
+                                    }
+                                    items(group.items, key = { it.id }, contentType = { "notice" }) { n ->
+                                        NoticeRow(
+                                            n = n,
+                                            now = now,
+                                            divider = n !== group.items.last(),
+                                            modifier = Modifier.animateItem(),
+                                            onOpen = { open(n) },
+                                            onMarkRead = { markRead(n, undoOnFailure = true) },
+                                        )
+                                    }
                                 }
-                            }
-                            if (feed?.hasMore == true) {
-                                item(key = "more", contentType = "more") {
-                                    LoadMoreFooter(failed = moreFailed, onRetry = { moreFailed = false })
+                                if (feed?.hasMore == true) {
+                                    item(key = "more", contentType = "more") {
+                                        LoadMoreFooter(failed = moreFailed, onRetry = { moreFailed = false })
+                                    }
                                 }
                             }
                         }
@@ -381,9 +429,36 @@ fun NotificationsScreen(openLink: (DeepLink) -> Unit, onUnreadChange: (Int) -> U
     }
 }
 
+/** Las filas de avisos que se alcanzan a ver; los títulos de día y el pie no cuentan. */
+private fun noticesOnScreen(info: LazyListLayoutInfo, shown: Map<String, NotificationDto>): List<NotificationDto> =
+    info.visibleItemsInfo
+        .filter { NoticeKinds.isOnScreen(it.offset, it.size, info.viewportStartOffset, info.viewportEndOffset) }
+        .mapNotNull { item -> (item.key as? String)?.let { shown[it] } }
+
+/**
+ * Manda lo que falta de [onScreen]. Un error aquí nunca se enseña (el API viejo no tiene esta ruta):
+ * se olvidan esos ids para reintentar la próxima vez que estén a la vista.
+ */
+private fun reportSeen(onScreen: List<NotificationDto>) {
+    val reported = ModulesStore.noticesReportedSeen
+    NoticeKinds.seenBatches(onScreen, reported).forEach { ids ->
+        reported += ids
+        noticeScope.launch {
+            try {
+                ApiClient.api.notificationsSeen(NotificationsSeenBody(ids))
+            } catch (e: Exception) {
+                reported -= ids.toSet()
+                if (e is CancellationException) throw e
+            }
+        }
+    }
+}
+
 @Composable
 private fun NoticesEmpty(filter: NoticeFilter, modifier: Modifier = Modifier) {
     when (filter) {
+        // En Enviados esta lista no se pinta: tiene su propio vacío (SentNotices).
+        NoticeFilter.SENT -> Unit
         NoticeFilter.ALL -> EmptyState(
             "No tienes avisos",
             "Aquí llegan las entregas, aprobaciones y menciones de tu equipo.",
@@ -427,12 +502,12 @@ internal fun NoticeChannel.icon(): ImageVector = when (this) {
  * Círculo en ARTA y cuadrado de 4 dp en Auditorio: es el radio de control de cada entidad.
  */
 @Composable
-internal fun NoticeIcon(channel: NoticeChannel, action: Boolean, modifier: Modifier = Modifier) {
+internal fun NoticeIcon(channel: NoticeChannel, action: Boolean, modifier: Modifier = Modifier, icon: ImageVector = channel.icon()) {
     val t = LocalArtaTokens.current
     val shape = t.controlShape
     val paint = if (action) Modifier.background(t.accentBrush, shape) else Modifier.border(1.dp, t.lineStrong, shape)
     Box(modifier.size(40.dp).clip(shape).then(paint), contentAlignment = Alignment.Center) {
-        Icon(channel.icon(), contentDescription = null, tint = if (action) t.onAccent else t.secondary, modifier = Modifier.size(19.dp))
+        Icon(icon, contentDescription = null, tint = if (action) t.onAccent else t.secondary, modifier = Modifier.size(19.dp))
     }
 }
 
@@ -511,7 +586,11 @@ private fun NoticeRow(
                     .padding(start = 20.dp, end = 16.dp, top = 14.dp, bottom = 14.dp),
                 verticalAlignment = Alignment.Top,
             ) {
-                NoticeIcon(channel, action = NoticeKinds.needsAction(n.type))
+                NoticeIcon(
+                    channel,
+                    action = NoticeKinds.needsAction(n.type),
+                    icon = if (NoticeKinds.isSeenReceipt(n.type)) Icons.Outlined.Visibility else channel.icon(),
+                )
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text(

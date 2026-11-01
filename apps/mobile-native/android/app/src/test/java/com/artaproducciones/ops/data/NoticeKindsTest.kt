@@ -2,6 +2,8 @@ package com.artaproducciones.ops.data
 
 import com.artaproducciones.ops.data.api.NotificationDto
 import com.artaproducciones.ops.data.api.NotificationPrefsDto
+import com.artaproducciones.ops.data.api.SentNoticeDto
+import com.artaproducciones.ops.data.api.SentRecipientDto
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 import org.junit.Assert.assertEquals
@@ -154,6 +156,113 @@ class NoticeKindsTest {
         assertEquals(7 to 5, NoticeKinds.parseHhMm("07:05"))
         assertEquals(22 to 0, NoticeKinds.parseHhMm("25:99"))
         assertEquals("07:05", NoticeKinds.hhMm(7, 5))
+    }
+
+    @Test
+    fun seenReceiptOnlyInforms() {
+        assertTrue(NoticeKinds.isSeenReceipt("notice.seen"))
+        assertTrue(NoticeKinds.isSeenReceipt("NOTICE.Seen"))
+        assertFalse(NoticeKinds.isSeenReceipt("task.assigned"))
+        assertFalse(NoticeKinds.isSeenReceipt(null))
+        assertFalse(NoticeKinds.needsAction("notice.seen"))
+        assertEquals(NoticeChannel.GENERAL, NoticeKinds.channelOf("notice.seen"))
+    }
+
+    @Test
+    fun sentIsNotAFilterOfTheInbox() {
+        assertFalse(NoticeFilter.SENT.matches(notice("a")))
+        assertFalse(NoticeFilter.SENT.unreadOnly)
+    }
+
+    @Test
+    fun reportsOnlyWhatTheServerDoesNotKnowYet() {
+        val onScreen = listOf(
+            notice("nuevo"),
+            notice("visto").copy(seenAt = "2026-11-01T17:10:00Z"),
+            notice("leido", readAt = "2026-11-01T17:10:00Z"),
+            notice("mandado"),
+            notice("otro"),
+            notice("nuevo"),
+        )
+        assertEquals(listOf(listOf("nuevo", "otro")), NoticeKinds.seenBatches(onScreen, setOf("mandado")))
+    }
+
+    @Test
+    fun nothingNewMeansNoCall() {
+        val onScreen = listOf(notice("a", readAt = "2026-11-01T17:10:00Z"), notice("b"))
+        assertEquals(emptyList<List<String>>(), NoticeKinds.seenBatches(onScreen, setOf("b")))
+        assertEquals(emptyList<List<String>>(), NoticeKinds.seenBatches(emptyList(), emptySet()))
+    }
+
+    @Test
+    fun noCallCarriesMoreThanTheApiAccepts() {
+        val onScreen = (1..450).map { notice("n$it") }
+        val batches = NoticeKinds.seenBatches(onScreen, emptySet())
+        assertEquals(listOf(200, 200, 50), batches.map { it.size })
+        assertEquals(onScreen.map { it.id }, batches.flatten())
+    }
+
+    /** Lista de 1000 px y filas de 100: lo que apenas asoma por arriba o por abajo no se ha visto. */
+    @Test
+    fun aRowCountsWithAtLeastHalfOfItInView() {
+        fun onScreen(offset: Int, size: Int = 100) = NoticeKinds.isOnScreen(offset, size, 0, 1000)
+        assertTrue(onScreen(0))
+        assertTrue(onScreen(950))
+        assertFalse(onScreen(960))
+        assertFalse(onScreen(1000))
+        assertTrue(onScreen(-50))
+        assertFalse(onScreen(-60))
+        assertFalse(onScreen(0, size = 0))
+    }
+
+    private fun person(seenAt: String? = null, readAt: String? = null) =
+        SentRecipientDto(id = "p", fullName = "Persona", seenAt = seenAt, readAt = readAt)
+
+    @Test
+    fun pillSummarizesWhoSawIt() {
+        val seen = person(seenAt = "2026-11-01T17:55:00Z")
+        val read = person(readAt = "2026-11-01T17:55:00Z")
+        val waiting = person()
+        assertEquals("Visto", NoticeKinds.sentSummary(listOf(seen)))
+        assertEquals("Visto", NoticeKinds.sentSummary(listOf(read)))
+        assertEquals("Sin ver", NoticeKinds.sentSummary(listOf(waiting)))
+        assertEquals("Visto por 2 de 3", NoticeKinds.sentSummary(listOf(seen, read, waiting)))
+        assertEquals("Visto por todos", NoticeKinds.sentSummary(listOf(seen, read)))
+        assertEquals("Nadie lo ha visto", NoticeKinds.sentSummary(listOf(waiting, waiting)))
+        assertEquals("Nadie lo ha visto", NoticeKinds.sentSummary(emptyList()))
+    }
+
+    @Test
+    fun eachPersonSaysWhenSheSawIt() {
+        fun status(seenAt: String? = null, readAt: String? = null) = NoticeKinds.recipientStatus(person(seenAt, readAt), now, puebla)
+        assertEquals("Sin ver", status())
+        assertEquals("Visto hace 5 min", status(seenAt = "2026-11-01T17:55:00Z"))
+        assertEquals("Visto hace 5 min", status(readAt = "2026-11-01T17:55:00Z"))
+        assertEquals("Visto hace 5 min", status(seenAt = "2026-11-01T17:55:00Z", readAt = "2026-11-01T17:58:00Z"))
+        assertEquals("Visto ahora", status(seenAt = "2026-11-01T17:59:50Z"))
+        assertTrue(status(seenAt = "2026-10-20T15:00:00Z").startsWith("Visto el 20 "))
+        assertEquals("Visto", status(seenAt = "no es fecha"))
+        assertEquals("Mandado hace 3 h", NoticeKinds.sentAge("2026-11-01T15:00:00Z", now, puebla))
+        assertEquals("Mandado", NoticeKinds.sentAge(null, now, puebla))
+    }
+
+    /** El API viejo no manda `seenAt`, y Enviados aguanta filas incompletas. */
+    @Test
+    fun seenFieldsAreOptional() {
+        val moshi = Moshi.Builder().add(KotlinJsonAdapterFactory()).build()
+        val notices = moshi.adapter(NotificationDto::class.java)
+        val seen = notices.fromJson("""{"id":"n","type":"x","title":"t","createdAt":"2026-11-01T17:00:00Z","seenAt":"2026-11-01T17:30:00Z"}""")!!
+        assertEquals("2026-11-01T17:30:00Z", seen.seenAt)
+        assertNull(notices.fromJson("""{"id":"n","type":"x","title":"t","createdAt":"2026-11-01T17:00:00Z"}""")!!.seenAt)
+
+        val rows = moshi.adapter(SentNoticeDto::class.java)
+        val row = rows.fromJson(
+            """{"key":"k","type":"task.assigned","title":"t","body":null,"linkUrl":"/tasks/1","createdAt":"2026-11-01T17:00:00Z",
+               |"recipients":[{"id":"u","fullName":"Beto Soto","seenAt":"2026-11-01T17:55:00Z","readAt":null}]}""".trimMargin(),
+        )!!
+        assertEquals("Beto Soto", row.recipients.single().fullName)
+        assertEquals("Visto", NoticeKinds.sentSummary(row.recipients))
+        assertEquals(emptyList<SentRecipientDto>(), rows.fromJson("""{"key":"k"}""")!!.recipients)
     }
 
     /** El contrato con el API: `bundleCount` es nuevo y el servidor viejo no lo manda. */

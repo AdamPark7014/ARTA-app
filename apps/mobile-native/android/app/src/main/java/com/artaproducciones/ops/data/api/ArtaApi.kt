@@ -273,9 +273,33 @@ data class NotificationDto(
     val entity: String? = null,
     /** Avisos sumados en la misma tarjeta (ráfaga); el API viejo no lo manda. */
     val bundleCount: Int = 1,
+    /** Cuándo lo tuvo a la vista (docs/AVISOS.md › Acuse de visto); el API viejo no lo manda. */
+    val seenAt: String? = null,
 )
 
 data class UnreadCount(val count: Int = 0)
+
+/** `POST /notifications/seen`: hasta 200 ids. */
+data class NotificationsSeenBody(val ids: List<String>)
+
+/** Una persona que recibió lo que mandé. Visto cuenta si hay [seenAt] o [readAt]. */
+data class SentRecipientDto(
+    val id: String = "",
+    val fullName: String = "",
+    val seenAt: String? = null,
+    val readAt: String? = null,
+)
+
+/** Una fila de `GET /notifications/sent`: el mismo aviso a varias personas va junto. */
+data class SentNoticeDto(
+    val key: String = "",
+    val type: String = "",
+    val title: String = "",
+    val body: String? = null,
+    val linkUrl: String? = null,
+    val createdAt: String? = null,
+    val recipients: List<SentRecipientDto> = emptyList(),
+)
 
 /** Horario silencioso: de noche solo llega lo urgente (`notification-prefs.ts`). */
 data class QuietHoursDto(val enabled: Boolean = false, val start: String = "22:00", val end: String = "07:00")
@@ -466,6 +490,14 @@ interface ArtaApi {
     /** Con [entity], solo los avisos de esa entidad (y los que no tienen). */
     @POST("notifications/read-all")
     suspend fun notificationsReadAll(@Query("entity") entity: String? = null): OkResponse
+
+    /** Estos avisos estuvieron a la vista: a quien los mandó le llega el acuse. */
+    @POST("notifications/seen")
+    suspend fun notificationsSeen(@Body body: NotificationsSeenBody): Any
+
+    /** Lo que mandé y quién ya lo vio. */
+    @GET("notifications/sent")
+    suspend fun notificationsSent(@Query("entity") entity: String? = null): List<SentNoticeDto>
 
     @POST("devices/push")
     suspend fun registerPush(@Body body: RegisterPushBody): Any

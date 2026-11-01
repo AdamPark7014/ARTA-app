@@ -6,10 +6,12 @@ enum AppTab: Hashable {
     case inicio, chats, tareas, avisos, mas
 }
 
-/// A dónde lleva una ruta interna del panel: una pantalla nativa o solo una pestaña.
+/// A dónde lleva una ruta interna del panel: una pantalla nativa, solo una pestaña o «Enviados»,
+/// que es un filtro dentro de Avisos (`/notifications?tab=enviados`).
 enum PanelTarget: Equatable {
     case screen(AppRoute)
     case tab(AppTab)
+    case sentNotices
 }
 
 /// Traduce las rutas internas del panel (la `url` de cada aviso, los enlaces de
@@ -74,7 +76,8 @@ enum PanelLink {
         case "dashboard":
             return parts.count == 1 ? .tab(.inicio) : nil
         case "notifications":
-            return parts.count == 1 ? .tab(.avisos) : nil
+            guard parts.count == 1 else { return nil }
+            return value("tab") == "enviados" ? .sentNotices : .tab(.avisos)
         default:
             return nil
         }
@@ -90,7 +93,8 @@ enum PanelLink {
             case "":
                 return nil
             case "avisos", "notifications":
-                return .tab(.avisos)
+                let tab = comps?.queryItems?.first(where: { $0.name == "tab" })?.value
+                return tab == "enviados" ? .sentNotices : .tab(.avisos)
             case "web":
                 let path = comps?.queryItems?.first(where: { $0.name == "path" })?.value ?? "/dashboard"
                 return target(path: path)
@@ -156,6 +160,8 @@ final class AppRouter: ObservableObject {
     @Published var tareasPath: [AppRoute] = []
     @Published var avisosPath: [AppRoute] = []
     @Published var masPath: [AppRoute] = []
+    /// Pidieron abrir «Enviados». Lo recoge Avisos, que puede no existir todavía si llegó un push.
+    @Published var wantsSentNotices = false
 
     private init() {}
 
@@ -188,6 +194,10 @@ final class AppRouter: ObservableObject {
             if fromLink { openFromLink(route) } else { open(route) }
         case .tab(let tab):
             select(tab)
+        case .sentNotices:
+            avisosPath = []
+            tab = .avisos
+            wantsSentNotices = true
         }
     }
 
@@ -211,6 +221,7 @@ final class AppRouter: ObservableObject {
 
     func reset() {
         tab = .inicio
+        wantsSentNotices = false
         resetStacks()
     }
 

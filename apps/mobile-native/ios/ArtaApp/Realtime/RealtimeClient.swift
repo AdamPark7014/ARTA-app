@@ -57,6 +57,8 @@ final class RealtimeClient {
     let chatUnread = PassthroughSubject<Int, Never>()
     let notificationsUnread = PassthroughSubject<Int, Never>()
     let notificationRead = PassthroughSubject<NotificationReadEvent, Never>()
+    /// Alguien vio algo que mandé: «Enviados» se pone al día.
+    let notificationSeen = PassthroughSubject<Void, Never>()
     let presence = PassthroughSubject<PresenceEvent, Never>()
     /// Cambió una tarea u OC mencionada en una de mis salas: refrescar su tarjeta.
     let refsChanged = PassthroughSubject<ChatRefInput, Never>()
@@ -162,6 +164,7 @@ final class RealtimeClient {
             self?.notificationRead.send(NotificationReadEvent(notificationId: Self.string(o, "notificationId")))
             if let unread = (o["unread"] as? NSNumber)?.intValue { self?.notificationsUnread.send(unread) }
         }
+        s.on("notification:seen") { [weak self] _, _ in self?.notificationSeen.send(()) }
         s.on("chat:presence") { [weak self] data, _ in
             guard let o = Self.object(data), let user = Self.string(o, "userId") else { return }
             let online = (o["online"] as? Bool) ?? (o["online"] as? NSNumber)?.boolValue ?? false

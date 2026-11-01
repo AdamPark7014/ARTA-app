@@ -488,6 +488,8 @@ struct NotificationDto: Decodable, Identifiable, Equatable {
     var body: String?
     var linkUrl: String?
     var readAt: String?
+    /// Estuvo a la vista en la campana o en Avisos (docs/AVISOS.md). Falta en API viejo.
+    var seenAt: String?
     let createdAt: String
     var actor: NotificationActor?
     /// ARTA | EXPLANADA; `null` en avisos personales (menciones, directos).
@@ -499,6 +501,45 @@ struct NotificationDto: Decodable, Identifiable, Equatable {
 }
 
 struct UnreadCount: Decodable { var count: Int? }
+
+/// `POST notifications/seen`: hasta 200 por llamada.
+struct SeenNoticesBody: Encodable { let ids: [String] }
+
+/// A quién le llegó algo que mandé. Visto cuenta si hay `seenAt` o `readAt`.
+struct SentRecipient: Decodable, Equatable {
+    var id: String?
+    var fullName: String?
+    var seenAt: String?
+    var readAt: String?
+
+    var seenStamp: String? { seenAt ?? readAt }
+    var hasSeen: Bool { seenStamp != nil }
+}
+
+/// `GET notifications/sent`: lo que mandé y quién ya lo vio; el mismo aviso a varias personas es
+/// una sola fila. Todo opcional porque el API puede ir atrás de la app.
+struct SentNotice: Decodable, Identifiable, Equatable {
+    var key: String?
+    var type: String?
+    var title: String?
+    var body: String?
+    var linkUrl: String?
+    var createdAt: String?
+    var recipients: [SentRecipient]?
+
+    var id: String { key ?? "\(type ?? "")|\(linkUrl ?? "")|\(title ?? "")|\(createdAt ?? "")" }
+    var people: [SentRecipient] { recipients ?? [] }
+    var allSeen: Bool { !people.isEmpty && people.allSatisfy { $0.hasSeen } }
+
+    /// Lo que dice la píldora de la fila.
+    var seenSummary: String {
+        let total = people.count
+        let seen = people.filter { $0.hasSeen }.count
+        guard total > 1 else { return seen > 0 ? "Visto" : "Sin ver" }
+        if seen == total { return "Visto por todos" }
+        return seen > 0 ? "Visto por \(seen) de \(total)" : "Nadie lo ha visto"
+    }
+}
 
 /// `GET/PATCH notifications/preferences`: qué llega al teléfono. La campana recibe todo, siempre.
 /// Sin nada guardado el API responde todo encendido y sin horario silencioso.

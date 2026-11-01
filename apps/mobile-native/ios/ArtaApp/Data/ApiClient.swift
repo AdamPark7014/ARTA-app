@@ -416,6 +416,14 @@ extension ApiClient {
     func notificationsReadAll() async throws {
         _ = try await perform(request("POST", "notifications/read-all", query: ["entity": EntityContext.query]))
     }
+    /// Acuse de visto: estos avisos estuvieron a la vista. A quien los mandó le llega su acuse.
+    func notificationsSeen(_ ids: [String]) async throws {
+        try await send("POST", "notifications/seen", body: SeenNoticesBody(ids: ids))
+    }
+    /// «Enviados»: lo que mandé en la entidad activa (y lo personal) y quién ya lo vio.
+    func sentNotices() async throws -> [SentNotice] {
+        try await get("notifications/sent", query: ["entity": EntityContext.query])
+    }
 
     func registerPush(_ body: RegisterPushBody) async throws { try await send("POST", "devices/push", body: body) }
     func removePush(_ token: String) async throws { try await send("DELETE", "devices/push", body: RemovePushBody(token: token)) }

@@ -522,9 +522,17 @@ fun artaFilterChipBorder(selected: Boolean): BorderStroke =
 /**
  * Selector segmentado del sistema: en ARTA fondo `#efede8` y la opción activa blanca con sombra;
  * en Auditorio fondo tenue con línea y la activa en plata con texto negro.
+ * [weights]: cuánto ancho le toca a cada opción, para textos tan dispares que en partes iguales se
+ * cortarían; sin ellos, partes iguales.
  */
 @Composable
-fun SegmentedControl(options: List<String>, selected: Int, onSelect: (Int) -> Unit, modifier: Modifier = Modifier) {
+fun SegmentedControl(
+    options: List<String>,
+    selected: Int,
+    onSelect: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+    weights: List<Float>? = null,
+) {
     val t = LocalArtaTokens.current
     val outer = if (t.isPill) RoundedCornerShape(12.dp) else RoundedCornerShape(5.dp)
     val inner = if (t.isPill) RoundedCornerShape(9.dp) else RoundedCornerShape(3.dp)
@@ -540,15 +548,19 @@ fun SegmentedControl(options: List<String>, selected: Int, onSelect: (Int) -> Un
             .padding(3.dp),
     ) {
         val gap = 3.dp
-        val cell = (maxWidth - gap * (count - 1)) / count
+        val shares = weights?.takeIf { it.size == count } ?: List(count) { 1f }
+        val usable = maxWidth - gap * (count - 1)
+        val cells = shares.map { usable * (it / shares.sum()) }
+        val active = selected.coerceIn(0, count - 1)
         // La opción activa se desliza en vez de saltar.
-        val x by animateDpAsState((cell + gap) * selected.coerceIn(0, count - 1), spring(stiffness = Spring.StiffnessMediumLow), label = "segment")
+        val x by animateDpAsState(cells.take(active).fold(0.dp) { sum, cell -> sum + cell + gap }, spring(stiffness = Spring.StiffnessMediumLow), label = "segment")
+        val activeWidth by animateDpAsState(cells[active], spring(stiffness = Spring.StiffnessMediumLow), label = "segmentWidth")
         Box(Modifier.matchParentSize()) {
             Box(
                 Modifier
                     .offset(x = x)
                     .fillMaxHeight()
-                    .width(cell)
+                    .width(activeWidth)
                     .then(
                         if (t.isDark) Modifier.background(t.accentBrush, inner)
                         else Modifier.shadow(2.dp, inner, ambientColor = t.shadow, spotColor = t.shadow).background(t.surface, inner),
@@ -569,14 +581,14 @@ fun SegmentedControl(options: List<String>, selected: Int, onSelect: (Int) -> Un
                 )
                 Box(
                     Modifier
-                        .weight(1f)
+                        .weight(shares[i])
                         .heightIn(min = 38.dp)
                         .clip(inner)
                         .selectable(selected = on, role = Role.RadioButton, onClick = {
                             if (!on) haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                             onSelect(i)
                         })
-                        .padding(vertical = 8.dp, horizontal = 6.dp),
+                        .padding(vertical = 8.dp, horizontal = if (weights != null) 3.dp else 6.dp),
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(

@@ -76,6 +76,7 @@ import com.artaproducciones.ops.data.api.ChatAttachment
 import com.artaproducciones.ops.data.api.EventDetailDto
 import com.artaproducciones.ops.data.api.ModulesMe
 import com.artaproducciones.ops.data.api.PersonRef
+import com.artaproducciones.ops.data.api.SentNoticeDto
 import com.artaproducciones.ops.data.api.TaskDto
 import com.artaproducciones.ops.data.api.userMessage
 import com.artaproducciones.ops.ui.chat.openAttachment
@@ -768,6 +769,12 @@ object ModulesStore {
     /** Avisos por consulta: `false` = todos, `true` = solo sin leer. */
     val noticeFeeds = mutableMapOf<Boolean, NoticeFeed>()
 
+    /** Avisos › Enviados; null = todavía no se pide. */
+    var sentNotices: List<SentNoticeDto>? = null
+
+    /** Avisos ya reportados como vistos: no se repiten. Si la llamada falla salen de aquí para reintentar. */
+    val noticesReportedSeen = mutableSetOf<String>()
+
     /** Lo último visto de cada detalle: al volver de una tarea el evento no parpadea. */
     val eventDetails = object : LinkedHashMap<String, EventDetailDto>(16, 0.75f, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, EventDetailDto>?) = size > MAX_DETAILS
@@ -784,6 +791,8 @@ object ModulesStore {
         approvals = null
         channels = null
         noticeFeeds.clear()
+        sentNotices = null
+        noticesReportedSeen.clear()
         eventDetails.clear()
         taskDetails.clear()
     }

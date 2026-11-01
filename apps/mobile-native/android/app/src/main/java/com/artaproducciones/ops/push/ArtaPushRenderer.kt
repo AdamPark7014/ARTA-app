@@ -30,6 +30,7 @@ import androidx.core.graphics.drawable.IconCompat
 import com.artaproducciones.ops.MainActivity
 import com.artaproducciones.ops.R
 import com.artaproducciones.ops.data.BizEntity
+import com.artaproducciones.ops.data.NoticeKinds
 import com.artaproducciones.ops.data.Session
 import java.util.concurrent.Executors
 
@@ -451,19 +452,22 @@ object ArtaPushRenderer {
         if (p.body.isNotBlank()) {
             builder.setContentText(p.body).setStyle(NotificationCompat.BigTextStyle().setBigContentTitle(title).bigText(p.body))
         }
-        // Dinero y firmas nunca se aprueban aquí: «Revisar» lleva a la pantalla donde se decide.
-        val buttons = p.buttons
-        if (buttons.isEmpty()) builder.addAction(eventAction(app, notificationId, p, if (p.isApproval) "Abrir" else "Ver"))
-        buttons.forEach { button ->
-            builder.addAction(
-                when (button) {
-                    PushButton.DELIVER -> deliverAction(app, notificationId, p)
-                    PushButton.APPROVE -> approveAction(app, notificationId, p)
-                    PushButton.REVIEW, PushButton.OPEN -> eventAction(app, notificationId, p, button.label)
-                },
-            )
+        // El acuse de visto no pide nada: sin botones; tocarlo abre su liga como cualquier aviso.
+        if (!NoticeKinds.isSeenReceipt(p.type)) {
+            // Dinero y firmas nunca se aprueban aquí: «Revisar» lleva a la pantalla donde se decide.
+            val buttons = p.buttons
+            if (buttons.isEmpty()) builder.addAction(eventAction(app, notificationId, p, if (p.isApproval) "Abrir" else "Ver"))
+            buttons.forEach { button ->
+                builder.addAction(
+                    when (button) {
+                        PushButton.DELIVER -> deliverAction(app, notificationId, p)
+                        PushButton.APPROVE -> approveAction(app, notificationId, p)
+                        PushButton.REVIEW, PushButton.OPEN -> eventAction(app, notificationId, p, button.label)
+                    },
+                )
+            }
+            if (p.notificationId.isNotBlank()) builder.addAction(markNoticeReadAction(app, notificationId, p.notificationId))
         }
-        if (p.notificationId.isNotBlank()) builder.addAction(markNoticeReadAction(app, notificationId, p.notificationId))
         notify(app, notificationId, builder.build())
         rebuildEventSummary(app, group, posted = PostedEvent(notificationId, channelId, summaryLine(title, p.body), p.body, p.threadTitle, p.entity))
     }

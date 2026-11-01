@@ -29,8 +29,8 @@ import XCTest
 ///   inicio-entity-chip  entity-notice                               (ActiveEntity)
 ///   notice-filter-<filtro>  notice-row-<id>  notice-prefs           (NotificationsView)
 ///
-/// Revisión de Avisos (a `debug/`): `arta-20-avisos-por-atender`, `arta-21/22-avisos-preferencias`
-/// y `auditorio-11-avisos-preferencias`.
+/// Revisión de Avisos (a `debug/`): `arta-20-avisos-por-atender`, `arta-21/22-avisos-preferencias`,
+/// `arta-23-avisos-enviados`, `auditorio-11-avisos-preferencias` y `auditorio-12-avisos-enviados`.
 ///
 /// Todo es TOLERANTE: si una pantalla no aparece se anota como omitida, se adjunta el
 /// árbol de accesibilidad (`dbg-*`) y el test sigue con las demás. Solo falla si la
@@ -332,6 +332,11 @@ final class StoreScreenshotsUITests: XCTestCase {
                 revisar("arta-20-avisos-por-atender")
                 tocarSiExiste([porId("notice-filter-all")], timeout: 3)
             }
+            if tocarSiExiste([porId("notice-filter-sent")], timeout: 4) {
+                pausa(0.8)
+                revisar("arta-23-avisos-enviados")
+                tocarSiExiste([porId("notice-filter-all")], timeout: 3)
+            }
             if abrir([porId("notice-prefs")], desde: "Avisos") {
                 pausa(1.2)
                 revisar("arta-21-avisos-preferencias")
@@ -498,6 +503,11 @@ final class StoreScreenshotsUITests: XCTestCase {
             pausa(1.0)
             esperarSinCarga()
             adjuntarCapturaDebug("auditorio-05-avisos")
+            if tocarSiExiste([porId("notice-filter-sent")], timeout: 4) {
+                pausa(0.8)
+                revisar("auditorio-12-avisos-enviados")
+                tocarSiExiste([porId("notice-filter-all")], timeout: 3)
+            }
             if abrir([porId("notice-prefs")], desde: "Avisos") {
                 pausa(1.2)
                 revisar("auditorio-11-avisos-preferencias")

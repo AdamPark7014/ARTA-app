@@ -146,6 +146,13 @@ private enum DemoNotices {
 
     private static let defaultPrefs = #"{"muted":[],"quietHours":{"enabled":false,"start":"22:00","end":"07:00"}}"#
 
+    /// Las mismas personas de `chat/colleagues`.
+    private static let lucia = (id: "c56ea4d06e6e4b57237532cd4", name: "Lucía Méndez Arriaga")
+    private static let mateo = (id: "c7c0ae50aaa46fda9060d0947", name: "Mateo Ríos Calderón")
+    private static let valeria = (id: "ce08d1dd4a18c703877519be3", name: "Valeria Ortega Luna")
+    /// Base de las fechas de muestra: fija, así «hace 5 min» avanza como en cualquier aviso.
+    private static let sampleNow = Date()
+
     /// `nil`: no es de avisos, sigue la lógica general.
     static func reply(path: String, method: String, query: [URLQueryItem], body: Data?) -> DemoBackend.Reply? {
         let entity = query.first(where: { $0.name == "entity" })?.value ?? ""
@@ -168,6 +175,11 @@ private enum DemoNotices {
             readAllEntities.insert(entity)
             lock.unlock()
             return DemoBackend.json(200, #"{"ok":true}"#)
+        case ("GET", "notifications/sent"):
+            return encode(sentRows(entity: entity))
+        case ("POST", "notifications/seen"):
+            // La app no lo manda en el demo; si llegara, no se marca nada.
+            return DemoBackend.json(200, #"{"seen":0}"#)
         default:
             break
         }
@@ -199,7 +211,8 @@ private enum DemoNotices {
     /// Filas de la fixture con fechas al día, de esa entidad y con `readAt` si ya se leyeron aquí.
     private static func notices(entity: String) -> [[String: Any]] {
         guard let raw = DemoFixtures.data(forKey: "notifications") else { return [] }
-        let list = (try? JSONSerialization.jsonObject(with: DemoClock.shift(raw))) as? [[String: Any]] ?? []
+        let recorded = (try? JSONSerialization.jsonObject(with: DemoClock.shift(raw))) as? [[String: Any]] ?? []
+        let list = recorded + [seenReceipt()]
         lock.lock()
         let ids = readIds
         let allRead = readAllEntities
@@ -223,6 +236,99 @@ private enum DemoNotices {
 
     private static func isRead(_ row: [String: Any]) -> Bool {
         row["readAt"] is String
+    }
+
+    // MARK: Acuse de visto (sin fixture: va aquí con fechas relativas a hoy)
+
+    /// El acuse de lo que Lucía vio en `sentRows`: enseña el ojo y su liga a «Enviados».
+    private static func seenReceipt() -> [String: Any] {
+        [
+            "id": "demo-notice-seen",
+            "type": "notice.seen",
+            "title": "Lucía M. ya vio 2 de tus avisos",
+            "body": "Demo R. te mencionó en Trío Luna de Plata · Noche de Boleros · Demo R. te mencionó en: Enviar el plano de escenario al recinto",
+            "linkUrl": "/notifications?tab=enviados",
+            "entity": "ARTA",
+            "createdAt": minutesAgo(12),
+            "actor": ["id": lucia.id, "fullName": lucia.name],
+        ]
+    }
+
+    /// `GET notifications/sent`, de lo más nuevo a lo más viejo y con un ejemplo de cada estado de la
+    /// píldora. Títulos como los arma el API; ligas a tareas y canales que sí existen en el demo.
+    private static func sentRows(entity: String) -> [[String: Any]] {
+        // El canal «general» no es de ninguna entidad: sale en las dos.
+        var rows = [
+            sentRow("chat.mention", "Demo R. te mencionó en general", "/chat?channel=c7f77b485b329c6ecd8b7dfba", minutes: 8, [
+                person(mateo), person(valeria),
+            ]),
+        ]
+        if entity.isEmpty || entity == "ARTA" {
+            rows += [
+                sentRow(
+                    "task.comment",
+                    "Demo R. comentó: Confirmar el rider técnico con el Trío Luna de Plata",
+                    "/events/cbf9b2784b0797342c1629b09?tab=tasks&task=cda29bbe09655a95f799bee13",
+                    minutes: 20,
+                    [person(lucia)]
+                ),
+                sentRow(
+                    "chat.mention",
+                    "Demo R. te mencionó en Trío Luna de Plata · Noche de Boleros",
+                    "/chat?channel=c65090e75d0dc02ce58fd8254",
+                    minutes: 55,
+                    [person(lucia, seen: 12), person(mateo, read: 40), person(valeria)]
+                ),
+                sentRow(
+                    "task.mention",
+                    "Demo R. te mencionó en: Enviar el plano de escenario al recinto",
+                    "/events/cbf9b2784b0797342c1629b09?tab=tasks&task=c3b2a1069f3d808b124c49e08",
+                    minutes: 180,
+                    [person(lucia, seen: 12), person(mateo, seen: 130)]
+                ),
+                sentRow(
+                    "task.assigned",
+                    "Demo R. te asignó: Reservar hospedaje para el trío",
+                    "/events/cbf9b2784b0797342c1629b09?tab=tasks&task=c40c99ec13d86f7ea7b453962",
+                    minutes: 2880,
+                    [person(mateo, seen: 2860)]
+                ),
+            ]
+        }
+        if entity.isEmpty || entity == "EXPLANADA" {
+            rows.append(sentRow(
+                "task.assigned",
+                "Demo R. te asignó: Cerrar la lista de medios para la rueda de prensa",
+                "/events/c159b2f535555db3effcb05ba?tab=tasks&task=ced2acc3fbe422e89ea322ed0",
+                minutes: 4320,
+                [person(mateo, seen: 4300)]
+            ))
+        }
+        return rows
+    }
+
+    private static func sentRow(_ type: String, _ title: String, _ link: String, minutes: Int, _ recipients: [[String: Any]]) -> [String: Any] {
+        [
+            "key": "\(type)|\(link)|\(title)",
+            "type": type,
+            "title": title,
+            "linkUrl": link,
+            "createdAt": minutesAgo(minutes),
+            "recipients": recipients,
+        ]
+    }
+
+    private static func person(_ who: (id: String, name: String), seen: Int? = nil, read: Int? = nil) -> [String: Any] {
+        ["id": who.id, "fullName": who.name, "seenAt": optionalStamp(seen), "readAt": optionalStamp(read)]
+    }
+
+    private static func optionalStamp(_ minutes: Int?) -> Any {
+        guard let minutes else { return NSNull() }
+        return minutesAgo(minutes)
+    }
+
+    private static func minutesAgo(_ minutes: Int) -> String {
+        ISO8601DateFormatter().string(from: sampleNow.addingTimeInterval(TimeInterval(-60 * minutes)))
     }
 
     private static func encode(_ rows: [[String: Any]]) -> DemoBackend.Reply {
