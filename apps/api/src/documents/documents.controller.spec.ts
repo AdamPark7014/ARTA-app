@@ -86,7 +86,7 @@ describe('Word → documento editable', () => {
 });
 
 describe('PDF de un documento', () => {
-  const pagesOf = (file: string) => (readFileSync(file).toString('latin1').match(/\/Type \/Page/g) || []).length;
+  const pagesOf = (file: string) => Number(readFileSync(file).toString('latin1').match(/\/Count (\d+)/)?.[1] ?? 0);
 
   async function generate(rows: string[][]) {
     process.env.UPLOAD_DIR = mkdtempSync(join(tmpdir(), 'arta-doc-'));
