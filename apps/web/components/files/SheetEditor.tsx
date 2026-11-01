@@ -1694,7 +1694,7 @@ export function SheetEditor({
   }
 
   return (
-    <ExpandBox title={fileName} dirty={dirty}>
+    <ExpandBox title={fileName} dirty={dirty} quietTitle>
       <div className="stack sheet-editor">
         {blockNotice}
 
@@ -1708,9 +1708,8 @@ export function SheetEditor({
                 </>
               ) : (
                 <>
-                  Se usa como Excel: clic y escribe · doble clic o F2 edita dentro · <strong>clic derecho</strong> en una
-                  celda, número de fila o letra de columna para insertar o eliminar · Ctrl+C / Ctrl+V con Excel · Ctrl+Z
-                  deshace · Ctrl+S guarda.
+                  Se usa como Excel: clic y escribe · doble clic o F2 edita · <strong>clic derecho</strong> inserta o
+                  elimina · Ctrl+Z deshace · Ctrl+S guarda.
                 </>
               )}
             </p>

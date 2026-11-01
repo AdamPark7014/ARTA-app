@@ -96,7 +96,8 @@ jobs:
       # mockea /api/*, así que este job no necesita Postgres ni el workspace api.
       - name: E2E tests (app shell + login 2FA)
         # «Stack real» pide API y base de datos: corre en su propio job.
-        run: npm run test:web -- --grep-invert "Stack real"
+        working-directory: apps/web
+        run: npx playwright test --grep-invert "Stack real"
 
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}

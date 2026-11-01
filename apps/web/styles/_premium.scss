@@ -1342,6 +1342,26 @@ html[data-entity] .notif-panel__seg .seg__btn {
   justify-content: flex-end;
 }
 
+/* Hoja abierta: «Ampliar» no gasta un renglón entero, va sobre la orilla de la tarjeta. */
+.expandbox--inline > .expandbox__bar:has(> .sr-only) {
+  margin-bottom: -2px;
+  padding-inline: 2px;
+}
+
+.expandbox--inline > .expandbox__bar:has(> .sr-only) .btn {
+  min-height: 30px;
+  padding-block: 0;
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.expandbox--inline > .expandbox__bar:has(> .sr-only) .btn:hover {
+  color: var(--text);
+}
+
 /* ── Tareas: cifras compactas; lo importante es la lista ─────────────────── */
 
 html[data-entity] .kpi-grid-dense {
