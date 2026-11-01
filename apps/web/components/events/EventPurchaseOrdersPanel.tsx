@@ -923,7 +923,7 @@ export function EventPurchaseOrdersPanel({
             <PoStateChips chips={chips} value={stateFilter} onChange={setStateFilter} />
           ) : null}
           <div className="dtable-wrap">
-            <table className="dtable oc-table">
+            <table className="dtable oc-table dtable--cards oc-table--event">
               <thead>
                 <tr>
                   <th>Proveedor</th>
