@@ -61,6 +61,11 @@ extension ApiClient {
         try await send("POST", "tasks/\(id)/reject", body: RejectTaskBody(note: note), as: ArtaTask.self)
     }
 
+    /// Queda en `activities` con `action: "comment"`. Responde la tarea completa.
+    func commentTask(_ id: String, body: String) async throws -> ArtaTask {
+        try await send("POST", "tasks/\(id)/comments", body: TaskCommentBody(body: body), as: ArtaTask.self)
+    }
+
     /// `POST tasks/:id/evidence` (multipart: `file`, `label`, `note`). Responde la evidencia
     /// (`fileUrl`), no un `UploadResult`, por eso no sirve `uploadFile`.
     func uploadTaskEvidence(_ taskId: String, data fileData: Data, filename: String, mime: String, note: String? = nil) async throws -> TaskEvidence {

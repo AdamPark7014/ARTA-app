@@ -13,6 +13,8 @@ enum MessageAction {
     /// Mensaje de otra persona (docs/chat-reportar-bloquear.md).
     case report
     case block
+    /// El texto del mensaje se vuelve una tarea (docs/CHAT-V2-CONTRATO.md §9).
+    case createTask
 }
 
 /// Hoja al mantener presionado un mensaje (como Slack): las 8 reacciones rápidas,
@@ -26,6 +28,7 @@ struct MessageActionsSheet: View {
     /// «Reportar» y «Bloquear a {nombre}»: solo en mensajes de otras personas.
     var canReport = false
     var canBlock = false
+    var canCreateTask = false
     var onAction: (MessageAction) -> Void
 
     @State private var showPicker = false
@@ -46,6 +49,9 @@ struct MessageActionsSheet: View {
                     }
                     if !message.text.isEmpty && !message.isDeleted {
                         row("Copiar texto", icon: "doc.on.doc", id: "msg-action-copy") { onAction(.copy) }
+                    }
+                    if canCreateTask {
+                        row("Crear tarea", icon: ChatRefKind.task.symbol, id: "msg-action-create-task") { onAction(.createTask) }
                     }
                     if usable {
                         row(message.isSaved ? "Quitar de guardados" : "Guardar", icon: message.isSaved ? "bookmark.slash" : "bookmark", id: "msg-action-save") { onAction(.save) }

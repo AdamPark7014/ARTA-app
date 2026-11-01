@@ -653,14 +653,17 @@ enum TaskInfo {
         case "rejected": return "Rechazada: corrección pedida"
         case "evidence_added": return "Evidencia agregada"
         case "deleted": return "Eliminada"
+        case "comment": return "Comentario"
         default: return action
         }
     }
 
-    /// `status_changed` guarda la clave del estado en `detail`.
+    /// `status_changed` guarda la clave del estado en `detail`; un comentario, el texto con sus
+    /// menciones como tokens, que se leen como «@Nombre».
     static func activityDetail(_ activity: TaskActivity) -> String? {
         guard let detail = activity.detail, !detail.isEmpty else { return nil }
         if activity.action == "status_changed" { return statusLabel(detail) }
+        if activity.action == "comment" { return plainText(detail) }
         return detail
     }
 }

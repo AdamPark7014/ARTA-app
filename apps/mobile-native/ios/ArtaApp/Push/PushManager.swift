@@ -25,7 +25,12 @@ import FirebaseMessaging
 ///   bandeja sin sonar ni encender la pantalla, también con la app abierta.
 /// - Tocar un aviso abre su pantalla nativa (`PanelLink`, contrato §4) en la entidad
 ///   del aviso (`entity`) y lo marca leído: con `channel_id` la conversación; si no,
-///   según `url` y `type`. Nunca se aprueba desde la notificación.
+///   según `url` y `type`.
+/// - Los botones van por caso (docs/AVISOS.md § Casos): `ARTA_TASK` entrega con una nota
+///   escrita ahí mismo, `ARTA_TASK_REVIEW` aprueba la entrega de una tarea con un toque y
+///   `ARTA_APPROVAL` solo abre la pantalla: el dinero y las firmas nunca se aprueban desde el
+///   aviso. Actúan sobre `target_kind` y `target_id`; si la llamada falla, una notificación
+///   local invita a abrir la tarea.
 /// - Silenciosos (`silent=1`: `chat.read`, `notification.read`): quitan los avisos
 ///   de lo que ya se leyó en otro dispositivo y ajustan el globo del ícono.
 /// - El resumen de grupo en español va en `categorySummaryFormat`; `summaryArgument`
@@ -35,8 +40,16 @@ final class PushManager: NSObject, UNUserNotificationCenterDelegate {
 
     static let chatCategory = "ARTA_CHAT"
     static let eventCategory = "ARTA_EVENT"
+    static let taskCategory = "ARTA_TASK"
+    static let taskReviewCategory = "ARTA_TASK_REVIEW"
+    static let approvalCategory = "ARTA_APPROVAL"
     static let replyAction = "ARTA_REPLY"
     static let markReadAction = "ARTA_MARK_READ"
+    static let deliverAction = "ARTA_TASK_DELIVER"
+    static let approveAction = "ARTA_TASK_APPROVE"
+    /// «Abrir» y «Revisar» llevan a donde lleva tocar el aviso: no hay nada que hacer en segundo plano.
+    static let openAction = "ARTA_OPEN"
+    static let reviewAction = "ARTA_REVIEW"
 
     private static let tokenKey = "arta.push.fcmToken"
 
@@ -94,7 +107,50 @@ final class PushManager: NSObject, UNUserNotificationCenterDelegate {
             categorySummaryFormat: "%u avisos más",
             options: [.hiddenPreviewsShowSubtitle]
         )
-        return [chat, event]
+        // Quien pidió autenticarse ya desbloqueó el teléfono: la sesión del contenedor se puede leer.
+        let deliver = UNTextInputNotificationAction(
+            identifier: deliverAction,
+            title: "Entregar",
+            options: [.authenticationRequired],
+            icon: UNNotificationActionIcon(systemImageName: "tray.and.arrow.up"),
+            textInputButtonTitle: "Enviar",
+            textInputPlaceholder: "¿Qué hiciste?"
+        )
+        let approve = UNNotificationAction(
+            identifier: approveAction,
+            title: "Aprobar",
+            options: [.authenticationRequired],
+            icon: UNNotificationActionIcon(systemImageName: "checkmark.seal")
+        )
+        let open = UNNotificationAction(
+            identifier: openAction,
+            title: "Abrir",
+            options: [.foreground],
+            icon: UNNotificationActionIcon(systemImageName: "arrow.up.forward.app")
+        )
+        let review = UNNotificationAction(
+            identifier: reviewAction,
+            title: "Revisar",
+            options: [.foreground],
+            icon: UNNotificationActionIcon(systemImageName: "eye")
+        )
+        func noticeCategory(_ identifier: String, _ actions: [UNNotificationAction]) -> UNNotificationCategory {
+            UNNotificationCategory(
+                identifier: identifier,
+                actions: actions,
+                intentIdentifiers: [],
+                hiddenPreviewsBodyPlaceholder: "Aviso nuevo de ARTA",
+                categorySummaryFormat: "%u avisos más",
+                options: [.hiddenPreviewsShowSubtitle]
+            )
+        }
+        return [
+            chat,
+            event,
+            noticeCategory(taskCategory, [deliver, open]),
+            noticeCategory(taskReviewCategory, [approve, open]),
+            noticeCategory(approvalCategory, [review]),
+        ]
     }
 
     // MARK: Permiso y token
@@ -276,9 +332,30 @@ final class PushManager: NSObject, UNUserNotificationCenterDelegate {
                 completionHandler()
             }
 
+        case Self.deliverAction:
+            let note = (response as? UNTextInputNotificationResponse)?.userText.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            guard !note.isEmpty else { completionHandler(); return }
+            let action = TaskPushAction(info: info, threadId: threadId, failedTitle: "No se pudo entregar la tarea", note: note)
+            Task {
+                await Self.run(action) { taskId in
+                    _ = try await ApiClient.shared.submitTask(taskId, note: note)
+                }
+                completionHandler()
+            }
+
+        case Self.approveAction:
+            let action = TaskPushAction(info: info, threadId: threadId, failedTitle: "No se pudo aprobar la entrega", note: nil)
+            Task {
+                await Self.run(action) { taskId in
+                    _ = try await ApiClient.shared.approveTask(taskId)
+                }
+                completionHandler()
+            }
+
         case UNNotificationDismissActionIdentifier:
             completionHandler()
 
+        // Tocar el aviso, «Abrir» y «Revisar»: su pantalla.
         default:
             if let notificationId { Task { try? await ApiClient.shared.notificationRead(notificationId) } }
             let target = PanelLink.target(
@@ -320,6 +397,42 @@ final class PushManager: NSObject, UNUserNotificationCenterDelegate {
         }
     }
 
+    /// «Entregar» o «Aprobar» sin abrir la app. Al salir marca leído el aviso, como «Responder».
+    private static func run(_ action: TaskPushAction, _ call: (String) async throws -> Void) async {
+        guard let taskId = action.taskId else {
+            await taskActionFailed(action)
+            return
+        }
+        do {
+            try await call(taskId)
+            if let notificationId = action.notificationId {
+                try? await ApiClient.shared.notificationRead(notificationId)
+                removeDeliveredNotices(notificationId: notificationId)
+            }
+        } catch {
+            await taskActionFailed(action)
+        }
+    }
+
+    /// Tocarla abre la tarea. Lo que se escribió se conserva a la vista para no perderlo.
+    private static func taskActionFailed(_ action: TaskPushAction) async {
+        let content = UNMutableNotificationContent()
+        content.title = action.failedTitle
+        if let note = action.note {
+            content.body = "Abre la tarea para intentarlo de nuevo. Tu nota: \(note)"
+        } else {
+            content.body = "Abre la tarea para intentarlo de nuevo."
+        }
+        content.threadIdentifier = action.threadId
+        var info: [AnyHashable: Any] = ["kind": "event"]
+        if let url = action.openURL { info["url"] = url }
+        if let entity = action.entity { info["entity"] = entity }
+        content.userInfo = info
+        content.sound = nil
+        let request = UNNotificationRequest(identifier: "task-action-failed-\(action.taskId ?? action.threadId)", content: content, trigger: nil)
+        try? await UNUserNotificationCenter.current().add(request)
+    }
+
     static func text(_ info: [AnyHashable: Any], _ key: String) -> String? {
         let value = info[AnyHashable(key)]
         if let s = value as? String {
@@ -328,6 +441,30 @@ final class PushManager: NSObject, UNUserNotificationCenterDelegate {
         }
         if let n = value as? NSNumber { return n.stringValue }
         return nil
+    }
+}
+
+/// Lo que hace falta de un aviso para actuar sobre su tarea en segundo plano, ya como texto.
+private struct TaskPushAction {
+    /// `target_id`, solo si el aviso trata de una tarea.
+    let taskId: String?
+    let notificationId: String?
+    let entity: String?
+    let threadId: String
+    let failedTitle: String
+    let note: String?
+    /// Si falla: la tarea o, sin ella, la liga del aviso.
+    let openURL: String?
+
+    init(info: [AnyHashable: Any], threadId: String, failedTitle: String, note: String?) {
+        let task = PushManager.text(info, "target_kind") == "task" ? PushManager.text(info, "target_id") : nil
+        taskId = task
+        notificationId = PushManager.text(info, "notification_id")
+        entity = PushManager.text(info, "entity")
+        self.threadId = threadId
+        self.failedTitle = failedTitle
+        self.note = note
+        openURL = task.map { "/tasks?task=\($0)" } ?? PushManager.text(info, "url")
     }
 }
 

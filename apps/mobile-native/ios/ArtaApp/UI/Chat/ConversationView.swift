@@ -14,6 +14,15 @@ struct ConversationView: View {
     @State private var draft = ""
     /// «@Nombre» visible en el borrador → id, para mandar el token `[@Nombre](user:id)`.
     @State private var mentionMap: [String: String] = [:]
+    /// «@Etiqueta» visible en el borrador → lo elegido en el selector (contrato §9). Al enviar viaja
+    /// lo que siga escrito en el texto.
+    @State private var refMap: [String: ChatRef] = [:]
+    /// Resultados de `chat/refs/search` para lo que se va escribiendo tras «@».
+    @State private var refResults: [ChatRef] = []
+    /// «Crear tarea» desde el menú de este mensaje.
+    @State private var taskSource: ChatMessage?
+    /// «Entregar» desde la tarjeta: la hoja de siempre, con la tarea ya cargada.
+    @State private var deliverTask: ArtaTask?
     @State private var editing: ChatMessage?
     @State private var replyingTo: ChatMessage?
     @State private var actionTarget: ChatMessage?
@@ -49,6 +58,8 @@ struct ConversationView: View {
     private static let bottomId = "conversation-bottom"
     private static let unreadId = "unread-divider"
     private static let composerIcon: CGFloat = 30
+    /// Lo que se va escribiendo tras «@»: hasta dos palabras, porque las etiquetas llevan espacios.
+    private static let mentionTail = #"@([^\s@]{0,30}(?: [^\s@]{0,30})?)$"#
 
     init(channelId: String, parentId: String?, focusMessageId: String?) {
         _model = StateObject(wrappedValue: ConversationModel(channelId: channelId, parentId: parentId, focusMessageId: focusMessageId))
@@ -72,7 +83,8 @@ struct ConversationView: View {
                         canEdit: model.canEdit(m),
                         canDelete: model.canDelete(m),
                         canReport: model.canReport(m),
-                        canBlock: model.canBlock(m)
+                        canBlock: model.canBlock(m),
+                        canCreateTask: model.canCreateTask(m)
                     ) { action in
                         actionTarget = nil
                         if case .react(let emoji) = action {
@@ -153,6 +165,21 @@ struct ConversationView: View {
         .sheet(item: $reportTarget) { m in
             ReportMessageSheet(message: m) {
                 show("Gracias. Un administrador lo revisará en menos de 24 horas.")
+            }
+        }
+        .sheet(item: $taskSource) { m in
+            CreateTaskFromMessageSheet(
+                message: m,
+                members: model.channel?.allMembers ?? [],
+                eventId: model.channel?.eventId,
+                create: { body in try await model.createTask(body, from: m) },
+                onDone: { announced in show(announced ? "Tarea creada y avisada en el hilo" : "Tarea creada") }
+            )
+        }
+        .sheet(item: $deliverTask) { task in
+            DeliverTaskSheet(task: task) { _ in
+                model.requestCards([ChatRefInput(kind: ChatRefKind.task.rawValue, id: task.id)])
+                show("Entrega enviada a revisión")
             }
         }
         .fullScreenCover(item: $gallery) { request in
@@ -560,6 +587,8 @@ struct ConversationView: View {
                     showReplies: !inThread,
                     myId: model.myId,
                     maxWidth: maxBubble,
+                    refs: model.refs(for: m),
+                    refBusy: model.refBusy,
                     onReact: { emoji in
                         model.react(m, emoji)
                         Haptics.react()
@@ -571,7 +600,8 @@ struct ConversationView: View {
                     onImage: { openImage($0) },
                     onVideo: { videoURL = $0 },
                     onFile: { openFile($0) },
-                    onQuote: { model.jump(to: $0) }
+                    onQuote: { model.jump(to: $0) },
+                    onRefAction: { ref, action in runRefAction(ref, action) }
                 )
                 .padding(.top, showAuthor ? 6 : 0)
                 .modifier(SwipeToReply(enabled: interactive) { startReply(m) })
@@ -588,6 +618,29 @@ struct ConversationView: View {
     private func openActions(_ m: ChatMessage) {
         Haptics.longPress()
         actionTarget = m
+    }
+
+    /// Botones de la tarjeta (contrato §9). Solo tareas: el dinero y las firmas se ven en su pantalla.
+    private func runRefAction(_ ref: ChatRef, _ action: ChatRefAction) {
+        Haptics.tap()
+        Task { await performRefAction(ref, action) }
+    }
+
+    private func performRefAction(_ ref: ChatRef, _ action: ChatRefAction) async {
+        switch action {
+        case .deliver:
+            if let task = await model.taskToDeliver(ref) { deliverTask = task }
+        case .complete:
+            if await model.completeTask(ref) {
+                Haptics.success()
+                show("Tarea hecha")
+            }
+        case .approve:
+            if await model.approveTask(ref) {
+                Haptics.success()
+                show("Entrega aprobada")
+            }
+        }
     }
 
     private func perform(_ action: MessageAction, on m: ChatMessage) {
@@ -617,6 +670,8 @@ struct ConversationView: View {
             reportTarget = m
         case .block:
             blockTarget = BlockTarget(id: m.author.id, name: m.author.fullName)
+        case .createTask:
+            taskSource = m
         }
     }
 
@@ -703,10 +758,99 @@ struct ConversationView: View {
     // MARK: Redactar
 
     private var mentionQuery: String? {
-        guard let range = draft.range(of: #"(^|\s)@([^\s@]{0,30})$"#, options: .regularExpression) else { return nil }
+        guard let range = draft.range(of: #"(^|\s)"# + Self.mentionTail, options: .regularExpression) else { return nil }
         let match = draft[range]
         guard let at = match.firstIndex(of: "@") else { return nil }
-        return String(match[match.index(after: at)...])
+        let query = String(match[match.index(after: at)...])
+        // Lo recién elegido («@Luces ») ya no es una búsqueda, aunque le sigas escribiendo.
+        let known = Array(mentionMap.keys) + Array(refMap.keys)
+        if known.contains(where: { query == $0 || query.hasPrefix($0 + " ") }) { return nil }
+        return query
+    }
+
+    /// Selector del «@»: las personas y, abajo, lo que se puede arrobar, agrupado por tipo.
+    @ViewBuilder
+    private func mentionPicker(_ query: String) -> some View {
+        let people = model.mentionCandidates(query)
+        let groups = ChatRefKind.allCases.compactMap { kind -> RefGroup? in
+            let items = refResults.filter { $0.kind == kind.rawValue }
+            return items.isEmpty ? nil : RefGroup(kind: kind, items: items)
+        }
+        // El alto de lo que hay, para no tapar la conversación con una lista de una sola fila.
+        let peopleHeight = CGFloat(people.count) * 44
+        let refsHeight = groups.reduce(CGFloat(0)) { $0 + 32 + CGFloat($1.items.count) * 52 }
+        if !people.isEmpty || !groups.isEmpty {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(people) { person in
+                        Button { insertMention(person) } label: {
+                            HStack(spacing: 10) {
+                                Avatar(name: person.fullName, size: 28)
+                                    .overlay(alignment: .bottomTrailing) {
+                                        if presence.isOnline(person.id) { PresenceDot(online: true, size: 9) }
+                                    }
+                                Text(person.fullName).foregroundStyle(ArtaColor.text)
+                                Spacer()
+                            }
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 8)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    ForEach(groups) { group in
+                        CapLabel(group.kind.title)
+                            .padding(.horizontal, 14)
+                            .padding(.top, ArtaSpace.m)
+                            .padding(.bottom, ArtaSpace.xs)
+                        ForEach(group.items, id: \.key) { ref in
+                            refPickerRow(ref)
+                        }
+                    }
+                }
+            }
+            .frame(maxHeight: min(240, peopleHeight + refsHeight))
+        }
+    }
+
+    private func refPickerRow(_ ref: ChatRef) -> some View {
+        Button { insertRef(ref) } label: {
+            HStack(spacing: 10) {
+                Image(systemName: ref.symbol)
+                    .font(.system(size: 15, weight: .regular))
+                    .foregroundStyle(ArtaColor.tertiary)
+                    .frame(width: 28, height: 28)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(ref.displayTitle)
+                        .foregroundStyle(ArtaColor.text)
+                        .lineLimit(1)
+                    if !ref.detailLine.isEmpty {
+                        Text(ref.detailLine)
+                            .font(.caption)
+                            .foregroundStyle(ArtaColor.muted)
+                            .lineLimit(1)
+                    }
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// Espera a que se deje de teclear; lo anterior se queda en pantalla mientras llega lo nuevo.
+    private func searchRefs(_ query: String?) async {
+        guard let query else {
+            refResults = []
+            return
+        }
+        try? await Task.sleep(nanoseconds: 180_000_000)
+        if Task.isCancelled { return }
+        let results = await model.searchRefs(query)
+        if Task.isCancelled { return }
+        refResults = results
     }
 
     @ViewBuilder
@@ -721,30 +865,7 @@ struct ConversationView: View {
         } else {
             VStack(spacing: 0) {
                 if let q = mentionQuery {
-                    let people = model.mentionCandidates(q)
-                    if !people.isEmpty {
-                        ScrollView {
-                            VStack(alignment: .leading, spacing: 0) {
-                                ForEach(people) { person in
-                                    Button { insertMention(person) } label: {
-                                        HStack(spacing: 10) {
-                                            Avatar(name: person.fullName, size: 28)
-                                                .overlay(alignment: .bottomTrailing) {
-                                                    if presence.isOnline(person.id) { PresenceDot(online: true, size: 9) }
-                                                }
-                                            Text(person.fullName).foregroundStyle(ArtaColor.text)
-                                            Spacer()
-                                        }
-                                        .padding(.horizontal, 14)
-                                        .padding(.vertical, 8)
-                                        .contentShape(Rectangle())
-                                    }
-                                    .buttonStyle(.plain)
-                                }
-                            }
-                        }
-                        .frame(maxHeight: 180)
-                    }
+                    mentionPicker(q)
                 }
                 if let editing {
                     contextBar(
@@ -780,6 +901,7 @@ struct ConversationView: View {
             }
             .background(ArtaColor.surfaceSoft)
             .overlay(alignment: .top) { Rectangle().fill(ArtaColor.line).frame(height: 1) }
+            .task(id: mentionQuery) { await searchRefs(mentionQuery) }
         }
     }
 
@@ -879,14 +1001,21 @@ struct ConversationView: View {
         if !value.isEmpty && editing == nil { model.onTyping() }
         if editing == nil && draftLoaded {
             ChatDrafts.save(resolvedDraft(), channelId: model.channelId, parentId: model.parentId)
+            ChatDrafts.saveRefs(draftRefs(), channelId: model.channelId, parentId: model.parentId)
         }
     }
 
     private func loadDraft() {
         guard !draftLoaded else { return }
-        let saved = ChatDrafts.load(channelId: model.channelId, parentId: model.parentId)
-        if !saved.isEmpty { setDraft(fromTokens: saved) }
+        restoreSavedDraft()
         draftLoaded = true
+    }
+
+    private func restoreSavedDraft() {
+        let saved = ChatDrafts.load(channelId: model.channelId, parentId: model.parentId)
+        guard !saved.isEmpty else { return }
+        setDraft(fromTokens: saved)
+        refMap = refsByLabel(ChatDrafts.loadRefs(channelId: model.channelId, parentId: model.parentId))
     }
 
     /// Texto con tokens `[@Nombre](user:id)` → borrador visible con «@Nombre» y su mapa de ids.
@@ -903,9 +1032,35 @@ struct ConversationView: View {
     }
 
     private func insertMention(_ person: ChannelMember) {
-        guard let range = draft.range(of: #"@([^\s@]{0,30})$"#, options: .regularExpression) else { return }
-        draft.replaceSubrange(range, with: "@\(person.fullName) ")
+        guard let range = draft.range(of: Self.mentionTail, options: .regularExpression) else { return }
+        // Antes de tocar el texto: `onDraftChange` ya debe saber que esto es una mención.
         mentionMap[person.fullName] = person.id
+        draft.replaceSubrange(range, with: "@\(person.fullName) ")
+    }
+
+    private func insertRef(_ ref: ChatRef) {
+        guard let range = draft.range(of: Self.mentionTail, options: .regularExpression) else { return }
+        Haptics.selection()
+        refMap[ref.label] = ref
+        draft.replaceSubrange(range, with: "@\(ref.label) ")
+    }
+
+    private func refsByLabel(_ refs: [ChatRef]) -> [String: ChatRef] {
+        var map: [String: ChatRef] = [:]
+        for ref in refs where !ref.label.isEmpty { map[ref.label] = ref }
+        return map
+    }
+
+    /// Lo elegido que sigue escrito en el texto, en el orden en que aparece y con el tope del API.
+    private func draftRefs() -> [ChatRef] {
+        let found = refMap.compactMap { label, ref -> (offset: Int, ref: ChatRef)? in
+            guard let range = draft.range(of: "@" + label) else { return nil }
+            return (offset: draft.distance(from: draft.startIndex, to: range.lowerBound), ref: ref)
+        }
+        return found
+            .sorted { $0.offset < $1.offset }
+            .prefix(chatRefsPerMessage)
+            .map { $0.ref }
     }
 
     /// Borrador con «@Nombre» convertidos al token que entiende el API.
@@ -921,7 +1076,9 @@ struct ConversationView: View {
         let text = resolvedDraft()
         draft = ""
         mentionMap = [:]
+        refMap = [:]
         ChatDrafts.save("", channelId: model.channelId, parentId: model.parentId)
+        ChatDrafts.saveRefs([], channelId: model.channelId, parentId: model.parentId)
         return text
     }
 
@@ -933,12 +1090,14 @@ struct ConversationView: View {
 
     private func submit() {
         if let editing {
-            model.edit(editing, resolvedDraft())
+            // Sin nada ligado ni elegido no se manda `refs`: el API viejo no lo conoce.
+            model.edit(editing, resolvedDraft(), refs: refMap.isEmpty ? nil : draftRefs())
             cancelEditing()
             return
         }
         let reply = takeReply()
-        model.send(takeDraft(), replyTo: reply)
+        let refs = draftRefs()
+        model.send(takeDraft(), replyTo: reply, refs: refs)
         Haptics.send()
     }
 
@@ -952,6 +1111,7 @@ struct ConversationView: View {
         replyingTo = nil
         editing = m
         setDraft(fromTokens: m.text)
+        refMap = refsByLabel(model.refs(for: m))
         composerFocused = true
     }
 
@@ -960,8 +1120,8 @@ struct ConversationView: View {
         editing = nil
         draft = ""
         mentionMap = [:]
-        let saved = ChatDrafts.load(channelId: model.channelId, parentId: model.parentId)
-        if !saved.isEmpty { setDraft(fromTokens: saved) }
+        refMap = [:]
+        restoreSavedDraft()
     }
 
     // MARK: Adjuntos
@@ -984,7 +1144,8 @@ struct ConversationView: View {
             }
         }
         let reply = takeReply()
-        model.sendFiles(jobs, caption: takeDraft(), replyTo: reply)
+        let refs = draftRefs()
+        model.sendFiles(jobs, caption: takeDraft(), replyTo: reply, refs: refs)
     }
 
     private func sendDocuments(_ urls: [URL]) {
@@ -992,7 +1153,8 @@ struct ConversationView: View {
             { @Sendable in try await MediaPrep.document(at: url) }
         }
         let reply = takeReply()
-        model.sendFiles(jobs, caption: takeDraft(), replyTo: reply)
+        let refs = draftRefs()
+        model.sendFiles(jobs, caption: takeDraft(), replyTo: reply, refs: refs)
     }
 
     private func sendCamera(_ result: CameraPicker.Result) {
@@ -1004,7 +1166,8 @@ struct ConversationView: View {
             job = { @Sendable in try await MediaPrep.video(at: url, ownsSource: true) }
         }
         let reply = takeReply()
-        model.sendFiles([job], caption: takeDraft(), replyTo: reply)
+        let refs = draftRefs()
+        model.sendFiles([job], caption: takeDraft(), replyTo: reply, refs: refs)
     }
 
     private func startRecording() {
@@ -1093,6 +1256,16 @@ struct ConversationView: View {
     }
 }
 
+// MARK: - Selector
+
+/// Resultados del «@» de un tipo, en el orden de `ChatRefKind`.
+private struct RefGroup: Identifiable {
+    let kind: ChatRefKind
+    let items: [ChatRef]
+
+    var id: String { kind.rawValue }
+}
+
 // MARK: - Bloquear
 
 /// A quién se va a bloquear (menú de un mensaje o encabezado de un directo).
@@ -1162,6 +1335,9 @@ struct MessageBubble: View {
     let showReplies: Bool
     let myId: String
     let maxWidth: CGFloat
+    /// Lo arrobado (contrato §9), con su tarjeta más nueva.
+    let refs: [ChatRef]
+    let refBusy: String?
     var onReact: (String) -> Void
     var onMoreReactions: () -> Void
     var onThread: () -> Void
@@ -1171,6 +1347,12 @@ struct MessageBubble: View {
     var onVideo: (URL) -> Void
     var onFile: (ChatAttachment) -> Void
     var onQuote: (String) -> Void
+    var onRefAction: (ChatRef, ChatRefAction) -> Void
+
+    /// Sin acceso no hay tarjeta, solo el chip.
+    private var refCards: [ChatRef] {
+        message.isDeleted ? [] : refs.filter(\.showsCard)
+    }
 
     private var linkURL: String? {
         guard !message.isDeleted, message.attachment == nil, !message.pending else { return nil }
@@ -1194,6 +1376,9 @@ struct MessageBubble: View {
             }
             VStack(alignment: mine ? .trailing : .leading, spacing: 4) {
                 bubble
+                if !refCards.isEmpty {
+                    ChatRefCards(refs: refCards, busyKey: refBusy, onAction: onRefAction)
+                }
                 if !message.allReactions.isEmpty && !message.isDeleted { reactions }
                 if showReplies && message.replies > 0 {
                     Button(action: onThread) {
@@ -1256,7 +1441,7 @@ struct MessageBubble: View {
                 }
             } else if inlineMeta {
                 HStack(alignment: .lastTextBaseline, spacing: 8) {
-                    ChatRichText(source: message.text)
+                    ChatRichText(source: message.text, refs: refs)
                     meta
                 }
             } else {
@@ -1264,7 +1449,7 @@ struct MessageBubble: View {
                     AttachmentContent(attachment: attachment, mine: mine, onImage: onImage, onVideo: onVideo, onFile: onFile)
                 }
                 if !message.text.isEmpty {
-                    ChatRichText(source: message.text)
+                    ChatRichText(source: message.text, refs: refs)
                 }
                 if let linkURL {
                     LinkPreviewCard(url: linkURL)

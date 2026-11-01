@@ -46,6 +46,10 @@ final class ConversationModel: ObservableObject {
     @Published var error: String?
     @Published var focusMessageId: String?
     @Published var jumpRequest: JumpRequest?
+    /// Tarjetas al día (lo que llegó por socket o lo que cambió): ganan a lo que traía el mensaje.
+    @Published private(set) var refCards: [String: ChatRef] = [:]
+    /// La tarjeta cuyo botón va en camino (`ChatRef.key`).
+    @Published private(set) var refBusy: String?
 
     var myId: String { Session.shared.currentUser?.id ?? "" }
 
@@ -55,6 +59,11 @@ final class ConversationModel: ObservableObject {
     private var visible = false
     private var started = false
     private var bag = Set<AnyCancellable>()
+    /// Tarjetas por pedir: se juntan un momento y salen en una sola llamada.
+    private var cardQueue: [String: ChatRefInput] = [:]
+    private var cardFlush: Task<Void, Never>?
+    /// Ya se pidieron: una tarjeta que no llega no se vuelve a pedir en cada mensaje nuevo.
+    private var askedCards = Set<String>()
 
     init(channelId: String, parentId: String?, focusMessageId: String?) {
         self.channelId = channelId
@@ -157,7 +166,7 @@ final class ConversationModel: ObservableObject {
         rt.updated.sink { [weak self] m in
             guard let self, m.channelId == self.channelId else { return }
             if let i = self.messages.firstIndex(where: { $0.id == m.id }) {
-                var next = m
+                var next = self.keepingCards(m, from: self.messages[i])
                 // `saved` es por persona: lo que llega por el socket no lo sabe.
                 next.saved = self.messages[i].saved
                 self.messages[i] = next
@@ -202,6 +211,19 @@ final class ConversationModel: ObservableObject {
         ChatBlocks.shared.$ids.sink { [weak self] ids in
             self?.hideAuthors(ids)
         }.store(in: &bag)
+
+        // Cambió una tarea u OC mencionada: solo si está en lo que se ve en esta pantalla.
+        rt.refsChanged.sink { [weak self] ref in
+            guard let self else { return }
+            let key = ref.key
+            guard self.messages.contains(where: { $0.refs?.contains(where: { $0.key == key }) == true }) else { return }
+            self.requestCards([ref])
+        }.store(in: &bag)
+
+        // Lo que llega por socket solo trae la etiqueta: cada quien pide la tarjeta con sus permisos.
+        $messages.sink { [weak self] list in
+            self?.requestUnresolved(list)
+        }.store(in: &bag)
     }
 
     /// Quita de la pantalla los mensajes (y el «escribiendo…») de personas bloqueadas.
@@ -221,6 +243,7 @@ final class ConversationModel: ObservableObject {
     }
 
     private func catchUp() async {
+        refreshAllCards()
         guard !hasNewer, let last = messages.last(where: { !$0.pending && !$0.failed }) else { return }
         if let parentId {
             if let t = try? await ApiClient.shared.thread(parentId) { ([t.root] + t.replies).forEach(upsert) }
@@ -233,11 +256,11 @@ final class ConversationModel: ObservableObject {
     private func upsert(_ m: ChatMessage) {
         var list = messages
         if let i = list.firstIndex(where: { $0.id == m.id }) {
-            var next = m
+            var next = keepingCards(m, from: list[i])
             if next.saved == nil { next.saved = list[i].saved }
             list[i] = next
         } else if let cid = m.clientId, let i = list.firstIndex(where: { $0.clientId == cid && $0.pending }) {
-            list[i] = m
+            list[i] = keepingCards(m, from: list[i])
         } else {
             list.append(m)
         }
@@ -391,7 +414,8 @@ final class ConversationModel: ObservableObject {
         )
     }
 
-    func send(_ body: String, attachment: UploadResult? = nil, replyTo: ChatMessage? = nil) {
+    /// `refs`: lo elegido en el selector que sigue escrito en el texto.
+    func send(_ body: String, attachment: UploadResult? = nil, replyTo: ChatMessage? = nil, refs: [ChatRef] = []) {
         let text = String(body.trimmingCharacters(in: .whitespacesAndNewlines).prefix(chatMessageLimit))
         guard !text.isEmpty || attachment != nil else { return }
         if hasNewer { Task { await loadLatest() } }
@@ -408,6 +432,7 @@ final class ConversationModel: ObservableObject {
             author: ChatAuthor(id: me?.id ?? "", fullName: me?.name ?? ""),
             clientId: clientId,
             replyTo: replyTo.map(Self.replyRef),
+            refs: refs.isEmpty ? nil : refs,
             pending: true
         )
         messages.append(optimistic)
@@ -415,6 +440,7 @@ final class ConversationModel: ObservableObject {
     }
 
     private func post(_ m: ChatMessage) {
+        let refs = (m.refs ?? []).map(\.input)
         Task {
             do {
                 let saved = try await ApiClient.shared.post(channelId, PostMessageBody(
@@ -425,7 +451,9 @@ final class ConversationModel: ObservableObject {
                     attachmentMime: m.attachment?.mime,
                     attachmentSize: m.attachment?.size,
                     clientId: m.clientId,
-                    replyToId: m.replyTo?.id
+                    replyToId: m.replyTo?.id,
+                    // Sin nada arrobado el campo no viaja: el API viejo no lo conoce.
+                    refs: refs.isEmpty ? nil : refs
                 ))
                 var result = saved
                 // El API viejo no devuelve `replyTo`: se conserva la cita local.
@@ -457,11 +485,11 @@ final class ConversationModel: ObservableObject {
     }
 
     /// Fotos, videos, notas de voz o documentos: un mensaje por archivo, como WhatsApp.
-    /// El texto escrito (y la cita) van en el primero. Se preparan y suben en orden.
-    func sendFiles(_ items: [@Sendable () async throws -> PreparedUpload], caption: String, replyTo: ChatMessage? = nil) {
+    /// El texto escrito (con lo arrobado en él) y la cita van en el primero. Se preparan y suben en orden.
+    func sendFiles(_ items: [@Sendable () async throws -> PreparedUpload], caption: String, replyTo: ChatMessage? = nil, refs: [ChatRef] = []) {
         guard !items.isEmpty else { return }
         for (i, item) in items.enumerated() {
-            uploadQueue.append((item, i == 0 ? caption : "", i == 0 ? replyTo : nil))
+            uploadQueue.append((item, i == 0 ? caption : "", i == 0 ? replyTo : nil, i == 0 ? refs : []))
         }
         queuedTotal += items.count
         guard !draining else { return }
@@ -469,7 +497,7 @@ final class ConversationModel: ObservableObject {
         Task { await drainUploads() }
     }
 
-    private var uploadQueue: [(prepare: @Sendable () async throws -> PreparedUpload, caption: String, replyTo: ChatMessage?)] = []
+    private var uploadQueue: [(prepare: @Sendable () async throws -> PreparedUpload, caption: String, replyTo: ChatMessage?, refs: [ChatRef])] = []
     private var queuedTotal = 0
     private var queuedDone = 0
     private var draining = false
@@ -492,7 +520,7 @@ final class ConversationModel: ObservableObject {
                         self.upload = UploadProgress(label: label, index: index, total: self.queuedTotal, fraction: fraction)
                     }
                 }
-                send(next.caption, attachment: uploaded, replyTo: next.replyTo)
+                send(next.caption, attachment: uploaded, replyTo: next.replyTo, refs: next.refs)
             } catch {
                 self.error = error.userMessage
             }
@@ -523,10 +551,12 @@ final class ConversationModel: ObservableObject {
         }
     }
 
-    func edit(_ m: ChatMessage, _ body: String) {
+    /// `refs` en `nil`: el API conserva lo que siga escrito en el cuerpo. Con lista, la reemplaza.
+    func edit(_ m: ChatMessage, _ body: String, refs: [ChatRef]? = nil) {
         let text = String(body.trimmingCharacters(in: .whitespacesAndNewlines).prefix(chatMessageLimit))
         guard !text.isEmpty, text != m.text else { return }
-        mutate { try await ApiClient.shared.edit(m.id, body: text) }
+        let inputs = refs?.map(\.input)
+        mutate { try await ApiClient.shared.edit(m.id, body: text, refs: inputs) }
     }
 
     func delete(_ m: ChatMessage) {
@@ -559,6 +589,165 @@ final class ConversationModel: ObservableObject {
     }
 
     func pins() async -> [ChatMessage] { (try? await ApiClient.shared.pins(channelId)) ?? [] }
+
+    // MARK: Referencias (docs/CHAT-V2-CONTRATO.md §9)
+
+    /// Lo arrobado en un mensaje con su tarjeta más nueva. `label` sigue siendo lo escrito en el
+    /// cuerpo, aunque hayan renombrado la tarea: con eso se encuentra el chip.
+    func refs(for m: ChatMessage) -> [ChatRef] {
+        (m.refs ?? []).filter(\.isValid).map { ref in
+            guard var card = refCards[ref.key] else { return ref }
+            card.label = ref.label
+            return card
+        }
+    }
+
+    /// El socket solo trae etiquetas: lo que ya se sabía de la tarjeta no se pierde al actualizar el
+    /// mensaje (una reacción no debe apagar los chips mientras llega la tarjeta).
+    private func keepingCards(_ next: ChatMessage, from old: ChatMessage) -> ChatMessage {
+        guard let incoming = next.refs, !incoming.isEmpty, let known = old.refs, !known.isEmpty else { return next }
+        var out = next
+        out.refs = incoming.map { ref in
+            guard ref.isUnresolved, var card = known.first(where: { $0.key == ref.key }), !card.isUnresolved else { return ref }
+            card.label = ref.label
+            return card
+        }
+        return out
+    }
+
+    private func requestUnresolved(_ list: [ChatMessage]) {
+        var wanted: [ChatRefInput] = []
+        for m in list where !m.pending {
+            for ref in m.refs ?? [] where ref.isValid && ref.isUnresolved && refCards[ref.key] == nil && !askedCards.contains(ref.key) {
+                wanted.append(ref.input)
+            }
+        }
+        if !wanted.isEmpty { requestCards(wanted) }
+    }
+
+    /// Pide tarjetas con mis permisos: lo que llegó por socket o lo que acaba de cambiar.
+    func requestCards(_ refs: [ChatRefInput]) {
+        for ref in refs { cardQueue[ref.key] = ref }
+        guard cardFlush == nil, !cardQueue.isEmpty else { return }
+        cardFlush = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 120_000_000)
+            await self?.flushCards()
+        }
+    }
+
+    private func flushCards() async {
+        cardFlush = nil
+        // El API acepta hasta 60 por llamada; lo demás sale en la siguiente vuelta.
+        let batch = Array(cardQueue.values.prefix(60))
+        for ref in batch {
+            cardQueue[ref.key] = nil
+            askedCards.insert(ref.key)
+        }
+        guard !batch.isEmpty else { return }
+        if let cards = try? await ApiClient.shared.refCards(batch) {
+            var next = refCards
+            for card in cards where card.isValid { next[card.key] = card }
+            refCards = next
+        }
+        if !cardQueue.isEmpty { requestCards([]) }
+    }
+
+    /// Al volver de una reconexión: mientras tanto pudo cambiar cualquiera.
+    private func refreshAllCards() {
+        askedCards.removeAll()
+        var seen = Set<String>()
+        var all: [ChatRefInput] = []
+        for m in messages where !m.pending {
+            for ref in m.refs ?? [] where ref.isValid && seen.insert(ref.key).inserted {
+                all.append(ref.input)
+            }
+        }
+        requestCards(all)
+    }
+
+    /// Selector del «@». Sin texto, lo que la persona trae a la mano. Si falla (API viejo, modo de
+    /// muestra), el selector se queda solo con las personas.
+    func searchRefs(_ query: String) async -> [ChatRef] {
+        let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        let found = (try? await ApiClient.shared.searchRefs(q, channelId: channelId)) ?? []
+        return found.filter { $0.isValid && $0.showsCard && !$0.label.isEmpty }
+    }
+
+    // MARK: Botones de la tarjeta
+
+    /// «Entregar» se escribe en su hoja, que necesita la tarea completa.
+    func taskToDeliver(_ ref: ChatRef) async -> ArtaTask? {
+        guard refBusy == nil else { return nil }
+        refBusy = ref.key
+        defer { refBusy = nil }
+        do {
+            return try await ApiClient.shared.task(ref.id)
+        } catch {
+            self.error = error.userMessage
+            return nil
+        }
+    }
+
+    /// «Marcar hecha»: no hay quien revise.
+    func completeTask(_ ref: ChatRef) async -> Bool {
+        await runRefAction(ref) { _ = try await ApiClient.shared.updateTask(ref.id, UpdateTaskBody(status: "DONE")) }
+    }
+
+    func approveTask(_ ref: ChatRef) async -> Bool {
+        await runRefAction(ref) { _ = try await ApiClient.shared.approveTask(ref.id) }
+    }
+
+    private func runRefAction(_ ref: ChatRef, _ call: () async throws -> Void) async -> Bool {
+        guard refBusy == nil else { return false }
+        refBusy = ref.key
+        defer { refBusy = nil }
+        do {
+            try await call()
+            requestCards([ref.input])
+            return true
+        } catch {
+            Haptics.error()
+            self.error = error.userMessage
+            return false
+        }
+    }
+
+    // MARK: Crear tarea desde un mensaje
+
+    /// Mismo criterio que `canCreateTasks` del API: «solo carpetas» y practicante no asignan trabajo.
+    /// En el modo de muestra no hay dónde crearla ni a quién avisarle.
+    func canCreateTask(_ m: ChatMessage) -> Bool {
+        guard !DemoMode.isActive, !m.pending, !m.failed, !m.isDeleted, !m.isSystem, !m.text.isEmpty else { return false }
+        let role = Session.shared.currentUser?.roleKey
+        return role != "solo_carpetas" && role != "practicante"
+    }
+
+    /// Crea la tarea y la anuncia como respuesta en el hilo de ese mensaje. Lanza solo si la tarea no
+    /// se creó; `false` si quedó creada pero no se pudo decir en la conversación.
+    func createTask(_ body: CreateTaskBody, from m: ChatMessage) async throws -> Bool {
+        let task = try await ApiClient.shared.createTask(body)
+        return await announceTask(task.id, replyingTo: m)
+    }
+
+    private func announceTask(_ taskId: String, replyingTo m: ChatMessage) async -> Bool {
+        guard channel?.mayPost != false else { return false }
+        let input = ChatRefInput(kind: ChatRefKind.task.rawValue, id: taskId)
+        do {
+            // La etiqueta la pone el API: es lo que después encuentra el chip en el cuerpo.
+            guard let card = try await ApiClient.shared.refCards([input]).first, !card.label.isEmpty else { return false }
+            let saved = try await ApiClient.shared.post(channelId, PostMessageBody(
+                body: "Nueva tarea: @\(card.label)",
+                parentId: m.parentId ?? m.id,
+                clientId: "i-\(UUID().uuidString)",
+                refs: [input]
+            ))
+            // Viendo el canal, el contador de respuestas lo sube el socket, como cualquier otra respuesta.
+            if belongsHere(saved) { upsert(saved) }
+            return true
+        } catch {
+            return false
+        }
+    }
 
     // MARK: Reportar y bloquear (docs/chat-reportar-bloquear.md)
 
@@ -630,7 +819,7 @@ final class ConversationModel: ObservableObject {
 
     /// Miembros que se pueden mencionar con «@».
     func mentionCandidates(_ query: String) -> [ChannelMember] {
-        let q = query.lowercased()
+        let q = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         return (channel?.allMembers ?? [])
             .filter { $0.id != myId && (q.isEmpty || $0.fullName.lowercased().contains(q)) }
             .prefix(6)

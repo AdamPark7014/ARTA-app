@@ -58,6 +58,8 @@ final class RealtimeClient {
     let notificationsUnread = PassthroughSubject<Int, Never>()
     let notificationRead = PassthroughSubject<NotificationReadEvent, Never>()
     let presence = PassthroughSubject<PresenceEvent, Never>()
+    /// Cambió una tarea u OC mencionada en una de mis salas: refrescar su tarjeta.
+    let refsChanged = PassthroughSubject<ChatRefInput, Never>()
     let connected = CurrentValueSubject<Bool, Never>(false)
 
     private var manager: SocketManager?
@@ -164,6 +166,10 @@ final class RealtimeClient {
             guard let o = Self.object(data), let user = Self.string(o, "userId") else { return }
             let online = (o["online"] as? Bool) ?? (o["online"] as? NSNumber)?.boolValue ?? false
             self?.presence.send(PresenceEvent(userId: user, online: online))
+        }
+        s.on("chat:refs-changed") { [weak self] data, _ in
+            guard let o = Self.object(data), let kind = Self.string(o, "kind"), let id = Self.string(o, "id") else { return }
+            self?.refsChanged.send(ChatRefInput(kind: kind, id: id))
         }
 
         self.manager = manager

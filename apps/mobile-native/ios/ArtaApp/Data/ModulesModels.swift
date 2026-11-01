@@ -276,6 +276,10 @@ struct RejectTaskBody: Encodable {
     let note: String
 }
 
+struct TaskCommentBody: Encodable {
+    let body: String
+}
+
 // MARK: - Eventos
 
 /// Fila de `GET events`.

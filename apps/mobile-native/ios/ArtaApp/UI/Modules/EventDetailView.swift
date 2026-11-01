@@ -23,6 +23,8 @@ struct EventDetailView: View {
     @State private var chatError: String?
     @State private var showNewTask = false
     @State private var showDone = false
+    /// «Mencionado en el chat» (docs/CHAT-V2-CONTRATO.md §9). Sin ninguno, la sección no aparece.
+    @State private var backlinks: [ChatBacklink] = []
 
     private var openTasks: [ArtaTask] {
         tasks
@@ -296,6 +298,10 @@ struct EventDetailView: View {
                     }
                 }
             }
+
+            if !backlinks.isEmpty {
+                ChatBacklinksCard(links: backlinks)
+            }
         }
     }
 
@@ -476,6 +482,10 @@ struct EventDetailView: View {
             }
         }
         loading = false
+        // API viejo o sin acceso: la sección simplemente no aparece.
+        if let links = try? await ApiClient.shared.refBacklinks(kind: ChatRefKind.event.rawValue, id: eventId) {
+            backlinks = links
+        }
     }
 
     private func openChat() async {

@@ -30,6 +30,13 @@ struct TaskDetailView: View {
     @State private var openingEvidenceId: String?
     /// Lo hecho, un momento abajo de la pantalla («Entrega aprobada»).
     @State private var flash: String?
+    @State private var comment = ""
+    @State private var sendingComment = false
+    @State private var commentError: String?
+    /// «Mencionado en el chat» (docs/CHAT-V2-CONTRATO.md §9). Sin ninguno, la sección no aparece.
+    @State private var backlinks: [ChatBacklink] = []
+
+    private static let commentLimit = 2000
 
     private var me: String? { profile?.id }
 
@@ -150,6 +157,9 @@ struct TaskDetailView: View {
                 peopleCard(t)
                 evidenceCard(t)
                 historyCard(t)
+                if !backlinks.isEmpty {
+                    ChatBacklinksCard(links: backlinks)
+                }
             }
             .padding(.horizontal, ArtaLayout.gutter)
             .padding(.vertical, ArtaSpace.l)
@@ -386,11 +396,15 @@ struct TaskDetailView: View {
         }
     }
 
+    /// El API no deja comentar en un evento cerrado (`assertEventNotClosed`).
     @ViewBuilder
     private func historyCard(_ t: ArtaTask) -> some View {
-        if !t.activityList.isEmpty {
-            ModuleCard(title: "Historial") {
+        if !t.activityList.isEmpty || !t.isEventClosed {
+            ModuleCard(title: "Comentarios e historial") {
                 VStack(alignment: .leading, spacing: 12) {
+                    if !t.isEventClosed {
+                        commentBox
+                    }
                     ForEach(t.activityList) { item in
                         HStack(alignment: .top, spacing: 10) {
                             TimelineDot(active: true).padding(.top, 5)
@@ -402,7 +416,10 @@ struct TaskDetailView: View {
                                     .foregroundStyle(ArtaColor.muted)
                                     .fixedSize(horizontal: false, vertical: true)
                                 if let extra = TaskInfo.activityDetail(item) {
-                                    Text(extra).font(.footnote).foregroundStyle(ArtaColor.text)
+                                    Text(extra)
+                                        .font(item.action == "comment" ? .subheadline : .footnote)
+                                        .foregroundStyle(ArtaColor.text)
+                                        .fixedSize(horizontal: false, vertical: true)
                                 }
                             }
                         }
@@ -410,6 +427,45 @@ struct TaskDetailView: View {
                 }
             }
         }
+    }
+
+    /// Campo del sistema (superficie suave, borde de línea fuerte) y su botón, abajo a la derecha.
+    private var commentBox: some View {
+        let shape = RoundedRectangle(cornerRadius: ArtaRadius.inner, style: .continuous)
+        return VStack(alignment: .trailing, spacing: ArtaSpace.s) {
+            TextField("Escribe un comentario", text: $comment, axis: .vertical)
+                .lineLimit(1...6)
+                .font(.subheadline)
+                .foregroundStyle(ArtaColor.text)
+                .tint(ArtaColor.accent)
+                .padding(.horizontal, ArtaSpace.m)
+                .padding(.vertical, 10)
+                .background(shape.fill(ArtaColor.surfaceSoft))
+                .overlay(shape.strokeBorder(ArtaColor.lineStrong, lineWidth: 1))
+                .onChange(of: comment) { _, value in
+                    if value.count > Self.commentLimit { comment = String(value.prefix(Self.commentLimit)) }
+                }
+                .accessibilityIdentifier("task-comment-field")
+            if let commentError {
+                InlineErrorRow(message: commentError)
+            }
+            Button {
+                Task { await sendComment() }
+            } label: {
+                HStack(spacing: ArtaSpace.xs) {
+                    if sendingComment {
+                        ProgressView()
+                            .controlSize(.small)
+                            .tint(ArtaColor.tertiary)
+                    }
+                    Text("Comentar")
+                }
+            }
+            .buttonStyle(ArtaPrimaryButtonStyle(fullWidth: false, compact: true))
+            .disabled(comment.moduleTrimmed.isEmpty || sendingComment)
+            .accessibilityIdentifier("task-comment-send")
+        }
+        .padding(.bottom, ArtaSpace.xs)
     }
 
     private func menu(_ t: ArtaTask) -> some View {
@@ -488,6 +544,27 @@ struct TaskDetailView: View {
             if !error.isModuleCancellation { self.error = error.userMessage }
         }
         loading = false
+        // API viejo o sin acceso: la sección simplemente no aparece.
+        if let links = try? await ApiClient.shared.refBacklinks(kind: ChatRefKind.task.rawValue, id: taskId) {
+            backlinks = links
+        }
+    }
+
+    private func sendComment() async {
+        let body = comment.moduleTrimmed
+        guard !body.isEmpty, !sendingComment else { return }
+        sendingComment = true
+        commentError = nil
+        do {
+            task = try await ApiClient.shared.commentTask(taskId, body: body)
+            comment = ""
+            Haptics.success()
+            show("Comentario agregado")
+        } catch {
+            Haptics.error()
+            commentError = error.userMessage
+        }
+        sendingComment = false
     }
 
     private func run(_ action: String, done: String, _ op: () async throws -> ArtaTask) async {

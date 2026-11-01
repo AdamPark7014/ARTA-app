@@ -198,13 +198,15 @@ struct ChatMessage: Decodable, Identifiable, Equatable {
     var deleted: Bool?
     /// Solo en resultados de `GET chat/search`.
     var channel: ChatChannelRef?
+    /// Tareas, eventos, OC… arrobados (contrato §9). Falta en el API viejo.
+    var refs: [ChatRef]?
     /// Solo en mensajes optimistas locales mientras el API responde.
     var pending = false
     var failed = false
 
     enum CodingKeys: String, CodingKey {
         case id, channelId, parentId, kind, body, attachment, pinnedAt, editedAt, createdAt, author, replyCount, reactions, clientId
-        case replyTo, saved, deleted, channel
+        case replyTo, saved, deleted, channel, refs
     }
 
     var text: String { body ?? "" }
@@ -239,9 +241,15 @@ struct PostMessageBody: Encodable {
     var attachmentSize: Int64?
     var clientId: String?
     var replyToId: String?
+    /// Lo arrobado que sigue escrito en el cuerpo (máximo 8); sin nada, no se manda.
+    var refs: [ChatRefInput]?
 }
 
-struct EditBody: Encodable { let body: String }
+struct EditBody: Encodable {
+    let body: String
+    /// `nil`: el API conserva lo que siga escrito en el cuerpo. Con lista, la reemplaza.
+    var refs: [ChatRefInput]? = nil
+}
 struct ReactionBody: Encodable { let emoji: String }
 struct MuteBody: Encodable {
     let muted: Bool
@@ -331,6 +339,100 @@ struct ChatPrefsBody: Encodable {
         }
     }
 }
+
+// MARK: - Referencias del chat (docs/CHAT-V2-CONTRATO.md §9)
+
+struct ChatRefPerson: Codable, Equatable {
+    let id: String
+    var fullName: String?
+
+    var name: String { fullName ?? "" }
+}
+
+/// Lo que se manda al API para ligar algo a un mensaje o pedir su tarjeta.
+struct ChatRefInput: Codable, Equatable {
+    let kind: String
+    let id: String
+
+    var key: String { "\(kind):\(id)" }
+}
+
+/// Una cosa arrobada en un mensaje. `label` es lo escrito en el cuerpo y `title` el nombre de hoy.
+/// Todo es opcional al decodificar, campo por campo: una referencia rara nunca tumba la lista de
+/// mensajes; la que no trae `kind` o `id` se ignora (`isValid`).
+struct ChatRef: Codable, Equatable {
+    var kind: String
+    var id: String
+    var label: String
+    var title: String?
+    /// `false`: llegó por socket, solo trae la etiqueta. La tarjeta se pide con `POST chat/refs/cards`.
+    var resolved: Bool?
+    /// `false`: sin acceso. Se ve la etiqueta y nada más.
+    var canOpen: Bool?
+    var missing: Bool?
+    var href: String?
+    var status: String?
+    var statusLabel: String?
+    /// action (relleno: te toca) | late | info | done
+    var tone: String?
+    var subtitle: String?
+    var dueAt: String?
+    /// 0-100.
+    var progress: Double?
+    var people: [ChatRefPerson]?
+    var amount: String?
+    /// deliver | complete | approve
+    var actions: [String]?
+
+    enum CodingKeys: String, CodingKey {
+        case kind, id, label, title, resolved, canOpen, missing, href, status, statusLabel, tone
+        case subtitle, dueAt, progress, people, amount, actions
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        kind = (try? c.decodeIfPresent(String.self, forKey: .kind)) ?? ""
+        id = (try? c.decodeIfPresent(String.self, forKey: .id)) ?? ""
+        label = (try? c.decodeIfPresent(String.self, forKey: .label)) ?? ""
+        title = try? c.decodeIfPresent(String.self, forKey: .title)
+        resolved = try? c.decodeIfPresent(Bool.self, forKey: .resolved)
+        canOpen = try? c.decodeIfPresent(Bool.self, forKey: .canOpen)
+        missing = try? c.decodeIfPresent(Bool.self, forKey: .missing)
+        href = try? c.decodeIfPresent(String.self, forKey: .href)
+        status = try? c.decodeIfPresent(String.self, forKey: .status)
+        statusLabel = try? c.decodeIfPresent(String.self, forKey: .statusLabel)
+        tone = try? c.decodeIfPresent(String.self, forKey: .tone)
+        subtitle = try? c.decodeIfPresent(String.self, forKey: .subtitle)
+        dueAt = try? c.decodeIfPresent(String.self, forKey: .dueAt)
+        progress = try? c.decodeIfPresent(Double.self, forKey: .progress)
+        people = try? c.decodeIfPresent([ChatRefPerson].self, forKey: .people)
+        amount = try? c.decodeIfPresent(String.self, forKey: .amount)
+        actions = try? c.decodeIfPresent([String].self, forKey: .actions)
+    }
+
+    var isValid: Bool { !kind.isEmpty && !id.isEmpty }
+    var key: String { "\(kind):\(id)" }
+    var input: ChatRefInput { ChatRefInput(kind: kind, id: id) }
+}
+
+struct ChatRefCardsBody: Encodable { let refs: [ChatRefInput] }
+struct ChatRefCardsResponse: Decodable { var refs: [ChatRef]? }
+struct ChatRefSearchResponse: Decodable { var results: [ChatRef]? }
+
+/// Un mensaje que menciona algo («Mencionado en el chat»).
+struct ChatBacklink: Decodable, Identifiable, Equatable {
+    let messageId: String
+    var channelId: String?
+    var channelName: String?
+    var author: ChatRefPerson?
+    var excerpt: String?
+    var at: String?
+    var href: String?
+
+    var id: String { messageId }
+}
+
+struct ChatBacklinksResponse: Decodable { var links: [ChatBacklink]? }
 
 // MARK: - Reportar y bloquear (docs/chat-reportar-bloquear.md)
 

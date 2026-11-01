@@ -303,7 +303,7 @@ extension ApiClient {
     }
 
     func thread(_ messageId: String) async throws -> ThreadDto { try await get("chat/messages/\(messageId)/thread") }
-    func edit(_ messageId: String, body: String) async throws -> ChatMessage { try await send("PATCH", "chat/messages/\(messageId)", body: EditBody(body: body), as: ChatMessage.self) }
+    func edit(_ messageId: String, body: String, refs: [ChatRefInput]? = nil) async throws -> ChatMessage { try await send("PATCH", "chat/messages/\(messageId)", body: EditBody(body: body, refs: refs), as: ChatMessage.self) }
     func deleteMessage(_ messageId: String) async throws { try await send("DELETE", "chat/messages/\(messageId)") }
     func react(_ messageId: String, emoji: String) async throws -> ChatMessage { try await send("POST", "chat/messages/\(messageId)/reactions", body: ReactionBody(emoji: emoji), as: ChatMessage.self) }
     func pin(_ messageId: String) async throws -> ChatMessage { try await send("POST", "chat/messages/\(messageId)/pin", as: ChatMessage.self) }
@@ -354,6 +354,25 @@ extension ApiClient {
     func linkPreview(_ url: String) async throws -> LinkPreview? { try await getOptional("chat/link-preview", query: ["url": url]) }
     func chatPrefs() async throws -> ChatPrefs { try await get("chat/prefs") }
     func setDnd(until: String?) async throws { try await send("PATCH", "chat/prefs", body: ChatPrefsBody(dndUntil: until)) }
+
+    // Referencias (docs/CHAT-V2-CONTRATO.md §9). Sin `q` sugiere lo que la persona trae a la mano.
+    func searchRefs(_ q: String, channelId: String?) async throws -> [ChatRef] {
+        let res: ChatRefSearchResponse = try await get("chat/refs/search", query: [
+            "q": q.isEmpty ? nil : q,
+            "channelId": channelId,
+            "entity": EntityContext.query,
+        ])
+        return res.results ?? []
+    }
+    /// Hasta 60, con los permisos de quien pide.
+    func refCards(_ refs: [ChatRefInput]) async throws -> [ChatRef] {
+        let res = try await send("POST", "chat/refs/cards", body: ChatRefCardsBody(refs: refs), as: ChatRefCardsResponse.self)
+        return res.refs ?? []
+    }
+    func refBacklinks(kind: String, id: String) async throws -> [ChatBacklink] {
+        let res: ChatBacklinksResponse = try await get("chat/refs/backlinks", query: ["kind": kind, "id": id])
+        return res.links ?? []
+    }
 
     // Reportar y bloquear (docs/chat-reportar-bloquear.md).
     func reportMessage(_ messageId: String, reason: ChatReportReason, details: String?) async throws {

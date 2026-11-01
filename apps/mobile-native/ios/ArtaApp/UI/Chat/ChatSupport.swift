@@ -8,6 +8,9 @@ let chatQuickReactions = ["👍", "❤️", "😂", "🎉", "👀", "🔥", "✅
 /// Límite del cuerpo de un mensaje en los tres clientes y en el API.
 let chatMessageLimit = 8000
 
+/// Cuántas cosas se pueden ligar a un mensaje: de más, el API responde 400.
+let chatRefsPerMessage = 8
+
 extension ArtaColor {
     static let online = Color(hex: 0x22C55E)
 }
@@ -54,6 +57,25 @@ enum ChatDrafts {
             UserDefaults.standard.removeObject(forKey: k)
         } else {
             UserDefaults.standard.set(String(text.prefix(chatMessageLimit)), forKey: k)
+        }
+    }
+
+    private static func refsKey(_ channelId: String, _ parentId: String?) -> String {
+        "chat.draft.refs.\(channelId)" + (parentId.map { ".\($0)" } ?? "")
+    }
+
+    /// Lo arrobado en el borrador: el cuerpo solo guarda «@Etiqueta», sin decir qué cosa es.
+    static func loadRefs(channelId: String, parentId: String?) -> [ChatRef] {
+        guard let data = UserDefaults.standard.data(forKey: refsKey(channelId, parentId)) else { return [] }
+        return (try? JSONDecoder().decode([ChatRef].self, from: data)) ?? []
+    }
+
+    static func saveRefs(_ refs: [ChatRef], channelId: String, parentId: String?) {
+        let k = refsKey(channelId, parentId)
+        if refs.isEmpty {
+            UserDefaults.standard.removeObject(forKey: k)
+        } else if let data = try? JSONEncoder().encode(refs) {
+            UserDefaults.standard.set(data, forKey: k)
         }
     }
 }
