@@ -1,5 +1,6 @@
 'use client';
 
+import type { ChatRef } from './chat-refs';
 import { getCsrfToken } from '@/lib/api';
 
 /* Chat en canales (el mismo API que Android e iPhone): tipos, fechas, adjuntos y notas de voz. */
@@ -82,6 +83,8 @@ export type ChatMessage = {
   replyCount: number;
   reactions: ChatReaction[];
   clientId?: string | null;
+  /** Tareas, eventos, OC, formatos, documentos y anticipos arrobados. */
+  refs?: ChatRef[];
   /** Chat v2 (opcionales: el API viejo no los manda). */
   replyToId?: string | null;
   replyTo?: ReplyRef | null;

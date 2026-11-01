@@ -16,6 +16,8 @@ import {
   type Colleague,
   type SavedItem,
 } from './chat-model';
+import { REF_GROUPS, refKey, type ChatRef, type RefAction } from './chat-refs';
+import { RefCard } from './RefCard';
 import { Avatar, ChannelGlyph, channelDisplayName, channelWhere, errorText, untilLabel } from './chat-ui';
 
 /* Paneles laterales: fijados, guardados e información del canal. */
@@ -397,6 +399,78 @@ export function ChannelInfo({
           ) : null}
         </section>
       ) : null}
+    </div>
+  );
+}
+
+type LinkedRef = ChatRef & { messageId: string; at: string; count: number };
+
+/** Panel «Ligados»: todo lo que se ha arrobado en esta conversación, con su estado de hoy. */
+export function LinkedList({
+  channelId,
+  live,
+  onAction,
+  busyKey,
+  onJump,
+}: {
+  channelId: string;
+  live: Record<string, ChatRef>;
+  onAction: (r: ChatRef, action: RefAction) => void;
+  busyKey: string | null;
+  onJump: (messageId: string) => void;
+}) {
+  const [refs, setRefs] = useState<LinkedRef[] | null>(null);
+  useEffect(() => {
+    let alive = true;
+    setRefs(null);
+    api<{ refs: LinkedRef[] }>(`/chat/channels/${channelId}/refs`)
+      .then((res) => {
+        if (alive) setRefs(res.refs ?? []);
+      })
+      .catch(() => {
+        if (alive) setRefs([]);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [channelId]);
+
+  if (!refs) return <p className="chat-panel__empty">Cargando…</p>;
+  if (!refs.length) {
+    return (
+      <p className="chat-panel__empty">
+        Aquí queda lo que se arrobe en esta conversación: tareas, eventos, órdenes de compra, formatos y documentos.
+      </p>
+    );
+  }
+  return (
+    <div className="ref-panel">
+      {REF_GROUPS.map((g) => {
+        const rows = refs.filter((r) => r.kind === g.kind);
+        if (!rows.length) return null;
+        return (
+          <section key={g.kind}>
+            <h4 className="ref-panel__title">{g.title}</h4>
+            {rows.map((r) => {
+              const key = refKey(r);
+              const card = live[key] ? { ...r, ...live[key], label: r.label } : r;
+              return (
+                <RefCard
+                  key={key}
+                  r={card}
+                  onAction={card.canOpen ? onAction : undefined}
+                  busy={busyKey === key}
+                  extra={
+                    <button type="button" className="ref-card__jump" onClick={() => onJump(r.messageId)}>
+                      Ir al mensaje{r.count > 1 ? ` (${r.count})` : ''}
+                    </button>
+                  }
+                />
+              );
+            })}
+          </section>
+        );
+      })}
     </div>
   );
 }

@@ -413,7 +413,9 @@ export type TaskNoticeKind =
   | 'status_changed'
   | 'deleted'
   | 'due_soon'
-  | 'overdue';
+  | 'overdue'
+  | 'comment'
+  | 'mention';
 
 export type TaskNoticeInput = {
   actor?: string | null;
@@ -493,6 +495,10 @@ export function taskNotice(kind: TaskNoticeKind, input: TaskNoticeInput): Notice
         event,
         'Entrégala o pide otra fecha a quien te la asignó.',
       );
+    case 'comment':
+      return notice(`${actor} comentó: ${task}`, input.note ? `«${clip(input.note, 120)}»` : event);
+    case 'mention':
+      return notice(`${actor} te mencionó en: ${task}`, input.note ? `«${clip(input.note, 120)}»` : event);
   }
 }
 
@@ -601,6 +607,35 @@ export function chatReportNotice(input: {
 /* ── Boletera ────────────────────────────────────────────────────────────── */
 
 /** «Boletos agotados: Noche de Boleros» · «1,200 de 1,200 boletos · el evento es el sáb 25 oct». */
+export type ChatRefRole =
+  | 'task_owner'
+  | 'task_requester'
+  | 'po_owner'
+  | 'format_owner'
+  | 'doc_owner'
+  | 'advance_owner';
+
+const CHAT_REF_THING: Record<ChatRefRole, string> = {
+  task_owner: 'tu tarea',
+  task_requester: 'la tarea que pediste',
+  po_owner: 'tu OC',
+  format_owner: 'el formato que llenaste',
+  doc_owner: 'tu documento',
+  advance_owner: 'tu anticipo',
+};
+
+/** Alguien arrobó algo tuyo en el chat. Sin `preview`: la conversación no es tuya, solo se dice de qué. */
+export function chatRefNotice(
+  role: ChatRefRole,
+  input: { actor?: string | null; where?: string; label: string; preview?: string },
+): Notice {
+  return notice(
+    `${who(input.actor)} mencionó ${CHAT_REF_THING[role]}${input.where ? ` en ${input.where}` : ''}`,
+    input.preview ? clip(input.preview, 140) : `«${clip(input.label, 60)}»`,
+    input.preview ? null : 'Se habló de esto en una conversación privada.',
+  );
+}
+
 export function ticketingMilestoneNotice(input: {
   event: { name: string; startsAt?: Date | string | null };
   milestone: number;

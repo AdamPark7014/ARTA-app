@@ -6,6 +6,7 @@ import {
   ForbiddenException,
   Get,
   NotFoundException,
+  Optional,
   Param,
   Patch,
   Post,
@@ -17,7 +18,7 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { Prisma, TaskStatus } from '@prisma/client';
-import { IsArray, IsIn, IsOptional, IsString } from 'class-validator';
+import { IsArray, IsIn, IsOptional, IsString, MaxLength } from 'class-validator';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { NotificationsService, type NotifyInput } from '../notifications/notifications.service';
@@ -34,6 +35,8 @@ import {
   type RoleKey,
 } from '../common/rbac/roles';
 import { MULTER_OPTIONS, contentMatchesExtension, discardUpload } from '../uploads/upload-storage';
+import { ChatRefsService } from '../chat/chat-refs.service';
+import { chatPreview, mentionedUserIds } from '../chat/chat-text';
 import {
   assertCanReview,
   assertCanSubmit,
@@ -66,6 +69,10 @@ class CreateTaskDto {
   @IsOptional() @IsString() dueAt?: string;
   /** ARTA o EXPLANADA para una tarea sin evento (con evento manda la del evento). */
   @IsOptional() @IsIn(['ARTA', 'EXPLANADA']) entity?: string;
+}
+
+class TaskCommentDto {
+  @IsString() @MaxLength(2000) body!: string;
 }
 
 const TASK_INCLUDE = {
@@ -123,6 +130,7 @@ export class TasksController {
   constructor(
     private prisma: PrismaService,
     private notifications: NotificationsService,
+    @Optional() private refs?: ChatRefsService,
   ) {}
 
   private async assertEvent(user: AuthUser, eventId: string) {
@@ -480,6 +488,50 @@ export class TasksController {
     return evidence;
   }
 
+  /**
+   * Comentario: queda en el historial de la tarea y le llega a sus responsables, a
+   * quien la pidió y a quien arrobaron (`[@Nombre](user:<id>)`, igual que en el chat).
+   */
+  @Post(':id/comments')
+  async comment(@Req() req: { user: AuthUser }, @Param('id') id: string, @Body() dto: TaskCommentDto) {
+    const task = await this.loadTask(id);
+    await this.assertCanTouch(req.user, task);
+    if (task.event) assertEventNotClosed(task.event.status);
+    const body = (dto.body ?? '').replace(/\r\n?/g, '\n').trim();
+    if (!body) throw new BadRequestException('Escribe un comentario');
+
+    const wanted = [...mentionedUserIds(body, req.user.id)];
+    const mentioned = wanted.length
+      ? (
+          await this.prisma.user.findMany({
+            where: { id: { in: wanted }, active: true, organizationId: task.organizationId || tenantIdOf(req.user) },
+            select: { id: true },
+          })
+        ).map((u) => u.id)
+      : [];
+    await logTaskActivity(this.prisma, id, req.user.id, 'comment', body, { mentions: mentioned });
+
+    const note = chatPreview(body);
+    const base = {
+      organizationId: task.organizationId,
+      actorId: req.user.id,
+      linkUrl: taskLink(task.eventId, task.id),
+      entity: task.event?.entity ?? task.entity ?? undefined,
+    };
+    await this.notifications.notifyUsers(mentioned, {
+      ...base,
+      type: 'task.mention',
+      ...taskNotice('mention', { actor: req.user.fullName, task, event: task.event, note }),
+    });
+    const others = [...taskAssigneeIds(task), task.createdById].filter((uid) => !uid || !mentioned.includes(uid));
+    await this.notifications.notifyUsers(others, {
+      ...base,
+      type: 'task.comment',
+      ...taskNotice('comment', { actor: req.user.fullName, task, event: task.event, note }),
+    });
+    return this.fetchTask(id);
+  }
+
   /** Entrega con evidencia — quien tiene la tarea la manda a revisión (o cierra si no hay quien apruebe). */
   @Post(':id/submit')
   async submit(
@@ -575,6 +627,7 @@ export class TasksController {
       });
     }
 
+    void this.refs?.touched('task', id);
     return updated;
   }
 
@@ -615,6 +668,7 @@ export class TasksController {
       });
     }
 
+    void this.refs?.touched('task', id);
     return updated;
   }
 
@@ -665,6 +719,7 @@ export class TasksController {
       });
     }
 
+    void this.refs?.touched('task', id);
     return updated;
   }
 
@@ -844,6 +899,7 @@ export class TasksController {
       }
     }
 
+    void this.refs?.touched('task', id);
     return updated;
   }
 
@@ -862,6 +918,7 @@ export class TasksController {
       linkUrl: taskLink(task.eventId),
       entity: task.event?.entity ?? task.entity ?? undefined,
     });
+    void this.refs?.touched('task', id);
     return { ok: true };
   }
 }

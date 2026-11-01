@@ -35,6 +35,8 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { discardUpload } from '../uploads/upload-storage';
 import { attachmentKind, CHAT_MULTER_OPTIONS, chatContentMatches, chatMimeFor, utf8FileName } from './chat-attachments';
 import { fetchLinkPreview } from './chat-link-preview';
+import { cleanRefInput, MAX_REFS_PER_MESSAGE } from './chat-refs';
+import { ChatRefsService } from './chat-refs.service';
 import {
   ChatService,
   GROUP_DM_MAX,
@@ -98,10 +100,17 @@ class PostMessageDto {
   @IsOptional() @IsString() @MaxLength(100) attachmentMime?: string;
   @IsOptional() @Type(() => Number) @IsInt() @Min(0) attachmentSize?: number;
   @IsOptional() @IsString() @MaxLength(64) clientId?: string;
+  /** Tareas, eventos, OC, formatos, documentos y anticipos arrobados; el servicio valida cada uno. */
+  @IsOptional() @IsArray() @ArrayMaxSize(MAX_REFS_PER_MESSAGE) refs?: Array<{ kind: string; id: string }>;
 }
 
 class EditMessageDto {
   @IsString() @MaxLength(MAX_BODY) body!: string;
+  @IsOptional() @IsArray() @ArrayMaxSize(MAX_REFS_PER_MESSAGE) refs?: Array<{ kind: string; id: string }>;
+}
+
+class RefCardsDto {
+  @IsArray() @ArrayMaxSize(60) refs!: Array<{ kind: string; id: string }>;
 }
 
 class ReactionDto {
@@ -129,7 +138,10 @@ class ReportStatusDto {
 @Controller('chat')
 @UseGuards(JwtAuthGuard)
 export class ChatController {
-  constructor(private readonly chat: ChatService) {}
+  constructor(
+    private readonly chat: ChatService,
+    private readonly refs: ChatRefsService,
+  ) {}
 
   // ─── Chat v2: grupos, guardados, presencia, vista previa y preferencias ───
 
@@ -205,6 +217,38 @@ export class ChatController {
   }
 
   // ─── Canales ─────────────────────────────────────────────────────────────
+
+  // ─── Referencias: arrobar tareas, eventos, OC, formatos, documentos y anticipos ───
+
+  @Get('refs/search')
+  searchRefs(
+    @Req() req: Req_,
+    @Query('q') q?: string,
+    @Query('kinds') kinds?: string,
+    @Query('entity') entity?: string,
+    @Query('channelId') channelId?: string,
+  ) {
+    return this.refs.search(req.user, { q, kinds, entity, channelId });
+  }
+
+  /** Tarjetas con los permisos de quien pide: lo que llegó por socket, o lo que cambió. */
+  @Post('refs/cards')
+  @HttpCode(200)
+  async refCards(@Req() req: Req_, @Body() dto: RefCardsDto) {
+    const refs = cleanRefInput(dto.refs, 60);
+    const cards = await this.refs.cards(req.user, refs);
+    return { refs: [...cards.values()] };
+  }
+
+  @Get('refs/backlinks')
+  backlinks(@Req() req: Req_, @Query('kind') kind: string, @Query('id') id: string) {
+    return this.refs.backlinks(req.user, kind, id);
+  }
+
+  @Get('channels/:id/refs')
+  channelRefs(@Req() req: Req_, @Param('id') id: string) {
+    return this.chat.channelRefs(req.user, id);
+  }
 
   @Get('channels')
   channels(@Req() req: Req_, @Query('entity') entity?: string) {
@@ -309,7 +353,7 @@ export class ChatController {
 
   @Patch('messages/:id')
   edit(@Req() req: Req_, @Param('id') id: string, @Body() dto: EditMessageDto) {
-    return this.chat.editMessage(req.user, id, dto.body);
+    return this.chat.editMessage(req.user, id, dto.body, dto.refs);
   }
 
   @Delete('messages/:id')

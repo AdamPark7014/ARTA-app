@@ -20,6 +20,8 @@ import {
   type ReplyRef,
 } from './chat-model';
 import { ChatInline, ChatMarkdown, firstLink, isEmojiOnly } from './chat-markdown';
+import { REF_ICON, refKey, type ChatRef, type RefAction } from './chat-refs';
+import { RefCards } from './RefCard';
 import { Avatar, Menu } from './chat-ui';
 import { EmojiPicker } from './EmojiPicker';
 
@@ -45,6 +47,12 @@ export type MessageActions = {
   jumpTo: (messageId: string) => void;
   onMention?: (userId: string) => void;
   isOnline?: (userId: string) => boolean;
+  /** Tarjetas al día (lo que cambió o llegó por socket); ganan a lo que traía el mensaje. */
+  refCards?: Record<string, ChatRef>;
+  refAct?: (r: ChatRef, action: RefAction) => void;
+  refBusy?: string | null;
+  /** «Crear tarea» desde un mensaje. */
+  createTask?: (m: ChatMessage) => void;
   highlight: string | null;
   touched: string | null;
   setTouched: (id: string | null) => void;
@@ -179,6 +187,14 @@ export function MessageItem({
   const mentionsMe = Boolean(x.meId && m.body && !mine && (m.body.includes(`(user:${x.meId})`) || /(^|\s)@canal\b/.test(m.body)));
   const busy = Boolean(emojiAt || menuAt);
   const stamp = local ? undefined : fullStamp(m.createdAt);
+  const refs = useMemo(
+    () =>
+      (m.refs ?? []).map((r) => {
+        const live = x.refCards?.[refKey(r)];
+        return live ? { ...live, label: r.label } : r;
+      }),
+    [m.refs, x.refCards],
+  );
 
   const openEmoji = (el: HTMLElement) => setEmojiAt(el.getBoundingClientRect());
 
@@ -212,7 +228,6 @@ export function MessageItem({
         {first ? (
           <div className="chat-msg__head">
             <span className="chat-msg__author">{m.author.fullName}</span>
-            {m.author.title ? <span className="chat-msg__role">{m.author.title}</span> : null}
             {m.pending ? (
               <span className="chat-msg__time">Enviando…</span>
             ) : (
@@ -253,7 +268,7 @@ export function MessageItem({
               <EditBox m={m} x={x} />
             ) : m.body ? (
               <div className={`chat-msg__body${jumbo ? ' is-jumbo' : ''}${m.editedAt ? ' is-edited' : ''}`}>
-                <ChatMarkdown text={m.body} meId={x.meId} onMention={x.onMention} />
+                <ChatMarkdown text={m.body} meId={x.meId} onMention={x.onMention} refs={refs} />
                 {m.editedAt ? (
                   <span className="chat-msg__edited" title={`Editado ${fullStamp(m.editedAt)}`}>
                     {' '}
@@ -263,6 +278,7 @@ export function MessageItem({
               </div>
             ) : null}
             {link ? <LinkPreviewCard url={link} /> : null}
+            {!isEditing && refs.length ? <RefCards refs={refs} onAction={x.refAct} busyKey={x.refBusy} /> : null}
           </>
         )}
 
@@ -404,6 +420,9 @@ export function MessageItem({
                 }
               : null,
             { label: 'Copiar enlace', icon: ICONS.link, onSelect: () => x.copyLink(m) },
+            x.createTask && m.body && !local
+              ? { label: 'Crear tarea', icon: REF_ICON.task, onSelect: () => x.createTask?.(m) }
+              : null,
             x.canPost && !m.parentId ? { label: m.pinnedAt ? 'Desfijar' : 'Fijar en el canal', icon: ICONS.pin, onSelect: () => x.pin(m) } : null,
             canEdit ? { label: 'Editar', icon: ICONS.edit, hint: '↑', onSelect: () => x.setEditing({ id: m.id, body: plainText(m.body) }) } : null,
             mine || x.canManage ? { label: 'Eliminar', icon: ICONS.trash, danger: true, onSelect: () => x.remove(m) } : null,
@@ -438,9 +457,13 @@ export function MessageStream({
   const r = receipt && lastMine ? receipt(lastMine) : null;
   const dividerRef = useRef<HTMLDivElement>(null);
 
-  return (
-    <>
-      {blocks.map((b) => {
+  const days: Array<{ key: string; blocks: typeof blocks }> = [];
+  for (const b of blocks) {
+    if (b.kind === 'day' || !days.length) days.push({ key: b.key, blocks: [b] });
+    else days[days.length - 1].blocks.push(b);
+  }
+
+  const renderBlock = (b: (typeof blocks)[number]) => {
         if (b.kind === 'day') {
           return (
             <div key={b.key} className="chat-day" role="separator">
@@ -469,7 +492,15 @@ export function MessageStream({
             ))}
           </div>
         );
-      })}
+  };
+
+  return (
+    <>
+      {days.map((d) => (
+        <div key={d.key} className="chat-dayblock">
+          {d.blocks.map(renderBlock)}
+        </div>
+      ))}
     </>
   );
 }

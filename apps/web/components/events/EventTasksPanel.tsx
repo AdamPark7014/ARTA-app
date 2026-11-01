@@ -1,7 +1,7 @@
 'use client';
 
 import { AvatarStack } from '@/components/ui/AvatarStack';
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { EmptyLite, Pill, SectionHead, Seg } from '@/components/ui/Lite';
 import { AssigneesPicker } from '@/components/ui/AssigneesPicker';
 import { TaskApprovalActions } from '@/components/tasks/TaskApprovalActions';
@@ -13,6 +13,9 @@ import type { DirUser, Task } from '@/components/events/event-detail.types';
 type TaskForm = { title: string; module: string; assigneeIds: string[]; dueAt: string; detail: string };
 
 type EventTasksPanelProps = {
+  /** `?task=<id>`, la liga de los avisos y del chat: abre esa tarea. `?do=deliver`: su entrega. */
+  focusTaskId?: string | null;
+  focusDo?: string | null;
   closed: boolean;
   tasks: Task[];
   directory: DirUser[];
@@ -66,6 +69,8 @@ export function EventTasksPanel({
   onSetTaskDue,
   onEditTask,
   onTaskUpdated,
+  focusTaskId,
+  focusDo,
 }: EventTasksPanelProps) {
   const [section, setSection] = useState<Section>('open');
   const [more, setMore] = useState(false);
@@ -89,6 +94,18 @@ export function EventTasksPanel({
       done: sorted.filter((t) => t.status === 'DONE'),
     };
   }, [tasks]);
+
+  const focusedRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!focusTaskId || focusedRef.current === focusTaskId) return;
+    const found = (tasks || []).find((t) => t.id === focusTaskId);
+    if (!found) return;
+    focusedRef.current = focusTaskId;
+    setSection(found.status === 'DONE' ? 'done' : found.status === 'PENDING_APPROVAL' ? 'approval' : 'open');
+    setOpenId(found.id);
+    if (focusDo === 'deliver' && isTaskAssignee(found, currentUserId) && found.status !== 'DONE') setDeliveryTask(found);
+    window.requestAnimationFrame(() => document.getElementById(`task-${found.id}`)?.scrollIntoView({ block: 'center' }));
+  }, [focusTaskId, focusDo, tasks, currentUserId]);
 
   const overdue = groups.open.filter((t) => dueKey(t.dueAt) && dueKey(t.dueAt) < today).length;
   const list = groups[section];
@@ -242,7 +259,7 @@ export function EventTasksPanel({
             const isEditing = editing?.id === t.id;
 
             return (
-              <li key={t.id} className={`task2 ${open ? 'is-open' : ''} ${t.status === 'DONE' ? 'is-done' : ''}`}>
+              <li key={t.id} id={`task-${t.id}`} className={`task2 ${open ? 'is-open' : ''} ${t.status === 'DONE' ? 'is-done' : ''}`}>
                 <div className="task2__row">
                   <button
                     type="button"
@@ -363,7 +380,7 @@ export function EventTasksPanel({
                         </div>
                         {canReview && onTaskUpdated ? <TaskApprovalActions task={t} onDone={onTaskUpdated} /> : null}
                         {(t.activities?.length ?? 0) > 0 ? (
-                          <TaskActivityTimeline task={t} expanded onToggle={() => setOpenId(null)} />
+                          <TaskActivityTimeline task={t} expanded onToggle={() => setOpenId(null)} onUpdated={onTaskUpdated} />
                         ) : null}
                       </>
                     )}

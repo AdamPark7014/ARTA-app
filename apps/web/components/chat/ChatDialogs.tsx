@@ -2,8 +2,9 @@
 
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { api } from '@/lib/api';
+import { AssigneesPicker, type DirectoryUser } from '@/components/ui/AssigneesPicker';
 import { Icon, ICONS } from './ChatAttachment';
-import { fold, plainText, type ChannelDetail, type ChannelSummary, type Colleague } from './chat-model';
+import { fold, plainText, type ChannelDetail, type ChannelSummary, type ChatMessage, type Colleague } from './chat-model';
 import { Avatar, ChannelGlyph, channelDisplayName, errorText, isDirectLike, Modal, PanelHead } from './chat-ui';
 
 const GROUP_MAX = 8;
@@ -364,6 +365,94 @@ export function QuickSwitcher({
           <kbd>Esc</kbd> cerrar
         </span>
       </footer>
+    </Modal>
+  );
+}
+
+/** «Crear tarea» desde un mensaje: el texto ya es el título; basta decir de quién y para cuándo. */
+export function TaskFromMessage({
+  message,
+  eventId,
+  entity,
+  onClose,
+  onCreated,
+  onError,
+}: {
+  message: ChatMessage;
+  eventId: string | null;
+  entity: 'ARTA' | 'EXPLANADA';
+  onClose: () => void;
+  onCreated: (taskId: string) => void;
+  onError: (text: string) => void;
+}) {
+  const [title, setTitle] = useState(() => plainText(message.body).replace(/\s+/g, ' ').trim().slice(0, 160));
+  const [assignees, setAssignees] = useState<string[]>([]);
+  const [dueAt, setDueAt] = useState('');
+  const [directory, setDirectory] = useState<DirectoryUser[]>([]);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    api<DirectoryUser[]>(`/users/directory?entity=${entity}`)
+      .then(setDirectory)
+      .catch(() => setDirectory([]));
+  }, [entity]);
+
+  const submit = async () => {
+    const clean = title.trim();
+    if (!clean || busy) return;
+    setBusy(true);
+    try {
+      const task = await api<{ id: string }>('/tasks', {
+        method: 'POST',
+        body: JSON.stringify({
+          title: clean,
+          assigneeIds: assignees,
+          dueAt: dueAt || undefined,
+          eventId: eventId ?? undefined,
+          entity,
+          detail: `Salió del chat, mensaje de ${message.author.fullName}.`,
+        }),
+      });
+      onCreated(task.id);
+    } catch (e) {
+      onError(errorText(e, 'No se pudo crear la tarea'));
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Modal label="Crear tarea" onClose={onClose} className="task-from">
+      <PanelHead title="Crear tarea" onClose={onClose} />
+      <form
+        className="task-from__form"
+        onSubmit={(e) => {
+          e.preventDefault();
+          void submit();
+        }}
+      >
+        <label className="task-from__field">
+          <span>Qué hay que hacer</span>
+          <input value={title} maxLength={200} autoFocus onChange={(e) => setTitle(e.target.value)} />
+        </label>
+        <div className="task-from__row">
+          <div className="task-from__field">
+            <span>Responsables</span>
+            <AssigneesPicker value={assignees} directory={directory} onChange={setAssignees} label="Responsables" />
+          </div>
+          <label className="task-from__field">
+            <span>Fecha de entrega</span>
+            <input type="date" value={dueAt} onChange={(e) => setDueAt(e.target.value)} />
+          </label>
+        </div>
+        <div className="task-from__actions">
+          <button type="button" className="btn ghost" onClick={onClose}>
+            Cancelar
+          </button>
+          <button type="submit" className="btn" disabled={!title.trim() || busy}>
+            {busy ? 'Creando…' : 'Crear tarea'}
+          </button>
+        </div>
+      </form>
     </Modal>
   );
 }

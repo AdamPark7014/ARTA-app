@@ -36,6 +36,13 @@ export type PushPayload = {
   passive?: boolean;
   /** De qué negocio es el aviso: ARTA o EXPLANADA; `null` si es de la cuenta. */
   entity?: string | null;
+  /** Botones por caso de uso (`pushActionsFor`). Las apps viejas los ignoran. */
+  actions?: string[];
+  /** Categoría de iOS para esos botones; sin ella, la de chat o la de evento. */
+  category?: string | null;
+  /** Sobre qué actúan los botones. */
+  targetKind?: string | null;
+  targetId?: string | null;
 };
 
 const ENTITY_WORD: Record<string, string> = { ARTA: 'Arta', EXPLANADA: 'Auditorio' };
@@ -127,6 +134,9 @@ export class PushDispatchService {
       message_id: payload.messageId || '',
       badge: payload.badge != null ? String(payload.badge) : '',
       entity: payload.entity || '',
+      actions: (payload.actions ?? []).join(','),
+      target_kind: payload.targetKind || '',
+      target_id: payload.targetId || '',
       passive: isPassive(payload) ? '1' : '',
       sent_at: new Date().toISOString(),
     };
@@ -215,7 +225,7 @@ export class PushDispatchService {
                 alert: { title: payload.title, body: payload.body, ...(subtitle ? { subtitle } : {}) },
                 ...(passive ? {} : { sound: 'default' }),
                 threadId: data.thread_id,
-                category: repliable ? 'ARTA_CHAT' : 'ARTA_EVENT',
+                category: payload.category || (repliable ? 'ARTA_CHAT' : 'ARTA_EVENT'),
                 mutableContent: true,
                 'interruption-level': passive ? 'passive' : 'active',
                 'relevance-score': RELEVANCE[data.channel] ?? 0.3,

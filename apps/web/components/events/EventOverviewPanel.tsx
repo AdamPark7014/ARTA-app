@@ -1,5 +1,6 @@
 'use client';
 
+import { RefBacklinks } from '@/components/chat/RefCard';
 import { useEffect, useMemo, useState } from 'react';
 import { ChecklistPicker } from '@/components/events/ChecklistPicker';
 import { EventVendorPins } from '@/components/events/EventVendorPins';
@@ -308,6 +309,7 @@ export function EventOverviewPanel({
           </section>
         </div>
       </div>
+      <RefBacklinks kind="event" id={event.id} />
     </div>
   );
 }

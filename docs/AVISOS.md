@@ -58,6 +58,34 @@ archivos («Ana R. subió 3 archivos»). Úsalo en todo lo que pueda llegar en s
 además `aps`, con `subtitle` (la entidad), `interruption-level` (`active` o `passive`) y `relevance-score`. No se usa
 `time-sensitive`: pediría una capacidad nueva y regenerar los perfiles de firma.
 
+## Casos: lo que cada aviso deja hacer
+
+Cada aviso sabe de qué trata (`Notification.targetKind/targetId`, sacado de la liga si no se dice otra cosa) y
+`pushActionsFor` le pone los botones. Viajan en `data.actions`, `data.target_kind` y `data.target_id`; en iOS además
+con la categoría de APNs. Una app vieja ignora todo eso y sigue abriendo la liga.
+
+| Caso | Tipos | Botones (`actions`) | iOS |
+|---|---|---|---|
+| Te toca una tarea | `task.assigned`, `task.reassigned`, `task.rejected`, `task.reopened`, `task.due_soon`, `task.overdue`, `chat.ref.task` | `task.deliver`, `open` | `ARTA_TASK` |
+| Te entregaron una tarea | `task.submitted` | `task.approve`, `open` | `ARTA_TASK_REVIEW` |
+| Dinero o firma | `po.requested`, `po.updated`, `advance.requested`, `checklist.submitted`, `checklist.signature_needed`, `checklist.returned`, `po.aging`… | `review` | `ARTA_APPROVAL` |
+| Te mencionaron | `chat.mention` | `reply`, `open` | `ARTA_CHAT` |
+| Mencionaron algo tuyo | `chat.ref.task_requested`, `chat.ref.po`, `chat.ref.format`, `chat.ref.doc`, `chat.ref.advance` | `open` | `ARTA_CHAT`/`ARTA_EVENT` |
+| Solo para enterarse | los demás con liga | `open` | `ARTA_EVENT` |
+
+Reglas:
+
+- `task.deliver` pide una nota ahí mismo y hace `POST /tasks/:id/submit`. `task.approve` aprueba con un toque.
+- **El dinero y las firmas nunca se aprueban desde la pantalla bloqueada:** `review` abre la pantalla, donde se ve el
+  monto y el comprobante.
+- En el navegador el service worker no tiene sesión: «Entregar» abre `/tasks?task=<id>&do=deliver` y «Revisar entrega»
+  abre `/tasks?task=<id>`, donde está el botón.
+
+**Quién recibe una arroba** (`ChatRefsService.notifyFor`): la tarea, sus responsables y quien la pidió (si no está
+terminada); la OC y el anticipo, quien los pidió; el formato, quien lo llenó al último; el documento, quien lo hizo. El
+evento no avisa: es contexto. Una persona recibe un solo aviso por mensaje, y ninguno si ya la mencionaron o si bloqueó
+al autor. Quien no puede leer esa conversación recibe el aviso **sin el texto** y con liga a la cosa, no al mensaje.
+
 ## Correo
 
 **No hay SMTP configurado en producción**: los resúmenes y las invitaciones se quedan en `NotificationOutbox` como

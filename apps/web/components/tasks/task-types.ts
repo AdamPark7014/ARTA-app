@@ -83,5 +83,6 @@ export const TASK_ACTION_LABEL: Record<string, string> = {
   approved: 'Aprobada',
   rejected: 'Rechazada — corrección pedida',
   evidence_added: 'Evidencia agregada',
+  comment: 'Comentario',
   deleted: 'Eliminada',
 };

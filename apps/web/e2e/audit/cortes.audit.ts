@@ -43,6 +43,44 @@ type Step = { name: string; path: string; action?: (page: Page) => Promise<void>
 /** Capas que se abren encima de una pantalla: campana, cuenta, buscador y cajón del menú. */
 const OVERLAYS: Step[] = [
   {
+    name: 'chat-refs',
+    path: '/chat?channel=ch-rich-general&msg=m-rich-g04b',
+    action: async (page) => {
+      await page.locator('#m-m-rich-g04b .ref-card').first().waitFor();
+      await page.locator('#m-m-rich-g04b').scrollIntoViewIfNeeded();
+    },
+  },
+  {
+    name: 'chat-selector',
+    path: '/chat?channel=ch-rich-general',
+    action: async (page) => {
+      const box = page.getByRole('textbox', { name: 'Mensaje' });
+      await box.waitFor();
+      await box.fill('revisen @');
+      await box.press('End');
+      await page.locator('.chat-mentions').waitFor();
+      await page.getByRole('option', { name: /Cotizar/ }).first().waitFor();
+    },
+  },
+  {
+    name: 'chat-tarea',
+    path: '/chat?channel=ch-rich-general',
+    action: async (page) => {
+      const box = page.getByRole('textbox', { name: 'Mensaje' });
+      await box.waitFor();
+      await box.fill('/tarea Cotizar luces y dimmers viernes');
+      await page.locator('.chat-composer__task').waitFor();
+    },
+  },
+  {
+    name: 'chat-ligados',
+    path: '/chat?channel=ch-rich-general',
+    action: async (page) => {
+      await page.getByRole('button', { name: /ligados a esta conversación/ }).click();
+      await page.locator('.ref-panel').waitFor();
+    },
+  },
+  {
     name: 'campana',
     path: '/dashboard',
     action: async (page) => {

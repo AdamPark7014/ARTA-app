@@ -79,3 +79,50 @@ Los marcadores no se aplican dentro de código. Copiar texto copia la versión l
 - Estados: cargando (esqueleto), vacío, error con «Reintentar». Hápticos en enviar, reaccionar y pulsación larga (móvil).
 - Deslizar para responder citando (móvil). Visor de imágenes con zoom, desplazamiento, galería y deslizar para cerrar.
 - Mensaje eliminado se muestra como «Mensaje eliminado» en gris (no desaparece si tiene hilo).
+
+## 9. Referencias: arrobar tareas, eventos, OC, formatos, documentos y anticipos
+
+Fecha: 2026-11-01. También aditivo: el cuerpo lleva `@Etiqueta` en **texto plano**, así que una app vieja lee
+«revisa @Cotizar luces» sin problema; solo no ve la tarjeta. Las personas siguen con `[@Nombre](user:<id>)`.
+
+- `kind`: `task | event | po | format | doc | advance`.
+- Prisma: `ChatMessageRef { messageId, channelId, kind, targetId, label, createdById, createdAt }`.
+- `POST /chat/channels/:id/messages` y `PATCH /chat/messages/:id` aceptan `refs?: [{ kind, id }]` (máximo 8). El
+  servidor descarta en silencio lo que el autor no puede abrir o ya no existe. Editar sin `refs` conserva las que
+  sigan escritas en el cuerpo; con `refs`, las reemplaza. Editar no vuelve a avisar.
+- `ChatMessageDto.refs: ChatRefDto[]`:
+
+  ```
+  { kind, id,
+    label,        // tal como quedó en el cuerpo: sirve para encontrar el chip. No cambia aunque renombren la tarea.
+    title,        // el nombre de hoy, para la tarjeta
+    resolved,     // false = llegó por socket, solo trae la etiqueta. Pide la tarjeta con /chat/refs/cards.
+    canOpen,      // false = sin acceso: enseña la etiqueta y nada más (ni monto, ni estado, ni liga)
+    missing,      // ya no existe
+    href,         // ruta del panel; las apps la traducen con su enrutador de ligas de siempre
+    status, statusLabel,
+    tone,         // action (relleno: te toca) | late | info | done
+    subtitle, dueAt, progress /* 0-100 */, people: [{ id, fullName }], amount,
+    actions }     // lo que ESTA persona puede hacer ahí mismo: deliver | complete | approve
+  ```
+
+- `GET /chat/refs/search?q=&kinds=&entity=&channelId=` → `{ results: ChatRefDto[] }`, en grupos por tipo. Sin `q`
+  sugiere lo que esa persona trae a la mano. Busca sin acentos. Primero lo del evento de la conversación.
+- `POST /chat/refs/cards` `{ refs: [{ kind, id }] }` (hasta 60) → `{ refs: ChatRefDto[] }`, con los permisos de quien pide.
+- `GET /chat/refs/backlinks?kind=&id=` → `{ links: [{ messageId, channelId, channelName, author, excerpt, at, href }] }`:
+  «Mencionado en». Solo conversaciones que esa persona puede leer; 404 si no puede abrir la cosa.
+- `GET /chat/channels/:id/refs` → `{ refs: [ChatRefDto + { messageId, at, count }] }`: panel «Ligados».
+- Socket `chat:refs-changed` `{ kind, id }` en el canal, cuando cambia una tarea u OC mencionada ahí: refresca la tarjeta.
+
+**Acciones de la tarjeta** (solo tareas):
+
+- `deliver`: alguien más la pidió, se entrega con nota o evidencia: `POST /tasks/:id/submit { completionNote }`.
+- `complete`: no hay quien revise: `PATCH /tasks/:id { status: 'DONE' }`.
+- `approve`: `POST /tasks/:id/approve`.
+
+**Crear tarea desde el chat:** `POST /tasks` de siempre (`eventId` si el canal es de un evento) y después un mensaje
+`Nueva tarea: @Etiqueta` con su `refs`; desde un mensaje, como respuesta en su hilo. Web: `/tarea Título @persona mañana`
+y «Crear tarea» en el menú del mensaje. Sus responsables no reciben aviso doble: ya les llegó `task.assigned`.
+
+**Comentar una tarea:** `POST /tasks/:id/comments { body }` (máx. 2000, con `[@Nombre](user:<id>)`) devuelve la tarea
+completa. Queda en `activities` con `action: 'comment'`. Avisa con `task.mention` y `task.comment`.

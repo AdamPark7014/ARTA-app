@@ -71,6 +71,23 @@ function actionLabel(data) {
   return 'Abrir';
 }
 
+/** Los botones que el servidor eligió para este caso de uso (`pushActionsFor`). */
+const ACTION_TITLE = {
+  'task.deliver': 'Entregar',
+  'task.approve': 'Revisar entrega',
+  review: 'Revisar',
+  reply: 'Responder',
+};
+
+function actionsOf(data, isChat) {
+  const wanted = (data.actions || '').split(',').filter(Boolean);
+  if (wanted.length) {
+    return wanted.slice(0, 2).map((action) => ({ action, title: ACTION_TITLE[action] || actionLabel(data) }));
+  }
+  if (isChat) return [{ action: 'open', title: 'Abrir chat' }];
+  return data.url ? [{ action: 'open', title: actionLabel(data) }] : [];
+}
+
 async function handlePush(data) {
   await setBadge(data.badge);
 
@@ -104,12 +121,14 @@ async function handlePush(data) {
     requireInteraction: data.priority === 'high' && data.channel === 'approvals',
     // Lo que no espera a nadie entra a la bandeja sin sonar.
     silent: data.passive === '1',
-    actions: isChat ? [{ action: 'open', title: 'Abrir chat' }] : data.url ? [{ action: 'open', title: actionLabel(data) }] : [],
+    actions: actionsOf(data, isChat),
     data: {
       url: data.url || '/notifications',
       kind: data.kind || 'event',
       channel: data.channel || 'general',
       notificationId: data.notification_id || '',
+      targetKind: data.target_kind || '',
+      targetId: data.target_id || '',
     },
   });
 }
@@ -152,7 +171,11 @@ self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   const info = event.notification.data || {};
   // `?notif=<id>`: la campana lo marca leído al llegar (aquí no hay sesión para hacerlo).
-  const url = new URL(targetUrl(info.url));
+  // «Entregar» y «Revisar entrega» van a la tarea aunque el aviso abra una conversación.
+  const onTask = info.targetKind === 'task' && info.targetId && (event.action === 'task.deliver' || event.action === 'task.approve');
+  const url = new URL(
+    onTask ? targetUrl(`/tasks?task=${encodeURIComponent(info.targetId)}${event.action === 'task.deliver' ? '&do=deliver' : ''}`) : targetUrl(info.url),
+  );
   if (info.notificationId) url.searchParams.set('notif', info.notificationId);
   const href = url.href;
   event.waitUntil(openOrFocus(href));

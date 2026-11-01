@@ -55,6 +55,40 @@ describe('TasksController · avisos', () => {
     return { controller, prisma, notifications };
   }
 
+  describe('comentarios', () => {
+    it('quedan en el historial y le llegan a responsables y a quien pidió, no a quien escribe', async () => {
+      const { controller, prisma, notifications } = setup();
+      await controller.comment(asUser('ana'), 't1', { body: '  ya pedí la cotización  ' });
+      expect(prisma.taskActivity.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ taskId: 't1', action: 'comment', detail: 'ya pedí la cotización' }),
+      });
+      const [ids, input] = notifications.notifyUsers.mock.calls[1] as unknown as [string[], any];
+      expect(ids).toEqual(expect.arrayContaining(['ana', 'carla', 'pide']));
+      expect(input.type).toBe('task.comment');
+      expect(input.title).toContain('comentó');
+      expect(input.linkUrl).toBe('/events/e1?tab=tasks&task=t1');
+    });
+
+    it('a quien arrobaron le dice «te mencionó», sin repetirle el otro aviso', async () => {
+      const { controller, prisma, notifications } = setup();
+      (prisma.user as any).findMany = jest.fn(async () => [{ id: 'carla' }]);
+      await controller.comment(asUser('ana'), 't1', { body: 'mira [@Carla](user:carla) y [@Fuera](user:fuera)' });
+      const [mentioned, mention] = notifications.notifyUsers.mock.calls[0] as unknown as [string[], any];
+      expect(mentioned).toEqual(['carla']);
+      expect(mention.type).toBe('task.mention');
+      expect(mention.body).toContain('@Carla');
+      const [others] = notifications.notifyUsers.mock.calls[1] as unknown as [string[]];
+      expect(others).not.toContain('carla');
+    });
+
+    it('no acepta un comentario vacío ni en un evento cerrado', async () => {
+      const empty = setup();
+      await expect(empty.controller.comment(asUser('ana'), 't1', { body: '   ' })).rejects.toThrow('Escribe un comentario');
+      const closed = setup({ event: { id: 'e1', name: 'C', entity: 'ARTA', status: 'CLOSED', organizationId: ORG } });
+      await expect(closed.controller.comment(asUser('ana'), 't1', { body: 'hola' })).rejects.toThrow();
+    });
+  });
+
   it('el enlace sigue el contrato móvil (tarea nativa)', () => {
     expect(taskLink('e1', 't1')).toBe('/events/e1?tab=tasks&task=t1');
     expect(taskLink(null, 't1')).toBe('/tasks?task=t1');

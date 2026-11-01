@@ -1,7 +1,8 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { AppShell } from '@/components/app-shell/AppShell';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { LoadingBlock, LoadingKpis } from '@/components/ui/LoadingBlock';
@@ -128,7 +129,28 @@ function toDateInput(iso?: string | null) {
 }
 
 export default function TasksPage() {
+  return (
+    <Suspense
+      fallback={
+        <AppShell title="Tareas">
+          <div className="stack page-workspace">
+            <LoadingBlock rows={4} label="Cargando tareas…" />
+          </div>
+        </AppShell>
+      }
+    >
+      <TasksPageInner />
+    </Suspense>
+  );
+}
+
+function TasksPageInner() {
   const { entity, user } = useUser();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const focusId = searchParams.get('task');
+  const focusDo = searchParams.get('do');
+  const [focusTask, setFocusTask] = useState<TaskRecord | null>(null);
   const canSeeTeam = TEAM_ROLES.has(user?.roleKey || '');
   const [view, setView] = useStickyState<View>('tasks.view', canSeeTeam ? 'requested' : 'mine');
   const [quick, setQuick] = useStickyState<QuickFilter>('tasks.quick', 'open');
@@ -195,8 +217,31 @@ export default function TasksPage() {
       .catch(() => setEvents([]));
   }, [entity, meId]);
 
+  // `?task=<id>`, la liga de los avisos y del chat: esa tarea arriba, con sus comentarios, aunque
+  // el filtro de la lista la deje fuera. `&do=deliver`: el botón «Entregar» del aviso.
+  useEffect(() => {
+    if (!meId || !focusId) {
+      setFocusTask(null);
+      return;
+    }
+    let alive = true;
+    api<TaskRecord>(`/tasks/${focusId}`)
+      .then((task) => {
+        if (!alive) return;
+        setFocusTask(task);
+        if (focusDo === 'deliver' && isTaskAssignee(task, meId) && task.status !== 'DONE') setDeliveryTask(task);
+      })
+      .catch(() => {
+        if (alive) setError('Esa tarea ya no existe o no tienes acceso');
+      });
+    return () => {
+      alive = false;
+    };
+  }, [focusId, focusDo, meId]);
+
   /** Sustituye la fila en memoria — nada de recargar 300 tareas por un clic. */
   const patchRow = useCallback((task: TaskRecord) => {
+    setFocusTask((cur) => (cur?.id === task.id ? task : cur));
     setRows((prev) => prev.map((r) => (r.id === task.id ? task : r)));
   }, []);
 
@@ -583,6 +628,42 @@ export default function TasksPage() {
           ))}
         </div>
 
+        {focusTask ? (
+          <section className="task-focus panel" aria-label={`Tarea ${focusTask.title}`}>
+            <header className="task-focus__head">
+              <div>
+                <h3 className="task-focus__title">{focusTask.title}</h3>
+                <p className="muted kpi-sub">
+                  {[
+                    TASK_STATUS_LABEL[focusTask.status] || focusTask.status,
+                    focusTask.event?.name,
+                    taskAssigneeNames(focusTask).join(', '),
+                    focusTask.createdBy ? `Lo pidió ${focusTask.createdBy.fullName}` : null,
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </p>
+              </div>
+              <button type="button" className="btn ghost btn-sm" onClick={() => router.replace('/tasks')}>
+                Cerrar
+              </button>
+            </header>
+            {focusTask.detail ? <p className="task-focus__detail">{focusTask.detail}</p> : null}
+            <div className="task-focus__actions">
+              {isTaskAssignee(focusTask, user?.id) && focusTask.status !== 'DONE' && focusTask.status !== 'PENDING_APPROVAL' ? (
+                <button type="button" className="btn btn-sm" onClick={() => handleCompleteClick(focusTask)}>
+                  {taskNeedsApproval(focusTask) ? 'Entregar' : 'Marcar hecha'}
+                </button>
+              ) : null}
+              {focusTask.status === 'PENDING_APPROVAL' &&
+              (focusTask.createdById === user?.id || user?.roleKey === 'dir_general' || user?.roleKey === 'dir_adjunta') ? (
+                <TaskApprovalActions task={focusTask} onDone={patchRow} />
+              ) : null}
+            </div>
+            <TaskActivityTimeline task={focusTask} expanded onUpdated={patchRow} />
+          </section>
+        ) : null}
+
         {loading ? (
           <>
             <LoadingKpis count={5} />
@@ -927,6 +1008,7 @@ export default function TasksPage() {
                                   ) : null}
                                   <TaskActivityTimeline
                                     task={t}
+                                    onUpdated={patchRow}
                                     expanded={historyOpen.has(t.id)}
                                     onToggle={() =>
                                       setHistoryOpen((prev) => {

@@ -6,6 +6,7 @@ import {
   ForbiddenException,
   Get,
   NotFoundException,
+  Optional,
   Param,
   Patch,
   Post,
@@ -30,6 +31,7 @@ import { hasPermission, canAccessEventOps, isDirectionRole, PERMISSIONS, type En
 import { assertSameTenant, tenantIdOf } from '../common/tenant';
 import { assertEventNotClosed } from '../common/event-guards';
 import { NotificationsService } from '../notifications/notifications.service';
+import { ChatRefsService } from '../chat/chat-refs.service';
 import { PurchaseOrderExcelService } from './po-excel.service';
 import { ExcelPdfService } from '../uploads/excel-pdf.service';
 import { uploadRoot } from '../uploads/upload-storage';
@@ -95,6 +97,7 @@ export class PurchaseOrdersController {
     private notifications: NotificationsService,
     private poExcel: PurchaseOrderExcelService = new PurchaseOrderExcelService(),
     private excelPdf: ExcelPdfService = new ExcelPdfService(),
+    @Optional() private refs?: ChatRefsService,
   ) {}
 
   /**
@@ -601,6 +604,7 @@ export class PurchaseOrdersController {
     if (order.status === 'PENDING_AUTH' && relevant) {
       await this.notifyAuthorizers(req.user, event, updated, 'po.updated', order.amount).catch(() => undefined);
     }
+    void this.refs?.touched('po', id);
     return withPoState(updated, await this.stateWindow(event.organizationId), event.status);
   }
 
@@ -734,6 +738,7 @@ export class PurchaseOrdersController {
       await this.notifyStatusChange(req.user, order.event, { ...order, paymentMethod: authorized.paymentMethod }, 'AUTHORIZED').catch(
         () => undefined,
       );
+      void this.refs?.touched('po', id);
       return withPoState(authorized, await this.stateWindow(order.event.organizationId), order.event.status);
     }
     if (body.status === 'PAID') {
@@ -798,6 +803,7 @@ export class PurchaseOrdersController {
         proofCount,
       });
       await this.notifyStatusChange(req.user, order.event, { ...order, paymentMethod: method }, 'PAID').catch(() => undefined);
+      void this.refs?.touched('po', id);
       return withPoState(paid, await this.stateWindow(order.event.organizationId), order.event.status);
     }
     // Any other transition (REJECTED/CANCELLED/DRAFT/PENDING_AUTH) is still an
@@ -819,6 +825,7 @@ export class PurchaseOrdersController {
       amount: Number(order.amount),
     });
     await this.notifyStatusChange(req.user, order.event, order, body.status).catch(() => undefined);
+    void this.refs?.touched('po', id);
     return withPoState(moved, await this.stateWindow(order.event.organizationId), order.event.status);
   }
 

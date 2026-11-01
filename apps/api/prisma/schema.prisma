@@ -726,6 +726,9 @@ model Notification {
   createdAt      DateTime      @default(now())
   /// Cuántos avisos iguales junta esta tarjeta («Ana subió 5 archivos»).
   bundleCount    Int           @default(1)
+  /// De qué trata el aviso, para sus botones: task | event | po | format | doc | advance | message.
+  targetKind     String?
+  targetId       String?
 
   @@index([userId, readAt, createdAt])
   @@index([organizationId, createdAt])
@@ -1224,6 +1227,7 @@ model ChatMessage {
   reactions      ChatMessageReaction[]
   savedBy        ChatSavedMessage[]
   reports        ChatReport[]
+  refs           ChatMessageRef[]
 
   @@index([channelId, createdAt])
   @@index([parentId, createdAt])
@@ -1232,6 +1236,26 @@ model ChatMessage {
   @@index([organizationId, recipientId, createdAt])
   @@index([senderId, recipientId, createdAt])
   @@index([recipientId, senderId, createdAt])
+}
+
+/// Lo que un mensaje arroba además de personas: tarea, evento, OC, formato, documento o anticipo.
+/// El cuerpo lleva `@label` en texto plano; el estado de la tarjeta se calcula al leer.
+model ChatMessageRef {
+  id          String      @id @default(cuid())
+  messageId   String
+  message     ChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  channelId   String
+  /// task | event | po | format | doc | advance
+  kind        String
+  targetId    String
+  /// Como quedó escrito en el mensaje; es lo único que ve quien no puede abrir esa cosa.
+  label       String
+  createdById String?
+  createdAt   DateTime    @default(now())
+
+  @@unique([messageId, kind, targetId])
+  @@index([kind, targetId])
+  @@index([channelId, createdAt])
 }
 
 model ChatMessageReaction {

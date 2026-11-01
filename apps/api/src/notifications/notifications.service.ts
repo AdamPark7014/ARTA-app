@@ -3,7 +3,14 @@ import { EntityKey } from '@prisma/client';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { PushDispatchService, type PushPayload } from '../devices/push-dispatch.service';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
-import { pushMetaFor } from './notification-push-meta';
+import {
+  pushActionsFor,
+  pushCategoryFor,
+  pushMetaFor,
+  targetFromLink,
+  type PushTarget,
+  type PushTargetKind,
+} from './notification-push-meta';
 import {
   canAccessEventOps,
   hasPermission,
@@ -30,6 +37,8 @@ export type NotifyInput = {
   linkUrl?: string | null;
   actorId?: string | null;
   entity?: EntityKey | null;
+  /** De qué trata, si no se deduce de la liga (el aviso abre un mensaje pero habla de una tarea). */
+  target?: PushTarget | { kind: string; id: string } | null;
   /**
    * Avisos en ráfaga (cinco archivos subidos seguidos): en vez de cinco vibraciones,
    * una tarjeta que se va actualizando en el mismo lugar, sin volver a sonar.
@@ -66,6 +75,7 @@ export class NotificationsService {
         const merged = await this.mergeIntoBundle(input);
         if (merged) return merged;
       }
+      const target = input.target ?? targetFromLink(input.linkUrl);
       const row = await this.prisma.notification.create({
         data: {
           userId: input.userId,
@@ -76,6 +86,8 @@ export class NotificationsService {
           linkUrl: input.linkUrl || undefined,
           actorId: input.actorId || undefined,
           entity: input.entity || undefined,
+          targetKind: target?.kind,
+          targetId: target?.id,
         },
         include: { actor: { select: { id: true, fullName: true } } },
       });
@@ -283,6 +295,8 @@ export class NotificationsService {
       linkUrl: string | null;
       actorId: string | null;
       entity?: EntityKey | null;
+      targetKind?: string | null;
+      targetId?: string | null;
       createdAt: Date;
       actor: { id: string; fullName: string } | null;
     },
@@ -293,6 +307,11 @@ export class NotificationsService {
     if (!this.push) return;
     const meta = pushMetaFor(row.type);
     const chat = chatLinkParts(row.linkUrl);
+    const target =
+      row.targetKind && row.targetId
+        ? { kind: row.targetKind as PushTargetKind, id: row.targetId }
+        : targetFromLink(row.linkUrl);
+    const actions = pushActionsFor(row.type, target);
     await this.push.sendToUser(row.userId, {
       title: row.title,
       body: row.body || '',
@@ -311,6 +330,10 @@ export class NotificationsService {
       threadId: chat ? `chat-${chat.channelId}` : row.linkUrl ? `link:${row.linkUrl.split('?')[0]}` : null,
       channelId: chat?.channelId ?? null,
       messageId: chat?.messageId ?? null,
+      actions,
+      category: pushCategoryFor(actions),
+      targetKind: target?.kind ?? null,
+      targetId: target?.id ?? null,
     });
   }
 }

@@ -12,12 +12,37 @@ import {
 } from 'react';
 import { Icon, ICONS } from './ChatAttachment';
 import { attachmentLabel, fold, MAX_LEN, plainText, type ChatMessage } from './chat-model';
+import { isTaskCommand, parseTaskCommand, REF_GROUPS, REF_ICON, type ChatRef } from './chat-refs';
 import { Avatar } from './chat-ui';
 import { EmojiPicker } from './EmojiPicker';
 
 export type MentionPerson = { id: string; fullName: string; title?: string | null };
 
-type Candidate = { kind: 'person'; p: MentionPerson } | { kind: 'channel' };
+type Candidate =
+  | { kind: 'person'; p: MentionPerson }
+  | { kind: 'channel' }
+  | { kind: 'ref'; r: ChatRef }
+  | { kind: 'command'; name: string; hint: string };
+
+/** Títulos de cada grupo del selector, en orden. */
+const REF_TITLE = Object.fromEntries(REF_GROUPS.map((g) => [g.kind, g.title]));
+const COMMANDS = [{ name: '/tarea', hint: 'Crea una tarea: /tarea Título @persona mañana' }];
+/** Personas junto a los resultados: sin escribir nada cabe lo demás; escribiendo, lo que coincida. */
+const PEOPLE_IDLE = 3;
+const PEOPLE_WITH_REFS = 5;
+
+function candidateKey(c: Candidate) {
+  if (c.kind === 'person') return `p-${c.p.id}`;
+  if (c.kind === 'ref') return `r-${c.r.kind}-${c.r.id}`;
+  if (c.kind === 'command') return c.name;
+  return '@canal';
+}
+
+function candidateGroup(c: Candidate) {
+  if (c.kind === 'ref') return REF_TITLE[c.r.kind] ?? 'Ligar';
+  if (c.kind === 'command') return 'Comandos';
+  return 'Personas';
+}
 
 const MENTION_QUERY = /(^|[\s([{])@([\p{L}\p{N}._-]{0,30}(?: [\p{L}\p{N}._-]{0,30})?)$/u;
 
@@ -26,6 +51,9 @@ const MENTION_QUERY = /(^|[\s([{])@([\p{L}\p{N}._-]{0,30}(?: [\p{L}\p{N}._-]{0,3
  * (↑ ↓ Enter/Tab, Esc cierra), Ctrl/Cmd+B/I negrita y cursiva, ↑ con el campo
  * vacío edita tu último mensaje. En pantalla se ve `@Nombre`; quien envía
  * lo convierte al token `[@Nombre](user:id)`.
+ *
+ * La misma @ liga tareas, eventos, OC, formatos, documentos y anticipos; `/tarea`
+ * crea una tarea sin salir de la conversación.
  */
 export function Composer({
   value,
@@ -47,6 +75,9 @@ export function Composer({
   isOnline,
   onPicked,
   onEditLast,
+  searchRefs,
+  onPickedRef,
+  taskPeople,
 }: {
   value: string;
   onChange: (v: string) => void;
@@ -67,6 +98,11 @@ export function Composer({
   isOnline?: (id: string) => boolean;
   onPicked?: (p: MentionPerson) => void;
   onEditLast?: () => void;
+  /** Lo que se puede ligar con @ desde esta conversación. */
+  searchRefs?: (q: string) => Promise<ChatRef[]>;
+  onPickedRef?: (r: ChatRef) => void;
+  /** Con quién se puede repartir un `/tarea`; sin esto el comando no aparece. */
+  taskPeople?: MentionPerson[];
 }) {
   const localRef = useRef<HTMLTextAreaElement>(null);
   const ref = inputRef ?? localRef;
@@ -74,7 +110,9 @@ export function Composer({
   const [mention, setMention] = useState<{ start: number; query: string } | null>(null);
   const [active, setActive] = useState(0);
   const [remote, setRemote] = useState<MentionPerson[]>([]);
+  const [refs, setRefs] = useState<ChatRef[]>([]);
   const [emojiAt, setEmojiAt] = useState<DOMRect | null>(null);
+  const listRef = useRef<HTMLDivElement>(null);
 
   useLayoutEffect(() => {
     const el = ref.current;
@@ -95,7 +133,28 @@ export function Composer({
     return () => window.clearTimeout(id);
   }, [query, people.length, searchPeople]);
 
+  // Tareas, eventos, OC…: se buscan en el servidor, con los permisos de quien escribe.
+  useEffect(() => {
+    if (query === null || !searchRefs) return;
+    const id = window.setTimeout(() => {
+      searchRefs(query.trim())
+        .then(setRefs)
+        .catch(() => setRefs([]));
+    }, 180);
+    return () => window.clearTimeout(id);
+  }, [query, searchRefs]);
+
+  // `/` al inicio del mensaje: los comandos.
+  const commandQuery = taskPeople && /^\/[\p{L}]*$/u.test(value) ? value.slice(1).toLowerCase() : null;
+
   const candidates = useMemo<Candidate[]>(() => {
+    if (commandQuery !== null) {
+      return COMMANDS.filter((c) => c.name.slice(1).startsWith(commandQuery)).map<Candidate>((c) => ({
+        kind: 'command',
+        name: c.name,
+        hint: c.hint,
+      }));
+    }
     if (query === null) return [];
     const q = fold(query.trim());
     const pool = people.length ? people : remote;
@@ -107,11 +166,21 @@ export function Composer({
       })
       .filter((x) => x.rank >= 0)
       .sort((a, b) => a.rank - b.rank || a.p.fullName.localeCompare(b.p.fullName, 'es'))
-      .slice(0, 8)
+      .slice(0, searchRefs ? (q ? PEOPLE_WITH_REFS : PEOPLE_IDLE) : 8)
       .map<Candidate>((x) => ({ kind: 'person', p: x.p }));
     if (canMentionChannel && 'canal'.startsWith(q)) scored.push({ kind: 'channel' });
-    return scored;
-  }, [query, people, remote, canMentionChannel]);
+    return [...scored, ...(searchRefs ? refs.map<Candidate>((r) => ({ kind: 'ref', r })) : [])];
+  }, [query, people, remote, canMentionChannel, refs, searchRefs, commandQuery]);
+
+  // Con el teclado la fila activa siempre queda a la vista.
+  useEffect(() => {
+    listRef.current?.querySelector('.is-active')?.scrollIntoView({ block: 'nearest' });
+  }, [active]);
+
+  const taskPreview = useMemo(
+    () => (taskPeople && isTaskCommand(value) ? parseTaskCommand(value, taskPeople) : null),
+    [value, taskPeople],
+  );
 
   if (disabled) {
     return (
@@ -150,13 +219,43 @@ export function Composer({
 
   const insertMention = (c: Candidate) => {
     const el = ref.current;
-    if (!el || !mention) return;
-    const text = c.kind === 'channel' ? '@canal ' : `@${c.p.fullName.trim()} `;
+    if (!el) return;
+    if (c.kind === 'command') {
+      const text = `${c.name} `;
+      onChange(text);
+      setMention(null);
+      placeCaret(text.length);
+      return;
+    }
+    if (!mention) return;
+    const text =
+      c.kind === 'channel' ? '@canal ' : c.kind === 'ref' ? `@${c.r.label} ` : `@${c.p.fullName.trim()} `;
     const end = el.selectionStart;
     onChange((value.slice(0, mention.start) + text + value.slice(end)).slice(0, MAX_LEN));
     if (c.kind === 'person') onPicked?.(c.p);
+    if (c.kind === 'ref') onPickedRef?.(c.r);
     setMention(null);
     placeCaret(mention.start + text.length);
+  };
+
+  /** Botones @ y /: escriben el carácter y abren el selector, como en Slack. */
+  const typeTrigger = (mark: '@' | '/') => {
+    const el = ref.current;
+    const s = el?.selectionStart ?? value.length;
+    const e = el?.selectionEnd ?? value.length;
+    if (mark === '/') {
+      onChange(`/${value}`.slice(0, MAX_LEN));
+      placeCaret(1);
+      return;
+    }
+    const before = value.slice(0, s);
+    const glue = before && !/\s$/.test(before) ? ' ' : '';
+    const next = `${before}${glue}@${value.slice(e)}`.slice(0, MAX_LEN);
+    const pos = s + glue.length + 1;
+    onChange(next);
+    setActive(0);
+    setMention({ start: pos - 1, query: '' });
+    placeCaret(pos);
   };
 
   const insertText = (t: string) => {
@@ -181,7 +280,7 @@ export function Composer({
 
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.nativeEvent.isComposing) return;
-    if (mention && candidates.length) {
+    if ((mention || commandQuery !== null) && candidates.length) {
       if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
         e.preventDefault();
         const d = e.key === 'ArrowDown' ? 1 : -1;
@@ -266,42 +365,62 @@ export function Composer({
           </div>
         ) : null}
 
-        {mention && candidates.length ? (
-          <div className="chat-mentions" role="listbox" aria-label="Mencionar">
-            <div className="chat-mentions__title">Mencionar</div>
-            {candidates.map((c, i) => (
-              <button
-                key={c.kind === 'person' ? c.p.id : '@canal'}
-                type="button"
-                role="option"
-                aria-selected={i === active}
-                className={`chat-mentions__row${i === active ? ' is-active' : ''}`}
-                onMouseEnter={() => setActive(i)}
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => insertMention(c)}
-              >
-                {c.kind === 'person' ? (
-                  <>
-                    <Avatar id={c.p.id} name={c.p.fullName} size="sm" online={isOnline ? isOnline(c.p.id) : undefined} />
-                    <span className="chat-mentions__name">{c.p.fullName}</span>
-                    {c.p.title ? <span className="chat-mentions__meta">{c.p.title}</span> : null}
-                  </>
-                ) : (
-                  <>
-                    <span className="chat-avatar chat-avatar--general chat-avatar--sm">@</span>
-                    <span className="chat-mentions__name">@canal</span>
-                    <span className="chat-mentions__meta">Avisa a todo el canal</span>
-                  </>
-                )}
-              </button>
-            ))}
+        {(mention || commandQuery !== null) && candidates.length ? (
+          <div ref={listRef} className="chat-mentions" role="listbox" aria-label="Mencionar o ligar">
+            {candidates.map((c, i) => {
+              const group = candidateGroup(c);
+              const heading = i === 0 || candidateGroup(candidates[i - 1]) !== group;
+              return (
+                <div key={candidateKey(c)} role="presentation">
+                  {heading ? <div className="chat-mentions__title">{group}</div> : null}
+                  <button
+                    type="button"
+                    role="option"
+                    aria-selected={i === active}
+                    className={`chat-mentions__row${i === active ? ' is-active' : ''}`}
+                    onMouseEnter={() => setActive(i)}
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => insertMention(c)}
+                  >
+                    {c.kind === 'person' ? (
+                      <>
+                        <Avatar id={c.p.id} name={c.p.fullName} size="sm" online={isOnline ? isOnline(c.p.id) : undefined} />
+                        <span className="chat-mentions__name">{c.p.fullName}</span>
+                        {c.p.title ? <span className="chat-mentions__meta">{c.p.title}</span> : null}
+                      </>
+                    ) : c.kind === 'ref' ? (
+                      <>
+                        <span className="chat-mentions__ico" aria-hidden>
+                          <Icon d={REF_ICON[c.r.kind]} size={15} />
+                        </span>
+                        <span className="chat-mentions__name">{c.r.title || c.r.label}</span>
+                        <span className="chat-mentions__meta">
+                          {[c.r.statusLabel, c.r.amount, c.r.subtitle].filter(Boolean).join(' · ')}
+                        </span>
+                      </>
+                    ) : c.kind === 'command' ? (
+                      <>
+                        <span className="chat-mentions__ico" aria-hidden>
+                          /
+                        </span>
+                        <span className="chat-mentions__name">{c.name}</span>
+                        <span className="chat-mentions__meta">{c.hint}</span>
+                      </>
+                    ) : (
+                      <>
+                        <span className="chat-avatar chat-avatar--general chat-avatar--sm">@</span>
+                        <span className="chat-mentions__name">@canal</span>
+                        <span className="chat-mentions__meta">Avisa a todo el canal</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              );
+            })}
           </div>
         ) : null}
 
-        <div className="chat-composer__inner">
-          <button type="button" className="chat-tool" aria-label="Adjuntar foto, video o documento" title="Adjuntar" onClick={onFiles}>
-            <Icon d={ICONS.clip} size={18} />
-          </button>
+        <div className="chat-composer__inner chat-composer__inner--bar">
           <div className="chat-composer__field">
             <textarea
               ref={ref}
@@ -321,26 +440,69 @@ export function Composer({
               onKeyDown={onKeyDown}
               onPaste={onPaste}
             />
-            <button
-              ref={emojiBtn}
-              type="button"
-              className={`chat-tool chat-tool--inset${emojiAt ? ' is-on' : ''}`}
-              aria-label="Emoji"
-              title="Emoji"
-              onClick={() => setEmojiAt(emojiAt ? null : (emojiBtn.current?.getBoundingClientRect() ?? null))}
-            >
-              <Icon d={ICONS.smile} size={18} />
-            </button>
           </div>
-          {!canSend && onMic ? (
-            <button type="button" className="chat-send chat-send--mic" aria-label="Grabar nota de voz" title="Nota de voz" onClick={onMic}>
-              <Icon d={ICONS.mic} size={18} />
-            </button>
-          ) : (
-            <button type="submit" className="chat-send" disabled={!canSend} aria-label="Enviar" title="Enviar (Enter)">
-              <Icon d={ICONS.send} size={18} />
-            </button>
-          )}
+          {isTaskCommand(value) ? (
+            <div className="chat-composer__task" role="status">
+              <Icon d={REF_ICON.task} size={14} />
+              {taskPreview ? (
+                <span>
+                  Se crea la tarea <strong>{taskPreview.title}</strong>
+                  {taskPreview.assignees.length ? ` para ${taskPreview.assignees.map((a) => a.fullName).join(', ')}` : ''}
+                  {taskPreview.dueAt ? ` · vence ${taskPreview.dueAt.split('-').reverse().join('/')}` : ''}
+                </span>
+              ) : (
+                <span>Escribe el título. Con @ la asignas y al final dile cuándo: hoy, mañana, viernes o 7/11.</span>
+              )}
+            </div>
+          ) : null}
+          <div className="chat-composer__bar">
+            <div className="chat-composer__tools">
+              <button type="button" className="chat-tool chat-tool--sm" aria-label="Adjuntar foto, video o documento" title="Adjuntar" onClick={onFiles}>
+                <Icon d={ICONS.clip} size={17} />
+              </button>
+              <span className="chat-composer__sep chat-tool--fmt" aria-hidden />
+              <button type="button" className="chat-tool chat-tool--sm chat-tool--fmt chat-tool--text" aria-label="Negrita" title="Negrita (Ctrl+B)" onClick={() => wrap('*')}>
+                <strong>B</strong>
+              </button>
+              <button type="button" className="chat-tool chat-tool--sm chat-tool--fmt chat-tool--text" aria-label="Cursiva" title="Cursiva (Ctrl+I)" onClick={() => wrap('_')}>
+                <em>I</em>
+              </button>
+              <button type="button" className="chat-tool chat-tool--sm chat-tool--fmt chat-tool--text" aria-label="Tachado" title="Tachado (Ctrl+Shift+X)" onClick={() => wrap('~')}>
+                <s>S</s>
+              </button>
+              <button type="button" className="chat-tool chat-tool--sm chat-tool--fmt chat-tool--text" aria-label="Código" title="Código" onClick={() => wrap('`')}>
+                <code>{'</>'}</code>
+              </button>
+              <span className="chat-composer__sep chat-tool--fmt" aria-hidden />
+              <button type="button" className="chat-tool chat-tool--sm chat-tool--text" aria-label="Mencionar o ligar" title="Mencionar a alguien o ligar una tarea, evento u OC" onClick={() => typeTrigger('@')}>
+                @
+              </button>
+              {taskPeople ? (
+                <button type="button" className="chat-tool chat-tool--sm chat-tool--text" aria-label="Comandos" title="Comandos: /tarea" onClick={() => typeTrigger('/')}>
+                  /
+                </button>
+              ) : null}
+              <button
+                ref={emojiBtn}
+                type="button"
+                className={`chat-tool chat-tool--sm${emojiAt ? ' is-on' : ''}`}
+                aria-label="Emoji"
+                title="Emoji"
+                onClick={() => setEmojiAt(emojiAt ? null : (emojiBtn.current?.getBoundingClientRect() ?? null))}
+              >
+                <Icon d={ICONS.smile} size={17} />
+              </button>
+            </div>
+            {!canSend && onMic ? (
+              <button type="button" className="chat-send chat-send--mic" aria-label="Grabar nota de voz" title="Nota de voz" onClick={onMic}>
+                <Icon d={ICONS.mic} size={18} />
+              </button>
+            ) : (
+              <button type="submit" className="chat-send" disabled={!canSend} aria-label="Enviar" title="Enviar (Enter)">
+                <Icon d={ICONS.send} size={18} />
+              </button>
+            )}
+          </div>
         </div>
         {near ? (
           <div className={`chat-composer__count${value.length >= MAX_LEN ? ' is-over' : ''}`} aria-live="polite">

@@ -727,6 +727,8 @@ function EventDetailInner() {
 
         {tab === 'tasks' && (
           <EventTasksPanel
+            focusTaskId={searchParams.get('task')}
+            focusDo={searchParams.get('do')}
             closed={closed}
             tasks={event.tasks || []}
             directory={directory}

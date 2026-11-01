@@ -2271,6 +2271,7 @@ type MessageFixture = {
   replyTo: { id: string; authorId: string; authorName: string; excerpt: string; kind: string | null; attachmentName: string | null; deleted: boolean } | null;
   saved: boolean;
   deleted: boolean;
+  refs?: unknown[];
 };
 
 function msg(
@@ -2325,6 +2326,74 @@ const GENERAL_MESSAGES: MessageFixture[] = [
     daysAgo(1, 11, 30),
     '[@Ana Robles Villaseñor](user:usr-e2e-super) ¿me ayudas a revisar las cortesías de los convenios? Son 120 boletos repartidos en tres zonas y la boletera necesita la lista hoy.',
     { replyCount: 4 },
+  ),
+  msg(
+    G,
+    'm-rich-g04b',
+    OCTAVIO,
+    daysAgo(1, 12, 10),
+    'Falta cerrar esto para la Noche de Boleros: @Cotizar luces y dimmers con @OC 4F2A9C antes del jueves. Queda todo en @Noche de Boleros.',
+    {
+      refs: [
+        {
+          kind: 'task',
+          id: 'tsk-rich-ref',
+          label: 'Cotizar luces y dimmers',
+          title: 'Cotizar luces y dimmers',
+          resolved: true,
+          canOpen: true,
+          missing: false,
+          href: '/tasks?task=tsk-rich-ref',
+          status: 'OPEN',
+          statusLabel: 'Pendiente',
+          tone: 'action',
+          subtitle: 'vence mañana · Noche de Boleros',
+          dueAt: null,
+          progress: null,
+          people: [{ id: ANA.id, fullName: ANA.fullName }, { id: BETO.id, fullName: BETO.fullName }],
+          amount: null,
+          actions: ['deliver'],
+        },
+        {
+          kind: 'po',
+          id: 'po-rich-ref',
+          label: 'OC 4F2A9C',
+          title: 'OC 4F2A9C',
+          resolved: true,
+          canOpen: true,
+          missing: false,
+          href: '/purchase-orders?po=po-rich-ref',
+          status: 'PENDING_AUTH',
+          statusLabel: 'Por autorizar',
+          tone: 'action',
+          subtitle: 'Sonido Quetzal Pro · Noche de Boleros',
+          dueAt: null,
+          progress: null,
+          people: [],
+          amount: '$37,700',
+          actions: [],
+        },
+        {
+          kind: 'event',
+          id: 'evt-rich-ref',
+          label: 'Noche de Boleros',
+          title: 'Noche de Boleros',
+          resolved: true,
+          canOpen: true,
+          missing: false,
+          href: '/events/evt-rich-ref',
+          status: 'ACTIVE',
+          statusLabel: 'Activo',
+          tone: 'info',
+          subtitle: 'sáb 7 nov · Teatro Principal',
+          dueAt: null,
+          progress: 64,
+          people: [],
+          amount: null,
+          actions: [],
+        },
+      ],
+    },
   ),
   msg(G, 'm-rich-g05', XIMENA, daysAgo(1, 13, 45), 'Les comparto las artes finales de la lona principal, ya aprobadas por el promotor.', {
     attachment: {
@@ -2906,7 +2975,41 @@ for (const e of EVENTS) {
 const checklistStubs: ApiStubs = {};
 for (const c of CHECKLISTS) checklistStubs[`/checklists/${c.id}`] = checklistFull(c);
 
-const chatStubs: ApiStubs = {};
+const RICH_REFS = GENERAL_MESSAGES.flatMap((m) => m.refs ?? []) as Array<Record<string, unknown>>;
+
+const chatStubs: ApiStubs = {
+  '/chat/refs/search': {
+    results: [
+      ...RICH_REFS,
+      {
+        ...RICH_REFS[0],
+        id: 'tsk-rich-ref-2',
+        label: 'Cotizar transporte de instrumentos',
+        title: 'Cotizar transporte de instrumentos',
+        statusLabel: 'Vencida',
+        tone: 'late',
+        subtitle: 'venció ayer · Noche de Boleros',
+        actions: [],
+      },
+    ],
+  },
+  [`/chat/channels/${G}/refs`]: {
+    refs: RICH_REFS.map((r, i) => ({ ...r, messageId: 'm-rich-g04b', at: daysAgo(1, 12, 10), count: i === 0 ? 2 : 1 })),
+  },
+  '/chat/refs/backlinks': {
+    links: [
+      {
+        messageId: 'm-rich-g04b',
+        channelId: G,
+        channelName: '#general',
+        author: { id: OCTAVIO.id, fullName: OCTAVIO.fullName },
+        excerpt: 'Falta cerrar esto para la Noche de Boleros',
+        at: daysAgo(1, 12, 10),
+        href: `/chat?channel=${G}&msg=m-rich-g04b`,
+      },
+    ],
+  },
+};
 for (const c of CHANNELS) {
   chatStubs[`/chat/channels/${c.id}`] = channelDetail(c);
   chatStubs[`/chat/channels/${c.id}/messages`] = messagePage(

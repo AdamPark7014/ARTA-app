@@ -1,6 +1,8 @@
 'use client';
 
 import { Fragment, useMemo, type ReactNode } from 'react';
+import { splitByRefs, type ChatRef } from './chat-refs';
+import { RefChip } from './RefCard';
 
 /*
  * Formato de texto del chat (contrato chat v2 §7), igual en web, Android e iOS:
@@ -272,12 +274,21 @@ export function isEmojiOnly(text: string) {
   return t.length > 0 && t.length <= 24 && EMOJI_ONLY.test(t);
 }
 
-type RenderOpts = { meId?: string | null; onMention?: (id: string) => void };
+type RenderOpts = { meId?: string | null; onMention?: (id: string) => void; refs?: ChatRef[] };
 
 function renderInline(nodes: MdInline[], o: RenderOpts): ReactNode[] {
   return nodes.map((n, i) => {
     switch (n.t) {
       case 'text':
+        if (o.refs?.length) {
+          return (
+            <Fragment key={i}>
+              {splitByRefs(n.v, o.refs).map((part, j) =>
+                typeof part === 'string' ? <Fragment key={j}>{part}</Fragment> : <RefChip key={j} r={part} />,
+              )}
+            </Fragment>
+          );
+        }
         return <Fragment key={i}>{n.v}</Fragment>;
       case 'code':
         return (
@@ -368,9 +379,9 @@ function renderBlocks(blocks: MdBlock[], o: RenderOpts): ReactNode[] {
   });
 }
 
-export function ChatMarkdown({ text, meId, onMention }: { text: string } & RenderOpts) {
+export function ChatMarkdown({ text, meId, onMention, refs }: { text: string } & RenderOpts) {
   const blocks = useMemo(() => parseMarkdown(text), [text]);
-  return <>{renderBlocks(blocks, { meId, onMention })}</>;
+  return <>{renderBlocks(blocks, { meId, onMention, refs })}</>;
 }
 
 /** Una línea (vista previa de lista, citas): solo formato en línea, sin bloques. */

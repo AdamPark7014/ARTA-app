@@ -3,6 +3,7 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { ChatChannelKind, ChatMessageKind, Prisma } from '@prisma/client';
 import { PrismaService } from '../common/prisma/prisma.service';
@@ -24,6 +25,8 @@ import {
   slugify,
 } from './chat-text';
 import { chatMimeFor } from './chat-attachments';
+import { refStub, refsStillInBody, type ChatRefDto } from './chat-refs';
+import { ChatRefsService } from './chat-refs.service';
 
 /**
  * Chat tipo Slack (portado de NEXARA y ajustado a ARTA):
@@ -42,6 +45,8 @@ export type ChatUser = {
   fullName?: string;
   /** ARTA / EXPLANADA (llegan en el token; los canales con entidad se filtran por ellas). */
   entities?: string[] | null;
+  /** Permisos extra del token: deciden si una referencia a dinero se puede abrir. */
+  permissions?: string[];
 };
 
 export const GENERAL_SLUG = 'general';
@@ -104,6 +109,7 @@ const messageInclude = {
       sender: { select: { id: true, fullName: true } },
     },
   },
+  refs: { select: { kind: true, targetId: true, label: true }, orderBy: { createdAt: 'asc' } },
   _count: { select: { replies: { where: { deletedAt: null } } } },
 } satisfies Prisma.ChatMessageInclude;
 
@@ -138,6 +144,11 @@ export type ChatMessageDto = {
   deleted: boolean;
   /** Guardado por quien pide; no viaja en los eventos del canal (es personal). */
   saved?: boolean;
+  /**
+   * Lo que el mensaje arroba además de personas. Por socket viaja sin resolver
+   * (`resolved: false`): cada quien pide la tarjeta con sus permisos.
+   */
+  refs: ChatRefDto[];
 };
 
 export type PostMessageInput = {
@@ -150,6 +161,8 @@ export type PostMessageInput = {
   attachmentSize?: number | null;
   /** Id temporal del cliente para reconciliar el mensaje optimista. */
   clientId?: string | null;
+  /** Tareas, eventos, OC, formatos, documentos y anticipos que se arrobaron. */
+  refs?: Array<{ kind: string; id: string }> | null;
 };
 
 type ChannelRow = {
@@ -211,6 +224,7 @@ export function serializeMessage(m: MessageRow, savedIds?: Set<string>): ChatMes
     replyTo: m.replyTo ? serializeQuote(m.replyTo) : null,
     deleted,
     ...(savedIds ? { saved: savedIds.has(m.id) } : {}),
+    refs: deleted ? [] : (m.refs ?? []).map(refStub),
   };
 }
 
@@ -229,6 +243,7 @@ export class ChatService {
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationsService,
     private readonly realtime: RealtimeGateway,
+    @Optional() private readonly refs?: ChatRefsService,
   ) {}
 
   // ─── Canales de la organización ──────────────────────────────────────────
@@ -822,9 +837,10 @@ export class ChatService {
     return new Set(rows.map((r) => r.messageId));
   }
 
-  private async serializeFor(userId: string, rows: MessageRow[]): Promise<ChatMessageDto[]> {
-    const saved = await this.savedIdsOf(userId, rows.map((r) => r.id));
-    return rows.map((r) => serializeMessage(r, saved));
+  private async serializeFor(user: ChatUser, rows: MessageRow[]): Promise<ChatMessageDto[]> {
+    const saved = await this.savedIdsOf(user.id, rows.map((r) => r.id));
+    const dtos = rows.map((r) => serializeMessage(r, saved));
+    return this.refs ? this.refs.hydrate(user, dtos) : dtos;
   }
 
   /**
@@ -872,7 +888,7 @@ export class ChatService {
         this.prisma.chatMessage.findMany({ where: { AND: [base, newerThan(c!)] }, include: messageInclude, orderBy: asc, take: half }),
       ]);
       return {
-        messages: await this.serializeFor(user.id, [...older.reverse(), ...newer]),
+        messages: await this.serializeFor(user, [...older.reverse(), ...newer]),
         hasMore: older.length === half + 1,
         hasNewer: newer.length === half,
       };
@@ -886,7 +902,7 @@ export class ChatService {
         orderBy: asc,
         take: limit,
       });
-      return { messages: await this.serializeFor(user.id, rows), hasMore: false, hasNewer: rows.length === limit };
+      return { messages: await this.serializeFor(user, rows), hasMore: false, hasNewer: rows.length === limit };
     }
 
     const c = await cursorOf(opts.before);
@@ -896,7 +912,7 @@ export class ChatService {
       orderBy: desc,
       take: limit,
     });
-    return { messages: await this.serializeFor(user.id, rows.reverse()), hasMore: rows.length === limit, hasNewer: false };
+    return { messages: await this.serializeFor(user, rows.reverse()), hasMore: rows.length === limit, hasNewer: false };
   }
 
   /** Un hilo completo: mensaje raíz (aunque se haya borrado) + respuestas. */
@@ -912,7 +928,7 @@ export class ChatService {
       orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
       take: PAGE_MAX,
     });
-    const [rootDto, ...replyDtos] = await this.serializeFor(user.id, [root, ...replies]);
+    const [rootDto, ...replyDtos] = await this.serializeFor(user, [root, ...replies]);
     return { root: rootDto, replies: replyDtos };
   }
 
@@ -965,6 +981,8 @@ export class ChatService {
       if (!quoted) throw new BadRequestException('El mensaje que citas no existe en esta conversación');
     }
 
+    const refs = this.refs ? await this.refs.forPost(user, input.refs) : [];
+
     const message = await this.prisma.chatMessage.create({
       data: {
         channelId,
@@ -978,6 +996,9 @@ export class ChatService {
         attachmentName: input.attachmentName?.slice(0, 200) || null,
         attachmentMime: attachmentUrl ? chatMimeFor(attachmentUrl, input.attachmentMime) : null,
         attachmentSize: input.attachmentSize ?? null,
+        ...(refs.length
+          ? { refs: { create: refs.map((r) => ({ ...r, channelId, createdById: user.id })) } }
+          : {}),
       },
       include: messageInclude,
     });
@@ -1000,6 +1021,8 @@ export class ChatService {
     }
 
     void this.fanOut(user, channel, message).catch(() => undefined);
+    // Quien lo escribió ya ve sus tarjetas; a los demás les llega la etiqueta y piden la suya.
+    if (refs.length && this.refs) return (await this.refs.hydrate(user, [payload]))[0];
     return payload;
   }
 
@@ -1113,6 +1136,12 @@ export class ChatService {
         entity: channel.entity ?? undefined,
       })),
     );
+
+    // A quien le importa lo que se arrobó; quien ya recibió la mención no recibe otro aviso.
+    await this.refs?.notifyFor(user, channel, message, {
+      memberIds: new Set(memberIds),
+      skip: new Set([...mentioned, ...blockers]),
+    });
   }
 
   private async systemMessage(channelId: string, user: ChatUser, body: string) {
@@ -1127,7 +1156,12 @@ export class ChatService {
     this.realtime.emitToChannel(channelId, 'chat:message', serializeMessage(message));
   }
 
-  async editMessage(user: ChatUser, messageId: string, rawBody: string) {
+  async editMessage(
+    user: ChatUser,
+    messageId: string,
+    rawBody: string,
+    rawRefs?: Array<{ kind: string; id: string }> | null,
+  ) {
     const message = await this.findMessage(user, messageId);
     if (message.senderId !== user.id) throw new ForbiddenException('Solo puedes editar tus mensajes');
     if (message.kind === ChatMessageKind.SYSTEM) throw new BadRequestException('Este mensaje no se edita');
@@ -1137,6 +1171,7 @@ export class ChatService {
     const body = (rawBody ?? '').replace(/\r\n?/g, '\n').trim();
     if (!body && !message.attachmentUrl) throw new BadRequestException('Escribe un mensaje');
     if (body.length > MAX_BODY) throw new BadRequestException(`El mensaje admite hasta ${MAX_BODY} caracteres`);
+    await this.syncRefs(user, message, body, rawRefs);
     const updated = await this.prisma.chatMessage.update({
       where: { id: messageId },
       data: { body, editedAt: new Date() },
@@ -1144,7 +1179,43 @@ export class ChatService {
     });
     await this.refreshPreview(updated.channelId);
     this.realtime.emitToChannel(updated.channelId, 'chat:message-updated', serializeMessage(updated));
-    return (await this.serializeFor(user.id, [updated]))[0];
+    return (await this.serializeFor(user, [updated]))[0];
+  }
+
+  /**
+   * Al editar: con `refs` se reemplazan; sin ellos (apps viejas) se queda lo que sigue
+   * escrito en el cuerpo. Nada nuevo avisa: editar no vuelve a sonar en ningún teléfono.
+   */
+  private async syncRefs(
+    user: ChatUser,
+    message: MessageRow,
+    body: string,
+    rawRefs?: Array<{ kind: string; id: string }> | null,
+  ) {
+    if (!this.refs) return;
+    const current = message.refs ?? [];
+    if (rawRefs === undefined || rawRefs === null) {
+      const keep = new Set(refsStillInBody(body, current));
+      const gone = current.filter((r) => !keep.has(r));
+      if (gone.length === 0) return;
+      await this.prisma.chatMessageRef.deleteMany({
+        where: { messageId: message.id, OR: gone.map((r) => ({ kind: r.kind, targetId: r.targetId })) },
+      });
+      return;
+    }
+    const next = await this.refs.forPost(user, rawRefs);
+    await this.prisma.$transaction([
+      this.prisma.chatMessageRef.deleteMany({ where: { messageId: message.id } }),
+      this.prisma.chatMessageRef.createMany({
+        data: next.map((r) => ({ ...r, messageId: message.id, channelId: message.channelId, createdById: user.id })),
+      }),
+    ]);
+  }
+
+  /** Panel «Ligados» de una conversación. */
+  async channelRefs(user: ChatUser, channelId: string) {
+    await this.access(user, channelId);
+    return this.refs ? this.refs.forChannel(user, channelId) : { refs: [] };
   }
 
   /**
@@ -1225,7 +1296,7 @@ export class ChatService {
         })
         .catch(() => undefined);
     }
-    return (await this.serializeFor(user.id, [refreshed]))[0];
+    return (await this.serializeFor(user, [refreshed]))[0];
   }
 
   async togglePin(user: ChatUser, messageId: string) {
@@ -1237,7 +1308,7 @@ export class ChatService {
       include: messageInclude,
     });
     this.realtime.emitToChannel(message.channelId, 'chat:message-updated', serializeMessage(updated));
-    return (await this.serializeFor(user.id, [updated]))[0];
+    return (await this.serializeFor(user, [updated]))[0];
   }
 
   async listPins(user: ChatUser, channelId: string) {
@@ -1248,7 +1319,7 @@ export class ChatService {
       orderBy: { pinnedAt: 'desc' },
       take: 50,
     });
-    return { messages: await this.serializeFor(user.id, rows) };
+    return { messages: await this.serializeFor(user, rows) };
   }
 
   // ─── Guardados ───────────────────────────────────────────────────────────

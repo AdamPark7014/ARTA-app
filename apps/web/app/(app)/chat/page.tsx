@@ -23,6 +23,16 @@ import { joinChannel, leaveChannel, sendTyping, useRealtime, useRealtimeStatus }
 import { useUser } from '@/lib/user-context';
 import { Icon, ICONS, MediaViewer } from '@/components/chat/ChatAttachment';
 import {
+  isTaskCommand,
+  parseTaskCommand,
+  refKey,
+  refsInText,
+  type ChatRef,
+  type RefAction,
+} from '@/components/chat/chat-refs';
+import { TaskDeliveryModal } from '@/components/tasks/TaskDeliveryModal';
+import type { TaskRecord } from '@/components/tasks/task-types';
+import {
   ACCEPT,
   EDIT_WINDOW_MS,
   encodeMentions,
@@ -71,8 +81,8 @@ import {
 } from '@/components/chat/chat-ui';
 import { Composer, type MentionPerson } from '@/components/chat/Composer';
 import { MessageStream, type MessageActions } from '@/components/chat/MessageList';
-import { ChannelInfo, MessageResult, PinsList, SavedList } from '@/components/chat/ChatPanels';
-import { NewConversation, QuickSwitcher } from '@/components/chat/ChatDialogs';
+import { ChannelInfo, LinkedList, MessageResult, PinsList, SavedList } from '@/components/chat/ChatPanels';
+import { NewConversation, QuickSwitcher, TaskFromMessage } from '@/components/chat/ChatDialogs';
 
 /*
  * Chat en canales, el mismo que las apps de Android e iPhone: #general, #anuncios,
@@ -82,7 +92,7 @@ import { NewConversation, QuickSwitcher } from '@/components/chat/ChatDialogs';
  */
 
 type Thread = { root: ChatMessage; replies: ChatMessage[] };
-type Panel = { kind: 'thread'; rootId: string } | { kind: 'pins' } | { kind: 'saved' } | { kind: 'info' } | null;
+type Panel = { kind: 'thread'; rootId: string } | { kind: 'pins' } | { kind: 'saved' } | { kind: 'info' } | { kind: 'refs' } | null;
 type Store = Record<string, { list: ChatMessage[]; hasMore: boolean }>;
 type TypingMap = Record<string, Record<string, { name: string; at: number }>>;
 type UploadItem = {
@@ -286,9 +296,37 @@ function ChatInner() {
   const draftsReady = useRef(false);
   const presenceReady = useRef(false);
   const picked = useRef(new Map<string, MentionPerson>());
+  const pickedRefs = useRef(new Map<string, ChatRef>());
+  const [refCards, setRefCards] = useState<Record<string, ChatRef>>({});
+  const [refBusy, setRefBusy] = useState<string | null>(null);
+  const [deliveryTask, setDeliveryTask] = useState<TaskRecord | null>(null);
+  const [taskFrom, setTaskFrom] = useState<ChatMessage | null>(null);
+  const refQueue = useRef(new Map<string, { kind: string; id: string }>());
+  const refTimer = useRef<number | null>(null);
 
   /** En móvil la conversación solo cuenta como «abierta» si está en pantalla. */
   const open = !narrow || view === 'convo';
+
+  /** Pide tarjetas con mis permisos: lo que llegó por socket o lo que acaba de cambiar. */
+  const requestCards = useCallback((refs: Array<{ kind: string; id: string }>) => {
+    for (const r of refs) refQueue.current.set(refKey(r), { kind: r.kind, id: r.id });
+    if (refTimer.current !== null) return;
+    refTimer.current = window.setTimeout(() => {
+      refTimer.current = null;
+      const batch = [...refQueue.current.values()];
+      refQueue.current.clear();
+      if (!batch.length) return;
+      api<{ refs: ChatRef[] }>('/chat/refs/cards', { method: 'POST', body: JSON.stringify({ refs: batch }) })
+        .then((res) =>
+          setRefCards((prev) => {
+            const next = { ...prev };
+            for (const card of res.refs ?? []) next[refKey(card)] = card;
+            return next;
+          }),
+        )
+        .catch(() => undefined);
+    }, 120);
+  }, []);
 
   const showToast = useCallback((text: string) => {
     setToast(text);
@@ -514,6 +552,15 @@ function ChatInner() {
   const entry = activeId ? store[activeId] : undefined;
   const messages = entry?.list;
 
+  // Lo que llegó por socket trae solo la etiqueta: cada quien pide su tarjeta.
+  useEffect(() => {
+    const unresolved: ChatRef[] = [];
+    for (const m of [...(messages ?? []), ...(thread ? [thread.root, ...thread.replies] : [])]) {
+      for (const r of m.refs ?? []) if (r.resolved === false && !refCards[refKey(r)]) unresolved.push(r);
+    }
+    if (unresolved.length) requestCards(unresolved);
+  }, [messages, thread, refCards, requestCards]);
+
   // «Mensajes nuevos»: se fija una vez al abrir, con el lastReadAt de antes de marcar leído.
   useEffect(() => {
     if (!activeId || markTaken.current === activeId || !head || !messages) return;
@@ -683,6 +730,7 @@ function ChatInner() {
     }
   });
   useRealtime<ChatMessage>('chat:thread-reply', applyMessage);
+  useRealtime<{ kind: string; id: string }>('chat:refs-changed', (r) => requestCards([r]));
   useRealtime<ChatMessage>('chat:message-updated', (m) => (m.deleted ? applyDelete(m.channelId, m.id) : applyUpdate(m, true)));
   useRealtime<{ channelId: string; messageId: string }>('chat:message-deleted', (p) => applyDelete(p.channelId, p.messageId));
   useRealtime<{ channelId: string; userId: string; fullName: string; at: number }>('chat:typing', (p) => {
@@ -754,12 +802,24 @@ function ChatInner() {
     [],
   );
   const onPicked = useCallback((p: MentionPerson) => picked.current.set(p.id, p), []);
+  const onPickedRef = useCallback((r: ChatRef) => pickedRefs.current.set(refKey(r), r), []);
+  const searchRefs = useCallback(
+    (q: string) => {
+      const params = new URLSearchParams({ entity });
+      if (q) params.set('q', q);
+      if (activeId) params.set('channelId', activeId);
+      return api<{ results: ChatRef[] }>(`/chat/refs/search?${params}`).then((res) => res.results ?? []);
+    },
+    [activeId, entity],
+  );
+  const canTask = user?.roleKey !== 'solo_carpetas' && user?.roleKey !== 'practicante';
+  const taskPeople = useMemo<MentionPerson[]>(() => people, [people]);
   const encode = (text: string) => encodeMentions(text, [...(head?.members ?? []), ...picked.current.values()]);
 
   /* enviar */
 
   const localMessage = useCallback(
-    (channelId: string, body: string, parentId: string | null, quoted: ChatMessage | null): ChatMessage => {
+    (channelId: string, body: string, parentId: string | null, quoted: ChatMessage | null, refs?: ChatRef[]): ChatMessage => {
       seq.current += 1;
       const clientId = `c-${Date.now()}-${seq.current}`;
       return {
@@ -776,6 +836,7 @@ function ChatInner() {
         reactions: [],
         replyToId: quoted?.id ?? null,
         replyTo: quoted ? replyExcerpt(quoted) : null,
+        refs,
         pending: true,
       };
     },
@@ -793,6 +854,7 @@ function ChatInner() {
             parentId: tmp.parentId ?? undefined,
             clientId: tmp.clientId,
             replyToId: tmp.replyToId ?? undefined,
+            refs: tmp.refs?.map((r) => ({ kind: r.kind, id: r.id })),
           }),
         });
         applyMessage({ ...res, clientId: tmp.clientId });
@@ -810,10 +872,77 @@ function ChatInner() {
     return true;
   };
 
+  /** Tarea recién creada: queda dicha en la conversación, ya con su tarjeta. */
+  const announceTask = useCallback(
+    async (taskId: string, channelId: string, parentId: string | null) => {
+      const { refs } = await api<{ refs: ChatRef[] }>('/chat/refs/cards', {
+        method: 'POST',
+        body: JSON.stringify({ refs: [{ kind: 'task', id: taskId }] }),
+      });
+      const card = refs?.[0];
+      if (card?.label) void deliver(localMessage(channelId, `Nueva tarea: @${card.label}`, parentId, null, [card]));
+    },
+    [deliver, localMessage],
+  );
+
+  /** `/tarea Título @persona mañana`. Si falla, el texto vuelve al redactor. */
+  const runTaskCommand = (channelId: string, text: string) => {
+    const cmd = parseTaskCommand(text, [...people, ...picked.current.values()]);
+    if (!cmd) {
+      showToast('Escribe el título de la tarea');
+      return;
+    }
+    setDrafts((d) => ({ ...d, [channelId]: '' }));
+    api<{ id: string }>('/tasks', {
+      method: 'POST',
+      body: JSON.stringify({
+        title: cmd.title,
+        assigneeIds: cmd.assignees.map((a) => a.id),
+        dueAt: cmd.dueAt ?? undefined,
+        eventId: head?.eventId ?? undefined,
+        entity,
+      }),
+    })
+      .then((task) => announceTask(task.id, channelId, null))
+      .catch((e) => {
+        setDrafts((d) => ({ ...d, [channelId]: text }));
+        showToast(errorText(e, 'No se pudo crear la tarea'));
+      });
+  };
+
+  const refAct = useCallback(
+    async (r: ChatRef, action: RefAction) => {
+      setRefBusy(refKey(r));
+      try {
+        if (action === 'deliver') {
+          setDeliveryTask(await api<TaskRecord>(`/tasks/${r.id}`));
+          return;
+        }
+        if (action === 'complete') {
+          await api(`/tasks/${r.id}`, { method: 'PATCH', body: JSON.stringify({ status: 'DONE' }) });
+          showToast('Tarea terminada');
+        } else {
+          await api(`/tasks/${r.id}/approve`, { method: 'POST' });
+          showToast('Tarea aprobada');
+        }
+        requestCards([r]);
+      } catch (e) {
+        showToast(errorText(e, 'No se pudo completar'));
+      } finally {
+        setRefBusy(null);
+      }
+    },
+    [requestCards, showToast],
+  );
+
   const sendMain = () => {
     if (!activeId || !user) return;
     const text = (drafts[activeId] ?? '').trim();
     if (!text) return;
+    if (canTask && isTaskCommand(text)) {
+      runTaskCommand(activeId, text);
+      return;
+    }
     const body = encode(text);
     if (tooLong(body)) return;
     const quoted = replyTo[activeId] ?? null;
@@ -824,7 +953,7 @@ function ChatInner() {
       delete next[activeId];
       return next;
     });
-    void deliver(localMessage(activeId, body, null, quoted));
+    void deliver(localMessage(activeId, body, null, quoted, refsInText(text, pickedRefs.current.values())));
   };
 
   const sendThread = () => {
@@ -836,7 +965,7 @@ function ChatInner() {
     setThreadDraft('');
     const quoted = threadReply;
     setThreadReply(null);
-    void deliver(localMessage(thread.root.channelId, body, thread.root.id, quoted));
+    void deliver(localMessage(thread.root.channelId, body, thread.root.id, quoted, refsInText(text, pickedRefs.current.values())));
   };
 
   const onDraft = (value: string) => {
@@ -1113,6 +1242,10 @@ function ChatInner() {
     jumpTo,
     onMention: openDm,
     isOnline,
+    refCards,
+    refAct: (r, action) => void refAct(r, action),
+    refBusy,
+    createTask: canTask ? setTaskFrom : undefined,
     highlight,
     touched,
     setTouched,
@@ -1438,7 +1571,7 @@ function ChatInner() {
     ));
 
   const panelTitle =
-    panel?.kind === 'thread' ? 'Hilo' : panel?.kind === 'pins' ? 'Mensajes fijados' : panel?.kind === 'saved' ? 'Guardados' : 'Detalles';
+    panel?.kind === 'thread' ? 'Hilo' : panel?.kind === 'refs' ? 'Ligados' : panel?.kind === 'pins' ? 'Mensajes fijados' : panel?.kind === 'saved' ? 'Guardados' : 'Detalles';
 
   const intro = (
     <div className="chat-intro">
@@ -1671,6 +1804,15 @@ function ChatInner() {
                   ) : null}
                   <button
                     type="button"
+                    className={`chat-tool${panel?.kind === 'refs' ? ' is-on' : ''}`}
+                    title="Ligados"
+                    aria-label="Tareas, eventos y OC ligados a esta conversación"
+                    onClick={() => setPanel((p) => (p?.kind === 'refs' ? null : { kind: 'refs' }))}
+                  >
+                    <Icon d={ICONS.link} size={17} />
+                  </button>
+                  <button
+                    type="button"
                     className={`chat-tool${panel?.kind === 'pins' ? ' is-on' : ''}`}
                     title="Fijados"
                     aria-label="Mensajes fijados"
@@ -1823,6 +1965,9 @@ function ChatInner() {
                   isOnline={isOnline}
                   onPicked={onPicked}
                   onEditLast={editLast}
+                  searchRefs={searchRefs}
+                  onPickedRef={onPickedRef}
+                  taskPeople={canTask ? taskPeople : undefined}
                 />
               )}
             </>
@@ -1868,6 +2013,8 @@ function ChatInner() {
                     canMentionChannel={false}
                     isOnline={isOnline}
                     onPicked={onPicked}
+                    searchRefs={searchRefs}
+                    onPickedRef={onPickedRef}
                   />
                 ) : null}
               </>
@@ -1881,6 +2028,21 @@ function ChatInner() {
                     jumpTo(m.id);
                   }}
                 />
+              </div>
+            ) : panel.kind === 'refs' ? (
+              <div className="chat-panel__body">
+                {activeId ? (
+                  <LinkedList
+                    channelId={activeId}
+                    live={refCards}
+                    onAction={(r, action) => void refAct(r, action)}
+                    busyKey={refBusy}
+                    onJump={(id) => {
+                      if (narrow) setPanel(null);
+                      jumpTo(id);
+                    }}
+                  />
+                ) : null}
               </div>
             ) : panel.kind === 'saved' ? (
               <div className="chat-panel__body">
@@ -1941,6 +2103,32 @@ function ChatInner() {
           onSelect={(id) => selectChannel(id)}
           onOpenDm={openDm}
           onClose={() => setSwitcher(false)}
+        />
+      ) : null}
+      {taskFrom ? (
+        <TaskFromMessage
+          message={taskFrom}
+          eventId={head?.eventId ?? null}
+          entity={entity}
+          onClose={() => setTaskFrom(null)}
+          onCreated={(taskId) => {
+            const m = taskFrom;
+            setTaskFrom(null);
+            showToast('Tarea creada');
+            void announceTask(taskId, m.channelId, m.parentId ?? m.id).catch(() => undefined);
+          }}
+          onError={showToast}
+        />
+      ) : null}
+      {deliveryTask ? (
+        <TaskDeliveryModal
+          task={deliveryTask}
+          onClose={() => setDeliveryTask(null)}
+          onDone={(task) => {
+            setDeliveryTask(null);
+            showToast(task.status === 'PENDING_APPROVAL' ? 'Entregada: espera aprobación' : 'Tarea terminada');
+            requestCards([{ kind: 'task', id: task.id }]);
+          }}
         />
       ) : null}
       {menu ? (
