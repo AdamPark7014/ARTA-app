@@ -3,6 +3,9 @@ import { notFound } from 'next/navigation';
 import { join } from 'path';
 import { promises as fs } from 'fs';
 
+// Sin esto Next intenta armarla al construir, ve el «no es E2E» y la deja en 404 para siempre.
+export const dynamic = 'force-dynamic';
+
 export async function GET(req: Request) {
   if (process.env.NODE_ENV === 'production' && !process.env.E2E_PORT) return notFound();
   const url = new URL(req.url);

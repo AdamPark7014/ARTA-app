@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { Nunito, Outfit } from 'next/font/google';
+import { Fraunces, Inter, Nunito, Outfit } from 'next/font/google';
 import '../styles/globals.scss';
 import { UserProvider } from '@/lib/user-context';
 import { ROOT_DOMAIN } from '@/lib/domains';
@@ -49,6 +49,26 @@ const outfit = Outfit({
 });
 
 /**
+ * El sitio público y el portal de proveedores usan Fraunces e Inter. Sin `preload`:
+ * el navegador solo las baja donde se usan, y el panel, que va en Nunito, ni las
+ * pide. Antes salían de una hoja de Google que frenaba el primer pintado de todo.
+ */
+const fraunces = Fraunces({
+  subsets: ['latin'],
+  weight: ['500', '600'],
+  display: 'swap',
+  preload: false,
+  variable: '--font-fraunces',
+});
+
+const inter = Inter({
+  subsets: ['latin'],
+  display: 'swap',
+  preload: false,
+  variable: '--font-inter',
+});
+
+/**
  * Respaldo del «modo app» del lado cliente: `(app)/layout` lo decide en el
  * servidor, pero el login (y cualquier ruta fuera de ese grupo) llega aquí y
  * una navegación suave posterior no vuelve a ejecutar scripts del servidor.
@@ -58,15 +78,7 @@ const APP_SHELL_FALLBACK =
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="es-MX" className={`${nunito.variable} ${outfit.variable}`} suppressHydrationWarning>
-      <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
-        <link
-          href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,650&family=Inter:wght@400;500;600;700&display=swap"
-          rel="stylesheet"
-        />
-      </head>
+    <html lang="es-MX" className={`${nunito.variable} ${outfit.variable} ${fraunces.variable} ${inter.variable}`} suppressHydrationWarning>
       <body suppressHydrationWarning>
         <script dangerouslySetInnerHTML={{ __html: APP_SHELL_FALLBACK }} />
         <UserProvider>{children}</UserProvider>

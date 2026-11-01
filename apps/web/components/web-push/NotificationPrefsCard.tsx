@@ -12,6 +12,18 @@ type Prefs = {
 
 const CHANNELS = Object.keys(CHANNEL_LABELS) as NoticeChannel[];
 
+/** Lo que conteste el API, siempre con la forma completa. */
+function normalized(raw: Partial<Prefs> | null | undefined): Prefs {
+  return {
+    muted: Array.isArray(raw?.muted) ? raw.muted : [],
+    quietHours: {
+      enabled: raw?.quietHours?.enabled === true,
+      start: raw?.quietHours?.start || '22:00',
+      end: raw?.quietHours?.end || '07:00',
+    },
+  };
+}
+
 function Switch({
   on,
   label,
@@ -50,7 +62,7 @@ export function NotificationPrefsCard() {
 
   useEffect(() => {
     api<Prefs>('/notifications/preferences')
-      .then(setPrefs)
+      .then((raw) => setPrefs(normalized(raw)))
       .catch(() => setError('No se pudieron cargar tus preferencias de avisos'));
   }, []);
 
@@ -59,7 +71,7 @@ export function NotificationPrefsCard() {
     setPrefs(next);
     setError('');
     try {
-      setPrefs(await api<Prefs>('/notifications/preferences', { method: 'PATCH', body: JSON.stringify(next) }));
+      setPrefs(normalized(await api<Prefs>('/notifications/preferences', { method: 'PATCH', body: JSON.stringify(next) })));
     } catch (e) {
       setPrefs(before);
       setError(e instanceof Error ? e.message : 'No se pudo guardar');

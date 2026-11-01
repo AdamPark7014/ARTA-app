@@ -106,7 +106,8 @@ export type GroupedNotices<T> = Array<{ label: 'Hoy' | 'Ayer' | 'Antes'; items: 
 
 export function groupNotices<T extends { createdAt: string }>(items: T[], now: Date = new Date()): GroupedNotices<T> {
   const groups: GroupedNotices<T> = [];
-  for (const item of items) {
+  const newestFirst = [...items].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  for (const item of newestFirst) {
     const label = noticeGroup(item.createdAt, now);
     const last = groups[groups.length - 1];
     if (last?.label === label) last.items.push(item);

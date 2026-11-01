@@ -610,6 +610,7 @@ function EventDetailInner() {
       <div className="stack page-workspace">
         <EventHero
           event={event}
+          dense={tab !== 'overview'}
           actions={
             <>
               {!closed && canEditEvent ? (

@@ -69,6 +69,8 @@ function workbookOC(): Buffer {
 }
 
 test('screenshots: Campaña y Corrida (antes/después)', async ({ page, baseURL }, testInfo) => {
+  // Abre cuatro libros y los fotografía: con el motor de Safari en CI pasa de los 45 s normales.
+  test.setTimeout(120_000);
   const shot = (name: string) => testInfo.outputPath(name);
   await seedSession(page, baseURL!);
   await mockAuthenticatedApi(page, {

@@ -1,6 +1,7 @@
 'use client';
 
 import Image from 'next/image';
+import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useUser } from '@/lib/user-context';
@@ -9,6 +10,7 @@ import { visibleNavItems } from '@/lib/access-matrix';
 import { createSecureHandoffUrl } from '@/lib/cross-entity-handoff';
 import { AccountMenu } from './AccountMenu';
 import { NotificationBell } from './NotificationBell';
+import { RouteProgress } from './RouteProgress';
 import { SidebarNav } from './SidebarNav';
 import { TopbarSearch } from './TopbarSearch';
 import { useEntityTheme } from './useEntityTheme';
@@ -31,7 +33,8 @@ export function AppShell({
   const pathname = usePathname();
   const router = useRouter();
   const [navOpen, setNavOpen] = useState(false);
-  const [navQuery, setNavQuery] = useState('');
+  // Dentro de un evento, la barra dice de dónde viene y lleva de regreso.
+  const crumb = /^\/events\/(?!new)[^/]+/.test(pathname || '') ? { href: '/events?scope=active', label: 'Eventos' } : null;
   /**
    * Menú que se esconde solo y vuelve al acercar el cursor al borde izquierdo,
    * como el Dock de macOS.
@@ -207,7 +210,7 @@ export function AppShell({
         </div>
 
         <Suspense fallback={<nav className="nav" aria-hidden />}>
-          <SidebarNav items={nav} query={navQuery} />
+          <SidebarNav items={nav} query="" />
         </Suspense>
 
         {/* Junta 11-09-2026: el pie del menú era un bloque de texto; ahora es la persona y dos iconos. */}
@@ -267,9 +270,14 @@ export function AppShell({
                 Fijar menú
               </button>
             ) : null}
+            {crumb ? (
+              <Link href={crumb.href} className="topbar-crumb">
+                {crumb.label}
+              </Link>
+            ) : null}
             <h1>{title || 'Panel'}</h1>
           </div>
-          <TopbarSearch value={navQuery} onChange={setNavQuery} items={nav} menuHidden={menuHidden} />
+          <TopbarSearch items={nav} />
           <div className="topbar-actions">
             <NotificationBell />
             <AccountMenu name={user.fullName} title={user.title} onLogout={logout} />
@@ -277,6 +285,10 @@ export function AppShell({
         </header>
         <div className="content">{children}</div>
       </div>
+      {/* `useSearchParams` pide su propio Suspense para no volver dinámica la pantalla. */}
+      <Suspense fallback={null}>
+        <RouteProgress />
+      </Suspense>
     </div>
   );
 }

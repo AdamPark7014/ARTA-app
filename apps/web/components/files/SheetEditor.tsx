@@ -1421,7 +1421,9 @@ export function SheetEditor({
       setExtent(pos);
       return;
     }
-    dragRef.current = 'cell';
+    // Arrastrar para seleccionar es del cursor: con el dedo, un toque que mueve la hoja al
+    // enfocar la celda terminaba seleccionando también la de junto.
+    if (!coarse) dragRef.current = 'cell';
     const focused = document.activeElement === e.currentTarget;
     if (!focused) {
       // Un clic selecciona la celda (como Excel): lo que se escriba la reemplaza.

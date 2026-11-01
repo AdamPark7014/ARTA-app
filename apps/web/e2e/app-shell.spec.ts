@@ -58,10 +58,15 @@ test.describe('App shell', () => {
     const nav = page.getByRole('navigation', { name: 'Módulos del panel' });
     await expect(nav.getByRole('link', { name: 'Eventos actuales' })).toBeVisible();
 
-    await page.getByLabel('Buscar en el menú').fill('finanz');
+    await page.getByLabel('Buscar en ARTA').fill('finanz');
 
-    await expect(nav.getByRole('link', { name: 'Finanzas' })).toBeVisible();
-    await expect(nav.getByRole('link', { name: 'Eventos actuales' })).toHaveCount(0);
+    const results = page.getByRole('listbox', { name: 'Resultados' });
+    await expect(results.getByRole('option', { name: /Finanzas/ })).toBeVisible();
+    // El menú no se mueve mientras se busca.
+    await expect(nav.getByRole('link', { name: 'Eventos actuales' })).toBeVisible();
+
+    await page.keyboard.press('Enter');
+    await expect(page).toHaveURL(/finance/);
   });
 
   test('desde el sidebar se llega al portafolio de eventos', async ({ page, baseURL, isMobile }) => {
@@ -132,5 +137,33 @@ test.describe('App shell', () => {
     // Ambos fixtures tienen fecha futura y estatus abierto: el archivo va vacío.
     await expect(page.getByRole('heading', { name: 'Eventos pasados' }).first()).toBeVisible();
     await expect(page.getByText('Noche de Bandas')).toHaveCount(0);
+  });
+
+  test('el buscador encuentra eventos y personas sin acentos, y lleva a ellos', async ({ page, baseURL }) => {
+    await seedSession(page, baseURL!);
+    await mockAuthenticatedApi(page, {
+      '/events': [
+        { id: 'evt-a', name: 'Gira Sinfónica', venue: 'Auditorio Arema', startsAt: '2030-01-10T02:00:00.000Z', status: 'ACTIVE' },
+        { id: 'evt-b', name: 'Noche de Bandas', venue: 'Teatro', startsAt: '2030-02-10T02:00:00.000Z', status: 'ACTIVE' },
+      ],
+      '/users/directory': [{ id: 'usr-beto', fullName: 'Beto Sandoval', title: 'Logística' }],
+    });
+    await page.goto('/dashboard');
+
+    const search = page.getByLabel('Buscar en ARTA');
+    const results = page.getByRole('listbox', { name: 'Resultados' });
+
+    // Antes de teclear: lo que viene.
+    await search.click();
+    await expect(results.getByText('Próximos eventos')).toBeVisible();
+    await expect(results.getByRole('option', { name: /Noche de Bandas/ })).toBeVisible();
+
+    await search.fill('sinfonica');
+    await expect(results.getByRole('option', { name: /Gira Sinfónica/ })).toBeVisible();
+    await expect(results.getByRole('option', { name: /Noche de Bandas/ })).toHaveCount(0);
+
+    await search.fill('beto');
+    await results.getByRole('option', { name: /Beto Sandoval/ }).click();
+    await expect(page).toHaveURL(/\/chat\?with=usr-beto/);
   });
 });

@@ -987,7 +987,7 @@ export function EventChecklistsPanel({
       </div>
 
       {mode === 'sheet' ? (
-        <ExpandBox title={activeChecklist.title} dirty={autosave.dirty}>
+        <ExpandBox title={activeChecklist.title} dirty={autosave.dirty} quietTitle>
           <FormatSheet
             key={activeChecklist.id}
             event={event}

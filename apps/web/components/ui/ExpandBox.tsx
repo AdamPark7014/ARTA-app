@@ -15,6 +15,8 @@ type Props = {
   defaultExpanded?: boolean;
   /** Si hay borrador sin guardar, Esc / salir pide confirmación */
   dirty?: boolean;
+  /** El título ya está a la vista en la pantalla: solo se enseña a pantalla completa. */
+  quietTitle?: boolean;
 };
 
 /**
@@ -31,6 +33,7 @@ export function ExpandBox({
   actions,
   defaultExpanded = false,
   dirty = false,
+  quietTitle = false,
 }: Props) {
   const [expanded, setExpanded] = useState(defaultExpanded);
   const dirtyRef = useRef(dirty);
@@ -68,7 +71,7 @@ export function ExpandBox({
   return (
     <div className={`expandbox ${expanded ? 'expandbox--full' : 'expandbox--inline'}`}>
       <div className="expandbox__bar">
-        <strong className="expandbox__title">{title}</strong>
+        <strong className={`expandbox__title ${quietTitle && !expanded ? 'sr-only' : ''}`}>{title}</strong>
         <div className="row row--tight">
           {actions}
           <button

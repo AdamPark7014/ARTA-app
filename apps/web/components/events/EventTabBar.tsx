@@ -56,23 +56,6 @@ export function EventTabBar({ tab, modules, onSelect }: Props) {
 
   return (
     <div ref={barRef} className={`event-tabs${stuck ? ' is-stuck' : ''}`}>
-      <label className="event-tabs__mobile">
-        <span className="event-tabs__mobile-label">Módulo</span>
-        <select
-          className="field field--select event-tabs__select"
-          aria-label="Módulo del evento"
-          value={tab}
-          onChange={(e) => onSelect(e.target.value as Tab)}
-        >
-          <option value="overview">{TAB_LABELS.overview}</option>
-          {modules.map((m) => (
-            <option key={m.key} value={m.key}>
-              {m.label}{m.count ? ` (${m.count})` : ''}
-            </option>
-          ))}
-        </select>
-      </label>
-
       <nav className="tab-bar event-tabs__desktop" aria-label="Módulos del evento" ref={navRef}>
         <button
           className={`tab-bar__btn ${tab === 'overview' ? 'is-active' : ''}`}

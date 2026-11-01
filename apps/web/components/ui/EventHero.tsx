@@ -82,10 +82,13 @@ export function EventHero({
   event,
   actions,
   menu,
+  dense = false,
 }: {
   event: HeroEvent;
   actions?: ReactNode;
   menu?: HeroMenuItem[];
+  /** Dentro de un módulo manda lo que se está trabajando: la cabecera ocupa menos. */
+  dense?: boolean;
 }) {
   const status = STATUS[event.status] || { label: event.status, tone: 'draft' };
   const place = [event.venue, event.city].filter(Boolean).join(', ');
@@ -102,7 +105,7 @@ export function EventHero({
   const showWhen = days !== null && event.status !== 'CANCELLED' && event.status !== 'CLOSED';
 
   return (
-    <section className="ev-hero ev-hero--compact">
+    <section className={`ev-hero ev-hero--compact ${dense ? 'ev-hero--dense' : ''}`}>
       <div className="ev-hero__copy">
         <p className="ev-hero__eyebrow">
           <span>{event.entity === 'ARTA' ? 'Arta' : 'Auditorio'}</span>

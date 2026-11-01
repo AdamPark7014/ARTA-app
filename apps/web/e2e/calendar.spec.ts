@@ -4,15 +4,20 @@ import type { Route } from '@playwright/test';
 import { mockAuthenticatedApi, seedSession } from './support/mock-api';
 
 test.describe('Calendario de eventos', () => {
-  test('nav + mes renderizan shows con startsAt', async ({ page, baseURL }) => {
+  test('nav + mes renderizan shows con startsAt', async ({ page, baseURL, isMobile }) => {
     await seedSession(page, baseURL!);
     await mockAuthenticatedApi(page);
 
     await page.goto('/dashboard');
-    const nav = page.getByRole('navigation', { name: 'Módulos del panel' });
-    await expect(nav.getByRole('link', { name: 'Calendario' })).toBeVisible();
-    await nav.getByRole('link', { name: 'Calendario' }).click();
-    await page.waitForURL('**/calendar');
+    if (isMobile) {
+      // En teléfono el menú es un cajón: lo prueba mobile-shell.spec.ts.
+      await page.goto('/calendar');
+    } else {
+      const nav = page.getByRole('navigation', { name: 'Módulos del panel' });
+      await expect(nav.getByRole('link', { name: 'Calendario' })).toBeVisible();
+      await nav.getByRole('link', { name: 'Calendario' }).click();
+      await page.waitForURL('**/calendar');
+    }
 
     await expect(page.getByRole('heading', { name: 'Calendario', level: 2 })).toBeVisible();
 

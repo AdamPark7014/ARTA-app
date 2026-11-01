@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import Link from 'next/link';
+import { Flash } from './Flash';
 
 type PageHeaderProps = {
   /** Etiqueta pequeña arriba del título (fecha, entidad, sección). */
@@ -84,18 +85,13 @@ type FlashProps = {
   onDismiss?: () => void;
 };
 
-/** Mensaje de estado (guardado, error, aviso). */
+/**
+ * Mensaje de estado. Con `onDismiss` es pasajero («Datos guardados»): flota abajo
+ * sin mover la pantalla y se cierra solo, salvo los errores, que esperan a que se
+ * lean. Sin `onDismiss` es un estado de la pantalla y se queda en su lugar.
+ */
 export function FlashMessage({ variant = 'info', children, onDismiss }: FlashProps) {
-  return (
-    <div className={`flash flash--${variant}`} role="status">
-      <span className="flash__body">{children}</span>
-      {onDismiss ? (
-        <button type="button" className="flash__dismiss" onClick={onDismiss} aria-label="Cerrar">
-          ×
-        </button>
-      ) : null}
-    </div>
-  );
+  return <Flash variant={variant} onDismiss={onDismiss}>{children}</Flash>;
 }
 
 type FormGridProps = {
