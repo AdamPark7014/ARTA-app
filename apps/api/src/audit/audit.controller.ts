@@ -86,8 +86,9 @@ export class AuditController {
         generatedBy: null,
         generatedAt: new Date(),
       } as const;
-      this.branding.drawHeaderFooter(doc, meta, right - left, 100);
-      doc.moveDown(3.2);
+      // Pintar el pie deja el cursor hasta abajo: el contenido empieza bajo el encabezado.
+      doc.y = this.branding.drawHeaderFooter(doc, meta, right - left, 100);
+      doc.x = left;
       doc.fillColor('#111').fontSize(14).text(`Historial ${docType.toLowerCase()}`, { width: right - left });
       doc.moveDown(0.6);
       for (const r of rows) {

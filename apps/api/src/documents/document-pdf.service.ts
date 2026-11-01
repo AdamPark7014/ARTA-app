@@ -4,26 +4,39 @@ import { createWriteStream, existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
 import { PdfBrandingService, type BrandingMeta } from '../uploads/pdf-branding.service';
 
-export type DocBlockType = 'h1' | 'h2' | 'p' | 'bullet' | 'divider';
+export type DocTextType = 'h1' | 'h2' | 'p' | 'bullet' | 'divider';
 
-export type DocBlock = { type: DocBlockType; text: string };
+export type DocTextBlock = { type: DocTextType; text: string };
+/** Tabla del Word importado; se edita celda por celda y sale en el PDF. */
+export type DocTableBlock = { type: 'table'; rows: string[][] };
+export type DocBlock = DocTextBlock | DocTableBlock;
 
-const BLOCK_TYPES: DocBlockType[] = ['h1', 'h2', 'p', 'bullet', 'divider'];
+const TEXT_TYPES: DocTextType[] = ['h1', 'h2', 'p', 'bullet', 'divider'];
+const MAX_TABLE_ROWS = 200;
+const MAX_TABLE_COLS = 30;
 
 /** Sanea lo que llega del panel: nunca confiamos en el JSON del cliente. */
 export function normalizeBlocks(raw: unknown): DocBlock[] {
   if (!Array.isArray(raw)) return [];
   return raw
     .slice(0, 2000)
-    .map((b) => {
-      const block = b as Partial<DocBlock>;
-      const type = BLOCK_TYPES.includes(block?.type as DocBlockType)
-        ? (block!.type as DocBlockType)
-        : 'p';
+    .map((b): DocBlock => {
+      const block = b as { type?: unknown; text?: unknown; rows?: unknown };
+      if (block?.type === 'table' && Array.isArray(block.rows)) {
+        const rows = (block.rows as unknown[])
+          .slice(0, MAX_TABLE_ROWS)
+          .map((row) =>
+            (Array.isArray(row) ? row : [])
+              .slice(0, MAX_TABLE_COLS)
+              .map((cell) => (cell == null ? '' : String(cell)).slice(0, 2000)),
+          );
+        return { type: 'table', rows };
+      }
+      const type = TEXT_TYPES.includes(block?.type as DocTextType) ? (block.type as DocTextType) : 'p';
       const text = typeof block?.text === 'string' ? block.text.slice(0, 20000) : '';
       return { type, text };
     })
-    .filter((b) => b.type === 'divider' || b.text.trim().length > 0 || b.type === 'p');
+    .filter((b) => b.type === 'table' || b.type === 'divider' || b.text.trim().length > 0 || b.type === 'p');
 }
 
 type DocInput = {
@@ -69,7 +82,12 @@ export class DocumentPdfService {
     const filePath = join(dir, `${documentId}-v${version}.pdf`); // keep stable path for linking history; return fileName for download UI
 
     await new Promise<void>((resolve, reject) => {
-      const doc = new PDFDocument({ size: 'LETTER', margin: 56 });
+      // El margen de abajo deja libre el pie de página; `bufferPages` permite numerar al final.
+      const doc = new PDFDocument({
+        size: 'LETTER',
+        margins: { top: 56, left: 56, right: 56, bottom: 90 },
+        bufferPages: true,
+      });
       const stream = createWriteStream(filePath);
       doc.pipe(stream);
 
@@ -86,13 +104,24 @@ export class DocumentPdfService {
         folio: input.folio || null,
         status: input.status || null,
       };
-      this.branding.drawHeaderFooter(doc, meta, right - left, 100);
-      if (input.draftWatermark) this.branding.draftWatermark(doc);
-      doc.moveDown(4.6);
+      // Pintar el pie deja el cursor hasta abajo: sin colocarlo, el contenido se iba a una
+      // segunda página y la primera salía solo con el encabezado.
+      const startAt = (top: number) => {
+        if (input.draftWatermark) this.branding.draftWatermark(doc);
+        doc.x = left;
+        doc.y = top;
+      };
+      startAt(this.branding.drawHeaderFooter(doc, meta, right - left, 100));
+      doc.on('pageAdded', () => startAt(this.branding.drawHeaderFooter(doc, meta, undefined, 100, { compact: true })));
 
       const accent = input.entity === 'EXPLANADA' ? '#1f5c50' : '#8b6914';
       for (const block of input.blocks) {
         if (doc.y > bottom) doc.addPage();
+
+        if (block.type === 'table') {
+          this.drawTable(doc, block.rows, left, right - left, bottom);
+          continue;
+        }
 
         if (block.type === 'divider') {
           doc.moveDown(0.4);
@@ -138,11 +167,62 @@ export class DocumentPdfService {
         doc.moveDown(0.4);
       }
 
+      this.branding.stampPageNumbers(doc);
       doc.end();
       stream.on('finish', () => resolve());
       stream.on('error', reject);
     });
 
     return { url: `/uploads/documents/${documentId}-v${version}.pdf`, filePath, fileName };
+  }
+
+  /** Tabla con líneas finas; la primera fila es el encabezado y se repite al cambiar de página. */
+  private drawTable(doc: PDFKit.PDFDocument, rows: string[][], left: number, width: number, bottom: number) {
+    const cols = rows.reduce((n, row) => Math.max(n, row.length), 0);
+    if (!cols) return;
+    const colWidth = width / cols;
+    const pad = 5;
+    const size = 9.5;
+
+    const heightOf = (row: string[], bold: boolean) => {
+      doc.font(bold ? 'Helvetica-Bold' : 'Helvetica').fontSize(size);
+      const tallest = row.reduce(
+        (h, cell) => Math.max(h, doc.heightOfString(cell || ' ', { width: colWidth - pad * 2 })),
+        0,
+      );
+      return tallest + pad * 2;
+    };
+
+    const drawRow = (row: string[], bold: boolean) => {
+      const height = heightOf(row, bold);
+      const y = doc.y;
+      if (bold) doc.rect(left, y, width, height).fill('#f1f0ed');
+      doc.font(bold ? 'Helvetica-Bold' : 'Helvetica').fontSize(size).fillColor('#222');
+      for (let c = 0; c < cols; c += 1) {
+        doc.text(row[c] || '', left + c * colWidth + pad, y + pad, { width: colWidth - pad * 2, lineBreak: true });
+      }
+      doc.lineWidth(0.5).strokeColor('#c9c8c4');
+      doc.rect(left, y, width, height).stroke();
+      for (let c = 1; c < cols; c += 1) {
+        doc
+          .moveTo(left + c * colWidth, y)
+          .lineTo(left + c * colWidth, y + height)
+          .stroke();
+      }
+      doc.x = left;
+      doc.y = y + height;
+    };
+
+    doc.moveDown(0.3);
+    doc.x = left;
+    rows.forEach((row, i) => {
+      if (doc.y + heightOf(row, i === 0) > bottom + 20) {
+        doc.addPage();
+        if (i > 0) drawRow(rows[0], true);
+      }
+      drawRow(row, i === 0);
+    });
+    doc.font('Helvetica');
+    doc.moveDown(0.6);
   }
 }

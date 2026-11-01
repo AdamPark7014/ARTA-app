@@ -65,7 +65,7 @@ const DOC_INCLUDE = {
 } satisfies Prisma.EventDocumentInclude;
 
 /** .docx (HTML de mammoth) → bloques del editor embebido. */
-function htmlToBlocks(html: string): DocBlock[] {
+export function htmlToBlocks(html: string): DocBlock[] {
   const blocks: DocBlock[] = [];
   // 1) Tables → preserve as editable table blocks (rows/cols)
   const tables: Array<{ start: number; end: number; html: string }> = [];
@@ -79,6 +79,7 @@ function htmlToBlocks(html: string): DocBlock[] {
   // Replace tables with placeholders to avoid re-parsing them as paragraphs
   let htmlNoTables = html;
   const placeholders: string[] = [];
+  const tableBlocks: DocBlock[] = [];
   tables.forEach((t, idx) => {
     const token = `__DOC_TABLE_${idx}__`;
     placeholders.push(token);
@@ -105,7 +106,7 @@ function htmlToBlocks(html: string): DocBlock[] {
       }
       if (cells.length) rows.push(cells);
     }
-    blocks.push({ type: 'table', rows } as unknown as DocBlock);
+    tableBlocks.push({ type: 'table', rows });
   });
 
   const re =
@@ -125,9 +126,14 @@ function htmlToBlocks(html: string): DocBlock[] {
       .replace(/&gt;/g, '>')
       .trim();
     if (!text && tag !== 'p') continue;
-    // If this paragraph is a table placeholder, skip (already added as table)
+    // Un párrafo que solo traía una imagen no se queda como hueco al principio del documento.
+    if (!text && !blocks.length) continue;
+    // La tabla entra donde estaba en el Word, no hasta arriba.
     const phIdx = placeholders.indexOf(text);
-    if (phIdx >= 0) continue;
+    if (phIdx >= 0) {
+      blocks.push(tableBlocks[phIdx]);
+      continue;
+    }
     if (tag === 'h1') blocks.push({ type: 'h1', text });
     else if (tag === 'h2') blocks.push({ type: 'h2', text });
     else if (tag === 'li') blocks.push({ type: 'bullet', text });

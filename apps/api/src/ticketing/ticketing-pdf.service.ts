@@ -61,8 +61,9 @@ export class TicketingPdfService {
         generatedBy: null,
         generatedAt: new Date(),
       };
-      this.branding.drawHeaderFooter(doc, meta, right - left, 100);
-      doc.moveDown(3.5);
+      // Pintar el pie deja el cursor hasta abajo: el contenido empieza bajo el encabezado.
+      doc.y = this.branding.drawHeaderFooter(doc, meta, right - left, 100);
+      doc.x = left;
 
       // Encabezado
       doc.fillColor('#111').fontSize(15).text('CREACIÓN BOLETERA', { width: right - left });
