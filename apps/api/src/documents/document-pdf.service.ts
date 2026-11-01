@@ -119,7 +119,7 @@ export class DocumentPdfService {
         if (doc.y > bottom) doc.addPage();
 
         if (block.type === 'table') {
-          this.drawTable(doc, block.rows, left, right - left, bottom);
+          this.drawTable(doc, block.rows, left, right - left);
           continue;
         }
 
@@ -177,7 +177,7 @@ export class DocumentPdfService {
   }
 
   /** Tabla con líneas finas; la primera fila es el encabezado y se repite al cambiar de página. */
-  private drawTable(doc: PDFKit.PDFDocument, rows: string[][], left: number, width: number, bottom: number) {
+  private drawTable(doc: PDFKit.PDFDocument, rows: string[][], left: number, width: number) {
     const cols = rows.reduce((n, row) => Math.max(n, row.length), 0);
     if (!cols) return;
     const colWidth = width / cols;
@@ -216,7 +216,8 @@ export class DocumentPdfService {
     doc.moveDown(0.3);
     doc.x = left;
     rows.forEach((row, i) => {
-      if (doc.y + heightOf(row, i === 0) > bottom + 20) {
+      // Con el margen real: un texto que pase de ahí abre otra página por su cuenta.
+      if (doc.y + heightOf(row, i === 0) > doc.page.height - doc.page.margins.bottom) {
         doc.addPage();
         if (i > 0) drawRow(rows[0], true);
       }
