@@ -1,3 +1,4 @@
+import { refreshFormulaResults } from './sheet-layout';
 import { BadRequestException, Injectable } from '@nestjs/common';
 import * as ExcelJS from 'exceljs';
 import type { SheetOp } from './sheet-ops';
@@ -138,7 +139,7 @@ export class XlsxPatchService {
 
       const cell = sheet.getCell(ref);
       if (change.formula) {
-        // Se conserva como fórmula viva; Excel calculará el valor al abrir.
+        // Se conserva como fórmula viva; su resultado se calcula abajo, ya con todo el parche aplicado.
         cell.value = { formula: change.formula.replace(/^=/, ''), result: undefined };
       } else if (change.value === null || change.value === undefined || change.value === '') {
         cell.value = null;
@@ -147,7 +148,8 @@ export class XlsxPatchService {
       }
     }
 
-    // Mantener el comportamiento existente: no forzar recálculo en apertura aquí.
+    for (const ws of workbook.worksheets) refreshFormulaResults(ws);
+
     const out = await workbook.xlsx.writeBuffer();
     return Buffer.from(out);
   }

@@ -204,4 +204,59 @@ describe('XlsxPatchService', () => {
       expect(result.reason).toContain('macros');
     });
   });
+
+  describe('resultados de las fórmulas', () => {
+    async function book(): Promise<Buffer> {
+      const wb = new ExcelJS.Workbook();
+      const ws = wb.addWorksheet('Corrida');
+      ws.getCell('A1').value = 1;
+      ws.getCell('A2').value = 2;
+      ws.getCell('A3').value = { formula: 'A1+A2', result: 3 };
+      return Buffer.from(await wb.xlsx.writeBuffer());
+    }
+
+    async function read(buffer: Buffer) {
+      const wb = new ExcelJS.Workbook();
+      await wb.xlsx.load(buffer as unknown as ExcelJS.Buffer);
+      return wb.getWorksheet('Corrida')!;
+    }
+
+    it('la fórmula escrita en el panel se guarda con su resultado', async () => {
+      const out = await new XlsxPatchService().applyCellPatch(await book(), {
+        cells: [{ sheet: 'Corrida', ref: 'B1', formula: '=A1*10' }],
+      });
+      expect((await read(out)).getCell('B1').value).toMatchObject({ formula: 'A1*10', result: 10 });
+    });
+
+    it('lo que dependía de una celda editada no se queda con el valor viejo', async () => {
+      const out = await new XlsxPatchService().applyCellPatch(await book(), {
+        cells: [{ sheet: 'Corrida', ref: 'A1', value: 40 }],
+      });
+      expect((await read(out)).getCell('A3').value).toMatchObject({ formula: 'A1+A2', result: 42 });
+    });
+
+    it('una fórmula que lee otra hoja toma el dato de esa hoja, no de la suya', async () => {
+      const wb = new ExcelJS.Workbook();
+      const ingresos = wb.addWorksheet('Ingresos');
+      ingresos.getCell('A1').value = 500;
+      const ws = wb.addWorksheet('Corrida');
+      ws.getCell('A1').value = 1;
+      ws.getCell('B1').value = { formula: 'Ingresos!A1*2', result: 0 };
+      const out = await new XlsxPatchService().applyCellPatch(Buffer.from(await wb.xlsx.writeBuffer()), {
+        cells: [{ sheet: 'Corrida', ref: 'A1', value: 2 }],
+      });
+      expect((await read(out)).getCell('B1').value).toMatchObject({ result: 1000 });
+    });
+
+    it('lo que aquí no se puede calcular conserva su resultado', async () => {
+      const wb = new ExcelJS.Workbook();
+      const ws = wb.addWorksheet('Corrida');
+      ws.getCell('A1').value = 1;
+      ws.getCell('B1').value = { formula: 'FUNCIONQUENOEXISTE(A1)', result: 77 };
+      const out = await new XlsxPatchService().applyCellPatch(Buffer.from(await wb.xlsx.writeBuffer()), {
+        cells: [{ sheet: 'Corrida', ref: 'A1', value: 2 }],
+      });
+      expect((await read(out)).getCell('B1').value).toMatchObject({ result: 77 });
+    });
+  });
 });

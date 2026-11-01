@@ -232,29 +232,47 @@ function plainOf(v: RawValue): string | number | boolean | Date | null {
 }
 
 /**
- * Evaluador de fórmulas para las celdas editadas en el panel (el servidor
- * guarda la fórmula sin resultado). Usa `fast-formula-parser` si está; si
- * algo no se puede calcular, la celda sale vacía en vez de tumbar el PDF.
+ * Evaluador de fórmulas. Calcula cada una con los valores actuales, igual que la
+ * hoja del panel: el resultado guardado en el archivo puede ser viejo (editar un
+ * precio en el panel no toca el total que depende de él) y un PDF de dinero no
+ * puede salir con cifras atrasadas. El guardado solo se usa si la fórmula no se
+ * puede calcular aquí. Usa `fast-formula-parser`; si no hay ni cálculo ni
+ * resultado, la celda sale vacía en vez de tumbar el PDF.
  */
 export class FormulaResolver implements Resolver {
   private memo = new Map<string, string | number | boolean | Date | null>();
   private stack = new Set<string>();
+  /** Un resolvedor por hoja, compartido: las fórmulas pueden leer otras hojas del libro. */
+  private siblings: Map<string, FormulaResolver>;
   private parser: { parse: (f: string, pos: { row: number; col: number; sheet: string }) => unknown } | null = null;
 
   constructor(
     private ws: ExcelJS.Worksheet,
     private formulaOf: (row: number, col: number) => string | null,
+    siblings?: Map<string, FormulaResolver>,
   ) {
+    this.siblings = siblings ?? new Map();
+    this.siblings.set(ws.name, this);
     try {
       // eslint-disable-next-line @typescript-eslint/no-var-requires
       const FormulaParser = require('fast-formula-parser');
       this.parser = new FormulaParser({
-        onCell: ({ row, col }: { row: number; col: number }) => this.numericOrText(row, col),
-        onRange: ({ from, to }: { from: { row: number; col: number }; to: { row: number; col: number } }) => {
+        onCell: ({ sheet, row, col }: { sheet?: string; row: number; col: number }) =>
+          this.on(sheet).numericOrText(row, col),
+        onRange: ({
+          sheet,
+          from,
+          to,
+        }: {
+          sheet?: string;
+          from: { row: number; col: number };
+          to: { row: number; col: number };
+        }) => {
+          const target = this.on(sheet);
           const out: Array<Array<string | number | boolean | Date | null>> = [];
           for (let r = from.row; r <= Math.min(to.row, MAX_ROWS); r += 1) {
             const line: Array<string | number | boolean | Date | null> = [];
-            for (let c = from.col; c <= Math.min(to.col, MAX_COLS); c += 1) line.push(this.numericOrText(r, c));
+            for (let c = from.col; c <= Math.min(to.col, MAX_COLS); c += 1) line.push(target.numericOrText(r, c));
             out.push(line);
           }
           return out;
@@ -263,6 +281,16 @@ export class FormulaResolver implements Resolver {
     } catch {
       this.parser = null;
     }
+  }
+
+  /** El resolvedor de la hoja que nombra la fórmula. Una hoja que no existe no se calcula. */
+  private on(sheet?: string): FormulaResolver {
+    if (!sheet || sheet === this.ws.name) return this;
+    const known = this.siblings.get(sheet);
+    if (known) return known;
+    const ws = this.ws.workbook?.getWorksheet(sheet);
+    if (!ws) throw new Error(`Hoja desconocida: ${sheet}`);
+    return new FormulaResolver(ws, (r, c) => formulaOfCell(ws, r, c), this.siblings);
   }
 
   private numericOrText(row: number, col: number) {
@@ -277,13 +305,9 @@ export class FormulaResolver implements Resolver {
     const raw = cell.value;
     let out: string | number | boolean | Date | null;
     if (isFormulaValue(raw)) {
-      const cached = plainOf(raw);
-      if (cached !== null && cached !== '') {
-        out = cached;
-      } else {
-        const formula = this.formulaOf(row, col);
-        out = formula ? this.evaluate(formula, row, col, key) : null;
-      }
+      const formula = this.formulaOf(row, col);
+      const fresh = formula ? this.evaluate(formula, row, col, key) : null;
+      out = fresh ?? plainOf(raw);
     } else {
       out = plainOf(raw);
     }
@@ -308,6 +332,26 @@ export class FormulaResolver implements Resolver {
 }
 
 /** Fórmula de una celda, resolviendo las compartidas por desplazamiento. */
+/**
+ * Vuelve a calcular el resultado guardado de cada fórmula de la hoja. Sin esto el
+ * archivo trae la fórmula nueva sin valor y lo que dependía de ella con el valor
+ * viejo: los visores que no calculan (vista previa del teléfono, correo, WhatsApp)
+ * enseñan celdas vacías o cifras atrasadas. Lo que no se puede calcular aquí se
+ * queda como estaba; Excel lo recalcula al abrir.
+ */
+export function refreshFormulaResults(ws: ExcelJS.Worksheet): void {
+  const resolver = new FormulaResolver(ws, (r, c) => formulaOfCell(ws, r, c));
+  ws.eachRow({ includeEmpty: false }, (row, r) => {
+    row.eachCell({ includeEmpty: false }, (cell, c) => {
+      const raw = cell.value;
+      if (!isFormulaValue(raw)) return;
+      const result = resolver.valueAt(r, c);
+      if (result === null || result === undefined) return;
+      cell.value = { ...raw, result } as ExcelJS.CellValue;
+    });
+  });
+}
+
 export function formulaOfCell(ws: ExcelJS.Worksheet, row: number, col: number): string | null {
   const raw = ws.getCell(row, col).value;
   if (!isFormulaValue(raw)) return null;
