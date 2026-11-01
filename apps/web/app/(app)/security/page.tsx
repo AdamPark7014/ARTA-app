@@ -1,5 +1,6 @@
 'use client';
 
+import { askConfirm } from '@/components/ui/AskDialog';
 import { FormEvent, useEffect, useState } from 'react';
 import { AppShell } from '@/components/app-shell/AppShell';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -72,9 +73,12 @@ export default function SecurityPage() {
 
   async function revokeAll() {
     if (
-      !confirm(
-        '¿Revocar todas las sesiones? También cerrarás esta sesión y tendrás que volver a iniciar.',
-      )
+      !(await askConfirm({
+        title: '¿Revocar todas las sesiones?',
+        body: 'También cerrarás esta sesión y tendrás que volver a iniciar.',
+        confirmLabel: 'Revocar todas',
+        danger: true,
+      }))
     ) {
       return;
     }
@@ -214,8 +218,8 @@ export default function SecurityPage() {
                   <button
                     className="btn-quiet btn-quiet--danger"
                     type="button"
-                    onClick={() => {
-                      if (confirm(`¿Cerrar la sesión de ${s.deviceLabel || 'este dispositivo'}?`)) void revoke(s.id);
+                    onClick={async () => {
+                      if (await askConfirm({ title: `¿Cerrar la sesión de ${s.deviceLabel || 'este dispositivo'}?`, confirmLabel: 'Cerrar sesión', danger: true })) void revoke(s.id);
                     }}
                   >
                     Revocar

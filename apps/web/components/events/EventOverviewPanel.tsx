@@ -180,7 +180,14 @@ export function EventOverviewPanel({
             </div>
             <div className="surface__body">
               {editing && !closed && canEdit ? (
-                <EventFields value={form} onChange={setForm} autoFocus />
+                <div className="sx-stack">
+                  <EventFields value={form} onChange={setForm} autoFocus />
+                  {problem ? (
+                    <p className="fx-problem" role="alert">
+                      {problem}
+                    </p>
+                  ) : null}
+                </div>
               ) : (
                 <div className="sx-stack">
                   <dl className="ev-facts">

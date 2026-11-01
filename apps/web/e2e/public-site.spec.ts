@@ -1,66 +1,28 @@
 import { test, expect } from '@playwright/test';
-import type { Route } from '@playwright/test';
 
-const STUDIO_MOCK = {
-  pages: [
-    {
-      sectionKey: 'home_hero',
-      contentJson: { headline: 'La experiencia del Show', sub: 'Producción en Puebla' },
-    },
-  ],
-  slides: [
-    {
-      id: 's1',
-      title: 'Show en vivo',
-      subtitle: 'Arta Producciones',
-      imageUrl: '/uploads/seed-hero-1.jpg',
-      ctaLabel: 'Explorar',
-      ctaHref: '#modulos',
-    },
-  ],
-  news: [
-    {
-      id: 'n1',
-      slug: 'temporada-puebla',
-      title: 'Nueva temporada de shows en Puebla',
-      excerpt: 'Producción integral.',
-      coverUrl: '/uploads/seed-news-1.jpg',
-      publishedAt: '2026-01-15T12:00:00.000Z',
-    },
-  ],
-};
-
-const NEWS_MOCK = {
-  id: 'n1',
-  slug: 'temporada-puebla',
-  title: 'Nueva temporada de shows en Puebla',
-  excerpt: 'Producción integral de conciertos.',
-  body: 'Arta Producciones anuncia la nueva temporada con shows en Puebla.',
-  coverUrl: '/uploads/seed-news-1.jpg',
-  publishedAt: '2026-01-15T12:00:00.000Z',
-};
-
+/**
+ * Estas páginas se arman en el servidor de Next: su `fetch` al API no pasa por el
+ * navegador y `page.route` no lo ve. Por eso sin API solo se pide lo que el sitio
+ * garantiza siempre (contenido propio, HTML desde el servidor y sin noticias
+ * inventadas). La noticia real, con el API y sus datos, la prueba la corrida de
+ * stack real.
+ */
 test.describe('Sitio público SSR', () => {
-  test.beforeEach(async ({ page }) => {
-    await page.route('**/studio/public/ARTA', (route: Route) =>
-      route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(STUDIO_MOCK) }),
-    );
-    await page.route('**/studio/public/news/temporada-puebla', (route: Route) =>
-      route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(NEWS_MOCK) }),
-    );
-  });
+  test('/p/arta llega con contenido en el HTML, aunque el API no conteste', async ({ page, request }) => {
+    // Por IP: `arta.localhost` solo lo resuelve el navegador, y a esta ruta le da igual el dominio.
+    const res = await request.get(`http://127.0.0.1:${process.env.E2E_PORT || 3100}/p/arta`);
+    expect(res.status()).toBeLessThan(400);
+    expect(await res.text()).toMatch(/<h1[^>]*>[^<]*(experiencia|Show)/i);
 
-  test('/p/arta renderiza contenido en HTML (no vacío)', async ({ page }) => {
-    const res = await page.goto('/p/arta');
-    expect(res?.status()).toBeLessThan(400);
+    await page.goto('/p/arta');
     await expect(page.locator('h1')).toContainText(/experiencia|Show/i);
     await expect(page.getByRole('heading', { name: /Noticias/i })).toBeVisible();
-    await expect(page.getByText('Nueva temporada de shows en Puebla')).toBeVisible();
+    await expect(page.locator('a[href*="/p/arta/noticias/"]')).toHaveCount(0);
   });
 
-  test('noticia por slug renderiza cuerpo server-side', async ({ page }) => {
-    await page.goto('/p/arta/noticias/temporada-puebla');
-    await expect(page.locator('h1')).toContainText('Nueva temporada de shows en Puebla');
-    await expect(page.getByText(/anuncia la nueva temporada/i)).toBeVisible();
+  test('una noticia que no existe lo dice, no enseña una página rota', async ({ page }) => {
+    await page.goto('/p/arta/noticias/no-existe');
+    await expect(page.getByText('Noticia no encontrada')).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Ver todas las noticias' })).toHaveAttribute('href', '/p/arta#noticias');
   });
 });

@@ -1,5 +1,6 @@
 'use client';
 
+import { askConfirm } from '@/components/ui/AskDialog';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { isDirectionRole } from '@arta/rbac';
 import { AppShell } from '@/components/app-shell/AppShell';
@@ -295,9 +296,9 @@ export default function CleaningInventoryPage() {
     setDraft((prev) => (prev ? { ...prev, items: prev.items.map((r, i) => (i === index ? { ...r, [key]: value } : r)) } : prev));
   }
 
-  function removeRow(index: number) {
+  async function removeRow(index: number) {
     const row = draft?.items[index];
-    if (row?.insumo.trim() && !window.confirm(`¿Quitar «${row.insumo}» de esta semana?`)) return;
+    if (row?.insumo.trim() && !(await askConfirm({ title: `¿Quitar «${row.insumo}» de esta semana?`, confirmLabel: 'Quitar', danger: true }))) return;
     setDraft((prev) => (prev ? { ...prev, items: prev.items.filter((_, i) => i !== index) } : prev));
   }
 
@@ -318,7 +319,7 @@ export default function CleaningInventoryPage() {
   }
 
   async function removeWeek() {
-    if (!week || !window.confirm(`¿Borrar ${week.label.toLowerCase()}? No se puede deshacer.`)) return;
+    if (!week || !(await askConfirm({ title: `¿Borrar ${week.label.toLowerCase()}?`, body: 'No se puede deshacer.', confirmLabel: 'Borrar', danger: true }))) return;
     try {
       await api(`/cleaning-inventory/${week.id}`, { method: 'DELETE' });
       setWeek(null);

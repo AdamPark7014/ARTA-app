@@ -1,10 +1,11 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import * as XLSX from 'xlsx';
 import { renderAsync } from 'docx-preview';
+import { PdfPages } from './PdfPages';
 import { SheetEditor } from './SheetEditor';
 import { ExpandBox } from '@/components/ui/ExpandBox';
+import { isMobileBrowser } from '@/lib/platform';
 import { fixMojibake } from '@/lib/text';
 
 type Props = {
@@ -19,11 +20,13 @@ type Props = {
 
 export function FileViewer({ url, fileName, kind, cacheKey, fileId }: Props) {
   const displayName = fixMojibake(fileName);
-  const [sheetHtml, setSheetHtml] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [pdfSrc, setPdfSrc] = useState('');
   const [pdfFailed, setPdfFailed] = useState(false);
+  // En teléfono y tableta el iframe enseña solo la primera página, o nada.
+  const [pdfOnCanvas, setPdfOnCanvas] = useState(false);
+  useEffect(() => setPdfOnCanvas(isMobileBrowser()), []);
 
   const isPdf = kind === 'pdf' || /\.pdf$/i.test(fileName) || url.toLowerCase().includes('.pdf');
   const isExcel =
@@ -78,36 +81,6 @@ export function FileViewer({ url, fileName, kind, cacheKey, fileId }: Props) {
     };
   }, [fetchUrl, isPdf]);
 
-  useEffect(() => {
-    if (!isExcel) return;
-    let cancelled = false;
-    setLoading(true);
-    setError('');
-    setSheetHtml('');
-    fetch(inlineUrl, { credentials: 'same-origin' })
-      .then((r) => {
-        if (!r.ok) throw new Error(`No se pudo cargar (${r.status})`);
-        return r.arrayBuffer();
-      })
-      .then((buf) => {
-        if (cancelled) return;
-        const wb = XLSX.read(buf, { type: 'array' });
-        const first = wb.SheetNames[0];
-        if (!first) throw new Error('Excel vacío');
-        const html = XLSX.utils.sheet_to_html(wb.Sheets[first], { id: 'arta-sheet' });
-        setSheetHtml(html);
-      })
-      .catch((e) => {
-        if (!cancelled) setError(e instanceof Error ? e.message : 'Error al leer Excel');
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [inlineUrl, isExcel]);
-
   // DOCX render (in-app)
   const [docxHtmlId] = useState(() => `docx-${Math.random().toString(36).slice(2)}`);
   useEffect(() => {
@@ -154,12 +127,16 @@ export function FileViewer({ url, fileName, kind, cacheKey, fileId }: Props) {
         ) : null}
         {!pdfFailed && pdfSrc ? (
           <div className="docview">
-            <iframe
-              title={displayName}
-              src={`${pdfSrc}#toolbar=1&navpanes=0`}
-              className="docview__frame"
-              onError={() => setPdfFailed(true)}
-            />
+            {pdfOnCanvas ? (
+              <PdfPages src={pdfSrc} title={displayName} onFail={() => setPdfFailed(true)} />
+            ) : (
+              <iframe
+                title={displayName}
+                src={`${pdfSrc}#toolbar=1&navpanes=0`}
+                className="docview__frame"
+                onError={() => setPdfFailed(true)}
+              />
+            )}
           </div>
         ) : null}
         {pdfFailed && !loading ? (

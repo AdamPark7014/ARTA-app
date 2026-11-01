@@ -1,5 +1,6 @@
 'use client';
 
+import { askConfirm } from '@/components/ui/AskDialog';
 import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AppShell } from '@/components/app-shell/AppShell';
@@ -148,7 +149,7 @@ export default function EventsCalendarPage() {
   }
 
   async function removeNote(id: string) {
-    if (!confirm('¿Quitar esta nota del calendario?')) return;
+    if (!(await askConfirm({ title: '¿Quitar esta nota del calendario?', confirmLabel: 'Quitar', danger: true }))) return;
     setNotes((prev) => prev.filter((n) => n.id !== id));
     closeCompose();
     try {

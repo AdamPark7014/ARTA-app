@@ -14,22 +14,18 @@ test.describe('Calendario de eventos', () => {
     await nav.getByRole('link', { name: 'Calendario' }).click();
     await page.waitForURL('**/calendar');
 
-    await expect(page.getByRole('heading', { name: /Calendario de eventos/i })).toBeVisible();
-    await expect(page.getByRole('grid', { name: /Calendario/i })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Calendario', level: 2 })).toBeVisible();
 
-    // September 2026 has "Noche de Bandas" (startsAt 2026-09-20)
-    const next = page.getByRole('button', { name: 'Mes →' });
-    // Cursor starts at "today" (Aug 31 2026 in CI clock may vary) — jump until we see Bandas or hit a few months
-    for (let i = 0; i < 4; i++) {
-      const hit = page.getByRole('button').filter({ hasText: 'Noche de Bandas' });
-      if ((await hit.count()) > 0) {
-        await hit.first().click();
-        await expect(page.getByRole('link', { name: /Noche de Bandas/i })).toBeVisible();
-        return;
-      }
-      await next.click();
-    }
-    throw new Error('Noche de Bandas no apareció en el calendario');
+    // «Noche de Bandas» es de septiembre de 2026 (startsAt 2026-09-20T02:00Z, la
+    // noche del 19 en Puebla) y el calendario abre en el mes de hoy: se camina
+    // hasta ahí en la dirección que toque, sea cual sea la fecha de la corrida.
+    const now = new Date();
+    const months = (2026 - now.getFullYear()) * 12 + (8 - now.getMonth());
+    const step = page.getByRole('button', { name: months < 0 ? 'Mes anterior' : 'Mes siguiente' });
+    for (let i = 0; i < Math.abs(months); i += 1) await step.click();
+
+    await expect(page.getByRole('heading', { name: /septiembre de 2026/i })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Noche de Bandas' })).toHaveAttribute('href', '/events/evt-e2e-1');
   });
 });
 

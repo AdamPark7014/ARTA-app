@@ -74,8 +74,8 @@ test.describe('Editores embebidos', () => {
       },
     });
 
-    // El archivo vive fuera de /api: se sirve un .xlsx real generado aquí.
-    await page.route('**/uploads/demo.xlsx', (route) =>
+    // El editor lee el original por `/api/files/:id/inline`: se sirve un .xlsx real generado aquí.
+    await page.route('**/api/files/file-xlsx/inline', (route) =>
       route.fulfill({
         status: 200,
         contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -152,8 +152,8 @@ test.describe('Editores embebidos', () => {
 
     await page.goto('/events/evt-e2e-1?tab=files');
 
-    await page.getByRole('button', { name: 'Nuevo documento' }).click();
-    expect(created.title).toBe('Documento sin título');
+    await page.getByRole('button', { name: '+ Documento' }).click();
+    await expect.poll(() => created.title).toBe('Documento sin título');
 
     await page.locator('.docedit__title').fill('Acta de junta');
     await page.locator('.docedit__text').first().fill('Acuerdos de la reunión del 28 de agosto.');
@@ -192,7 +192,7 @@ test.describe('Editores embebidos', () => {
     });
 
     // Libro con fórmula en B4 = B2 + B3
-    await page.route('**/uploads/demo.xlsx', (route) => {
+    await page.route('**/api/files/file-xlsx/inline', (route) => {
       const ws = XLSX.utils.aoa_to_sheet([
         ['Concepto', 'Monto'],
         ['Audio', 12000],
@@ -219,5 +219,71 @@ test.describe('Editores embebidos', () => {
     const b2 = page.getByLabel('Celda B2', { exact: true });
     await b2.fill('15000');
     await expect(page.getByLabel('Celda B4', { exact: true })).toHaveValue('23000');
+  });
+
+  test('como en Excel: la celda seleccionada enseña el resultado y la fórmula solo al editarla', async ({
+    page,
+    baseURL,
+  }) => {
+    await seedSession(page, baseURL!);
+    await mockAuthenticatedApi(page, {
+      '/events/evt-e2e-1': {
+        ...EVENT,
+        files: [
+          {
+            id: 'file-xlsx',
+            fileName: 'Presupuesto.xlsx',
+            url: '/uploads/demo.xlsx',
+            kind: 'excel',
+            module: null,
+            createdAt: '2026-08-28T10:00:00.000Z',
+          },
+        ],
+      },
+      '/documents/event/evt-e2e-1': [],
+      '/vendor/event/evt-e2e-1': [],
+    });
+    await page.route('**/api/files/file-xlsx/inline', (route) => {
+      const ws = XLSX.utils.aoa_to_sheet([
+        ['Concepto', 'Monto'],
+        ['Audio', 12000],
+        ['Luces', 8000],
+        ['Total', null],
+      ]);
+      (ws as any)['B4'] = { t: 'n', f: 'B2+B3' };
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Presupuesto');
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        body: XLSX.write(wb, { bookType: 'xlsx', type: 'buffer' }) as Buffer,
+      });
+    });
+
+    await page.goto('/events/evt-e2e-1?tab=files');
+    await page.getByRole('button', { name: 'Editar', exact: true }).click();
+
+    const b4 = page.getByLabel('Celda B4', { exact: true });
+    const fx = page.getByLabel('Editar B4', { exact: true });
+
+    // Un clic: selecciona. La celda sigue en 20000 y la fórmula se lee en la barra.
+    await b4.click();
+    await expect(b4).toHaveValue('20000');
+    await expect(fx).toHaveValue('=B2+B3');
+
+    // F2 (o doble clic): ahora sí, la fórmula dentro de la celda.
+    await page.keyboard.press('F2');
+    await expect(b4).toHaveValue('=B2+B3');
+
+    // Esc cancela la edición y regresa al resultado, sin perder la fórmula.
+    await page.keyboard.press('Escape');
+    await expect(b4).toHaveValue('20000');
+    await expect(fx).toHaveValue('=B2+B3');
+
+    // Escribir encima reemplaza; Enter confirma y baja.
+    await page.keyboard.type('=B2*2');
+    await expect(b4).toHaveValue('=B2*2');
+    await page.keyboard.press('Enter');
+    await expect(b4).toHaveValue('24000');
   });
 });

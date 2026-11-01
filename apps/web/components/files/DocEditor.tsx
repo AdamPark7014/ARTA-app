@@ -1,5 +1,6 @@
 'use client';
 
+import { askConfirm } from '@/components/ui/AskDialog';
 import { useEffect, useRef, useState } from 'react';
 import { api } from '@/lib/api';
 import { openGeneratedTab } from '@/lib/open-tab';
@@ -277,7 +278,7 @@ export function DocEditor({ doc, canEdit, onSaved, onDeleted, onClose }: Props) 
   }
 
   async function removeDoc() {
-    if (!confirm(`¿Eliminar el documento “${doc.title}”?`)) return;
+    if (!(await askConfirm({ title: `¿Eliminar el documento «${doc.title}»?`, danger: true }))) return;
     try {
       await api(`/documents/${doc.id}`, { method: 'DELETE' });
       onDeleted(doc.id);

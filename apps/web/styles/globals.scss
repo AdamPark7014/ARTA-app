@@ -6572,9 +6572,13 @@ textarea.pdffield__input--text {
 
 /* Teléfono y «modo app» (vista web de las apps nativas): siempre al final. */
 @import "./mobile";
+@import "./safari";
 
 /* Pulido sin cortes (11-10-2026): la última palabra, encima de todo lo anterior. */
 @import "./pulido";
 
 /* Acabado (12-10-2026): encabezado único, campos del sistema, color solo en alertas. */
 @import "./acabado";
+
+/* Barrido premium (01-11-2026): diálogos, avisos y movimiento. */
+@import "./premium";

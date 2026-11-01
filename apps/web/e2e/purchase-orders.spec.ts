@@ -180,30 +180,33 @@ test.describe('Órdenes de compra · torre', () => {
 test.describe('Órdenes de compra · crear', () => {
   test('el formulario vacío no crea una OC de $0, y dice qué falta', async ({ page, baseURL }) => {
     await openOcs(page, baseURL!, []);
+    await page.getByRole('button', { name: '+ Nueva orden' }).first().click();
 
-    const crear = page.getByRole('button', { name: /Crear orden de compra/ });
+    const crear = page.getByRole('button', { name: /^Crear orden/ });
     await expect(crear).toBeDisabled();
-    await expect(page.getByText(/Escribe al menos un concepto/i)).toBeVisible();
+    await expect(page.getByText('Agrega una partida')).toBeVisible();
   });
 
   test('con concepto e importe se habilita, y el botón dice cuánto', async ({ page, baseURL }) => {
     await openOcs(page, baseURL!, []);
+    await page.getByRole('button', { name: '+ Nueva orden' }).first().click();
 
     // Por nombre accesible y no por `placeholder`: el texto de ayuda ya cambió
     // una vez y dejó la prueba roja sin que nada se hubiera roto.
-    await page.getByLabel('Concepto de la partida 1').fill('Consola');
-    await page.getByLabel('Cantidad de Consola').fill('2');
-    await page.getByLabel('Precio unitario de Consola').fill('7500');
+    await page.getByLabel('Descripción, partida 1').fill('Consola');
+    await page.getByLabel('Cantidad, partida 1').fill('2');
+    await page.getByLabel('Precio, partida 1').fill('7500');
 
-    await expect(page.getByRole('button', { name: /Crear orden de compra por/ })).toBeEnabled();
+    await expect(page.getByRole('button', { name: /^Crear orden · \$/ })).toBeEnabled();
   });
 
   test('elegir efectivo avisa que no habrá comprobante', async ({ page, baseURL }) => {
     await openOcs(page, baseURL!, []);
+    await page.getByRole('button', { name: '+ Nueva orden' }).first().click();
 
     await expect(page.getByText(/al liquidar se pedirá/i)).toBeVisible();
 
-    await page.getByLabel('Forma de pago').selectOption('EFECTIVO');
+    await page.getByRole('radiogroup', { name: 'Forma de pago' }).getByRole('radio', { name: 'Efectivo' }).click();
     await expect(page.getByText(/no se pide comprobante/i).first()).toBeVisible();
   });
 });

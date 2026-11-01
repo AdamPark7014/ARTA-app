@@ -1,5 +1,6 @@
 'use client';
 
+import { askConfirm, askPrompt } from '@/components/ui/AskDialog';
 import { useEffect, useMemo, useState } from 'react';
 import { FileViewer, SheetEditor } from '@/components/files/lazy';
 import { EmptyLite, FileRow, Pill, SectionHead } from '@/components/ui/Lite';
@@ -81,8 +82,9 @@ export function EventFinancePanel({
   }
 
   function remove(f: EventFile) {
-    if (!confirm(`¿Eliminar «${f.fileName}»?`)) return;
-    void run(() => api(`/uploads/${f.id}`, { method: 'DELETE' }).then(() => undefined), 'Archivo eliminado');
+    void askConfirm({ title: `¿Eliminar «${f.fileName}»?`, danger: true }).then((ok) => {
+      if (ok) void run(() => api(`/uploads/${f.id}`, { method: 'DELETE' }).then(() => undefined), 'Archivo eliminado');
+    });
   }
 
   const uploadButton = (label: string, primary: boolean) => (
@@ -125,7 +127,8 @@ export function EventFinancePanel({
                 const f = e.target.files?.[0];
                 e.target.value = '';
                 if (!f) return;
-                const note = window.prompt('Motivo del reemplazo por documento externo') || '';
+                const note = await askPrompt({ title: 'Reemplazar por documento externo', label: 'Motivo', confirmLabel: 'Reemplazar' });
+                if (note === null) return;
                 try {
                   const fd = new FormData();
                   fd.append('file', f);
@@ -150,7 +153,8 @@ export function EventFinancePanel({
             className="btn ghost btn-sm"
             type="button"
             onClick={async () => {
-              const note = window.prompt('Motivo para reactivar la corrida interna (dirección)') || '';
+              const note = await askPrompt({ title: 'Reactivar la corrida interna', label: 'Motivo (dirección)', confirmLabel: 'Reactivar' });
+              if (note === null) return;
               try {
                 await api(`/slots/event/${event.id}/restore`, {
                   method: 'POST',

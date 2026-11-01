@@ -1,5 +1,6 @@
 'use client';
 
+import { askConfirm } from '@/components/ui/AskDialog';
 import { useState } from 'react';
 import { FlashMessage, FormGrid } from '@/components/ui/PageChrome';
 import { api } from '@/lib/api';
@@ -232,8 +233,8 @@ export function TemplateSchemaEditor({ templateId, initial, onSaved }: Props) {
                   <button
                     className="btn ghost"
                     type="button"
-                    onClick={() => {
-                      if (confirm('¿Quitar este bloque y sus preguntas?')) {
+                    onClick={async () => {
+                      if (await askConfirm({ title: '¿Quitar este bloque y sus preguntas?', confirmLabel: 'Quitar', danger: true })) {
                         setSections((prev) => prev.filter((_, i) => i !== sIdx));
                       }
                     }}

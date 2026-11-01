@@ -1,5 +1,6 @@
 'use client';
 
+import { askConfirm } from '@/components/ui/AskDialog';
 import { useEffect, useMemo, useState } from 'react';
 import { EmptyLite, FileRow, Pill, ReviewFlow, SectionHead } from '@/components/ui/Lite';
 import { api } from '@/lib/api';
@@ -168,10 +169,10 @@ export function EventSponsorsPanel({
     setDirty(true);
   }
 
-  function removeConvenio(i: number) {
+  async function removeConvenio(i: number) {
     const r = rows[i];
     const hasData = r.concept.trim() || (r.description || '').trim() || (r.zonas || []).some((z) => z.zona.trim() || z.qty != null);
-    if (hasData && !confirm(`¿Quitar ${r.concept.trim() || 'este convenio'} con sus zonas?`)) return;
+    if (hasData && !(await askConfirm({ title: `¿Quitar ${r.concept.trim() || 'este convenio'} con sus zonas?`, confirmLabel: 'Quitar', danger: true }))) return;
     setRows((prev) => prev.filter((_, idx) => idx !== i));
     setDirty(true);
   }
@@ -805,8 +806,8 @@ function Sponsors({
                               className="icon-btn icon-btn--danger"
                               type="button"
                               aria-label={`Quitar ${s.name}`}
-                              onClick={() => {
-                                if (confirm(`¿Quitar a ${s.name}?`)) {
+                              onClick={async () => {
+                                if (await askConfirm({ title: `¿Quitar a ${s.name}?`, confirmLabel: 'Quitar', danger: true })) {
                                   void run(() => api(`/sponsors/${s.id}`, { method: 'DELETE' }), 'Patrocinador quitado');
                                 }
                               }}

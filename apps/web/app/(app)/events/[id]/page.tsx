@@ -1,5 +1,6 @@
 'use client';
 
+import { askConfirm } from '@/components/ui/AskDialog';
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 import { AppShell } from '@/components/app-shell/AppShell';
@@ -393,7 +394,7 @@ function EventDetailInner() {
 
   async function restoreChecklistVersion(versionId: string) {
     if (!activeChecklist || closed) return;
-    if (!confirm('¿Restaurar esta versión? Se crea una nueva entrada en el historial y se regenera el PDF.')) return;
+    if (!(await askConfirm({ title: '¿Restaurar esta versión?', body: 'Se crea una nueva entrada en el historial y se regenera el PDF.', confirmLabel: 'Restaurar' }))) return;
     setSaving(true);
     setMsg('');
     try {
@@ -479,7 +480,7 @@ function EventDetailInner() {
   }
 
   async function deleteFile(fileId: string) {
-    if (!confirm('¿Eliminar archivo?')) return;
+    if (!(await askConfirm({ title: '¿Eliminar este archivo?', danger: true }))) return;
     try {
       await api(`/uploads/${fileId}`, { method: 'DELETE' });
       if (previewFile?.id === fileId) setPreviewFile(null);
@@ -491,7 +492,7 @@ function EventDetailInner() {
   }
 
   async function eventAction(path: string, ok: string, question?: string) {
-    if (question && !confirm(question)) return;
+    if (question && !(await askConfirm({ title: question }))) return;
     try {
       await api(`/events/${id}/${path}`, { method: 'POST' });
       flash(ok);
@@ -502,7 +503,7 @@ function EventDetailInner() {
   }
 
   async function deleteEvent() {
-    if (!confirm('¿ELIMINAR evento y todo su contenido? Esta acción no se puede deshacer.')) return;
+    if (!(await askConfirm({ title: '¿Eliminar el evento?', body: 'Se borra con todo su contenido. No se puede deshacer.', confirmLabel: 'Eliminar evento', danger: true }))) return;
     try {
       await api(`/events/${id}`, { method: 'DELETE' });
       window.location.href = '/events';

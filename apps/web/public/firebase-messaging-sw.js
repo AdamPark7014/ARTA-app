@@ -63,6 +63,14 @@ async function hasFocusedClient() {
   return list.some((c) => c.focused && c.visibilityState === 'visible');
 }
 
+/** El botón del aviso dice qué sigue. */
+function actionLabel(data) {
+  if (data.channel === 'approvals') return 'Revisar';
+  if (data.channel === 'tasks') return 'Ver tarea';
+  if (data.channel === 'finance') return 'Ver detalle';
+  return 'Abrir';
+}
+
 async function handlePush(data) {
   await setBadge(data.badge);
 
@@ -94,6 +102,9 @@ async function handlePush(data) {
     lang: 'es-MX',
     timestamp: data.sent_at ? Date.parse(data.sent_at) || Date.now() : Date.now(),
     requireInteraction: data.priority === 'high' && data.channel === 'approvals',
+    // Lo que no espera a nadie entra a la bandeja sin sonar.
+    silent: data.passive === '1',
+    actions: isChat ? [{ action: 'open', title: 'Abrir chat' }] : data.url ? [{ action: 'open', title: actionLabel(data) }] : [],
     data: {
       url: data.url || '/notifications',
       kind: data.kind || 'event',
@@ -139,6 +150,10 @@ async function openOrFocus(href) {
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const href = targetUrl(event.notification.data && event.notification.data.url);
+  const info = event.notification.data || {};
+  // `?notif=<id>`: la campana lo marca leído al llegar (aquí no hay sesión para hacerlo).
+  const url = new URL(targetUrl(info.url));
+  if (info.notificationId) url.searchParams.set('notif', info.notificationId);
+  const href = url.href;
   event.waitUntil(openOrFocus(href));
 });

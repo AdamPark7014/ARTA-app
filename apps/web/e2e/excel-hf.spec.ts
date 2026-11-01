@@ -60,7 +60,7 @@ test('SheetEditor abre sin error, muestra contenido y recalcula fórmula', async
 
   // Editar y verificar recálculo (B3=2, C3=6000 => D3=12000; cambia a B3=3,C3=5000 => 15000)
   await page.getByRole('button', { name: 'Ocultar' }).first().click();
-  await page.getByRole('button', { name: 'Editar' }).first().click();
+  await page.getByRole('button', { name: 'Editar', exact: true }).first().click();
   await page.getByLabel('Celda B3', { exact: true }).fill('3');
   await page.getByLabel('Celda C3', { exact: true }).fill('5000');
   // D3 debe mostrar 15000 (valor calculado en vista)

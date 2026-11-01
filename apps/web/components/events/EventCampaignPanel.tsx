@@ -1,5 +1,6 @@
 'use client';
 
+import { askConfirm, askPrompt } from '@/components/ui/AskDialog';
 import { useEffect, useMemo, useState } from 'react';
 import { FileViewer, SheetEditor } from '@/components/files/lazy';
 import { EmptyLite, FileRow, Pill, ReviewFlow, SectionHead, Seg } from '@/components/ui/Lite';
@@ -246,7 +247,8 @@ export function EventCampaignPanel({
   }
   async function replaceExternal(file: File) {
     // Subir archivo y marcar el slot como REPLACED
-    const note = window.prompt('Motivo del reemplazo por documento externo') || '';
+    const note = await askPrompt({ title: 'Reemplazar por documento externo', label: 'Motivo', confirmLabel: 'Reemplazar' });
+    if (note === null) return;
     try {
       const fd = new FormData();
       fd.append('file', file);
@@ -264,7 +266,8 @@ export function EventCampaignPanel({
     }
   }
   async function restoreInternal() {
-    const note = window.prompt('Motivo para reactivar la campaña interna (dirección)') || '';
+    const note = await askPrompt({ title: 'Reactivar la campaña interna', label: 'Motivo (dirección)', confirmLabel: 'Reactivar' });
+    if (note === null) return;
     try {
       await api(`/slots/event/${event.id}/restore`, {
         method: 'POST',
@@ -300,7 +303,7 @@ export function EventCampaignPanel({
    */
   async function importFromSheet() {
     if (!sheet) return;
-    if (filled.length && !confirm('Los conceptos de la tabla se reemplazan con los del Excel. Revisa y guarda.')) return;
+    if (filled.length && !(await askConfirm({ title: '¿Actualizar la tabla desde el Excel?', body: 'Los conceptos de la tabla se reemplazan con los del Excel. Revisa y guarda.', confirmLabel: 'Actualizar' }))) return;
     setBusy(true);
     try {
       const { parseCampaignWorkbook } = await import('@/lib/campaign-sheet-template');

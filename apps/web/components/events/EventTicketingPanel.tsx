@@ -1,5 +1,6 @@
 'use client';
 
+import { askConfirm } from '@/components/ui/AskDialog';
 import { useMemo, useState, type ReactNode } from 'react';
 import type {
   EventDetail,
@@ -342,7 +343,7 @@ export function EventTicketingPanel({ event, closed, canEdit, onChanged, flash }
   }
 
   async function remove(setup: TicketingSetup) {
-    if (!window.confirm('¿Eliminar la boletera de este evento?')) return;
+    if (!(await askConfirm({ title: '¿Eliminar la boletera de este evento?', danger: true }))) return;
     setBusy(true);
     try {
       await api(`/ticketing/${setup.id}`, { method: 'DELETE' });

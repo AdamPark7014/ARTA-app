@@ -1,5 +1,6 @@
 'use client';
 
+import { askConfirm } from '@/components/ui/AskDialog';
 import { FileViewer, PdfEditor, SheetEditor } from '@/components/files/lazy';
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { AppShell } from '@/components/app-shell/AppShell';
@@ -146,13 +147,13 @@ export default function FoldersPage() {
   }
 
   async function removeFile(fileId: string, fileName: string) {
-    if (!active || !confirm(`¿Quitar «${fileName}» de la carpeta?`)) return;
+    if (!active || !(await askConfirm({ title: `¿Quitar «${fileName}» de la carpeta?`, confirmLabel: 'Quitar', danger: true }))) return;
     await api(`/folders/${active.id}/files/${fileId}`, { method: 'DELETE' });
     await openFolder(active.id);
   }
 
   async function removeFolder(folder: Folder) {
-    if (!confirm(`¿Eliminar la carpeta «${folder.name}» y sus archivos?`)) return;
+    if (!(await askConfirm({ title: `¿Eliminar la carpeta «${folder.name}»?`, body: 'Se borran también sus archivos.', danger: true }))) return;
     await api(`/folders/${folder.id}`, { method: 'DELETE' });
     setActive(null);
     await load();

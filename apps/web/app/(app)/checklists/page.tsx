@@ -1,5 +1,6 @@
 'use client';
 
+import { askConfirm } from '@/components/ui/AskDialog';
 import { useEffect, useMemo, useState } from 'react';
 import { AppShell } from '@/components/app-shell/AppShell';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -230,7 +231,7 @@ export default function ChecklistsTemplatesPage() {
 
   async function restoreVersion(versionId: string) {
     if (!preview || !canManage) return;
-    if (!confirm('¿Restaurar esta versión? Se guarda un respaldo de la actual.')) return;
+    if (!(await askConfirm({ title: '¿Restaurar esta versión?', body: 'Se guarda un respaldo de la actual.', confirmLabel: 'Restaurar' }))) return;
     setRestoring(true);
     setMsg('');
     try {

@@ -1,5 +1,6 @@
 'use client';
 
+import { askPrompt } from '@/components/ui/AskDialog';
 import {
   useCallback,
   useEffect,
@@ -16,6 +17,7 @@ import {
 import { createPortal } from 'react-dom';
 import * as XLSX from 'xlsx';
 import FastFormulaParser from 'fast-formula-parser';
+import { hasCoarsePointer } from '@/lib/platform';
 import { createEvaluator } from '@/lib/sheet-evaluator';
 import type { SaveFile } from '@/lib/file-save';
 import { api } from '@/lib/api';
@@ -76,7 +78,8 @@ type Props = {
 
 type Pos = { r: number; c: number };
 type Area = { r1: number; c1: number; r2: number; c2: number };
-type Menu = { x: number; y: number; target: 'cell' | 'row' | 'col' };
+/** `touch`: abierto con el dedo; sale como hoja desde abajo y no se cierra si baja el teclado. */
+type Menu = { x: number; y: number; target: 'cell' | 'row' | 'col'; touch?: boolean };
 type Snapshot =
   | { kind: 'grid'; grid: Grid }
   | {
@@ -247,7 +250,15 @@ export function SheetEditor({
   /** Otra esquina del rango seleccionado (igual a `sel` si es una sola celda). */
   const [extent, setExtent] = useState<Pos | null>(null);
   const [menu, setMenu] = useState<Menu | null>(null);
+  /**
+   * Celda en edición (F2, doble clic, segundo toque o al teclear). Solo ahí se ve
+   * la fórmula cruda; la celda seleccionada enseña el resultado, como en Excel,
+   * y la fórmula se lee en la barra fx.
+   */
+  const [editing, setEditing] = useState<Pos | null>(null);
+  const caretEndRef = useRef<Pos | null>(null);
   const [showCoach, setShowCoach] = useState(false);
+  const [coarse, setCoarse] = useState(false);
   const campaign = variant === 'campaign';
   const finance = variant === 'finance';
   const [colPx, setColPx] = useState<number[]>([]);
@@ -506,6 +517,7 @@ export function SheetEditor({
   }, [grid, activeSheet]);
 
   useEffect(() => {
+    setCoarse(hasCoarsePointer());
     try {
       if (sessionStorage.getItem('arta-sheet-coach-2') !== '1') setShowCoach(true);
     } catch {
@@ -531,10 +543,22 @@ export function SheetEditor({
   const loadSheet = useCallback(
     (wb: XLSX.WorkBook, name: string) => {
       const ws = wb.Sheets[name];
-      const rows = ws ? (XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: false }) as unknown[][]) : [];
-      // Preferir fórmulas visibles cuando existan (para no perder =B*C al editar)
+      // Siempre desde A1: si el libro empieza más abajo, la cuadrícula y el Excel se desfasarían
+      // y lo editado iría a dar a otra celda.
+      const bounds = ws?.['!ref'] ? XLSX.utils.decode_range(ws['!ref']) : null;
+      const rows = ws
+        ? (XLSX.utils.sheet_to_json(ws, {
+            header: 1,
+            defval: '',
+            raw: false,
+            ...(bounds ? { range: XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: bounds.e }) } : {}),
+          }) as unknown[][])
+        : [];
+      // Preferir fórmulas visibles cuando existan (para no perder =B*C al editar). Una fórmula sin
+      // resultado guardado no sale en `sheet_to_json`: se recorre la hoja hasta su última columna.
       const withFormulas = rows.map((row, r) =>
-        row.map((cell, c) => {
+        Array.from({ length: Math.max(row.length, (bounds?.e.c ?? -1) + 1) }, (_, c) => {
+          const cell = row[c];
           const addr = XLSX.utils.encode_cell({ r, c });
           const obj = ws?.[addr] as XLSX.CellObject | undefined;
           if (obj?.f) return `=${obj.f}`;
@@ -611,7 +635,9 @@ export function SheetEditor({
       })
       .then((buf) => {
         if (cancelled) return;
-        const wb = XLSX.read(buf, { type: 'array', cellStyles: true, cellFormula: true });
+        // `sheetStubs`: sin él, SheetJS tira las celdas con fórmula y sin resultado guardado, que es
+        // como ExcelJS deja lo editado en el panel: la fórmula escrita salía vacía al volver a abrir.
+        const wb = XLSX.read(buf, { type: 'array', cellStyles: true, cellFormula: true, sheetStubs: true });
         workbookRef.current = wb;
         setSheetNames(wb.SheetNames);
         const first = wb.SheetNames[0] || '';
@@ -1049,10 +1075,10 @@ export function SheetEditor({
     setMsg(`Hoja «${name}» creada`);
   }
 
-  function renameActiveSheet() {
+  async function renameActiveSheet() {
     const wb = workbookRef.current;
     if (!wb || !canEdit || !activeSheet) return;
-    const next = window.prompt('Nombre de la hoja', activeSheet)?.trim();
+    const next = await askPrompt({ title: 'Nombre de la hoja', defaultValue: activeSheet, confirmLabel: 'Renombrar', required: true });
     if (!next || next === activeSheet) return;
     if (wb.SheetNames.includes(next)) {
       setError('Ya existe una hoja con ese nombre');
@@ -1211,7 +1237,11 @@ export function SheetEditor({
       focusTargetRef.current = null;
       setSel(target);
       if (!opts.keepExtent) setExtent(target);
-      if (opts.selectAll ?? true) el.select();
+      if (opts.selectAll ?? true) {
+        setEditing(null);
+        el.select();
+        selectAllRef.current = target;
+      }
     } else if (el) {
       el.focus({ preventScroll: false });
       el.scrollIntoView({ block: 'nearest', inline: 'nearest' });
@@ -1237,11 +1267,13 @@ export function SheetEditor({
     const matches = target && target.pos.r === pos.r && target.pos.c === pos.c;
     setSel(pos);
     if (!(matches && target.keepExtent)) setExtent(pos);
+    // Llegar a una celda (también desde la barra fx) confirma lo escrito: enseña el resultado.
+    setEditing(null);
     const raw = gridRef.current[pos.r]?.[pos.c] ?? '';
     focusInfoRef.current = { pos, value: raw, grid: gridRef.current, changed: false };
     if (!matches || target.selectAll) {
       e.currentTarget.select();
-      // Al enfocarse pinta el valor crudo (la fórmula) y eso mueve el cursor: se vuelve a seleccionar tras el render.
+      // Salir de la edición cambia el texto y eso mueve el cursor: se vuelve a seleccionar tras el render.
       selectAllRef.current = pos;
     }
     focusTargetRef.current = null;
@@ -1255,6 +1287,20 @@ export function SheetEditor({
     if (el && document.activeElement === el) el.select();
   });
 
+  useLayoutEffect(() => {
+    const pos = caretEndRef.current;
+    if (!pos) return;
+    caretEndRef.current = null;
+    const el = inputAt(pos);
+    if (el && document.activeElement === el) el.setSelectionRange(el.value.length, el.value.length);
+  });
+
+  /** Entra a editar la celda con el cursor al final (F2, doble clic). */
+  function startEditing(pos: Pos) {
+    if (canEdit) setEditing(pos);
+    caretEndRef.current = pos;
+  }
+
   function onCellChange(pos: Pos, value: string) {
     if (!canEdit) return;
     const info = focusInfoRef.current;
@@ -1262,6 +1308,7 @@ export function SheetEditor({
       info.changed = true;
       pushHistory({ kind: 'grid', grid: info.grid });
     }
+    setEditing(pos);
     setCell(pos.r, pos.c, value);
   }
 
@@ -1330,17 +1377,20 @@ export function SheetEditor({
         return;
       case 'F2':
         e.preventDefault();
-        el.setSelectionRange(el.value.length, el.value.length);
+        startEditing(pos);
         return;
       case 'Escape': {
+        // En edición, Esc cancela y regresa a la celda; sin editar, suelta la selección.
+        if (editing?.r !== pos.r || editing?.c !== pos.c) return;
+        e.preventDefault();
+        e.stopPropagation();
         const info = focusInfoRef.current;
         if (info && info.pos.r === pos.r && info.pos.c === pos.c && el.value !== info.value) {
-          e.preventDefault();
-          e.stopPropagation();
           setCell(pos.r, pos.c, info.value);
           info.changed = false;
-          selectAllRef.current = pos;
         }
+        setEditing(null);
+        selectAllRef.current = pos;
         return;
       }
       case 'Delete':
@@ -1377,7 +1427,16 @@ export function SheetEditor({
       // Un clic selecciona la celda (como Excel): lo que se escriba la reemplaza.
       e.preventDefault();
       focusCell(pos);
+    } else if (canEdit && (editing?.r !== pos.r || editing?.c !== pos.c)) {
+      // Segundo clic o toque sobre la celda ya seleccionada: a editar, con la fórmula a la vista.
+      setEditing(pos);
     }
+  }
+
+  /** Salir de la hoja termina la edición; pasar a la barra fx la continúa. */
+  function onCellBlur(e: ReactFocusEvent<HTMLInputElement>) {
+    const next = e.relatedTarget as HTMLElement | null;
+    if (!next?.classList?.contains('sheet-fxbar__input')) setEditing(null);
   }
 
   function onCellEnter(pos: Pos) {
@@ -1503,6 +1562,7 @@ export function SheetEditor({
       setMenu(null);
     }
     document.addEventListener('mousedown', onDown);
+    if (menu.touch) return () => document.removeEventListener('mousedown', onDown);
     window.addEventListener('scroll', onScroll, true);
     window.addEventListener('resize', onScroll);
     return () => {
@@ -1639,9 +1699,18 @@ export function SheetEditor({
         {showCoach ? (
           <div className="editor-coach" role="note" style={{ alignItems: 'center' }}>
             <p className="editor-coach__text" style={{ margin: 0 }}>
-              Se usa como Excel: clic y escribe · doble clic o F2 edita dentro · <strong>clic derecho</strong> en una
-              celda, número de fila o letra de columna para insertar o eliminar · Ctrl+C / Ctrl+V con Excel · Ctrl+Z
-              deshace · Ctrl+S guarda.
+              {coarse ? (
+                <>
+                  Se usa como Excel: toca una celda y escribe · un segundo toque edita dentro · <strong>Filas y
+                  columnas</strong> inserta o elimina donde estés.
+                </>
+              ) : (
+                <>
+                  Se usa como Excel: clic y escribe · doble clic o F2 edita dentro · <strong>clic derecho</strong> en una
+                  celda, número de fila o letra de columna para insertar o eliminar · Ctrl+C / Ctrl+V con Excel · Ctrl+Z
+                  deshace · Ctrl+S guarda.
+                </>
+              )}
             </p>
             <button type="button" className="editor-coach__dismiss" onClick={dismissCoach} aria-label="Cerrar guía">
               Entendido
@@ -1670,6 +1739,22 @@ export function SheetEditor({
                 <button className="btn ghost btn-sm" type="button" onClick={addSheet} title="Agregar hoja">
                   + Hoja
                 </button>
+              ) : null}
+              {canEdit && coarse ? (
+                <>
+                  {/* Con el dedo no hay doble clic fiable ni clic derecho: lo mismo, a la vista. */}
+                  <button className="btn ghost btn-sm" type="button" onClick={renameActiveSheet}>
+                    Renombrar
+                  </button>
+                  <button
+                    className="btn ghost btn-sm"
+                    type="button"
+                    disabled={!sel}
+                    onClick={() => setMenu({ x: 0, y: 0, target: 'cell', touch: true })}
+                  >
+                    Filas y columnas
+                  </button>
+                </>
               ) : null}
             </div>
 
@@ -1801,6 +1886,10 @@ export function SheetEditor({
               placeholder={sel ? 'Valor o fórmula (=A1*B1)' : 'Selecciona una celda'}
               aria-label={sel ? `Editar ${selLabel}` : 'Sin celda seleccionada'}
               onChange={(e) => sel && onCellChange(sel, e.target.value)}
+              onBlur={(e) => {
+                const next = e.relatedTarget as HTMLElement | null;
+                if (!next?.classList?.contains('sheet__cell')) setEditing(null);
+              }}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && sel) {
                   e.preventDefault();
@@ -1928,6 +2017,7 @@ export function SheetEditor({
                           // Celda cubierta por el rowSpan/colSpan de una maestra anterior: no se dibuja.
                           if (serverCovered.has(`${r + 1}:${c + 1}`)) continue;
                           const isSel = sel?.r === r && sel?.c === c;
+                          const isEditing = isSel && editing?.r === r && editing?.c === c;
                           const serverCell = serverCellsByKey.get(`${r + 1}:${c + 1}`);
                           const merge = serverCell ? undefined : merges.find((m) => m.s.r === r && m.s.c === c);
                           let colSpan = 1;
@@ -1940,7 +2030,7 @@ export function SheetEditor({
                             for (let i = merge.s.c + 1; i <= merge.e.c; i += 1) widthPx += widthOf(i);
                           }
                           const rowSpan = serverCell && serverCell.rowSpan > 1 ? serverCell.rowSpan : undefined;
-                          const display = isSel ? (grid[r]?.[c] ?? '') : row[c];
+                          const display = isEditing ? (grid[r]?.[c] ?? '') : row[c];
                           const { t } = toCellValue(String(display));
                           const isText = t === 's' && typeof display === 'string' && !String(display).startsWith('=');
                           const approxTextPx = isText ? Math.min(2000, String(display).length * 7) : 0;
@@ -1962,13 +2052,14 @@ export function SheetEditor({
                               '--cell-style': serverCell.italic ? 'italic' : 'normal',
                               '--cell-align': serverCell.align,
                             });
-                          } else if (t === 'n' && !isSel) {
+                          } else if (t === 'n' && !isEditing) {
                             // Los números a la derecha, como en Excel.
                             inputStyle.textAlign = 'right';
                           }
                           const pos = { r, c };
                           const classes = ['sheet__td'];
                           if (isSel) classes.push('sheet__td--sel');
+                          if (isEditing) classes.push('sheet__td--editing');
                           if (multi && inArea(r, c)) classes.push('sheet__td--range');
                           cells.push(
                             <td
@@ -1987,6 +2078,7 @@ export function SheetEditor({
                                 readOnly={!canEdit}
                                 aria-label={`Celda ${colLabel(c)}${r + 1}`}
                                 onFocus={(e) => onCellFocus(e, pos)}
+                                onBlur={onCellBlur}
                                 onChange={(e) => onCellChange(pos, e.target.value)}
                                 onKeyDown={(e) => onCellKeyDown(e, pos)}
                                 onMouseDown={(e) => onCellMouseDown(e, pos)}
@@ -1994,6 +2086,7 @@ export function SheetEditor({
                                 onDoubleClick={(e) => {
                                   // Doble clic: editar dentro, con el cursor al final (como F2).
                                   const el = e.currentTarget;
+                                  startEditing(pos);
                                   el.setSelectionRange(el.value.length, el.value.length);
                                 }}
                                 onContextMenu={(e) => openMenu(e, 'cell')}
@@ -2074,13 +2167,17 @@ export function SheetEditor({
         ? createPortal(
             <div
               ref={menuRef}
-              className="sheet-menu"
+              className={`sheet-menu${menu.touch ? ' sheet-menu--touch' : ''}`}
               role="menu"
               aria-label="Opciones de la hoja"
-              style={{
-                top: Math.min(menu.y, window.innerHeight - 40 - menuItems.length * 34),
-                left: Math.min(menu.x, window.innerWidth - 270),
-              }}
+              style={
+                menu.touch
+                  ? undefined
+                  : {
+                      top: Math.min(menu.y, window.innerHeight - 40 - menuItems.length * 34),
+                      left: Math.min(menu.x, window.innerWidth - 270),
+                    }
+              }
             >
               {menuItems.map((item, i) =>
                 item === 'sep' ? (

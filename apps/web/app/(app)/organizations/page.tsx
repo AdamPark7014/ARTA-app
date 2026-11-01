@@ -1,5 +1,6 @@
 'use client';
 
+import { askConfirm } from '@/components/ui/AskDialog';
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { AppShell } from '@/components/app-shell/AppShell';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -529,8 +530,8 @@ export default function OrganizationsPage() {
                               <button
                                 className="btn-quiet btn-quiet--danger"
                                 type="button"
-                                onClick={() => {
-                                  if (confirm(`¿Revocar la invitación de ${inv.email}?`)) void revokeInvite(inv.id);
+                                onClick={async () => {
+                                  if (await askConfirm({ title: `¿Revocar la invitación de ${inv.email}?`, confirmLabel: 'Revocar', danger: true })) void revokeInvite(inv.id);
                                 }}
                               >
                                 Revocar

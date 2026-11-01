@@ -1,5 +1,6 @@
 'use client';
 
+import { askConfirm } from '@/components/ui/AskDialog';
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -523,7 +524,7 @@ export default function StudioPage() {
   }
 
   async function discardProposal(key: string) {
-    if (!confirm('¿Descartar la propuesta del practicante para esta sección?')) return;
+    if (!(await askConfirm({ title: '¿Descartar la propuesta del practicante?', body: 'Solo la de esta sección.', confirmLabel: 'Descartar', danger: true }))) return;
     try {
       await api(`/studio/pages/${key}/proposal`, { method: 'DELETE' });
       setMsg('Propuesta descartada');

@@ -93,9 +93,25 @@ test.describe('Hub crítico', () => {
     await seedSession(page, baseURL!);
     await mockAuthenticatedApi(page, {
       '/campaigns': CAMPAIGN_ROWS,
+      '/events/evt-e2e-1': {
+        ...EVENT_FINANCE,
+        financeRuns: [],
+        files: [
+          {
+            id: 'camp-xlsx',
+            fileName: 'Hoja-gastos.xlsx',
+            url: '/uploads/camp-gastos.xlsx',
+            kind: 'excel',
+            module: 'campaign',
+            createdAt: '2026-08-28T10:00:00.000Z',
+          },
+        ],
+      },
+      '/documents/event/evt-e2e-1': [],
+      '/vendor/event/evt-e2e-1': [],
     });
 
-    await page.route('**/uploads/camp-gastos.xlsx', (route) =>
+    await page.route('**/api/files/camp-xlsx/inline', (route) =>
       route.fulfill({
         status: 200,
         contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -104,8 +120,9 @@ test.describe('Hub crítico', () => {
     );
 
     await page.goto('/campaigns');
-    await page.getByRole('button', { name: /Archivos \(1\)/ }).click();
-    await page.getByRole('button', { name: 'Editar aquí' }).click();
+    await page.getByRole('link', { name: 'Ver / Editar' }).click();
+    await expect(page).toHaveURL(/\/events\/evt-e2e-1\?tab=campaign/);
+    // La hoja de la campaña ya viene abierta al entrar.
     await expect(page.getByLabel('Celda A1', { exact: true })).toHaveValue('Concepto');
     // La hoja abre embebida en la campaña; ampliar es opcional (junta: sin
     // overlays blancos encima del contenido).
@@ -120,7 +137,7 @@ test.describe('Hub crítico', () => {
       '/vendor/event/evt-e2e-1': [],
     });
 
-    await page.route('**/uploads/demo.xlsx', (route) =>
+    await page.route('**/api/files/file-xlsx/inline', (route) =>
       route.fulfill({
         status: 200,
         contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -129,7 +146,7 @@ test.describe('Hub crítico', () => {
     );
 
     await page.goto('/events/evt-e2e-1?tab=files');
-    await page.getByRole('button', { name: 'Editar aquí' }).click();
+    await page.getByRole('button', { name: 'Editar', exact: true }).click();
     await page.getByRole('button', { name: /Ampliar a pantalla completa/ }).click();
     await page.getByLabel('Celda A4', { exact: true }).fill('Transporte');
 
@@ -167,7 +184,11 @@ test.describe('Hub crítico', () => {
     });
 
     await page.goto('/purchase-orders');
-    await expect(page.getByRole('status')).toContainText('Ventana de OC abierta');
+    // Ya no es un banner: la regla se ve en una línea, con un punto cuando hoy se cobra.
+    const note = page.locator('.oc-paydays');
+    await expect(note).toContainText('lunes y jueves de 10:00 a 14:00');
+    await expect(note).toContainText('Hoy es día de cobro');
+    await expect(note.locator('.oc-dot')).toHaveClass(/is-on/);
   });
 
   test('OC: banner de ventana cerrada', async ({ page, baseURL }) => {
@@ -194,41 +215,33 @@ test.describe('Hub crítico', () => {
     });
 
     await page.goto('/purchase-orders');
-    await expect(page.getByRole('status')).toContainText('Ventana de OC cerrada');
+    const note = page.locator('.oc-paydays');
+    await expect(note).toContainText('lunes y jueves de 10:00 a 14:00');
+    await expect(note).toContainText('Próximo cobro: el próximo lunes a las 10:00');
+    await expect(note.locator('.oc-dot')).not.toHaveClass(/is-on/);
   });
 
-  test('Corrida: guardar finanzas del evento', async ({ page, baseURL }) => {
-    let patched = false;
+  test('Corrida: se genera desde el machote y el panel lo confirma', async ({ page, baseURL }) => {
+    let generated = false;
     await seedSession(page, baseURL!);
     await mockAuthenticatedApi(page, {
       '/events/evt-e2e-1': EVENT_FINANCE,
       '/documents/event/evt-e2e-1': [],
       '/vendor/event/evt-e2e-1': [],
-      '/finance/fin-e2e-1': (route: Route) => {
-        if (route.request().method() === 'PATCH') {
-          patched = true;
-          return route.fulfill({
-            status: 200,
-            contentType: 'application/json',
-            body: JSON.stringify({ id: 'fin-e2e-1', locked: false }),
-          });
-        }
+      '/finance/event/evt-e2e-1/generate': (route: Route) => {
+        generated = route.request().method() === 'POST';
         return route.fulfill({
-          status: 200,
+          status: 201,
           contentType: 'application/json',
-          body: JSON.stringify(EVENT_FINANCE.financeRuns[0]),
+          body: JSON.stringify({ id: 'fin-e2e-1' }),
         });
       },
     });
 
     await page.goto('/events/evt-e2e-1?tab=finance');
-    // La corrida oficial es el Excel; la tabla simple es un resumen opcional
-    // que se despliega a mano.
-    await page.getByRole('button', { name: 'Mostrar tabla simple' }).click();
-    const saveBtn = page.getByRole('button', { name: 'Guardar resumen' });
-    await expect(saveBtn).toBeVisible();
-    await saveBtn.click();
-    await expect.poll(() => patched).toBe(true);
-    await expect(page.getByText('Corrida guardada')).toBeVisible();
+    // La corrida oficial es el Excel: se genera del machote o se sube, y se edita en el sitio.
+    await page.getByRole('button', { name: 'Generar corrida' }).click();
+    await expect.poll(() => generated).toBe(true);
+    await expect(page.getByText('Corrida generada')).toBeVisible();
   });
 });

@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import { headers } from 'next/headers';
+import { AskDialogHost } from '@/components/ui/AskDialog';
 import { WebPushPrompt } from '@/components/web-push/WebPushPrompt';
 import { PANEL_THEME_SCRIPT } from '@/lib/entity-theme';
 
@@ -26,6 +27,7 @@ export default function PanelLayout({ children }: { children: React.ReactNode })
       <script dangerouslySetInnerHTML={{ __html: PANEL_THEME_SCRIPT }} />
       {isArtaApp() ? <script dangerouslySetInnerHTML={{ __html: APP_SHELL_SCRIPT }} /> : null}
       {children}
+      <AskDialogHost />
       {isArtaApp() ? null : <WebPushPrompt />}
     </>
   );

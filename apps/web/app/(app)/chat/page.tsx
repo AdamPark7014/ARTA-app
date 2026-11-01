@@ -1,5 +1,6 @@
 'use client';
 
+import { askConfirm } from '@/components/ui/AskDialog';
 import {
   Suspense,
   useCallback,
@@ -1087,8 +1088,8 @@ function ChatInner() {
         .then((r) => applyUpdate(r))
         .catch((e) => showToast(errorText(e)));
     },
-    remove: (m) => {
-      if (!window.confirm('¿Eliminar este mensaje para todos?')) return;
+    remove: async (m) => {
+      if (!(await askConfirm({ title: '¿Eliminar este mensaje?', body: 'Desaparece para todos en la conversación.', danger: true }))) return;
       api(`/chat/messages/${m.id}`, { method: 'DELETE' })
         .then(() => applyDelete(m.channelId, m.id))
         .catch((e) => showToast(errorText(e)));
@@ -1166,14 +1167,14 @@ function ChatInner() {
         scheduleChannels();
       }}
       onMute={(h) => void setMute(h)}
-      onLeave={() => {
-        if (!window.confirm(`¿Salir de ${channelDisplayName(head)}?`)) return;
+      onLeave={async () => {
+        if (!(await askConfirm({ title: `¿Salir de ${channelDisplayName(head)}?`, confirmLabel: 'Salir' }))) return;
         api(`/chat/channels/${head.id}/leave`, { method: 'POST' })
           .then(closeChannel)
           .catch((e) => showToast(errorText(e)));
       }}
-      onArchive={() => {
-        if (!window.confirm(`¿Archivar ${channelDisplayName(head)}? Nadie podrá escribir en él.`)) return;
+      onArchive={async () => {
+        if (!(await askConfirm({ title: `¿Archivar ${channelDisplayName(head)}?`, body: 'Nadie podrá escribir en él.', confirmLabel: 'Archivar' }))) return;
         api(`/chat/channels/${head.id}/archive`, { method: 'POST' })
           .then(closeChannel)
           .catch((e) => showToast(errorText(e)));
@@ -1182,9 +1183,9 @@ function ChatInner() {
         await api(`/chat/channels/${head.id}/members`, { method: 'POST', body: JSON.stringify({ userIds: ids }) });
         await refreshDetail(head.id);
       }}
-      onRemove={(userId) => {
+      onRemove={async (userId) => {
         const who = head.members.find((m) => m.id === userId)?.fullName ?? 'esta persona';
-        if (!window.confirm(`¿Quitar a ${who} del canal?`)) return;
+        if (!(await askConfirm({ title: `¿Quitar a ${who} del canal?`, confirmLabel: 'Quitar', danger: true }))) return;
         api(`/chat/channels/${head.id}/members/${encodeURIComponent(userId)}`, { method: 'DELETE' })
           .then(() => refreshDetail(head.id))
           .catch((e) => showToast(errorText(e)));

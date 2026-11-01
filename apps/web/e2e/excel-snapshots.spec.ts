@@ -68,7 +68,8 @@ function workbookOC(): Buffer {
   return XLSX.write(wb, { bookType: 'xlsx', type: 'buffer' }) as Buffer;
 }
 
-test('screenshots: Campaña y Corrida (antes/después)', async ({ page, baseURL }) => {
+test('screenshots: Campaña y Corrida (antes/después)', async ({ page, baseURL }, testInfo) => {
+  const shot = (name: string) => testInfo.outputPath(name);
   await seedSession(page, baseURL!);
   await mockAuthenticatedApi(page, {
     '/events/evt-e2e-2': {
@@ -131,69 +132,40 @@ test('screenshots: Campaña y Corrida (antes/después)', async ({ page, baseURL 
   await page.goto('/events/evt-e2e-2?tab=files');
   await page.setViewportSize({ width: 1440, height: 900 });
 
-  // Campaña visor (in-app)
-  // Botón puede ser "Ver"; en algunos paneles existe "Ver / Editar"
-  const campRow = page.locator('.hub-item', { hasText: 'Campaña.xlsx' }).first();
-  const verBtn = campRow.getByRole('button', { name: 'Ver' }).first();
-  if (await verBtn.count()) {
-    await verBtn.click();
-    const campRegion = page.locator('.sheet-editor').first();
-    await expect(campRegion).toBeVisible();
-    await campRegion.screenshot({ path: '/opt/cursor/artifacts/campana-app.png', animations: 'disabled' });
-  } else {
-    // Si no hay visor directo, abre editor y captura
-    const editarBtn = campRow.getByRole('button', { name: /Editar|Editar aquí/ }).first();
-    await editarBtn.click();
-    const campRegion = page.locator('.sheet-editor').first();
-    await expect(campRegion).toBeVisible();
-    await campRegion.screenshot({ path: '/opt/cursor/artifacts/campana-app.png', animations: 'disabled' });
-    await page.getByRole('button', { name: 'Cerrar' }).first().click();
+  // Cada visor abre dentro de su renglón; se abre, se comprueba y se fotografía.
+  for (const [file, png] of [
+    ['Campaña.xlsx', 'campana-app.png'],
+    ['Corrida.xlsx', 'corrida-app.png'],
+    ['DISTRIBUCION_PENDONES.xlsx', 'pendones-app.png'],
+    ['ORDEN_DE_COMPRA.xlsx', 'oc-app.png'],
+  ] as const) {
+    const row = page.locator('.hub-item', { hasText: file }).first();
+    await row.getByRole('button', { name: 'Ver', exact: true }).click();
+    const region = row.locator('.sheet-editor').first();
+    await expect(region).toBeVisible();
+    await region.screenshot({ path: shot(png), animations: 'disabled' });
+    await row.getByRole('button', { name: 'Ocultar', exact: true }).click();
   }
 
-  // Corrida visor
-  await page.getByRole('button', { name: 'Ver' }).nth(1).click();
-  const corrRegion = page.locator('.surface .sheet-editor').nth(1);
-  await expect(corrRegion).toBeVisible();
-  await corrRegion.screenshot({ path: '/opt/cursor/artifacts/corrida-app.png', animations: 'disabled' });
-
-  // Pendones visor
-  await page.getByRole('button', { name: 'Ver' }).nth(2).click();
-  const pendRegion = page.locator('.surface .sheet-editor').nth(2);
-  await expect(pendRegion).toBeVisible();
-  await pendRegion.screenshot({ path: '/opt/cursor/artifacts/pendones-app.png', animations: 'disabled' });
-
-  // OC visor
-  await page.getByRole('button', { name: 'Ver' }).nth(3).click();
-  const ocRegion = page.locator('.surface .sheet-editor').nth(3);
-  await expect(ocRegion).toBeVisible();
-  await ocRegion.screenshot({ path: '/opt/cursor/artifacts/oc-app.png', animations: 'disabled' });
-
   // Editar: abrir editor y dejar celda/fórmula seleccionadas
-  await page.getByRole('button', { name: 'Editar aquí' }).first().click();
-  const editor = page.locator('.surface .sheet-editor').first();
+  const campRow = page.locator('.hub-item', { hasText: 'Campaña.xlsx' }).first();
+  await campRow.getByRole('button', { name: 'Editar', exact: true }).click();
+  const editor = campRow.locator('.sheet-editor').first();
   await expect(editor).toBeVisible();
   await page.getByLabel('Celda B3', { exact: true }).click();
   await page.getByLabel('Editar B3').fill('2');
   await page.getByLabel('Celda C3', { exact: true }).click();
   await page.getByLabel('Editar C3').fill('7500');
   await page.getByLabel('Celda D3', { exact: true }).click();
-  await editor.screenshot({ path: '/opt/cursor/artifacts/editando.png', animations: 'disabled' });
+  await editor.screenshot({ path: shot('editando.png'), animations: 'disabled' });
+  // La celda con fórmula enseña el resultado (2 × 7500), no la fórmula.
+  await expect(page.getByLabel('Celda D3', { exact: true })).toHaveValue(/15,?000/);
 
   // Visor puro del mismo archivo
-  await page.getByRole('button', { name: 'Ocultar' }).first().click();
-  await page.getByRole('button', { name: 'Ver' }).first().click();
-  const viewer = page.locator('.surface .sheet-editor').first();
+  await campRow.locator('.btn-quiet', { hasText: 'Cerrar' }).click();
+  await campRow.getByRole('button', { name: 'Ver', exact: true }).click();
+  const viewer = campRow.locator('.sheet-editor').first();
   await expect(viewer).toBeVisible();
-  await viewer.screenshot({ path: '/opt/cursor/artifacts/visor.png', animations: 'disabled' });
-
-  // Guarda rutas de verificación en consola para el PR body (no aserciones duras)
-  console.log('ARTIFACTS', [
-    '/opt/cursor/artifacts/campana-app.png',
-    '/opt/cursor/artifacts/corrida-app.png',
-    '/opt/cursor/artifacts/pendones-app.png',
-    '/opt/cursor/artifacts/oc-app.png',
-    '/opt/cursor/artifacts/editando.png',
-    '/opt/cursor/artifacts/visor.png',
-  ]);
+  await viewer.screenshot({ path: shot('visor.png'), animations: 'disabled' });
 });
 

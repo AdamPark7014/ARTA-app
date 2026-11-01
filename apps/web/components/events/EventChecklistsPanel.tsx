@@ -1,5 +1,6 @@
 'use client';
 
+import { askPrompt } from '@/components/ui/AskDialog';
 import { FileViewer, PdfEditor } from '@/components/files/lazy';
 import { ExpandBox } from '@/components/ui/ExpandBox';
 import { FormatSheet, FormatSignatures, GrowingText, type SignPermissions } from '@/components/events/FormatSheet';
@@ -431,7 +432,8 @@ export function EventChecklistsPanel({
   }
   async function replaceWithExternal(file: File) {
     if (!activeChecklist) return;
-    const note = window.prompt('Motivo del reemplazo por documento externo') || '';
+    const note = await askPrompt({ title: 'Reemplazar por documento externo', label: 'Motivo', confirmLabel: 'Reemplazar' });
+    if (note === null) return;
     try {
       const fd = new FormData();
       fd.append('file', file);
@@ -451,7 +453,8 @@ export function EventChecklistsPanel({
   }
   async function restoreInternalChecklist() {
     if (!activeChecklist) return;
-    const note = window.prompt('Motivo para reactivar el formato interno (dirección)') || '';
+    const note = await askPrompt({ title: 'Reactivar el formato interno', label: 'Motivo (dirección)', confirmLabel: 'Reactivar' });
+    if (note === null) return;
     await api(`/slots/event/${event.id}/restore`, {
       method: 'POST',
       body: JSON.stringify({ kind: 'CHECKLIST', checklistTemplateId: activeChecklist.template?.id || null, note }),

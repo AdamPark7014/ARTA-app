@@ -1,5 +1,6 @@
 'use client';
 
+import { askConfirm } from '@/components/ui/AskDialog';
 import {
   Fragment,
   useEffect,
@@ -436,6 +437,11 @@ function PoForm({ mode, initial, facts, busy, onCancel, onSubmit }: PoFormProps)
               );
             })}
           </div>
+          <p className="fx-hint">
+            {poNeedsProof(d.paymentMethod)
+              ? 'Al liquidar se pedirá el comprobante.'
+              : 'En esta forma de pago no se pide comprobante.'}
+          </p>
         </div>
         <button
           type="button"
@@ -760,12 +766,12 @@ export function EventPurchaseOrdersPanel({
   }
 
   async function rejectPo(po: Po) {
-    if (!window.confirm(`¿Rechazar la orden de ${po.vendorName || 'este proveedor'}?`)) return;
+    if (!(await askConfirm({ title: `¿Rechazar la orden de ${po.vendorName || 'este proveedor'}?`, confirmLabel: 'Rechazar', danger: true }))) return;
     await setStatus(po, 'REJECTED');
   }
 
   async function removePo(po: Po) {
-    if (!window.confirm(`¿Eliminar la orden de ${po.vendorName || 'este proveedor'}? No se puede deshacer.`)) {
+    if (!(await askConfirm({ title: `¿Eliminar la orden de ${po.vendorName || 'este proveedor'}?`, body: 'No se puede deshacer.', danger: true }))) {
       return;
     }
     const ok = await run(

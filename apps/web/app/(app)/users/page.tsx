@@ -1,5 +1,6 @@
 'use client';
 
+import { askConfirm } from '@/components/ui/AskDialog';
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { AppShell } from '@/components/app-shell/AppShell';
 import { DistBar } from '@/components/charts/SparkBars';
@@ -473,9 +474,12 @@ export default function UsersPage() {
       return;
     }
     if (
-      !confirm(
-        `¿Eliminar acceso de ${u.fullName}?\nSe desactiva la cuenta y se cierran sus sesiones. El historial se conserva.`,
-      )
+      !(await askConfirm({
+        title: `¿Eliminar el acceso de ${u.fullName}?`,
+        body: 'Se desactiva la cuenta y se cierran sus sesiones. El historial se conserva.',
+        confirmLabel: 'Eliminar acceso',
+        danger: true,
+      }))
     ) {
       return;
     }
@@ -1101,8 +1105,8 @@ Contraseña: ${creds.password}`}</pre>
                             className="btn-quiet btn-quiet--danger"
                             type="button"
                             disabled={saving}
-                            onClick={() => {
-                              if (confirm(`¿Revocar la invitación de ${inv.email}?`)) void revokeInvite(inv.id);
+                            onClick={async () => {
+                              if (await askConfirm({ title: `¿Revocar la invitación de ${inv.email}?`, confirmLabel: 'Revocar', danger: true })) void revokeInvite(inv.id);
                             }}
                           >
                             Revocar

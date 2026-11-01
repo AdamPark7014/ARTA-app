@@ -1,5 +1,6 @@
 'use client';
 
+import { askConfirm } from '@/components/ui/AskDialog';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
@@ -180,8 +181,8 @@ export function GalleryField({
     onPatch({ files: next, fileId: null, value: '' });
   }
 
-  function remove(entry: Entry) {
-    if (!window.confirm(`¿Quitar «${entry.name}» de este campo? El archivo sigue en los adjuntos del formato.`)) return;
+  async function remove(entry: Entry) {
+    if (!(await askConfirm({ title: `¿Quitar «${entry.name}» de este campo?`, body: 'El archivo sigue en los adjuntos del formato.', confirmLabel: 'Quitar', danger: true }))) return;
     const gone = keyOf(entry.file);
     commit(attachmentFiles(latest.current).filter((f) => keyOf(f) !== gone));
   }
