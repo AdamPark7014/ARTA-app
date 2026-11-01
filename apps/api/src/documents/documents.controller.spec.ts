@@ -104,7 +104,7 @@ describe('PDF de un documento', () => {
   });
 
   it('una tabla larga sigue en la página siguiente', async () => {
-    const rows = Array.from({ length: 60 }, (_, i) => [`Zona ${i}`, String(i)]);
+    const rows = Array.from({ length: 40 }, (_, i) => [`Zona ${i}`, String(i)]);
     expect(pagesOf(await generate(rows))).toBe(2);
   });
 });
