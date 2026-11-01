@@ -227,7 +227,7 @@ function LoginForm() {
                 <label>
                   Código de la app autenticadora
                   <input
-                    className="field"
+                    className="field lg-otp"
                     name="code"
                     value={totpCode}
                     onChange={(e) => setTotpCode(e.target.value)}
@@ -244,7 +244,7 @@ function LoginForm() {
               <label>
                 Código de verificación
                 <input
-                  className="field"
+                  className="field lg-otp"
                   name="code"
                   value={totpCode}
                   onChange={(e) => setTotpCode(e.target.value)}

@@ -17,10 +17,10 @@ export const metadata: Metadata = {
   formatDetection: { email: false, address: false, telephone: false },
   manifest: '/manifest.webmanifest',
   icons: {
-    icon: '/brand/arta-logo.png',
+    icon: { url: '/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
     apple: { url: '/icons/apple-touch-icon.png', sizes: '180x180', type: 'image/png' },
   },
-  appleWebApp: { capable: true, title: 'ARTA', statusBarStyle: 'black' },
+  appleWebApp: { capable: true, title: 'ARTA', statusBarStyle: 'default' },
   other: {
     'geo.region': 'MX-PUE',
     'geo.placename': 'Puebla',

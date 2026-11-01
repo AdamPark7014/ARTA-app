@@ -99,7 +99,7 @@ function safe(text: unknown): string {
 @Injectable()
 export class PdfBrandingService {
   accent(entity: string): string {
-    return entity === 'EXPLANADA' ? '#1f5c50' : '#8b6914';
+    return entity === 'EXPLANADA' ? '#3f3f45' : '#0c0c0d';
   }
 
   entityLabel(entity: string): string {

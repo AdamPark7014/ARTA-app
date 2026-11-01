@@ -68,7 +68,7 @@ export class TicketingPdfService {
       // Encabezado
       doc.fillColor('#111').fontSize(15).text('CREACIÓN BOLETERA', { width: right - left });
       doc.moveDown(0.2);
-      const accent = event.entity === 'EXPLANADA' ? '#1f5c50' : '#8b6914';
+      const accent = event.entity === 'EXPLANADA' ? '#3f3f45' : '#0c0c0d';
       doc
         .strokeColor(accent)
         .lineWidth(1.2)

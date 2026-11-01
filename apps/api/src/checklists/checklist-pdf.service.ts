@@ -139,8 +139,8 @@ const SOFT = '#f1f1f4';
 /** Rayado tenue de los recuadros de texto largo. */
 const RULE = '#e3e3e8';
 const LINK = '#1a4fb8';
-const GOLD = '#8b6914';
-const GREEN = '#1f5c50';
+const GOLD = '#0c0c0d';
+const GREEN = '#3f3f45';
 
 const BRAND_DIR_CANDIDATES = [
   join(process.cwd(), 'assets', 'brand'),

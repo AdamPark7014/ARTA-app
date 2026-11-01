@@ -2076,6 +2076,8 @@ export function SheetEditor({
                                   serverCell ? ' sheet__cell--styled' : ''
                                 }`}
                                 data-cell={`${r}:${c}`}
+                                // Sin esto Safari cuenta el ancho natural del campo y ensancha la columna.
+                                size={1}
                                 value={display as string}
                                 readOnly={!canEdit}
                                 aria-label={`Celda ${colLabel(c)}${r + 1}`}

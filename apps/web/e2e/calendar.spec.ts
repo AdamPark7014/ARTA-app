@@ -8,11 +8,11 @@ test.describe('Calendario de eventos', () => {
     await seedSession(page, baseURL!);
     await mockAuthenticatedApi(page);
 
-    await page.goto('/dashboard');
     if (isMobile) {
       // En teléfono el menú es un cajón: lo prueba mobile-shell.spec.ts.
       await page.goto('/calendar');
     } else {
+      await page.goto('/dashboard');
       const nav = page.getByRole('navigation', { name: 'Módulos del panel' });
       await expect(nav.getByRole('link', { name: 'Calendario' })).toBeVisible();
       await nav.getByRole('link', { name: 'Calendario' }).click();

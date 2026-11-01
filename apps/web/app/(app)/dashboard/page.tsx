@@ -106,6 +106,53 @@ function shortDate(iso: string) {
     .replace('.', '');
 }
 
+/** Lo que viene, al frente: cuánto falta, cómo va y un toque para entrar. */
+function NextShow({
+  show,
+  now,
+}: {
+  show: { id: string; name: string; artist?: string | null; startsAt: string; avgProgress: number };
+  now: Date;
+}) {
+  const days = daysUntil(show.startsAt, now);
+  const progress = Math.max(0, Math.min(100, Math.round(show.avgProgress)));
+  const when =
+    days <= 0 ? hhmm(show.startsAt) : days === 1 ? `Mañana · ${hhmm(show.startsAt)}` : `${shortDate(show.startsAt)} · ${hhmm(show.startsAt)}`;
+  return (
+    <Link className="next-show" href={`/events/${show.id}`}>
+      <span className="next-show__count" aria-hidden={days > 1 ? undefined : true}>
+        {days <= 0 ? (
+          <b className="next-show__today">Hoy</b>
+        ) : (
+          <>
+            <b className="t-num">{days}</b>
+            <small>{days === 1 ? 'día' : 'días'}</small>
+          </>
+        )}
+      </span>
+      <span className="next-show__copy">
+        <span className="next-show__eyebrow">Siguiente show · {when}</span>
+        <span className="next-show__name">{show.name}</span>
+        {show.artist && !show.name.toLowerCase().includes(show.artist.toLowerCase()) ? (
+          <span className="next-show__artist">{show.artist}</span>
+        ) : null}
+      </span>
+      <span className="next-show__progress">
+        <span className="next-show__pct t-num">{progress}%</span>
+        <span className="next-show__label">de formatos</span>
+        <span className="next-show__bar" aria-hidden>
+          <i style={{ width: `${progress}%` }} />
+        </span>
+      </span>
+      <span className="next-show__go" aria-hidden>
+        <svg viewBox="0 0 24 24" width="18" height="18" focusable="false">
+          <path d="M5 12h14M13 6l6 6-6 6" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </span>
+    </Link>
+  );
+}
+
 /** Fila de «Esperan tu visto bueno»: monto (o «—») y estado lleno / borde. */
 function ApprovalRow({
   title,
@@ -281,6 +328,9 @@ export default function DashboardPage() {
     : [];
   const hasRisks = !!data && (data.atRisk.length > 0 || otherAlerts.length > 0);
   const singleToday = agenda.today.length === 1 ? agenda.today[0] : null;
+  // El que sigue: hoy el que aún no empieza; si ya pasaron todos, el próximo.
+  const nextShow =
+    agenda.today.find((e) => new Date(e.startsAt).getTime() > now.getTime()) ?? agenda.next[0] ?? agenda.today[0] ?? null;
 
   return (
     <AppShell title="Inicio">
@@ -365,6 +415,7 @@ export default function DashboardPage() {
           <FlashMessage variant="error">{error}</FlashMessage>
         ) : data && k ? (
           <>
+            {nextShow ? <NextShow show={nextShow} now={now} /> : null}
             <div className="kpi-row">
               <Link className="kpi-card" href="/events">
                 <span className="cap">Eventos activos</span>

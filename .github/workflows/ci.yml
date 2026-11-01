@@ -95,7 +95,8 @@ jobs:
       # playwright.config.ts levanta el server (build + next start -p 3100) y
       # mockea /api/*, así que este job no necesita Postgres ni el workspace api.
       - name: E2E tests (app shell + login 2FA)
-        run: npm run test:web
+        # «Stack real» pide API y base de datos: corre en su propio job.
+        run: npm run test:web -- --grep-invert "Stack real"
 
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}

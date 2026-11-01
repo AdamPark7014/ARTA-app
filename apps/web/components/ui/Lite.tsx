@@ -102,6 +102,20 @@ export function ReviewFlow({ step }: { step: ReviewStep }) {
 }
 
 /** Estado vacío corto: un símbolo, una frase y, si aplica, la acción. */
+/** Los vacíos se piden con un carácter (`icon="▤"`); aquí sale el ícono de línea del sistema. */
+const EMPTY_ICONS: Record<string, string> = {
+  '▤': 'M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9zM14 3v6h6M8 13h8M8 17h6',
+  '✓': 'M9 12l2 2 4-4M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z',
+  '◷': 'M12 7v5l3 2M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z',
+  $: 'M12 3v18M16.5 7.5C16 6 14.2 5 12 5 9.5 5 7.5 6.3 7.5 8.3c0 4.4 9 2.6 9 7.3 0 2-2 3.4-4.5 3.4-2.3 0-4.1-1-4.6-2.6',
+  '✦': 'M12 3l1.9 5.6L19.5 10.5l-5.6 1.9L12 18l-1.9-5.6L4.5 10.5l5.6-1.9zM19 3v3M17.5 4.5h3',
+  '+': 'M12 5v14M5 12h14',
+  '!': 'M12 8v5M12 16.5v.5M10.3 3.9L2.5 17.5A2 2 0 0 0 4.2 20.5h15.6a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z',
+  '✎': 'M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16zM13.5 6.5l4 4',
+  '≡': 'M4 6h16M4 12h16M4 18h10',
+  '⇄': 'M7 4L3 8l4 4M3 8h14M17 12l4 4-4 4M21 16H7',
+};
+
 export function EmptyLite({
   icon = '+',
   title,
@@ -116,7 +130,13 @@ export function EmptyLite({
   return (
     <div className="empty-lite">
       <span className="empty-lite__icon" aria-hidden>
-        {icon}
+        {typeof icon === 'string' && EMPTY_ICONS[icon] ? (
+          <svg viewBox="0 0 24 24" width="20" height="20" focusable="false">
+            <path d={EMPTY_ICONS[icon]} fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        ) : (
+          icon
+        )}
       </span>
       <p className="empty-lite__title">{title}</p>
       {text ? <p>{text}</p> : null}

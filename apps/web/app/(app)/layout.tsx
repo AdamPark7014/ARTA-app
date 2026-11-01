@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import { headers } from 'next/headers';
 import { AskDialogHost } from '@/components/ui/AskDialog';
 import { WebPushPrompt } from '@/components/web-push/WebPushPrompt';
+import { entityFromHost } from '@/lib/domains';
 import { PANEL_THEME_SCRIPT } from '@/lib/entity-theme';
 
 export const metadata: Metadata = {
@@ -14,8 +15,11 @@ function isArtaApp(): boolean {
 }
 
 export function generateViewport(): Viewport {
+  // Safari y Chrome en el teléfono tiñen su barra con esto: papel en ARTA, negro en el Auditorio.
+  const host = (headers().get('host') || '').split(':')[0];
+  const themeColor = entityFromHost(host) === 'EXPLANADA' ? '#08080a' : '#f7f6f3';
   // Solo en la app: en Safari normal `cover` metería el contenido bajo la muesca.
-  return isArtaApp() ? { viewportFit: 'cover' } : {};
+  return isArtaApp() ? { viewportFit: 'cover', themeColor } : { themeColor };
 }
 
 const APP_SHELL_SCRIPT =

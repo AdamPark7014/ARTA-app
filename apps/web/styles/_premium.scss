@@ -904,6 +904,384 @@ html[data-entity] :is(a, button, summary, [role='tab'], [role='option']):focus-v
   }
 }
 
+/* ── Inicio: el siguiente show ───────────────────────────────────────────── */
+
+.next-show {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) minmax(150px, 210px) auto;
+  align-items: center;
+  gap: 26px;
+  margin-bottom: 14px;
+  padding: 20px 24px;
+  overflow: hidden;
+  border-radius: var(--radius-lg);
+  background: #0c0c0d;
+  color: #fff;
+  box-shadow: 0 2px 6px rgba(12, 12, 13, 0.14), 0 18px 40px rgba(12, 12, 13, 0.16);
+  transition: transform 0.2s var(--ease-out), box-shadow 0.2s ease;
+}
+
+/* Arcos de 1 px, los mismos de la entrada. */
+.next-show::before {
+  content: '';
+  position: absolute;
+  right: -120px;
+  bottom: -220px;
+  width: 520px;
+  height: 520px;
+  border-radius: 50%;
+  background: repeating-radial-gradient(circle, transparent 0 58px, rgba(255, 255, 255, 0.055) 58px 59px);
+  pointer-events: none;
+}
+
+[data-entity='EXPLANADA'] .next-show {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background:
+    radial-gradient(640px 240px at 78% -40%, rgba(199, 204, 212, 0.2), transparent 70%),
+    linear-gradient(180deg, #141417, #0d0d10);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07);
+}
+
+[data-entity='EXPLANADA'] .next-show::before {
+  display: none;
+}
+
+.next-show > * {
+  position: relative;
+}
+
+@media (hover: hover) {
+  .next-show:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 10px rgba(12, 12, 13, 0.16), 0 24px 52px rgba(12, 12, 13, 0.22);
+  }
+
+  .next-show:hover .next-show__go {
+    transform: translateX(3px);
+  }
+}
+
+.next-show__count {
+  display: grid;
+  justify-items: center;
+  min-width: 62px;
+}
+
+.next-show__count b {
+  font-size: 2.6rem;
+  font-weight: 300;
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+
+.next-show__count .next-show__today {
+  font-size: 1.9rem;
+  font-weight: 400;
+}
+
+.next-show__count small {
+  margin-top: 2px;
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 0.74rem;
+  font-weight: 600;
+}
+
+.next-show__copy {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding-left: 26px;
+  border-left: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+.next-show__eyebrow {
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+}
+
+.next-show__name {
+  display: -webkit-box;
+  overflow: hidden;
+  font-size: 1.22rem;
+  font-weight: 500;
+  line-height: 1.26;
+  letter-spacing: -0.01em;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+
+.next-show__artist {
+  overflow: hidden;
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 0.84rem;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.next-show__progress {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: baseline;
+  gap: 2px 8px;
+}
+
+.next-show__pct {
+  font-size: 1.32rem;
+  font-weight: 400;
+}
+
+.next-show__label {
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 0.76rem;
+}
+
+.next-show__bar {
+  grid-column: 1 / -1;
+  height: 3px;
+  margin-top: 5px;
+  overflow: hidden;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.next-show__bar i {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #9aa1ac, #f1f3f6);
+}
+
+.next-show__go {
+  display: inline-grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: var(--radius-ctl);
+  transition: transform 0.2s var(--ease-out);
+}
+
+@media (max-width: 760px) {
+  .next-show {
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 14px 16px;
+    padding: 16px;
+  }
+
+  .next-show__copy {
+    padding-left: 16px;
+  }
+
+  .next-show__count b {
+    font-size: 2.1rem;
+  }
+
+  .next-show__progress {
+    grid-column: 1 / -1;
+  }
+
+  .next-show__go {
+    display: none;
+  }
+}
+
+/* Las cifras que abren algo lo dicen al pasar. */
+@media (hover: hover) {
+  a.kpi-card {
+    position: relative;
+  }
+
+  a.kpi-card::after {
+    content: '→';
+    position: absolute;
+    top: 14px;
+    right: 16px;
+    color: var(--text-3);
+    font-size: 0.95rem;
+    opacity: 0;
+    transform: translateX(-4px);
+    transition: opacity 0.16s ease, transform 0.16s var(--ease-out);
+  }
+
+  a.kpi-card:hover::after {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ── Caras (`AvatarStack`) ───────────────────────────────────────────────── */
+
+.av-stack {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+}
+
+.av-stack__face {
+  display: inline-grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  margin-left: -7px;
+  border: 2px solid var(--bg-elev);
+  border-radius: 50%;
+  background: #e9e7e1;
+  color: var(--text);
+  font-size: 0.6rem;
+  font-weight: 700;
+}
+
+.av-stack__face:first-child {
+  margin-left: 0;
+}
+
+[data-entity='EXPLANADA'] .av-stack__face {
+  border-color: #111114;
+  border-radius: 4px;
+  background: #26262b;
+}
+
+.av-stack__face--more {
+  background: var(--fill-soft);
+  color: var(--muted);
+}
+
+@media (max-width: 640px) {
+  .task2__row .av-stack {
+    display: none;
+  }
+}
+
+/* ── Vacíos con ícono de línea ───────────────────────────────────────────── */
+
+html[data-entity] .empty-lite__icon {
+  border: 1px solid var(--line-strong);
+  background: transparent;
+  color: var(--muted);
+}
+
+[data-entity='EXPLANADA'] .empty-lite__icon {
+  border-radius: 6px;
+}
+
+/* ── Código de 2FA: seis casillas sobre un solo campo (el Llavero lo llena) ── */
+
+html[data-entity] input.lg-otp {
+  --otp-cell: 44px;
+  width: calc(var(--otp-cell) * 6 + 2px);
+  max-width: 100%;
+  height: 54px;
+  padding: 0 0 0 calc(var(--otp-cell) / 2 - 0.34em);
+  border: 1px solid var(--line-field);
+  background-color: var(--field-bg);
+  background-image: repeating-linear-gradient(
+    90deg,
+    transparent 0 calc(var(--otp-cell) - 1px),
+    var(--line-field) calc(var(--otp-cell) - 1px) var(--otp-cell)
+  );
+  background-position: 0 0;
+  color: var(--text);
+  font-size: 1.32rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: calc(var(--otp-cell) - 0.68em);
+}
+
+html[data-entity] input.lg-otp::placeholder {
+  color: color-mix(in srgb, var(--text) 22%, transparent);
+}
+
+/* ── Entrada ─────────────────────────────────────────────────────────────── */
+
+.lg-form {
+  animation: ds-rise 0.32s var(--ease-out);
+}
+
+/* ── Letra, cifras, botones y detalles que se notan sin notarse ──────────── */
+
+html[data-entity] {
+  text-rendering: optimizeLegibility;
+}
+
+html[data-entity] ::selection {
+  background: color-mix(in srgb, var(--text) 16%, transparent);
+}
+
+html[data-entity] :is(.ph__title, .ev-hero__title, .sx-head__title) {
+  letter-spacing: -0.012em;
+}
+
+html[data-entity] :is(.kpi-card__value, .value) {
+  letter-spacing: -0.015em;
+}
+
+[data-entity='ARTA'] {
+  --shadow-btn: 0 1px 2px rgba(12, 12, 13, 0.16), 0 4px 12px rgba(12, 12, 13, 0.12);
+}
+
+@media (hover: hover) {
+  html[data-entity='ARTA'] .btn:not(.ghost):hover:not(:disabled) {
+    box-shadow: 0 2px 4px rgba(12, 12, 13, 0.18), 0 8px 20px rgba(12, 12, 13, 0.18);
+  }
+}
+
+/* Barras de desplazamiento finas (Safari en Mac ya las esconde sola). */
+html[data-entity] * {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--text) 18%, transparent) transparent;
+}
+
+/* ── Página que no existe ────────────────────────────────────────────────── */
+
+.nf {
+  display: grid;
+  gap: 10px;
+  place-content: center;
+  justify-items: center;
+  min-height: 100vh;
+  min-height: 100dvh;
+  padding: 24px;
+  background: #f7f6f3;
+  color: #0c0c0d;
+  font-family: var(--font-nunito), system-ui, sans-serif;
+  text-align: center;
+}
+
+.nf__code {
+  margin: 0;
+  color: #6b6b73;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 2.4px;
+}
+
+.nf__title {
+  margin: 0;
+  font-size: 2rem;
+  font-weight: 300;
+  letter-spacing: -0.015em;
+}
+
+.nf__text {
+  margin: 0 0 10px;
+  color: #55555c;
+}
+
+.nf__action {
+  display: inline-flex;
+  align-items: center;
+  min-height: 42px;
+  padding: 0 20px;
+  border-radius: 999px;
+  background: #0c0c0d;
+  color: #fff;
+  font-weight: 600;
+}
+
 /* ── Campana: el filtro en una sola línea ────────────────────────────────── */
 
 html[data-entity] .notif-panel__seg {

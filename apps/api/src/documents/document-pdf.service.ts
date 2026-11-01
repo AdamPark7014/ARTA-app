@@ -114,7 +114,7 @@ export class DocumentPdfService {
       startAt(this.branding.drawHeaderFooter(doc, meta, right - left, 100));
       doc.on('pageAdded', () => startAt(this.branding.drawHeaderFooter(doc, meta, undefined, 100, { compact: true })));
 
-      const accent = input.entity === 'EXPLANADA' ? '#1f5c50' : '#8b6914';
+      const accent = input.entity === 'EXPLANADA' ? '#3f3f45' : '#0c0c0d';
       for (const block of input.blocks) {
         if (doc.y > bottom) doc.addPage();
 

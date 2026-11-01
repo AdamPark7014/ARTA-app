@@ -1,5 +1,6 @@
 'use client';
 
+import { AvatarStack } from '@/components/ui/AvatarStack';
 import { useMemo, useRef, useState } from 'react';
 import { EmptyLite, Pill, SectionHead, Seg } from '@/components/ui/Lite';
 import { AssigneesPicker } from '@/components/ui/AssigneesPicker';
@@ -263,6 +264,7 @@ export function EventTasksPanel({
                       {t.module ? ` · ${t.module}` : ''}
                     </span>
                   </button>
+                  <AvatarStack names={taskAssigneeNames(t)} />
                   {key ? <span className={`task2__due ${late ? 'is-late' : ''}`}>{dueLabel(key)}</span> : null}
                   {t.status === 'BLOCKED' ? <Pill tone="danger">Bloqueada</Pill> : null}
                   {t.status === 'PENDING_APPROVAL' ? <Pill tone="review">Por aprobar</Pill> : null}
