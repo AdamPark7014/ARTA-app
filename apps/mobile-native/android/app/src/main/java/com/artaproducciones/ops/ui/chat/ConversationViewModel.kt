@@ -4,18 +4,25 @@ import android.app.Application
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.artaproducciones.ops.data.ActiveEntity
+import com.artaproducciones.ops.data.ChatRefs
 import com.artaproducciones.ops.data.Session
 import com.artaproducciones.ops.data.api.ApiClient
 import com.artaproducciones.ops.data.api.ChannelDetail
 import com.artaproducciones.ops.data.api.ChatAttachment
 import com.artaproducciones.ops.data.api.ChatAuthor
 import com.artaproducciones.ops.data.api.ChatMessage
+import com.artaproducciones.ops.data.api.ChatRefDto
 import com.artaproducciones.ops.data.api.ChatReplyRef
 import com.artaproducciones.ops.data.api.EditBody
+import com.artaproducciones.ops.data.api.ModulesClient
 import com.artaproducciones.ops.data.api.MuteBody
 import com.artaproducciones.ops.data.api.PostMessageBody
 import com.artaproducciones.ops.data.api.ReactionBody
+import com.artaproducciones.ops.data.api.RefCardsBody
+import com.artaproducciones.ops.data.api.RefInput
 import com.artaproducciones.ops.data.api.ReportBody
+import com.artaproducciones.ops.data.api.TaskDto
 import com.artaproducciones.ops.data.api.UploadResult
 import com.artaproducciones.ops.data.api.userMessage
 import com.artaproducciones.ops.data.realtime.ChatBlocks
@@ -24,17 +31,22 @@ import com.artaproducciones.ops.data.realtime.withoutBlocked
 import com.artaproducciones.ops.push.ActiveConversation
 import com.artaproducciones.ops.ui.common.parseInstant
 import com.artaproducciones.ops.ui.common.plainText
+import com.artaproducciones.ops.ui.modules.ModulesStore
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.MultipartBody
 import java.io.File
 import java.time.Instant
+import java.time.LocalDate
 import java.util.UUID
 
 /** [fraction] null mientras se prepara (p. ej. comprimiendo la foto) o si no se sabe el tamaño. */
@@ -63,6 +75,10 @@ data class ConversationState(
     val highlightId: String? = null,
     /** Primer mensaje ajeno posterior al `lastReadAt` con el que se abrió: separador «Mensajes nuevos». */
     val firstUnreadId: String? = null,
+    /** Tarjetas pedidas con mis permisos (`kind:id`): ganan sobre lo que traiga el mensaje. */
+    val refCards: Map<String, ChatRefDto> = emptyMap(),
+    /** Tarjeta con una acción en curso. */
+    val refBusy: String? = null,
 ) {
     val uploading: Boolean get() = upload != null
 }
@@ -84,12 +100,18 @@ class ConversationViewModel(
     private var visible = false
     private var unreadComputed = false
 
+    // Antes del `init`: el primer `collect` corre ahí mismo, en el hilo principal.
+    private val refQueue = LinkedHashMap<String, RefInput>()
+    private val refAsked = HashSet<String>()
+    private var refJob: Job? = null
+
     init {
         // Antes de unirse a la sala: lo que llegue de personas bloqueadas se ignora.
         ChatBlocks.ensureLoaded()
         RealtimeClient.join(channelId)
         viewModelScope.launch { loadInitial() }
         collectRealtime()
+        collectRefs()
     }
 
     private suspend fun loadInitial() {
@@ -149,8 +171,10 @@ class ConversationViewModel(
         viewModelScope.launch {
             RealtimeClient.updated.collect { m ->
                 if (m.channelId != channelId) return@collect
-                // `saved` es por persona: el evento del socket no lo trae para mí.
-                _state.update { s -> s.copy(messages = s.messages.map { if (it.id == m.id) m.copy(saved = it.saved) else it }) }
+                // `saved` es por persona: el evento del socket no lo trae para mí. Las tarjetas, tampoco.
+                _state.update { s ->
+                    s.copy(messages = s.messages.map { if (it.id == m.id) m.copy(saved = it.saved, refs = ChatRefs.keepResolved(m.refs, it.refs)) else it })
+                }
             }
         }
         viewModelScope.launch {
@@ -192,7 +216,143 @@ class ConversationViewModel(
                 // Reconexión: el servidor olvidó la sala y pudo llegar algo mientras tanto.
                 RealtimeClient.join(channelId)
                 if (_state.value.loadError != null) loadInitial() else catchUp()
+                // Lo que cambió mientras no había socket no avisó: se vuelven a pedir las tarjetas.
+                requestCards(_state.value.messages.flatMap { it.refs.orEmpty() }.distinctBy { it.key }.map { RefInput(it.kind, it.id) })
             }
+        }
+    }
+
+    // ─── Referencias (contrato §9) ─────────────────────────────────────────────
+
+    private fun collectRefs() {
+        // Lo que llega por socket trae solo la etiqueta: cada quien pide su tarjeta.
+        viewModelScope.launch {
+            _state.map { it.messages }.distinctUntilChanged().collect { list ->
+                requestCards(ChatRefs.unresolved(list, _state.value.refCards, refAsked))
+            }
+        }
+        viewModelScope.launch {
+            RealtimeClient.refsChanged.collect { e ->
+                val key = ChatRefs.key(e.kind, e.id)
+                val s = _state.value
+                val mine = key in s.refCards || s.messages.any { m -> m.refs.orEmpty().any { it.key == key } }
+                if (mine) requestCards(listOf(RefInput(e.kind, e.id)))
+            }
+        }
+    }
+
+    /** Se juntan las que lleguen seguidas en una sola petición, de hasta 60. */
+    private fun requestCards(refs: List<RefInput>) {
+        if (refs.isEmpty()) return
+        refs.forEach { r ->
+            val key = ChatRefs.key(r.kind, r.id)
+            refQueue[key] = r
+            refAsked.add(key)
+        }
+        if (refJob?.isActive == true) return
+        refJob = viewModelScope.launch {
+            delay(REF_BATCH_MS)
+            while (refQueue.isNotEmpty()) {
+                val batch = refQueue.values.take(ChatRefs.MAX_CARDS_PER_REQUEST)
+                batch.forEach { refQueue.remove(ChatRefs.key(it.kind, it.id)) }
+                try {
+                    val cards = ApiClient.api.refCards(RefCardsBody(batch)).refs.orEmpty()
+                    _state.update { s -> s.copy(refCards = s.refCards + cards.associateBy { it.key }) }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Exception) {
+                    // Se queda con la etiqueta; el siguiente cambio en la lista lo vuelve a intentar.
+                    batch.forEach { refAsked.remove(ChatRefs.key(it.kind, it.id)) }
+                }
+            }
+        }
+    }
+
+    /** Selector del `@`: sin texto, lo que la persona trae a la mano. Sin API de referencias, nada. */
+    suspend fun searchRefs(q: String): List<ChatRefDto> = try {
+        ApiClient.api.refSearch(q = q.ifBlank { null }, channelId = channelId, entity = ActiveEntity.param).results.orEmpty()
+    } catch (e: CancellationException) {
+        throw e
+    } catch (_: Exception) {
+        emptyList()
+    }
+
+    /**
+     * Botones de la tarjeta (solo tareas): entregar con nota, marcar hecha o aprobar. Devuelve qué
+     * decirle a la persona; la tarjeta se refresca sola con lo que diga el API.
+     */
+    suspend fun refAction(ref: ChatRefDto, action: String, note: String = ""): Result<String> {
+        _state.update { it.copy(refBusy = ref.key) }
+        val result = runCatching {
+            val text = when (action) {
+                ChatRefs.ACTION_DELIVER -> {
+                    val task = ModulesClient.api.submitTask(ref.id, mapOf("completionNote" to note))
+                    if (task.status == "PENDING_APPROVAL") "Entrega enviada: espera el visto bueno de quien la pidió" else "Tarea completada"
+                }
+                ChatRefs.ACTION_COMPLETE -> {
+                    ModulesClient.api.updateTask(ref.id, mapOf("status" to "DONE"))
+                    "Tarea completada"
+                }
+                ChatRefs.ACTION_APPROVE -> {
+                    ModulesClient.api.approveTask(ref.id)
+                    "Entrega aprobada"
+                }
+                else -> error("Acción desconocida")
+            }
+            ModulesStore.taskLists.clear()
+            ModulesStore.taskDetails.remove(ref.id)
+            requestCards(listOf(RefInput(ref.kind, ref.id)))
+            text
+        }
+        _state.update { it.copy(refBusy = null) }
+        return result
+    }
+
+    /** Dirección y operación crean tareas; `solo_carpetas` y `practicante`, no (el API dice lo mismo). */
+    val canCreateTasks: Boolean get() = Session.currentUser?.roleKey !in NO_TASK_ROLES
+
+    /**
+     * «Crear tarea» del menú del mensaje: `POST /tasks` y, ya creada, queda dicho en el hilo de ese
+     * mensaje. Si lo segundo falla la tarea sigue creada, así que no cuenta como error.
+     */
+    suspend fun createTaskFrom(m: ChatMessage, title: String, assigneeIds: List<String>, due: LocalDate?): Result<Unit> = runCatching {
+        val eventId = _state.value.channel?.eventId
+        val task = ModulesClient.api.createTask(
+            buildMap {
+                put("title", title)
+                put("assigneeIds", assigneeIds)
+                put("detail", "Salió del chat, mensaje de ${m.author.fullName}.")
+                // Con evento el API copia la entidad del evento; sin él, es la activa.
+                if (eventId != null) put("eventId", eventId) else ActiveEntity.param?.let { put("entity", it) }
+                due?.let { put("dueAt", it.toString()) }
+            },
+        )
+        ModulesStore.taskLists.clear()
+        try {
+            announceTask(task, m)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            // Sin aviso en el hilo (API sin referencias o sin red): la tarea ya existe.
+        }
+    }
+
+    /** `Nueva tarea: @Etiqueta` como respuesta en el hilo; la etiqueta la dice el API. */
+    private suspend fun announceTask(task: TaskDto, m: ChatMessage) {
+        val input = RefInput("task", task.id)
+        val card = ApiClient.api.refCards(RefCardsBody(listOf(input))).refs.orEmpty().firstOrNull() ?: return
+        if (card.label.isBlank()) return
+        val body = "Nueva tarea: @${card.label}"
+        val root = m.parentId ?: m.id
+        if (parentId == root) {
+            send(body, refs = listOf(card))
+            return
+        }
+        // Desde el canal el hilo no está en pantalla: solo sube su contador.
+        val before = m.replyCount
+        ApiClient.api.post(channelId, PostMessageBody(body = body, parentId = root, clientId = "a-" + UUID.randomUUID(), refs = listOf(input)))
+        _state.update { s ->
+            s.copy(messages = s.messages.map { if (it.id == root) it.copy(replyCount = maxOf(it.replyCount, before + 1)) else it })
         }
     }
 
@@ -232,8 +392,8 @@ class ConversationViewModel(
             val byId = list.indexOfFirst { it.id == m.id }
             val byClient = if (m.clientId != null) list.indexOfFirst { it.clientId == m.clientId && it.pending } else -1
             when {
-                byId >= 0 -> list[byId] = m.copy(saved = m.saved || list[byId].saved)
-                byClient >= 0 -> list[byClient] = m
+                byId >= 0 -> list[byId] = m.copy(saved = m.saved || list[byId].saved, refs = ChatRefs.keepResolved(m.refs, list[byId].refs))
+                byClient >= 0 -> list[byClient] = m.copy(refs = ChatRefs.keepResolved(m.refs, list[byClient].refs))
                 else -> list.add(m)
             }
             s.copy(messages = list.sortedWith(compareBy<ChatMessage>({ it.pending || it.failed }, { it.createdAt }, { it.id })))
@@ -354,7 +514,7 @@ class ConversationViewModel(
         RealtimeClient.typing(channelId)
     }
 
-    fun send(body: String, attachment: UploadResult? = null, replyTo: ChatMessage? = null) {
+    fun send(body: String, attachment: UploadResult? = null, replyTo: ChatMessage? = null, refs: List<ChatRefDto> = emptyList()) {
         val text = body.trim()
         if (text.isBlank() && attachment == null) return
         if (_state.value.hasNewer) jumpToLatest()
@@ -369,6 +529,8 @@ class ConversationViewModel(
             createdAt = Instant.now().toString(),
             author = ChatAuthor(me?.id.orEmpty(), me?.fullName.orEmpty()),
             replyTo = replyTo?.let(::replyRefOf),
+            // Lo elegido ya trae su tarjeta: se ve al instante, sin esperar al API.
+            refs = refs.takeIf { it.isNotEmpty() },
             clientId = clientId,
             pending = true,
         )
@@ -400,10 +562,12 @@ class ConversationViewModel(
                         attachmentSize = m.attachment?.size,
                         clientId = m.clientId,
                         replyToId = m.replyTo?.id,
+                        refs = m.refs?.takeIf { it.isNotEmpty() }?.let(ChatRefs::inputs),
                     ),
                 )
                 // Un API sin citas todavía no devuelve `replyTo`: se conserva la local.
-                val merged = if (saved.replyTo == null && m.replyTo != null) saved.copy(replyTo = m.replyTo) else saved
+                val merged = (if (saved.replyTo == null && m.replyTo != null) saved.copy(replyTo = m.replyTo) else saved)
+                    .let { it.copy(refs = ChatRefs.keepResolved(it.refs, m.refs)) }
                 _state.update { s ->
                     val exists = s.messages.any { it.id == merged.id }
                     s.copy(messages = if (exists) s.messages.filterNot { it.clientId == m.clientId && it.pending } else s.messages.map { if (it.clientId == m.clientId) merged else it })
@@ -424,7 +588,12 @@ class ConversationViewModel(
         _state.update { s -> s.copy(messages = s.messages.filterNot { it.clientId == m.clientId && it.failed }) }
     }
 
-    private class QueuedUpload(val prepare: suspend () -> PreparedUpload, val caption: String, val replyTo: ChatMessage?)
+    private class QueuedUpload(
+        val prepare: suspend () -> PreparedUpload,
+        val caption: String,
+        val replyTo: ChatMessage?,
+        val refs: List<ChatRefDto>,
+    )
 
     private var uploadJob: Job? = null
     private val uploadQueue = ArrayDeque<QueuedUpload>()
@@ -435,18 +604,19 @@ class ConversationViewModel(
      * Fotos, videos o documentos (uno o varios): un mensaje por archivo, como WhatsApp.
      * El texto escrito (y la cita) van con el primero. Se suben en orden y en streaming.
      */
-    fun sendFiles(uris: List<Uri>, caption: String, replyTo: ChatMessage? = null) {
+    fun sendFiles(uris: List<Uri>, caption: String, replyTo: ChatMessage? = null, refs: List<ChatRefDto> = emptyList()) {
         if (uris.isEmpty()) return
         val app = getApplication<Application>()
-        enqueue(uris.map { uri -> suspend { ChatMedia.prepare(app, uri) } }, caption, replyTo)
+        enqueue(uris.map { uri -> suspend { ChatMedia.prepare(app, uri) } }, caption, replyTo, refs)
     }
 
     /** Nota de voz grabada en la app. */
-    fun sendVoice(file: File, replyTo: ChatMessage? = null) = enqueue(listOf(suspend { ChatMedia.prepareFile(file) }), "", replyTo)
+    fun sendVoice(file: File, replyTo: ChatMessage? = null) = enqueue(listOf(suspend { ChatMedia.prepareFile(file) }), "", replyTo, emptyList())
 
-    private fun enqueue(items: List<suspend () -> PreparedUpload>, caption: String, replyTo: ChatMessage?) {
+    private fun enqueue(items: List<suspend () -> PreparedUpload>, caption: String, replyTo: ChatMessage?, refs: List<ChatRefDto>) {
         items.forEachIndexed { i, prepare ->
-            uploadQueue.addLast(QueuedUpload(prepare, if (i == 0) caption else "", if (i == 0) replyTo else null))
+            val first = i == 0
+            uploadQueue.addLast(QueuedUpload(prepare, if (first) caption else "", if (first) replyTo else null, if (first) refs else emptyList()))
         }
         queuedTotal += items.size
         if (uploadJob?.isActive == true) return
@@ -480,7 +650,7 @@ class ConversationViewModel(
                 val uploaded = withContext(Dispatchers.IO) {
                     ApiClient.api.upload(MultipartBody.Part.createFormData("file", p.name, body))
                 }
-                send(next.caption, uploaded, next.replyTo)
+                send(next.caption, uploaded, next.replyTo, next.refs)
             } catch (e: Exception) {
                 _state.update { it.copy(error = e.userMessage()) }
             } finally {
@@ -513,9 +683,10 @@ class ConversationViewModel(
         }
     }
 
-    fun edit(m: ChatMessage, body: String) {
+    /** [refs] null: el API conserva las que sigan escritas. Con lista (aun vacía), las reemplaza. */
+    fun edit(m: ChatMessage, body: String, refs: List<ChatRefDto>? = null) {
         if (body.isBlank() || body.trim() == m.body) return
-        mutate { ApiClient.api.edit(m.id, EditBody(body.trim())) }
+        mutate { ApiClient.api.edit(m.id, EditBody(body.trim(), refs?.let(ChatRefs::inputs))) }
     }
 
     fun delete(m: ChatMessage) {
@@ -589,5 +760,9 @@ class ConversationViewModel(
 
     companion object {
         const val EDIT_WINDOW_MS = 60 * 60 * 1000L
+
+        /** Espera antes de pedir tarjetas: las que lleguen seguidas viajan juntas. */
+        private const val REF_BATCH_MS = 120L
+        private val NO_TASK_ROLES = setOf("solo_carpetas", "practicante")
     }
 }

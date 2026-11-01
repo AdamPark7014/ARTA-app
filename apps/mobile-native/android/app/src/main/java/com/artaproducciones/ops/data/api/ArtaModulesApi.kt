@@ -300,6 +300,10 @@ interface ArtaModulesApi {
     @POST("tasks/{id}/reject")
     suspend fun rejectTask(@Path("id") id: String, @Body body: JsonBody): TaskDto
 
+    /** `{ body }`, máximo 2000. Responde la tarea completa; queda en `activities` con `action: comment`. */
+    @POST("tasks/{id}/comments")
+    suspend fun commentTask(@Path("id") id: String, @Body body: JsonBody): TaskDto
+
     // Eventos
     @GET("events")
     suspend fun events(@Query("entity") entity: String? = null, @Query("scope") scope: String? = null): List<EventSummaryDto>

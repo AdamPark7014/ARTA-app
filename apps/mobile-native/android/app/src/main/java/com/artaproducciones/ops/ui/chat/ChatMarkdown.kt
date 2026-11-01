@@ -6,23 +6,37 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.InlineTextContent
+import androidx.compose.foundation.text.appendInlineContent
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.LinkAnnotation
+import androidx.compose.ui.text.Placeholder
+import androidx.compose.ui.text.PlaceholderVerticalAlign
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextLinkStyles
@@ -35,8 +49,12 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withLink
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
+import com.artaproducciones.ops.data.ChatRefs
+import com.artaproducciones.ops.data.api.ChatRefDto
 import com.artaproducciones.ops.ui.theme.ArtaColors
+import com.artaproducciones.ops.ui.theme.LocalArtaTokens
 import kotlin.math.max
 import kotlin.math.roundToInt
 
@@ -145,10 +163,44 @@ fun firstUrl(body: String): String? {
     return trimUrl(m.value).takeIf { it.length > 10 }
 }
 
-/** Formato en línea → AnnotatedString. Dentro de código no se aplica nada más. */
-fun inlineMarkdown(text: String): AnnotatedString = buildAnnotatedString { appendInline(text) }
+/** Referencias (tarea, evento, OC…) del mensaje: sus `@Etiqueta` se pintan como chip. */
+class RefChips(val refs: List<ChatRefDto>, val muted: Color, val onOpen: (ChatRefDto) -> Unit)
 
-private fun AnnotatedString.Builder.appendInline(text: String) {
+private const val CHIP_TAG = "arta_ref_chip"
+private const val THIN_SPACE = " "
+
+private val ChipOpen = SpanStyle(fontWeight = FontWeight.SemiBold, fontSize = 0.92.em)
+
+/** Formato en línea → AnnotatedString. Dentro de código no se aplica nada más. */
+fun inlineMarkdown(text: String, chips: RefChips? = null): AnnotatedString = buildAnnotatedString { appendInline(text, chips) }
+
+private fun chipIconId(kind: String, on: Boolean) = "ref:$kind:" + if (on) "on" else "off"
+
+/** Ícono por tipo + etiqueta, sin la arroba. Abre su liga; apagado o tachado no hace nada. */
+private fun AnnotatedString.Builder.appendChip(ref: ChatRefDto, chips: RefChips) {
+    val state = ChatRefs.chipState(ref)
+    val on = state == ChatRefs.ChipState.OPEN
+    fun content() {
+        append(THIN_SPACE)
+        appendInlineContent(chipIconId(ref.kind, on))
+        append(THIN_SPACE + ref.label + THIN_SPACE)
+    }
+    pushStringAnnotation(CHIP_TAG, state.name)
+    if (on) {
+        withLink(LinkAnnotation.Clickable(CHIP_TAG, TextLinkStyles(ChipOpen)) { chips.onOpen(ref) }) { content() }
+    } else {
+        val off = SpanStyle(
+            color = chips.muted,
+            fontWeight = FontWeight.Medium,
+            fontSize = 0.92.em,
+            textDecoration = if (state == ChatRefs.ChipState.MISSING) TextDecoration.LineThrough else null,
+        )
+        withStyle(off) { content() }
+    }
+    pop()
+}
+
+private fun AnnotatedString.Builder.appendInline(text: String, chips: RefChips?) {
     var pos = 0
     while (pos < text.length) {
         var bestTok: Tok? = null
@@ -159,6 +211,15 @@ private fun AnnotatedString.Builder.appendInline(text: String) {
                 best = m
                 bestTok = tok
             }
+        }
+        // Lo que empieza antes gana (`código`, un enlace, *negritas*, que luego se revisan por dentro);
+        // en empate, la referencia, para que una tarea llamada «canal…» no se lea como @canal.
+        val hit = chips?.let { ChatRefs.nextIn(text, pos, it.refs) }
+        if (hit != null && (best == null || hit.start <= best.range.first)) {
+            append(text.substring(pos, hit.start))
+            appendChip(hit.ref, chips)
+            pos = hit.end
+            continue
         }
         if (best == null || bestTok == null) {
             append(text.substring(pos))
@@ -177,9 +238,9 @@ private fun AnnotatedString.Builder.appendInline(text: String) {
                 withLink(LinkAnnotation.Url(url, LinkStyles)) { append(url) }
             }
             Tok.Channel -> withStyle(MentionStyle) { append(best.value) }
-            Tok.Bold -> withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { appendInline(best.groupValues[1]) }
-            Tok.Italic -> withStyle(SpanStyle(fontStyle = FontStyle.Italic)) { appendInline(best.groupValues[1]) }
-            Tok.Strike -> withStyle(SpanStyle(textDecoration = TextDecoration.LineThrough)) { appendInline(best.groupValues[1]) }
+            Tok.Bold -> withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { appendInline(best.groupValues[1], chips) }
+            Tok.Italic -> withStyle(SpanStyle(fontStyle = FontStyle.Italic)) { appendInline(best.groupValues[1], chips) }
+            Tok.Strike -> withStyle(SpanStyle(textDecoration = TextDecoration.LineThrough)) { appendInline(best.groupValues[1], chips) }
         }
         pos = end
     }
@@ -195,26 +256,98 @@ fun MarkdownText(
     modifier: Modifier = Modifier,
     style: TextStyle = MaterialTheme.typography.bodyLarge,
     color: Color = ArtaColors.Text,
+    refs: List<ChatRefDto> = emptyList(),
+    onRef: (ChatRefDto) -> Unit = {},
     meta: (@Composable () -> Unit)? = null,
 ) {
     val blocks = remember(body) { parseBlocks(body) }
     val single = blocks.singleOrNull() as? MdBlock.Paragraph
+    val muted = LocalArtaTokens.current.secondary
+    val open by rememberUpdatedState(onRef)
+    val chips = remember(refs, muted) { if (refs.isEmpty()) null else RefChips(refs, muted) { open(it) } }
     if (single != null) {
-        val text = remember(single.text) { inlineMarkdown(single.text) }
-        if (meta == null) Text(text, style = style, color = color, modifier = modifier)
-        else TextWithTrailingMeta(text, style, color, modifier, meta)
+        val text = remember(single.text, chips) { inlineMarkdown(single.text, chips) }
+        if (meta == null) RichText(text, chips, style, color, modifier)
+        else TextWithTrailingMeta(text, chips, style, color, modifier, meta)
         return
     }
     Column(modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        blocks.forEach { MdBlockView(it, style, color) }
+        blocks.forEach { MdBlockView(it, chips, style, color) }
         if (meta != null) Box(Modifier.align(Alignment.End)) { meta() }
     }
 }
 
+/** Texto con chips: el ícono va en línea y el fondo se dibuja detrás, también si el chip parte renglón. */
 @Composable
-private fun MdBlockView(b: MdBlock, style: TextStyle, color: Color) {
+private fun RichText(
+    text: AnnotatedString,
+    chips: RefChips?,
+    style: TextStyle,
+    color: Color,
+    modifier: Modifier = Modifier,
+    onLayout: (TextLayoutResult) -> Unit = {},
+) {
+    if (chips == null) {
+        Text(text, style = style, color = color, modifier = modifier, onTextLayout = onLayout)
+        return
+    }
+    val t = LocalArtaTokens.current
+    val ranges = remember(text) { text.getStringAnnotations(CHIP_TAG, 0, text.length).map { it.start to it.end } }
+    val icons = remember(chips) { chipIcons(chips) }
+    var layout by remember { mutableStateOf<TextLayoutResult?>(null) }
+    val radius = if (t.isPill) 6.dp else 3.dp
+    Text(
+        text,
+        style = style,
+        color = color,
+        inlineContent = icons,
+        onTextLayout = {
+            layout = it
+            onLayout(it)
+        },
+        modifier = modifier.drawBehind {
+            val l = layout ?: return@drawBehind
+            ranges.forEach { (start, end) -> drawChip(l, start, end, t.fill, t.lineStrong, radius.toPx()) }
+        },
+    )
+}
+
+private fun chipIcons(chips: RefChips): Map<String, InlineTextContent> = buildMap {
+    for (kind in chips.refs.map { it.kind }.distinct()) {
+        for (on in listOf(true, false)) {
+            put(
+                chipIconId(kind, on),
+                InlineTextContent(Placeholder(1.05.em, 1.05.em, PlaceholderVerticalAlign.TextCenter)) {
+                    val t = LocalArtaTokens.current
+                    Icon(refIcon(kind), null, tint = if (on) t.text.copy(alpha = 0.7f) else t.tertiary, modifier = Modifier.fillMaxSize())
+                },
+            )
+        }
+    }
+}
+
+/** Un rectángulo por renglón: un chip largo que parte línea se ve como dos, no como un bloque. */
+private fun DrawScope.drawChip(l: TextLayoutResult, start: Int, end: Int, fill: Color, line: Color, radius: Float) {
+    val last = end.coerceAtMost(l.layoutInput.text.length)
+    if (last <= start) return
+    val inset = 2.dp.toPx()
+    val stroke = Stroke(1.dp.toPx())
+    for (n in l.getLineForOffset(start)..l.getLineForOffset(last - 1)) {
+        val from = maxOf(start, l.getLineStart(n))
+        val to = minOf(last, l.getLineEnd(n, visibleEnd = true))
+        if (to <= from) continue
+        val box = l.getPathForRange(from, to).getBounds()
+        val topLeft = Offset(box.left, box.top + inset)
+        val size = Size(box.width, (box.height - inset * 2).coerceAtLeast(0f))
+        drawRoundRect(fill, topLeft, size, CornerRadius(radius))
+        drawRoundRect(line, topLeft, size, CornerRadius(radius), style = stroke)
+    }
+}
+
+@Composable
+private fun MdBlockView(b: MdBlock, chips: RefChips?, style: TextStyle, color: Color) {
     when (b) {
-        is MdBlock.Paragraph -> Text(remember(b.text) { inlineMarkdown(b.text) }, style = style, color = color)
+        is MdBlock.Paragraph -> RichText(remember(b.text, chips) { inlineMarkdown(b.text, chips) }, chips, style, color)
         is MdBlock.Code -> Text(
             b.text,
             style = style.copy(fontFamily = FontFamily.Monospace, fontSize = 13.sp, lineHeight = 18.sp),
@@ -226,8 +359,9 @@ private fun MdBlockView(b: MdBlock, style: TextStyle, color: Color) {
                 .horizontalScroll(rememberScrollState())
                 .padding(horizontal = 8.dp, vertical = 6.dp),
         )
-        is MdBlock.Quote -> Text(
-            remember(b.text) { inlineMarkdown(b.text) },
+        is MdBlock.Quote -> RichText(
+            remember(b.text, chips) { inlineMarkdown(b.text, chips) },
+            chips,
             style = style,
             color = color.copy(alpha = 0.85f),
             modifier = Modifier
@@ -236,7 +370,7 @@ private fun MdBlockView(b: MdBlock, style: TextStyle, color: Color) {
         )
         is MdBlock.Item -> Row {
             Text(b.marker, style = style, color = color.copy(alpha = 0.7f), modifier = Modifier.widthIn(min = 18.dp))
-            Text(remember(b.text) { inlineMarkdown(b.text) }, style = style, color = color, modifier = Modifier.padding(start = 4.dp))
+            RichText(remember(b.text, chips) { inlineMarkdown(b.text, chips) }, chips, style, color, Modifier.padding(start = 4.dp))
         }
     }
 }
@@ -244,6 +378,7 @@ private fun MdBlockView(b: MdBlock, style: TextStyle, color: Color) {
 @Composable
 private fun TextWithTrailingMeta(
     text: AnnotatedString,
+    chips: RefChips?,
     style: TextStyle,
     color: Color,
     modifier: Modifier,
@@ -253,7 +388,7 @@ private fun TextWithTrailingMeta(
     val layoutRef = remember { arrayOfNulls<TextLayoutResult>(1) }
     Layout(
         content = {
-            Text(text, style = style, color = color, onTextLayout = { layoutRef[0] = it })
+            RichText(text, chips, style, color, onLayout = { layoutRef[0] = it })
             meta()
         },
         modifier = modifier,

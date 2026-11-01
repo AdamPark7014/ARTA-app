@@ -126,6 +126,59 @@ data class ChatReplyRef(
 /** Canal de un resultado de búsqueda o de un guardado. */
 data class ChatChannelRef(val id: String, val name: String = "", val kind: String = "PUBLIC", val isGroupDm: Boolean = false)
 
+data class RefPerson(val id: String = "", val fullName: String = "")
+
+/**
+ * Referencia de un mensaje: tarea, evento, OC, formato, documento o anticipo
+ * (docs/CHAT-V2-CONTRATO.md §9). Todo es opcional: el API viejo no manda nada de esto y lo que
+ * llega por socket solo trae la etiqueta (`resolved: false`). `kind` y `tone` van como texto para
+ * que un tipo nuevo no truene al decodificar. Lógica en `data/ChatRefs.kt`.
+ */
+data class ChatRefDto(
+    val kind: String = "",
+    val id: String = "",
+    /** Tal como quedó en el cuerpo: encuentra el chip. No cambia aunque renombren la tarea. */
+    val label: String = "",
+    /** El nombre de hoy, para la tarjeta. */
+    val title: String? = null,
+    val resolved: Boolean? = null,
+    val canOpen: Boolean? = null,
+    val missing: Boolean? = null,
+    val href: String? = null,
+    val status: String? = null,
+    val statusLabel: String? = null,
+    /** `action` (relleno: te toca) | `late` | `info` | `done`. */
+    val tone: String? = null,
+    val subtitle: String? = null,
+    val dueAt: String? = null,
+    /** 0-100. */
+    val progress: Double? = null,
+    val people: List<RefPerson>? = null,
+    val amount: String? = null,
+    /** Lo que ESTA persona puede hacer ahí mismo: `deliver` | `complete` | `approve`. */
+    val actions: List<String>? = null,
+) {
+    val key: String get() = "$kind:$id"
+}
+
+data class RefInput(val kind: String, val id: String)
+data class RefCardsBody(val refs: List<RefInput>)
+data class RefCardsResult(val refs: List<ChatRefDto>? = null)
+data class RefSearchResult(val results: List<ChatRefDto>? = null)
+
+/** «Mencionado en»: un mensaje que liga esta cosa. `href` lleva a ese mensaje. */
+data class RefBacklink(
+    val messageId: String = "",
+    val channelId: String = "",
+    val channelName: String = "",
+    val author: RefPerson? = null,
+    val excerpt: String? = null,
+    val at: String? = null,
+    val href: String? = null,
+)
+
+data class RefBacklinks(val links: List<RefBacklink>? = null)
+
 data class ChatMessage(
     val id: String,
     val channelId: String,
@@ -143,6 +196,8 @@ data class ChatMessage(
     val saved: Boolean = false,
     val deleted: Boolean = false,
     val channel: ChatChannelRef? = null,
+    /** Lo que se arrobó en el mensaje; null en un API sin referencias. */
+    val refs: List<ChatRefDto>? = null,
     /** Solo en mensajes optimistas locales mientras el API responde. */
     val clientId: String? = null,
     val pending: Boolean = false,
@@ -162,9 +217,12 @@ data class PostMessageBody(
     val attachmentSize: Long? = null,
     val clientId: String? = null,
     val replyToId: String? = null,
+    /** Solo si se arrobó algo: el API viejo no conoce el campo. */
+    val refs: List<RefInput>? = null,
 )
 
-data class EditBody(val body: String)
+/** Sin [refs] el API conserva las que sigan escritas en el cuerpo; con [refs], las reemplaza. */
+data class EditBody(val body: String, val refs: List<RefInput>? = null)
 data class ReactionBody(val emoji: String)
 data class MuteBody(val muted: Boolean, val hours: Int? = null)
 data class DirectBody(val userId: String)
@@ -344,6 +402,24 @@ interface ArtaApi {
 
     @GET("chat/presence")
     suspend fun presence(): PresenceList
+
+    // Referencias: arrobar tareas, eventos, OC, formatos, documentos y anticipos (contrato §9).
+
+    /** Sin [q] sugiere lo que la persona trae a la mano; primero lo del evento de la conversación. */
+    @GET("chat/refs/search")
+    suspend fun refSearch(
+        @Query("q") q: String? = null,
+        @Query("channelId") channelId: String? = null,
+        @Query("entity") entity: String? = null,
+    ): RefSearchResult
+
+    /** Hasta 60, con los permisos de quien pide. */
+    @POST("chat/refs/cards")
+    suspend fun refCards(@Body body: RefCardsBody): RefCardsResult
+
+    /** 404 si no puede abrir la cosa: quien llama lo trata como «sin menciones». */
+    @GET("chat/refs/backlinks")
+    suspend fun refBacklinks(@Query("kind") kind: String, @Query("id") id: String): RefBacklinks
 
     @GET("chat/prefs")
     suspend fun chatPrefs(): ChatPrefs

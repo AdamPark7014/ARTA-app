@@ -2,7 +2,9 @@ package com.artaproducciones.ops.ui.chat
 
 import android.content.Context
 import android.util.LruCache
+import com.artaproducciones.ops.data.ChatRefs
 import com.artaproducciones.ops.data.api.ApiClient
+import com.artaproducciones.ops.data.api.ChatRefDto
 import com.artaproducciones.ops.data.api.LinkPreview
 import com.artaproducciones.ops.data.realtime.RealtimeClient
 import kotlinx.coroutines.CoroutineScope
@@ -50,6 +52,16 @@ object ChatDrafts {
     fun put(context: Context, key: String, text: String) {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
         if (text.isBlank()) prefs.remove(key) else prefs.putString(key, text.take(MAX_CHARS))
+        prefs.apply()
+    }
+
+    /** Lo arrobado en el borrador: el texto solo trae `@Etiqueta`, sin saber qué cosa es. */
+    fun refs(context: Context, key: String): List<ChatRefDto> =
+        ChatRefs.decodeDraft(context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString("$key#refs", null))
+
+    fun putRefs(context: Context, key: String, refs: List<ChatRefDto>) {
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+        if (refs.isEmpty()) prefs.remove("$key#refs") else prefs.putString("$key#refs", ChatRefs.encodeDraft(refs))
         prefs.apply()
     }
 }

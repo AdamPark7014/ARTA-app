@@ -1059,6 +1059,11 @@ export class ChatService {
       : [];
     for (const id of everyone) mentioned.add(id);
 
+    // Dueños de lo arrobado: su aviso va aparte, no reciben además el push normal del mensaje.
+    const refPlan = this.refs
+      ? await this.refs.planFor(user, message, new Set([...mentioned, ...blockers]))
+      : new Map<string, never>();
+
     const direct = channel.kind === ChatChannelKind.DIRECT;
     const channelLabel = direct ? '' : channel.isGroupDm ? channel.name : `#${channel.name}`;
 
@@ -1076,7 +1081,7 @@ export class ChatService {
     };
     const reachable = members.filter((m) => m.userId !== user.id && !isMuted(m) && !blockers.has(m.userId));
     const loud = new Set(
-      message.parentId ? [] : reachable.filter((m) => !mentioned.has(m.userId)).map((m) => m.userId),
+      message.parentId ? [] : reachable.filter((m) => !mentioned.has(m.userId) && !refPlan.has(m.userId)).map((m) => m.userId),
     );
     this.realtime.emitToUsers(memberIds.filter((id) => loud.has(id)), 'chat:channel-activity', { ...activity, notify: true });
     this.realtime.emitToUsers(memberIds.filter((id) => !loud.has(id)), 'chat:channel-activity', { ...activity, notify: false });
@@ -1095,7 +1100,7 @@ export class ChatService {
       if (root) inThread.add(root.senderId);
       audience = audience.filter((id) => inThread.has(id));
     }
-    audience = audience.filter((id) => !mentioned.has(id));
+    audience = audience.filter((id) => !mentioned.has(id) && !refPlan.has(id));
 
     const author = user.fullName || message.sender.fullName || 'Alguien';
     const url = `/chat?channel=${channel.id}&msg=${message.id}`;
@@ -1138,10 +1143,7 @@ export class ChatService {
     );
 
     // A quien le importa lo que se arrobó; quien ya recibió la mención no recibe otro aviso.
-    await this.refs?.notifyFor(user, channel, message, {
-      memberIds: new Set(memberIds),
-      skip: new Set([...mentioned, ...blockers]),
-    });
+    await this.refs?.sendPlan(user, channel, message, refPlan, new Set(memberIds));
   }
 
   private async systemMessage(channelId: string, user: ChatUser, body: string) {

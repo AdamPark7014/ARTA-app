@@ -42,6 +42,26 @@ import {
 } from './chat-refs';
 import { chatPreview } from './chat-text';
 
+type RefChannel = {
+  id: string;
+  organizationId: string;
+  name: string;
+  kind: ChatChannelKind;
+  isGroupDm: boolean;
+  eventId: string | null;
+  entity: EntityKey | null;
+};
+
+type RefMessage = {
+  id: string;
+  body: string;
+  refs?: Array<{ kind: string; targetId: string; label: string }> | null;
+};
+
+type RefPlanItem = { role: ChatRefRole; label: string; link: string; type: string };
+
+export type RefPlan = Map<string, RefPlanItem>;
+
 export type RefViewer = {
   id: string;
   roleKey: string;
@@ -839,20 +859,20 @@ export class ChatRefsService {
    */
   async notifyFor(
     actor: RefViewer,
-    channel: {
-      id: string;
-      organizationId: string;
-      name: string;
-      kind: ChatChannelKind;
-      isGroupDm: boolean;
-      eventId: string | null;
-      entity: EntityKey | null;
-    },
-    message: { id: string; body: string; refs?: Array<{ kind: string; targetId: string; label: string }> | null },
+    channel: RefChannel,
+    message: RefMessage,
     opts: { memberIds: Set<string>; skip: Set<string> },
   ) {
+    const plan = await this.planFor(actor, message, opts.skip);
+    await this.sendPlan(actor, channel, message, plan, opts.memberIds);
+    return plan;
+  }
+
+  /** A quién le toca qué aviso por este mensaje, sin mandar nada todavía. */
+  async planFor(actor: RefViewer, message: RefMessage, skip: Set<string>): Promise<RefPlan> {
+    const plan: RefPlan = new Map();
     const refs = (message.refs ?? []).filter((r) => isRefKind(r.kind) && r.kind !== 'event');
-    if (refs.length === 0 || !this.notifications) return;
+    if (refs.length === 0 || !this.notifications) return plan;
 
     const idsOf = (kind: RefKind) => refs.filter((r) => r.kind === kind).map((r) => r.targetId);
     const [tasks, pos, formats, docs, advances] = await Promise.all([
@@ -895,9 +915,8 @@ export class ChatRefsService {
     ]);
 
     // Un aviso por persona y mensaje: el primero que le toca (lo escrito antes manda).
-    const plan = new Map<string, { role: ChatRefRole; label: string; link: string; type: string }>();
-    const add = (userId: string | null | undefined, item: { role: ChatRefRole; label: string; link: string; type: string }) => {
-      if (!userId || userId === actor.id || opts.skip.has(userId) || plan.has(userId)) return;
+    const add = (userId: string | null | undefined, item: RefPlanItem) => {
+      if (!userId || userId === actor.id || skip.has(userId) || plan.has(userId)) return;
       plan.set(userId, item);
     };
     for (const ref of refs) {
@@ -930,8 +949,18 @@ export class ChatRefsService {
         if (a) add(a.uploadedById, { role: 'advance_owner', label: ref.label, link: `/advances?advance=${a.id}`, type: 'chat.ref.advance' });
       }
     }
-    if (plan.size === 0) return;
+    if (plan.size === 0) return plan;
+    const active = await this.prisma.user.findMany({
+      where: { id: { in: [...plan.keys()] }, active: true },
+      select: { id: true },
+    });
+    const alive = new Set(active.map((u) => u.id));
+    for (const id of [...plan.keys()]) if (!alive.has(id)) plan.delete(id);
+    return plan;
+  }
 
+  async sendPlan(actor: RefViewer, channel: RefChannel, message: RefMessage, plan: RefPlan, memberIds: Set<string>) {
+    if (plan.size === 0 || !this.notifications) return;
     const people = await this.prisma.user.findMany({
       where: { id: { in: [...plan.keys()] }, active: true },
       select: { id: true, roleKey: true, entities: true },
@@ -942,7 +971,7 @@ export class ChatRefsService {
     await this.notifications.notifyMany(
       people.map((person) => {
         const item = plan.get(person.id)!;
-        const reads = this.canReadChannel(person, channel, opts.memberIds.has(person.id));
+        const reads = this.canReadChannel(person, channel, memberIds.has(person.id));
         return {
           userId: person.id,
           organizationId: channel.organizationId,

@@ -76,6 +76,7 @@ import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Share
+import androidx.compose.material.icons.outlined.TaskAlt
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -148,10 +149,12 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import coil.compose.AsyncImage
+import com.artaproducciones.ops.data.ChatRefs
 import com.artaproducciones.ops.data.api.ChannelMember
 import com.artaproducciones.ops.data.api.ChatAttachment
 import com.artaproducciones.ops.data.api.ChatMessage
 import com.artaproducciones.ops.data.api.ChatReaction
+import com.artaproducciones.ops.data.api.ChatRefDto
 import com.artaproducciones.ops.data.api.ChatReplyRef
 import com.artaproducciones.ops.data.api.userMessage
 import com.artaproducciones.ops.data.realtime.ChatBlocks
@@ -164,15 +167,21 @@ import com.artaproducciones.ops.ui.common.messageTime
 import com.artaproducciones.ops.ui.common.parseInstant
 import com.artaproducciones.ops.ui.common.plainText
 import com.artaproducciones.ops.ui.theme.ArtaColors
+import com.artaproducciones.ops.ui.theme.ArtaType
 import com.artaproducciones.ops.ui.theme.LocalArtaTokens
 import com.artaproducciones.ops.ui.theme.TABULAR
 import com.artaproducciones.ops.ui.theme.TextButton
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.time.Instant
+import java.util.Locale
 import kotlin.math.roundToInt
 
 private const val GROUP_WINDOW_MS = 5 * 60 * 1000L
+
+/** Personas en el selector del `@` cuando también hay referencias (los mismos topes de la web). */
+private const val MENTION_PEOPLE_IDLE = 3
+private const val MENTION_PEOPLE_WITH_REFS = 5
 
 /**
  * Subrutas del chat. La pestaña de chats y la conversación solo reciben `openChat`,
@@ -197,6 +206,8 @@ fun ConversationScreen(
     onBack: () -> Unit,
     openThread: (String) -> Unit,
     openChat: (String) -> Unit,
+    /** Ruta del panel (`href` de una referencia): la traduce el enrutador de ligas de los avisos. */
+    openLink: (String) -> Unit,
 ) {
     val context = LocalContext.current
     val app = context.applicationContext as Application
@@ -215,6 +226,11 @@ fun ConversationScreen(
 
     val draftKey = remember { ChatDrafts.key(channelId, parentId) }
     val mentions = remember { mutableStateMapOf<String, String>() }
+    // Lo elegido en el selector del `@`; al enviar viajan las que sigan escritas en el texto.
+    val pickedRefs = remember {
+        mutableStateMapOf<String, ChatRefDto>().apply { ChatDrafts.refs(context, draftKey).forEach { put(it.key, it) } }
+    }
+    fun bodyOf(text: String) = ChatRefs.protectingLabels(text, pickedRefs.values.map { it.label }) { resolveMentions(it, mentions) }
     var draft by remember {
         val text = plainTextKeepingMentions(ChatDrafts.get(context, draftKey), mentions)
         mutableStateOf(TextFieldValue(text, TextRange(text.length)))
@@ -233,6 +249,8 @@ fun ConversationScreen(
     var confirmDelete by remember { mutableStateOf<ChatMessage?>(null) }
     var reportFor by remember { mutableStateOf<ChatMessage?>(null) }
     var confirmBlock by remember { mutableStateOf<BlockTarget?>(null) }
+    var taskFrom by remember { mutableStateOf<ChatMessage?>(null) }
+    var deliverRef by remember { mutableStateOf<ChatRefDto?>(null) }
     val focusRequester = remember { FocusRequester() }
 
     // Personas que bloqueé: sus mensajes no se pintan aunque ya estuvieran cargados.
@@ -244,12 +262,33 @@ fun ConversationScreen(
     LaunchedEffect(draft.text, editing) {
         if (editing != null) return@LaunchedEffect
         delay(400)
-        ChatDrafts.put(context, draftKey, resolveMentions(draft.text, mentions))
+        ChatDrafts.put(context, draftKey, bodyOf(draft.text))
+        ChatDrafts.putRefs(context, draftKey, ChatRefs.inText(draft.text, pickedRefs.values))
     }
     val latestDraft by rememberUpdatedState(draft.text)
     val latestEditing by rememberUpdatedState(editing)
     DisposableEffect(Unit) {
-        onDispose { if (latestEditing == null) ChatDrafts.put(context, draftKey, resolveMentions(latestDraft, mentions)) }
+        onDispose {
+            if (latestEditing == null) {
+                ChatDrafts.put(context, draftKey, bodyOf(latestDraft))
+                ChatDrafts.putRefs(context, draftKey, ChatRefs.inText(latestDraft, pickedRefs.values))
+            }
+        }
+    }
+
+    // El `@` bajo el cursor; lo que ya se eligió no se vuelve a sugerir («@Luces hola»).
+    val mentionQ = remember(draft.text, draft.selection, mentions.size, pickedRefs.size) {
+        mentionQuery(draft)?.takeUnless { ChatRefs.alreadyWritten(it, mentions.keys + pickedRefs.values.map { r -> r.label }) }
+    }
+    var refResults by remember { mutableStateOf<List<ChatRefDto>>(emptyList()) }
+    LaunchedEffect(mentionQ) {
+        val q = mentionQ
+        if (q == null) {
+            refResults = emptyList()
+            return@LaunchedEffect
+        }
+        delay(180)
+        refResults = vm.searchRefs(q.trim())
     }
 
     // Visible = pantalla al frente: marca leído y calla los pushes de esta conversación.
@@ -292,13 +331,34 @@ fun ConversationScreen(
     fun clearComposer() {
         draft = TextFieldValue("")
         mentions.clear()
+        pickedRefs.clear()
         replyTo = null
     }
 
     fun sendUris(uris: List<Uri>) {
         if (uris.isEmpty()) return
-        vm.sendFiles(uris, resolveMentions(draft.text, mentions), replyTo)
+        vm.sendFiles(uris, bodyOf(draft.text), replyTo, ChatRefs.inText(draft.text, pickedRefs.values))
         clearComposer()
+    }
+
+    /** Toque en un chip o una tarjeta: lo que no tiene liga no hace nada. */
+    fun openRef(r: ChatRefDto) {
+        r.href?.takeIf { it.isNotBlank() }?.let(openLink)
+    }
+
+    fun runRefAction(r: ChatRefDto, action: String) {
+        if (action == ChatRefs.ACTION_DELIVER) {
+            deliverRef = r
+            return
+        }
+        scope.launch {
+            vm.refAction(r, action)
+                .onSuccess {
+                    haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    snackbar.showSnackbar(it)
+                }
+                .onFailure { snackbar.showSnackbar(it.userMessage()) }
+        }
     }
 
     val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
@@ -657,6 +717,10 @@ fun ConversationScreen(
                                         onJumpTo = vm::jumpTo,
                                         onRetry = { vm.retry(m) },
                                         onDiscard = { vm.discard(m) },
+                                        refs = remember(m.refs, state.refCards) { ChatRefs.view(m.refs, state.refCards) },
+                                        refBusy = state.refBusy,
+                                        onOpenRef = ::openRef,
+                                        onRefAction = ::runRefAction,
                                     )
                                 }
                             }
@@ -706,22 +770,31 @@ fun ConversationScreen(
                 )
             } else {
                 MentionSuggestions(
-                    draft = draft,
+                    query = mentionQ,
                     members = channel?.members.orEmpty().filter { it.id != vm.myId },
                     online = online,
                     allowChannel = channel != null && !isDirect,
+                    refs = refResults,
                     onPick = { member ->
                         val (value, name) = insertMention(draft, member.fullName)
                         mentions[name] = member.id
                         draft = value
                     },
                     onPickChannel = { draft = insertMention(draft, "canal").first },
+                    onPickRef = { r ->
+                        pickedRefs[r.key] = r
+                        draft = insertMention(draft, r.label).first
+                    },
                 )
                 editing?.let { e ->
                     ComposerContextBar(
                         label = "Editando mensaje",
                         text = plainText(e.body),
-                        onClose = { editing = null; draft = TextFieldValue("") },
+                        onClose = {
+                            editing = null
+                            pickedRefs.clear()
+                            draft = TextFieldValue("")
+                        },
                     )
                 }
                 replyTo?.let { r ->
@@ -774,10 +847,16 @@ fun ConversationScreen(
                         onEmoji = { composerEmoji = true },
                         onMic = { onMic() },
                         onSend = {
-                            val body = resolveMentions(draft.text, mentions)
+                            val body = bodyOf(draft.text)
+                            val refs = ChatRefs.inText(draft.text, pickedRefs.values)
                             val e = editing
                             haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                            if (e != null) vm.edit(e, body) else vm.send(body, replyTo = replyTo)
+                            if (e != null) {
+                                // Solo si el mensaje tiene o gana referencias: el API viejo no conoce el campo.
+                                vm.edit(e, body, refs.takeIf { pickedRefs.isNotEmpty() })
+                            } else {
+                                vm.send(body, replyTo = replyTo, refs = refs)
+                            }
                             editing = null
                             clearComposer()
                             scope.launch { listState.animateScrollToItem(0) }
@@ -795,6 +874,7 @@ fun ConversationScreen(
             mine = m.author.id == vm.myId,
             canManage = channel?.canManage == true,
             inThread = parentId != null,
+            canCreateTask = vm.canCreateTasks,
             onDismiss = { actionsFor = null },
             onReact = { react(m, it) },
             onMoreReactions = { reactPickerFor = m },
@@ -810,10 +890,13 @@ fun ConversationScreen(
                 Toast.makeText(context, if (m.saved) "Quitado de guardados" else "Guardado", Toast.LENGTH_SHORT).show()
             },
             onPin = { vm.togglePin(m) },
+            onCreateTask = { taskFrom = m },
             onEdit = {
                 replyTo = null
                 editing = m
                 mentions.clear()
+                pickedRefs.clear()
+                m.refs.orEmpty().forEach { pickedRefs[it.key] = it }
                 val text = plainTextKeepingMentions(m.body, mentions)
                 draft = TextFieldValue(text, TextRange(text.length))
                 focusRequester.runCatching { requestFocus() }
@@ -828,6 +911,36 @@ fun ConversationScreen(
             },
             onReport = { reportFor = m },
             onBlock = { confirmBlock = BlockTarget(m.author.id, m.author.fullName) },
+        )
+    }
+
+    taskFrom?.let { m ->
+        ChatTaskSheet(
+            message = m,
+            members = channel?.members.orEmpty(),
+            myId = vm.myId,
+            onDismiss = { taskFrom = null },
+            onCreate = { title, assignees, due -> vm.createTaskFrom(m, title, assignees, due) },
+            onCreated = {
+                taskFrom = null
+                scope.launch { snackbar.showSnackbar("Tarea creada") }
+            },
+        )
+    }
+
+    deliverRef?.let { r ->
+        RefDeliverSheet(
+            ref = r,
+            onDismiss = { deliverRef = null },
+            onOpenTask = {
+                deliverRef = null
+                openRef(r)
+            },
+            onSend = { note -> vm.refAction(r, ChatRefs.ACTION_DELIVER, note) },
+            onSent = { text ->
+                deliverRef = null
+                scope.launch { snackbar.showSnackbar(text) }
+            },
         )
     }
 
@@ -1008,6 +1121,10 @@ private fun MessageBubble(
     onJumpTo: (String) -> Unit,
     onRetry: () -> Unit,
     onDiscard: () -> Unit,
+    refs: List<ChatRefDto>,
+    refBusy: String?,
+    onOpenRef: (ChatRefDto) -> Unit,
+    onRefAction: (ChatRefDto, String) -> Unit,
 ) {
     if (m.kind == "SYSTEM") {
         Text(
@@ -1108,8 +1225,17 @@ private fun MessageBubble(
                     ) {
                         // Dentro de mi burbuja todo toma los tokens de la burbuja (texto blanco sobre tinta en ARTA).
                         CompositionLocalProvider(LocalArtaTokens provides if (mine) tokens.inMine() else tokens) {
-                            BubbleContent(m, mine, showAuthor, ticks, onOpenAttachment, onJumpTo)
+                            BubbleContent(m, mine, showAuthor, ticks, refs, onOpenRef, onOpenAttachment, onJumpTo)
                         }
+                    }
+                    if (refs.isNotEmpty() && !m.deleted) {
+                        RefCards(
+                            refs = refs,
+                            busyKey = refBusy,
+                            onOpen = onOpenRef,
+                            onAction = onRefAction,
+                            modifier = Modifier.widthIn(max = maxWidth).padding(top = Space.XS),
+                        )
                     }
                     if (m.reactions.isNotEmpty() && !m.deleted) {
                         FlowRow(
@@ -1180,6 +1306,8 @@ private fun BubbleContent(
     mine: Boolean,
     showAuthor: Boolean,
     ticks: Ticks,
+    refs: List<ChatRefDto>,
+    onOpenRef: (ChatRefDto) -> Unit,
     onOpenAttachment: (ChatAttachment) -> Unit,
     onJumpTo: (String) -> Unit,
 ) {
@@ -1216,7 +1344,7 @@ private fun BubbleContent(
         m.attachment?.let { a -> AttachmentView(a, mine) { onOpenAttachment(a) } }
         if (m.attachment == null) firstUrl(m.body)?.let { LinkPreviewCard(it) }
         if (m.body.isNotBlank()) {
-            MarkdownText(m.body, meta = { MetaRow(m, ticks) })
+            MarkdownText(m.body, refs = refs, onRef = onOpenRef, meta = { MetaRow(m, ticks) })
         } else {
             Box(Modifier.align(Alignment.End)) { MetaRow(m, ticks) }
         }
@@ -1437,17 +1565,24 @@ private fun mentionQuery(v: TextFieldValue): String? {
 
 @Composable
 private fun MentionSuggestions(
-    draft: TextFieldValue,
+    query: String?,
     members: List<ChannelMember>,
     online: Set<String>,
     allowChannel: Boolean,
+    refs: List<ChatRefDto>,
     onPick: (ChannelMember) -> Unit,
     onPickChannel: () -> Unit,
+    onPickRef: (ChatRefDto) -> Unit,
 ) {
-    val q = mentionQuery(draft) ?: return
-    val matches = remember(q, members) { members.filter { it.fullName.contains(q, ignoreCase = true) } }
+    val q = query ?: return
+    // Con tareas, eventos y demás en la lista, las personas no se las llevan de la pantalla.
+    val matches = remember(q, members, refs.isEmpty()) {
+        val all = members.filter { it.fullName.contains(q.trim(), ignoreCase = true) }
+        if (refs.isEmpty()) all else all.take(if (q.isBlank()) MENTION_PEOPLE_IDLE else MENTION_PEOPLE_WITH_REFS)
+    }
+    val groups = remember(refs) { ChatRefs.grouped(refs) }
     val channelMatch = allowChannel && "canal".startsWith(q.lowercase())
-    if (matches.isEmpty() && !channelMatch) return
+    if (matches.isEmpty() && !channelMatch && groups.isEmpty()) return
     Surface(
         color = ArtaColors.BgElev,
         shape = RoundedCornerShape(Space.M),
@@ -1455,7 +1590,7 @@ private fun MentionSuggestions(
         border = BorderStroke(1.dp, ArtaColors.Line),
         modifier = Modifier.fillMaxWidth().padding(horizontal = Space.S, vertical = Space.XS),
     ) {
-        LazyColumn(Modifier.heightIn(max = 240.dp)) {
+        LazyColumn(Modifier.heightIn(max = 280.dp)) {
             if (channelMatch) {
                 item(key = "@canal") {
                     Row(
@@ -1485,6 +1620,17 @@ private fun MentionSuggestions(
                         }
                     }
                 }
+            }
+            groups.forEach { group ->
+                item(key = "g:${group.kind}") {
+                    Text(
+                        group.title.uppercase(Locale.forLanguageTag("es-MX")),
+                        style = ArtaType.Cap,
+                        color = ArtaColors.Tertiary,
+                        modifier = Modifier.padding(start = Space.L, end = Space.L, top = Space.M, bottom = Space.XS),
+                    )
+                }
+                items(group.items, key = { "r:" + it.key }) { r -> RefSuggestionRow(r) { onPickRef(r) } }
             }
         }
     }
@@ -1537,6 +1683,7 @@ private fun MessageActions(
     mine: Boolean,
     canManage: Boolean,
     inThread: Boolean,
+    canCreateTask: Boolean,
     onDismiss: () -> Unit,
     onReact: (String) -> Unit,
     onMoreReactions: () -> Unit,
@@ -1545,6 +1692,7 @@ private fun MessageActions(
     onCopy: () -> Unit,
     onSave: () -> Unit,
     onPin: () -> Unit,
+    onCreateTask: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
     onShare: () -> Unit,
@@ -1561,6 +1709,7 @@ private fun MessageActions(
         SheetItem(Icons.AutoMirrored.Outlined.Reply, "Responder") { onReply(); onDismiss() }
         if (!inThread) SheetItem(Icons.Outlined.Forum, "Responder en hilo") { onThread(); onDismiss() }
         if (m.body.isNotBlank()) SheetItem(Icons.Outlined.ContentCopy, "Copiar texto") { onCopy(); onDismiss() }
+        if (canCreateTask && m.body.isNotBlank()) SheetItem(Icons.Outlined.TaskAlt, "Crear tarea") { onCreateTask(); onDismiss() }
         SheetItem(
             if (m.saved) Icons.Outlined.BookmarkRemove else Icons.Outlined.BookmarkBorder,
             if (m.saved) "Quitar de guardados" else "Guardar mensaje",

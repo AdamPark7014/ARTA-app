@@ -67,8 +67,11 @@ object ActiveConversation {
  *   «Marcar como leído», acceso de conversación (Android 11+) y resumen
  *   «N conversaciones» cuando hay varias.
  * - Procesos (OC, formatos, tareas…): `BigTextStyle`, id estable por `tag` para
- *   actualizar en su sitio sin volver a sonar, «Marcar como leído» y agrupados por
- *   `thread_id` con tarjeta resumen («3 avisos de Noche de Boleros»).
+ *   actualizar en su sitio sin volver a sonar, los botones del caso ([PushButton]),
+ *   «Marcar como leído» y agrupados por `thread_id` con tarjeta resumen
+ *   («3 avisos de Noche de Boleros»).
+ * - Una tarea arrobada en un mensaje trae `channel_id` pero se pinta como proceso: sus
+ *   botones actúan sobre la tarea, no sobre la conversación.
  * - `passive`: entra a la bandeja sin sonar, sin aviso emergente y sin encender la pantalla.
  * - Silenciosos: `chat.read` quita el aviso de lo que ya se leyó en otro lado.
  */
@@ -126,7 +129,12 @@ object ArtaPushRenderer {
             }
             ArtaNotifications.ensureChannels(app)
             if (!canPost(app)) return
-            if (payload.isChat) renderChat(app, payload) else renderEvent(app, payload)
+            when {
+                payload.isChat && !payload.hasTaskButton -> renderChat(app, payload)
+                // La conversación está en pantalla: ahí mismo se ve la tarjeta con su botón.
+                ActiveConversation.isOpen(payload.chatChannelId) -> Unit
+                else -> renderEvent(app, payload)
+            }
         } catch (e: Exception) {
             Log.w(TAG, "No se pudo mostrar la notificación: ${e.message}", e)
         }
@@ -443,8 +451,18 @@ object ArtaPushRenderer {
         if (p.body.isNotBlank()) {
             builder.setContentText(p.body).setStyle(NotificationCompat.BigTextStyle().setBigContentTitle(title).bigText(p.body))
         }
-        // Sin aprobar desde la notificación: «Abrir» lleva a la pantalla donde se decide.
-        builder.addAction(eventAction(app, notificationId, p))
+        // Dinero y firmas nunca se aprueban aquí: «Revisar» lleva a la pantalla donde se decide.
+        val buttons = p.buttons
+        if (buttons.isEmpty()) builder.addAction(eventAction(app, notificationId, p, if (p.isApproval) "Abrir" else "Ver"))
+        buttons.forEach { button ->
+            builder.addAction(
+                when (button) {
+                    PushButton.DELIVER -> deliverAction(app, notificationId, p)
+                    PushButton.APPROVE -> approveAction(app, notificationId, p)
+                    PushButton.REVIEW, PushButton.OPEN -> eventAction(app, notificationId, p, button.label)
+                },
+            )
+        }
         if (p.notificationId.isNotBlank()) builder.addAction(markNoticeReadAction(app, notificationId, p.notificationId))
         notify(app, notificationId, builder.build())
         rebuildEventSummary(app, group, posted = PostedEvent(notificationId, channelId, summaryLine(title, p.body), p.body, p.threadTitle, p.entity))
@@ -468,7 +486,78 @@ object ArtaPushRenderer {
             .build()
     }
 
-    private fun eventAction(app: Context, notificationId: Int, p: PushPayload): NotificationCompat.Action {
+    private fun taskIntent(app: Context, action: String, androidId: Int, p: PushPayload) =
+        Intent(app, NotificationActionReceiver::class.java).apply {
+            this.action = action
+            putExtra(NotificationActionReceiver.EXTRA_TASK_ID, p.targetId)
+            putExtra(NotificationActionReceiver.EXTRA_ANDROID_ID, androidId)
+            putExtra(NotificationActionReceiver.EXTRA_NOTICE_ID, p.notificationId)
+        }
+
+    /** «Entregar» con texto, igual que «Responder»: la nota viaja sin abrir la app. */
+    private fun deliverAction(app: Context, androidId: Int, p: PushPayload): NotificationCompat.Action {
+        val input = RemoteInput.Builder(NotificationActionReceiver.KEY_NOTE).setLabel("¿Qué hiciste?").build()
+        // Mutable a propósito: el sistema escribe el texto de RemoteInput en el intent.
+        val flags = PendingIntent.FLAG_UPDATE_CURRENT or
+            (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) PendingIntent.FLAG_MUTABLE else 0)
+        val pi = PendingIntent.getBroadcast(app, androidId * 31 + 5, taskIntent(app, NotificationActionReceiver.ACTION_TASK_DELIVER, androidId, p), flags)
+        return NotificationCompat.Action.Builder(IconCompat.createWithResource(app, R.drawable.ic_action_reply), PushButton.DELIVER.label, pi)
+            .addRemoteInput(input)
+            .setAllowGeneratedReplies(false)
+            .setShowsUserInterface(false)
+            .setAuthenticationRequired(true)
+            .build()
+    }
+
+    private fun approveAction(app: Context, androidId: Int, p: PushPayload): NotificationCompat.Action {
+        val pi = PendingIntent.getBroadcast(
+            app,
+            androidId * 31 + 6,
+            taskIntent(app, NotificationActionReceiver.ACTION_TASK_APPROVE, androidId, p),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+        return NotificationCompat.Action.Builder(IconCompat.createWithResource(app, R.drawable.ic_action_read), PushButton.APPROVE.label, pi)
+            .setShowsUserInterface(false)
+            .setAuthenticationRequired(true)
+            .build()
+    }
+
+    /**
+     * La entrega o el visto bueno no salieron: el aviso (mismo id, así se quita la espera de
+     * Android) lo dice y lleva a la tarea para hacerlo ahí.
+     */
+    fun taskActionFailed(context: Context, androidId: Int, taskId: String, title: String) {
+        val app = context.applicationContext
+        try {
+            val group = activeNotifications(app).firstOrNull { it.id == androidId }?.notification?.group
+            val text = "Abre la tarea para intentarlo de nuevo."
+            val open = PendingIntent.getActivity(
+                app,
+                androidId * 31 + 7,
+                Intent(app, MainActivity::class.java).apply {
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                    putExtra(EXTRA_URL, "/tasks/$taskId")
+                },
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            )
+            val builder = baseBuilder(app, ArtaNotifications.CHANNEL_TASKS, System.currentTimeMillis())
+                .setContentTitle(title)
+                .setContentText(text)
+                .setStyle(NotificationCompat.BigTextStyle().setBigContentTitle(title).bigText(text))
+                .setCategory(NotificationCompat.CATEGORY_ERROR)
+                .setSubText(ArtaNotifications.label(ArtaNotifications.CHANNEL_TASKS))
+                .setOnlyAlertOnce(true)
+                .setContentIntent(open)
+                .addAction(NotificationCompat.Action.Builder(IconCompat.createWithResource(app, R.drawable.ic_stat_arta), "Abrir", open).setShowsUserInterface(true).build())
+                .setPublicVersion(publicVersion(app, ArtaNotifications.CHANNEL_TASKS, "Nuevo aviso"))
+            group?.let { builder.setGroup(it) }
+            notify(app, androidId, builder.build())
+        } catch (e: Exception) {
+            Log.w(TAG, "No se pudo avisar del fallo: ${e.message}")
+        }
+    }
+
+    private fun eventAction(app: Context, notificationId: Int, p: PushPayload, label: String): NotificationCompat.Action {
         val intent = Intent(app, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
             if (p.url.isNotBlank()) putExtra(EXTRA_URL, p.url)
@@ -484,7 +573,6 @@ object ArtaPushRenderer {
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
-        val label = if (p.isApproval) "Abrir" else "Ver"
         return NotificationCompat.Action.Builder(IconCompat.createWithResource(app, R.drawable.ic_stat_arta), label, pi)
             .setShowsUserInterface(true)
             .build()

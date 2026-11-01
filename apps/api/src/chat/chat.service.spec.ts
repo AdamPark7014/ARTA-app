@@ -453,6 +453,48 @@ describe('Chat v2', () => {
   });
 });
 
+describe('Avisos de lo arrobado', () => {
+  it('el dueño de una tarea arrobada recibe su aviso, no además el push normal del mensaje', async () => {
+    const prisma = {
+      chatChannel: { findFirst: jest.fn().mockResolvedValue(channel()), update: jest.fn() },
+      chatChannelMember: {
+        updateMany: jest.fn(),
+        findMany: jest.fn().mockResolvedValue([
+          { userId: 'u1', mutedUntil: null },
+          { userId: 'dueno', mutedUntil: null },
+          { userId: 'otro', mutedUntil: null },
+        ]),
+      },
+      chatUserBlock: { findMany: jest.fn().mockResolvedValue([]), findFirst: jest.fn().mockResolvedValue(null) },
+      chatMessage: {
+        create: jest.fn().mockResolvedValue(
+          messageRow({ refs: [{ kind: 'task', targetId: 't1', label: 'Cotizar luces' }], body: 'mira @Cotizar luces' }),
+        ),
+      },
+      chatSavedMessage: { findMany: jest.fn().mockResolvedValue([]) },
+      user: { findMany: jest.fn().mockResolvedValue([]) },
+    };
+    const notifications = { pushOnly: jest.fn(), notifyMany: jest.fn().mockResolvedValue([]) };
+    const realtime = { emitToChannel: jest.fn(), emitToUsers: jest.fn() };
+    const refs = {
+      forPost: jest.fn().mockResolvedValue([{ kind: 'task', targetId: 't1', label: 'Cotizar luces' }]),
+      hydrate: jest.fn(async (_u: unknown, m: unknown) => m),
+      planFor: jest.fn().mockResolvedValue(new Map([['dueno', { role: 'task_owner', label: 'Cotizar luces', link: '/tasks?task=t1', type: 'chat.ref.task' }]])),
+      sendPlan: jest.fn(),
+    };
+    const service = new ChatService(prisma as never, notifications as never, realtime as never, refs as never);
+    await service.postMessage(
+      { id: 'u1', roleKey: 'produccion', organizationId: ORG, entities: ['ARTA'], fullName: 'Ana' },
+      'c1',
+      { body: 'mira @Cotizar luces', refs: [{ kind: 'task', id: 't1' }] },
+    );
+    await flush();
+    const pushed = notifications.pushOnly.mock.calls.map((call) => call[0]);
+    expect(pushed).toEqual(['otro']);
+    expect(refs.sendPlan).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('Reportar y bloquear', () => {
   const luis = { id: 'u2', fullName: 'Luis Pérez', title: null };
 

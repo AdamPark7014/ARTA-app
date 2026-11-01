@@ -72,6 +72,7 @@ import com.artaproducciones.ops.data.api.ModulesClient
 import com.artaproducciones.ops.data.api.ModulesSession
 import com.artaproducciones.ops.data.api.TaskEventRef
 import com.artaproducciones.ops.data.api.userMessage
+import com.artaproducciones.ops.ui.chat.RefBacklinksSection
 import com.artaproducciones.ops.ui.common.Avatar
 import com.artaproducciones.ops.ui.theme.ArtaColors
 import com.artaproducciones.ops.ui.theme.ArtaType
@@ -195,9 +196,12 @@ fun EventDetailScreen(eventId: String, nav: ModuleNav) {
                             )
                         }
                         when (tab) {
-                            NativeTab.SUMMARY -> summaryItems(ev, onOpenChecklist = { id ->
-                                nav.openWeb("/events/$eventId?tab=checklists&checklist=$id", "Formatos")
-                            })
+                            NativeTab.SUMMARY -> {
+                                summaryItems(ev, onOpenChecklist = { id ->
+                                    nav.openWeb("/events/$eventId?tab=checklists&checklist=$id", "Formatos")
+                                })
+                                item(key = "mencionado") { RefBacklinksSection("event", eventId, onOpen = { nav.openWeb(it) }) }
+                            }
                             NativeTab.TASKS -> {
                                 val today = LocalDate.now()
                                 val ref = TaskEventRef(ev.id, ev.name, ev.status, ev.entity)
@@ -414,7 +418,7 @@ private fun Fact(item: FactItem, modifier: Modifier = Modifier) {
 
 /** Barra de avance de 3 dp del sistema: acento sobre la línea (sin verde al llegar al 100 %). */
 @Composable
-private fun ProgressLine(value: Float, modifier: Modifier = Modifier) {
+internal fun ProgressLine(value: Float, modifier: Modifier = Modifier) {
     val t = LocalArtaTokens.current
     Box(modifier.fillMaxWidth().height(3.dp).clip(RoundedCornerShape(50)).background(t.line)) {
         Box(Modifier.fillMaxWidth(value.coerceIn(0f, 1f)).fillMaxHeight().clip(RoundedCornerShape(50)).background(t.accentBrush))

@@ -31,14 +31,17 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.Event
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -60,18 +63,24 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
 import com.artaproducciones.ops.data.api.ModulesClient
 import com.artaproducciones.ops.data.api.ModulesSession
 import com.artaproducciones.ops.data.api.TaskDto
 import com.artaproducciones.ops.data.api.userMessage
 import com.artaproducciones.ops.ui.chat.ChatMedia
+import com.artaproducciones.ops.ui.chat.RefBacklinksSection
 import com.artaproducciones.ops.ui.common.Avatar
+import com.artaproducciones.ops.ui.common.plainText
 import com.artaproducciones.ops.ui.theme.ArtaColors
 import com.artaproducciones.ops.ui.theme.Button
 import com.artaproducciones.ops.ui.theme.LocalArtaTokens
@@ -81,6 +90,9 @@ import kotlinx.coroutines.launch
 import okhttp3.MultipartBody
 
 private val OPEN_STATUSES = setOf("OPEN", "IN_PROGRESS", "BLOCKED")
+
+/** Tope del API para un comentario. */
+private const val COMMENT_MAX = 2000
 
 /** Qué puede hacer la persona con esta tarea: mismas reglas que la web y el API. */
 private class TaskAbilities(t: TaskDto, perms: ModulesPerms) {
@@ -139,6 +151,7 @@ fun TaskDetailScreen(taskId: String, nav: ModuleNav) {
     var delivering by remember { mutableStateOf(false) }
     var rejecting by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
+    var comment by rememberSaveable(taskId) { mutableStateOf("") }
 
     LaunchedEffect(taskId, tick) {
         try {
@@ -189,7 +202,8 @@ fun TaskDetailScreen(taskId: String, nav: ModuleNav) {
     val p = perms
     val can = if (t != null && p != null) TaskAbilities(t, p) else null
 
-    Column(Modifier.fillMaxSize()) {
+    // El campo de comentar va a media pantalla: con el teclado abierto, la lista se recorre y lo deja a la vista.
+    Column(Modifier.fillMaxSize().imePadding()) {
         DetailTopBar("Tarea", onBack = { nav.back() }) {
             if (can != null && (can.edit || can.delete)) {
                 Column {
@@ -229,6 +243,17 @@ fun TaskDetailScreen(taskId: String, nav: ModuleNav) {
                         onToggleBlock = {
                             if (t.status == "BLOCKED") setStatus("OPEN", "Tarea desbloqueada") else setStatus("BLOCKED", "Tarea bloqueada")
                         },
+                        comment = comment,
+                        onCommentChange = { comment = it.take(COMMENT_MAX) },
+                        onSendComment = {
+                            val text = comment.trim()
+                            if (text.isNotEmpty()) {
+                                act("comment", null) {
+                                    ModulesClient.api.commentTask(taskId, mapOf("body" to text)).also { comment = "" }
+                                }
+                            }
+                        },
+                        onOpenLink = { href -> nav.openWeb(href) },
                     )
                 }
             }
@@ -319,6 +344,10 @@ private fun TaskBody(
     onAddFiles: () -> Unit,
     onStart: () -> Unit,
     onToggleBlock: () -> Unit,
+    comment: String,
+    onCommentChange: (String) -> Unit,
+    onSendComment: () -> Unit,
+    onOpenLink: (String) -> Unit,
 ) {
     val scroll = rememberScrollState()
     Column(
@@ -449,8 +478,14 @@ private fun TaskBody(
             }
         }
 
+        RefBacklinksSection("task", task.id, onOpen = onOpenLink)
+
+        if (task.activities.isNotEmpty() || !can.closed) {
+            SectionTitle("Historial", count = task.activities.size.takeIf { it > 0 })
+        }
+        // El API no deja comentar con el evento cerrado.
+        if (!can.closed) TaskCommentField(comment, busy == "comment", enabled = busy == null, onCommentChange, onSendComment)
         if (task.activities.isNotEmpty()) {
-            SectionTitle("Historial", count = task.activities.size)
             // Línea de tiempo: punto alineado al título de cada cambio y un hilo fino que los une.
             val acts = task.activities.asReversed()
             val line = ArtaColors.LineStrong
@@ -475,8 +510,13 @@ private fun TaskBody(
                         Spacer(Modifier.width(12.dp))
                         Column(Modifier.weight(1f).padding(bottom = if (last) 0.dp else 14.dp)) {
                             Text(TASK_ACTION_LABEL[a.action] ?: a.action, fontWeight = FontWeight.Medium)
-                            a.detail?.takeIf { it.isNotBlank() && a.action != "status_changed" }?.let {
-                                Text(it, style = MaterialTheme.typography.bodySmall, color = ArtaColors.Muted)
+                            if (a.action == "comment") {
+                                // Lo que alguien escribió se lee como texto, no como detalle del sistema.
+                                a.detail?.takeIf { it.isNotBlank() }?.let { Text(plainText(it), style = MaterialTheme.typography.bodyMedium) }
+                            } else {
+                                a.detail?.takeIf { it.isNotBlank() && a.action != "status_changed" }?.let {
+                                    Text(it, style = MaterialTheme.typography.bodySmall, color = ArtaColors.Muted)
+                                }
                             }
                             if (a.action == "status_changed") {
                                 Text(statusName(a.detail), style = MaterialTheme.typography.bodySmall, color = ArtaColors.Muted)
@@ -493,6 +533,39 @@ private fun TaskBody(
         }
         // Sin barra de acciones abajo, lo último no se queda debajo de la barra de gestos.
         if (!(can.review || can.deliver || can.markDone || can.reopen)) Spacer(Modifier.navigationBarsPadding())
+    }
+}
+
+/** Campo para comentar: queda en el historial y avisa a quienes tienen la tarea y a quien la pidió. */
+@Composable
+private fun TaskCommentField(value: String, sending: Boolean, enabled: Boolean, onChange: (String) -> Unit, onSend: () -> Unit) {
+    val t = LocalArtaTokens.current
+    val canSend = value.isNotBlank() && enabled
+    Row(Modifier.padding(horizontal = 16.dp).fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
+        OutlinedTextField(
+            value = value,
+            onValueChange = onChange,
+            placeholder = { Text("Escribe un comentario") },
+            maxLines = 4,
+            shape = t.itemShape,
+            keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
+            modifier = Modifier.weight(1f),
+        )
+        Spacer(Modifier.width(8.dp))
+        IconButton(
+            onClick = onSend,
+            enabled = canSend,
+            modifier = Modifier
+                .padding(bottom = 4.dp)
+                .clip(CircleShape)
+                .background(if (canSend) t.accentBrush else SolidColor(t.fill)),
+        ) {
+            if (sending) {
+                CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = t.tertiary)
+            } else {
+                Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Enviar comentario", tint = if (canSend) t.onAccent else t.tertiary)
+            }
+        }
     }
 }
 

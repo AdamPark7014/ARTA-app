@@ -459,6 +459,7 @@ private fun SignedInNav(user: UserDto, pendingLink: StateFlow<DeepLink?>, onLink
                 onBack = { nav.popBackStack() },
                 openThread = { rootId -> nav.navigate("thread/$channelId/$rootId") },
                 openChat = { id -> nav.navigate("chat/$id") },
+                openLink = { href -> moduleNav.openWeb(href) },
             )
         }
         composable(
@@ -475,6 +476,7 @@ private fun SignedInNav(user: UserDto, pendingLink: StateFlow<DeepLink?>, onLink
                 onBack = { nav.popBackStack() },
                 openThread = {},
                 openChat = { id -> nav.navigate("chat/$id") },
+                openLink = { href -> moduleNav.openWeb(href) },
             )
         }
     }

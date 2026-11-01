@@ -88,6 +88,8 @@ internal class DemoInterceptor(context: Context) : Interceptor {
         return when {
             s.size == 4 && s[0] == "chat" && s[1] == "messages" && s[3] == "thread" -> thread(s[2])
             path == "chat/search" -> search(url.queryParameter("q").orEmpty(), url.queryParameter("channelId"), entity)
+            path == "chat/refs/search" -> refSearch(url.queryParameter("q").orEmpty())
+            path == "chat/refs/backlinks" -> """{"links":[]}"""
             s.size == 4 && s[0] == "chat" && s[1] == "channels" && s[3] == "messages" -> EMPTY_PAGE
             s.size == 4 && s[0] == "chat" && s[1] == "channels" && s[3] == "pins" -> """{"messages":[]}"""
             path == "analytics/purchase-orders" -> """{"orders":[]}"""
@@ -143,6 +145,7 @@ internal class DemoInterceptor(context: Context) : Interceptor {
         return when {
             // Chat
             method == "POST" && s.size == 4 && s[0] == "chat" && s[1] == "channels" && s[3] == "messages" -> postMessage(s[2], body)
+            path == "chat/refs/cards" -> JSONObject().put("refs", JSONArray(refInputs(body).map { (kind, id) -> refCard(kind, id) })).toString()
             s.size in 3..4 && s[0] == "chat" && s[1] == "messages" -> messageAction(method, s[2], s.getOrNull(3), body)
             path == "chat/prefs" -> JSONObject().put("dndUntil", body.opt("dndUntil") ?: JSONObject.NULL).toString()
             path == "chat/upload" -> upload(request)?.toString()
@@ -316,6 +319,7 @@ internal class DemoInterceptor(context: Context) : Interceptor {
             .put("saved", false)
             .put("deleted", false)
             .put("clientId", body.opt("clientId") ?: JSONObject.NULL)
+            .put("refs", JSONArray(refInputs(body).map { (kind, id) -> refCard(kind, id) }))
         if (parentId != null) {
             store.put(repliesKey(parentId), (store.arr(repliesKey(parentId)) ?: JSONArray()).put(m))
             updateMessage(parentId) { it.put("replyCount", it.optInt("replyCount") + 1) }
@@ -327,6 +331,57 @@ internal class DemoInterceptor(context: Context) : Interceptor {
             changeChannel(channelId) { it.put("lastMessageAt", createdAt).put("lastMessagePreview", preview) }
         }
         return m.toString()
+    }
+
+    // ─── Referencias: tareas y eventos de las fixtures (lo demás, «ya no existe») ──
+
+    private fun refInputs(body: JSONObject): List<Pair<String, String>> =
+        body.optJSONArray("refs").objects().mapNotNull { r -> r.str("id")?.let { id -> r.optString("kind") to id } }
+
+    private fun refCard(kind: String, id: String): JSONObject {
+        val card = JSONObject().put("kind", kind).put("id", id).put("resolved", true)
+        val task = if (kind == "task") findTask(id) else null
+        val event = if (kind == "event") store.arr("events").objects().firstOrNull { it.optString("id") == id } else null
+        return when {
+            task != null -> {
+                val status = task.optString("status")
+                val done = status == "DONE"
+                val mine = meId() in task.optJSONArray("assigneeIds").strings()
+                val actions = JSONArray()
+                if (!done && status != "PENDING_APPROVAL" && mine) actions.put(if (task.str("createdById") == meId()) "complete" else "deliver")
+                if (status == "PENDING_APPROVAL" && task.str("createdById") == meId()) actions.put("approve")
+                val eventId = task.str("eventId")
+                card.put("label", task.optString("title"))
+                    .put("title", task.optString("title"))
+                    .put("canOpen", true)
+                    .put("href", if (eventId != null) "/events/$eventId?tab=tasks&task=$id" else "/tasks?task=$id")
+                    .put("status", status)
+                    .put("statusLabel", DEMO_TASK_STATUS[status] ?: status)
+                    .put("tone", if (done) "done" else if (actions.length() > 0) "action" else "info")
+                    .put("subtitle", task.optJSONObject("event")?.str("name") ?: JSONObject.NULL)
+                    .put("people", task.optJSONArray("assignees") ?: JSONArray())
+                    .put("actions", actions)
+            }
+            event != null -> card.put("label", event.optString("name"))
+                .put("title", event.optString("name"))
+                .put("canOpen", true)
+                .put("href", "/events/$id")
+                .put("status", event.optString("status"))
+                .put("tone", "info")
+                .put("subtitle", event.str("venue") ?: JSONObject.NULL)
+            else -> card.put("label", "").put("missing", true).put("canOpen", false)
+        }
+    }
+
+    private fun refSearch(q: String): String {
+        val needle = q.trim().lowercase()
+        fun hit(text: String) = needle.isEmpty() || text.lowercase().contains(needle)
+        val tasks = taskListKeys.flatMap { store.arr(it).objects() }.distinctBy { it.optString("id") }
+            .filter { it.optString("status") != "DONE" && hit(it.optString("title")) }.take(6)
+            .map { refCard("task", it.optString("id")) }
+        val events = store.arr("events").objects().filter { hit(it.optString("name")) }.take(4)
+            .map { refCard("event", it.optString("id")) }
+        return JSONObject().put("results", JSONArray(tasks + events)).toString()
     }
 
     private fun messageAction(method: String, id: String, action: String?, body: JSONObject): String? = when {
@@ -530,6 +585,15 @@ internal class DemoInterceptor(context: Context) : Interceptor {
             changeTask(id) { t -> t.put("evidences", (t.optJSONArray("evidences") ?: JSONArray()).put(evidence)) }
             evidence.toString()
         }
+        "comments" -> changeTask(id) { t ->
+            val activity = JSONObject()
+                .put("id", newId())
+                .put("action", "comment")
+                .put("detail", body.str("body").orEmpty())
+                .put("createdAt", now())
+                .put("actor", person(meId()))
+            t.put("activities", (t.optJSONArray("activities") ?: JSONArray()).put(activity))
+        }
         else -> OK
     }
 
@@ -576,6 +640,13 @@ internal class DemoInterceptor(context: Context) : Interceptor {
         private val JSON = "application/json; charset=utf-8".toMediaType()
         private val MESSAGES = Regex("^chat/channels/[^/]+/messages$")
         private const val BLOCKS = "chat/blocks"
+        private val DEMO_TASK_STATUS = mapOf(
+            "OPEN" to "Pendiente",
+            "IN_PROGRESS" to "En curso",
+            "PENDING_APPROVAL" to "Por revisar",
+            "BLOCKED" to "Bloqueada",
+            "DONE" to "Terminada",
+        )
 
         /** Endpoints cuyo DTO es una lista: sin fixture contestan `[]` en vez de 404. */
         private val LISTS = setOf(

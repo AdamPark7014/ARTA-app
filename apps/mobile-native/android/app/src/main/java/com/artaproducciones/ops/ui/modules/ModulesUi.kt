@@ -220,6 +220,7 @@ val TASK_ACTION_LABEL = mapOf(
     "approved" to "Aprobada",
     "rejected" to "Rechazada — corrección pedida",
     "evidence_added" to "Evidencia agregada",
+    "comment" to "Comentario",
     "deleted" to "Eliminada",
 )
 

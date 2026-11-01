@@ -37,10 +37,21 @@ data class PushPayload(
     /** Arta o Auditorio; null = de la cuenta o de un directo. */
     val entity: BizEntity? = null,
     val passive: Boolean = false,
+    /** Botones que pide el API (`data.actions`, docs/AVISOS.md § Casos); vacío en un API viejo. */
+    val actions: List<String> = emptyList(),
+    /** De qué trata el aviso: sobre eso actúan sus botones (la liga dice dónde se abre). */
+    val targetKind: String = "",
+    val targetId: String = "",
 ) {
     enum class Kind { CHAT, EVENT }
 
     val isChat: Boolean get() = kind == Kind.CHAT
+
+    /** Botones del aviso. Vacío: los de siempre. */
+    val buttons: List<PushButton> get() = PushButton.forActions(actions, targetKind, targetId)
+
+    /** Lleva «Entregar» o «Aprobar»: actúa sobre la tarea, así que es un aviso propio aunque venga de un mensaje. */
+    val hasTaskButton: Boolean get() = buttons.any { it.actsOnTask }
 
     /** Pide una decisión (autorizar o revisar): lleva la acción «Abrir» a aprobaciones. */
     val isApproval: Boolean get() = isApprovalType(type)
@@ -51,10 +62,12 @@ data class PushPayload(
     /**
      * Qué identifica a este aviso para descartar la re-entrega de FCM. En un aviso de proceso cuenta
      * también el texto: una ráfaga llega con el mismo id y texto nuevo («3 archivos»), y esa sí se pinta.
+     * El de una tarea arrobada trae el mismo `message_id` que el push del mensaje: no es repetido.
      */
     val dedupeKey: String?
         get() = when {
             silent -> null
+            hasTaskButton -> "t:$targetId:$notificationId:$messageId:$title:$body"
             messageId.isNotBlank() -> "m:$messageId"
             notificationId.isNotBlank() -> "n:$notificationId:$title:$body"
             else -> null
@@ -99,6 +112,9 @@ data class PushPayload(
                 silent = v("silent") == "1",
                 entity = BizEntity.of(v("entity")),
                 passive = v("passive") == "1",
+                actions = v("actions").split(',').map { it.trim() }.filter { it.isNotEmpty() },
+                targetKind = v("target_kind"),
+                targetId = v("target_id"),
             )
         }
 
@@ -107,6 +123,42 @@ data class PushPayload(
             raw.toLongOrNull()?.let { n -> return if (n < 100_000_000_000L) n * 1000L else n }
             return runCatching { java.time.Instant.parse(raw).toEpochMilli() }.getOrNull()
                 ?: runCatching { java.time.OffsetDateTime.parse(raw).toInstant().toEpochMilli() }.getOrNull()
+        }
+    }
+}
+
+/**
+ * Botones de un aviso según lo que pide el API (docs/AVISOS.md § Casos). Sin Android: se prueba en la JVM.
+ * «Responder» no está aquí: es de la conversación y lo pone [ArtaPushRenderer] en los avisos de chat.
+ */
+enum class PushButton(val label: String, val actsOnTask: Boolean = false) {
+    /** Pide una nota ahí mismo y hace `POST /tasks/:id/submit`. */
+    DELIVER("Entregar", actsOnTask = true),
+
+    /** `POST /tasks/:id/approve` con un toque. */
+    APPROVE("Aprobar", actsOnTask = true),
+
+    /** Dinero o firma: abre la pantalla, donde se ve el monto y el comprobante. Nunca aprueba. */
+    REVIEW("Revisar"),
+    OPEN("Abrir"),
+    ;
+
+    companion object {
+        /**
+         * Lo que actúa ahí mismo solo existe sobre una tarea: un `task.approve` que apuntara a una OC
+         * no aprobaría dinero desde el aviso, se queda sin ese botón. Lo que esta versión no conoce se ignora.
+         */
+        fun forActions(actions: List<String>, targetKind: String, targetId: String): List<PushButton> {
+            val onTask = targetKind == "task" && targetId.isNotBlank()
+            return actions.mapNotNull { action ->
+                when (action) {
+                    "task.deliver" -> DELIVER.takeIf { onTask }
+                    "task.approve" -> APPROVE.takeIf { onTask }
+                    "review" -> REVIEW
+                    "open" -> OPEN
+                    else -> null
+                }
+            }.distinct()
         }
     }
 }

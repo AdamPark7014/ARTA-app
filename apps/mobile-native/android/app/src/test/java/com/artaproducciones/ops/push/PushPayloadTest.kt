@@ -132,6 +132,72 @@ class PushPayloadTest {
         assertEquals("2 avisos", PushGrouping.summaryTitle(2, null))
     }
 
+    private fun buttons(actions: String, kind: String = "", id: String = "") =
+        PushPayload.from(mapOf("actions" to actions, "target_kind" to kind, "target_id" to id)).buttons
+
+    /** Los casos de docs/AVISOS.md: lo que manda `pushActionsFor` del API. */
+    @Test
+    fun theButtonsFollowEachCase() {
+        assertEquals(listOf(PushButton.DELIVER, PushButton.OPEN), buttons("task.deliver,open", "task", "t1"))
+        assertEquals(listOf(PushButton.APPROVE, PushButton.OPEN), buttons("task.approve,open", "task", "t1"))
+        assertEquals(listOf(PushButton.REVIEW), buttons("review", "po", "p1"))
+        assertEquals(listOf(PushButton.OPEN), buttons("open", "event", "e1"))
+        assertEquals(listOf("Entregar", "Aprobar", "Revisar", "Abrir"), PushButton.entries.map { it.label })
+    }
+
+    /** Sobre dinero o firmas nada se aprueba desde el aviso, aunque el servidor lo pidiera. */
+    @Test
+    fun onlyATaskCanBeActedOnFromTheNotice() {
+        assertEquals(emptyList<PushButton>(), buttons("task.approve", "po", "p1"))
+        assertEquals(emptyList<PushButton>(), buttons("task.deliver", "advance", "a1"))
+        assertEquals(listOf(PushButton.OPEN), buttons("task.approve,open", "task", ""))
+        assertFalse(PushButton.REVIEW.actsOnTask)
+        assertFalse(PushButton.OPEN.actsOnTask)
+    }
+
+    @Test
+    fun anOldApiOrAnUnknownActionLeavesTheUsualButtons() {
+        val old = PushPayload.from(mapOf("type" to "po.requested", "tag" to "arta-1"))
+        assertEquals(emptyList<PushButton>(), old.buttons)
+        assertFalse(old.hasTaskButton)
+        assertEquals(emptyList<PushButton>(), buttons("", "task", "t1"))
+        assertEquals(emptyList<PushButton>(), buttons("firmar,algo-nuevo", "task", "t1"))
+        // `reply` lo pone el chat, no esta lista.
+        assertEquals(listOf(PushButton.OPEN), buttons("reply, open ", "message", "m1"))
+    }
+
+    /**
+     * Una tarea arrobada trae `channel_id` y el mismo `message_id` que el push del mensaje: si no se
+     * distingue, llega como repetido y el botón «Entregar» nunca aparece.
+     */
+    @Test
+    fun aTaskMentionIsItsOwnNoticeNotAChatRepeat() {
+        val message = PushPayload.from(mapOf("kind" to "chat", "channel_id" to "c1", "message_id" to "m1", "type" to "chat.message"))
+        val mention = PushPayload.from(
+            mapOf(
+                "kind" to "event",
+                "channel_id" to "c1",
+                "message_id" to "m1",
+                "notification_id" to "n1",
+                "type" to "chat.ref.task",
+                "actions" to "task.deliver,open",
+                "target_kind" to "task",
+                "target_id" to "t1",
+            ),
+        )
+        assertTrue(mention.isChat)
+        assertTrue(mention.hasTaskButton)
+        assertFalse(message.hasTaskButton)
+        assertNotEquals(message.dedupeKey, mention.dedupeKey)
+        // La re-entrega de FCM del mismo aviso sí se descarta.
+        assertEquals(mention.dedupeKey, PushPayload.from(mention.raw).dedupeKey)
+
+        // Lo arrobado que solo abre (una OC) se apila con su conversación, como siempre.
+        val po = PushPayload.from(mapOf("channel_id" to "c1", "message_id" to "m1", "actions" to "open", "target_kind" to "po", "target_id" to "p1"))
+        assertFalse(po.hasTaskButton)
+        assertEquals("m:m1", po.dedupeKey)
+    }
+
     @Test
     fun onlyWhatIsDecidedThereOpensApprovals() {
         assertTrue(PushPayload.from(mapOf("type" to "po.requested")).opensApprovals)
