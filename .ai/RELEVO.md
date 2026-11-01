@@ -4,7 +4,7 @@
 - **Fecha:** 2026-11-01
 - **Rama:** main
   (Adam es el único programador).
-- **Producción:** PROD_HASH desplegado desde `main` el 2026-11-01 (`bash deploy/update.sh` en `/var/www/arta-app`, log
+- **Producción:** `34e4ace` desplegado desde `main` el 2026-11-01 (`bash deploy/update.sh` en `/var/www/arta-app`, log
   `/root/arta-deploy-20261101-*.log`; respaldo automático en `/root/arta-backups/`). Disco al 84 %: al 90 % se cae la BD.
 
 ## Turno claude-code (2026-11-01, tarde): chat con referencias y otra pasada premium
@@ -41,9 +41,13 @@ teléfono de verdad. El comentario en las apps no trae selector de @.
 `e2e/audit/cortes.audit.ts`: `chat-refs`, `chat-selector`, `chat-tarea`, `chat-ligados`, `tablero`.
 
 **Incidente (01-11, 18:53–18:56 UTC):** se desplegó `ChatMessageRef` sin su migración: el archivo no se escribió porque iba
-después de un parche que falló, las pruebas usan Prisma de mentira y se desplegó sin esperar «Stack real» en CI. El chat
-falló unos 3 minutos (1 error en el log, 0 avisos perdidos). Se aplicó el SQL a mano y la migración quedó idempotente.
-Ahora `schema-migrations.spec.ts` truena si un modelo o columna no tiene migración. **Desplegar solo con CI en verde.**
+en la misma línea (`&&`) de un parche que falló. El chat falló unos 3 minutos (1 error en el log, 0 avisos perdidos). Se
+aplicó el SQL a mano y la migración quedó idempotente. **La CI no lo vio** (`21d0514` salió en verde): sus pruebas con base
+real no tocaban el chat, las del API usan Prisma de mentira, `notify` se traga sus errores y el contenedor seguía «healthy».
+Ahora: `schema-migrations.spec.ts` truena si un modelo o columna no tiene migración, y `test/chat-refs.e2e-spec.ts` escribe y
+lee el chat en la base real. Tras desplegar, consultar la tabla nueva y `docker logs arta-api`.
+Ojo: `prisma migrate diff` contra producción marca diferencias viejas en `EventDocumentSlot` (nombres de índices, llaves y
+valores por omisión): por eso no sirve de guardia en CI todavía.
 
 **Siguiente:** versión nueva de las apps a tiendas (pide OK de Adam), verlas en teléfono, lista § 6 de `SAFARI.md`,
 SMTP sin conectar.
