@@ -142,6 +142,70 @@ test.describe('Campana', () => {
   });
 });
 
+/**
+ * Un Socket.IO mínimo por long-polling: saluda, conecta y entrega `events`, cada uno
+ * en su propia respuesta, para probar lo que pasa cuando el aviso llega en vivo.
+ */
+async function fakeSocket(page: import('@playwright/test').Page, events: Array<[string, unknown]>) {
+  const queue = [
+    `0${JSON.stringify({ sid: 'e2e', upgrades: [], pingInterval: 25000, pingTimeout: 60000, maxPayload: 1000000 })}`,
+    `40${JSON.stringify({ sid: 'e2e-ns' })}`,
+    ...events.map((event) => `42${JSON.stringify(event)}`),
+  ];
+  await page.route('**/api/socket.io/**', async (route) => {
+    if (route.request().method() === 'POST') {
+      return route.fulfill({ status: 200, contentType: 'text/plain', body: 'ok' });
+    }
+    const next = queue.shift();
+    if (next) return route.fulfill({ status: 200, contentType: 'text/plain; charset=UTF-8', body: next });
+    // Sin nada que entregar, el sondeo se queda colgado como en un servidor real.
+    await new Promise((resolve) => setTimeout(resolve, 15_000));
+    return route.fulfill({ status: 200, contentType: 'text/plain', body: '6' }).catch(() => undefined);
+  });
+}
+
+test.describe('Aviso en vivo', () => {
+  test('sale como tarjeta, la campana suma, y tocarla lleva al aviso y lo marca leído', async ({ page, baseURL }) => {
+    const read: string[] = [];
+    await seedSession(page, baseURL!);
+    await mockAuthenticatedApi(page, {
+      ...EVENT_ROUTES,
+      '/notifications': [],
+      '/notifications/n-oc/read': (route: Route) => {
+        read.push('n-oc');
+        return route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
+      },
+    });
+    await fakeSocket(page, [['notification:new', { notification: NOTICES[0], unread: 1 }]]);
+    await page.goto('/dashboard');
+
+    const toast = page.locator('.ltoast', { hasText: 'Mateo R. pide autorizar la OC 4F2A9C' });
+    await expect(toast).toBeVisible();
+    await toast.locator('.ltoast__open').click();
+
+    await expect(page).toHaveURL(/\/events\/evt-e2e-1\?tab=ocs/);
+    await expect.poll(() => read).toEqual(['n-oc']);
+    await expect(toast).toHaveCount(0);
+  });
+
+  test('se puede cerrar sin abrirla, y dentro del chat no estorba con mensajes', async ({ page, baseURL }) => {
+    await seedSession(page, baseURL!);
+    await mockAuthenticatedApi(page, {});
+    await fakeSocket(page, [
+      [
+        'chat:channel-activity',
+        { channelId: 'c1', messageId: 'm1', preview: '¿Ya salió el camión?', senderName: 'Beto S.', notify: true },
+      ],
+    ]);
+    await page.goto('/dashboard');
+
+    const toast = page.locator('.ltoast', { hasText: 'Beto S.' });
+    await expect(toast).toBeVisible();
+    await page.getByRole('button', { name: 'Cerrar aviso' }).click();
+    await expect(toast).toHaveCount(0);
+  });
+});
+
 test.describe('Pantalla de avisos', () => {
   test('filtra por categoría y trae los anteriores al pedirlos', async ({ page, baseURL }) => {
     const before: string[] = [];

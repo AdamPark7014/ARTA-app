@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { Fraunces, Inter, Nunito, Outfit } from 'next/font/google';
+import { Nunito, Outfit } from 'next/font/google';
 import '../styles/globals.scss';
 import { UserProvider } from '@/lib/user-context';
 import { ROOT_DOMAIN } from '@/lib/domains';
@@ -49,24 +49,12 @@ const outfit = Outfit({
 });
 
 /**
- * El sitio público y el portal de proveedores usan Fraunces e Inter. Sin `preload`:
- * el navegador solo las baja donde se usan, y el panel, que va en Nunito, ni las
- * pide. Antes salían de una hoja de Google que frenaba el primer pintado de todo.
+ * El sitio público y el portal de proveedores usan Fraunces e Inter; el panel va en
+ * Nunito y no las necesita. Solo se piden en esas rutas: antes salían de una hoja de
+ * Google que frenaba el primer pintado de todo el panel.
  */
-const fraunces = Fraunces({
-  subsets: ['latin'],
-  weight: ['500', '600'],
-  display: 'swap',
-  preload: false,
-  variable: '--font-fraunces',
-});
-
-const inter = Inter({
-  subsets: ['latin'],
-  display: 'swap',
-  preload: false,
-  variable: '--font-inter',
-});
+const PUBLIC_FONTS_SCRIPT =
+  "try{if(/^\\/(p|legal|contratar|v)(\\/|$)/.test(location.pathname)){var l=document.createElement('link');l.rel='stylesheet';l.href='https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,650&family=Inter:wght@400;500;600;700&display=swap';document.head.appendChild(l);}}catch(e){}";
 
 /**
  * Respaldo del «modo app» del lado cliente: `(app)/layout` lo decide en el
@@ -78,7 +66,10 @@ const APP_SHELL_FALLBACK =
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="es-MX" className={`${nunito.variable} ${outfit.variable} ${fraunces.variable} ${inter.variable}`} suppressHydrationWarning>
+    <html lang="es-MX" className={`${nunito.variable} ${outfit.variable}`} suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: PUBLIC_FONTS_SCRIPT }} />
+      </head>
       <body suppressHydrationWarning>
         <script dangerouslySetInnerHTML={{ __html: APP_SHELL_FALLBACK }} />
         <UserProvider>{children}</UserProvider>

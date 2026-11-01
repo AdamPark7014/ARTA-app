@@ -82,6 +82,14 @@ hay que actualizarle el teléfono, no parchar 200 colores.
 | iPhone en horizontal | Textos que crecían solos y tablas descuadradas. | «Text autosizing» de Safari de iPhone. | `-webkit-text-size-adjust: 100%` en `html` (`_mobile.scss`). |
 | Campana en teléfono | En Safari < 15.4 el panel de avisos perdía el tope de alto. | `dvh` sin respaldo: la declaración entera se descarta. | `vh` antes de `dvh` (`_mobile.scss`). |
 | Entidad activa | Con «Bloquear todas las cookies», `localStorage` lanza `SecurityError` y la pantalla podía caerse. | Safari bloquea también el almacenamiento local. | `getActiveEntity`/`setActiveEntity` con `try` (`lib/api.ts`). |
+| Ver un PDF en iPhone o iPad | Solo se veía la primera página; en Android, nada. | iOS pinta un PDF en un iframe como una imagen de su primera página y no deja bajar. | En teléfono y tableta se dibuja con pdf.js, página por página (`components/files/PdfPages.tsx`, `lib/platform.ts`). |
+| Hoja con el dedo | Insertar o eliminar filas y renombrar la hoja no existían. | Todo vivía en el clic derecho y el doble clic, que en iOS no llegan. | Botones «Filas y columnas» y «Renombrar» a la vista con puntero táctil; el menú sale como hoja desde abajo y no se cierra al bajar el teclado. |
+| Hoja con el dedo | Un toque seleccionaba también la celda de junto. | El toque simula arrastrar el ratón; al enfocar, la hoja se movía y entraba a la vecina. | Arrastrar para seleccionar solo con cursor (`onCellMouseDown`). |
+| Chat en iPhone con el teclado abierto | La barra del chat se iba de la pantalla. | Safari de iPhone empuja la página en vez de acortarla. | `lib/use-keyboard-fit.ts` ajusta la caja a `visualViewport`. **Necesita un iPhone de verdad para confirmarse (§6).** |
+| Fechas y horas en iPhone | El valor salía centrado y el campo vacío colapsaba a una rayita. | Estilo propio de iOS para `input[type=date\|time]`. | `styles/_safari.scss`, solo en iOS (`@supports (-webkit-touch-callout: none)`). |
+| `<summary>` | El triángulo seguía saliendo. | Safari no respeta `list-style: none` en `summary`. | `summary::-webkit-details-marker { display: none }` en todos. |
+| Toques en iPhone | Destello gris y retraso al tocar un botón. | Valores por omisión de WebKit. | `-webkit-tap-highlight-color` y `touch-action: manipulation` (`styles/_safari.scss`). |
+| Página en iPhone | Lo de abajo quedaba tapado por la barra de Safari. | `100vh` incluye esa barra. | `100dvh` donde hay soporte, en marco y barra lateral. |
 
 ## 4. Revisado en el código y sin problema
 
@@ -144,9 +152,10 @@ En la corrida `40966061877` WebKit queda en cero en las cuatro combinaciones (AR
 390×844). El log mostró por qué: en el runner, WebKit sin ventana tardaba hasta 1.3 s en dar dos cuadros
 (Safari de verdad los da a 60–120 por segundo). No es de la app.
 
-Las 23 pruebas que fallan **en los dos motores** también fallan en `ci.yml` desde el 22-10: quedaron atrás
-de la interfaz, no son de Safari. Mientras no se pongan al día, estos flujos no están cubiertos en ningún
-navegador:
+Las 23 pruebas que fallaban **en los dos motores** se pusieron al día el 01-11-2026 (eran de la interfaz, no de
+Safari). Al hacerlo salieron errores reales que esas pruebas ya no vigilaban: fórmulas que se perdían al reabrir la
+hoja, PDF de corrida con totales viejos, tablas de Word que desaparecían y PDF con la primera página vacía. Antes de
+eso estos flujos no estaban cubiertos en ningún navegador:
 
 - `editors`, `excel-hf`, `excel-snapshots`, `hotfix-sheet-editor`, `correcciones-0930`: hoja de cálculo y
   documento embebidos (las celdas ya no se encuentran por su etiqueta).
@@ -175,3 +184,6 @@ desplegada, en una Mac y en un iPhone:
 8. Descargar un PDF generado en el navegador (convenios, campaña) en iPhone: sale la hoja de descarga.
 9. Avisos web: instalar el panel en la pantalla de inicio (Compartir → Agregar a inicio) y activar avisos.
 10. iPhone en horizontal en una tabla larga (OC, tareas): el texto no crece solo.
+11. Abrir un PDF de varias páginas en iPhone: se ven todas al bajar.
+12. Hoja en iPhone o iPad: un toque selecciona, el segundo edita, «Filas y columnas» inserta donde estás.
+13. Chat en iPhone: tocar el campo de escribir; la barra del chat sigue arriba y el campo queda sobre el teclado.

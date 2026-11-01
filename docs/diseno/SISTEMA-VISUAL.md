@@ -141,3 +141,24 @@ Estilos en `apps/web/styles/_acabado.scss`, que va después de `_pulido.scss`. R
 - **Calendario en el teléfono**: shows y notas son barras sin texto; el detalle vive en «Ver lista».
 - **Acceso**: pantalla partida (marca a la izquierda, formulario a la derecha; en el teléfono la marca arriba).
   El fondo de la marca lleva líneas de 1 px casi imperceptibles: arcos en ARTA, diagonales en el Auditorio.
+
+## Barrido premium (01-11-2026)
+
+Pedido de Adam: «todo muchísimo más premium, hasta las notificaciones». Mismos tokens y las mismas reglas; lo que se
+agregó vive en `apps/web/styles/_premium.scss` (última palabra de la cascada) y `_safari.scss`.
+
+- **Preguntas**: nada de `confirm`/`prompt` del navegador. `askConfirm` y `askPrompt` (`components/ui/AskDialog.tsx`):
+  con el tema de la entidad, el botón dice lo que va a pasar y Cancelar cancela. En el teléfono, hoja desde abajo.
+  Solo «salir con cambios sin guardar» sigue con el nativo, porque tiene que contestar sin esperar.
+- **Mensajes**: `FlashMessage` con `onDismiss` flota abajo y se cierra solo (los errores esperan); sin `onDismiss` es
+  un estado de la pantalla y se queda en su lugar. Guardar no mueve nada.
+- **Avisos**: ícono por categoría, lleno si espera algo de quien lo lee y contorno si es para enterarse. Grupos por
+  día, filtros «Sin leer» y «Por atender», tarjeta en vivo arriba a la derecha, pantalla `/notifications`. Categorías y
+  textos en `lib/notification-kinds.ts`, los mismos que usa el teléfono.
+- **Buscar**: Ctrl K / ⌘ K busca eventos, personas y pantallas sin acentos; antes de teclear enseña lo próximo.
+- **Movimiento**: `--ease-out` y `--ease-spring`, 120–240 ms. Lo que se presiona lo dice (`scale(.975)`), lo que abre
+  otra pantalla se levanta 2 px, cargas con brillo que pasa y línea de progreso al cambiar de pantalla. Nada de esto
+  con «reducir movimiento».
+- **Densidad**: dentro de un módulo del evento la cabecera cede lugar (`ev-hero--dense`); las barras de herramientas
+  van en una línea; las cifras que filtran son compactas (`kpi-grid-dense`).
+- **Teléfono**: módulos del evento como tira de pastillas, no un menú nativo.

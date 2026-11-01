@@ -983,7 +983,7 @@ Contraseña: ${creds.password}`}</pre>
                         <tr key={u.id} className={!u.active ? 'is-muted' : undefined}>
                           <td>
                             <strong>{u.fullName}</strong>
-                            <div className="muted kpi-sub">
+                            <div className="muted kpi-sub user-contact">
                               {u.email}
                               {u.title ? ` · ${u.title}` : ''}
                             </div>

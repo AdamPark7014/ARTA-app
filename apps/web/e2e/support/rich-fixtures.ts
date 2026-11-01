@@ -3047,6 +3047,7 @@ export const RICH_STUBS: ApiStubs = {
   // Avisos (campana del AppShell)
   '/notifications': NOTIFICATIONS,
   '/notifications/unread-count': { count: NOTIFICATIONS.filter((n) => !n.readAt).length },
+  '/notifications/preferences': { muted: ['documents'], quietHours: { enabled: true, start: '22:00', end: '07:00' } },
 };
 
 /* ── rutas ────────────────────────────────────────────────────────────────── */
@@ -3060,6 +3061,7 @@ export const RICH_ROUTES: Array<{ name: string; path: string; note?: string }> =
     path: '/dashboard',
     note: 'Abrir la campana: botón con aria-label «Avisos (4 sin leer)». 6 avisos, 4 sin leer.',
   },
+  { name: 'avisos', path: '/notifications', note: 'Pantalla de Avisos: historial con filtros y grupos por día.' },
   { name: 'events', path: '/events', note: 'Eventos actuales: 6 tarjetas Arta/Auditorio, nombres largos, avance y «Urgente».' },
   { name: 'events-past', path: '/events?scope=past', note: 'Pasados: uno cerrado y uno cancelado.' },
   { name: 'event-overview', path: E1, note: 'Resumen del show de hoy: mosaicos, datos, notas y formatos más atrasados.' },

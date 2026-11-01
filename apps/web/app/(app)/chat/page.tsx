@@ -1,5 +1,6 @@
 'use client';
 
+import { useKeyboardFit } from '@/lib/use-keyboard-fit';
 import { askConfirm } from '@/components/ui/AskDialog';
 import {
   Suspense,
@@ -211,6 +212,7 @@ function ChatInner() {
   const meId = user?.id ?? null;
   const router = useRouter();
   const searchParams = useSearchParams();
+  useKeyboardFit('.chat');
   const channelParam = searchParams.get('channel');
   const msgParam = searchParams.get('msg');
   const withParam = searchParams.get('with');

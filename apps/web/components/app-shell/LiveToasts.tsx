@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { NoticeIcon } from './NoticeRow';
 
 export type LiveToast = {
@@ -17,12 +18,14 @@ const STAY_MS = 7000;
 /** Tarjetas en vivo arriba a la derecha (en el teléfono, arriba de lado a lado). */
 export function LiveToasts({ toasts, onDismiss }: { toasts: LiveToast[]; onDismiss: (key: string) => void }) {
   if (!toasts.length) return null;
-  return (
+  // En `body`: la barra superior lleva `backdrop-filter` y atraparía un `position: fixed`.
+  return createPortal(
     <div className="ltoasts" role="status" aria-live="polite">
       {toasts.map((toast) => (
         <ToastCard key={toast.key} toast={toast} onDismiss={() => onDismiss(toast.key)} />
       ))}
-    </div>
+    </div>,
+    document.body,
   );
 }
 

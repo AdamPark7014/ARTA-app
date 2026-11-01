@@ -997,6 +997,12 @@ html[data-entity] .kpi-grid-dense > .kpi > .kpi-sub {
   font-size: 0.72rem;
 }
 
+/* ── Usuarios: un correo largo se parte, no pisa la columna de al lado ───── */
+
+.user-contact {
+  overflow-wrap: anywhere;
+}
+
 /* ── Campaña: el concepto se lee completo ────────────────────────────────── */
 
 html[data-entity] .campaign-table .c-concept {
