@@ -211,9 +211,19 @@ data class NotificationDto(
     val readAt: String? = null,
     val createdAt: String,
     val actor: NotificationActor? = null,
+    /** ARTA o EXPLANADA; null = de la cuenta o de un directo. */
+    val entity: String? = null,
+    /** Avisos sumados en la misma tarjeta (ráfaga); el API viejo no lo manda. */
+    val bundleCount: Int = 1,
 )
 
 data class UnreadCount(val count: Int = 0)
+
+/** Horario silencioso: de noche solo llega lo urgente (`notification-prefs.ts`). */
+data class QuietHoursDto(val enabled: Boolean = false, val start: String = "22:00", val end: String = "07:00")
+
+/** Qué llega al teléfono; la campana siempre recibe todo. El PATCH reemplaza todo: va siempre completo. */
+data class NotificationPrefsDto(val muted: List<String> = emptyList(), val quietHours: QuietHoursDto = QuietHoursDto())
 
 data class RegisterPushBody(
     val token: String,
@@ -356,8 +366,20 @@ interface ArtaApi {
     @GET("chat/blocks")
     suspend fun blocks(): List<BlockedUser>
 
+    /** [before] = `createdAt` del último que ya se tiene (siguiente página); [unread] = "1" deja solo lo no leído. */
     @GET("notifications")
-    suspend fun notifications(@Query("take") take: Int = 50, @Query("entity") entity: String? = null): List<NotificationDto>
+    suspend fun notifications(
+        @Query("take") take: Int = 50,
+        @Query("entity") entity: String? = null,
+        @Query("before") before: String? = null,
+        @Query("unread") unread: String? = null,
+    ): List<NotificationDto>
+
+    @GET("notifications/preferences")
+    suspend fun notificationPrefs(): NotificationPrefsDto
+
+    @PATCH("notifications/preferences")
+    suspend fun setNotificationPrefs(@Body body: NotificationPrefsDto): NotificationPrefsDto
 
     @GET("notifications/unread-count")
     suspend fun notificationsUnread(@Query("entity") entity: String? = null): UnreadCount

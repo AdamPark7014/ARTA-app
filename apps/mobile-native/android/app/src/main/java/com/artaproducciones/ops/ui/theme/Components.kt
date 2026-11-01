@@ -39,6 +39,8 @@ import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.foundation.layout.Arrangement
@@ -485,7 +487,7 @@ fun StatusPill(text: String, tone: Tone, modifier: Modifier = Modifier) {
     val base = modifier.clip(shape)
     val painted = if (tone == Tone.Action) base.background(t.accentBrush) else base.border(1.dp, border, shape)
     Box(painted.padding(horizontal = 8.dp, vertical = 3.dp)) {
-        Text(text.uppercase(ES_MX), color = fg, style = ArtaType.Status, maxLines = 1)
+        Text(text.uppercase(ES_MX), color = fg, style = ArtaType.Status, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 
@@ -528,6 +530,7 @@ fun SegmentedControl(options: List<String>, selected: Int, onSelect: (Int) -> Un
     val inner = if (t.isPill) RoundedCornerShape(9.dp) else RoundedCornerShape(3.dp)
     val track = if (t.isDark) Color(0x09FFFFFF) else t.fill
     val count = options.size.coerceAtLeast(1)
+    val haptics = LocalHapticFeedback.current
     BoxWithConstraints(
         modifier
             .fillMaxWidth()
@@ -569,7 +572,10 @@ fun SegmentedControl(options: List<String>, selected: Int, onSelect: (Int) -> Un
                         .weight(1f)
                         .heightIn(min = 38.dp)
                         .clip(inner)
-                        .selectable(selected = on, role = Role.RadioButton, onClick = { onSelect(i) })
+                        .selectable(selected = on, role = Role.RadioButton, onClick = {
+                            if (!on) haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            onSelect(i)
+                        })
                         .padding(vertical = 8.dp, horizontal = 6.dp),
                     contentAlignment = Alignment.Center,
                 ) {

@@ -50,6 +50,54 @@ class DemoKeysTest {
     }
 }
 
+/** Los avisos del modo demo se comportan como `GET /notifications` del API, sin red. */
+class DemoNoticesTest {
+    private val raw = JSONArray()
+        .put(JSONObject().put("id", "c").put("createdAt", "2026-10-03T00:00:00.000Z").put("readAt", JSONObject.NULL))
+        .put(JSONObject().put("id", "a").put("createdAt", "2026-10-05T00:00:00.000Z").put("readAt", JSONObject.NULL))
+        .put(JSONObject().put("id", "b").put("createdAt", "2026-10-04T00:00:00.000Z").put("readAt", "2026-10-04T01:00:00.000Z"))
+        .toString()
+
+    private fun ids(query: String): List<String> {
+        val page = JSONArray(DemoNotices.page(raw, "https://arta.artaproducciones.com/api/notifications?$query".toHttpUrl()))
+        return (0 until page.length()).map { page.getJSONObject(it).getString("id") }
+    }
+
+    @Test
+    fun newestFirstAndTakeLimits() {
+        assertEquals(listOf("a", "b", "c"), ids("take=30"))
+        assertEquals(listOf("a"), ids("take=1"))
+    }
+
+    @Test
+    fun beforeIsTheNextPage() {
+        assertEquals(listOf("b", "c"), ids("take=30&before=2026-10-05T00:00:00.000Z"))
+        assertEquals(emptyList<String>(), ids("take=30&before=2026-10-03T00:00:00.000Z"))
+    }
+
+    @Test
+    fun unreadLeavesOnlyUnread() {
+        assertEquals(listOf("a", "c"), ids("take=30&unread=1"))
+    }
+
+    @Test
+    fun prefsAlwaysHaveTheFullShape() {
+        val defaults = JSONObject(DemoNotices.DEFAULT_PREFS)
+        assertEquals(defaults.toString(), DemoNotices.normalizePrefs(JSONObject()).toString())
+
+        val saved = DemoNotices.normalizePrefs(
+            JSONObject()
+                .put("muted", JSONArray().put("general").put("inventada").put("chat"))
+                .put("quietHours", JSONObject().put("enabled", true).put("start", "23:15").put("end", "25:00")),
+        )
+        assertEquals(listOf("chat", "general"), saved.getJSONArray("muted").let { a -> (0 until a.length()).map { a.getString(it) } })
+        val quiet = saved.getJSONObject("quietHours")
+        assertEquals(true, quiet.getBoolean("enabled"))
+        assertEquals("23:15", quiet.getString("start"))
+        assertEquals("07:00", quiet.getString("end"))
+    }
+}
+
 class DemoEntitiesTest {
     private val events = mapOf("e-arta" to "ARTA", "e-aud" to "EXPLANADA")
     private fun eventEntity(id: String): String? = events[id]

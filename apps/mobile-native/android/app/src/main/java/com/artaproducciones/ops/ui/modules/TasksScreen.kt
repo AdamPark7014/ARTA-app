@@ -32,6 +32,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -107,13 +108,13 @@ internal fun groupByDue(tasks: List<TaskDto>, today: LocalDate): List<Pair<DueBu
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun TasksScreen(nav: ModuleNav) {
-    var perms by remember { mutableStateOf<ModulesPerms?>(null) }
+    var perms by remember { mutableStateOf(ModulesStore.perms) }
     var view by rememberSaveable { mutableStateOf(TaskView.MINE) }
     var filter by rememberSaveable { mutableStateOf(StatusFilter.OPEN) }
     var query by rememberSaveable { mutableStateOf("") }
     var rows by remember { mutableStateOf(ModulesStore.taskLists[view.key]) }
     var shownView by remember { mutableStateOf(view) }
-    var loading by remember { mutableStateOf(false) }
+    var refreshing by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var tick by remember { mutableIntStateOf(0) }
     var creating by remember { mutableStateOf(false) }
@@ -121,7 +122,7 @@ fun TasksScreen(nav: ModuleNav) {
     val entity = LocalActiveEntity.current
 
     LaunchedEffect(Unit) {
-        runCatching { ModulesSession.me() }.onSuccess { perms = ModulesPerms(it) }
+        runCatching { ModulesSession.me() }.onSuccess { me -> perms = ModulesPerms(me).also { ModulesStore.perms = it } }
     }
 
     var shownEntity by remember { mutableStateOf(entity) }
@@ -132,7 +133,6 @@ fun TasksScreen(nav: ModuleNav) {
             shownView = view
             shownEntity = entity
         }
-        loading = true
         try {
             val active = ActiveEntity.param
             val list = when (view) {
@@ -143,10 +143,12 @@ fun TasksScreen(nav: ModuleNav) {
             ModulesStore.taskLists[view.key] = list
             rows = list
             error = null
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
             error = e.userMessage()
         } finally {
-            loading = false
+            refreshing = false
         }
     }
 
@@ -157,6 +159,8 @@ fun TasksScreen(nav: ModuleNav) {
     val overdueCount = remember(rows) { rows.orEmpty().count { it.isOverdue(today) } }
     val reviewCount = remember(rows) { rows.orEmpty().count { it.status == "PENDING_APPROVAL" } }
     val listState = rememberLazyListState()
+    // El botón se encoge al bajar: deja ver lo último de la lista.
+    val atTop by remember { derivedStateOf { listState.firstVisibleItemIndex == 0 } }
 
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
@@ -197,40 +201,47 @@ fun TasksScreen(nav: ModuleNav) {
                 }
             }
             PullToRefreshBox(
-                isRefreshing = loading && rows != null,
-                onRefresh = { tick++ },
+                isRefreshing = refreshing,
+                onRefresh = {
+                    refreshing = true
+                    tick++
+                },
                 modifier = Modifier.fillMaxSize(),
             ) {
-                val current = rows
-                when {
-                    current == null && error != null -> ErrorState(error!!, onRetry = { tick++ })
-                    current == null -> SkeletonList()
-                    else -> LazyColumn(
-                        Modifier.fillMaxSize().fadingEdges(listState, start = 16.dp, end = 28.dp),
-                        state = listState,
-                        contentPadding = PaddingValues(top = 4.dp, bottom = 104.dp),
-                    ) {
-                        error?.let { msg -> item { InlineError(msg) { tick++ } } }
-                        if (groups.isEmpty()) {
-                            item {
-                                val filtered = query.isNotBlank() || filter != StatusFilter.OPEN
-                                when {
-                                    filtered -> EmptyState("Nada coincide", "Prueba con otra búsqueda o filtro.", icon = Icons.Default.Search)
-                                    view == TaskView.MINE -> EmptyState("No tienes tareas pendientes", "Cuando alguien te asigne algo aparecerá aquí.", icon = Icons.Outlined.TaskAlt)
-                                    view == TaskView.REQUESTED -> EmptyState("No has pedido tareas", "Crea una con «Nueva tarea» y asígnala a una o varias personas.", icon = Icons.Outlined.TaskAlt)
-                                    else -> EmptyState("Sin tareas pendientes", "El equipo está al día.", icon = Icons.Outlined.TaskAlt)
+                PhaseSwap(listPhase(rows != null, error)) { phase ->
+                    when (phase) {
+                        ListPhase.Error -> ErrorState(error.orEmpty(), onRetry = { tick++ })
+                        ListPhase.Loading -> SkeletonList()
+                        ListPhase.Ready -> LazyColumn(
+                            Modifier.fillMaxSize().fadingEdges(listState, start = 16.dp, end = 28.dp),
+                            state = listState,
+                            contentPadding = PaddingValues(top = 4.dp, bottom = 104.dp),
+                        ) {
+                            error?.let { msg -> item(key = "error") { InlineError(msg) { tick++ } } }
+                            if (groups.isEmpty()) {
+                                item(key = "empty") {
+                                    val filtered = query.isNotBlank() || filter != StatusFilter.OPEN
+                                    when {
+                                        filtered -> EmptyState("Nada coincide", "Prueba con otra búsqueda o filtro.", icon = Icons.Default.Search)
+                                        view == TaskView.MINE -> EmptyState("No tienes tareas pendientes", "Cuando alguien te asigne algo aparecerá aquí.", icon = Icons.Outlined.TaskAlt)
+                                        view == TaskView.REQUESTED -> EmptyState("No has pedido tareas", "Crea una con «Nueva tarea» y asígnala a una o varias personas.", icon = Icons.Outlined.TaskAlt)
+                                        else -> EmptyState("Sin tareas pendientes", "El equipo está al día.", icon = Icons.Outlined.TaskAlt)
+                                    }
                                 }
                             }
-                        }
-                        groups.forEach { (bucket, tasks) ->
-                            item(key = "h-${bucket.name}") { SectionTitle(bucket.label, count = tasks.size, alert = bucket == DueBucket.OVERDUE) }
-                            items(tasks, key = { "${bucket.name}-${it.id}" }) { t ->
-                                TaskRow(
-                                    task = t,
-                                    showAssignees = view != TaskView.MINE,
-                                    today = today,
-                                    onClick = { nav.openTask(t.id) },
-                                )
+                            groups.forEach { (bucket, tasks) ->
+                                item(key = "h-${bucket.name}") {
+                                    SectionTitle(bucket.label, Modifier.animateItem(), count = tasks.size, alert = bucket == DueBucket.OVERDUE)
+                                }
+                                items(tasks, key = { "${bucket.name}-${it.id}" }) { t ->
+                                    TaskRow(
+                                        task = t,
+                                        showAssignees = view != TaskView.MINE,
+                                        today = today,
+                                        onClick = { nav.openTask(t.id) },
+                                        modifier = Modifier.animateItem(),
+                                    )
+                                }
                             }
                         }
                     }
@@ -241,7 +252,8 @@ fun TasksScreen(nav: ModuleNav) {
         if (perms?.canCreateTasks != false) {
             ExtendedFloatingActionButton(
                 onClick = { creating = true },
-                icon = { Icon(Icons.Default.Add, contentDescription = null) },
+                expanded = atTop,
+                icon = { Icon(Icons.Default.Add, contentDescription = "Nueva tarea") },
                 text = { Text("Nueva tarea") },
                 containerColor = ArtaColors.Gold,
                 contentColor = ArtaColors.OnAccent,
@@ -265,9 +277,16 @@ fun TasksScreen(nav: ModuleNav) {
 
 /** Fila de tarea compartida por Tareas, Inicio y el evento. */
 @Composable
-internal fun TaskRow(task: TaskDto, showAssignees: Boolean, onClick: () -> Unit, today: LocalDate = LocalDate.now(), showEvent: Boolean = true) {
+internal fun TaskRow(
+    task: TaskDto,
+    showAssignees: Boolean,
+    onClick: () -> Unit,
+    today: LocalDate = LocalDate.now(),
+    showEvent: Boolean = true,
+    modifier: Modifier = Modifier,
+) {
     val overdue = task.isOverdue(today)
-    ModuleCard(Modifier.padding(horizontal = 16.dp, vertical = 4.dp), onClick = onClick) {
+    ModuleCard(modifier.padding(horizontal = 16.dp, vertical = 4.dp), onClick = onClick) {
         Row(verticalAlignment = Alignment.Top) {
             Text(
                 task.title,

@@ -1,5 +1,6 @@
 package com.artaproducciones.ops.ui.chat
 
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -11,6 +12,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -61,6 +63,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -76,6 +79,9 @@ import com.artaproducciones.ops.ui.common.messageTime
 import com.artaproducciones.ops.ui.common.parseInstant
 import com.artaproducciones.ops.ui.common.plainText
 import com.artaproducciones.ops.ui.common.relativeTime
+import com.artaproducciones.ops.ui.modules.ModulesStore
+import com.artaproducciones.ops.ui.modules.PhaseSwap
+import com.artaproducciones.ops.ui.modules.rememberHaptics
 import com.artaproducciones.ops.ui.theme.ArtaColors
 import com.artaproducciones.ops.ui.theme.ArtaType
 import com.artaproducciones.ops.ui.theme.LocalActiveEntity
@@ -133,9 +139,10 @@ private fun dndOptions(): List<Pair<String, Instant?>> {
 @Composable
 fun ChatListScreen(openChat: (String) -> Unit) {
     val scope = rememberCoroutineScope()
-    var channels by remember { mutableStateOf<List<ChannelSummary>>(emptyList()) }
-    var loading by remember { mutableStateOf(true) }
-    var loaded by remember { mutableStateOf(false) }
+    // Lo último cargado se ve de inmediato al volver; se actualiza por detrás.
+    var channels by remember { mutableStateOf(ModulesStore.channels.orEmpty()) }
+    var refreshing by remember { mutableStateOf(false) }
+    var loaded by remember { mutableStateOf(ModulesStore.channels != null) }
     var error by remember { mutableStateOf<String?>(null) }
     var query by rememberSaveable { mutableStateOf("") }
     var unreadOnly by rememberSaveable { mutableStateOf(false) }
@@ -148,11 +155,22 @@ fun ChatListScreen(openChat: (String) -> Unit) {
     LaunchedEffect(Unit) { ChatBlocks.ensureLoaded(refresh = true) }
     val online by ChatPresence.online.collectAsState()
     val entity = LocalActiveEntity.current
+    val haptics = rememberHaptics()
+    var shownEntity by remember { mutableStateOf(entity) }
 
     suspend fun load() {
+        // Lo de la otra entidad no se queda mientras llega lo nuevo. Se lee la entidad del momento:
+        // los colectores del socket se quedan con esta función desde la primera composición.
+        val active = ActiveEntity.current
+        if (shownEntity != active) {
+            shownEntity = active
+            channels = emptyList()
+            loaded = false
+        }
         try {
             // Canales de la entidad activa más los directos (los directos son personales).
             channels = ApiClient.api.channels(ActiveEntity.param)
+            ModulesStore.channels = channels
             error = null
             loaded = true
         } catch (e: CancellationException) {
@@ -160,7 +178,7 @@ fun ChatListScreen(openChat: (String) -> Unit) {
         } catch (e: Exception) {
             error = e.userMessage()
         } finally {
-            loading = false
+            refreshing = false
         }
     }
 
@@ -184,6 +202,7 @@ fun ChatListScreen(openChat: (String) -> Unit) {
 
     fun setDnd(until: Instant?) {
         menu = false
+        haptics.confirm()
         scope.launch {
             val json = JSONObject().put("dndUntil", until?.toString() ?: JSONObject.NULL).toString()
             runCatching { ApiClient.api.setChatPrefs(json.toRequestBody("application/json".toMediaType())) }
@@ -281,57 +300,64 @@ fun ChatListScreen(openChat: (String) -> Unit) {
                 )
             }
             PullToRefreshBox(
-                isRefreshing = loading && loaded,
+                isRefreshing = refreshing,
                 onRefresh = {
-                    loading = true
+                    refreshing = true
                     reloadTick++
                 },
                 modifier = Modifier.fillMaxSize(),
             ) {
-                when {
-                    !loaded && error == null -> ListSkeleton(9)
-                    !loaded -> ErrorState(error, onRetry = {
-                        error = null
-                        loading = true
-                        reloadTick++
-                    })
-                    visible.isEmpty() -> EmptyState(
-                        Icons.Outlined.Forum,
-                        if (filtering) "Nada por aquí" else "Aún no hay conversaciones",
-                        when {
-                            query.isNotBlank() -> "Nada coincide con «$query»."
-                            unreadOnly -> "Estás al día."
-                            else -> "Toca el lápiz para escribirle a alguien o crear un canal."
-                        },
-                        Modifier.padding(top = Space.XL),
-                    )
-                    else -> LazyColumn(
-                        Modifier.fillMaxSize().fadingEdges(listState, start = 16.dp, end = 28.dp),
-                        state = listState,
-                        contentPadding = PaddingValues(bottom = 24.dp),
-                    ) {
-                        error?.let { msg ->
-                            item {
-                                Row(Modifier.fillMaxWidth().padding(start = Space.L), verticalAlignment = Alignment.CenterVertically) {
-                                    Text(msg, color = ArtaColors.Danger, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
-                                    TextButton(onClick = { reloadTick++ }) { Text("Reintentar", color = ArtaColors.Gold) }
+                val view = when {
+                    !loaded && error == null -> "loading"
+                    !loaded -> "error"
+                    visible.isEmpty() -> "empty"
+                    else -> "list"
+                }
+                PhaseSwap(view) { phase ->
+                    when (phase) {
+                        "loading" -> ListSkeleton(9)
+                        "error" -> ErrorState(error, onRetry = {
+                            error = null
+                            reloadTick++
+                        })
+                        "empty" -> EmptyState(
+                            Icons.Outlined.Forum,
+                            if (filtering) "Nada por aquí" else "Aún no hay conversaciones",
+                            when {
+                                query.isNotBlank() -> "Nada coincide con «$query»."
+                                unreadOnly -> "Estás al día."
+                                else -> "Toca el lápiz para escribirle a alguien o crear un canal."
+                            },
+                            Modifier.padding(top = Space.XL),
+                        )
+                        else -> LazyColumn(
+                            Modifier.fillMaxSize().fadingEdges(listState, start = 16.dp, end = 28.dp),
+                            state = listState,
+                            contentPadding = PaddingValues(bottom = 24.dp),
+                        ) {
+                            error?.let { msg ->
+                                item {
+                                    Row(Modifier.fillMaxWidth().padding(start = Space.L), verticalAlignment = Alignment.CenterVertically) {
+                                        Text(msg, color = ArtaColors.Danger, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+                                        TextButton(onClick = { reloadTick++ }) { Text("Reintentar", color = ArtaColors.Gold) }
+                                    }
                                 }
                             }
-                        }
-                        Section.entries.forEach { section ->
-                            val rows = grouped[section].orEmpty()
-                            if (rows.isEmpty()) return@forEach
-                            val open = filtering || section.key !in collapsed
-                            item(key = "h-" + section.key) {
-                                SectionHeader(
-                                    title = section.title,
-                                    unread = rows.sumOf { if (it.muted) 0 else it.unreadCount },
-                                    open = open,
-                                ) { collapsed = if (section.key in collapsed) collapsed - section.key else collapsed + section.key }
-                            }
-                            if (open) {
-                                items(rows, key = { it.id }) { c ->
-                                    ChannelRow(c, online = c.peer?.id in online) { openChat(c.id) }
+                            Section.entries.forEach { section ->
+                                val rows = grouped[section].orEmpty()
+                                if (rows.isEmpty()) return@forEach
+                                val open = filtering || section.key !in collapsed
+                                item(key = "h-" + section.key) {
+                                    SectionHeader(
+                                        title = section.title,
+                                        unread = rows.sumOf { if (it.muted) 0 else it.unreadCount },
+                                        open = open,
+                                    ) { collapsed = if (section.key in collapsed) collapsed - section.key else collapsed + section.key }
+                                }
+                                if (open) {
+                                    items(rows, key = { it.id }) { c ->
+                                        ChannelRow(c, online = c.peer?.id in online, modifier = Modifier.animateItem()) { openChat(c.id) }
+                                    }
                                 }
                             }
                         }
@@ -344,15 +370,16 @@ fun ChatListScreen(openChat: (String) -> Unit) {
 
 @Composable
 private fun SectionHeader(title: String, unread: Int, open: Boolean, onToggle: () -> Unit) {
+    val turn by animateFloatAsState(if (open) 0f else -90f, label = "sectionChevron")
     Row(
-        Modifier.fillMaxWidth().clickable(onClick = onToggle).padding(start = Space.L, end = Space.L, top = Space.L, bottom = Space.XS),
+        Modifier.fillMaxWidth().clickable(role = Role.Button, onClick = onToggle).heightIn(min = 48.dp).padding(start = Space.L, end = Space.L, top = Space.M, bottom = Space.XS),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(
             Icons.Outlined.ExpandMore,
             if (open) "Contraer" else "Expandir",
             tint = ArtaColors.Muted,
-            modifier = Modifier.size(18.dp).rotate(if (open) 0f else -90f),
+            modifier = Modifier.size(18.dp).rotate(turn),
         )
         Spacer(Modifier.width(Space.XS))
         Text(
@@ -372,10 +399,12 @@ private fun SectionHeader(title: String, unread: Int, open: Boolean, onToggle: (
  * (como iOS); el título y la vista previa pasan a un segundo renglón antes de cortarse.
  */
 @Composable
-private fun ChannelRow(c: ChannelSummary, online: Boolean, onClick: () -> Unit) {
+private fun ChannelRow(c: ChannelSummary, online: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
     val unread = c.unreadCount > 0
     val direct = c.kind == "DIRECT" || c.isGroupDm
-    val name = EventChannelName(c.name, isEvent = !direct && c.eventId != null)
+    val isEvent = !direct && c.eventId != null
+    val name = EventChannelName(c.name, isEvent = isEvent)
+    Column(modifier) {
     Row(
         Modifier
             .fillMaxWidth()
@@ -390,7 +419,8 @@ private fun ChannelRow(c: ChannelSummary, online: Boolean, onClick: () -> Unit) 
                 if (c.kind == "PRIVATE" && !c.isGroupDm) Icon(Icons.Outlined.Lock, null, tint = ArtaColors.Muted, modifier = Modifier.padding(top = 3.dp, end = 2.dp).size(14.dp))
                 if (c.postingRestricted) Icon(Icons.Outlined.Campaign, null, tint = ArtaColors.Muted, modifier = Modifier.padding(top = 2.dp, end = 4.dp).size(16.dp))
                 Text(
-                    if (direct) name.title else "#${name.title}",
+                    // El # solo en canales generales; un evento se lee por su nombre (SISTEMA-VISUAL.md › Acabado).
+                    if (direct || isEvent) name.title else "#${name.title}",
                     fontWeight = if (unread && !c.muted) FontWeight.Bold else FontWeight.Medium,
                     color = if (c.muted && !unread) ArtaColors.Muted else ArtaColors.Text,
                     maxLines = 2,
@@ -437,4 +467,5 @@ private fun ChannelRow(c: ChannelSummary, online: Boolean, onClick: () -> Unit) 
         }
     }
     HorizontalDivider(color = ArtaColors.Line, thickness = 0.5.dp, modifier = Modifier.padding(start = 72.dp, end = Space.L))
+    }
 }

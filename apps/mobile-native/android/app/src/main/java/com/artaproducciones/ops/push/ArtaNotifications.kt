@@ -8,6 +8,7 @@ import android.content.Context
 import android.media.AudioAttributes
 import android.provider.Settings
 import android.util.Log
+import com.artaproducciones.ops.data.BizEntity
 
 /**
  * Canales de notificación. Uno por proceso del API (`channel` del push) para
@@ -27,6 +28,16 @@ object ArtaNotifications {
 
     /** Tinta de marca: acento de notificaciones y luz LED (Android aclara el tono si el panel es oscuro). */
     const val ACCENT_COLOR: Int = 0xFF0C0C0D.toInt()
+
+    /** Plata del Auditorio (lo oscuro lo pone el sistema). */
+    private const val ACCENT_AUDITORIO: Int = 0xFFC7CCD4.toInt()
+
+    /** Texto sobre el acento: blanco sobre tinta, tinta sobre plata. */
+    private const val ON_ACCENT: Int = 0xFFFFFFFF.toInt()
+
+    fun accentFor(entity: BizEntity?): Int = if (entity == BizEntity.EXPLANADA) ACCENT_AUDITORIO else ACCENT_COLOR
+
+    fun onAccentFor(entity: BizEntity?): Int = if (entity == BizEntity.EXPLANADA) ACCENT_COLOR else ON_ACCENT
 
     private val VIBRATION = longArrayOf(0L, 220L, 120L, 220L)
 

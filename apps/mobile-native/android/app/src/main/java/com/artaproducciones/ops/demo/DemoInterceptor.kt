@@ -81,7 +81,8 @@ internal class DemoInterceptor(context: Context) : Interceptor {
         for (key in DemoKeys.candidates(path, url)) {
             val raw = store.raw(key) ?: continue
             // Grabado sin entidad: se filtra como el API (lo grabado con `entity=` ya viene filtrado).
-            return if (entity != null && "entity=" !in key) DemoEntities.filter(path, raw, entity, ::eventEntity) else raw
+            val body = if (entity != null && "entity=" !in key) DemoEntities.filter(path, raw, entity, ::eventEntity) else raw
+            return if (path == "notifications") DemoNotices.page(body, url) else body
         }
         val s = path.split('/')
         return when {
@@ -90,6 +91,7 @@ internal class DemoInterceptor(context: Context) : Interceptor {
             s.size == 4 && s[0] == "chat" && s[1] == "channels" && s[3] == "messages" -> EMPTY_PAGE
             s.size == 4 && s[0] == "chat" && s[1] == "channels" && s[3] == "pins" -> """{"messages":[]}"""
             path == "analytics/purchase-orders" -> """{"orders":[]}"""
+            path == DemoNotices.PREFS_KEY -> DemoNotices.DEFAULT_PREFS
             path in LISTS || path.startsWith("tasks/event/") -> "[]"
             else -> null
         }
@@ -161,6 +163,7 @@ internal class DemoInterceptor(context: Context) : Interceptor {
             // Crear canal o grupo: sin pantalla de destino en las fixtures.
             path == "chat/channels" || path == "chat/group-dm" -> null
             // Avisos
+            path == DemoNotices.PREFS_KEY -> DemoNotices.normalizePrefs(body).toString().also { store.put(path, it) }
             s.size == 3 && s[0] == "notifications" && s[2] == "read" -> notificationRead(s[1])
             path == "notifications/read-all" -> {
                 // Con `?entity=`, como el API: solo los de esa entidad (y los que no tienen).
@@ -410,6 +413,7 @@ internal class DemoInterceptor(context: Context) : Interceptor {
         val n = list.objects().firstOrNull { it.optString("id") == id } ?: return null
         if (n.isNull("readAt")) n.put("readAt", now())
         store.put("notifications", list)
+        store.put("notifications/unread-count", JSONObject().put("count", list.objects().count { it.isNull("readAt") }))
         return n.toString()
     }
 

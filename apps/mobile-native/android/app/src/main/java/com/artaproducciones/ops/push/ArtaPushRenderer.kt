@@ -10,7 +10,6 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Canvas
-import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Typeface
 import android.os.Build
@@ -30,6 +29,7 @@ import androidx.core.content.pm.ShortcutManagerCompat
 import androidx.core.graphics.drawable.IconCompat
 import com.artaproducciones.ops.MainActivity
 import com.artaproducciones.ops.R
+import com.artaproducciones.ops.data.BizEntity
 import com.artaproducciones.ops.data.Session
 import java.util.concurrent.Executors
 
@@ -67,7 +67,9 @@ object ActiveConversation {
  *   «Marcar como leído», acceso de conversación (Android 11+) y resumen
  *   «N conversaciones» cuando hay varias.
  * - Procesos (OC, formatos, tareas…): `BigTextStyle`, id estable por `tag` para
- *   actualizar en su sitio y resumen por canal cuando hay 2 o más.
+ *   actualizar en su sitio sin volver a sonar, «Marcar como leído» y agrupados por
+ *   `thread_id` con tarjeta resumen («3 avisos de Noche de Boleros»).
+ * - `passive`: entra a la bandeja sin sonar, sin aviso emergente y sin encender la pantalla.
  * - Silenciosos: `chat.read` quita el aviso de lo que ya se leyó en otro lado.
  */
 object ArtaPushRenderer {
@@ -83,6 +85,8 @@ object ArtaPushRenderer {
     const val EXTRA_CHANNEL_ID = "arta_channel_id"
     const val EXTRA_MESSAGE_ID = "arta_message_id"
     const val EXTRA_NOTIFICATION_ID = "arta_notification_id"
+    /** Avisos de la campana ligados a una conversación (menciones): se marcan leídos al abrirla. */
+    const val EXTRA_NOTIFICATION_IDS = "arta_notification_ids"
     /** `type` del aviso (p. ej. `po.requested`): decide si una OC abre aprobaciones o la web. */
     const val EXTRA_TYPE = "arta_type"
     /** Destino forzado por una acción de la notificación. */
@@ -97,12 +101,7 @@ object ArtaPushRenderer {
     }
 
     private fun firstTime(p: PushPayload): Boolean {
-        val key = when {
-            p.silent -> return true
-            p.messageId.isNotBlank() -> "m:${p.messageId}"
-            p.notificationId.isNotBlank() -> "n:${p.notificationId}"
-            else -> return true
-        }
+        val key = p.dedupeKey ?: return true
         synchronized(seen) {
             if (seen.containsKey(key)) return false
             seen[key] = Unit
@@ -158,14 +157,44 @@ object ArtaPushRenderer {
         try {
             val nm = NotificationManagerCompat.from(app)
             if (notificationId.isNotBlank()) {
-                nm.cancel("evt:arta-$notificationId".hashCode())
+                dismissEvent(app, "evt:arta-$notificationId".hashCode())
             } else {
                 activeNotifications(app)
-                    .filter { it.notification.group != GROUP_CHAT && it.notification.group?.startsWith("arta_") == true }
+                    .filter { it.notification.group != GROUP_CHAT && it.notification.group?.startsWith(PushGrouping.PREFIX) == true }
                     .forEach { nm.cancel(it.id) }
             }
         } catch (e: Exception) {
             Log.w(TAG, "No se pudieron quitar los avisos: ${e.message}")
+        }
+    }
+
+    /** Quita un aviso de proceso y deja su tarjeta resumen al día (o la quita si ya no queda ninguno). */
+    fun dismissEvent(context: Context, androidId: Int) {
+        if (androidId == 0) return
+        val app = context.applicationContext
+        try {
+            val group = activeNotifications(app).firstOrNull { it.id == androidId }?.notification?.group
+            NotificationManagerCompat.from(app).cancel(androidId)
+            if (group != null && group != GROUP_CHAT) rebuildEventSummary(app, group, excluding = androidId)
+        } catch (e: Exception) {
+            Log.w(TAG, "No se pudo quitar el aviso: ${e.message}")
+        }
+    }
+
+    /**
+     * Tocar el último aviso de un grupo lo cancela el sistema, y su resumen se quedaría como tarjeta
+     * vacía: se limpia al abrir la app. Con hijas sigue igual (se actualiza con el siguiente aviso).
+     */
+    fun sweepSummaries(context: Context) {
+        val app = context.applicationContext
+        try {
+            val active = activeNotifications(app)
+            val nm = NotificationManagerCompat.from(app)
+            active.filter { it.isSummary() && it.notification.group?.startsWith(PushGrouping.PREFIX) == true }
+                .filter { s -> active.none { !it.isSummary() && it.notification.group == s.notification.group } }
+                .forEach { nm.cancel(it.id) }
+        } catch (e: Exception) {
+            Log.w(TAG, "No se pudieron limpiar los resúmenes: ${e.message}")
         }
     }
 
@@ -211,9 +240,11 @@ object ArtaPushRenderer {
                 senderName = senderName,
                 text = p.body.ifBlank { "Mensaje nuevo" },
                 at = p.sentAtMillis,
+                noticeId = p.notificationId,
             ),
+            entity = p.entity?.key.orEmpty(),
         )
-        postConversation(app, conversation, alert = true, badge = p.badge)
+        postConversation(app, conversation, alert = !p.passive, refreshSummary = true)
     }
 
     /**
@@ -238,12 +269,13 @@ object ArtaPushRenderer {
                 mine = true,
             ),
         )
-        postConversation(app, conversation, alert = false, badge = null)
+        postConversation(app, conversation, alert = false, refreshSummary = false)
     }
 
-    private fun postConversation(app: Context, c: ChatNotificationStore.Conversation, alert: Boolean, badge: Int?) {
+    private fun postConversation(app: Context, c: ChatNotificationStore.Conversation, alert: Boolean, refreshSummary: Boolean) {
         val notificationId = chatNotificationId(c.threadId)
         val isGroup = c.title.isNotBlank()
+        val entity = BizEntity.of(c.entity)
         val lastOther = c.messages.lastOrNull { !it.mine }
         val peerName = lastOther?.senderName ?: "ARTA"
 
@@ -256,18 +288,18 @@ object ArtaPushRenderer {
                 Person.Builder()
                     .setKey(personKey(m.senderId, m.senderName))
                     .setName(m.senderName.ifBlank { "ARTA" })
-                    .setIcon(IconCompat.createWithBitmap(initials(m.senderName)))
+                    .setIcon(IconCompat.createWithBitmap(initials(m.senderName, entity)))
                     .build()
             }
             style.addMessage(m.text, m.at, author)
         }
 
         val name = if (isGroup) c.title else peerName
-        val icon = initials(name)
+        val icon = initials(name, entity)
         val lastText = c.messages.lastOrNull()?.let { if (isGroup && !it.mine) "${it.senderName}: ${it.text}" else it.text }.orEmpty()
         val pendingCount = c.messages.count { !it.mine }
 
-        val builder = baseBuilder(app, ArtaNotifications.CHANNEL_CHAT, c.messages.lastOrNull()?.at ?: System.currentTimeMillis())
+        val builder = baseBuilder(app, ArtaNotifications.CHANNEL_CHAT, c.messages.lastOrNull()?.at ?: System.currentTimeMillis(), entity)
             .setContentTitle(name)
             .setContentText(lastText)
             .setStyle(style)
@@ -276,8 +308,9 @@ object ArtaPushRenderer {
             .setGroup(GROUP_CHAT)
             .setNumber(pendingCount)
             .setOnlyAlertOnce(!alert)
-            .setContentIntent(contentIntent(app, notificationId, c.url, c.chatChannelId, lastOther?.messageId.orEmpty(), ""))
-            .setPublicVersion(publicVersion(app, ArtaNotifications.CHANNEL_CHAT, "Nuevo mensaje"))
+            .setContentIntent(contentIntent(app, notificationId, c.url, c.chatChannelId, lastOther?.messageId.orEmpty(), "", noticeIds = c.noticeIds))
+            .setPublicVersion(publicVersion(app, ArtaNotifications.CHANNEL_CHAT, "Nuevo mensaje", entity))
+        entity?.let { builder.setSubText(it.short) }
         if (!alert) builder.setSilent(true)
 
         if (c.chatChannelId.isNotBlank()) {
@@ -291,7 +324,7 @@ object ArtaPushRenderer {
         }
 
         notify(app, notificationId, builder.build())
-        if (alert) refreshChatSummary(app, notificationId, summaryLine(name, lastText), pendingCount)
+        if (refreshSummary) refreshChatSummary(app, notificationId, summaryLine(name, lastText), pendingCount)
     }
 
     private fun replyAction(app: Context, threadId: String, chatChannelId: String, notificationId: Int): NotificationCompat.Action {
@@ -393,23 +426,46 @@ object ArtaPushRenderer {
     private fun renderEvent(app: Context, p: PushPayload) {
         val channelId = p.androidChannel
         val notificationId = eventNotificationId(p)
-        val group = "arta_" + channelId.removePrefix("arta_")
+        val group = PushGrouping.groupFor(p)
         val title = p.title.ifBlank { "ARTA" }
-        val builder = baseBuilder(app, channelId, p.sentAtMillis)
+        val builder = baseBuilder(app, channelId, p.sentAtMillis, p.entity)
             .setContentTitle(title)
-            .setSubText(ArtaNotifications.label(channelId))
+            // La entidad dice de dónde viene; sin ella (cuenta, directos), la categoría.
+            .setSubText(p.entity?.short ?: ArtaNotifications.label(channelId))
             .setCategory(if (channelId == ArtaNotifications.CHANNEL_CHAT) NotificationCompat.CATEGORY_MESSAGE else NotificationCompat.CATEGORY_EVENT)
             .setGroup(group)
-            .setLargeIcon(initials(p.senderName.ifBlank { ArtaNotifications.label(channelId) }))
+            // La misma etiqueta otra vez (una ráfaga) actualiza la tarjeta sin volver a sonar.
+            .setOnlyAlertOnce(true)
+            .setLargeIcon(initials(p.senderName.ifBlank { ArtaNotifications.label(channelId) }, p.entity))
             .setContentIntent(contentIntent(app, notificationId, p.url, p.chatChannelId, p.messageId, p.notificationId, p.type))
-            .setPublicVersion(publicVersion(app, channelId, "Nuevo aviso"))
+            .setPublicVersion(publicVersion(app, channelId, "Nuevo aviso", p.entity))
+        if (p.passive) builder.setSilent(true).setPriority(NotificationCompat.PRIORITY_LOW)
         if (p.body.isNotBlank()) {
             builder.setContentText(p.body).setStyle(NotificationCompat.BigTextStyle().setBigContentTitle(title).bigText(p.body))
         }
         // Sin aprobar desde la notificación: «Abrir» lleva a la pantalla donde se decide.
         builder.addAction(eventAction(app, notificationId, p))
+        if (p.notificationId.isNotBlank()) builder.addAction(markNoticeReadAction(app, notificationId, p.notificationId))
         notify(app, notificationId, builder.build())
-        refreshEventSummary(app, channelId, group, notificationId, summaryLine(title, p.body))
+        rebuildEventSummary(app, group, posted = PostedEvent(notificationId, channelId, summaryLine(title, p.body), p.body, p.threadTitle, p.entity))
+    }
+
+    private fun markNoticeReadAction(app: Context, androidId: Int, noticeId: String): NotificationCompat.Action {
+        val intent = Intent(app, NotificationActionReceiver::class.java).apply {
+            action = NotificationActionReceiver.ACTION_MARK_NOTICE_READ
+            putExtra(NotificationActionReceiver.EXTRA_NOTICE_ID, noticeId)
+            putExtra(NotificationActionReceiver.EXTRA_ANDROID_ID, androidId)
+        }
+        val pi = PendingIntent.getBroadcast(
+            app,
+            androidId * 31 + 4,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+        return NotificationCompat.Action.Builder(IconCompat.createWithResource(app, R.drawable.ic_action_read), "Marcar como leído", pi)
+            .setSemanticAction(NotificationCompat.Action.SEMANTIC_ACTION_MARK_AS_READ)
+            .setShowsUserInterface(false)
+            .build()
     }
 
     private fun eventAction(app: Context, notificationId: Int, p: PushPayload): NotificationCompat.Action {
@@ -418,7 +474,7 @@ object ArtaPushRenderer {
             if (p.url.isNotBlank()) putExtra(EXTRA_URL, p.url)
             if (p.type.isNotBlank()) putExtra(EXTRA_TYPE, p.type)
             if (p.notificationId.isNotBlank()) putExtra(EXTRA_NOTIFICATION_ID, p.notificationId)
-            if (p.isApproval) putExtra(EXTRA_TARGET, TARGET_APPROVALS)
+            if (p.opensApprovals) putExtra(EXTRA_TARGET, TARGET_APPROVALS)
             // Las acciones no cancelan solas (autoCancel solo aplica al toque): la app la quita.
             putExtra(EXTRA_DISMISS_ID, notificationId)
         }
@@ -439,30 +495,59 @@ object ArtaPushRenderer {
         return if (key.isNotBlank()) "evt:$key".hashCode() else (System.currentTimeMillis() and 0x7FFFFFFFL).toInt()
     }
 
-    private fun refreshEventSummary(app: Context, channelId: String, group: String, postedId: Int, postedLine: CharSequence) {
-        val others = activeNotifications(app)
-            .filter { it.id != postedId && it.notification.group == group && !it.isSummary() }
+    /** Lo recién pintado: quizá todavía no se ve entre los activos (`notify` va en cola). */
+    private class PostedEvent(
+        val id: Int,
+        val channelId: String,
+        val line: CharSequence,
+        val body: String,
+        val threadTitle: String,
+        val entity: BizEntity?,
+    )
+
+    /**
+     * Tarjeta resumen del grupo con lo que hay en la barra. Sin nada, se quita: un resumen sin hijas
+     * se quedaría como tarjeta vacía. Con una sola no hace falta tocarla: se ve el aviso mismo.
+     */
+    private fun rebuildEventSummary(app: Context, group: String, excluding: Int? = null, posted: PostedEvent? = null) {
+        val active = activeNotifications(app).filter { it.notification.group == group }
+        val others = active
+            .filter { !it.isSummary() && it.id != excluding && it.id != posted?.id }
             .sortedByDescending { it.postTime }
-        val total = others.size + 1
+        val total = others.size + (if (posted != null) 1 else 0)
+        val summary = active.firstOrNull { it.isSummary() }
+        if (total == 0) {
+            summary?.let { NotificationManagerCompat.from(app).cancel(it.id) }
+            return
+        }
         if (total < 2) return
+        val channelId = posted?.channelId ?: others.first().notification.channelId
+        val bodies = listOfNotNull(posted?.body) + others.map { textOf(it) }
+        val subject = PushGrouping.subject(posted?.threadTitle.orEmpty(), bodies)
+        val entity = posted?.entity
+        val fallbackSub = others.firstOrNull()?.notification?.extras?.getCharSequence(Notification.EXTRA_SUB_TEXT)?.toString()
         postSummary(
             app = app,
             channelId = channelId,
             group = group,
-            title = "$total avisos",
-            summaryText = ArtaNotifications.label(channelId),
-            lines = listOf(postedLine) + others.map { lineOf(it) },
+            title = PushGrouping.summaryTitle(total, subject),
+            summaryText = entity?.short ?: fallbackSub ?: ArtaNotifications.label(channelId),
+            lines = listOfNotNull(posted?.line) + others.map { lineOf(it) },
             total = total,
             url = "/notifications",
+            color = entity?.let(ArtaNotifications::accentFor) ?: others.firstOrNull()?.notification?.color ?: ArtaNotifications.ACCENT_COLOR,
         )
     }
 
+    private fun textOf(sbn: StatusBarNotification): String =
+        sbn.notification.extras.getCharSequence(Notification.EXTRA_TEXT)?.toString().orEmpty()
+
     // ─── Comunes ────────────────────────────────────────────────────────────
 
-    private fun baseBuilder(app: Context, channelId: String, sentAt: Long): NotificationCompat.Builder =
+    private fun baseBuilder(app: Context, channelId: String, sentAt: Long, entity: BizEntity? = null): NotificationCompat.Builder =
         NotificationCompat.Builder(app, channelId)
             .setSmallIcon(R.drawable.ic_stat_arta)
-            .setColor(ArtaNotifications.ACCENT_COLOR)
+            .setColor(ArtaNotifications.accentFor(entity))
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setDefaults(NotificationCompat.DEFAULT_ALL)
             .setAutoCancel(true)
@@ -470,10 +555,10 @@ object ArtaPushRenderer {
             .setShowWhen(true)
             .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
 
-    private fun publicVersion(app: Context, channelId: String, text: String): Notification =
+    private fun publicVersion(app: Context, channelId: String, text: String, entity: BizEntity? = null): Notification =
         NotificationCompat.Builder(app, channelId)
             .setSmallIcon(R.drawable.ic_stat_arta)
-            .setColor(ArtaNotifications.ACCENT_COLOR)
+            .setColor(ArtaNotifications.accentFor(entity))
             .setContentTitle("ARTA")
             .setContentText(text)
             .build()
@@ -487,6 +572,7 @@ object ArtaPushRenderer {
         lines: List<CharSequence>,
         total: Int,
         url: String,
+        color: Int = ArtaNotifications.ACCENT_COLOR,
     ) {
         val id = summaryId(group)
         val style = NotificationCompat.InboxStyle().setBigContentTitle(title)
@@ -495,7 +581,7 @@ object ArtaPushRenderer {
         style.setSummaryText(if (extra > 0) "$summaryText · +$extra más" else summaryText)
         val n = NotificationCompat.Builder(app, channelId)
             .setSmallIcon(R.drawable.ic_stat_arta)
-            .setColor(ArtaNotifications.ACCENT_COLOR)
+            .setColor(color)
             .setContentTitle(title)
             .setContentText(lines.firstOrNull() ?: "")
             .setSubText(summaryText)
@@ -524,6 +610,7 @@ object ArtaPushRenderer {
         messageId: String,
         notificationId: String,
         type: String = "",
+        noticeIds: List<String> = emptyList(),
     ): PendingIntent {
         val intent = Intent(app, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
@@ -531,6 +618,7 @@ object ArtaPushRenderer {
             if (chatChannelId.isNotBlank()) putExtra(EXTRA_CHANNEL_ID, chatChannelId)
             if (messageId.isNotBlank()) putExtra(EXTRA_MESSAGE_ID, messageId)
             if (notificationId.isNotBlank()) putExtra(EXTRA_NOTIFICATION_ID, notificationId)
+            if (noticeIds.isNotEmpty()) putExtra(EXTRA_NOTIFICATION_IDS, noticeIds.toTypedArray())
             if (type.isNotBlank()) putExtra(EXTRA_TYPE, type)
         }
         return PendingIntent.getActivity(app, requestCode, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
@@ -554,8 +642,8 @@ object ArtaPushRenderer {
         )
     }
 
-    /** Círculo dorado con las iniciales (máx. 2) en negro, como el resto de la marca. */
-    fun initials(name: String): Bitmap {
+    /** Círculo del acento de la entidad con las iniciales (máx. 2): blanco sobre tinta, tinta sobre plata. */
+    fun initials(name: String, entity: BizEntity? = null): Bitmap {
         val letters = name.trim().removePrefix("#")
             .split(Regex("\\s+"))
             .mapNotNull { w -> w.firstOrNull { it.isLetterOrDigit() }?.uppercaseChar() }
@@ -565,9 +653,9 @@ object ArtaPushRenderer {
         val out = Bitmap.createBitmap(AVATAR_PX, AVATAR_PX, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(out)
         val half = AVATAR_PX / 2f
-        canvas.drawCircle(half, half, half, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = ArtaNotifications.ACCENT_COLOR })
+        canvas.drawCircle(half, half, half, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = ArtaNotifications.accentFor(entity) })
         val text = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.parseColor("#09090B")
+            color = ArtaNotifications.onAccentFor(entity)
             textAlign = Paint.Align.CENTER
             typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
             textSize = AVATAR_PX * if (letters.length > 1) 0.38f else 0.46f

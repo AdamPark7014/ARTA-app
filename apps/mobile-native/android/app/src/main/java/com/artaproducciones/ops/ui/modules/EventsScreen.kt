@@ -17,6 +17,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.CalendarMonth
@@ -41,7 +43,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -59,7 +63,9 @@ import com.artaproducciones.ops.ui.theme.LocalArtaTokens
 import com.artaproducciones.ops.ui.theme.SearchField
 import com.artaproducciones.ops.ui.theme.SegmentedControl
 import com.artaproducciones.ops.ui.theme.TABULAR
+import androidx.compose.material.icons.outlined.Event
 import androidx.compose.material.icons.outlined.EventAvailable
+import com.artaproducciones.ops.ui.theme.fadingEdges
 import com.artaproducciones.ops.ui.theme.TextButton
 import java.time.LocalDate
 import java.time.YearMonth
@@ -91,9 +97,9 @@ internal fun EventSummaryDto.occursOn(day: LocalDate): Boolean {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EventsScreen(nav: ModuleNav, showBack: Boolean = true) {
-    var perms by remember { mutableStateOf<ModulesPerms?>(null) }
+    var perms by remember { mutableStateOf(ModulesStore.perms) }
     var events by remember { mutableStateOf(ModulesStore.events) }
-    var loading by remember { mutableStateOf(true) }
+    var refreshing by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var tick by remember { mutableIntStateOf(0) }
     var monthMode by rememberSaveable { mutableStateOf(false) }
@@ -106,20 +112,22 @@ fun EventsScreen(nav: ModuleNav, showBack: Boolean = true) {
     val entity = LocalActiveEntity.current
 
     LaunchedEffect(tick, entity) {
-        loading = true
         try {
             val p = ModulesPerms(ModulesSession.me())
             perms = p
+            ModulesStore.perms = p
             // Solo la entidad activa; sin operación de eventos en ella, no hay nada que pedir.
             val ops = p.opsEntity
             val list = if (ops == null) emptyList() else ModulesClient.api.events(entity = ops, scope = "all")
             ModulesStore.events = list
             events = list
             error = null
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
             error = e.userMessage()
         } finally {
-            loading = false
+            refreshing = false
         }
     }
 
@@ -149,6 +157,8 @@ fun EventsScreen(nav: ModuleNav, showBack: Boolean = true) {
             }
     }
 
+    val listState = rememberLazyListState()
+
     Column(Modifier.fillMaxSize()) {
         val toggle: @Composable () -> Unit = {
             IconButton(onClick = { monthMode = !monthMode }) {
@@ -160,55 +170,69 @@ fun EventsScreen(nav: ModuleNav, showBack: Boolean = true) {
         else ScreenTitle("Eventos") { toggle() }
 
         PullToRefreshBox(
-            isRefreshing = loading && events != null,
-            onRefresh = { tick++ },
+            isRefreshing = refreshing,
+            onRefresh = {
+                refreshing = true
+                tick++
+            },
             modifier = Modifier.fillMaxSize(),
         ) {
-            val current = events
-            when {
-                current == null && error != null -> ErrorState(error!!, onRetry = { tick++ })
-                current == null -> SkeletonList()
-                monthMode -> MonthView(
-                    events = current,
-                    notes = notes,
-                    month = month,
-                    selected = selected,
-                    error = error,
-                    onRetry = { tick++ },
-                    onMonth = { month = it },
-                    onSelect = { selected = it },
-                    onOpen = { nav.openEvent(it.id) },
-                )
-                else -> LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = bottomInset())) {
-                    item {
-                        SegmentedControl(
-                            options = EventSegment.entries.map { it.label },
-                            selected = segment.ordinal,
-                            onSelect = { segment = EventSegment.entries[it] },
-                            modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 4.dp),
-                        )
-                    }
-                    item {
-                        SearchField(
-                            value = query,
-                            onValueChange = { query = it },
-                            placeholder = "Buscar show, artista o lugar",
-                            compactPlaceholder = "Buscar shows",
-                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-                        )
-                    }
-                    error?.let { msg -> item { InlineError(msg) { tick++ } } }
-                    if (visible.isEmpty()) {
-                        item {
-                            when {
-                                query.isNotBlank() -> EmptyState("Nada coincide", "Prueba con otro nombre o lugar.", icon = Icons.Default.Search)
-                                segment == EventSegment.LIVE -> EmptyState("Ningún show en curso hoy", icon = Icons.Outlined.EventAvailable)
-                                segment == EventSegment.PAST -> EmptyState("Sin eventos pasados", icon = Icons.Outlined.EventAvailable)
-                                else -> EmptyState("Sin shows próximos", "Los eventos nuevos se crean desde la web.", icon = Icons.Outlined.EventAvailable)
+            // La lista y el mes se funden; lo que sale se sigue pintando, por eso el `orEmpty`.
+            val view = when (listPhase(events != null, error)) {
+                ListPhase.Error -> "error"
+                ListPhase.Loading -> "loading"
+                ListPhase.Ready -> if (monthMode) "month" else "list"
+            }
+            PhaseSwap(view) { phase ->
+                when (phase) {
+                    "error" -> ErrorState(error.orEmpty(), onRetry = { tick++ })
+                    "loading" -> SkeletonList()
+                    "month" -> MonthView(
+                        events = events.orEmpty(),
+                        notes = notes,
+                        month = month,
+                        selected = selected,
+                        error = error,
+                        onRetry = { tick++ },
+                        onMonth = { month = it },
+                        onSelect = { selected = it },
+                        onOpen = { nav.openEvent(it.id) },
+                    )
+                    else -> LazyColumn(
+                        Modifier.fillMaxSize().fadingEdges(listState, start = 16.dp, end = 28.dp),
+                        state = listState,
+                        contentPadding = PaddingValues(bottom = bottomInset()),
+                    ) {
+                        item(key = "segment") {
+                            SegmentedControl(
+                                options = EventSegment.entries.map { it.label },
+                                selected = segment.ordinal,
+                                onSelect = { segment = EventSegment.entries[it] },
+                                modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 4.dp),
+                            )
+                        }
+                        item(key = "search") {
+                            SearchField(
+                                value = query,
+                                onValueChange = { query = it },
+                                placeholder = "Buscar show, artista o lugar",
+                                compactPlaceholder = "Buscar shows",
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                            )
+                        }
+                        error?.let { msg -> item(key = "error") { InlineError(msg) { tick++ } } }
+                        if (visible.isEmpty()) {
+                            item(key = "empty") {
+                                when {
+                                    query.isNotBlank() -> EmptyState("Nada coincide", "Prueba con otro nombre o lugar.", icon = Icons.Default.Search)
+                                    segment == EventSegment.LIVE -> EmptyState("Ningún show en curso hoy", icon = Icons.Outlined.EventAvailable)
+                                    segment == EventSegment.PAST -> EmptyState("Sin eventos pasados", icon = Icons.Outlined.EventAvailable)
+                                    else -> EmptyState("Sin shows próximos", "Los eventos nuevos se crean desde la web.", icon = Icons.Outlined.EventAvailable)
+                                }
                             }
                         }
+                        items(visible, key = { it.id }) { e -> EventRow(e, onClick = { nav.openEvent(e.id) }, modifier = Modifier.animateItem()) }
                     }
-                    items(visible, key = { it.id }) { e -> EventRow(e, onClick = { nav.openEvent(e.id) }) }
                 }
             }
         }
@@ -222,8 +246,8 @@ private val MONTH_SHORT = DateTimeFormatter.ofPattern("MMM", ES_MX)
  * el lugar puede ocupar dos en vez de cortarse a media palabra.
  */
 @Composable
-internal fun EventRow(e: EventSummaryDto, onClick: () -> Unit) {
-    ModuleCard(Modifier.padding(horizontal = 16.dp, vertical = 4.dp), onClick = onClick) {
+internal fun EventRow(e: EventSummaryDto, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    ModuleCard(modifier.padding(horizontal = 16.dp, vertical = 4.dp), onClick = onClick) {
         Row(verticalAlignment = Alignment.Top) {
             val start = e.startDay()
             Column(
@@ -233,12 +257,13 @@ internal fun EventRow(e: EventSummaryDto, onClick: () -> Unit) {
                     .padding(vertical = 6.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                Text(start?.dayOfMonth?.toString() ?: "—", style = ArtaType.Kpi.copy(fontSize = 20.sp, lineHeight = 24.sp, fontWeight = FontWeight.Normal), color = ArtaColors.Text)
-                Text(
-                    start?.let { MONTH_SHORT.format(it).replace(".", "") } ?: "",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = ArtaColors.Gold,
-                )
+                if (start != null) {
+                    Text("${start.dayOfMonth}", style = ArtaType.Kpi.copy(fontSize = 20.sp, lineHeight = 24.sp, fontWeight = FontWeight.Normal), color = ArtaColors.Text)
+                    Text(MONTH_SHORT.format(start).replace(".", ""), style = MaterialTheme.typography.labelSmall, color = ArtaColors.Gold)
+                } else {
+                    // Sin fecha: el renglón de abajo ya lo dice con palabras; aquí, nunca una raya suelta.
+                    Icon(Icons.Outlined.Event, contentDescription = null, tint = ArtaColors.Tertiary, modifier = Modifier.padding(vertical = 8.dp).size(22.dp))
+                }
             }
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
@@ -247,7 +272,8 @@ internal fun EventRow(e: EventSummaryDto, onClick: () -> Unit) {
                     eventWhenLabel(e.startsAt, e.endsAt),
                     style = MaterialTheme.typography.bodySmall.copy(fontFeatureSettings = TABULAR),
                     color = ArtaColors.Muted,
-                    maxLines = 1,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
                 )
                 val place = listOfNotNull(e.venue?.takeIf { it.isNotBlank() }, e.city?.takeIf { it.isNotBlank() }).joinToString(", ")
                 if (place.isNotBlank()) {
@@ -284,6 +310,7 @@ private fun MonthView(
     val dayEvents = remember(events, selected) { events.filter { it.occursOn(selected) }.sortedBy { it.startsAt ?: "" } }
     val dayNotes = notesByDay[selected.toString()].orEmpty()
 
+    val haptics = rememberHaptics()
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = bottomInset())) {
         error?.let { msg -> item { InlineError(msg, onRetry) } }
         item {
@@ -337,7 +364,10 @@ private fun MonthView(
                                     isSelected = day == selected,
                                     hasEvents = events.any { it.occursOn(day) },
                                     hasNotes = notesByDay.containsKey(day.toString()),
-                                    onClick = { onSelect(day) },
+                                    onClick = {
+                                        if (day != selected) haptics.tick()
+                                        onSelect(day)
+                                    },
                                     modifier = Modifier.weight(1f),
                                 )
                             }
@@ -355,9 +385,9 @@ private fun MonthView(
             SectionTitle(label, count = (dayEvents.size + dayNotes.size).takeIf { it > 0 })
         }
         if (dayEvents.isEmpty() && dayNotes.isEmpty()) {
-            item { Text("Nada en este día.", color = ArtaColors.Muted, modifier = Modifier.padding(horizontal = 16.dp)) }
+            item { Text("Nada en este día.", color = ArtaColors.Muted, modifier = Modifier.padding(horizontal = 20.dp)) }
         }
-        items(dayEvents, key = { "e-${it.id}" }) { e -> EventRow(e, onClick = { onOpen(e) }) }
+        items(dayEvents, key = { "e-${it.id}" }) { e -> EventRow(e, onClick = { onOpen(e) }, modifier = Modifier.animateItem()) }
         items(dayNotes, key = { "n-${it.id}" }) { n ->
             ModuleCard(Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
                 Text(n.text)
@@ -386,9 +416,10 @@ private fun DayCell(
         modifier
             .aspectRatio(1f)
             .padding(2.dp)
+            .clip(shape)
             .background(if (isSelected) ArtaColors.GoldSoft else Color.Transparent, shape)
             .then(if (isToday) Modifier.border(1.dp, ArtaColors.Gold, shape) else Modifier)
-            .clickable(onClick = onClick),
+            .clickable(role = Role.Button, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {

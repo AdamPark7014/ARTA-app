@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.navigationBars
@@ -20,6 +21,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
@@ -28,8 +30,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AttachFile
+import androidx.compose.material.icons.outlined.History
+import androidx.compose.material.icons.outlined.TaskAlt
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -56,6 +59,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -151,9 +155,10 @@ fun ApprovalsScreen(nav: ModuleNav, focusAdvanceId: String? = null) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val haptics = rememberHaptics()
-    var perms by remember { mutableStateOf<ModulesPerms?>(null) }
-    var data by remember { mutableStateOf<ApprovalsData?>(null) }
-    var loading by remember { mutableStateOf(true) }
+    var perms by remember { mutableStateOf(ModulesStore.perms) }
+    // Con una tarjeta por enfocar (viene de un aviso) se espera lo fresco: la caché diría que ya no está.
+    var data by remember { mutableStateOf(if (focusAdvanceId == null) ModulesStore.approvals else null) }
+    var refreshing by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var tick by remember { mutableIntStateOf(0) }
     var tab by rememberSaveable { mutableIntStateOf(0) }
@@ -168,18 +173,21 @@ fun ApprovalsScreen(nav: ModuleNav, focusAdvanceId: String? = null) {
     val listState = rememberLazyListState()
 
     LaunchedEffect(tick) {
-        loading = true
         try {
             val p = ModulesPerms(ModulesSession.me())
             perms = p
+            ModulesStore.perms = p
             data = loadApprovals(p)
             error = null
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
             error = e.userMessage()
         } finally {
-            loading = false
+            refreshing = false
         }
     }
+    LaunchedEffect(data) { data?.let { ModulesStore.approvals = it } }
 
     fun reviewTask(t: TaskDto, note: String?) {
         busyId = t.id
@@ -277,37 +285,47 @@ fun ApprovalsScreen(nav: ModuleNav, focusAdvanceId: String? = null) {
             modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 4.dp),
         )
         PullToRefreshBox(
-            isRefreshing = loading && d != null,
-            onRefresh = { tick++ },
+            isRefreshing = refreshing,
+            onRefresh = {
+                refreshing = true
+                tick++
+            },
             modifier = Modifier.fillMaxSize(),
         ) {
-            when {
-                d == null && error != null -> ErrorState(error!!, onRetry = { tick++ })
-                d == null || p == null -> SkeletonList()
-                tab == 0 -> PendingList(
-                    data = d,
-                    perms = p,
-                    error = error,
-                    busyId = busyId,
-                    onRetry = { tick++ },
-                    onOpenTask = { nav.openTask(it.id) },
-                    onApprove = { reviewTask(it, null) },
-                    onReject = { rejectTask = it },
-                    onOpenPo = { openPo = it },
-                    onOpenAdvances = { nav.openWeb("/advances", "Anticipos") },
-                    listState = listState,
-                    highlightAdvance = highlightAdvance,
-                    onOpenFile = { a, url -> openRemoteFile(context, scope, url, a.label) },
-                    onApproveAdvance = { resolveAdvance(it, "approve") },
-                    onRejectAdvance = { rejectAdvance = it },
-                    onPaidAdvance = { confirmPaid = it },
-                )
-                else -> HistoryList(
-                    data = d,
-                    perms = p,
-                    onOpenTask = { nav.openTask(it.id) },
-                    onOpenPo = { openPo = it },
-                )
+            val view = when (listPhase(d != null && p != null, error)) {
+                ListPhase.Error -> "error"
+                ListPhase.Loading -> "loading"
+                ListPhase.Ready -> if (tab == 0) "pending" else "history"
+            }
+            PhaseSwap(view) { phase ->
+                when (phase) {
+                    "error" -> ErrorState(error.orEmpty(), onRetry = { tick++ })
+                    "loading" -> SkeletonList()
+                    "pending" -> if (d != null && p != null) PendingList(
+                        data = d,
+                        perms = p,
+                        error = error,
+                        busyId = busyId,
+                        onRetry = { tick++ },
+                        onOpenTask = { nav.openTask(it.id) },
+                        onApprove = { reviewTask(it, null) },
+                        onReject = { rejectTask = it },
+                        onOpenPo = { openPo = it },
+                        onOpenAdvances = { nav.openWeb("/advances", "Anticipos") },
+                        listState = listState,
+                        highlightAdvance = highlightAdvance,
+                        onOpenFile = { a, url -> openRemoteFile(context, scope, url, a.label) },
+                        onApproveAdvance = { resolveAdvance(it, "approve") },
+                        onRejectAdvance = { rejectAdvance = it },
+                        onPaidAdvance = { confirmPaid = it },
+                    )
+                    else -> if (d != null && p != null) HistoryList(
+                        data = d,
+                        perms = p,
+                        onOpenTask = { nav.openTask(it.id) },
+                        onOpenPo = { openPo = it },
+                    )
+                }
             }
             SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).navigationBarsPadding())
         }
@@ -327,7 +345,7 @@ fun ApprovalsScreen(nav: ModuleNav, focusAdvanceId: String? = null) {
     confirmPaid?.let { a ->
         ConfirmDialog(
             title = "¿Marcar pagado?",
-            text = listOfNotNull(a.conceptLabel(), advanceAmountLabel(a.amount), a.event?.name?.takeIf { it.isNotBlank() }).joinToString(" · "),
+            text = listOfNotNull(a.conceptLabel(), advanceAmountOrNull(a.amount), a.event?.name?.takeIf { it.isNotBlank() }).joinToString(" · "),
             confirmLabel = "Marcar pagado",
             onConfirm = { resolveAdvance(a, "paid") },
             onDismiss = { confirmPaid = null },
@@ -397,13 +415,14 @@ private fun PendingList(
                     "Nada pendiente",
                     "Cuando alguien te entregue una tarea" +
                         (if (perms.approvesMoney) ", pidan una orden de compra o un anticipo" else "") + ", aparecerá aquí.",
+                    icon = Icons.Outlined.TaskAlt,
                 )
             }
         }
         if (data.tasksToReview.isNotEmpty()) {
             item { SectionTitle("Tareas por aprobar", count = data.tasksToReview.size) }
             items(data.tasksToReview, key = { "t-${it.id}" }) { t ->
-                ReviewTaskCard(t, busy = busyId == t.id, onOpen = { onOpenTask(t) }, onApprove = { onApprove(t) }, onReject = { onReject(t) })
+                ReviewTaskCard(t, busy = busyId == t.id, onOpen = { onOpenTask(t) }, onApprove = { onApprove(t) }, onReject = { onReject(t) }, modifier = Modifier.animateItem())
             }
         }
         if (toAuthorize.isNotEmpty()) {
@@ -412,7 +431,7 @@ private fun PendingList(
                     Text(money(toAuthorize.sumOf { it.row.amount }), style = MaterialTheme.typography.labelMedium, color = ArtaColors.Muted)
                 }
             }
-            items(toAuthorize, key = { "a-${it.row.id}" }) { PoCard(it, onClick = { onOpenPo(it) }) }
+            items(toAuthorize, key = { "a-${it.row.id}" }) { PoCard(it, onClick = { onOpenPo(it) }, modifier = Modifier.animateItem()) }
         }
         if (toPay.isNotEmpty()) {
             item {
@@ -426,11 +445,11 @@ private fun PendingList(
                         "Hoy no es día de cobro: los pagos se registran solo en los días de cobro.",
                         style = MaterialTheme.typography.bodySmall,
                         color = ArtaColors.Muted,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
                     )
                 }
             }
-            items(toPay, key = { "p-${it.row.id}" }) { PoCard(it, onClick = { onOpenPo(it) }) }
+            items(toPay, key = { "p-${it.row.id}" }) { PoCard(it, onClick = { onOpenPo(it) }, modifier = Modifier.animateItem()) }
         }
         if (advances.isNotEmpty()) {
             item {
@@ -446,6 +465,7 @@ private fun PendingList(
                     onApprove = { onApproveAdvance(a) },
                     onReject = { onRejectAdvance(a) },
                     onPaid = { onPaidAdvance(a) },
+                    modifier = Modifier.animateItem(),
                 )
             }
         }
@@ -487,22 +507,22 @@ private fun HistoryList(data: ApprovalsData, perms: ModulesPerms, onOpenTask: (T
     val approved = data.requested.filter { it.status == "DONE" }.sortedByDescending { it.approvedAt ?: it.updatedAt ?: "" }.take(40)
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 32.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding())) {
         if (orders.isEmpty() && approved.isEmpty()) {
-            item { EmptyState("Sin historial todavía", "Aquí quedan las órdenes autorizadas o pagadas y las tareas que aprobaste.") }
+            item { EmptyState("Sin historial todavía", "Aquí quedan las órdenes autorizadas o pagadas y las tareas que aprobaste.", icon = Icons.Outlined.History) }
         }
         if (perms.approvesMoney && orders.isNotEmpty()) {
             item { SectionTitle("Órdenes de compra", count = orders.size) }
-            items(orders, key = { "h-${it.row.id}" }) { PoCard(it, onClick = { onOpenPo(it) }) }
+            items(orders, key = { "h-${it.row.id}" }) { PoCard(it, onClick = { onOpenPo(it) }, modifier = Modifier.animateItem()) }
         }
         if (approved.isNotEmpty()) {
             item { SectionTitle("Tareas que pediste, ya cerradas", count = approved.size) }
-            items(approved, key = { "d-${it.id}" }) { t -> TaskRow(task = t, showAssignees = true, onClick = { onOpenTask(t) }) }
+            items(approved, key = { "d-${it.id}" }) { t -> TaskRow(task = t, showAssignees = true, onClick = { onOpenTask(t) }, modifier = Modifier.animateItem()) }
         }
     }
 }
 
 @Composable
-private fun ReviewTaskCard(task: TaskDto, busy: Boolean, onOpen: () -> Unit, onApprove: () -> Unit, onReject: () -> Unit) {
-    ModuleCard(Modifier.padding(horizontal = 16.dp, vertical = 4.dp), onClick = onOpen) {
+private fun ReviewTaskCard(task: TaskDto, busy: Boolean, onOpen: () -> Unit, onApprove: () -> Unit, onReject: () -> Unit, modifier: Modifier = Modifier) {
+    ModuleCard(modifier.padding(horizontal = 16.dp, vertical = 4.dp), onClick = onOpen) {
         Text(task.title, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
         val who = task.assigneePeople().joinToString(", ") { it.fullName }.ifBlank { "Sin responsable" }
         Text(
@@ -530,18 +550,15 @@ private fun ReviewTaskCard(task: TaskDto, busy: Boolean, onOpen: () -> Unit, onA
                 colors = ButtonDefaults.outlinedButtonColors(contentColor = ArtaColors.Danger),
                 modifier = Modifier.weight(1f),
             ) { Text("Rechazar") }
-            Button(onClick = onApprove, enabled = !busy, modifier = Modifier.weight(1f)) {
-                if (busy) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = ArtaColors.OnAccent)
-                else Text("Visto bueno")
-            }
+            Button(onClick = onApprove, enabled = !busy, modifier = Modifier.weight(1f)) { BusyLabel(busy, "Visto bueno") }
         }
     }
 }
 
 @Composable
-private fun PoCard(item: PoItem, onClick: () -> Unit) {
+private fun PoCard(item: PoItem, onClick: () -> Unit, modifier: Modifier = Modifier) {
     val r = item.row
-    ModuleCard(Modifier.padding(horizontal = 16.dp, vertical = 4.dp), onClick = onClick) {
+    ModuleCard(modifier.padding(horizontal = 16.dp, vertical = 4.dp), onClick = onClick) {
         Row(verticalAlignment = Alignment.Top) {
             Text(r.vendorName ?: "Sin proveedor", fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
             Spacer(Modifier.width(12.dp))
@@ -659,7 +676,10 @@ private fun PoSheet(
             Text(
                 row.eventName,
                 color = ArtaColors.Gold,
-                modifier = Modifier.clickable { onOpenEvent(row.eventId) },
+                modifier = Modifier
+                    .clickable(role = Role.Button, onClickLabel = "Abrir el evento") { onOpenEvent(row.eventId) }
+                    .heightIn(min = 40.dp)
+                    .wrapContentHeight(),
             )
 
             when {
@@ -667,7 +687,7 @@ private fun PoSheet(
                 d == null -> Column(verticalArrangement = Arrangement.spacedBy(8.dp)) { repeat(4) { SkeletonBlock(height = 18) } }
                 else -> {
                     InfoLine("Rubro", poRubroLabel(d.rubro))
-                    InfoLine("Solicitó", d.createdBy?.fullName ?: row.createdBy ?: "—")
+                    (d.createdBy?.fullName ?: row.createdBy)?.takeIf { it.isNotBlank() }?.let { InfoLine("Solicitó", it) }
                     d.createdAt?.let { InfoLine("Pedida", stampLabel(it)) }
                     InfoLine("Forma de pago", poPaymentLabel(d.paymentMethod))
                     InfoLine("Beneficiario", if (d.payeeType == "OTRO") "Otro" else "Proveedor")
@@ -683,14 +703,15 @@ private fun PoSheet(
                             Row {
                                 Column(Modifier.weight(1f)) {
                                     Text(l.concept)
-                                    Text(
-                                        "${l.qty?.toDoubleOrNull()?.let { q -> if (q % 1.0 == 0.0) q.toLong().toString() else q.toString() } ?: "—"} × ${moneyOf(l.unitPrice)}",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = ArtaColors.Muted,
-                                    )
+                                    // Solo lo que se sabe: nada de rayas sueltas si falta la cantidad o el precio.
+                                    val qty = l.qty?.toDoubleOrNull()?.let { q -> if (q % 1.0 == 0.0) q.toLong().toString() else q.toString() }
+                                    val unit = l.unitPrice?.toDoubleOrNull()?.let(::money)
+                                    listOfNotNull(qty, unit).joinToString(" × ").takeIf { it.isNotBlank() }?.let {
+                                        Text(it, style = MaterialTheme.typography.bodySmall.copy(fontFeatureSettings = TABULAR), color = ArtaColors.Muted)
+                                    }
                                 }
                                 Spacer(Modifier.width(12.dp))
-                                Text(moneyOf(l.total), style = LocalTextStyle.current.copy(fontFeatureSettings = TABULAR))
+                                l.total?.toDoubleOrNull()?.let { Text(money(it), style = LocalTextStyle.current.copy(fontFeatureSettings = TABULAR)) }
                             }
                         }
                         val total = d.amount?.toDoubleOrNull() ?: row.amount
@@ -707,13 +728,13 @@ private fun PoSheet(
                     if (d.proofs.isEmpty()) Text("Sin comprobantes", color = ArtaColors.Muted)
                     d.proofs.forEach { proof ->
                         Row(
-                            Modifier.fillMaxWidth().clickable { openRemoteFile(context, scope, proof.fileUrl, proof.label) }.padding(vertical = 6.dp),
+                            Modifier.fillMaxWidth().clickable(role = Role.Button) { openRemoteFile(context, scope, proof.fileUrl, proof.label) }.heightIn(min = 48.dp).padding(vertical = 6.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Icon(Icons.Default.AttachFile, contentDescription = null, tint = ArtaColors.Gold)
                             Spacer(Modifier.width(8.dp))
                             Text(proof.label ?: proof.fileUrl.substringAfterLast('/'), modifier = Modifier.weight(1f), maxLines = 2, overflow = TextOverflow.Ellipsis)
-                            proof.amount?.let { Text(moneyOf(it), color = ArtaColors.Muted) }
+                            proof.amount?.toDoubleOrNull()?.let { Text(money(it), color = ArtaColors.Muted, style = LocalTextStyle.current.copy(fontFeatureSettings = TABULAR)) }
                         }
                     }
 
@@ -728,9 +749,7 @@ private fun PoSheet(
                                 colors = ButtonDefaults.outlinedButtonColors(contentColor = ArtaColors.Danger),
                                 modifier = Modifier.weight(1f),
                             ) { Text("Rechazar") }
-                            Button(onClick = { setStatus("AUTHORIZED") }, enabled = !busy, modifier = Modifier.weight(1f)) {
-                                if (busy) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = ArtaColors.OnAccent) else Text("Autorizar")
-                            }
+                            Button(onClick = { setStatus("AUTHORIZED") }, enabled = !busy, modifier = Modifier.weight(1f)) { BusyLabel(busy, "Autorizar") }
                         }
                         d.status == "AUTHORIZED" && perms.canMarkPaid -> when {
                             poNeedsProof(d.paymentMethod) && d.proofs.isEmpty() -> Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -741,9 +760,7 @@ private fun PoSheet(
                                 OutlinedButton(onClick = { onOpenWeb(ocsPath, "Órdenes de compra") }) { Text("Subir comprobante") }
                             }
                             !canPayNow -> Text("Hoy no es día de cobro: el pago se registra en el siguiente día de cobro.", color = ArtaColors.Muted)
-                            else -> Button(onClick = { confirm = "PAID" }, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
-                                if (busy) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = ArtaColors.OnAccent) else Text("Marcar pagada")
-                            }
+                            else -> Button(onClick = { confirm = "PAID" }, enabled = !busy, modifier = Modifier.fillMaxWidth()) { BusyLabel(busy, "Marcar pagada") }
                         }
                     }
                 }

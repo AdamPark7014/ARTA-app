@@ -15,7 +15,6 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -39,6 +38,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.artaproducciones.ops.data.api.userMessage
+import com.artaproducciones.ops.ui.modules.BusyLabel
 import com.artaproducciones.ops.ui.theme.ArtaColors
 import com.artaproducciones.ops.ui.theme.Button
 import com.artaproducciones.ops.ui.theme.TextButton
@@ -193,11 +193,7 @@ fun ReportMessageSheet(
                     enabled = reason != null && !sending,
                     
                 ) {
-                    if (sending) {
-                        CircularProgressIndicator(Modifier.size(18.dp), color = ArtaColors.OnAccent, strokeWidth = 2.dp)
-                    } else {
-                        Text("Enviar reporte")
-                    }
+                    BusyLabel(sending, "Enviar reporte")
                 }
             }
             Spacer(Modifier.navigationBarsPadding().padding(bottom = Space.M))

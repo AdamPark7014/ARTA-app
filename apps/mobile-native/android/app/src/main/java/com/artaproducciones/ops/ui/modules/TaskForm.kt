@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
@@ -24,7 +25,6 @@ import androidx.compose.material.icons.filled.Event
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -40,6 +40,7 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -48,7 +49,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
 import com.artaproducciones.ops.data.ActiveEntity
 import com.artaproducciones.ops.data.api.DirUserDto
@@ -95,6 +99,8 @@ fun TaskFormSheet(
     val assigneeIds = remember { mutableStateListOf<String>().apply { initial?.let { addAll(it.assigneeIdList()) } } }
     var due by remember { mutableStateOf(dueDate(initial?.dueAt)) }
     var people by remember { mutableStateOf<List<DirUserDto>>(emptyList()) }
+    var peopleFailed by remember { mutableStateOf(false) }
+    var peopleTick by remember { mutableIntStateOf(0) }
     var events by remember { mutableStateOf<List<EventSummaryDto>>(emptyList()) }
     var saving by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -102,8 +108,12 @@ fun TaskFormSheet(
     var pickEvent by remember { mutableStateOf(false) }
     var pickDate by remember { mutableStateOf(false) }
 
+    // Si el equipo no carga, el selector lo dice y deja reintentar (antes se quedaba en «Cargando»).
+    LaunchedEffect(peopleTick) {
+        peopleFailed = false
+        runCatching { ModulesSession.directory() }.onSuccess { people = it }.onFailure { peopleFailed = true }
+    }
     LaunchedEffect(Unit) {
-        runCatching { ModulesSession.directory() }.onSuccess { people = it }
         if (!editing && presetEventId == null) {
             runCatching { ModulesClient.api.events(entity = ActiveEntity.param, scope = "active") }
                 .onSuccess { list -> events = list.filter { it.status !in CLOSED_EVENT }.sortedBy { it.startsAt ?: "9999" } }
@@ -184,6 +194,7 @@ fun TaskFormSheet(
                 onValueChange = { title = it; error = null },
                 label = { Text("Título") },
                 singleLine = true,
+                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, imeAction = ImeAction.Next),
                 modifier = Modifier.fillMaxWidth(),
             )
             OutlinedTextField(
@@ -191,6 +202,7 @@ fun TaskFormSheet(
                 onValueChange = { detail = it },
                 label = { Text("Detalle (opcional)") },
                 minLines = 2,
+                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
                 modifier = Modifier.fillMaxWidth(),
             )
             OutlinedTextField(
@@ -198,6 +210,7 @@ fun TaskFormSheet(
                 onValueChange = { module = it },
                 label = { Text("Área o módulo (opcional)") },
                 singleLine = true,
+                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
                 modifier = Modifier.fillMaxWidth(),
             )
 
@@ -247,8 +260,7 @@ fun TaskFormSheet(
 
             // Apagado a propósito mientras falta el título, como «Entrar» en la entrada.
             Button(onClick = { save() }, enabled = !saving && title.isNotBlank(), modifier = Modifier.fillMaxWidth()) {
-                if (saving) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = ArtaColors.OnAccent)
-                else Text(if (editing) "Guardar cambios" else "Crear tarea")
+                BusyLabel(saving, if (editing) "Guardar cambios" else "Crear tarea")
             }
             Spacer(Modifier.size(8.dp))
         }
@@ -257,6 +269,8 @@ fun TaskFormSheet(
     if (pickPeople) {
         PeoplePickerDialog(
             people = people,
+            failed = peopleFailed,
+            onRetry = { peopleTick++ },
             selected = assigneeIds.toList(),
             onDismiss = { pickPeople = false },
             onDone = { ids ->
@@ -303,7 +317,8 @@ private fun FieldRow(label: String, value: String, enabled: Boolean, onClick: ()
     Column(
         Modifier
             .fillMaxWidth()
-            .clickable(enabled = enabled, onClick = onClick)
+            .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
+            .heightIn(min = 48.dp)
             .padding(vertical = 4.dp),
     ) {
         Text(label.uppercase(ES_MX), style = ArtaType.Cap, color = ArtaColors.Tertiary)
@@ -315,6 +330,8 @@ private fun FieldRow(label: String, value: String, enabled: Boolean, onClick: ()
 @Composable
 private fun PeoplePickerDialog(
     people: List<DirUserDto>,
+    failed: Boolean,
+    onRetry: () -> Unit,
     selected: List<String>,
     onDismiss: () -> Unit,
     onDone: (List<String>) -> Unit,
@@ -337,8 +354,13 @@ private fun PeoplePickerDialog(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
-                if (people.isEmpty()) {
-                    Text("Cargando equipo…", color = ArtaColors.Muted, modifier = Modifier.padding(top = 12.dp))
+                when {
+                    people.isEmpty() && failed -> Row(Modifier.padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text("No se pudo cargar el equipo.", color = ArtaColors.Muted, modifier = Modifier.weight(1f))
+                        TextButton(onClick = onRetry) { Text("Reintentar") }
+                    }
+                    people.isEmpty() -> Text("Cargando equipo…", color = ArtaColors.Muted, modifier = Modifier.padding(top = 12.dp))
+                    visible.isEmpty() -> Text("Nadie coincide con «${q.trim()}».", color = ArtaColors.Muted, modifier = Modifier.padding(top = 12.dp))
                 }
                 LazyColumn(Modifier.heightIn(max = 360.dp).padding(top = 8.dp)) {
                     items(visible, key = { it.id }) { p ->
@@ -400,6 +422,15 @@ private fun EventPickerDialog(
                             modifier = Modifier.fillMaxWidth().clickable { onPick(null) }.padding(vertical = 12.dp),
                         )
                         HorizontalDivider(color = ArtaColors.Line)
+                    }
+                    if (visible.isEmpty()) {
+                        item {
+                            Text(
+                                if (q.isBlank()) "No hay eventos activos." else "Nada coincide con «${q.trim()}».",
+                                color = ArtaColors.Muted,
+                                modifier = Modifier.padding(vertical = 12.dp),
+                            )
+                        }
                     }
                     items(visible, key = { it.id }) { ev ->
                         Column(Modifier.fillMaxWidth().clickable { onPick(ev) }.padding(vertical = 10.dp)) {

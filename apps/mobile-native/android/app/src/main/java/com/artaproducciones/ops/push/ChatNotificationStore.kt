@@ -24,6 +24,8 @@ internal object ChatNotificationStore {
         val text: String,
         val at: Long,
         val mine: Boolean = false,
+        /** Aviso de la campana de este mensaje (menciones): se marca leído junto con la conversación. */
+        val noticeId: String = "",
     )
 
     data class Conversation(
@@ -33,7 +35,11 @@ internal object ChatNotificationStore {
         val url: String,
         val messages: List<Entry>,
         val updatedAt: Long = 0L,
-    )
+        /** `ARTA` / `EXPLANADA`; vacío en directos. */
+        val entity: String = "",
+    ) {
+        val noticeIds: List<String> get() = messages.map { it.noticeId }.filter { it.isNotBlank() }.distinct()
+    }
 
     private fun prefs(context: Context): SharedPreferences =
         context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -47,6 +53,7 @@ internal object ChatNotificationStore {
         title: String,
         url: String,
         entry: Entry,
+        entity: String = "",
     ): Conversation {
         val current = read(context, threadId)
         val duplicate = entry.messageId.isNotBlank() && current?.messages?.any { it.messageId == entry.messageId } == true
@@ -58,6 +65,7 @@ internal object ChatNotificationStore {
             url = url.ifBlank { current?.url.orEmpty() },
             messages = messages,
             updatedAt = System.currentTimeMillis(),
+            entity = entity.ifBlank { current?.entity.orEmpty() },
         )
         write(context, conversation)
         return conversation
@@ -87,6 +95,7 @@ internal object ChatNotificationStore {
                 title = o.optString("title"),
                 url = o.optString("url"),
                 updatedAt = o.optLong("updatedAt"),
+                entity = o.optString("entity"),
                 messages = (0 until arr.length()).mapNotNull { i ->
                     val m = arr.optJSONObject(i) ?: return@mapNotNull null
                     Entry(
@@ -96,6 +105,7 @@ internal object ChatNotificationStore {
                         text = m.optString("text"),
                         at = m.optLong("at"),
                         mine = m.optBoolean("mine"),
+                        noticeId = m.optString("noticeId"),
                     )
                 },
             )
@@ -112,7 +122,8 @@ internal object ChatNotificationStore {
                     .put("senderName", m.senderName)
                     .put("text", m.text)
                     .put("at", m.at)
-                    .put("mine", m.mine),
+                    .put("mine", m.mine)
+                    .put("noticeId", m.noticeId),
             )
         }
         val o = JSONObject()
@@ -120,6 +131,7 @@ internal object ChatNotificationStore {
             .put("title", c.title)
             .put("url", c.url)
             .put("updatedAt", c.updatedAt)
+            .put("entity", c.entity)
             .put("messages", arr)
         commit(prefs(context).edit().putString(KEY_PREFIX + c.threadId, o.toString()))
     }

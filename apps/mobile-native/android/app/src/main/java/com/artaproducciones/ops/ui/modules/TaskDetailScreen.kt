@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -38,7 +39,6 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -128,9 +128,9 @@ fun TaskDetailScreen(taskId: String, nav: ModuleNav) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val haptics = rememberHaptics()
-    var task by remember { mutableStateOf<TaskDto?>(null) }
-    var perms by remember { mutableStateOf<ModulesPerms?>(null) }
-    var loading by remember { mutableStateOf(true) }
+    var task by remember(taskId) { mutableStateOf(ModulesStore.taskDetails[taskId]) }
+    var perms by remember { mutableStateOf(ModulesStore.perms) }
+    var refreshing by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var tick by remember { mutableIntStateOf(0) }
     var busy by remember { mutableStateOf<String?>(null) }
@@ -141,17 +141,19 @@ fun TaskDetailScreen(taskId: String, nav: ModuleNav) {
     var confirmDelete by remember { mutableStateOf(false) }
 
     LaunchedEffect(taskId, tick) {
-        loading = true
         try {
-            perms = ModulesPerms(ModulesSession.me())
+            perms = ModulesPerms(ModulesSession.me()).also { ModulesStore.perms = it }
             task = ModulesClient.api.task(taskId)
             error = null
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
             error = e.userMessage()
         } finally {
-            loading = false
+            refreshing = false
         }
     }
+    LaunchedEffect(task) { task?.let { ModulesStore.taskDetails[taskId] = it } }
 
     fun act(key: String, success: String?, block: suspend () -> TaskDto?) {
         if (busy != null) return
@@ -205,25 +207,30 @@ fun TaskDetailScreen(taskId: String, nav: ModuleNav) {
             }
         }
         PullToRefreshBox(
-            isRefreshing = loading && t != null,
-            onRefresh = { tick++ },
+            isRefreshing = refreshing,
+            onRefresh = {
+                refreshing = true
+                tick++
+            },
             modifier = Modifier.weight(1f).fillMaxWidth(),
         ) {
-            when {
-                t == null && error != null -> ErrorState(error!!, onRetry = { tick++ })
-                t == null || can == null -> DetailSkeleton()
-                else -> TaskBody(
-                    task = t,
-                    can = can,
-                    busy = busy,
-                    onOpenEvent = { id -> nav.openEvent(id) },
-                    onOpenFile = { url, name -> openRemoteFile(context, scope, url, name) },
-                    onAddFiles = { picker.launch("*/*") },
-                    onStart = { setStatus("IN_PROGRESS", "Tarea en curso") },
-                    onToggleBlock = {
-                        if (t.status == "BLOCKED") setStatus("OPEN", "Tarea desbloqueada") else setStatus("BLOCKED", "Tarea bloqueada")
-                    },
-                )
+            PhaseSwap(listPhase(t != null && can != null, error)) { phase ->
+                when (phase) {
+                    ListPhase.Error -> ErrorState(error.orEmpty(), onRetry = { tick++ })
+                    ListPhase.Loading -> DetailSkeleton()
+                    ListPhase.Ready -> if (t != null && can != null) TaskBody(
+                        task = t,
+                        can = can,
+                        busy = busy,
+                        onOpenEvent = { id -> nav.openEvent(id) },
+                        onOpenFile = { url, name -> openRemoteFile(context, scope, url, name) },
+                        onAddFiles = { picker.launch("*/*") },
+                        onStart = { setStatus("IN_PROGRESS", "Tarea en curso") },
+                        onToggleBlock = {
+                            if (t.status == "BLOCKED") setStatus("OPEN", "Tarea desbloqueada") else setStatus("BLOCKED", "Tarea bloqueada")
+                        },
+                    )
+                }
             }
         }
         if (t != null && can != null) {
@@ -282,6 +289,7 @@ fun TaskDetailScreen(taskId: String, nav: ModuleNav) {
             onConfirm = {
                 act("delete", "Tarea eliminada") {
                     ModulesClient.api.deleteTask(taskId)
+                    ModulesStore.taskDetails.remove(taskId)
                     nav.back()
                     null
                 }
@@ -317,7 +325,7 @@ private fun TaskBody(
         Modifier.fillMaxSize().fadingEdges(scroll, start = 16.dp).verticalScroll(scroll).padding(top = 8.dp, bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Column(Modifier.padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(task.title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Pill(taskStatusLabel(task), taskStatusColor(task.status))
@@ -337,15 +345,15 @@ private fun TaskBody(
         }
 
         if (can.start || can.block) {
-            Row(Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (can.start) OutlinedButton(onClick = onStart, enabled = busy == null) { Text("En curso") }
+            Row(Modifier.padding(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (can.start) OutlinedButton(onClick = onStart, enabled = busy == null) { BusyLabel(busy == "IN_PROGRESS", "En curso") }
                 if (can.block) {
                     OutlinedButton(
                         onClick = onToggleBlock,
                         enabled = busy == null,
                         colors = if (task.status == "BLOCKED") ButtonDefaults.outlinedButtonColors()
                         else ButtonDefaults.outlinedButtonColors(contentColor = ArtaColors.Danger),
-                    ) { Text(if (task.status == "BLOCKED") "Desbloquear" else "Bloquear") }
+                    ) { BusyLabel(busy == "BLOCKED" || (busy == "OPEN" && task.status == "BLOCKED"), if (task.status == "BLOCKED") "Desbloquear" else "Bloquear") }
                 }
             }
         }
@@ -372,14 +380,14 @@ private fun TaskBody(
         }
 
         if (!task.detail.isNullOrBlank() || !task.module.isNullOrBlank()) {
-            Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Column(Modifier.padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 task.module?.takeIf { it.isNotBlank() }?.let { Text("Área: $it", color = ArtaColors.Muted, style = MaterialTheme.typography.bodySmall) }
                 task.detail?.takeIf { it.isNotBlank() }?.let { Text(it, style = MaterialTheme.typography.bodyLarge) }
             }
         }
 
         SectionTitle("Personas")
-        Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(Modifier.padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             task.createdBy?.takeIf { it.fullName.isNotBlank() }?.let {
                 PersonLine(it.fullName, "Pidió" + (task.createdAt?.let { c -> " · ${stampLabel(c)}" } ?: ""))
             }
@@ -410,20 +418,20 @@ private fun TaskBody(
         SectionTitle("Archivos y entregables", count = task.evidences.size.takeIf { it > 0 }) {
             if (can.addFiles) {
                 TextButton(onClick = onAddFiles, enabled = busy == null) {
-                    if (busy == "files") CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
-                    else Text("Agregar")
+                    BusyLabel(busy == "files", "Agregar")
                 }
             }
         }
         if (task.evidences.isEmpty()) {
-            Text("Sin archivos todavía.", color = ArtaColors.Muted, modifier = Modifier.padding(horizontal = 16.dp))
+            Text("Sin archivos todavía.", color = ArtaColors.Muted, modifier = Modifier.padding(horizontal = 20.dp))
         }
         task.evidences.forEach { ev ->
             Row(
                 Modifier
                     .fillMaxWidth()
-                    .clickable { onOpenFile(ev.fileUrl, ev.label) }
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                    .clickable(role = androidx.compose.ui.semantics.Role.Button) { onOpenFile(ev.fileUrl, ev.label) }
+                    .heightIn(min = 48.dp)
+                    .padding(horizontal = 20.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Icon(Icons.Default.AttachFile, contentDescription = null, tint = ArtaColors.Gold)
@@ -446,7 +454,7 @@ private fun TaskBody(
             // Línea de tiempo: punto alineado al título de cada cambio y un hilo fino que los une.
             val acts = task.activities.asReversed()
             val line = ArtaColors.LineStrong
-            Column(Modifier.padding(horizontal = 16.dp)) {
+            Column(Modifier.padding(horizontal = 20.dp)) {
                 acts.forEachIndexed { i, a ->
                     val last = i == acts.lastIndex
                     Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
@@ -562,20 +570,14 @@ private fun TaskActionBar(
                             enabled = enabled,
                             colors = ButtonDefaults.outlinedButtonColors(contentColor = ArtaColors.Danger),
                             modifier = Modifier.weight(1f),
-                        ) { Text("Rechazar") }
-                        Button(onClick = onApprove, enabled = enabled, modifier = Modifier.weight(1f)) {
-                            if (busy == "approve") CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = ArtaColors.OnAccent)
-                            else Text("Dar visto bueno")
-                        }
+                        ) { BusyLabel(busy == "reject", "Rechazar") }
+                        Button(onClick = onApprove, enabled = enabled, modifier = Modifier.weight(1f)) { BusyLabel(busy == "approve", "Dar visto bueno") }
                     }
                     can.deliver -> Button(onClick = onDeliver, enabled = enabled, modifier = Modifier.weight(1f)) { Text("Entregar") }
-                    can.markDone -> Button(onClick = onMarkDone, enabled = enabled, modifier = Modifier.weight(1f)) {
-                        if (busy == "DONE") CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = ArtaColors.OnAccent)
-                        else Text("Marcar hecha")
-                    }
+                    can.markDone -> Button(onClick = onMarkDone, enabled = enabled, modifier = Modifier.weight(1f)) { BusyLabel(busy == "DONE", "Marcar hecha") }
                 }
                 if (can.reopen && !can.review) {
-                    OutlinedButton(onClick = onReopen, enabled = enabled, modifier = Modifier.weight(1f)) { Text("Reabrir") }
+                    OutlinedButton(onClick = onReopen, enabled = enabled, modifier = Modifier.weight(1f)) { BusyLabel(busy == "OPEN", "Reabrir") }
                 }
             }
         }
@@ -655,7 +657,7 @@ private fun DeliverSheet(task: TaskDto, onDismiss: () -> Unit, onDelivered: (Tas
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.AttachFile, contentDescription = null, tint = ArtaColors.Gold, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(8.dp))
-                    Text(displayName(context, uri), modifier = Modifier.weight(1f), maxLines = 1)
+                    Text(displayName(context, uri), modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
                     TextButton(onClick = { files.remove(uri) }) { Text("Quitar") }
                 }
             }
@@ -665,13 +667,14 @@ private fun DeliverSheet(task: TaskDto, onDismiss: () -> Unit, onDelivered: (Tas
                 Text("Adjuntar foto, PDF o archivo")
             }
             if (task.evidences.isNotEmpty()) {
-                Text("Ya hay ${task.evidences.size} archivo(s) en esta tarea.", style = MaterialTheme.typography.bodySmall, color = ArtaColors.Muted)
+                Text(
+                    if (task.evidences.size == 1) "Ya hay 1 archivo en esta tarea." else "Ya hay ${task.evidences.size} archivos en esta tarea.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = ArtaColors.Muted,
+                )
             }
             error?.let { Text(it, color = ArtaColors.Danger) }
-            Button(onClick = { send() }, enabled = !sending, modifier = Modifier.fillMaxWidth()) {
-                if (sending) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = ArtaColors.OnAccent)
-                else Text("Enviar entrega")
-            }
+            Button(onClick = { send() }, enabled = !sending, modifier = Modifier.fillMaxWidth()) { BusyLabel(sending, "Enviar entrega") }
             Spacer(Modifier.height(8.dp))
         }
     }

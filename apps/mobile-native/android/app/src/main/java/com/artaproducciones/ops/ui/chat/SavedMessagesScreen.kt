@@ -13,7 +13,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.BookmarkRemove
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -26,8 +25,6 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -48,6 +45,7 @@ import com.artaproducciones.ops.data.api.SavedItem
 import com.artaproducciones.ops.data.api.userMessage
 import com.artaproducciones.ops.ui.common.Avatar
 import com.artaproducciones.ops.ui.common.relativeTime
+import com.artaproducciones.ops.ui.modules.DetailTopBar
 import com.artaproducciones.ops.ui.theme.ArtaColors
 import kotlinx.coroutines.launch
 
@@ -111,11 +109,7 @@ fun SavedMessagesScreen(onBack: () -> Unit, openMessage: (channelId: String, mes
         containerColor = Color.Transparent,
         snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
-            TopAppBar(
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = ArtaColors.BgElev),
-                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Atrás") } },
-                title = { Text("Guardados", fontWeight = FontWeight.SemiBold) },
-            )
+            DetailTopBar("Guardados", onBack = onBack)
         },
     ) { padding ->
         PullToRefreshBox(

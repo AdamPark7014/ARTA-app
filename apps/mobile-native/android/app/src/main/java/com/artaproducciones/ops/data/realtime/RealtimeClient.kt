@@ -65,6 +65,11 @@ object RealtimeClient {
     private val _notificationsUnread = MutableSharedFlow<Int>(extraBufferCapacity = 8)
     val notificationsUnread: SharedFlow<Int> = _notificationsUnread
 
+    private val _notificationRead = MutableSharedFlow<String?>(extraBufferCapacity = 8)
+
+    /** Aviso leído en esta u otra pantalla (id; null = se marcaron todos). */
+    val notificationRead: SharedFlow<String?> = _notificationRead
+
     private fun obj(args: Array<out Any?>): JSONObject? = args.firstOrNull() as? JSONObject
 
     private fun message(o: JSONObject): ChatMessage? = runCatching { messageAdapter.fromJson(o.toString()) }
@@ -115,6 +120,9 @@ object RealtimeClient {
     private val onChannelChanged = Emitter.Listener { args -> obj(args)?.optString("channelId")?.let { _channelsChanged.tryEmit(it) } }
     private val onChatUnread = Emitter.Listener { args -> obj(args)?.let { _chatUnread.tryEmit(it.optInt("total")) } }
     private val onNotification = Emitter.Listener { args -> obj(args)?.let { _notificationsUnread.tryEmit(it.optInt("unread")) } }
+    private val onNotificationRead = Emitter.Listener { args ->
+        obj(args)?.let { o -> _notificationRead.tryEmit(if (o.isNull("notificationId")) null else o.optString("notificationId").takeIf { id -> id.isNotBlank() }) }
+    }
 
     private val onConnect = Emitter.Listener {
         _connected.value = true
@@ -160,6 +168,7 @@ object RealtimeClient {
         s.on("chat:unread", onChatUnread)
         s.on("chat:presence", onPresence)
         s.on("notification:new", onNotification)
+        s.on("notification:read", onNotificationRead)
         socket = s
         s.connect()
     }

@@ -28,6 +28,7 @@ import com.artaproducciones.ops.push.ArtaPushRenderer
 import com.artaproducciones.ops.ui.ArtaApp
 import com.artaproducciones.ops.ui.DeepLink
 import com.artaproducciones.ops.ui.theme.ArtaTheme
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -38,6 +39,9 @@ private val NAV_DARK_SCRIM = Color.argb(0x80, 0x1b, 0x1b, 0x1b)
 /** Fondo de la ventana por entidad (lo que asoma antes de que Compose pinte o al rotar). */
 private val WINDOW_ARTA = Color.rgb(0xF7, 0xF6, 0xF3)
 private val WINDOW_AUDITORIO = Color.rgb(0x08, 0x08, 0x0A)
+
+/** El sistema cancela el aviso tocado justo después de abrir la app; entonces se limpian los resúmenes. */
+private const val SWEEP_AFTER_TAP_MS = 900L
 
 class MainActivity : ComponentActivity() {
     /** Destino pendiente de un aviso tocado; la navegación lo consume y lo limpia. */
@@ -98,9 +102,17 @@ class MainActivity : ComponentActivity() {
 
     private fun handle(intent: Intent?, demoLink: DeepLink? = null) {
         intent ?: return
-        val notificationId = intent.getStringExtra(ArtaPushRenderer.EXTRA_NOTIFICATION_ID)
-        if (!notificationId.isNullOrBlank()) {
-            lifecycleScope.launch { runCatching { ApiClient.api.notificationRead(notificationId) } }
+        // Tocar un aviso lo marca leído; una conversación, además, las menciones que traía.
+        val noticeIds = listOfNotNull(intent.getStringExtra(ArtaPushRenderer.EXTRA_NOTIFICATION_ID)) +
+            intent.getStringArrayExtra(ArtaPushRenderer.EXTRA_NOTIFICATION_IDS).orEmpty()
+        noticeIds.filter { it.isNotBlank() }.distinct().forEach { id ->
+            lifecycleScope.launch { runCatching { ApiClient.api.notificationRead(id) } }
+        }
+        if (intent.hasExtra(ArtaPushRenderer.EXTRA_URL) || intent.hasExtra(ArtaPushRenderer.EXTRA_CHANNEL_ID)) {
+            lifecycleScope.launch {
+                delay(SWEEP_AFTER_TAP_MS)
+                ArtaPushRenderer.sweepSummaries(this@MainActivity)
+            }
         }
         val dismissId = intent.getIntExtra(ArtaPushRenderer.EXTRA_DISMISS_ID, 0)
         if (dismissId != 0) NotificationManagerCompat.from(this).cancel(dismissId)

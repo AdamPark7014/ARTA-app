@@ -6,6 +6,7 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -208,10 +209,15 @@ fun EmptyState(icon: ImageVector, title: String, subtitle: String? = null, modif
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(Space.S),
     ) {
-        Box(Modifier.size(64.dp).background(ArtaColors.GoldSoft, CircleShape), contentAlignment = Alignment.Center) {
-            Icon(icon, null, tint = ArtaColors.Gold, modifier = Modifier.size(30.dp))
+        // El mismo recuadro que los vacíos de los módulos: relleno neutro con línea fina.
+        val shape = LocalArtaTokens.current.controlShape
+        Box(
+            Modifier.size(60.dp).background(ArtaColors.Surface2, shape).border(1.dp, ArtaColors.Line, shape),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(icon, null, tint = ArtaColors.Muted, modifier = Modifier.size(26.dp))
         }
-        Text(title, style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center)
+        Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center)
         if (!subtitle.isNullOrBlank()) {
             Text(subtitle, color = ArtaColors.Muted, style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center)
         }

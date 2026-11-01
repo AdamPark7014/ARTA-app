@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -32,6 +33,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -52,6 +54,9 @@ fun advanceAmount(raw: String?): Double? =
     raw?.trim()?.replace(",", "")?.takeIf { it.isNotEmpty() }?.toBigDecimalOrNull()?.toDouble()
 
 fun advanceAmountLabel(raw: String?): String = money(advanceAmount(raw))
+
+/** Para enseñar: sin monto no se pinta nada, ni una raya suelta. */
+fun advanceAmountOrNull(raw: String?): String? = advanceAmount(raw)?.let(::money)
 
 fun advanceStatusLabel(status: String?): String = when (status) {
     "PENDING" -> "Por aprobar"
@@ -86,8 +91,9 @@ internal fun AdvanceCard(
     onApprove: () -> Unit,
     onReject: () -> Unit,
     onPaid: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
-    val outer = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+    val outer = modifier.padding(horizontal = 16.dp, vertical = 4.dp)
     ModuleCard(if (highlighted) outer.border(1.5.dp, ArtaColors.Gold, LocalArtaTokens.current.cardShape) else outer) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
@@ -97,8 +103,10 @@ internal fun AdvanceCard(
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f),
             )
-            Spacer(Modifier.width(8.dp))
-            Text(advanceAmountLabel(advance.amount), fontWeight = FontWeight.SemiBold, color = ArtaColors.Text, style = LocalTextStyle.current.copy(fontFeatureSettings = TABULAR))
+            advanceAmountOrNull(advance.amount)?.let { amount ->
+                Spacer(Modifier.width(8.dp))
+                Text(amount, fontWeight = FontWeight.SemiBold, color = ArtaColors.Text, style = LocalTextStyle.current.copy(fontFeatureSettings = TABULAR), maxLines = 1)
+            }
         }
         advance.event?.name?.takeIf { it.isNotBlank() }?.let {
             Text(it, style = MaterialTheme.typography.bodySmall, color = ArtaColors.Muted, maxLines = 2, overflow = TextOverflow.Ellipsis)
@@ -133,7 +141,7 @@ internal fun AdvanceCard(
         }
         advance.fileUrl?.takeIf { it.isNotBlank() }?.let { url ->
             Row(
-                Modifier.fillMaxWidth().clickable { onOpenFile(url) }.padding(vertical = 6.dp),
+                Modifier.fillMaxWidth().clickable(role = Role.Button) { onOpenFile(url) }.heightIn(min = 48.dp).padding(vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Icon(Icons.Default.AttachFile, contentDescription = null, tint = ArtaColors.Gold, modifier = Modifier.size(18.dp))
@@ -178,7 +186,7 @@ internal fun AdvanceRejectSheet(advance: AdvanceDto, onConfirm: (String) -> Unit
         ) {
             Text("Rechazar anticipo", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
             Text(
-                listOfNotNull(advance.conceptLabel(), advanceAmountLabel(advance.amount), advance.event?.name?.takeIf { it.isNotBlank() })
+                listOfNotNull(advance.conceptLabel(), advanceAmountOrNull(advance.amount), advance.event?.name?.takeIf { it.isNotBlank() })
                     .joinToString(" · "),
                 color = ArtaColors.Muted,
             )
@@ -199,9 +207,10 @@ internal fun AdvanceRejectSheet(advance: AdvanceDto, onConfirm: (String) -> Unit
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 TextButton(onClick = onDismiss, modifier = Modifier.weight(1f)) { Text("Cancelar") }
-                Button(
+                // Lo destructivo va discreto (SISTEMA-VISUAL.md › Acabado): contorno, nunca un botón rojo lleno.
+                OutlinedButton(
                     onClick = { if (advanceReasonValid(reason)) onConfirm(reason.trim()) else showError = true },
-                    colors = ButtonDefaults.buttonColors(containerColor = ArtaColors.Danger, contentColor = ArtaColors.OnDanger),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = ArtaColors.Danger),
                     modifier = Modifier.weight(1f),
                 ) { Text("Rechazar") }
             }

@@ -2,7 +2,6 @@ package com.artaproducciones.ops.ui.more
 
 import android.content.Intent
 import android.net.Uri
-import android.provider.Settings
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -10,6 +9,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -78,6 +78,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -388,18 +389,8 @@ fun MoreScreen(user: UserDto, nav: ModuleNav) {
             MoreRow(
                 icon = Icons.Outlined.NotificationsActive,
                 label = "Ajustes de avisos",
-                supporting = if (PushRegistration.available) "Sonido, vibración y qué avisos te llegan" else "Esta compilación no tiene Firebase: no llegarán avisos push",
-                onClick = {
-                    val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
-                        .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
-                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    runCatching { context.startActivity(intent) }.onFailure {
-                        context.startActivity(
-                            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${context.packageName}"))
-                                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-                        )
-                    }
-                },
+                supporting = if (PushRegistration.available) "Qué te llega, horario silencioso y permiso" else "Esta compilación no tiene Firebase: no llegarán avisos push",
+                onClick = { nav.openNotificationPrefs() },
             )
         }
         item(key = "dnd") {
@@ -515,6 +506,7 @@ fun MoreScreen(user: UserDto, nav: ModuleNav) {
                 }) { Text("Cerrar sesión", color = ArtaColors.Danger) }
             },
             dismissButton = { TextButton(onClick = { confirmLogout = false }) { Text("Cancelar") } },
+            containerColor = ArtaColors.BgElev,
         )
     }
 
@@ -530,6 +522,7 @@ fun MoreScreen(user: UserDto, nav: ModuleNav) {
                     LegalLinks.open(context, LegalLinks.CONTRACT)
                 }) { Text("Cómo contratar ARTA") }
             },
+            containerColor = ArtaColors.BgElev,
         )
     }
 
@@ -565,6 +558,7 @@ fun MoreScreen(user: UserDto, nav: ModuleNav) {
                 }
             },
             dismissButton = { TextButton(onClick = { dndDialog = false }) { Text("Cancelar") } },
+            containerColor = ArtaColors.BgElev,
         )
     }
 }
@@ -611,7 +605,8 @@ private fun MoreRow(
     Row(
         Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
+            .clickable(role = Role.Button, onClick = onClick)
+            .heightIn(min = 48.dp)
             .padding(start = 20.dp, end = 14.dp, top = 12.dp, bottom = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(16.dp),

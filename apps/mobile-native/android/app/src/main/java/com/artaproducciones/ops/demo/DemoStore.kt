@@ -78,6 +78,50 @@ internal object DemoEntities {
 }
 
 /**
+ * Avisos en el modo demo, como `GET /notifications` y `/notifications/preferences` del API: una
+ * sola fixture sirve a todas las páginas y filtros, y las preferencias se recuerdan en memoria.
+ */
+internal object DemoNotices {
+    const val PREFS_KEY = "notifications/preferences"
+    const val DEFAULT_PREFS = """{"muted":[],"quietHours":{"enabled":false,"start":"22:00","end":"07:00"}}"""
+
+    private val CHANNELS = listOf("chat", "approvals", "tasks", "finance", "events", "documents", "general")
+    private val HHMM = Regex("^([01]\\d|2[0-3]):[0-5]\\d\$")
+
+    /** Aplica `unread`, `before` y `take` sobre la lista grabada, de lo más nuevo a lo más viejo. */
+    fun page(raw: String, url: HttpUrl): String {
+        val list = runCatching { JSONArray(raw) }.getOrNull() ?: return raw
+        val unreadOnly = url.queryParameter("unread").let { it == "1" || it == "true" }
+        val before = url.queryParameter("before")?.let { runCatching { Instant.parse(it) }.getOrNull() }
+        val take = url.queryParameter("take")?.toIntOrNull()?.coerceIn(1, 100) ?: 30
+        val rows = list.objects()
+            .filter { !unreadOnly || it.isNull("readAt") }
+            .filter { n -> before == null || createdAt(n)?.isBefore(before) == true }
+            .sortedByDescending { createdAt(it) ?: Instant.EPOCH }
+            .take(take)
+        return JSONArray(rows).toString()
+    }
+
+    /** Lo mismo que `normalizePrefs` del API: la forma completa, con valores válidos. */
+    fun normalizePrefs(body: JSONObject): JSONObject {
+        val muted = body.optJSONArray("muted").strings().toSet()
+        val quiet = body.optJSONObject("quietHours")
+        fun hour(key: String, fallback: String) = quiet?.str(key)?.takeIf { HHMM.matches(it) } ?: fallback
+        return JSONObject()
+            .put("muted", JSONArray(CHANNELS.filter { it in muted }))
+            .put(
+                "quietHours",
+                JSONObject()
+                    .put("enabled", quiet?.optBoolean("enabled") == true)
+                    .put("start", hour("start", "22:00"))
+                    .put("end", hour("end", "07:00")),
+            )
+    }
+
+    private fun createdAt(n: JSONObject): Instant? = n.str("createdAt")?.let { runCatching { Instant.parse(it) }.getOrNull() }
+}
+
+/**
  * Las fixtures traen fechas absolutas del día en que se grabaron (la cuenta se resiembra justo
  * antes: tareas que vencen «hoy», mensajes de hace minutos, eventos de la semana). Para que el demo
  * se vea igual cualquier otro día, todas las fechas se mueven los días enteros que separan aquel

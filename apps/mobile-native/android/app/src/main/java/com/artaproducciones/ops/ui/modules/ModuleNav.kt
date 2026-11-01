@@ -9,5 +9,7 @@ interface ModuleNav {
     fun openChat(channelId: String)
     /** «Más › Usuarios bloqueados» del chat. */
     fun openBlockedUsers()
+    /** Qué avisos llegan al teléfono (desde Más y desde la barra de Avisos). */
+    fun openNotificationPrefs()
     fun back()
 }

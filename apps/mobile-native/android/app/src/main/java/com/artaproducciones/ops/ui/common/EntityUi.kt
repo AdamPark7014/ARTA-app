@@ -13,6 +13,7 @@ import androidx.compose.material.icons.outlined.SwapHoriz
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -60,7 +61,9 @@ fun EntityChip(modifier: Modifier = Modifier) {
     val haptics = rememberHaptics()
     val shape = t.controlShape
     val fg = if (t.isDark) t.accent else t.onAccent
+    // Para un híbrido es un botón: el recuadro de toque llega a 48 dp, el dibujo sigue siendo la píldora.
     val base = modifier
+        .then(if (hybrid) Modifier.minimumInteractiveComponentSize() else Modifier)
         .clip(shape)
         .then(
             if (t.isDark) Modifier.background(Color(0x0AFFFFFF)).border(1.dp, Color(0x1AFFFFFF), shape)

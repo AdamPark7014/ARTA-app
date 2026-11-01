@@ -13,21 +13,16 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.outlined.Block
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -54,6 +49,7 @@ import com.artaproducciones.ops.ui.chat.ModerationText
 import com.artaproducciones.ops.ui.chat.Space
 import com.artaproducciones.ops.ui.common.Avatar
 import com.artaproducciones.ops.ui.common.parseInstant
+import com.artaproducciones.ops.ui.modules.DetailTopBar
 import com.artaproducciones.ops.ui.theme.ArtaColors
 import com.artaproducciones.ops.ui.theme.OutlinedButton
 import kotlinx.coroutines.launch
@@ -101,11 +97,7 @@ fun BlockedUsersScreen(onBack: () -> Unit) {
         containerColor = Color.Transparent,
         snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
-            TopAppBar(
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = ArtaColors.BgElev),
-                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Atrás") } },
-                title = { Text(ModerationText.BLOCKED_USERS, fontWeight = FontWeight.SemiBold) },
-            )
+            DetailTopBar(ModerationText.BLOCKED_USERS, onBack = onBack)
         },
     ) { padding ->
         PullToRefreshBox(
@@ -162,7 +154,7 @@ private fun BlockedRow(u: BlockedUser, busy: Boolean, onUnblock: () -> Unit) {
         Spacer(Modifier.width(Space.M))
         Column(Modifier.weight(1f)) {
             Text(displayName(u), fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            since?.let { Text(it, color = ArtaColors.Muted, style = MaterialTheme.typography.bodySmall, maxLines = 1) }
+            since?.let { Text(it, color = ArtaColors.Muted, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis) }
         }
         Spacer(Modifier.width(Space.S))
         OutlinedButton(

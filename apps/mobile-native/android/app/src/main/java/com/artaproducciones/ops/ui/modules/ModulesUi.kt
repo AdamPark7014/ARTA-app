@@ -4,7 +4,11 @@ import android.content.Context
 import android.os.Build
 import android.view.HapticFeedbackConstants
 import android.widget.Toast
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.Crossfade
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.navigationBars
@@ -23,6 +27,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -33,10 +38,13 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.outlined.CloudOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -62,7 +70,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.artaproducciones.ops.data.ActiveEntity
+import com.artaproducciones.ops.data.NoticeFeed
+import com.artaproducciones.ops.data.api.ChannelSummary
 import com.artaproducciones.ops.data.api.ChatAttachment
+import com.artaproducciones.ops.data.api.EventDetailDto
 import com.artaproducciones.ops.data.api.ModulesMe
 import com.artaproducciones.ops.data.api.PersonRef
 import com.artaproducciones.ops.data.api.TaskDto
@@ -324,7 +335,6 @@ fun eventWhenLabel(startIso: String?, endIso: String?): String {
 
 private val MONEY = NumberFormat.getCurrencyInstance(ES_MX)
 fun money(amount: Double?): String = if (amount == null) "—" else synchronized(MONEY) { MONEY.format(amount) }
-fun moneyOf(raw: String?): String = money(raw?.toDoubleOrNull())
 
 fun eventStatusLabel(status: String): String? = when (status) {
     "DRAFT" -> "Borrador"
@@ -571,9 +581,10 @@ fun EmptyState(
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         if (icon != null) {
-            // Igual que iOS: círculo del relleno neutro con línea fina.
+            // Igual que iOS: relleno neutro con línea fina; círculo en ARTA, recto en Auditorio.
+            val shape = LocalArtaTokens.current.controlShape
             Box(
-                Modifier.size(60.dp).background(ArtaColors.Surface2, CircleShape).border(1.dp, ArtaColors.Line, CircleShape),
+                Modifier.size(60.dp).background(ArtaColors.Surface2, shape).border(1.dp, ArtaColors.Line, shape),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(icon, contentDescription = null, tint = ArtaColors.Muted, modifier = Modifier.size(26.dp))
@@ -589,16 +600,63 @@ fun EmptyState(
     }
 }
 
+/** Error que tapa la pantalla (no hay nada cargado): el mismo que el del chat, con «Reintentar». */
 @Composable
 fun ErrorState(message: String, onRetry: () -> Unit, modifier: Modifier = Modifier) {
     Column(
         modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 40.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Text(message, color = ArtaColors.Danger, textAlign = TextAlign.Center)
+        Icon(Icons.Outlined.CloudOff, contentDescription = null, tint = ArtaColors.Muted, modifier = Modifier.size(36.dp))
+        Text("No se pudo cargar", style = MaterialTheme.typography.titleMedium, color = ArtaColors.Text, textAlign = TextAlign.Center)
+        Text(message, color = ArtaColors.Muted, style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center)
+        Spacer(Modifier.height(4.dp))
         Button(onClick = onRetry) { Text("Reintentar") }
     }
+}
+
+/**
+ * Texto del botón o, mientras trabaja, un círculo del color del contenido. El texto se queda (sin
+ * verse) para que el botón no cambie de ancho, y el círculo toma el color del botón apagado: con
+ * `OnAccent` fijo salía blanco sobre gris claro y no se veía.
+ */
+@Composable
+fun BusyLabel(busy: Boolean, text: String, maxLines: Int = 1) {
+    Box(contentAlignment = Alignment.Center) {
+        Text(
+            text,
+            maxLines = maxLines,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Center,
+            modifier = if (busy) Modifier.alpha(0f) else Modifier,
+        )
+        if (busy) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = LocalContentColor.current)
+    }
+}
+
+/** Qué se ve en una lista: error que la tapa, esqueleto o lo cargado. */
+enum class ListPhase { Error, Loading, Ready }
+
+fun listPhase(hasData: Boolean, error: String?): ListPhase = when {
+    hasData -> ListPhase.Ready
+    error != null -> ListPhase.Error
+    else -> ListPhase.Loading
+}
+
+/**
+ * Cambia de esqueleto a contenido (o de pestaña) fundiendo, sin salto. [state] es la fase, nunca
+ * los datos: lo que sale se sigue pintando durante el fundido, así que el contenido debe aguantar
+ * que los datos ya no estén (`val x = dato ?: return@PhaseSwap`).
+ */
+@Composable
+fun <S> PhaseSwap(state: S, modifier: Modifier = Modifier.fillMaxSize(), content: @Composable (S) -> Unit) {
+    AnimatedContent(
+        targetState = state,
+        modifier = modifier,
+        transitionSpec = { fadeIn(tween(220)) togetherWith fadeOut(tween(110)) },
+        label = "phase",
+    ) { content(it) }
 }
 
 /** Banda de error sobre contenido que ya estaba cargado (no lo tapa). */
@@ -697,11 +755,35 @@ fun Dot(color: Color, size: Int = 6) {
  * Es de la entidad activa: al cambiar de entidad se vacía (`switchEntity`).
  */
 object ModulesStore {
+    private const val MAX_DETAILS = 24
+
     val taskLists = mutableMapOf<String, List<TaskDto>>()
     var events: List<com.artaproducciones.ops.data.api.EventSummaryDto>? = null
+    var perms: ModulesPerms? = null
+    internal var inicio: InicioData? = null
+    internal var approvals: ApprovalsData? = null
+    var channels: List<ChannelSummary>? = null
+
+    /** Avisos por consulta: `false` = todos, `true` = solo sin leer. */
+    val noticeFeeds = mutableMapOf<Boolean, NoticeFeed>()
+
+    /** Lo último visto de cada detalle: al volver de una tarea el evento no parpadea. */
+    val eventDetails = object : LinkedHashMap<String, EventDetailDto>(16, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, EventDetailDto>?) = size > MAX_DETAILS
+    }
+    val taskDetails = object : LinkedHashMap<String, TaskDto>(16, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, TaskDto>?) = size > MAX_DETAILS
+    }
 
     fun clear() {
         taskLists.clear()
         events = null
+        perms = null
+        inicio = null
+        approvals = null
+        channels = null
+        noticeFeeds.clear()
+        eventDetails.clear()
+        taskDetails.clear()
     }
 }

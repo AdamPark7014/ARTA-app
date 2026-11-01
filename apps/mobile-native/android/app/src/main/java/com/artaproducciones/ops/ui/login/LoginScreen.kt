@@ -1,5 +1,6 @@
 package com.artaproducciones.ops.ui.login
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -14,6 +15,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
@@ -25,7 +27,6 @@ import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -49,6 +50,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -59,6 +61,8 @@ import androidx.compose.ui.unit.sp
 import com.artaproducciones.ops.R
 import com.artaproducciones.ops.data.Session
 import com.artaproducciones.ops.ui.common.LegalLinks
+import com.artaproducciones.ops.ui.modules.BusyLabel
+import com.artaproducciones.ops.ui.modules.rememberHaptics
 import com.artaproducciones.ops.ui.theme.ArtaCard
 import com.artaproducciones.ops.ui.theme.ArtaColors
 import com.artaproducciones.ops.ui.theme.ArtaType
@@ -82,26 +86,33 @@ fun LoginScreen() {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val t = LocalArtaTokens.current
+    val haptics = rememberHaptics()
     var email by rememberSaveable { mutableStateOf("") }
     var password by rememberSaveable { mutableStateOf("") }
     var code by rememberSaveable { mutableStateOf("") }
     var challengeId by rememberSaveable { mutableStateOf<String?>(null) }
     var showPassword by rememberSaveable { mutableStateOf(false) }
-    var busy by rememberSaveable { mutableStateOf(false) }
+    // Sin guardar: al girar el teléfono la petición se cancela y el botón se quedaba apagado para siempre.
+    var busy by remember { mutableStateOf(false) }
     var error by rememberSaveable { mutableStateOf<String?>(null) }
     var enteringDemo by remember { mutableStateOf(false) }
 
     fun apply(result: Session.LoginResult) {
         busy = false
         when (result) {
-            Session.LoginResult.Success -> Unit
+            Session.LoginResult.Success -> haptics.confirm()
             is Session.LoginResult.NeedsCode -> {
                 challengeId = result.challengeId
                 error = null
             }
-            Session.LoginResult.NeedsEnrollment ->
+            Session.LoginResult.NeedsEnrollment -> {
+                haptics.reject()
                 error = "Tu organización pide verificación en dos pasos. Actívala primero en el panel web y vuelve a entrar."
-            is Session.LoginResult.Error -> error = result.message
+            }
+            is Session.LoginResult.Error -> {
+                haptics.reject()
+                error = result.message
+            }
         }
     }
 
@@ -117,7 +128,7 @@ fun LoginScreen() {
 
     val ready = if (challengeId == null) email.isNotBlank() && password.length >= 4 else code.length >= 6
 
-    BoxWithConstraints(Modifier.fillMaxSize().imePadding()) {
+    BoxWithConstraints(Modifier.fillMaxSize().systemBarsPadding().imePadding()) {
         val screen = maxHeight
         Column(
             Modifier
@@ -160,7 +171,12 @@ fun LoginScreen() {
                                 singleLine = true,
                                 shape = fieldShape(),
                                 colors = fieldColors(),
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, imeAction = ImeAction.Next),
+                                keyboardOptions = KeyboardOptions(
+                                    capitalization = KeyboardCapitalization.None,
+                                    autoCorrectEnabled = false,
+                                    keyboardType = KeyboardType.Email,
+                                    imeAction = ImeAction.Next,
+                                ),
                                 modifier = Modifier.fillMaxWidth(),
                             )
                         }
@@ -203,11 +219,11 @@ fun LoginScreen() {
                         )
                     }
 
-                    error?.let {
+                    AnimatedVisibility(error != null) {
                         Row(verticalAlignment = Alignment.Top) {
                             Icon(Icons.Outlined.ErrorOutline, contentDescription = null, tint = ArtaColors.Danger, modifier = Modifier.padding(top = 1.dp).size(16.dp))
                             Spacer(Modifier.size(6.dp))
-                            Text(it, color = ArtaColors.Danger, style = MaterialTheme.typography.bodySmall)
+                            Text(error.orEmpty(), color = ArtaColors.Danger, style = MaterialTheme.typography.bodySmall)
                         }
                     }
 
@@ -216,11 +232,7 @@ fun LoginScreen() {
                         enabled = !busy && ready,
                         modifier = Modifier.fillMaxWidth().height(52.dp),
                     ) {
-                        if (busy) {
-                            CircularProgressIndicator(Modifier.size(20.dp), color = ArtaColors.OnAccent, strokeWidth = 2.dp)
-                        } else {
-                            Text(if (challengeId == null) "Entrar" else "Verificar", fontWeight = FontWeight.SemiBold)
-                        }
+                        BusyLabel(busy, if (challengeId == null) "Entrar" else "Verificar")
                     }
 
                     if (challengeId != null) {
@@ -238,6 +250,7 @@ fun LoginScreen() {
                 Spacer(Modifier.height(20.dp))
                 DemoEntry(
                     enabled = !busy && !enteringDemo,
+                    entering = enteringDemo,
                     onExplore = {
                         if (!enteringDemo) {
                             error = null
@@ -272,16 +285,22 @@ fun LoginScreen() {
  * ficticios, sin cuenta ni conexión (`Session.enterDemo`). Debajo, cómo contratarla.
  */
 @Composable
-private fun DemoEntry(enabled: Boolean, onExplore: () -> Unit, onContract: () -> Unit) {
+private fun DemoEntry(enabled: Boolean, entering: Boolean, onExplore: () -> Unit, onContract: () -> Unit) {
     Column(
         Modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        OutlinedButton(onClick = onExplore, enabled = enabled, modifier = Modifier.fillMaxWidth().height(48.dp)) {
+        // Hasta dos renglones: en un teléfono angosto el texto no cabe en uno y no debe cortarse.
+        OutlinedButton(
+            onClick = onExplore,
+            enabled = enabled,
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+        ) {
             Icon(Icons.Outlined.AutoAwesome, contentDescription = null, modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(8.dp))
-            Text("Explorar ARTA con datos de muestra", fontWeight = FontWeight.SemiBold)
+            BusyLabel(entering, "Explorar ARTA con datos de muestra", maxLines = 2)
         }
         Text(
             "Sin cuenta ni conexión. Datos ficticios de una productora de ejemplo.",

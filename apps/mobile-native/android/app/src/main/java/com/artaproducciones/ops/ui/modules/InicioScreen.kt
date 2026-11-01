@@ -101,7 +101,7 @@ import java.time.temporal.ChronoUnit
 private val TODAY_LONG = DateTimeFormatter.ofPattern("EEEE d 'de' MMMM", ES_MX)
 private val HM = DateTimeFormatter.ofPattern("HH:mm", ES_MX)
 
-private class InicioData(
+internal class InicioData(
     val myTasks: List<TaskDto>?,
     val approvals: ApprovalsData?,
     val events: List<EventSummaryDto>?,
@@ -115,9 +115,10 @@ private class InicioData(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun InicioScreen(user: UserDto, nav: ModuleNav) {
-    var perms by remember { mutableStateOf<ModulesPerms?>(null) }
-    var data by remember { mutableStateOf<InicioData?>(null) }
-    var loading by remember { mutableStateOf(true) }
+    // Lo último cargado se ve de inmediato al volver y se actualiza por detrás, sin esqueleto.
+    var perms by remember { mutableStateOf(ModulesStore.perms) }
+    var data by remember { mutableStateOf(ModulesStore.inicio) }
+    var refreshing by remember { mutableStateOf(false) }
     var tick by remember { mutableIntStateOf(0) }
     var creating by remember { mutableStateOf(false) }
     val today = LocalDate.now()
@@ -130,10 +131,10 @@ fun InicioScreen(user: UserDto, nav: ModuleNav) {
             data = null
             dataEntity = entity
         }
-        loading = true
         try {
             val p = ModulesPerms(ModulesSession.me(expectedId = user.id))
             perms = p
+            ModulesStore.perms = p
             val active = ActiveEntity.param
             val ops = p.opsEntity
             data = coroutineScope {
@@ -155,10 +156,13 @@ fun InicioScreen(user: UserDto, nav: ModuleNav) {
                     firstError = listOf(t, a, e).firstNotNullOfOrNull { it.exceptionOrNull() }?.userMessage(),
                 )
             }
+            ModulesStore.inicio = data
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
             data = InicioData(data?.myTasks, data?.approvals, data?.events, e.userMessage())
         } finally {
-            loading = false
+            refreshing = false
         }
     }
 
@@ -167,8 +171,11 @@ fun InicioScreen(user: UserDto, nav: ModuleNav) {
     val hasContent = d != null && (d.myTasks != null || d.events != null || d.approvals != null)
 
     PullToRefreshBox(
-        isRefreshing = loading && hasContent,
-        onRefresh = { tick++ },
+        isRefreshing = refreshing,
+        onRefresh = {
+            refreshing = true
+            tick++
+        },
         modifier = Modifier.fillMaxSize(),
     ) {
         val listState = rememberLazyListState()
@@ -177,22 +184,22 @@ fun InicioScreen(user: UserDto, nav: ModuleNav) {
             state = listState,
             contentPadding = PaddingValues(bottom = 32.dp),
         ) {
-            item { Header(user, today, entity) }
+            item(key = "header") { Header(user, today, entity) }
             when {
-                !hasContent && d?.firstError != null -> item { ErrorState(d.firstError, onRetry = { tick++ }) }
-                !hasContent || p == null || d == null -> item { InicioSkeleton() }
+                !hasContent && d?.firstError != null -> item(key = "error") { ErrorState(d.firstError, onRetry = { tick++ }, modifier = Modifier.animateItem()) }
+                !hasContent || p == null || d == null -> item(key = "skeleton") { Box(Modifier.animateItem()) { InicioSkeleton() } }
                 else -> {
-                    d.firstError?.let { msg -> item { InlineError(msg) { tick++ } } }
-                    item { KpiRow(p, d, today, entity, nav) }
-                    item { QuickActions(p, d.approvals, onNewTask = { creating = true }, nav = nav) }
+                    d.firstError?.let { msg -> item(key = "inline-error") { InlineError(msg) { tick++ } } }
+                    item(key = "kpi") { Box(Modifier.animateItem()) { KpiRow(p, d, today, entity, nav) } }
+                    item(key = "quick") { Box(Modifier.animateItem()) { QuickActions(p, d.approvals, onNewTask = { creating = true }, nav = nav) } }
                     val ops = p.opsEntity != null
                     val todayEvents = if (ops) eventsOn(d.events, today) else emptyList()
                     if (todayEvents.isNotEmpty()) {
-                        item { TodayPanel(todayEvents, today, onOpen = { nav.openEvent(it) }) }
+                        item(key = "today") { Box(Modifier.animateItem()) { TodayPanel(todayEvents, today, onOpen = { nav.openEvent(it) }) } }
                     }
                     val approvals = d.approvals
                     if (approvals != null && (p.approvesMoney || approvals.tasksToReview.isNotEmpty() || approvals.actionableAdvances.isNotEmpty())) {
-                        item { ApprovalsPanel(approvals, p, nav) }
+                        item(key = "approvals") { Box(Modifier.animateItem()) { ApprovalsPanel(approvals, p, nav) } }
                     }
                     todayTasks(d.myTasks, today, nav)
                     if (ops) upcomingEvents(d.events, today, nav)
@@ -223,7 +230,8 @@ private fun Header(user: UserDto, today: LocalDate, entity: BizEntity) {
             Spacer(Modifier.weight(1f))
             EntityChip()
         }
-        Spacer(Modifier.height(22.dp))
+        // El chip de un híbrido ya trae su margen de toque.
+        Spacer(Modifier.height(if (ActiveEntity.isHybrid) 12.dp else 22.dp))
         Text(TODAY_LONG.format(today).uppercase(ES_MX), style = ArtaType.Cap, color = ArtaColors.Tertiary)
         Spacer(Modifier.height(4.dp))
         Text(
@@ -365,7 +373,7 @@ private fun KpiCard(k: Kpi, modifier: Modifier) {
         contentPadding = PaddingValues(horizontal = 14.dp, vertical = 13.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Text(k.label.uppercase(ES_MX), style = ArtaType.Cap.copy(fontSize = 10.sp, letterSpacing = 1.4.sp), color = ArtaColors.Tertiary, maxLines = 1)
+        Text(k.label.uppercase(ES_MX), style = ArtaType.Cap.copy(fontSize = 10.sp, letterSpacing = 1.4.sp), color = ArtaColors.Tertiary, maxLines = 1, overflow = TextOverflow.Ellipsis)
         val valueStyle = if (k.silver) ArtaType.Kpi.copy(brush = t.accentBrush) else ArtaType.Kpi.copy(color = ArtaColors.Text)
         Text(k.value, style = valueStyle, maxLines = 1, overflow = TextOverflow.Ellipsis)
         k.detail?.let {
@@ -528,7 +536,8 @@ private fun TimelineRow(m: Moment, onClick: () -> Unit) {
         Modifier
             .fillMaxWidth()
             .clip(t.itemShape)
-            .clickable(onClick = onClick)
+            .clickable(role = Role.Button, onClick = onClick)
+            .heightIn(min = 48.dp)
             .padding(vertical = 7.dp),
         verticalAlignment = Alignment.Top,
     ) {
@@ -586,7 +595,7 @@ private fun ApprovalsPanel(a: ApprovalsData, p: ModulesPerms, nav: ModuleNav) {
         }
         a.actionableAdvances.forEach { ad ->
             val toApprove = ad.advanceStatus == "PENDING"
-            add(Pending(advanceTitle(ad.conceptLabel()), joinDetail(ad.who(), ad.event?.name), advanceAmountLabel(ad.amount), if (toApprove) "Aprobar" else "Pagar", true) { nav.openApprovals() })
+            add(Pending(advanceTitle(ad.conceptLabel()), joinDetail(ad.who(), ad.event?.name), advanceAmountOrNull(ad.amount), if (toApprove) "Aprobar" else "Pagar", true) { nav.openApprovals() })
         }
     }
     ArtaCard(
@@ -633,7 +642,7 @@ private fun PendingRow(item: Pending) {
     Row(
         Modifier
             .fillMaxWidth()
-            .clickable(onClick = item.open)
+            .clickable(role = Role.Button, onClick = item.open)
             .padding(top = 12.dp, bottom = 12.dp, end = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -666,13 +675,13 @@ private fun androidx.compose.foundation.lazy.LazyListScope.todayTasks(tasks: Lis
         .filter { val b = it.bucket(today); b == DueBucket.OVERDUE || b == DueBucket.TODAY }
         .sortedBy { it.dueAt ?: "" }
     val overdue = urgent.count { it.isOverdue(today) }
-    item {
+    item(key = "h-tasks") {
         SectionTitle("Mis tareas de hoy", count = urgent.size.takeIf { it > 0 }, modifier = Modifier.padding(top = 8.dp)) {
-            if (overdue > 0) Text("$overdue vencidas", style = MaterialTheme.typography.labelMedium, color = ArtaColors.Danger)
+            if (overdue > 0) Text(plural(overdue, "vencida", "vencidas"), style = MaterialTheme.typography.labelMedium, color = ArtaColors.Danger)
         }
     }
     if (urgent.isEmpty()) {
-        item {
+        item(key = "tasks-empty") {
             val rest = actionable.size
             Text(
                 if (rest > 0) "Nada vence hoy. Tienes $rest pendiente${if (rest == 1) "" else "s"} en Tareas." else "Estás al día: no tienes tareas pendientes.",
@@ -682,10 +691,12 @@ private fun androidx.compose.foundation.lazy.LazyListScope.todayTasks(tasks: Lis
             )
         }
     } else {
-        items(urgent.take(8), key = { "t-${it.id}" }) { t -> TaskRow(task = t, showAssignees = false, today = today, onClick = { nav.openTask(t.id) }) }
+        items(urgent.take(8), key = { "t-${it.id}" }) { t ->
+            TaskRow(task = t, showAssignees = false, today = today, onClick = { nav.openTask(t.id) }, modifier = Modifier.animateItem())
+        }
         val more = actionable.size - urgent.take(8).size
         if (more > 0) {
-            item {
+            item(key = "tasks-more") {
                 Text(
                     "$more pendiente${if (more == 1) "" else "s"} más en Tareas",
                     style = MaterialTheme.typography.bodySmall,
@@ -708,13 +719,13 @@ private fun androidx.compose.foundation.lazy.LazyListScope.upcomingEvents(events
             !end.isBefore(today) && !start.isAfter(limit)
         }
         .sortedBy { it.startsAt ?: "" }
-    item {
+    item(key = "h-events") {
         SectionTitle("Próximos 7 días", count = upcoming.size.takeIf { it > 0 }, modifier = Modifier.padding(top = 8.dp)) {
             TextButton(onClick = { nav.openWeb("/events", "Eventos") }) { Text("Ver eventos") }
         }
     }
     if (upcoming.isEmpty()) {
-        item {
+        item(key = "events-empty") {
             Text(
                 "Sin shows en los próximos 7 días.",
                 style = MaterialTheme.typography.bodyMedium,
@@ -723,5 +734,5 @@ private fun androidx.compose.foundation.lazy.LazyListScope.upcomingEvents(events
             )
         }
     }
-    items(upcoming, key = { "e-${it.id}" }) { e -> EventRow(e, onClick = { nav.openEvent(e.id) }) }
+    items(upcoming, key = { "e-${it.id}" }) { e -> EventRow(e, onClick = { nav.openEvent(e.id) }, modifier = Modifier.animateItem()) }
 }

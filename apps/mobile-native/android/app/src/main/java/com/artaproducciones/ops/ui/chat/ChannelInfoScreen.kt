@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.Logout
 import androidx.compose.material.icons.outlined.Archive
 import androidx.compose.material.icons.outlined.Bookmark
@@ -41,8 +40,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -75,6 +72,7 @@ import com.artaproducciones.ops.data.api.UpdateChannelBody
 import com.artaproducciones.ops.data.api.userMessage
 import com.artaproducciones.ops.ui.common.parseInstant
 import com.artaproducciones.ops.ui.common.plainText
+import com.artaproducciones.ops.ui.modules.DetailTopBar
 import com.artaproducciones.ops.ui.theme.ArtaColors
 import com.artaproducciones.ops.ui.theme.TextButton
 import kotlinx.coroutines.CancellationException
@@ -166,14 +164,9 @@ fun ChannelInfoScreen(
         containerColor = Color.Transparent,
         snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
-            TopAppBar(
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = ArtaColors.BgElev),
-                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Atrás") } },
-                title = { Text("Información", fontWeight = FontWeight.SemiBold) },
-                actions = {
-                    if (busy) CircularProgressIndicator(Modifier.padding(end = Space.L).size(20.dp), strokeWidth = 2.dp, color = ArtaColors.Gold)
-                },
-            )
+            DetailTopBar("Información", onBack = onBack) {
+                if (busy) CircularProgressIndicator(Modifier.padding(end = Space.L).size(20.dp), strokeWidth = 2.dp, color = ArtaColors.Gold)
+            }
         },
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {

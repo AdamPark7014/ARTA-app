@@ -40,7 +40,6 @@ import androidx.compose.material.icons.filled.Event
 import androidx.compose.material.icons.filled.Forum
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Schedule
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -49,6 +48,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -103,9 +103,9 @@ fun EventDetailScreen(eventId: String, nav: ModuleNav) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val haptics = rememberHaptics()
-    var event by remember { mutableStateOf<EventDetailDto?>(null) }
-    var perms by remember { mutableStateOf<ModulesPerms?>(null) }
-    var loading by remember { mutableStateOf(true) }
+    var event by remember(eventId) { mutableStateOf(ModulesStore.eventDetails[eventId]) }
+    var perms by remember { mutableStateOf(ModulesStore.perms) }
+    var refreshing by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var tick by remember { mutableIntStateOf(0) }
     var tab by rememberSaveable { mutableStateOf(NativeTab.SUMMARY) }
@@ -113,15 +113,16 @@ fun EventDetailScreen(eventId: String, nav: ModuleNav) {
     var openingChat by remember { mutableStateOf(false) }
 
     LaunchedEffect(eventId, tick) {
-        loading = true
         try {
-            perms = ModulesPerms(ModulesSession.me())
-            event = ModulesClient.api.event(eventId)
+            perms = ModulesPerms(ModulesSession.me()).also { ModulesStore.perms = it }
+            event = ModulesClient.api.event(eventId).also { ModulesStore.eventDetails[eventId] = it }
             error = null
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
             error = e.userMessage()
         } finally {
-            loading = false
+            refreshing = false
         }
     }
 
@@ -157,106 +158,111 @@ fun EventDetailScreen(eventId: String, nav: ModuleNav) {
             }
         }
         PullToRefreshBox(
-            isRefreshing = loading && ev != null,
-            onRefresh = { tick++ },
+            isRefreshing = refreshing,
+            onRefresh = {
+                refreshing = true
+                tick++
+            },
             modifier = Modifier.fillMaxSize(),
         ) {
-            when {
-                ev == null && error != null -> ErrorState(error!!, onRetry = { tick++ })
-                ev == null || p == null -> SkeletonList(4)
-                else -> LazyColumn(Modifier.fillMaxSize().fadingEdges(listState, start = 16.dp), state = listState, contentPadding = PaddingValues(top = 8.dp, bottom = bottomInset())) {
-                    // Siempre el mismo número de renglones antes del encabezado (el título de la barra los cuenta).
-                    item { error?.let { msg -> InlineError(msg) { tick++ } } }
-                    item { EventHeader(ev) }
-                    item {
-                        QuickFacts(
-                            ev,
-                            p,
-                            onTasks = { tab = NativeTab.TASKS },
-                            onWeb = { key, label -> nav.openWeb("/events/$eventId?tab=$key", label) },
-                        )
-                    }
-                    // Las secciones que viven en la web van en chips que pasan de renglón; las nativas,
-                    // en segmentado (caben siempre). Nada se va por el borde de la pantalla.
-                    item {
-                        WebLinks(webTabs(p)) { w -> nav.openWeb("/events/$eventId?tab=${w.key}", w.label) }
-                    }
-                    item {
-                        SegmentedControl(
-                            options = NativeTab.entries.map { it.label },
-                            selected = tab.ordinal,
-                            onSelect = { tab = NativeTab.entries[it] },
-                            modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 6.dp),
-                        )
-                    }
-                    when (tab) {
-                        NativeTab.SUMMARY -> summaryItems(ev, onOpenChecklist = { id ->
-                            nav.openWeb("/events/$eventId?tab=checklists&checklist=$id", "Formatos")
-                        })
-                        NativeTab.TASKS -> {
-                            val today = LocalDate.now()
-                            val ref = TaskEventRef(ev.id, ev.name, ev.status, ev.entity)
-                            val open = ev.tasks.filter { it.status != "DONE" }.sortedBy { it.dueAt ?: "9999" }
-                            val done = ev.tasks.filter { it.status == "DONE" }
-                            item {
-                                SectionTitle("Pendientes", count = open.size) {
-                                    if (!closed && p.canCreateTasks) {
-                                        TextButton(onClick = { creatingTask = true }) {
-                                            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                                            Spacer(Modifier.width(4.dp))
-                                            Text("Nueva tarea")
-                                        }
-                                    }
-                                }
-                            }
-                            if (ev.tasks.isEmpty()) {
-                                item { EmptyState("Sin tareas en este evento", if (closed) null else "Crea una y asígnala a una o varias personas.", icon = Icons.Outlined.TaskAlt) }
-                            } else if (open.isEmpty()) {
-                                item { Text("Todo al día.", color = ArtaColors.Muted, modifier = Modifier.padding(horizontal = 16.dp)) }
-                            }
-                            items(open, key = { "o-${it.id}" }) { t ->
-                                TaskRow(task = t.copy(event = t.event ?: ref), showAssignees = true, showEvent = false, today = today, onClick = { nav.openTask(t.id) })
-                            }
-                            if (done.isNotEmpty()) {
-                                item { SectionTitle("Hechas", count = done.size) }
-                                items(done, key = { "d-${it.id}" }) { t ->
-                                    TaskRow(task = t.copy(event = t.event ?: ref), showAssignees = true, showEvent = false, today = today, onClick = { nav.openTask(t.id) })
-                                }
-                            }
+            PhaseSwap(listPhase(ev != null && p != null, error)) { phase ->
+                when (phase) {
+                    ListPhase.Error -> ErrorState(error.orEmpty(), onRetry = { tick++ })
+                    ListPhase.Loading -> SkeletonList(4)
+                    ListPhase.Ready -> if (ev != null && p != null) LazyColumn(Modifier.fillMaxSize().fadingEdges(listState, start = 16.dp), state = listState, contentPadding = PaddingValues(top = 8.dp, bottom = bottomInset())) {
+                        // Siempre el mismo número de renglones antes del encabezado (el título de la barra los cuenta).
+                        item { error?.let { msg -> InlineError(msg) { tick++ } } }
+                        item { EventHeader(ev) }
+                        item {
+                            QuickFacts(
+                                ev,
+                                p,
+                                onTasks = { tab = NativeTab.TASKS },
+                                onWeb = { key, label -> nav.openWeb("/events/$eventId?tab=$key", label) },
+                            )
                         }
-                        NativeTab.TEAM -> {
-                            item {
-                                Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    Text(
-                                        "La conversación de producción del evento: avisos, fotos, documentos y llamadas al equipo.",
-                                        color = ArtaColors.Muted,
-                                    )
-                                    Button(onClick = { openChat() }, enabled = !openingChat, modifier = Modifier.fillMaxWidth()) {
-                                        if (openingChat) {
-                                            CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = ArtaColors.OnAccent)
-                                        } else {
-                                            Icon(Icons.Default.Forum, contentDescription = null, modifier = Modifier.size(18.dp))
-                                            Spacer(Modifier.width(8.dp))
-                                            Text("Abrir chat del evento")
+                        // Las secciones que viven en la web van en chips que pasan de renglón; las nativas,
+                        // en segmentado (caben siempre). Nada se va por el borde de la pantalla.
+                        item {
+                            WebLinks(webTabs(p)) { w -> nav.openWeb("/events/$eventId?tab=${w.key}", w.label) }
+                        }
+                        item {
+                            SegmentedControl(
+                                options = NativeTab.entries.map { it.label },
+                                selected = tab.ordinal,
+                                onSelect = { tab = NativeTab.entries[it] },
+                                modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 6.dp),
+                            )
+                        }
+                        when (tab) {
+                            NativeTab.SUMMARY -> summaryItems(ev, onOpenChecklist = { id ->
+                                nav.openWeb("/events/$eventId?tab=checklists&checklist=$id", "Formatos")
+                            })
+                            NativeTab.TASKS -> {
+                                val today = LocalDate.now()
+                                val ref = TaskEventRef(ev.id, ev.name, ev.status, ev.entity)
+                                val open = ev.tasks.filter { it.status != "DONE" }.sortedBy { it.dueAt ?: "9999" }
+                                val done = ev.tasks.filter { it.status == "DONE" }
+                                item {
+                                    SectionTitle("Pendientes", count = open.size) {
+                                        if (!closed && p.canCreateTasks) {
+                                            TextButton(onClick = { creatingTask = true }) {
+                                                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                                                Spacer(Modifier.width(4.dp))
+                                                Text("Nueva tarea")
+                                            }
                                         }
                                     }
                                 }
+                                if (ev.tasks.isEmpty()) {
+                                    item { EmptyState("Sin tareas en este evento", if (closed) null else "Crea una y asígnala a una o varias personas.", icon = Icons.Outlined.TaskAlt) }
+                                } else if (open.isEmpty()) {
+                                    item { Text("Todo al día.", color = ArtaColors.Muted, modifier = Modifier.padding(horizontal = 20.dp)) }
+                                }
+                                items(open, key = { "o-${it.id}" }) { t ->
+                                    TaskRow(task = t.copy(event = t.event ?: ref), showAssignees = true, showEvent = false, today = today, onClick = { nav.openTask(t.id) }, modifier = Modifier.animateItem())
+                                }
+                                if (done.isNotEmpty()) {
+                                    item { SectionTitle("Hechas", count = done.size) }
+                                    items(done, key = { "d-${it.id}" }) { t ->
+                                        TaskRow(task = t.copy(event = t.event ?: ref), showAssignees = true, showEvent = false, today = today, onClick = { nav.openTask(t.id) }, modifier = Modifier.animateItem())
+                                    }
+                                }
                             }
-                            val people = ev.tasks.flatMap { it.assigneePeople() + listOfNotNull(it.createdBy) }
-                                .filter { it.id.isNotEmpty() && it.fullName.isNotBlank() }
-                                .distinctBy { it.id }
-                                .sortedBy { it.fullName }
-                            item { SectionTitle("Personas con tareas aquí", count = people.size.takeIf { it > 0 }) }
-                            if (people.isEmpty()) {
-                                item { Text("Nadie tiene tareas en este evento todavía.", color = ArtaColors.Muted, modifier = Modifier.padding(horizontal = 16.dp)) }
-                            }
-                            items(people, key = { "p-${it.id}" }) { person ->
-                                val count = ev.tasks.count { it.status != "DONE" && it.isAssignee(person.id) }
-                                Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    Avatar(person.fullName, size = 36.dp)
-                                    Spacer(Modifier.width(12.dp))
-                                    Text(person.fullName, modifier = Modifier.weight(1f))
-                                    if (count > 0) Text(if (count == 1) "1 pendiente" else "$count pendientes", style = MaterialTheme.typography.bodySmall, color = ArtaColors.Muted)
+                            NativeTab.TEAM -> {
+                                item {
+                                    Column(Modifier.padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        Text(
+                                            "La conversación de producción del evento: avisos, fotos, documentos y llamadas al equipo.",
+                                            color = ArtaColors.Muted,
+                                        )
+                                        Button(onClick = { openChat() }, enabled = !openingChat, modifier = Modifier.fillMaxWidth()) {
+                                            if (openingChat) {
+                                                BusyLabel(true, "Abrir chat del evento")
+                                            } else {
+                                                Icon(Icons.Default.Forum, contentDescription = null, modifier = Modifier.size(18.dp))
+                                                Spacer(Modifier.width(8.dp))
+                                                Text("Abrir chat del evento")
+                                            }
+                                        }
+                                    }
+                                }
+                                val people = ev.tasks.flatMap { it.assigneePeople() + listOfNotNull(it.createdBy) }
+                                    .filter { it.id.isNotEmpty() && it.fullName.isNotBlank() }
+                                    .distinctBy { it.id }
+                                    .sortedBy { it.fullName }
+                                item { SectionTitle("Personas con tareas aquí", count = people.size.takeIf { it > 0 }) }
+                                if (people.isEmpty()) {
+                                    item { Text("Nadie tiene tareas en este evento todavía.", color = ArtaColors.Muted, modifier = Modifier.padding(horizontal = 20.dp)) }
+                                }
+                                items(people, key = { "p-${it.id}" }) { person ->
+                                    val count = ev.tasks.count { it.status != "DONE" && it.isAssignee(person.id) }
+                                    Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                                        Avatar(person.fullName, size = 36.dp)
+                                        Spacer(Modifier.width(12.dp))
+                                        Text(person.fullName, modifier = Modifier.weight(1f))
+                                        if (count > 0) Text(if (count == 1) "1 pendiente" else "$count pendientes", style = MaterialTheme.typography.bodySmall, color = ArtaColors.Muted)
+                                    }
                                 }
                             }
                         }
@@ -282,7 +288,7 @@ fun EventDetailScreen(eventId: String, nav: ModuleNav) {
 
 @Composable
 private fun EventHeader(ev: EventDetailDto) {
-    Column(Modifier.padding(horizontal = 16.dp, vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    Column(Modifier.padding(horizontal = 20.dp, vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(ev.name, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
             val label = eventStatusLabel(ev.status) ?: "Activo"
@@ -423,14 +429,15 @@ private fun WebLinks(tabs: List<WebTab>, onOpen: (WebTab) -> Unit) {
     val t = LocalArtaTokens.current
     Column(Modifier.fillMaxWidth().padding(bottom = 6.dp)) {
         SectionTitle("En la web")
+        // Cada chip reserva 48 dp de toque; ese margen ya es la separación entre renglones.
         FlowRow(
             Modifier.fillMaxWidth().padding(horizontal = 16.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             tabs.forEach { w ->
                 Row(
                     Modifier
+                        .minimumInteractiveComponentSize()
                         .clip(t.controlShape)
                         .border(1.dp, t.lineStrong, t.controlShape)
                         .clickable(role = Role.Button, onClickLabel = "Abrir ${w.label} en la web") { onOpen(w) }
@@ -452,11 +459,11 @@ private fun androidx.compose.foundation.lazy.LazyListScope.summaryItems(ev: Even
     val notes = ev.notes?.takeIf { it.isNotBlank() }
     if (description != null) {
         item { SectionTitle("Descripción") }
-        item { Text(description, modifier = Modifier.padding(horizontal = 16.dp)) }
+        item { Text(description, modifier = Modifier.padding(horizontal = 20.dp)) }
     }
     if (notes != null) {
         item { SectionTitle("Notas") }
-        item { Text(notes, modifier = Modifier.padding(horizontal = 16.dp)) }
+        item { Text(notes, modifier = Modifier.padding(horizontal = 20.dp)) }
     }
     ev.createdBy?.takeIf { it.fullName.isNotBlank() }?.let { who ->
         item {
@@ -464,17 +471,17 @@ private fun androidx.compose.foundation.lazy.LazyListScope.summaryItems(ev: Even
                 "Creó el evento: ${who.fullName}",
                 style = MaterialTheme.typography.bodySmall,
                 color = ArtaColors.Muted,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
             )
         }
     }
     item { SectionTitle("Formatos", count = ev.checklists.size.takeIf { it > 0 }) }
     if (ev.checklists.isEmpty()) {
-        item { Text("Sin formatos.", color = ArtaColors.Muted, modifier = Modifier.padding(horizontal = 16.dp)) }
+        item { Text("Sin formatos.", color = ArtaColors.Muted, modifier = Modifier.padding(horizontal = 20.dp)) }
     }
     items(ev.checklists, key = { "c-${it.id}" }) { c ->
         val pct = (c.progressPct ?: 0.0).coerceIn(0.0, 100.0)
-        ModuleCard(Modifier.padding(horizontal = 16.dp, vertical = 4.dp), onClick = { onOpenChecklist(c.id) }) {
+        ModuleCard(Modifier.animateItem().padding(horizontal = 16.dp, vertical = 4.dp), onClick = { onOpenChecklist(c.id) }) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(c.title ?: c.template?.name ?: "Formato", modifier = Modifier.weight(1f), maxLines = 2, overflow = TextOverflow.Ellipsis)
                 Text("${pct.toInt()} %", style = MaterialTheme.typography.bodySmall.copy(fontFeatureSettings = TABULAR), color = ArtaColors.Muted)

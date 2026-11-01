@@ -16,7 +16,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.PersonSearch
 import androidx.compose.material.icons.outlined.Search
@@ -32,17 +31,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SecondaryTabRow
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
-import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRowDefaults
-import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -69,7 +62,9 @@ import com.artaproducciones.ops.data.api.DirectBody
 import com.artaproducciones.ops.data.api.GroupDmBody
 import com.artaproducciones.ops.data.api.userMessage
 import com.artaproducciones.ops.ui.common.Avatar
+import com.artaproducciones.ops.ui.modules.DetailTopBar
 import com.artaproducciones.ops.ui.theme.ArtaColors
+import com.artaproducciones.ops.ui.theme.SegmentedControl
 import com.artaproducciones.ops.ui.theme.TextButton
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
@@ -129,42 +124,33 @@ fun NewConversationScreen(onBack: () -> Unit, openChat: (String) -> Unit) {
         containerColor = Color.Transparent,
         snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
-            TopAppBar(
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = ArtaColors.BgElev),
-                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Atrás") } },
-                title = { Text("Nueva conversación", fontWeight = FontWeight.SemiBold) },
-                actions = {
-                    if (busy) {
-                        CircularProgressIndicator(Modifier.padding(end = Space.L).size(20.dp), strokeWidth = 2.dp, color = ArtaColors.Gold)
-                    } else {
-                        TextButton(onClick = ::submit, enabled = canSubmit) {
-                            Text(
-                                when {
-                                    tab == 1 -> "Crear"
-                                    selected.size > 1 -> "Crear grupo"
-                                    else -> "Abrir"
-                                },
-                                color = if (canSubmit) ArtaColors.Gold else ArtaColors.Muted,
-                                fontWeight = FontWeight.SemiBold,
-                            )
-                        }
+            DetailTopBar("Nueva conversación", onBack = onBack) {
+                if (busy) {
+                    CircularProgressIndicator(Modifier.padding(end = Space.L).size(20.dp), strokeWidth = 2.dp, color = ArtaColors.Gold)
+                } else {
+                    TextButton(onClick = ::submit, enabled = canSubmit) {
+                        Text(
+                            when {
+                                tab == 1 -> "Crear"
+                                selected.size > 1 -> "Crear grupo"
+                                else -> "Abrir"
+                            },
+                            color = if (canSubmit) ArtaColors.Gold else ArtaColors.Muted,
+                            fontWeight = FontWeight.SemiBold,
+                        )
                     }
-                },
-            )
+                }
+            }
         },
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).imePadding()) {
-            SecondaryTabRow(
-                selectedTabIndex = tab,
-                containerColor = ArtaColors.BgElev,
-                contentColor = ArtaColors.Text,
-                indicator = {
-                    TabRowDefaults.SecondaryIndicator(Modifier.tabIndicatorOffset(tab), color = ArtaColors.Gold)
-                },
-            ) {
-                Tab(selected = tab == 0, onClick = { tab = 0 }, text = { Text("Mensaje directo") })
-                Tab(selected = tab == 1, onClick = { tab = 1 }, text = { Text("Canal") })
-            }
+            // El mismo segmentado del sistema que en Tareas y Aprobaciones, no pestañas subrayadas.
+            SegmentedControl(
+                options = listOf("Mensaje directo", "Canal"),
+                selected = tab,
+                onSelect = { tab = it },
+                modifier = Modifier.padding(horizontal = Space.L, vertical = Space.S),
+            )
             if (tab == 1) {
                 Column(Modifier.padding(horizontal = Space.L, vertical = Space.M), verticalArrangement = Arrangement.spacedBy(Space.S)) {
                     OutlinedTextField(

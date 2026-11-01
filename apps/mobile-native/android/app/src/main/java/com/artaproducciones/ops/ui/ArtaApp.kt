@@ -1,9 +1,16 @@
 package com.artaproducciones.ops.ui
 
 import android.net.Uri
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.draw.drawWithContent
 import com.artaproducciones.ops.data.BizEntity
 import com.artaproducciones.ops.ui.theme.ArtaTokens
@@ -95,6 +102,7 @@ import com.artaproducciones.ops.ui.modules.TasksScreen
 import com.artaproducciones.ops.ui.modules.rememberHaptics
 import com.artaproducciones.ops.ui.more.BlockedUsersScreen
 import com.artaproducciones.ops.ui.more.MoreScreen
+import com.artaproducciones.ops.ui.notifications.NotificationPrefsScreen
 import com.artaproducciones.ops.ui.notifications.NotificationsScreen
 import com.artaproducciones.ops.ui.theme.ArtaColors
 import com.artaproducciones.ops.ui.theme.EntitySwitchBanner
@@ -113,6 +121,14 @@ private const val APPROVALS_ROUTE = "approvals?advance={advance}"
 
 /** Más › Usuarios bloqueados (chat). */
 private const val BLOCKED_USERS_ROUTE = "blocked-users"
+
+/** Preferencias de avisos (Más y barra de Avisos). */
+private const val NOTIFICATION_PREFS_ROUTE = "notification-prefs"
+
+/** Al abrir una pantalla entra poco desde la derecha; sin el fundido lento de 700 ms por omisión. */
+private const val NAV_ENTER_MS = 240
+private const val NAV_EXIT_MS = 150
+private const val NAV_SLIDE_DIVISOR = 14
 
 /**
  * Dos toques en Inicio más juntos que esto (entre que se suelta el dedo una vez y la otra)
@@ -317,6 +333,9 @@ private fun SignedInNav(user: UserDto, pendingLink: StateFlow<DeepLink?>, onLink
             override fun openBlockedUsers() {
                 nav.navigate(BLOCKED_USERS_ROUTE) { launchSingleTop = true }
             }
+            override fun openNotificationPrefs() {
+                nav.navigate(NOTIFICATION_PREFS_ROUTE) { launchSingleTop = true }
+            }
             override fun back() {
                 if (nav.previousBackStackEntry != null) nav.popBackStack() else tab = Tab.Inicio
             }
@@ -336,7 +355,14 @@ private fun SignedInNav(user: UserDto, pendingLink: StateFlow<DeepLink?>, onLink
         onLinkConsumed()
     }
 
-    NavHost(navController = nav, startDestination = "home") {
+    NavHost(
+        navController = nav,
+        startDestination = "home",
+        enterTransition = { fadeIn(tween(NAV_ENTER_MS)) + slideInHorizontally(tween(NAV_ENTER_MS)) { it / NAV_SLIDE_DIVISOR } },
+        exitTransition = { fadeOut(tween(NAV_EXIT_MS)) },
+        popEnterTransition = { fadeIn(tween(NAV_ENTER_MS)) },
+        popExitTransition = { fadeOut(tween(NAV_EXIT_MS)) + slideOutHorizontally(tween(NAV_ENTER_MS)) { it / NAV_SLIDE_DIVISOR } },
+    ) {
         composable("home") {
             HomeScreen(
                 user = user,
@@ -367,6 +393,7 @@ private fun SignedInNav(user: UserDto, pendingLink: StateFlow<DeepLink?>, onLink
         }
         composable("events") { EventsScreen(nav = moduleNav) }
         composable(BLOCKED_USERS_ROUTE) { BlockedUsersScreen(onBack = { nav.popBackStack() }) }
+        composable(NOTIFICATION_PREFS_ROUTE) { NotificationPrefsScreen(onBack = { nav.popBackStack() }) }
         composable(
             route = "web?path={path}&title={title}",
             arguments = listOf(
@@ -497,6 +524,13 @@ private fun HomeScreen(
             }
         }
     }
+    // Leído en otro lado: el globo baja sin esperar a volver a abrir la app.
+    LaunchedEffect(entity) {
+        RealtimeClient.notificationRead.collectLatest {
+            delay(BADGE_REFRESH_DELAY_MS)
+            runCatching { noticeUnread = ApiClient.api.notificationsUnread(ActiveEntity.param).count }
+        }
+    }
     // Aviso breve con cada cambio (doble toque, chip de Inicio o selector de Más).
     LaunchedEffect(Unit) {
         ActiveEntity.changes.drop(1).collectLatest { now ->
@@ -517,6 +551,8 @@ private fun HomeScreen(
 
     val tokens = LocalArtaTokens.current
     val barLine = tokens.line
+    // Cada pestaña conserva su scroll y sus filtros al volver a ella.
+    val tabStates = rememberSaveableStateHolder()
     Scaffold(
         containerColor = Color.Transparent,
         bottomBar = {
@@ -594,12 +630,25 @@ private fun HomeScreen(
         },
     ) { padding ->
         Box(Modifier.padding(padding)) {
-            when (tab) {
-                Tab.Inicio -> InicioScreen(user = user, nav = moduleNav)
-                Tab.Chats -> ChatListScreen(openChat = openChat)
-                Tab.Tareas -> TasksScreen(nav = moduleNav)
-                Tab.Avisos -> NotificationsScreen(openLink = openLink, onUnreadChange = { noticeUnread = it })
-                Tab.Mas -> MoreScreen(user = user, nav = moduleNav)
+            AnimatedContent(
+                targetState = tab,
+                modifier = Modifier.fillMaxSize(),
+                transitionSpec = { fadeIn(tween(200, delayMillis = 40)) togetherWith fadeOut(tween(90)) },
+                label = "tab",
+            ) { current ->
+                tabStates.SaveableStateProvider(current.name) {
+                    when (current) {
+                        Tab.Inicio -> InicioScreen(user = user, nav = moduleNav)
+                        Tab.Chats -> ChatListScreen(openChat = openChat)
+                        Tab.Tareas -> TasksScreen(nav = moduleNav)
+                        Tab.Avisos -> NotificationsScreen(
+                            openLink = openLink,
+                            onUnreadChange = { noticeUnread = it },
+                            openPrefs = moduleNav::openNotificationPrefs,
+                        )
+                        Tab.Mas -> MoreScreen(user = user, nav = moduleNav)
+                    }
+                }
             }
             // Aviso «Ahora en …» arriba, como en la propuesta: tinta en ARTA, plata en Auditorio.
             SnackbarHost(snackbar, Modifier.align(Alignment.TopCenter).padding(horizontal = 14.dp, vertical = 10.dp)) { data ->
