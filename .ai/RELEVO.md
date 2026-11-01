@@ -33,9 +33,10 @@ teléfono el buscador salía en 165 px (ahora toda la pantalla), el evento dentr
 tareas en el primer pantallazo, la cabecera del chat deja ver el nombre con lo demás en «Más».
 
 **Apps:** iOS (`21d0514`) y Android (`58fb578`) con todo lo anterior salvo `/tarea` y «Ligados». Android: 94/94 y
-assembleDebug. iOS: lo compila `ios-build.yml`. **Ninguna se vio en pantalla y nada se publicó en tiendas.** Lo más
-riesgoso de ver: el chip dentro del texto en iOS (`Text + Text`) y su fondo en Android; las acciones de push en un
-teléfono de verdad. El comentario en las apps no trae selector de @.
+assembleDebug, sin verse en emulador. iOS: compila (`ios-build.yml`) y abre en simulador con el código final
+(`ios-screenshots.yml`, corrida 41341449800), pero el modo demo no trae referencias: **chips, tarjetas y botones de aviso no
+se han visto en ninguna app.** Lo más riesgoso: el chip dentro del texto en iOS (`Text + Text`) y su fondo en Android; las
+acciones de push en un teléfono de verdad. El comentario en las apps no trae selector de @. Nada se publicó en tiendas.
 
 **Pruebas:** web Chromium 148/148 (`e2e/chat-refs.spec.ts`, `e2e/tareas-tablero.spec.ts`), API 729. Capturas nuevas en
 `e2e/audit/cortes.audit.ts`: `chat-refs`, `chat-selector`, `chat-tarea`, `chat-ligados`, `tablero`.
