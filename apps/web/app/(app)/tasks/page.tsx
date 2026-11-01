@@ -21,6 +21,7 @@ import { useStickyState } from '@/lib/use-sticky-state';
 import { useUser } from '@/lib/user-context';
 import { TaskApprovalActions } from '@/components/tasks/TaskApprovalActions';
 import { TaskActivityTimeline } from '@/components/tasks/TaskActivityTimeline';
+import { TaskBoard } from '@/components/tasks/TaskBoard';
 import { TaskDeliveryModal } from '@/components/tasks/TaskDeliveryModal';
 import {
   TASK_STATUS_LABEL,
@@ -61,14 +62,6 @@ const BUCKET_LABEL: Record<Bucket, string> = {
   someday: 'Sin fecha',
   done: 'Completadas',
 };
-
-const QUICK_FILTERS: Array<{ key: QuickFilter; label: string }> = [
-  { key: 'open', label: 'Pendientes' },
-  { key: 'overdue', label: 'Vencidas' },
-  { key: 'blocked', label: 'Bloqueadas' },
-  { key: 'done', label: 'Hechas' },
-  { key: 'all', label: 'Todas' },
-];
 
 const STATUS_LABEL = TASK_STATUS_LABEL;
 
@@ -155,6 +148,7 @@ function TasksPageInner() {
   const [view, setView] = useStickyState<View>('tasks.view', canSeeTeam ? 'requested' : 'mine');
   const [quick, setQuick] = useStickyState<QuickFilter>('tasks.quick', 'open');
   const [group, setGroup] = useStickyState<GroupMode>('tasks.group', 'due');
+  const [layout, setLayout] = useStickyState<'list' | 'board'>('tasks.layout', 'list');
   const [rows, setRows] = useState<TaskRecord[]>([]);
   const [directory, setDirectory] = useState<DirUser[]>([]);
   const [events, setEvents] = useState<EventRow[]>([]);
@@ -163,6 +157,8 @@ function TasksPageInner() {
   const [who, setWho] = useState('all');
   const [form, setForm] = useState(emptyForm);
   const [advanced, setAdvanced] = useState(false);
+  // En el teléfono el alta se queda en una línea hasta que se empieza a usar.
+  const [composing, setComposing] = useState(false);
   const [creating, setCreating] = useState(false);
   const [msg, setMsg] = useState('');
   const [error, setError] = useState('');
@@ -229,6 +225,7 @@ function TasksPageInner() {
       .then((task) => {
         if (!alive) return;
         setFocusTask(task);
+        window.requestAnimationFrame(() => document.querySelector('.task-focus')?.scrollIntoView({ block: 'start' }));
         if (focusDo === 'deliver' && isTaskAssignee(task, meId) && task.status !== 'DONE') setDeliveryTask(task);
       })
       .catch(() => {
@@ -245,12 +242,9 @@ function TasksPageInner() {
     setRows((prev) => prev.map((r) => (r.id === task.id ? task : r)));
   }, []);
 
-  const filtered = useMemo(() => {
+  /** Persona y búsqueda: aplican a la lista y al tablero. El estado solo a la lista (el tablero ya va por estado). */
+  const searched = useMemo(() => {
     let list = rows;
-    if (quick === 'open') list = list.filter((t) => t.status !== 'DONE');
-    else if (quick === 'overdue') list = list.filter((t) => isOverdue(t, today));
-    else if (quick === 'blocked') list = list.filter((t) => t.status === 'BLOCKED');
-    else if (quick === 'done') list = list.filter((t) => t.status === 'DONE');
     if (who !== 'all') {
       list = list.filter((t) => (who === 'none' ? !taskAssigneeIds(t).length : taskAssigneeIds(t).includes(who)));
     }
@@ -266,7 +260,15 @@ function TasksPageInner() {
       );
     }
     return list;
-  }, [rows, quick, who, q, today]);
+  }, [rows, who, q]);
+
+  const filtered = useMemo(() => {
+    if (quick === 'open') return searched.filter((t) => t.status !== 'DONE');
+    if (quick === 'overdue') return searched.filter((t) => isOverdue(t, today));
+    if (quick === 'blocked') return searched.filter((t) => t.status === 'BLOCKED');
+    if (quick === 'done') return searched.filter((t) => t.status === 'DONE');
+    return searched;
+  }, [searched, quick, today]);
 
   /** Secciones ordenadas por urgencia — lo vencido siempre arriba. */
   const groups = useMemo(() => {
@@ -336,6 +338,21 @@ function TasksPageInner() {
       return;
     }
     void setTaskStatus(t.id, 'DONE');
+  }
+
+  /** Soltar en el tablero: terminar o mandar a aprobar lo de alguien más pide su entrega con evidencia. */
+  function moveOnBoard(t: TaskRecord, next: string) {
+    if (next === t.status) return;
+    const mine = isTaskAssignee(t, user?.id);
+    if (next === 'PENDING_APPROVAL' && !mine) {
+      setError('Solo quien tiene la tarea la puede entregar');
+      return;
+    }
+    if (mine && taskNeedsApproval(t) && (next === 'DONE' || next === 'PENDING_APPROVAL')) {
+      setDeliveryTask(t);
+      return;
+    }
+    void setTaskStatus(t.id, next === 'PENDING_APPROVAL' ? 'DONE' : next);
   }
 
   async function bulkMarkDone() {
@@ -502,6 +519,7 @@ function TasksPageInner() {
     <AppShell title="Tareas">
       <div className="stack page-workspace">
         <PageHeader
+          className="ph--tasks"
           title="Tareas"
           description={`Lo que el equipo tiene pendiente en ${entity === 'ARTA' ? 'Arta Producciones' : 'Auditorio Arema'}.`}
           hint="Al entregar una tarea que pediste a otra persona, el responsable sube evidencia (nota + archivo) y tú la apruebas o rechazas en «Que pedí». Todo queda en el historial."
@@ -522,13 +540,14 @@ function TasksPageInner() {
           </FlashMessage>
         ) : null}
 
-        <div className="quick-add composer">
+        <div className={`quick-add composer ${composing || advanced || form.title ? 'is-open' : ''}`}>
           <input
             ref={titleRef}
             className="quick-add__title composer__title"
             value={form.title}
             placeholder="Nueva tarea… (ej. Cotizar transporte del staff)"
             aria-label="Tarea"
+            onFocus={() => setComposing(true)}
             onChange={(e) => setForm({ ...form, title: e.target.value })}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !creating) {
@@ -671,55 +690,41 @@ function TasksPageInner() {
           </>
         ) : (
           <>
-            <div className="grid-cards kpi-grid-dense">
-              <button
-                type="button"
-                className={`kpi kpi--action ${quick === 'open' ? 'kpi--on' : ''}`}
-                onClick={() => setQuick('open')}
-              >
-                <div className="label">Pendientes</div>
-                <div className="value">{kpis.open}</div>
-                <div className="kpi-sub muted">Abiertas + en curso</div>
-              </button>
-              <button
-                type="button"
-                className={`kpi kpi--action ${kpis.overdue ? 'kpi--danger' : ''} ${quick === 'overdue' ? 'kpi--on' : ''}`}
-                onClick={() => setQuick('overdue')}
-              >
-                <div className="label">Vencidas</div>
-                <div className="value">{kpis.overdue}</div>
-                <div className="kpi-sub muted">Fuera de fecha</div>
-              </button>
-              <button
-                type="button"
-                className={`kpi kpi--action ${kpis.blocked ? 'kpi--danger' : ''} ${quick === 'blocked' ? 'kpi--on' : ''}`}
-                onClick={() => setQuick('blocked')}
-              >
-                <div className="label">Bloqueadas</div>
-                <div className="value">{kpis.blocked}</div>
-                <div className="kpi-sub muted">Esperan desbloqueo</div>
-              </button>
-              <button
-                type="button"
-                className={`kpi kpi--action ${who === 'none' ? 'kpi--on' : ''}`}
-                onClick={() => setWho(who === 'none' ? 'all' : 'none')}
-              >
-                <div className="label">Sin dueño</div>
-                <div className="value">{kpis.unassigned}</div>
-                <div className="kpi-sub muted">Nadie las tomó</div>
-              </button>
-              <button
-                type="button"
-                className={`kpi kpi--action ${quick === 'done' ? 'kpi--on' : ''}`}
-                onClick={() => setQuick('done')}
-              >
-                <div className="label">Hechas</div>
-                <div className="value">{kpis.done}</div>
-                <div className="kpi-sub muted">Completadas</div>
-              </button>
-            </div>
+            {layout === 'list' ? (
+              <div className="task-tiles" role="group" aria-label="Filtro rápido">
+                {(
+                  [
+                    { key: 'open', label: 'Pendientes', n: kpis.open },
+                    { key: 'overdue', label: 'Vencidas', n: kpis.overdue, alert: kpis.overdue > 0 },
+                    { key: 'blocked', label: 'Bloqueadas', n: kpis.blocked, alert: kpis.blocked > 0 },
+                    { key: 'done', label: 'Hechas', n: kpis.done },
+                    { key: 'all', label: 'Todas', n: rows.length },
+                  ] as Array<{ key: QuickFilter; label: string; n: number; alert?: boolean }>
+                ).map((f) => (
+                  <button
+                    key={f.key}
+                    type="button"
+                    className={`task-tile ${quick === f.key ? 'is-on' : ''} ${f.alert ? 'is-alert' : ''}`}
+                    aria-pressed={quick === f.key}
+                    onClick={() => setQuick(f.key)}
+                  >
+                    <span className="task-tile__label">{f.label}</span>
+                    <span className="task-tile__value">{f.n}</span>
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  className={`task-tile ${who === 'none' ? 'is-on' : ''}`}
+                  aria-pressed={who === 'none'}
+                  onClick={() => setWho(who === 'none' ? 'all' : 'none')}
+                >
+                  <span className="task-tile__label">Sin dueño</span>
+                  <span className="task-tile__value">{kpis.unassigned}</span>
+                </button>
+              </div>
+            ) : null}
 
-            <FilterBar meta={`${filtered.length} de ${rows.length}`}>
+            <FilterBar meta={layout === 'list' ? `${filtered.length} de ${rows.length}` : `${searched.length} de ${rows.length}`}>
               <FieldSearch
                 value={q}
                 onChange={setQ}
@@ -727,18 +732,13 @@ function TasksPageInner() {
                 label="Buscar tarea"
                 maxWidth={280}
               />
-              <div className="chip-row" role="group" aria-label="Filtro rápido">
-                {QUICK_FILTERS.map((f) => (
-                  <button
-                    key={f.key}
-                    type="button"
-                    className={`chip ${quick === f.key ? 'is-on' : ''}`}
-                    aria-pressed={quick === f.key}
-                    onClick={() => setQuick(f.key)}
-                  >
-                    {f.label}
-                  </button>
-                ))}
+              <div className="seg task-layout" role="group" aria-label="Forma de ver las tareas">
+                <button type="button" className={`seg__btn ${layout === 'list' ? 'is-on' : ''}`} aria-pressed={layout === 'list'} onClick={() => setLayout('list')}>
+                  Lista
+                </button>
+                <button type="button" className={`seg__btn ${layout === 'board' ? 'is-on' : ''}`} aria-pressed={layout === 'board'} onClick={() => setLayout('board')}>
+                  Tablero
+                </button>
               </div>
               {view === 'team' ? (
                 <select
@@ -756,6 +756,7 @@ function TasksPageInner() {
                   ))}
                 </select>
               ) : null}
+              {layout === 'list' ? (
               <select
                 className="field field--select"
                 aria-label="Agrupar tareas"
@@ -766,6 +767,7 @@ function TasksPageInner() {
                 <option value="assignee">Agrupar por persona</option>
                 <option value="none">Sin agrupar</option>
               </select>
+              ) : null}
               {filterActive ? (
                 <button
                   className="btn ghost btn-sm"
@@ -819,7 +821,14 @@ function TasksPageInner() {
               </select>
             </BulkBar>
 
-            {!filtered.length ? (
+            {layout === 'board' ? (
+              <TaskBoard
+                tasks={searched}
+                today={today}
+                onMove={moveOnBoard}
+                onOpen={(t) => router.push(`/tasks?task=${t.id}`)}
+              />
+            ) : !filtered.length ? (
               <div className="panel">
                 <div className="panel-body">
                   <EmptyState
@@ -858,7 +867,7 @@ function TasksPageInner() {
               groups.map((g) => {
                 const allSelected = g.tasks.every((t) => selected.has(t.id));
                 const someSelected = g.tasks.some((t) => selected.has(t.id));
-                const isCollapsed = collapsed.has(g.key);
+                const isCollapsed = collapsed.has(g.key) && !(quick === 'done' && g.key === 'done');
                 return (
                   <section className={`task-group ${g.key === 'overdue' ? 'task-group--urgent' : ''}`} key={g.key}>
                     <header className="task-group__head">

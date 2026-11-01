@@ -82,6 +82,37 @@ export function needsAction(type: string | null | undefined): boolean {
   );
 }
 
+const TASK_TO_DELIVER = new Set([
+  'task.assigned',
+  'task.reassigned',
+  'task.rejected',
+  'task.reopened',
+  'task.due_soon',
+  'task.overdue',
+  'chat.ref.task',
+]);
+
+/**
+ * El siguiente paso de un aviso sin leer, a un toque: entregar o revisar. Los mismos casos que los
+ * botones del push (docs/AVISOS.md § Casos). Lo que solo informa no lleva botón.
+ */
+export function noticeAction(n: {
+  type: string;
+  targetKind?: string | null;
+  targetId?: string | null;
+  linkUrl?: string | null;
+}): { label: string; href: string } | null {
+  const t = (n.type || '').toLowerCase();
+  const task =
+    n.targetKind === 'task' ? n.targetId : n.targetKind ? null : (/[?&]task=([^&#]+)/.exec(n.linkUrl ?? '')?.[1] ?? null);
+  if (task && TASK_TO_DELIVER.has(t)) return { label: 'Entregar', href: `/tasks?task=${task}&do=deliver` };
+  if (task && t === 'task.submitted') return { label: 'Revisar', href: `/tasks?task=${task}` };
+  if (n.linkUrl && channelOf(t) === 'approvals' && !t.startsWith('campaign.') && !t.startsWith('convenios.')) {
+    return { label: 'Revisar', href: n.linkUrl };
+  }
+  return null;
+}
+
 /** «ahora», «hace 5 min», «hace 3 h»; de días pasados, la fecha. */
 export function noticeAge(iso: string, now: number = Date.now()): string {
   const mins = Math.round((now - new Date(iso).getTime()) / 60_000);

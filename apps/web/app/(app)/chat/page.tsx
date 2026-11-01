@@ -105,7 +105,7 @@ type UploadItem = {
 type UploadState = { label: string; index: number; total: number; fraction: number | null };
 type FailedUpload = { id: string; item: UploadItem; error: string };
 type Prefs = { dndUntil: string | null };
-type MenuState = { kind: 'dnd' | 'mute'; anchor: DOMRect } | null;
+type MenuState = { kind: 'dnd' | 'mute' | 'more'; anchor: DOMRect } | null;
 
 const PAGE = 50;
 const TYPING_TTL = 5_000;
@@ -1363,6 +1363,20 @@ function ChatInner() {
     },
     dndActive ? { label: 'Desactivar', icon: ICONS.bell, onSelect: () => void setDnd(null) } : null,
   ];
+  const moreItems: (MenuItem | null)[] = [
+    head?.eventId ? { label: 'Ver evento', icon: ICON_EVENT, onSelect: () => router.push(`/events/${head.eventId}`) } : null,
+    { label: 'Ligados', icon: ICONS.link, onSelect: () => setPanel({ kind: 'refs' }) },
+    { label: 'Mensajes fijados', icon: ICONS.pin, onSelect: () => openPins() },
+    {
+      label: head?.muted ? 'Silenciado' : 'Silenciar',
+      icon: head?.muted ? ICONS.bellOff : ICONS.bell,
+      onSelect: () => {
+        const anchor = menu?.anchor;
+        if (anchor) window.setTimeout(() => setMenu({ kind: 'mute', anchor }), 0);
+      },
+    },
+    { label: 'Detalles', icon: ICONS.info, onSelect: () => setPanel({ kind: 'info' }) },
+  ];
   const muteItems: (MenuItem | null)[] = [
     { label: 'Silenciar 8 horas', icon: ICONS.bellOff, onSelect: () => void setMute(8) },
     { label: 'Silenciar 1 semana', icon: ICONS.bellOff, onSelect: () => void setMute(168) },
@@ -1792,6 +1806,17 @@ function ChatInner() {
                   </span>
                 </button>
                 <div className="chat-head__tools">
+                  {narrow ? (
+                    <button
+                      type="button"
+                      className="chat-tool chat-head__more"
+                      aria-label="Más opciones de la conversación"
+                      title="Más"
+                      onClick={(e) => setMenu({ kind: 'more', anchor: e.currentTarget.getBoundingClientRect() })}
+                    >
+                      <Icon d={ICONS.more} size={18} />
+                    </button>
+                  ) : null}
                   {head?.eventId ? (
                     <Link className="chat-tool" href={`/events/${head.eventId}`} title="Ver evento" aria-label="Ver evento">
                       <Icon d={ICON_EVENT} size={17} />
@@ -2135,7 +2160,7 @@ function ChatInner() {
         <Menu
           anchor={menu.anchor}
           title={menu.kind === 'dnd' ? (dndActive && prefs?.dndUntil ? `No molestar ${untilLabel(prefs.dndUntil)}` : 'No molestar') : 'Avisos'}
-          items={menu.kind === 'dnd' ? dndItems : muteItems}
+          items={menu.kind === 'dnd' ? dndItems : menu.kind === 'more' ? moreItems : muteItems}
           onClose={() => setMenu(null)}
         />
       ) : null}

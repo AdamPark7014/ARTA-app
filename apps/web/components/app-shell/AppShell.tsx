@@ -1,5 +1,6 @@
 'use client';
 
+import { Shortcuts } from './Shortcuts';
 import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
@@ -289,6 +290,7 @@ export function AppShell({
       <Suspense fallback={null}>
         <RouteProgress />
       </Suspense>
+      <Shortcuts items={nav} />
     </div>
   );
 }

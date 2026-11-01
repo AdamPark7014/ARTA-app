@@ -1,6 +1,6 @@
 'use client';
 
-import { CHANNEL_ICONS, CHANNEL_LABELS, channelOf, needsAction, noticeAge } from '@/lib/notification-kinds';
+import { CHANNEL_ICONS, CHANNEL_LABELS, channelOf, needsAction, noticeAction, noticeAge } from '@/lib/notification-kinds';
 
 export type Notice = {
   id: string;
@@ -13,6 +13,9 @@ export type Notice = {
   actor?: { id: string; fullName: string } | null;
   /** ARTA o EXPLANADA; null = de la cuenta o de un directo, se ve en las dos. Falta en API viejo. */
   entity?: 'ARTA' | 'EXPLANADA' | null;
+  /** De qué trata: sobre eso actúa su botón. Falta en API viejo. */
+  targetKind?: string | null;
+  targetId?: string | null;
 };
 
 /** Ícono de la categoría: lleno si el aviso espera algo de quien lo lee, contorno si es para enterarse. */
@@ -38,6 +41,7 @@ export function NoticeRow({
   onMarkRead?: (notice: Notice) => void;
 }) {
   const unread = !notice.readAt;
+  const action = unread ? noticeAction(notice) : null;
   return (
     <div className={`nt-row ${unread ? 'is-unread' : ''}`}>
       <button type="button" className="nt-row__open" onClick={() => onOpen(notice)}>
@@ -50,6 +54,11 @@ export function NoticeRow({
           </span>
         </span>
       </button>
+      {action ? (
+        <button type="button" className="nt-row__act" onClick={() => onOpen({ ...notice, linkUrl: action.href })}>
+          {action.label}
+        </button>
+      ) : null}
       {unread ? (
         onMarkRead ? (
           <button

@@ -5,6 +5,7 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { api } from '@/lib/api';
 import { navHref, navItemMatches, navKey, type NavItem } from '@/lib/access-matrix';
 import { useUser } from '@/lib/user-context';
+import { REF_GROUPS, REF_ICON, type ChatRef } from '@/components/chat/chat-refs';
 import { NavIcon } from './NavIcon';
 
 type Props = {
@@ -26,16 +27,36 @@ type PersonHit = { id: string; fullName: string; title?: string | null };
 
 type Result = {
   key: string;
-  section: 'Próximos eventos' | 'Eventos' | 'Personas' | 'Pantallas';
+  section: string;
   title: string;
   detail?: string;
   href: string;
   /** Ícono: el trazo del menú al que pertenece. */
   icon: string;
+  /** Trazo propio, para lo que no es una pantalla del menú. */
+  path?: string;
   initials?: string;
 };
 
 const PER_SECTION = 5;
+/** Sin escribir nada: lo más próximo y lo que traes a la mano, sin llenar la pantalla. */
+const IDLE_EVENTS = 3;
+const IDLE_TASKS = 4;
+/** Tareas, OC, formatos, documentos y anticipos se buscan en el servidor, con mis permisos. */
+const REMOTE_KINDS = 'task,po,format,doc,advance';
+const SECTION_OF = Object.fromEntries(REF_GROUPS.map((g) => [g.kind, g.title]));
+
+function refResult(r: ChatRef): Result {
+  return {
+    key: `ref-${r.kind}-${r.id}`,
+    section: SECTION_OF[r.kind] ?? 'Resultados',
+    title: r.title || r.label,
+    detail: [r.statusLabel, r.amount, r.subtitle].filter(Boolean).join(' · '),
+    href: r.href || '/',
+    icon: '/',
+    path: REF_ICON[r.kind],
+  };
+}
 
 /** Sin acentos ni mayúsculas: «sinfonica» encuentra «Sinfónica». */
 function folded(text: string) {
@@ -99,8 +120,33 @@ export function TopbarSearch({ items }: Props) {
   const [events, setEvents] = useState<EventHit[]>([]);
   const [people, setPeople] = useState<PersonHit[]>([]);
   const [loaded, setLoaded] = useState('');
+  const [remote, setRemote] = useState<ChatRef[]>([]);
+  const listRef = useRef<HTMLDivElement>(null);
 
   const query = value.trim();
+
+  useEffect(() => {
+    if (!open) return;
+    let alive = true;
+    const params = new URLSearchParams({ entity, kinds: query ? REMOTE_KINDS : 'task' });
+    if (query) params.set('q', query);
+    const id = window.setTimeout(
+      () => {
+        api<{ results?: ChatRef[] }>(`/chat/refs/search?${params}`)
+          .then((res) => {
+            if (alive) setRemote(Array.isArray(res?.results) ? res.results : []);
+          })
+          .catch(() => {
+            if (alive) setRemote([]);
+          });
+      },
+      query ? 180 : 0,
+    );
+    return () => {
+      alive = false;
+      window.clearTimeout(id);
+    };
+  }, [open, query, entity]);
 
   const load = useCallback(() => {
     if (loaded === entity) return;
@@ -119,8 +165,9 @@ export function TopbarSearch({ items }: Props) {
       return events
         .filter((e) => e.startsAt && new Date(e.startsAt).getTime() >= now - 86_400_000 && e.status !== 'CANCELLED')
         .sort((a, b) => new Date(a.startsAt!).getTime() - new Date(b.startsAt!).getTime())
-        .slice(0, PER_SECTION)
-        .map((e) => eventResult(e, 'Próximos eventos'));
+        .slice(0, IDLE_EVENTS)
+        .map((e) => eventResult(e, 'Próximos eventos'))
+        .concat(remote.slice(0, IDLE_TASKS).map((r) => ({ ...refResult(r), section: 'Tus tareas' })));
     }
     const words = folded(query).split(/\s+/).filter(Boolean);
     const best = <T,>(rows: T[], text: (row: T) => string) =>
@@ -134,6 +181,7 @@ export function TopbarSearch({ items }: Props) {
       ...best(events, (e) => [e.name, e.artist, e.venue, e.city].filter(Boolean).join(' ')).map((e) =>
         eventResult(e, 'Eventos'),
       ),
+      ...remote.map(refResult),
       ...best(people, (p) => `${p.fullName} ${p.title ?? ''}`).map<Result>((p) => ({
         key: `person-${p.id}`,
         section: 'Personas',
@@ -155,7 +203,11 @@ export function TopbarSearch({ items }: Props) {
           icon: item.href,
         })),
     ];
-  }, [query, events, people, items]);
+  }, [query, events, people, items, remote]);
+
+  useEffect(() => {
+    listRef.current?.querySelector('.is-active')?.scrollIntoView({ block: 'nearest' });
+  }, [active]);
 
   useEffect(() => {
     setIsMac(/Mac|iPhone|iPad/i.test(navigator.platform || navigator.userAgent));
@@ -228,7 +280,7 @@ export function TopbarSearch({ items }: Props) {
         ref={inputRef}
         className="topbar-search__input"
         type="search"
-        placeholder="Buscar eventos, personas, pantallas"
+        placeholder="Buscar eventos, tareas, OC, personas"
         aria-label="Buscar en ARTA"
         autoComplete="off"
         spellCheck={false}
@@ -253,7 +305,7 @@ export function TopbarSearch({ items }: Props) {
       </kbd>
 
       {showList ? (
-        <div className="topbar-search__results" id={listId} role="listbox" aria-label="Resultados">
+        <div ref={listRef} className="topbar-search__results" id={listId} role="listbox" aria-label="Resultados">
           {results.length ? (
             results.map((result, i) => (
               <div key={result.key} role="presentation">
@@ -277,6 +329,10 @@ export function TopbarSearch({ items }: Props) {
                     <span className="topbar-search__avatar" aria-hidden>
                       {result.initials}
                     </span>
+                  ) : result.path ? (
+                    <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden focusable="false">
+                      <path d={result.path} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
                   ) : (
                     <NavIcon href={result.icon} size={16} />
                   )}

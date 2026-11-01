@@ -43,6 +43,14 @@ type Step = { name: string; path: string; action?: (page: Page) => Promise<void>
 /** Capas que se abren encima de una pantalla: campana, cuenta, buscador y cajón del menú. */
 const OVERLAYS: Step[] = [
   {
+    name: 'tablero',
+    path: '/tasks',
+    action: async (page) => {
+      await page.getByRole('button', { name: 'Tablero' }).click();
+      await page.locator('.board-card').first().waitFor();
+    },
+  },
+  {
     name: 'chat-refs',
     path: '/chat?channel=ch-rich-general&msg=m-rich-g04b',
     action: async (page) => {

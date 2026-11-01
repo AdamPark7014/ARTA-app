@@ -191,6 +191,7 @@ test.describe('Chat · referencias', () => {
     await box.fill('mejor otra cosa');
     await box.press('Enter');
     await expect.poll(() => posted.length).toBe(1);
+    expect(posted[0].body).toBe('mejor otra cosa');
     expect(posted[0].refs).toEqual([]);
   });
 
