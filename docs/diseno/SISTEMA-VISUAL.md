@@ -155,10 +155,17 @@ agregó vive en `apps/web/styles/_premium.scss` (última palabra de la cascada) 
 - **Avisos**: ícono por categoría, lleno si espera algo de quien lo lee y contorno si es para enterarse. Grupos por
   día, filtros «Sin leer» y «Por atender», tarjeta en vivo arriba a la derecha, pantalla `/notifications`. Categorías y
   textos en `lib/notification-kinds.ts`, los mismos que usa el teléfono.
-- **Buscar**: Ctrl K / ⌘ K busca eventos, personas y pantallas sin acentos; antes de teclear enseña lo próximo.
+- **Buscar**: Ctrl K / ⌘ K busca eventos, tareas, OC, formatos, documentos, anticipos, personas y pantallas, sin acentos;
+  antes de teclear enseña los próximos shows y tus tareas. `?` enseña los atajos y `g` + letra lleva a una pantalla.
 - **Movimiento**: `--ease-out` y `--ease-spring`, 120–240 ms. Lo que se presiona lo dice (`scale(.975)`), lo que abre
   otra pantalla se levanta 2 px, cargas con brillo que pasa y línea de progreso al cambiar de pantalla. Nada de esto
   con «reducir movimiento».
 - **Densidad**: dentro de un módulo del evento la cabecera cede lugar (`ev-hero--dense`); las barras de herramientas
   van en una línea; las cifras que filtran son compactas (`kpi-grid-dense`).
 - **Teléfono**: módulos del evento como tira de pastillas, no un menú nativo.
+- **Referencias**: el chip va en contorno aunque te toque actuar, porque va dentro del texto y un relleno grita; lo relleno
+  es el botón de la tarjeta. Tarjeta: ícono, nombre, píldora de estado, monto, detalle, avance y caras.
+- **Tareas**: los mosaicos son los filtros, con su cuenta; no hay otra fila repitiéndolos. Las filas se leen como texto y
+  sus controles aparecen al pasar por ellas (con el dedo siguen a la vista). Tablero: una columna por estado.
+- **Teléfono**: lo que se abre (buscador, avisos) ocupa la pantalla; un módulo del evento deja un renglón de cabecera; la
+  cabecera del chat enseña el nombre y lo demás va en «Más».

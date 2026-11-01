@@ -1,13 +1,97 @@
 # RELEVO
 
 - **Último turno:** claude-code
-- **Fecha:** 2026-10-21
+- **Fecha:** 2026-11-01
 - **Rama:** main
   (Adam es el único programador).
-- **Producción:** `0dbccc0` desplegado desde `main` el 2026-10-21 ~17:20 UTC (bundle `c28eda6..main` +
-  `update.sh --no-pull`, log `/root/arta-deploy-20261021-rodrigo.log`; respaldo automático en `/root/arta-backups/`).
-  `aef8585` (Android) no toca API ni web: no hace falta desplegarlo. Bundles: siempre `<base>..main`, con un hash
-  solo da «Refusing to create empty bundle».
+- **Producción:** PROD_HASH desplegado desde `main` el 2026-11-01 (`bash deploy/update.sh` en `/var/www/arta-app`, log
+  `/root/arta-deploy-20261101-*.log`; respaldo automático en `/root/arta-backups/`). Disco al 84 %: al 90 % se cae la BD.
+
+## Turno claude-code (2026-11-01, tarde): chat con referencias y otra pasada premium
+
+Adam: «en el chat algo mucho más pro tipo Slack… poder arrobar tareas, personas, actividades, eventos; mejora tareas,
+notificaciones y el ligado de push a casos de uso» y «haz mucho más premium todo el sistema».
+
+**Chat** (`docs/CHAT-V2-CONTRATO.md` § 9): la misma @ liga tareas, eventos, OC, formatos, documentos y anticipos. El
+cuerpo lleva `@Etiqueta` en texto plano (las apps viejas lo leen bien) y `refs` aparte (`ChatMessageRef`). La tarjeta se
+calcula al leer, con los permisos de quien lee: **sin acceso se ve la etiqueta, nunca monto ni estado**. Por socket viaja
+sin resolver (`resolved:false`) y cada cliente pide la suya con `POST /chat/refs/cards`. Trampa: `label` es lo escrito y
+encuentra el chip; `title` es el nombre de hoy. No los mezcles o al renombrar una tarea se pierde el chip.
+Web: selector universal, barra de redactor tipo Slack, `/tarea Título @persona mañana`, «Crear tarea» en un mensaje,
+panel «Ligados», «Mencionado en el chat» en tarea y evento. Sin el puesto en el encabezado. La fecha ya no se encima.
+
+**Avisos** (`docs/AVISOS.md` § Casos): `Notification.targetKind/targetId`, sacado de la liga si no se dice otro.
+`pushActionsFor` decide los botones: Entregar (con nota), Aprobar, Revisar. **El dinero y las firmas nunca se aprueban
+desde la pantalla bloqueada: `review` solo abre.** Un aviso por persona y mensaje: `planFor` corre antes del push normal.
+Service worker sin sesión: «Entregar» abre `/tasks?task=<id>&do=deliver`. En la campana, el botón del siguiente paso.
+
+**Tareas:** `POST /tasks/:id/comments` con @, `?task=` por fin lleva a esa tarea aunque el filtro la deje fuera (antes
+la liga de los avisos no enfocaba nada), vista Tablero con arrastre, un solo juego de filtros, filas que se leen como texto.
+
+**Otra pasada premium:** Ctrl K encuentra tareas, OC, formatos, documentos y anticipos; atajos `?` y `g` + letra. En el
+teléfono el buscador salía en 165 px (ahora toda la pantalla), el evento dentro de un módulo es un renglón, Tareas enseña
+tareas en el primer pantallazo, la cabecera del chat deja ver el nombre con lo demás en «Más».
+
+**Apps:** iOS (`21d0514`) y Android (`58fb578`) con todo lo anterior salvo `/tarea` y «Ligados». Android: 94/94 y
+assembleDebug. iOS: lo compila `ios-build.yml`. **Ninguna se vio en pantalla y nada se publicó en tiendas.** Lo más
+riesgoso de ver: el chip dentro del texto en iOS (`Text + Text`) y su fondo en Android; las acciones de push en un
+teléfono de verdad. El comentario en las apps no trae selector de @.
+
+**Pruebas:** web Chromium 148/148 (`e2e/chat-refs.spec.ts`, `e2e/tareas-tablero.spec.ts`), API 729. Capturas nuevas en
+`e2e/audit/cortes.audit.ts`: `chat-refs`, `chat-selector`, `chat-tarea`, `chat-ligados`, `tablero`.
+
+**Incidente (01-11, 18:53–18:56 UTC):** se desplegó `ChatMessageRef` sin su migración: el archivo no se escribió porque iba
+después de un parche que falló, las pruebas usan Prisma de mentira y se desplegó sin esperar «Stack real» en CI. El chat
+falló unos 3 minutos (1 error en el log, 0 avisos perdidos). Se aplicó el SQL a mano y la migración quedó idempotente.
+Ahora `schema-migrations.spec.ts` truena si un modelo o columna no tiene migración. **Desplegar solo con CI en verde.**
+
+**Siguiente:** versión nueva de las apps a tiendas (pide OK de Adam), verlas en teléfono, lista § 6 de `SAFARI.md`,
+SMTP sin conectar.
+
+## Turno claude-code (2026-11-01): barrido premium de punta a punta, Safari y avisos
+
+Adam: «dale una pasada a todo… compatibilidad con Safari… más premium, hasta las notificaciones, cómo interactúan,
+qué envían; barrido end-to-end». El RELEVO no se actualizaba desde el 22-10: los commits del 29-10 (junta 23-10,
+contabilidad y practicante, formatos de seguridad, inventario de limpieza, Safari) y este turno van aquí.
+
+**Errores reales que salieron al poner al día las pruebas (llevaban rojas desde el 22-10):**
+- **Fórmulas que desaparecían:** el servidor guardaba la fórmula sin resultado y SheetJS descarta esas celdas: al
+  reabrir la hoja salían vacías. Ahora `XLSX.read` con `sheetStubs` y `refreshFormulaResults` al guardar.
+- **PDF de corrida con totales viejos:** `FormulaResolver` usaba el resultado guardado aunque el dato hubiera cambiado.
+  Ahora calcula con los valores actuales y solo cae al guardado si no puede. Las fórmulas leen la hoja que nombran.
+- **Tablas de Word perdidas:** `normalizeBlocks` del API no conocía `table`, las volvía párrafo vacío (también al
+  guardar). Se conservan en su lugar y salen en el PDF.
+- **PDF con la primera página vacía** (documentos, boletera, historial): el cursor se quedaba abajo tras pintar el pie.
+- **Cancelar el motivo de un reemplazo seguía adelante:** `window.prompt(...) || ''`. Ahora `askPrompt` devuelve `null`.
+- `/notifications` no existía aunque el aviso del navegador llevaba ahí. Tocar un aviso no lo marcaba leído.
+
+**Web:** `AskDialog` en lugar de `confirm`/`prompt` (queda solo el de salir con cambios sin guardar), `Flash` flotante,
+buscador global (Ctrl K: eventos, personas, pantallas), `RouteProgress`, migas, «Siguiente show» en Inicio, módulos en
+pastillas en el teléfono, OC del evento como tarjetas, hoja que selecciona como Excel (resultado en la celda, fórmula en
+la barra), caras en tareas, vacíos con ícono de línea, 2FA en casillas, 404 propia, barra de Safari teñida, formatos y
+PDF en tinta (antes dorado y verde). Estilos nuevos en `styles/_premium.scss` y `_safari.scss`; guía en
+`docs/diseno/SISTEMA-VISUAL.md` § «Barrido premium».
+
+**Avisos** (`docs/AVISOS.md`): campana nueva, tarjeta en vivo, pantalla `/notifications`, preferencias por persona
+(`User.notificationPrefs`: categorías y horario silencioso), ráfagas (`Notification.bundleCount`), iOS con `subtitle`,
+`interruption-level` y `relevance-score`. Migración `20261101120000_avisos_preferencias_y_rafagas` (solo columnas).
+
+**Safari** (`docs/SAFARI.md`): PDF dibujado con pdf.js en teléfono y tableta (el iframe enseña solo la primera página),
+«Filas y columnas» y «Renombrar» a la vista con el dedo, un toque ya no selecciona la celda de junto, chat sobre el
+teclado (`use-keyboard-fit.ts`, **sin probar en un iPhone real**), fechas de iOS, columnas de la hoja que Safari
+ensanchaba (`size={1}`). Lo que necesita una persona con Safari de verdad: `SAFARI.md` §6.
+
+**Apps:** iOS y Android con pantalla de Avisos nueva, preferencias, interacción del push y barrido de acabado. Android
+compila, 67 pruebas; **no se vio en emulador** (la máquina tenía 2 GB libres). iOS compila en CI (`ios-build.yml`).
+**Nada se publicó en tiendas ni cambió versiones:** las apps nuevas salen cuando Adam lo pida.
+
+**Pruebas:** Chromium 128/128 en local y en CI, WebKit (Mac e iPhone) contra Chromium en `web-safari.yml`, stack real en
+verde por primera vez en semanas, API 693. `ci.yml` ya no corre «Stack real» en el job sin API.
+
+**No conectado:** no hay SMTP en producción: resúmenes e invitaciones no salen por correo (`docs/AVISOS.md`).
+
+**Siguiente:** versión nueva de las apps a tiendas (pide OK de Adam), revisar Android en emulador, lista de §6 de
+`SAFARI.md` con un iPhone y una Mac.
 
 ## Turno claude-code (2026-10-21, tarde): cierre del acabado, Rodrigo con correo de Arta, Play
 

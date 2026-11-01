@@ -188,6 +188,8 @@ test.describe('Chat · referencias', () => {
     await box.fill('@');
     await box.press('End');
     await page.getByRole('option', { name: /Cotizar luces/ }).click();
+    // El cursor se coloca en el siguiente cuadro: el robot escribe más rápido que nadie y le ganaría.
+    await page.evaluate(() => new Promise(requestAnimationFrame));
     await box.fill('mejor otra cosa');
     await box.press('Enter');
     await expect.poll(() => posted.length).toBe(1);
