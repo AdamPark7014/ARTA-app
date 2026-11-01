@@ -17,21 +17,24 @@ struct DemoBanner: View {
                 .minimumScaleFactor(0.85)
             Spacer(minLength: ArtaSpace.s)
             Button {
+                Haptics.tap()
                 Task { await session.logout() }
             } label: {
                 Text("Salir")
                     .font(.caption.weight(.bold))
                     .padding(.horizontal, ArtaSpace.m)
                     .padding(.vertical, 5)
-                    .background(Color(uiColor: .systemBackground).opacity(0.22), in: Capsule())
+                    .background(ArtaControlShape().fill(ArtaColor.surface.opacity(0.22)))
+                    // 44 pt para el dedo, sin agrandar lo que se dibuja.
+                    .frame(minHeight: 44)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .accessibilityIdentifier("demo-exit")
         }
-        .foregroundStyle(Color(uiColor: .systemBackground))
+        .foregroundStyle(ArtaColor.surface)
         .padding(.horizontal, ArtaSpace.m)
-        .padding(.vertical, ArtaSpace.s)
-        .background(ArtaColor.text.opacity(0.92), in: Capsule())
+        .background(ArtaControlShape().fill(ArtaColor.text.opacity(0.92)))
         .padding(.horizontal, ArtaSpace.l)
         // Encima de la barra de pestañas (49 pt) y de su línea.
         .padding(.bottom, 58)
@@ -54,6 +57,7 @@ struct DemoWebUnavailableView: View {
             Text(title ?? "Panel web")
                 .font(ArtaFont.display(20, weight: .semibold))
                 .foregroundStyle(ArtaColor.text)
+                .multilineTextAlignment(.center)
             Text("Esta sección abre el panel web de tu organización con tu sesión. En el modo de muestra no está disponible; con una cuenta se abre aquí mismo, sin volver a iniciar sesión.")
                 .font(.subheadline)
                 .foregroundStyle(ArtaColor.muted)

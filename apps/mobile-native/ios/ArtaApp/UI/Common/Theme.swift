@@ -368,7 +368,8 @@ private struct ArtaButtonBody: View {
                 color: kind == .primary && isEnabled && !compact && ArtaTheme.isLight ? Color(hex: 0x0C0C0D, opacity: 0.18) : .clear,
                 radius: 8, x: 0, y: 5
             )
-            .contentShape(shape)
+            // Los compactos miden ~34 pt: el dedo alcanza 44 sin agrandar lo que se dibuja.
+            .contentShape(compact ? AnyShape(ArtaHitArea(dy: 5)) : AnyShape(shape))
             .opacity(configuration.isPressed ? 0.82 : 1)
             .scaleEffect(configuration.isPressed ? 0.985 : 1)
             .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
@@ -509,6 +510,32 @@ enum ArtaLayout {
     /// Lo que se desvanece arriba de la barra de pestañas (y el aire extra que deja el
     /// contenido para que lo último nunca quede bajo el desvanecido).
     static let bottomFade: CGFloat = 28
+
+    /// Aire al final de las pantallas con pestañas. Explorando con datos de muestra, además, lo
+    /// que ocupa la pastilla de `DemoBanner`: lo último nunca se queda debajo de ella.
+    static var scrollBottomMargin: CGFloat {
+        bottomFade + (DemoMode.enteredFromLogin ? 52 : 0)
+    }
+}
+
+// MARK: - Área de toque
+
+/// Área de toque más grande que lo que se dibuja: el dedo pide 44 pt aunque el control mida menos.
+struct ArtaHitArea: Shape {
+    var dx: CGFloat = 0
+    var dy: CGFloat = 0
+
+    func path(in rect: CGRect) -> Path {
+        Path(rect.insetBy(dx: -dx, dy: -dy))
+    }
+}
+
+extension View {
+    /// En la etiqueta del botón (no en el botón): amplía el toque sin mover el diseño.
+    /// Solo dentro de un desplazamiento vertical: un `ScrollView` horizontal recorta los toques a su alto.
+    func artaHitArea(dx: CGFloat = 0, dy: CGFloat = 0) -> some View {
+        contentShape(ArtaHitArea(dx: dx, dy: dy))
+    }
 }
 
 // MARK: - Bordes de desplazamiento
@@ -587,7 +614,7 @@ extension View {
     /// encima a la barra de estado.
     func artaTabBarScrim(glow: Bool = true) -> some View {
         self
-            .contentMargins(.bottom, ArtaLayout.bottomFade, for: .scrollContent)
+            .contentMargins(.bottom, ArtaLayout.scrollBottomMargin, for: .scrollContent)
             .overlay(alignment: .bottom) { ArtaBottomScrim() }
             .overlay(alignment: .top) { ArtaStatusBarScrim(glow: glow) }
     }

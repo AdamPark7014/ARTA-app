@@ -10,4 +10,6 @@ enum AppRoute: Hashable {
     case chat(channelId: String, messageId: String?)
     /// Más › Usuarios bloqueados (docs/chat-reportar-bloquear.md).
     case blockedUsers
+    /// Qué llega al teléfono: Más › Preferencias de avisos y la barra de Avisos.
+    case notificationPreferences
 }

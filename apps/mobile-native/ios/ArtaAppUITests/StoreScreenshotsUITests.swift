@@ -27,6 +27,10 @@ import XCTest
 ///   task-row-<id>  tasks-filter-<filtro>                            (TasksView)
 ///   approval-order-<id>                                             (ApprovalsView)
 ///   inicio-entity-chip  entity-notice                               (ActiveEntity)
+///   notice-filter-<filtro>  notice-row-<id>  notice-prefs           (NotificationsView)
+///
+/// Revisión de Avisos (a `debug/`): `arta-20-avisos-por-atender`, `arta-21/22-avisos-preferencias`
+/// y `auditorio-11-avisos-preferencias`.
 ///
 /// Todo es TOLERANTE: si una pantalla no aparece se anota como omitida, se adjunta el
 /// árbol de accesibilidad (`dbg-*`) y el test sigue con las demás. Solo falla si la
@@ -319,6 +323,25 @@ final class StoreScreenshotsUITests: XCTestCase {
                 volver(a: tituloChats, pestana: .chats)
             }
         }
+
+        // Avisos: el filtro «Por atender» y las preferencias (desde la barra).
+        if irAPestana(.avisos) {
+            pausa(1.0)
+            if tocarSiExiste([porId("notice-filter-action")], timeout: 4) {
+                pausa(0.8)
+                revisar("arta-20-avisos-por-atender")
+                tocarSiExiste([porId("notice-filter-all")], timeout: 3)
+            }
+            if abrir([porId("notice-prefs")], desde: "Avisos") {
+                pausa(1.2)
+                revisar("arta-21-avisos-preferencias")
+                deslizarArriba(2)
+                revisar("arta-22-avisos-preferencias-abajo")
+                volver(a: "Avisos", pestana: .avisos)
+            } else {
+                omitir("revisión: no se abrieron las preferencias de avisos")
+            }
+        }
     }
 
     // MARK: - Letra grande y entrada (relanzan la app)
@@ -475,6 +498,11 @@ final class StoreScreenshotsUITests: XCTestCase {
             pausa(1.0)
             esperarSinCarga()
             adjuntarCapturaDebug("auditorio-05-avisos")
+            if abrir([porId("notice-prefs")], desde: "Avisos") {
+                pausa(1.2)
+                revisar("auditorio-11-avisos-preferencias")
+                volver(a: "Avisos", pestana: .avisos)
+            }
         }
         if tocarSiExiste([app.tabBars.buttons.matching(identifier: "tab-mas").firstMatch, porId("tab-mas")], timeout: 6) {
             pausa(1.0)

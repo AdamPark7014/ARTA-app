@@ -91,21 +91,28 @@ struct EventDetailView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 header(event)
-                if let message = chatError ?? refreshError {
-                    Label(message, systemImage: "exclamationmark.triangle.fill")
-                        .font(.footnote)
-                        .foregroundStyle(ArtaColor.danger)
+                if let chatError {
+                    InlineErrorRow(message: chatError) {
+                        Task { await openChat() }
+                    }
+                } else if let refreshError {
+                    InlineErrorRow(message: refreshError) {
+                        Task { await load() }
+                    }
                 }
-                Picker("Sección", selection: $pane) {
+                Picker("Sección", selection: $pane.animation(.snappy(duration: 0.22))) {
                     ForEach(Pane.allCases) { p in
                         Text(p.rawValue).tag(p)
                     }
                 }
                 .pickerStyle(.segmented)
+                .onChange(of: pane) { _, _ in Haptics.selection() }
                 if pane == .summary {
                     summary(event)
+                        .transition(.opacity)
                 } else {
                     tasksPane(event)
+                        .transition(.opacity)
                 }
                 moreCard(event)
             }
@@ -284,7 +291,7 @@ struct EventDetailView: View {
                                 }
                                 .contentShape(Rectangle())
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(ArtaPressStyle(scale: 0.99))
                         }
                     }
                 }
@@ -302,7 +309,8 @@ struct EventDetailView: View {
             Text(value)
                 .font(ArtaFont.figure(26))
                 .tracking(-0.6)
-                .foregroundStyle(alert ? ArtaColor.danger : (quiet ? ArtaColor.muted : ArtaColor.text))
+                // Color solo en alertas, y nunca en la cifra: lo avisa el detalle de abajo.
+                .foregroundStyle(quiet ? ArtaColor.muted : ArtaColor.text)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
             if let progress {
@@ -348,14 +356,16 @@ struct EventDetailView: View {
                 }
                 if !doneTasks.isEmpty {
                     Button {
-                        withAnimation { showDone.toggle() }
+                        Haptics.selection()
+                        withAnimation(.snappy(duration: 0.25)) { showDone.toggle() }
                     } label: {
                         Label(showDone ? "Ocultar hechas" : "Ver hechas (\(doneTasks.count))",
                               systemImage: showDone ? "chevron.up" : "chevron.down")
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(ArtaColor.accent)
+                            .artaHitArea(dx: ArtaSpace.s, dy: ArtaSpace.m)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(ArtaPressStyle(scale: 0.97))
                     if showDone {
                         ModuleCard(title: "Hechas", count: doneTasks.count) {
                             taskList(doneTasks)
@@ -374,7 +384,7 @@ struct EventDetailView: View {
                 } label: {
                     TaskRow(task: task, showEvent: false)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(ArtaPressStyle(scale: 0.99))
                 if task.id != list.last?.id {
                     ArtaDivider(leading: 36)
                 }

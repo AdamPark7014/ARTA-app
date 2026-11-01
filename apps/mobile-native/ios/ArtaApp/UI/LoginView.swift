@@ -39,9 +39,13 @@ struct LoginView: View {
                                 .font(.footnote)
                                 .foregroundStyle(ArtaColor.danger)
                                 .fixedSize(horizontal: false, vertical: true)
+                                .transition(.opacity)
                                 .accessibilityIdentifier("login-error")
                         }
                     }
+                    .animation(.easeOut(duration: 0.18), value: error)
+                    .animation(.easeInOut(duration: 0.22), value: challengeId)
+                    .animation(.easeInOut(duration: 0.22), value: needsEnrollment)
                     .padding(ArtaSpace.xl)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(ArtaCardBackground(radius: ArtaRadius.card + 4))
@@ -131,10 +135,12 @@ struct LoginView: View {
                             Image(systemName: showPassword ? "eye.slash" : "eye")
                                 .font(.system(size: 15, weight: .regular))
                                 .foregroundStyle(ArtaColor.tertiary)
-                                .frame(width: 28, height: 28)
+                                .frame(width: 44, height: 44)
                                 .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
+                        // El ojo se queda a la orilla del campo: el resto del cuadro es solo para el dedo.
+                        .padding(.trailing, -ArtaSpace.s)
                         .accessibilityLabel(showPassword ? "Ocultar contraseña" : "Mostrar contraseña")
                     }
                 }
@@ -166,14 +172,11 @@ struct LoginView: View {
             }
             primaryButton(busy ? "Verificando…" : "Verificar", disabled: code.count < 6, action: verify)
                 .accessibilityIdentifier("login-verify")
-            Button("Usar otra cuenta") {
+            quietButton("Usar otra cuenta") {
                 challengeId = nil
                 code = ""
                 error = nil
             }
-            .font(.footnote.weight(.semibold))
-            .foregroundStyle(ArtaColor.muted)
-            .frame(maxWidth: .infinity)
         }
         .onAppear { focus = .code }
     }
@@ -189,13 +192,10 @@ struct LoginView: View {
                 Label("Abrir el panel web", systemImage: "arrow.up.right")
             }
             .buttonStyle(ArtaPrimaryButtonStyle())
-            Button("Volver") {
+            quietButton("Volver") {
                 needsEnrollment = false
                 error = nil
             }
-            .font(.footnote.weight(.semibold))
-            .foregroundStyle(ArtaColor.muted)
-            .frame(maxWidth: .infinity)
         }
     }
 
@@ -206,16 +206,17 @@ struct LoginView: View {
     private var demoEntry: some View {
         VStack(spacing: ArtaSpace.s) {
             Button {
+                Haptics.tap()
                 error = nil
                 focus = nil
                 session.enterDemo()
             } label: {
+                // El estilo va en un renglón: se achica antes que cortarse en pantallas chicas.
                 Label("Explorar ARTA con datos de muestra", systemImage: "sparkles")
-                    .font(.subheadline.weight(.semibold))
+                    .minimumScaleFactor(0.8)
                     .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.bordered)
-            .tint(ArtaColor.text)
+            .buttonStyle(ArtaSecondaryButtonStyle())
             .disabled(busy)
             .accessibilityIdentifier("login-demo")
             Text("Sin cuenta ni conexión. Datos ficticios de una productora de ejemplo.")
@@ -228,6 +229,8 @@ struct LoginView: View {
                     .font(.caption.weight(.semibold))
                     .underline(true, color: ArtaColor.lineStrong)
                     .multilineTextAlignment(.center)
+                    .frame(minHeight: 44)
+                    .contentShape(Rectangle())
             }
             .foregroundStyle(ArtaColor.muted)
             .accessibilityIdentifier("login-contratar")
@@ -240,12 +243,18 @@ struct LoginView: View {
     private var legalLinks: some View {
         HStack(spacing: ArtaSpace.m) {
             Link(destination: ArtaAppMeta.privacidadURL) {
-                Text("Aviso de privacidad").underline(true, color: ArtaColor.lineStrong)
+                Text("Aviso de privacidad")
+                    .underline(true, color: ArtaColor.lineStrong)
+                    .frame(minHeight: 44)
+                    .contentShape(Rectangle())
             }
             .accessibilityIdentifier("login-privacy")
             Text("·").foregroundStyle(ArtaColor.tertiary).accessibilityHidden(true)
             Link(destination: ArtaAppMeta.terminosURL) {
-                Text("Términos").underline(true, color: ArtaColor.lineStrong)
+                Text("Términos")
+                    .underline(true, color: ArtaColor.lineStrong)
+                    .frame(minHeight: 44)
+                    .contentShape(Rectangle())
             }
             .accessibilityIdentifier("login-terms")
         }
@@ -299,9 +308,26 @@ struct LoginView: View {
     }
 
     private func primaryButton(_ title: String, disabled: Bool, action: @escaping () -> Void) -> some View {
-        Button(title, action: action)
-            .buttonStyle(ArtaPrimaryButtonStyle())
-            .disabled(disabled || busy)
+        Button(action: action) {
+            HStack(spacing: ArtaSpace.s) {
+                if busy { ProgressView().tint(ArtaColor.tertiary) }
+                Text(title)
+            }
+        }
+        .buttonStyle(ArtaPrimaryButtonStyle())
+        .disabled(disabled || busy)
+    }
+
+    /// Acción de texto discreta («Volver», «Usar otra cuenta»), con 44 pt para el dedo.
+    private func quietButton(_ title: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(ArtaColor.muted)
+                .frame(maxWidth: .infinity, minHeight: 44)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 
     private func submit() {
@@ -327,12 +353,16 @@ struct LoginView: View {
         busy = false
         switch result {
         case .success:
+            Haptics.success()
             password = ""
         case .needsCode(let id):
+            Haptics.tap()
             challengeId = id
         case .needsEnrollment:
+            Haptics.warning()
             needsEnrollment = true
         case .error(let message):
+            Haptics.error()
             error = message
             code = ""
         }

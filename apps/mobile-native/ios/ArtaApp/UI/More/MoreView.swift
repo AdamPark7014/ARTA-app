@@ -13,6 +13,7 @@ struct MoreView: View {
     @State private var confirmLogout = false
     @State private var confirmDeleteAccount = false
     @State private var busy = false
+    @State private var openingSafari = false
     @State private var legalPage: SafariPage?
 
     init(user: UserDto) {
@@ -53,11 +54,7 @@ struct MoreView: View {
                 Section {
                     ForEach(section.modules) { module in
                         NavigationLink(value: AppRoute.web(path: module.path, title: module.label)) {
-                            Label {
-                                Text(module.label).foregroundStyle(ArtaColor.text)
-                            } icon: {
-                                Image(systemName: module.icon).foregroundStyle(ArtaColor.muted)
-                            }
+                            rowLabel(module.label, systemImage: module.icon)
                         }
                     }
                 } header: {
@@ -75,14 +72,21 @@ struct MoreView: View {
                 .listRowBackground(ArtaColor.bgElev)
             }
 
+            // Qué llega al teléfono, horario silencioso, No molestar y el permiso de iOS.
+            Section {
+                NavigationLink(value: AppRoute.notificationPreferences) {
+                    rowLabel("Preferencias de avisos", systemImage: "bell.badge")
+                }
+                .accessibilityIdentifier("more-notification-prefs")
+            } header: {
+                ArtaSectionHeader("Avisos")
+            }
+            .listRowBackground(ArtaColor.bgElev)
+
             // Apple (1.2): quien bloquea en el chat puede revisar y deshacer el bloqueo.
             Section {
                 NavigationLink(value: AppRoute.blockedUsers) {
-                    Label {
-                        Text("Usuarios bloqueados").foregroundStyle(ArtaColor.text)
-                    } icon: {
-                        Image(systemName: "person.crop.circle.badge.xmark").foregroundStyle(ArtaColor.muted)
-                    }
+                    rowLabel("Usuarios bloqueados", systemImage: "person.crop.circle.badge.xmark")
                 }
                 .accessibilityIdentifier("more-blocked-users")
             } header: {
@@ -92,20 +96,21 @@ struct MoreView: View {
 
             Section {
                 Button {
-                    if let url = URL(string: UIApplication.openNotificationSettingsURLString) {
-                        UIApplication.shared.open(url)
-                    }
-                } label: {
-                    Label("Ajustes de avisos", systemImage: "bell.badge")
-                }
-                Button {
+                    Haptics.tap()
+                    openingSafari = true
                     Task {
                         let url = await WebSession.signedURL(path: "/dashboard")
                         _ = await UIApplication.shared.open(url)
+                        openingSafari = false
                     }
                 } label: {
-                    Label("Abrir en Safari", systemImage: "safari")
+                    HStack {
+                        rowLabel("Abrir en Safari", systemImage: "safari")
+                        Spacer(minLength: ArtaSpace.s)
+                        if openingSafari { ProgressView().tint(ArtaColor.tertiary) }
+                    }
                 }
+                .disabled(openingSafari)
             } header: {
                 ArtaSectionHeader("App")
             }
@@ -124,11 +129,13 @@ struct MoreView: View {
 
             Section {
                 Button(role: .destructive) {
+                    Haptics.tap()
                     confirmLogout = true
                 } label: {
                     Text(busy ? "Cerrando sesión…" : "Cerrar sesión").frame(maxWidth: .infinity)
                 }
                 .disabled(busy)
+                .accessibilityIdentifier("more-logout")
                 // Eliminación de cuenta (guideline 5.1.1(v)): se pide desde la app
                 // y se completa en la web, porque las cuentas las crea quien
                 // administra la organización. En Safari y no en hoja: ahí la
@@ -213,11 +220,20 @@ struct MoreView: View {
         .padding(.vertical, ArtaSpace.s)
     }
 
+    /// La misma fila en todo Más: texto en tinta o plata clara e ícono secundario.
+    private func rowLabel(_ title: String, systemImage: String) -> some View {
+        Label {
+            Text(title).foregroundStyle(ArtaColor.text)
+        } icon: {
+            Image(systemName: systemImage).foregroundStyle(ArtaColor.muted)
+        }
+    }
+
     private func legalRow(_ title: String, systemImage: String, url: URL, id: String) -> some View {
         Button {
             legalPage = SafariPage(url: url)
         } label: {
-            Label(title, systemImage: systemImage)
+            rowLabel(title, systemImage: systemImage)
         }
         .accessibilityIdentifier(id)
     }

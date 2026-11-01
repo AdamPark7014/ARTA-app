@@ -86,8 +86,8 @@ struct EventsView: View {
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
-                    Haptics.tap()
-                    mode = mode == .list ? .calendar : .list
+                    Haptics.selection()
+                    withAnimation(.snappy(duration: 0.22)) { mode = mode == .list ? .calendar : .list }
                 } label: {
                     Image(systemName: mode == .list ? "calendar" : "list.bullet")
                 }
@@ -131,11 +131,9 @@ struct EventsView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: ArtaSpace.m) {
                     if let refreshError {
-                        Label(refreshError, systemImage: "exclamationmark.triangle.fill")
-                            .font(.footnote)
-                            .foregroundStyle(ArtaColor.danger)
-                            .fixedSize(horizontal: false, vertical: true)
-                            .padding(.horizontal, ArtaSpace.xs)
+                        InlineErrorRow(message: refreshError) {
+                            Task { await load() }
+                        }
                     }
                     CardSection(items: rows, dividerInset: 58) { event in
                         Button {
@@ -210,7 +208,9 @@ struct EventsView: View {
             Button {
                 shiftMonth(-1)
             } label: {
-                Image(systemName: "chevron.left").padding(8)
+                Image(systemName: "chevron.left")
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
             }
             .accessibilityLabel("Mes anterior")
             Spacer()
@@ -221,15 +221,21 @@ struct EventsView: View {
             Button {
                 shiftMonth(1)
             } label: {
-                Image(systemName: "chevron.right").padding(8)
+                Image(systemName: "chevron.right")
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
             }
             .accessibilityLabel("Mes siguiente")
-            Button("Hoy") {
+            Button {
                 Haptics.tap()
                 month = MonthGrid.startOfMonth(Date())
                 selectedDay = MonthGrid.calendar.startOfDay(for: Date())
+            } label: {
+                Text("Hoy")
+                    .font(.subheadline.weight(.semibold))
+                    .frame(minHeight: 44)
+                    .contentShape(Rectangle())
             }
-            .font(.subheadline.weight(.semibold))
         }
         .foregroundStyle(ArtaColor.accent)
         .buttonStyle(.plain)
@@ -284,13 +290,15 @@ struct EventsView: View {
                 Spacer()
                 if !noteEntities.isEmpty {
                     Button {
+                        Haptics.tap()
                         editingNote = NoteDraft(date: selectedDay, note: nil)
                     } label: {
                         Label("Nota", systemImage: "plus")
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(ArtaColor.accent)
+                            .artaHitArea(dx: ArtaSpace.s, dy: ArtaSpace.m)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(ArtaPressStyle(scale: 0.97))
                 }
             }
             if let notesError {
@@ -310,7 +318,7 @@ struct EventsView: View {
                     EventRow(event: event)
                         .artaCard(padding: 12)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(ArtaPressStyle(scale: 0.99))
             }
             ForEach(dayNotes) { note in
                 Button {
@@ -318,7 +326,7 @@ struct EventsView: View {
                 } label: {
                     noteRow(note)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(ArtaPressStyle(scale: 0.99))
             }
         }
     }
@@ -450,15 +458,23 @@ struct EventRow: View {
     var body: some View {
         HStack(spacing: 12) {
             VStack(spacing: 0) {
-                Text(startDate.map { MDate.shortMonth($0) } ?? "—")
-                    .font(.system(size: 10, weight: .semibold, design: .rounded))
-                    .tracking(1)
-                    .textCase(.uppercase)
-                    .foregroundStyle(ArtaColor.tertiary)
-                Text(startDate.map { MDate.dayNumber($0) } ?? "")
-                    .font(.system(size: 20, weight: .light, design: .rounded))
-                    .monospacedDigit()
-                    .foregroundStyle(ArtaColor.text)
+                if let startDate {
+                    Text(MDate.shortMonth(startDate))
+                        .font(.system(size: 10, weight: .semibold, design: .rounded))
+                        .tracking(1)
+                        .textCase(.uppercase)
+                        .foregroundStyle(ArtaColor.tertiary)
+                    Text(MDate.dayNumber(startDate))
+                        .font(.system(size: 20, weight: .light, design: .rounded))
+                        .monospacedDigit()
+                        .foregroundStyle(ArtaColor.text)
+                } else {
+                    // Sin fecha: el ícono en vez de una raya suelta (al lado dice «Sin fecha»).
+                    Image(systemName: "calendar")
+                        .font(.system(size: 17, weight: .regular))
+                        .foregroundStyle(ArtaColor.tertiary)
+                        .accessibilityHidden(true)
+                }
             }
             .frame(width: 46, height: 50)
             .background(RoundedRectangle(cornerRadius: ArtaRadius.item, style: .continuous).fill(ArtaColor.surface2))

@@ -25,6 +25,9 @@ struct ConversationView: View {
     @State private var flash: String?
     @State private var showPins = false
     @State private var pinned: [ChatMessage] = []
+    @State private var pinsLoading = false
+    /// Se está bajando un documento para abrirlo con Vista Rápida.
+    @State private var openingFile = false
     @State private var showPhotos = false
     @State private var photoItems: [PhotosPickerItem] = []
     @State private var showFiles = false
@@ -83,6 +86,8 @@ struct ConversationView: View {
                 }
                 .overlay(alignment: .top) { flashBanner }
                 .animation(.easeInOut(duration: 0.2), value: flash)
+                .overlay(alignment: .top) { openingFileBanner }
+                .animation(.easeInOut(duration: 0.2), value: openingFile)
                 .confirmationDialog(
                     blockTitle,
                     isPresented: Binding(get: { blockTarget != nil }, set: { if !$0 { blockTarget = nil } }),
@@ -136,9 +141,13 @@ struct ConversationView: View {
         }
         .confirmationDialog("¿Eliminar este mensaje?", isPresented: Binding(get: { confirmDelete != nil }, set: { if !$0 { confirmDelete = nil } }), titleVisibility: .visible) {
             Button("Eliminar para todos", role: .destructive) {
-                if let m = confirmDelete { model.delete(m) }
+                if let m = confirmDelete {
+                    model.delete(m)
+                    Haptics.warning()
+                }
                 confirmDelete = nil
             }
+            Button("Cancelar", role: .cancel) { confirmDelete = nil }
         }
         .sheet(isPresented: $showPins) { pinsSheet }
         .sheet(item: $reportTarget) { m in
@@ -208,7 +217,11 @@ struct ConversationView: View {
                     }
                     Button {
                         showPins = true
-                        Task { pinned = await model.pins() }
+                        pinsLoading = true
+                        Task {
+                            pinned = await model.pins()
+                            pinsLoading = false
+                        }
                     } label: { Label("Mensajes fijados", systemImage: "pin") }
                     Button { pushChat(.saved) } label: { Label("Mensajes guardados", systemImage: "bookmark") }
                     if model.channel?.isMuted == true {
@@ -588,6 +601,8 @@ struct ConversationView: View {
             pushChat(.thread(channelId: model.channelId, rootId: m.id))
         case .copy:
             UIPasteboard.general.string = plainText(m.text)
+            Haptics.success()
+            show("Texto copiado")
         case .save:
             model.toggleSave(m)
         case .pin:
@@ -654,6 +669,25 @@ struct ConversationView: View {
                 .transition(.move(edge: .top).combined(with: .opacity))
                 .onTapGesture { self.flash = nil }
                 .accessibilityIdentifier("chat-flash")
+        }
+    }
+
+    /// Vista Rápida tarda lo que tarde en bajar el archivo: que se note que ya va.
+    @ViewBuilder
+    private var openingFileBanner: some View {
+        if openingFile {
+            HStack(spacing: ArtaSpace.s) {
+                ProgressView().tint(ArtaColor.tertiary)
+                Text("Abriendo archivo…")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(ArtaColor.text)
+            }
+            .padding(.horizontal, ArtaSpace.l)
+            .padding(.vertical, ArtaSpace.s)
+            .background(ArtaControlShape().fill(ArtaColor.surface))
+            .overlay(ArtaControlShape().strokeBorder(ArtaColor.lineStrong, lineWidth: 1))
+            .padding(.top, 10)
+            .transition(.opacity)
         }
     }
 
@@ -764,6 +798,7 @@ struct ConversationView: View {
                 Image(systemName: "xmark.circle.fill")
                     .font(.system(size: 20))
                     .foregroundStyle(ArtaColor.muted)
+                    .artaHitArea(dx: ArtaSpace.m, dy: ArtaSpace.m)
             }
             .buttonStyle(.plain)
             .accessibilityLabel(cancelLabel)
@@ -795,6 +830,8 @@ struct ConversationView: View {
                         .font(.system(size: Self.composerIcon))
                         .foregroundStyle(model.uploading ? ArtaColor.accent : ArtaColor.muted)
                         .frame(width: 36, height: 36)
+                        // 44 pt para el dedo sin agrandar la barra.
+                        .artaHitArea(dx: ArtaSpace.xs, dy: ArtaSpace.xs)
                 }
                 .accessibilityLabel("Adjuntar")
             }
@@ -815,6 +852,7 @@ struct ConversationView: View {
                         .font(.system(size: Self.composerIcon))
                         .foregroundStyle(ArtaColor.accent)
                         .frame(width: 36, height: 36)
+                        .artaHitArea(dx: ArtaSpace.xs, dy: ArtaSpace.xs)
                 }
                 .accessibilityLabel("Grabar nota de voz")
             } else {
@@ -823,6 +861,7 @@ struct ConversationView: View {
                         .font(.system(size: Self.composerIcon))
                         .foregroundStyle(draftIsEmpty ? ArtaColor.muted : ArtaColor.accent)
                         .frame(width: 36, height: 36)
+                        .artaHitArea(dx: ArtaSpace.xs, dy: ArtaSpace.xs)
                 }
                 .disabled(draftIsEmpty)
                 .accessibilityLabel(editing == nil ? "Enviar" : "Guardar")
@@ -969,6 +1008,7 @@ struct ConversationView: View {
     }
 
     private func startRecording() {
+        Haptics.tap()
         Task {
             do {
                 try await recorder.start()
@@ -1000,13 +1040,15 @@ struct ConversationView: View {
     }
 
     private func openFile(_ attachment: ChatAttachment) {
-        guard let url = ApiConfig.resolve(attachment.url) else { return }
+        guard let url = ApiConfig.resolve(attachment.url), !openingFile else { return }
+        openingFile = true
         Task {
             do {
                 previewURL = try await ApiClient.shared.download(url, suggestedName: attachment.name)
             } catch {
                 model.error = error.userMessage
             }
+            openingFile = false
         }
     }
 
@@ -1036,7 +1078,11 @@ struct ConversationView: View {
             .scrollContentBackground(.hidden)
             .background(ArtaColor.bg)
             .overlay {
-                if pinned.isEmpty { EmptyState(icon: "pin", title: "Nada fijado", message: "Mantén presionado un mensaje para fijarlo.") }
+                if pinsLoading {
+                    ProgressView().tint(ArtaColor.tertiary)
+                } else if pinned.isEmpty {
+                    EmptyState(icon: "pin", title: "Nada fijado", message: "Mantén presionado un mensaje para fijarlo.")
+                }
             }
             .navigationTitle("Fijados")
             .navigationBarTitleDisplayMode(.inline)
@@ -1154,14 +1200,23 @@ struct MessageBubble: View {
                         Text(message.replies == 1 ? "1 respuesta ›" : "\(message.replies) respuestas ›")
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(ArtaColor.accent)
+                            .artaHitArea(dx: ArtaSpace.s, dy: ArtaSpace.s)
                     }
                     .buttonStyle(.plain)
                 }
                 if message.failed {
                     HStack(spacing: 12) {
                         Text("No se envió").foregroundStyle(ArtaColor.danger)
-                        Button("Reintentar", action: onRetry).foregroundStyle(ArtaColor.accent)
-                        Button("Descartar", action: onDiscard).foregroundStyle(ArtaColor.muted)
+                        Button(action: onRetry) {
+                            Text("Reintentar")
+                                .foregroundStyle(ArtaColor.accent)
+                                .artaHitArea(dx: ArtaSpace.xs, dy: ArtaSpace.m)
+                        }
+                        Button(action: onDiscard) {
+                            Text("Descartar")
+                                .foregroundStyle(ArtaColor.muted)
+                                .artaHitArea(dx: ArtaSpace.xs, dy: ArtaSpace.m)
+                        }
                     }
                     .font(.caption)
                 }
@@ -1272,6 +1327,7 @@ struct MessageBubble: View {
                     .background(ArtaControlShape().fill(reacted ? ArtaColor.accentSoft : ArtaColor.surface2))
                     .overlay(ArtaControlShape().strokeBorder(reacted ? ArtaColor.accent : Color.clear, lineWidth: 1))
                     .foregroundStyle(ArtaColor.text)
+                    .artaHitArea(dx: ArtaSpace.xxs, dy: ArtaSpace.s)
                 }
                 .buttonStyle(.plain)
                 .contextMenu {
@@ -1292,6 +1348,7 @@ struct MessageBubble: View {
                     .padding(.horizontal, 9)
                     .padding(.vertical, 6)
                     .background(ArtaControlShape().fill(ArtaColor.surface2))
+                    .artaHitArea(dx: ArtaSpace.xxs, dy: ArtaSpace.s)
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Agregar reacción")

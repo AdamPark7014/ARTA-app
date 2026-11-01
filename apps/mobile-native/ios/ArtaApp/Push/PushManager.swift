@@ -19,12 +19,17 @@ import FirebaseMessaging
 /// - Procesos (`ARTA_EVENT`): OC, formatos, tareas… con «Marcar como leído». El
 ///   servidor elige la categoría por `kind` y apila por entidad (`thread-id` = `tag`
 ///   o `link:<ruta>`); `channel` (tasks, approvals, finance, events, documents,
-///   general) solo ordena los canales de Android.
-/// - Tocar un aviso abre su pantalla nativa (`PanelLink`, contrato §4): con
-///   `channel_id` la conversación; si no, según `url` y `type`. Nunca se aprueba
-///   desde la notificación.
+///   general) solo ordena los canales de Android. Ráfagas de avisos iguales actualizan
+///   la misma tarjeta (`apns-collapse-id`).
+/// - Lo que no espera a nadie (`passive=1`, `interruption-level: passive`) entra a la
+///   bandeja sin sonar ni encender la pantalla, también con la app abierta.
+/// - Tocar un aviso abre su pantalla nativa (`PanelLink`, contrato §4) en la entidad
+///   del aviso (`entity`) y lo marca leído: con `channel_id` la conversación; si no,
+///   según `url` y `type`. Nunca se aprueba desde la notificación.
 /// - Silenciosos (`silent=1`: `chat.read`, `notification.read`): quitan los avisos
 ///   de lo que ya se leyó en otro dispositivo y ajustan el globo del ícono.
+/// - El resumen de grupo en español va en `categorySummaryFormat`; `summaryArgument`
+///   no se usa porque iOS lo ignora desde la versión 15.
 final class PushManager: NSObject, UNUserNotificationCenterDelegate {
     static let shared = PushManager()
 
@@ -66,21 +71,28 @@ final class PushManager: NSObject, UNUserNotificationCenterDelegate {
             options: [],
             icon: UNNotificationActionIcon(systemImageName: "checkmark.message")
         )
+        let readNotice = UNNotificationAction(
+            identifier: markReadAction,
+            title: "Marcar como leído",
+            options: [],
+            icon: UNNotificationActionIcon(systemImageName: "checkmark.circle")
+        )
+        // Con las vistas previas ocultas se sigue viendo de qué entidad es (Arta o Auditorio).
         let chat = UNNotificationCategory(
             identifier: chatCategory,
             actions: [reply, read],
             intentIdentifiers: ["INSendMessageIntent"],
             hiddenPreviewsBodyPlaceholder: "Mensaje nuevo",
             categorySummaryFormat: "%u mensajes más",
-            options: [.hiddenPreviewsShowTitle]
+            options: [.hiddenPreviewsShowTitle, .hiddenPreviewsShowSubtitle]
         )
         let event = UNNotificationCategory(
             identifier: eventCategory,
-            actions: [read],
+            actions: [readNotice],
             intentIdentifiers: [],
             hiddenPreviewsBodyPlaceholder: "Aviso nuevo de ARTA",
             categorySummaryFormat: "%u avisos más",
-            options: []
+            options: [.hiddenPreviewsShowSubtitle]
         )
         return [chat, event]
     }
@@ -207,8 +219,9 @@ final class PushManager: NSObject, UNUserNotificationCenterDelegate {
 
     // MARK: UNUserNotificationCenterDelegate
 
-    /// Con la app abierta: banner + bandeja + sonido, como WhatsApp. Única
-    /// excepción: un mensaje de la conversación que está abierta en pantalla.
+    /// Con la app abierta: banner + bandeja + sonido, como WhatsApp. Excepciones: un
+    /// mensaje de la conversación que está abierta en pantalla no se muestra, y lo
+    /// pasivo entra a la bandeja callado, igual que con la app cerrada.
     func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         willPresent notification: UNNotification,
@@ -224,6 +237,10 @@ final class PushManager: NSObject, UNUserNotificationCenterDelegate {
         if let channel = Self.text(info, "channel_id"),
            ActiveConversation.shared.isOpen(channel) {
             completionHandler([])
+            return
+        }
+        if Self.text(info, "passive") == "1" || notification.request.content.interruptionLevel == .passive {
+            completionHandler([.list, .badge])
             return
         }
         completionHandler([.banner, .list, .sound, .badge])
@@ -270,7 +287,10 @@ final class PushManager: NSObject, UNUserNotificationCenterDelegate {
                 url: Self.text(info, "url"),
                 type: Self.text(info, "type")
             )
+            let entity = Self.text(info, "entity").flatMap(ArtaEntity.init(rawValue:))
             Task { @MainActor in
+                // Antes de navegar: cambiar de entidad limpia las pilas abiertas.
+                if let entity { ActiveEntity.shared.focus(on: entity) }
                 if let target {
                     AppRouter.shared.follow(target, fromLink: true)
                 } else {

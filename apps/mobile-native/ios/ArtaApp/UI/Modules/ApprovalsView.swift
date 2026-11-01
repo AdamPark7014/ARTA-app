@@ -31,6 +31,8 @@ struct ApprovalsView: View {
     @State private var payingAdvance: AdvanceRow?
     @State private var confirmPay = false
     @State private var previewURL: URL?
+    /// Anticipo cuyo archivo se está bajando para abrirlo.
+    @State private var openingAdvanceId: String?
 
     private var pendingOrders: [PurchaseOrderRow] {
         orders
@@ -72,6 +74,7 @@ struct ApprovalsView: View {
             .padding(.horizontal, ArtaLayout.gutter)
             .padding(.vertical, ArtaSpace.s)
             .background(ArtaColor.bg)
+            .onChange(of: segment) { _, _ in Haptics.selection() }
         }
         .flashToast(flash)
         .navigationTitle("Aprobaciones")
@@ -133,8 +136,16 @@ struct ApprovalsView: View {
         } else {
             ScrollView {
                 VStack(alignment: .leading, spacing: ArtaSpace.xl) {
-                    if let refreshError { errorRow(refreshError) }
-                    if let advancesError { errorRow("Anticipos: \(advancesError)") }
+                    if let refreshError {
+                        InlineErrorRow(message: refreshError) {
+                            Task { await load() }
+                        }
+                    }
+                    if let advancesError {
+                        InlineErrorRow(message: "Anticipos: \(advancesError)") {
+                            Task { await loadAdvances() }
+                        }
+                    }
                     if !tasks.isEmpty {
                         CardSection(title: "Entregas por revisar", count: tasks.count, items: tasks,
                                     dividerInset: 36, rowPadding: ArtaSpace.s) { task in
@@ -197,7 +208,10 @@ struct ApprovalsView: View {
                     ProgressView().tint(ArtaColor.accent)
                 } else {
                     // Corregir abre la hoja del motivo (con su confirmación); no es un botón rojo lleno.
-                    Button("Corregir") { rejecting = task }
+                    Button("Corregir") {
+                        Haptics.tap()
+                        rejecting = task
+                    }
                         .buttonStyle(ArtaDestructiveButtonStyle(fullWidth: false, compact: true))
                         .disabled(task.isEventClosed)
                     Button("Aprobar") {
@@ -304,20 +318,31 @@ struct ApprovalsView: View {
             HStack(spacing: ArtaSpace.s) {
                 if let fileUrl = advance.fileUrl, !fileUrl.isEmpty {
                     Button {
-                        openAdvanceFile(fileUrl, name: advance.label)
+                        openAdvanceFile(fileUrl, name: advance.label, id: advance.id)
                     } label: {
-                        Label("Ver archivo", systemImage: "paperclip")
-                            .font(.footnote.weight(.semibold))
-                            .foregroundStyle(ArtaColor.text)
-                            .padding(.vertical, ArtaSpace.xs)
-                            .contentShape(Rectangle())
+                        HStack(spacing: ArtaSpace.xs) {
+                            if openingAdvanceId == advance.id {
+                                ProgressView().controlSize(.small).tint(ArtaColor.tertiary)
+                            } else {
+                                Image(systemName: "paperclip")
+                            }
+                            Text("Ver archivo")
+                        }
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(ArtaColor.text)
+                        .padding(.vertical, ArtaSpace.xs)
+                        .artaHitArea(dx: ArtaSpace.xs, dy: ArtaSpace.s)
                     }
                     .buttonStyle(ArtaPressStyle(scale: 0.97))
+                    .disabled(openingAdvanceId != nil)
                 }
                 Spacer(minLength: ArtaSpace.xs)
                 if advance.isPending {
                     // Rechazar pide el motivo en su hoja antes de mandar nada.
-                    Button("Rechazar") { rejectingAdvance = advance }
+                    Button("Rechazar") {
+                        Haptics.tap()
+                        rejectingAdvance = advance
+                    }
                         .buttonStyle(ArtaDestructiveButtonStyle(fullWidth: false, compact: true))
                     Button("Aprobar") {
                         Task {
@@ -329,6 +354,7 @@ struct ApprovalsView: View {
                     .buttonStyle(ArtaPrimaryButtonStyle(fullWidth: false, compact: true))
                 } else if advance.isApproved {
                     Button("Marcar pagado") {
+                        Haptics.tap()
                         payingAdvance = advance
                         confirmPay = true
                     }
@@ -364,7 +390,11 @@ struct ApprovalsView: View {
         } else {
             ScrollView {
                 VStack(alignment: .leading, spacing: ArtaSpace.xl) {
-                    if let refreshError { errorRow(refreshError) }
+                    if let refreshError {
+                        InlineErrorRow(message: refreshError) {
+                            Task { await load() }
+                        }
+                    }
                     if !approvedTasks.isEmpty {
                         CardSection(title: "Entregas aprobadas", count: approvedTasks.count, items: approvedTasks,
                                     dividerInset: 36, rowPadding: ArtaSpace.s) { task in
@@ -406,24 +436,17 @@ struct ApprovalsView: View {
         ScrollView {
             VStack(spacing: 12) {
                 if let refreshError {
-                    Label(refreshError, systemImage: "exclamationmark.triangle.fill")
-                        .font(.footnote)
-                        .foregroundStyle(ArtaColor.danger)
-                        .padding(.horizontal, 16)
+                    InlineErrorRow(message: refreshError) {
+                        Task { await load() }
+                    }
+                    .padding(.horizontal, ArtaLayout.gutter)
                 }
                 ModuleEmptyView(icon: icon, title: title, message: message)
                     .frame(minHeight: 420)
             }
         }
         .refreshable { await load() }
-    }
-
-    private func errorRow(_ text: String) -> some View {
-        Label(text, systemImage: "exclamationmark.triangle.fill")
-            .font(.footnote)
-            .foregroundStyle(ArtaColor.danger)
-            .fixedSize(horizontal: false, vertical: true)
-            .padding(.horizontal, ArtaSpace.xs)
+        .artaTabBarScrim(glow: false)
     }
 
     // MARK: Datos
@@ -527,13 +550,16 @@ struct ApprovalsView: View {
         }
     }
 
-    private func openAdvanceFile(_ path: String, name: String?) {
+    private func openAdvanceFile(_ path: String, name: String?, id: String) {
+        Haptics.tap()
+        openingAdvanceId = id
         Task {
             do {
                 previewURL = try await ModuleFiles.download(path, name: name)
             } catch {
                 if !error.isModuleCancellation { refreshError = error.userMessage }
             }
+            openingAdvanceId = nil
         }
     }
 
@@ -572,7 +598,11 @@ struct PurchaseOrderSheet: View {
     @State private var confirmAuthorize = false
     @State private var confirmReject = false
     @State private var previewURL: URL?
+    /// Qué decisión va en camino: el botón que la mandó enseña la carga.
+    @State private var deciding: String?
+    @State private var openingProofId: String?
 
+    private var hasAmount: Bool { (detail?.amount ?? row.amount) != nil }
     private var amountText: String { Money.mxn(detail?.amount?.value ?? row.amount?.value) }
 
     var body: some View {
@@ -598,7 +628,8 @@ struct PurchaseOrderSheet: View {
             }
             .task { await load() }
             .quickLookPreview($previewURL)
-            .confirmationDialog("¿Autorizar \(amountText)?", isPresented: $confirmAuthorize, titleVisibility: .visible) {
+            .interactiveDismissDisabled(busy)
+            .confirmationDialog(hasAmount ? "¿Autorizar \(amountText)?" : "¿Autorizar esta orden?", isPresented: $confirmAuthorize, titleVisibility: .visible) {
                 Button("Autorizar") {
                     Task { await decide("AUTHORIZED") }
                 }
@@ -665,7 +696,9 @@ struct PurchaseOrderSheet: View {
                             }
                             .buttonStyle(ArtaPressStyle(scale: 0.99))
                         }
-                        FactRow(label: "Pidió", value: po.createdBy?.fullName ?? row.createdBy ?? "—")
+                        if let by = po.createdBy?.fullName ?? row.createdBy, !by.isEmpty {
+                            FactRow(label: "Pidió", value: by)
+                        }
                         if let created = po.createdAt {
                             FactRow(label: "Fecha", value: MDate.stampText(created))
                         }
@@ -736,20 +769,23 @@ struct PurchaseOrderSheet: View {
                                             }
                                         }
                                         Spacer(minLength: ArtaSpace.s)
-                                        Image(systemName: "eye").foregroundStyle(ArtaColor.tertiary)
+                                        if openingProofId == proof.id {
+                                            ProgressView().controlSize(.small).tint(ArtaColor.tertiary)
+                                        } else {
+                                            Image(systemName: "eye").foregroundStyle(ArtaColor.tertiary)
+                                        }
                                     }
                                     .contentShape(Rectangle())
                                 }
                                 .buttonStyle(ArtaPressStyle(scale: 0.99))
+                                .disabled(openingProofId != nil)
                             }
                         }
                     }
                 }
 
                 if let actionError {
-                    Label(actionError, systemImage: "exclamationmark.triangle.fill")
-                        .font(.footnote)
-                        .foregroundStyle(ArtaColor.danger)
+                    InlineErrorRow(message: actionError)
                 }
 
                 if canDecide && po.isPending {
@@ -760,10 +796,20 @@ struct PurchaseOrderSheet: View {
                     } else {
                         // Rechazar es discreto y siempre pide confirmación; autorizar es la acción principal.
                         HStack(spacing: ArtaSpace.m) {
-                            Button("Rechazar") { confirmReject = true }
-                                .buttonStyle(ArtaDestructiveButtonStyle())
-                            Button("Autorizar") { confirmAuthorize = true }
-                                .buttonStyle(ArtaPrimaryButtonStyle())
+                            Button {
+                                Haptics.tap()
+                                confirmReject = true
+                            } label: {
+                                decisionLabel("Rechazar", status: "REJECTED")
+                            }
+                            .buttonStyle(ArtaDestructiveButtonStyle())
+                            Button {
+                                Haptics.tap()
+                                confirmAuthorize = true
+                            } label: {
+                                decisionLabel("Autorizar", status: "AUTHORIZED")
+                            }
+                            .buttonStyle(ArtaPrimaryButtonStyle())
                         }
                         .disabled(busy)
                         .padding(.top, ArtaSpace.xs)
@@ -792,6 +838,13 @@ struct PurchaseOrderSheet: View {
         }
     }
 
+    private func decisionLabel(_ title: String, status: String) -> some View {
+        HStack(spacing: ArtaSpace.s) {
+            if deciding == status { ProgressView().tint(ArtaColor.tertiary) }
+            Text(title)
+        }
+    }
+
     private func proofName(_ proof: PurchaseOrderProof) -> String {
         if let label = proof.label, !label.isEmpty { return label }
         return (proof.fileUrl as NSString).lastPathComponent
@@ -810,6 +863,7 @@ struct PurchaseOrderSheet: View {
 
     private func decide(_ status: String) async {
         busy = true
+        deciding = status
         actionError = nil
         do {
             try await ApiClient.shared.setPurchaseOrderStatus(row.id, status: status)
@@ -821,15 +875,19 @@ struct PurchaseOrderSheet: View {
             actionError = error.userMessage
         }
         busy = false
+        deciding = nil
     }
 
     private func open(_ proof: PurchaseOrderProof) {
+        Haptics.tap()
+        openingProofId = proof.id
         Task {
             do {
                 previewURL = try await ModuleFiles.download(proof.fileUrl, name: proof.label)
             } catch {
-                actionError = error.userMessage
+                if !error.isModuleCancellation { actionError = error.userMessage }
             }
+            openingProofId = nil
         }
     }
 }

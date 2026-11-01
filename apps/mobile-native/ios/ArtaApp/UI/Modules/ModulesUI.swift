@@ -51,6 +51,8 @@ enum Haptics {
     static func warning() { UINotificationFeedbackGenerator().notificationOccurred(.warning) }
     static func error() { UINotificationFeedbackGenerator().notificationOccurred(.error) }
     static func tap() { UIImpactFeedbackGenerator(style: .light).impactOccurred() }
+    /// Cambió una selección: filtro, segmentado, interruptor.
+    static func selection() { UISelectionFeedbackGenerator().selectionChanged() }
 }
 
 // MARK: - Estados
@@ -165,6 +167,64 @@ struct ModuleEmptyView: View {
 
     var body: some View {
         EmptyState(icon: icon, title: title, message: message)
+    }
+}
+
+/// Algo falló con datos ya en pantalla (una recarga, una acción): el motivo y, si se puede,
+/// «Reintentar», sin tapar lo que se está viendo.
+struct InlineErrorRow: View {
+    let message: String
+    var retry: (() -> Void)? = nil
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: ArtaSpace.s) {
+            Label(message, systemImage: "exclamationmark.triangle.fill")
+                .font(.footnote)
+                .foregroundStyle(ArtaColor.danger)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if let retry {
+                Button {
+                    Haptics.tap()
+                    retry()
+                } label: {
+                    Text("Reintentar")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(ArtaColor.text)
+                        .fixedSize()
+                        .artaHitArea(dx: ArtaSpace.s, dy: ArtaSpace.m)
+                }
+                .buttonStyle(ArtaPressStyle(scale: 0.96))
+            }
+        }
+        .padding(.horizontal, ArtaSpace.xs)
+    }
+}
+
+/// Filtro de una fila de chips (Tareas, Avisos): lleno el activo, contorno los demás. La píldora
+/// mide ~31 pt y el toque 44: la fila reserva ese alto, por eso no lleva relleno vertical propio.
+struct FilterChip: View {
+    let title: String
+    let isOn: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Text(title)
+                .font(.footnote.weight(.semibold))
+                .monospacedDigit()
+                .foregroundStyle(isOn ? ArtaColor.onAccent : ArtaColor.muted)
+                .lineLimit(1)
+                .fixedSize()
+                .padding(.horizontal, 14)
+                .padding(.vertical, 7)
+                .background(ArtaControlShape().fill(isOn ? ArtaColor.accentFill : AnyShapeStyle(ArtaColor.surface)))
+                .overlay(ArtaControlShape().strokeBorder(isOn ? Color.clear : ArtaColor.lineStrong, lineWidth: 1))
+                .padding(.vertical, 6)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(ArtaPressStyle(scale: 0.95))
+        .accessibilityAddTraits(isOn ? .isSelected : [])
     }
 }
 
@@ -301,9 +361,9 @@ struct PanelCard<Content: View>: View {
                             }
                             .font(.footnote)
                             .foregroundStyle(ArtaColor.tertiary)
-                            // Área de toque cómoda sin mover el diseño.
+                            // Área de toque de 44 pt sin mover el diseño.
                             .padding(.vertical, ArtaSpace.xs)
-                            .contentShape(Rectangle())
+                            .artaHitArea(dx: ArtaSpace.s, dy: ArtaSpace.s + ArtaSpace.xxs)
                         }
                         .buttonStyle(ArtaPressStyle(scale: 0.96))
                         .accessibilityIdentifier(trailingId ?? "")
@@ -531,7 +591,7 @@ enum Money {
     }()
 
     static func mxn(_ value: Double?) -> String {
-        guard let value else { return "—" }
+        guard let value else { return "Sin monto" }
         return mxnFormatter.string(from: NSNumber(value: value)) ?? String(format: "$%.2f", value)
     }
 }
@@ -590,7 +650,7 @@ enum TaskInfo {
         case "submitted": return "Entregada para revisión"
         case "completed": return "Completada"
         case "approved": return "Aprobada"
-        case "rejected": return "Rechazada — corrección pedida"
+        case "rejected": return "Rechazada: corrección pedida"
         case "evidence_added": return "Evidencia agregada"
         case "deleted": return "Eliminada"
         default: return action
@@ -642,7 +702,7 @@ enum POInfo {
         case "PAID": return "Pagada"
         case "REJECTED": return "Rechazada"
         case "CANCELLED": return "Cancelada"
-        default: return status ?? "—"
+        default: return status ?? "Sin estado"
         }
     }
 

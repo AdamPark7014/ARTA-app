@@ -243,8 +243,13 @@ struct ChatListView: View {
             .accessibilityLabel("Opciones de chat")
         }
         ToolbarItem(placement: .topBarTrailing) {
-            Button { composing = true } label: { Image(systemName: "square.and.pencil") }
-                .accessibilityLabel("Nueva conversación")
+            Button {
+                Haptics.tap()
+                composing = true
+            } label: {
+                Image(systemName: "square.and.pencil")
+            }
+            .accessibilityLabel("Nueva conversación")
         }
     }
 
@@ -288,6 +293,7 @@ struct ChatListView: View {
 
     private func sectionHeader(_ title: String, count: Int? = nil, unread: Int, open: Binding<Bool>) -> some View {
         Button {
+            Haptics.selection()
             withAnimation(.easeInOut(duration: 0.2)) { open.wrappedValue.toggle() }
         } label: {
             // Mismo encabezado «cap» que el resto de la app, con la flecha para plegar.
@@ -302,7 +308,7 @@ struct ChatListView: View {
                 Spacer()
                 if !open.wrappedValue && unread > 0 { CountBadge(count: unread, muted: false) }
             }
-            .padding(.vertical, ArtaSpace.xs)
+            .frame(minHeight: 44)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -328,12 +334,18 @@ struct ChatListView: View {
                 .font(.footnote)
                 .foregroundStyle(ArtaColor.text)
             Spacer(minLength: 8)
-            Button("Desactivar") { model.setDnd(nil) }
-                .font(.footnote.weight(.semibold))
-                .foregroundStyle(ArtaColor.accent)
-                .buttonStyle(.plain)
+            Button {
+                model.setDnd(nil)
+            } label: {
+                Text("Desactivar")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(ArtaColor.accent)
+                    .frame(minHeight: 44)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
         }
-        .padding(10)
+        .padding(.horizontal, 10)
         .background(RoundedRectangle(cornerRadius: ArtaRadius.item, style: .continuous).fill(ArtaColor.accentSoft))
         .listRowBackground(Color.clear)
         .listRowSeparator(.hidden)
@@ -449,7 +461,7 @@ private struct ChannelRow: View {
                         Image(systemName: "megaphone.fill").font(.caption2).foregroundStyle(ArtaColor.muted)
                     }
                     Text(name.title)
-                        .font(.body.weight(bold ? .bold : .regular))
+                        .font(.body.weight(bold ? .semibold : .regular))
                         .foregroundStyle(channel.isMuted ? ArtaColor.muted : ArtaColor.text)
                         .lineLimit(2)
                         .fixedSize(horizontal: false, vertical: true)
@@ -498,7 +510,8 @@ private struct ChannelRow: View {
     @ViewBuilder
     private var preview: some View {
         if let draft, !draft.isEmpty {
-            Text("Borrador: ").foregroundColor(ArtaColor.danger).fontWeight(.medium) + Text(plainText(draft)).foregroundColor(ArtaColor.muted)
+            // Monocromo: el color es solo para alertas reales.
+            Text("Borrador: ").foregroundColor(ArtaColor.text).fontWeight(.semibold) + Text(plainText(draft)).foregroundColor(ArtaColor.muted)
         } else {
             Text(plainText(channel.lastMessagePreview ?? channel.topic ?? ""))
                 .foregroundStyle(bold ? ArtaColor.text : ArtaColor.muted)
@@ -738,8 +751,10 @@ struct NewConversationSheet: View {
         Task {
             do {
                 let channel = try await ApiClient.shared.openDirect(person.id)
+                Haptics.tap()
                 onOpen(channel.id)
             } catch {
+                Haptics.error()
                 self.error = error.userMessage
             }
             busy = false
@@ -772,6 +787,7 @@ struct NewConversationSheet: View {
                 Haptics.success()
                 onOpen(detail.id)
             } catch {
+                Haptics.error()
                 self.error = error.userMessage
             }
             busy = false

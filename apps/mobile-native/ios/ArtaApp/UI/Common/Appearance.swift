@@ -10,7 +10,8 @@ enum ArtaAppearance {
         let light = entity == .arta
         let text = UIColor(hex: light ? 0x0C0C0D : 0xF2F2F4)
         let secondary = UIColor(hex: light ? 0x55555C : 0xA1A1AA)
-        let tertiary = UIColor(hex: light ? 0x8B8B92 : 0x85858E)
+        // Los mismos de `ArtaColor.tertiary` (los anteriores no daban AA sobre las barras).
+        let tertiary = UIColor(hex: light ? 0x6B6B73 : 0x8A8A93)
         let line = light ? UIColor(hex: 0x0C0C0D, alpha: 0.07) : UIColor(white: 1, alpha: 0.07)
         let accent = UIColor(hex: light ? 0x0C0C0D : 0xC7CCD4)
         let onAccent = light ? UIColor.white : UIColor(hex: 0x0A0A0B)

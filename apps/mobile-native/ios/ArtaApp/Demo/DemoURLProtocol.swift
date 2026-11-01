@@ -41,6 +41,8 @@ final class DemoURLProtocol: URLProtocol {
 ///    si no hay, `{"ok":true}`. «Chat del evento» (`POST chat/event/:id`) devuelve el
 ///    canal grabado de ese evento.
 ///  - Lo que no es del API (fotos de `/uploads`, el socket, otros hosts): 404 vacío.
+///  - Avisos: los contesta `DemoNotices`, que sí recuerda leídos y preferencias mientras la
+///    app sigue abierta (así se prueban los filtros y el horario silencioso).
 /// Las fechas de las respuestas se mueven al día de hoy (`DemoClock.shift`).
 enum DemoBackend {
     struct Reply {
@@ -53,10 +55,14 @@ enum DemoBackend {
             return Reply(status: 404, data: Data())
         }
         let method = (request.httpMethod ?? "GET").uppercased()
+        let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
+        if path.hasPrefix("notifications"),
+           let notices = DemoNotices.reply(path: path, method: method, query: items, body: method == "PATCH" ? bodyData(of: request) : nil) {
+            return notices
+        }
         guard method == "GET" || method == "HEAD" else {
             return mutation(path: path)
         }
-        let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
         let key = DemoFixtures.key(path: path, queryItems: items)
         if let data = DemoFixtures.data(forKey: key) ?? DemoFixtures.data(forKey: path) {
             return Reply(status: 200, data: DemoClock.shift(data))
@@ -107,7 +113,122 @@ enum DemoBackend {
         return match?["id"] as? String
     }
 
-    private static func json(_ status: Int, _ body: String) -> Reply {
+    fileprivate static func json(_ status: Int, _ body: String) -> Reply {
         Reply(status: status, data: Data(body.utf8))
+    }
+
+    /// Dentro de un `URLProtocol` el cuerpo suele llegar como flujo, no en `httpBody`.
+    private static func bodyData(of request: URLRequest) -> Data? {
+        if let body = request.httpBody { return body }
+        guard let stream = request.httpBodyStream else { return nil }
+        stream.open()
+        defer { stream.close() }
+        var out = Data()
+        var buffer = [UInt8](repeating: 0, count: 4096)
+        while stream.hasBytesAvailable {
+            let count = stream.read(&buffer, maxLength: buffer.count)
+            if count <= 0 { break }
+            out.append(buffer, count: count)
+        }
+        return out
+    }
+}
+
+/// Avisos del modo de muestra. La lista sale de la fixture de siempre; lo leído y las preferencias
+/// se guardan solo en memoria mientras la app sigue abierta. `URLProtocol` corre en los hilos de
+/// URLSession: todo el estado va con candado.
+private enum DemoNotices {
+    private static let lock = NSLock()
+    private static var readIds = Set<String>()
+    /// Entidades a las que ya se les hizo «Leer todo» (`""` = sin `entity`, todas).
+    private static var readAllEntities = Set<String>()
+    private static var prefs: Data?
+
+    private static let defaultPrefs = #"{"muted":[],"quietHours":{"enabled":false,"start":"22:00","end":"07:00"}}"#
+
+    /// `nil`: no es de avisos, sigue la lógica general.
+    static func reply(path: String, method: String, query: [URLQueryItem], body: Data?) -> DemoBackend.Reply? {
+        let entity = query.first(where: { $0.name == "entity" })?.value ?? ""
+        switch (method, path) {
+        case ("GET", "notifications/preferences"):
+            return savedPrefs()
+        case ("PATCH", "notifications/preferences"):
+            return savePrefs(body)
+        case ("GET", "notifications"):
+            // La fixture cabe entera en la primera página: `before` ya no trae nada más.
+            if query.contains(where: { $0.name == "before" }) { return DemoBackend.json(200, "[]") }
+            let unreadOnly = query.first(where: { $0.name == "unread" })?.value == "1"
+            let rows = notices(entity: entity).filter { !unreadOnly || !isRead($0) }
+            return encode(rows)
+        case ("GET", "notifications/unread-count"):
+            let count = notices(entity: entity).filter { !isRead($0) }.count
+            return DemoBackend.json(200, "{\"count\":\(count)}")
+        case ("POST", "notifications/read-all"):
+            lock.lock()
+            readAllEntities.insert(entity)
+            lock.unlock()
+            return DemoBackend.json(200, #"{"ok":true}"#)
+        default:
+            break
+        }
+        let parts = path.split(separator: "/").map(String.init)
+        if method == "PATCH", parts.count == 3, parts[0] == "notifications", parts[2] == "read" {
+            lock.lock()
+            readIds.insert(parts[1])
+            lock.unlock()
+            return DemoBackend.json(200, #"{"ok":true}"#)
+        }
+        return nil
+    }
+
+    private static func savedPrefs() -> DemoBackend.Reply {
+        lock.lock()
+        let saved = prefs
+        lock.unlock()
+        return saved.map { DemoBackend.Reply(status: 200, data: $0) } ?? DemoBackend.json(200, defaultPrefs)
+    }
+
+    private static func savePrefs(_ body: Data?) -> DemoBackend.Reply {
+        guard let body, !body.isEmpty else { return savedPrefs() }
+        lock.lock()
+        prefs = body
+        lock.unlock()
+        return DemoBackend.Reply(status: 200, data: body)
+    }
+
+    /// Filas de la fixture con fechas al día, de esa entidad y con `readAt` si ya se leyeron aquí.
+    private static func notices(entity: String) -> [[String: Any]] {
+        guard let raw = DemoFixtures.data(forKey: "notifications") else { return [] }
+        let list = (try? JSONSerialization.jsonObject(with: DemoClock.shift(raw))) as? [[String: Any]] ?? []
+        lock.lock()
+        let ids = readIds
+        let allRead = readAllEntities
+        lock.unlock()
+        let stamp = ISO8601DateFormatter().string(from: Date())
+        return list.compactMap { (row: [String: Any]) -> [String: Any]? in
+            let rowEntity = row["entity"] as? String
+            if !entity.isEmpty, let rowEntity, rowEntity != entity { return nil }
+            guard !isRead(row) else { return row }
+            let rowId = (row["id"] as? String) ?? ""
+            let readHere = ids.contains(rowId)
+                || allRead.contains("")
+                || (rowEntity == nil && !allRead.isEmpty)
+                || (rowEntity.map { allRead.contains($0) } ?? false)
+            guard readHere else { return row }
+            var copy = row
+            copy["readAt"] = stamp
+            return copy
+        }
+    }
+
+    private static func isRead(_ row: [String: Any]) -> Bool {
+        row["readAt"] is String
+    }
+
+    private static func encode(_ rows: [[String: Any]]) -> DemoBackend.Reply {
+        guard let data = try? JSONSerialization.data(withJSONObject: rows) else {
+            return DemoBackend.json(200, "[]")
+        }
+        return DemoBackend.Reply(status: 200, data: data)
     }
 }

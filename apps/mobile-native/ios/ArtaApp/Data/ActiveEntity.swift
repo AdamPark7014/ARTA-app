@@ -94,6 +94,8 @@ final class ActiveEntity: ObservableObject {
 
     private var userId: String?
     private var noticeTask: Task<Void, Never>?
+    /// Se tocó un aviso de otra entidad antes de saber a cuáles tiene acceso la persona (arranque en frío).
+    private var pendingFocus: ArtaEntity?
 
     private init() {}
 
@@ -112,16 +114,30 @@ final class ActiveEntity: ObservableObject {
         let list = hybrid ? ArtaEntity.allCases : own
         let saved = UserDefaults.standard.string(forKey: Self.storageKey(user.id)).flatMap(ArtaEntity.init(rawValue:))
         let chosen: ArtaEntity
-        if let saved, list.contains(saved) {
+        if let pendingFocus, list.contains(pendingFocus) {
+            chosen = pendingFocus
+        } else if let saved, list.contains(saved) {
             chosen = saved
         } else if userId == user.id, list.contains(current) {
             chosen = current
         } else {
             chosen = list.first ?? .arta
         }
+        // Con un usuario parcial (sin entidades) se sigue esperando al completo.
+        if !list.isEmpty { pendingFocus = nil }
         userId = user.id
         available = list
         apply(chosen)
+    }
+
+    /// Se tocó un aviso de esa entidad: la pantalla que abre debe verse y cargar en ella. Al
+    /// arrancar en frío todavía no se saben las entidades de la persona: espera a `configure`.
+    func focus(on entity: ArtaEntity) {
+        if available.isEmpty {
+            pendingFocus = entity
+        } else {
+            select(entity)
+        }
     }
 
     /// Cambio pedido por la persona (doble toque en Inicio, chip de Inicio o selector de Más).
@@ -144,6 +160,7 @@ final class ActiveEntity: ObservableObject {
         noticeTask?.cancel()
         notice = nil
         userId = nil
+        pendingFocus = nil
         available = []
         apply(.arta)
     }
@@ -260,6 +277,7 @@ struct EntityChip: View {
         .padding(.vertical, 6)
         .background(shape.fill(light ? Color(hex: 0x0C0C0D) : Color.white.opacity(0.04)))
         .overlay(shape.strokeBorder(light ? Color.clear : Color.white.opacity(0.1), lineWidth: 1))
-        .contentShape(shape)
+        // La píldora mide ~28 pt; el dedo alcanza 44 sin moverla.
+        .contentShape(ArtaHitArea(dx: ArtaSpace.xs, dy: ArtaSpace.s))
     }
 }

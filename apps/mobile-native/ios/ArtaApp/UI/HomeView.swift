@@ -8,6 +8,12 @@ import UIKit
 struct SignedInView: View {
     let user: UserDto
     @EnvironmentObject private var activeEntity: ActiveEntity
+    @EnvironmentObject private var router: AppRouter
+
+    /// Dentro de una conversación la pastilla taparía la barra para escribir, justo arriba de las pestañas.
+    private var showsDemoBanner: Bool {
+        DemoMode.enteredFromLogin && !(router.tab == .chats && !router.chatPath.isEmpty)
+    }
 
     var body: some View {
         ZStack {
@@ -30,9 +36,15 @@ struct SignedInView: View {
         // Explorando con datos de muestra desde la entrada: pastilla con «Salir». Con
         // `-ArtaDemo YES` (capturas y video de tienda) no se enseña.
         .overlay(alignment: .bottom) {
-            if DemoMode.enteredFromLogin {
-                DemoBanner()
+            ZStack {
+                if showsDemoBanner {
+                    DemoBanner()
+                        .transition(.opacity)
+                }
             }
+            .animation(.easeOut(duration: 0.18), value: showsDemoBanner)
+            // Se queda sobre las pestañas aunque suba el teclado (buscador).
+            .ignoresSafeArea(.keyboard, edges: .bottom)
         }
     }
 }
@@ -176,6 +188,8 @@ struct HomeView: View {
             ConversationView(channelId: channelId, parentId: nil, focusMessageId: messageId)
         case .blockedUsers:
             BlockedUsersView()
+        case .notificationPreferences:
+            NotificationPreferencesView()
         }
     }
 }

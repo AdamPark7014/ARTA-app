@@ -49,6 +49,8 @@ struct TasksView: View {
     @State private var error: String?
     @State private var showCreate = false
     @State private var flash: String?
+    /// La recarga falló con la lista ya en pantalla.
+    @State private var refreshError: String?
 
     private var scopes: [Scope] { profile?.seesTeamTasks == true ? Scope.allCases : [.mine, .requested] }
 
@@ -63,6 +65,7 @@ struct TasksView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
+                        Haptics.tap()
                         showCreate = true
                     } label: {
                         Image(systemName: "plus")
@@ -80,6 +83,7 @@ struct TasksView: View {
             }
             .task { await load() }
             .onChange(of: scope) { _, _ in
+                Haptics.selection()
                 Task { await load(resetting: true) }
             }
     }
@@ -99,6 +103,11 @@ struct TasksView: View {
             // (16 en ARTA, 6 en Auditorio) y encabezados «cap» con su contador, como el resto.
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: ArtaSpace.xl) {
+                    if let refreshError {
+                        InlineErrorRow(message: refreshError) {
+                            Task { await load() }
+                        }
+                    }
                     ForEach(groups, id: \.bucket) { group in
                         CardSection(title: group.bucket.title, count: group.tasks.count, alert: group.bucket == .overdue,
                                     items: group.tasks, dividerInset: 36, rowPadding: ArtaSpace.s) { task in
@@ -128,7 +137,7 @@ struct TasksView: View {
     }
 
     private var header: some View {
-        VStack(spacing: ArtaSpace.m) {
+        VStack(spacing: ArtaSpace.s) {
             Picker("Vista", selection: $scope) {
                 ForEach(scopes) { s in
                     Text(s.title).tag(s)
@@ -146,34 +155,21 @@ struct TasksView: View {
                     }
                 }
                 .padding(.horizontal, ArtaLayout.gutter)
-                .padding(.vertical, ArtaSpace.xxs)
             }
             .artaHorizontalEdgeFade(ArtaLayout.gutter)
         }
-        .padding(.vertical, ArtaSpace.s)
+        // Los chips ya traen su aire vertical (44 pt de toque): abajo sobra poco.
+        .padding(.top, ArtaSpace.s)
+        .padding(.bottom, ArtaSpace.xs)
         .background(ArtaColor.bg)
     }
 
     private func chip(_ f: Filter) -> some View {
-        let on = f == filter
-        return Button {
+        FilterChip(title: f.title, isOn: f == filter) {
             withAnimation(.snappy(duration: 0.22)) { filter = f }
-            Haptics.tap()
-        } label: {
-            Text(f.title)
-                .font(.footnote.weight(.semibold))
-                .foregroundStyle(on ? ArtaColor.onAccent : ArtaColor.muted)
-                .lineLimit(1)
-                .fixedSize()
-                .padding(.horizontal, 14)
-                .padding(.vertical, 7)
-                .background(ArtaControlShape().fill(on ? ArtaColor.accentFill : AnyShapeStyle(ArtaColor.surface)))
-                .overlay(ArtaControlShape().strokeBorder(on ? Color.clear : ArtaColor.lineStrong, lineWidth: 1))
-                .contentShape(ArtaControlShape())
+            Haptics.selection()
         }
-        .buttonStyle(ArtaPressStyle(scale: 0.95))
         .accessibilityIdentifier("tasks-filter-\(f.rawValue)")
-        .accessibilityAddTraits(on ? .isSelected : [])
     }
 
     @ViewBuilder
@@ -259,8 +255,11 @@ struct TasksView: View {
             guard requested == scope else { return }
             tasks = list
             error = nil
+            refreshError = nil
         } catch {
-            if !error.isModuleCancellation { self.error = error.userMessage }
+            if !error.isModuleCancellation {
+                if tasks.isEmpty { self.error = error.userMessage } else { refreshError = error.userMessage }
+            }
         }
         loading = false
     }

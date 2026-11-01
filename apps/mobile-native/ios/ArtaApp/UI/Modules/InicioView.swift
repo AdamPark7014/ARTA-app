@@ -22,6 +22,8 @@ struct InicioView: View {
     @State private var error: String?
     @State private var refreshError: String?
     @State private var showNewTask = false
+    /// Para volver a contar al regresar a la pantalla (se aprobó algo, se cerró una tarea).
+    @State private var lastLoadedAt = Date.distantPast
     @ScaledMetric(relativeTo: .largeTitle) private var greetingSize: CGFloat = 30
     @ScaledMetric(relativeTo: .title) private var figureSize: CGFloat = 28
 
@@ -81,7 +83,7 @@ struct InicioView: View {
             }
         }
         .task {
-            if !loaded { await load() }
+            if !loaded || Date().timeIntervalSince(lastLoadedAt) > 5 { await load() }
         }
         .sheet(isPresented: $showNewTask) {
             TaskFormSheet(mode: .create(eventId: nil)) { _ in
@@ -99,9 +101,9 @@ struct InicioView: View {
                     .padding(.bottom, ArtaSpace.s)
                 greeting
                 if let refreshError {
-                    Label(refreshError, systemImage: "exclamationmark.triangle.fill")
-                        .font(.footnote)
-                        .foregroundStyle(ArtaColor.danger)
+                    InlineErrorRow(message: refreshError) {
+                        Task { await load() }
+                    }
                 }
                 kpiRow
                     .padding(.top, ArtaSpace.s)
@@ -372,7 +374,8 @@ struct InicioView: View {
 
     private func timelineRow(_ item: TimelineItem) -> some View {
         HStack(alignment: .top, spacing: 10) {
-            Text(item.time.map(MDate.timeText) ?? "—")
+            // Sin hora: un evento que empezó otro día y sigue hoy.
+            Text(item.time.map(MDate.timeText) ?? "Hoy")
                 .font(.caption.monospacedDigit())
                 .foregroundStyle(ArtaColor.tertiary)
                 .frame(width: 42, alignment: .leading)
@@ -572,8 +575,9 @@ struct InicioView: View {
                             Text("Ver \(dueTasks.count - shown.count) más en Tareas")
                                 .font(.footnote.weight(.semibold))
                                 .foregroundStyle(ArtaColor.accent)
+                                .artaHitArea(dx: ArtaSpace.s, dy: ArtaSpace.m)
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(ArtaPressStyle(scale: 0.97))
                     }
                 }
             }
@@ -738,6 +742,7 @@ struct InicioView: View {
             activeEvents = events
             await loadApprovals(me)
             loaded = true
+            lastLoadedAt = Date()
             error = nil
             refreshError = nil
         } catch {

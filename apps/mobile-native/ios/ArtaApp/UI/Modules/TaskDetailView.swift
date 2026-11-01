@@ -24,6 +24,12 @@ struct TaskDetailView: View {
     @State private var showImporter = false
     @State private var photoItems: [PhotosPickerItem] = []
     @State private var uploading = false
+    /// Qué acción va en camino («DONE», «OPEN», «approve»…): su botón enseña la carga.
+    @State private var runningAction: String?
+    /// Evidencia que se está bajando para abrirla.
+    @State private var openingEvidenceId: String?
+    /// Lo hecho, un momento abajo de la pantalla («Entrega aprobada»).
+    @State private var flash: String?
 
     private var me: String? { profile?.id }
 
@@ -44,15 +50,21 @@ struct TaskDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                if let task { menu(task) }
+                if busy {
+                    ProgressView()
+                } else if let task {
+                    menu(task)
+                }
             }
         }
         .task { await load() }
+        .flashToast(flash)
         .quickLookPreview($previewURL)
         .sheet(isPresented: $showDeliver) {
             if let task {
                 DeliverTaskSheet(task: task) { updated in
                     self.task = updated
+                    show("Entrega enviada a revisión")
                 }
             }
         }
@@ -60,6 +72,7 @@ struct TaskDetailView: View {
             if let task {
                 RejectTaskSheet(task: task) { updated in
                     self.task = updated
+                    show("Se pidió corrección")
                 }
             }
         }
@@ -125,10 +138,7 @@ struct TaskDetailView: View {
             VStack(alignment: .leading, spacing: 16) {
                 headerCard(t)
                 if let actionError {
-                    Label(actionError, systemImage: "exclamationmark.triangle.fill")
-                        .font(.footnote)
-                        .foregroundStyle(ArtaColor.danger)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                    InlineErrorRow(message: actionError)
                 }
                 actionsCard(t)
                 if let detailText = t.detail, !detailText.isEmpty {
@@ -176,6 +186,7 @@ struct TaskDetailView: View {
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(ArtaColor.accent)
                             .multilineTextAlignment(.leading)
+                            .artaHitArea(dy: ArtaSpace.m)
                     }
                     .buttonStyle(ArtaPressStyle(scale: 0.97))
                 } else {
@@ -208,31 +219,32 @@ struct TaskDetailView: View {
         } else {
             VStack(spacing: 8) {
                 if canReview(t) {
-                    actionButton("Aprobar entrega", icon: "checkmark.seal.fill", prominent: true) {
+                    actionButton("Aprobar entrega", icon: "checkmark.seal.fill", prominent: true, running: runningAction == "approve") {
                         Task { await approve() }
                     }
                     actionButton("Pedir corrección", icon: "arrow.uturn.left", destructive: true) {
+                        Haptics.tap()
                         showReject = true
                     }
                 }
                 if canDeliver(t) {
                     actionButton("Entregar con evidencia", icon: "tray.and.arrow.up.fill", prominent: true) {
+                        Haptics.tap()
                         showDeliver = true
                     }
                 }
                 if canMarkDone(t) {
-                    actionButton("Marcar hecha", icon: "checkmark.circle", prominent: true) {
+                    actionButton("Marcar hecha", icon: "checkmark.circle", prominent: true, running: runningAction == "DONE") {
                         Task { await setStatus("DONE") }
                     }
                 }
                 if canReopen(t) && !canReview(t) {
-                    actionButton("Reabrir", icon: "arrow.counterclockwise") {
+                    actionButton("Reabrir", icon: "arrow.counterclockwise", running: runningAction == "OPEN") {
                         Task { await setStatus("OPEN") }
                     }
                 }
             }
             .disabled(busy)
-            .opacity(busy ? 0.6 : 1)
         }
     }
 
@@ -244,9 +256,19 @@ struct TaskDetailView: View {
         icon: String,
         prominent: Bool = false,
         destructive: Bool = false,
+        running: Bool = false,
         action: @escaping () -> Void
     ) -> some View {
-        let button = Button(action: action) { Label(title, systemImage: icon) }
+        let button = Button(action: action) {
+            HStack(spacing: ArtaSpace.s) {
+                if running {
+                    ProgressView().tint(ArtaColor.tertiary)
+                } else {
+                    Image(systemName: icon)
+                }
+                Text(title)
+            }
+        }
         if prominent {
             button.buttonStyle(ArtaPrimaryButtonStyle())
         } else if destructive {
@@ -326,10 +348,16 @@ struct TaskDetailView: View {
                                     }
                                 }
                                 Spacer()
-                                Image(systemName: "eye").foregroundStyle(ArtaColor.muted)
+                                if openingEvidenceId == ev.id {
+                                    ProgressView().controlSize(.small).tint(ArtaColor.tertiary)
+                                } else {
+                                    Image(systemName: "eye").foregroundStyle(ArtaColor.muted)
+                                }
                             }
+                            .contentShape(Rectangle())
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(ArtaPressStyle(scale: 0.99))
+                        .disabled(openingEvidenceId != nil)
                     }
                     if t.evidenceList.isEmpty {
                         Text("Todavía no hay archivos.").font(.subheadline).foregroundStyle(ArtaColor.muted)
@@ -462,27 +490,45 @@ struct TaskDetailView: View {
         loading = false
     }
 
-    private func run(_ op: () async throws -> ArtaTask) async {
+    private func run(_ action: String, done: String, _ op: () async throws -> ArtaTask) async {
         busy = true
+        runningAction = action
         actionError = nil
         do {
             task = try await op()
             Haptics.success()
+            show(done)
         } catch {
             Haptics.error()
             actionError = error.userMessage
         }
         busy = false
+        runningAction = nil
     }
 
     private func setStatus(_ status: String) async {
         let id = taskId
-        await run { try await ApiClient.shared.updateTask(id, UpdateTaskBody(status: status)) }
+        let done: String
+        switch status {
+        case "DONE": done = "Tarea hecha"
+        case "IN_PROGRESS": done = "Tarea en curso"
+        case "BLOCKED": done = "Tarea bloqueada"
+        default: done = "Tarea reabierta"
+        }
+        await run(status, done: done) { try await ApiClient.shared.updateTask(id, UpdateTaskBody(status: status)) }
     }
 
     private func approve() async {
         let id = taskId
-        await run { try await ApiClient.shared.approveTask(id) }
+        await run("approve", done: "Entrega aprobada") { try await ApiClient.shared.approveTask(id) }
+    }
+
+    private func show(_ text: String) {
+        flash = text
+        Task {
+            try? await Task.sleep(nanoseconds: 3_000_000_000)
+            if flash == text { flash = nil }
+        }
     }
 
     private func deleteTask() async {
@@ -516,12 +562,16 @@ struct TaskDetailView: View {
     }
 
     private func open(_ evidence: TaskEvidence) {
+        Haptics.tap()
+        openingEvidenceId = evidence.id
+        actionError = nil
         Task {
             do {
                 previewURL = try await ModuleFiles.download(evidence.fileUrl, name: evidence.label)
             } catch {
-                actionError = error.userMessage
+                if !error.isModuleCancellation { actionError = error.userMessage }
             }
+            openingEvidenceId = nil
         }
     }
 }

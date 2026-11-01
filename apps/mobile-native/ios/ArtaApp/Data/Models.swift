@@ -390,11 +390,28 @@ struct NotificationDto: Decodable, Identifiable, Equatable {
     var actor: NotificationActor?
     /// ARTA | EXPLANADA; `null` en avisos personales (menciones, directos).
     var entity: String?
+    /// Cuántos avisos iguales se juntaron en esta tarjeta (el título ya lo dice). Falta en API viejo.
+    var bundleCount: Int?
 
     var isRead: Bool { readAt != nil }
 }
 
 struct UnreadCount: Decodable { var count: Int? }
+
+/// `GET/PATCH notifications/preferences`: qué llega al teléfono. La campana recibe todo, siempre.
+/// Sin nada guardado el API responde todo encendido y sin horario silencioso.
+struct NotificationPrefs: Codable, Equatable {
+    /// Categorías apagadas (`NoticeChannel.rawValue`).
+    var muted: [String]
+    var quietHours: NotificationQuietHours
+}
+
+/// De noche solo llega lo urgente. `start` y `end` son «HH:mm» en la hora de Puebla.
+struct NotificationQuietHours: Codable, Equatable {
+    var enabled: Bool
+    var start: String
+    var end: String
+}
 
 struct RegisterPushBody: Encodable {
     let token: String

@@ -371,10 +371,21 @@ extension ApiClient {
         }
     }
 
-    func notifications(take: Int = 50) async throws -> [NotificationDto] {
+    /// Bandeja de la entidad activa, de lo más nuevo a lo más viejo. `before` = `createdAt` de la
+    /// última fila ya cargada (siguiente página); `unreadOnly` deja solo lo no leído.
+    func notifications(take: Int = 50, before: String? = nil, unreadOnly: Bool = false) async throws -> [NotificationDto] {
         let entity = EntityContext.query
-        let list: [NotificationDto] = try await get("notifications", query: ["take": String(take), "entity": entity])
+        let list: [NotificationDto] = try await get("notifications", query: [
+            "take": String(take),
+            "entity": entity,
+            "before": before,
+            "unread": unreadOnly ? "1" : nil,
+        ])
         return list.filter { EntityContext.keeps($0.entity, for: entity) }
+    }
+    func notificationPreferences() async throws -> NotificationPrefs { try await get("notifications/preferences") }
+    func saveNotificationPreferences(_ prefs: NotificationPrefs) async throws -> NotificationPrefs {
+        try await send("PATCH", "notifications/preferences", body: prefs, as: NotificationPrefs.self)
     }
     /// Globo de Avisos: solo la entidad activa (y los avisos personales).
     func notificationsUnread() async throws -> Int {

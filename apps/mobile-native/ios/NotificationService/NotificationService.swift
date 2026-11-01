@@ -3,8 +3,8 @@ import UIKit
 import UserNotifications
 
 /// Convierte cada push de chat en una notificación de comunicación de iOS: la
-/// cara de quien escribe (iniciales sobre dorado) en lugar del ícono de la app
-/// y, en canales, el nombre del canal como grupo. Es lo que hace WhatsApp.
+/// cara de quien escribe (iniciales en tinta o plata, según la entidad) en lugar del
+/// ícono de la app y, en canales, el nombre del canal como grupo. Es lo que hace WhatsApp.
 ///
 /// Requiere `mutable-content: 1` (el API lo manda en `aps`) y la capacidad
 /// Communication Notifications en la app. Si algo falla se muestra el aviso tal cual.
@@ -31,13 +31,21 @@ final class NotificationService: UNNotificationServiceExtension {
             content.threadIdentifier = text("thread_id")
         }
 
+        // El API manda `interruption-level` en `aps`; esto cubre el mismo dato si solo llegó en `data`.
+        if text("passive") == "1" {
+            content.interruptionLevel = .passive
+            content.sound = nil
+        }
+
         guard text("kind") == "chat" else {
-            // Procesos: los urgentes (aprobaciones, pagos) no se quedan callados en el resumen.
-            if text("priority") == "high" { content.relevanceScore = 1 }
+            // Procesos: el API ya manda `relevance-score` (aprobaciones arriba, documentos abajo). Sin
+            // él (servidor viejo), los urgentes no se quedan callados en el resumen.
+            if content.relevanceScore == 0, text("priority") == "high" { content.relevanceScore = 1 }
             contentHandler(content)
             return
         }
 
+        let entity = text("entity")
         let senderId = text("sender_id")
         let senderName = text("sender_name").isEmpty ? content.title : text("sender_name")
         let threadTitle = text("thread_title")
@@ -47,7 +55,7 @@ final class NotificationService: UNNotificationServiceExtension {
             personHandle: INPersonHandle(value: senderId.isEmpty ? senderName : senderId, type: .unknown),
             nameComponents: nil,
             displayName: senderName,
-            image: Self.avatar(for: senderName).map { INImage(imageData: $0) },
+            image: Self.avatar(for: senderName, entity: entity).map { INImage(imageData: $0) },
             contactIdentifier: nil,
             customIdentifier: senderId.isEmpty ? nil : senderId
         )
@@ -70,7 +78,7 @@ final class NotificationService: UNNotificationServiceExtension {
             sender: sender,
             attachments: nil
         )
-        if isGroup, let data = Self.avatar(for: threadTitle, channel: true) {
+        if isGroup, let data = Self.avatar(for: threadTitle, entity: entity, channel: true) {
             intent.setImage(INImage(imageData: data), forParameterNamed: \.speakableGroupName)
         }
 
@@ -90,18 +98,42 @@ final class NotificationService: UNNotificationServiceExtension {
         if let contentHandler, let bestAttempt { contentHandler(bestAttempt) }
     }
 
-    /// Círculo dorado con iniciales (o `#` para canales), igual que el avatar de la app.
-    private static func avatar(for name: String, channel: Bool = false) -> Data? {
+    private static func color(_ hex: UInt32) -> UIColor {
+        UIColor(
+            red: CGFloat((hex >> 16) & 0xFF) / 255,
+            green: CGFloat((hex >> 8) & 0xFF) / 255,
+            blue: CGFloat(hex & 0xFF) / 255,
+            alpha: 1
+        )
+    }
+
+    /// Círculo con iniciales (o `#` para canales), igual que el avatar de la app: tinta en ARTA y
+    /// plata en Auditorio; los canales, en el relleno neutro de cada una. Los mismos valores de
+    /// `ArtaColor` (esta extensión no comparte código con la app).
+    private static func avatar(for name: String, entity: String, channel: Bool = false) -> Data? {
         let size = CGSize(width: 120, height: 120)
-        let gold = UIColor(red: 0xC9 / 255, green: 0xA9 / 255, blue: 0x62 / 255, alpha: 1)
-        let dark = UIColor(red: 0x09 / 255, green: 0x09 / 255, blue: 0x0B / 255, alpha: 1)
+        let auditorium = entity == "EXPLANADA"
+        let fill: UIColor
+        if auditorium {
+            fill = color(channel ? 0x18181C : 0xC7CCD4)
+        } else {
+            fill = color(channel ? 0xEFEDE8 : 0x0C0C0D)
+        }
+        let ink: UIColor
+        if auditorium {
+            ink = color(channel ? 0xC7CCD4 : 0x0A0A0B)
+        } else {
+            ink = color(channel ? 0x0C0C0D : 0xFFFFFF)
+        }
         let label = channel ? "#" : initials(name)
+        let base = UIFont.systemFont(ofSize: 48, weight: .semibold)
+        let font = base.fontDescriptor.withDesign(.rounded).map { UIFont(descriptor: $0, size: 48) } ?? base
         let image = UIGraphicsImageRenderer(size: size).image { _ in
-            (channel ? dark : gold).setFill()
+            fill.setFill()
             UIBezierPath(ovalIn: CGRect(origin: .zero, size: size)).fill()
             let attrs: [NSAttributedString.Key: Any] = [
-                .font: UIFont.systemFont(ofSize: 48, weight: .bold),
-                .foregroundColor: channel ? gold : dark,
+                .font: font,
+                .foregroundColor: ink,
             ]
             let textSize = (label as NSString).size(withAttributes: attrs)
             (label as NSString).draw(

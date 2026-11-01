@@ -73,6 +73,8 @@ enum PanelLink {
             return .screen(.event(parts[1]))
         case "dashboard":
             return parts.count == 1 ? .tab(.inicio) : nil
+        case "notifications":
+            return parts.count == 1 ? .tab(.avisos) : nil
         default:
             return nil
         }
@@ -226,7 +228,7 @@ final class AppRouter: ObservableObject {
         switch route {
         case .task: return .tareas
         case .event, .approvals: return .inicio
-        case .web, .blockedUsers: return .mas
+        case .web, .blockedUsers, .notificationPreferences: return .mas
         case .chat: return .chats
         }
     }

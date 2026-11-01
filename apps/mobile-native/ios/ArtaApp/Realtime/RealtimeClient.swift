@@ -33,6 +33,11 @@ struct PresenceEvent {
     let online: Bool
 }
 
+/// Se leyó un aviso aquí o en otro dispositivo; sin `notificationId`, varios («Leer todo»).
+struct NotificationReadEvent {
+    let notificationId: String?
+}
+
 /// Socket.IO del API con la misma sesión que HTTP: el handshake manda la cookie
 /// `arta_access` (el gateway la valida contra `UserSession`). Detrás de Traefik
 /// el path es `/api/socket.io`. Los eventos llegan en el hilo principal.
@@ -51,6 +56,7 @@ final class RealtimeClient {
     let channelsChanged = PassthroughSubject<String, Never>()
     let chatUnread = PassthroughSubject<Int, Never>()
     let notificationsUnread = PassthroughSubject<Int, Never>()
+    let notificationRead = PassthroughSubject<NotificationReadEvent, Never>()
     let presence = PassthroughSubject<PresenceEvent, Never>()
     let connected = CurrentValueSubject<Bool, Never>(false)
 
@@ -147,6 +153,12 @@ final class RealtimeClient {
         }
         s.on("notification:new") { [weak self] data, _ in
             if let o = Self.object(data) { self?.notificationsUnread.send((o["unread"] as? NSNumber)?.intValue ?? 0) }
+        }
+        // Leído aquí o en otro dispositivo: la lista se pone al día y el globo baja sin recargar.
+        s.on("notification:read") { [weak self] data, _ in
+            guard let o = Self.object(data) else { return }
+            self?.notificationRead.send(NotificationReadEvent(notificationId: Self.string(o, "notificationId")))
+            if let unread = (o["unread"] as? NSNumber)?.intValue { self?.notificationsUnread.send(unread) }
         }
         s.on("chat:presence") { [weak self] data, _ in
             guard let o = Self.object(data), let user = Self.string(o, "userId") else { return }

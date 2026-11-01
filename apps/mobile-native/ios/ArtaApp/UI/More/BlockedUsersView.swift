@@ -75,14 +75,12 @@ struct BlockedUsersView: View {
             }
             Spacer(minLength: 8)
             if busyId == user.id {
-                ProgressView()
+                ProgressView().tint(ArtaColor.tertiary)
             } else {
                 Button("Desbloquear") {
                     Task { await unblock(user) }
                 }
-                .buttonStyle(.bordered)
-                .tint(ArtaColor.accent)
-                .controlSize(.small)
+                .buttonStyle(ArtaSecondaryButtonStyle(fullWidth: false, compact: true))
                 .disabled(busyId != nil)
                 .accessibilityIdentifier("blocked-unblock-\(user.id)")
             }
@@ -104,10 +102,8 @@ struct BlockedUsersView: View {
     }
 
     private func errorLabel(_ text: String) -> some View {
-        Label(text, systemImage: "exclamationmark.triangle.fill")
-            .font(.footnote)
-            .foregroundStyle(ArtaColor.danger)
-            .padding(.horizontal, 16)
+        InlineErrorRow(message: text)
+            .padding(.horizontal, ArtaSpace.m)
     }
 
     private func load() async {
