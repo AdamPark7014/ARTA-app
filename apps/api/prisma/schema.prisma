@@ -244,6 +244,8 @@ model User {
   pushEndpoints        UserPushEndpoint[]
   /// No molestar: mientras sea futuro no sale push (el aviso en la app sí se guarda).
   chatDndUntil         DateTime?
+  /// Qué avisos llegan al teléfono: categorías apagadas y horario silencioso (notification-prefs.ts).
+  notificationPrefs    Json?
 
   @@index([organizationId])
 }
@@ -722,6 +724,8 @@ model Notification {
   entity         EntityKey?
   readAt         DateTime?
   createdAt      DateTime      @default(now())
+  /// Cuántos avisos iguales junta esta tarjeta («Ana subió 5 archivos»).
+  bundleCount    Int           @default(1)
 
   @@index([userId, readAt, createdAt])
   @@index([organizationId, createdAt])

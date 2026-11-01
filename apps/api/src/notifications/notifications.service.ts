@@ -15,6 +15,8 @@ import {
 
 /** Recordatorios repetitivos: una vez por persona y enlace en esta ventana (cron diario u horario). */
 const ONCE_PER_DAY_MS = 20 * 60 * 60 * 1000;
+/** Avisos iguales de la misma persona en esta ventana se juntan en una sola tarjeta. */
+const BUNDLE_WINDOW_MS = 10 * 60 * 1000;
 
 export type NotifyInput = {
   /** Destinatario. Si es el propio actor, no se crea nada. */
@@ -28,6 +30,12 @@ export type NotifyInput = {
   linkUrl?: string | null;
   actorId?: string | null;
   entity?: EntityKey | null;
+  /**
+   * Avisos en ráfaga (cinco archivos subidos seguidos): en vez de cinco vibraciones,
+   * una tarjeta que se va actualizando en el mismo lugar, sin volver a sonar.
+   * Recibe cuántos lleva ya y devuelve el texto de la tarjeta.
+   */
+  bundle?: (count: number) => { title: string; body?: string | null };
 };
 
 /**
@@ -54,6 +62,10 @@ export class NotificationsService {
     // No te avisas a ti mismo de lo que tú acabas de hacer.
     if (input.actorId && input.actorId === input.userId) return null;
     try {
+      if (input.bundle) {
+        const merged = await this.mergeIntoBundle(input);
+        if (merged) return merged;
+      }
       const row = await this.prisma.notification.create({
         data: {
           userId: input.userId,
@@ -75,6 +87,34 @@ export class NotificationsService {
       this.logger.warn(`No se pudo crear la notificación ${input.type}: ${String(err)}`);
       return null;
     }
+  }
+
+  /** Suma a la tarjeta sin leer de la misma ráfaga, si la hay. */
+  private async mergeIntoBundle(input: NotifyInput) {
+    const open = await this.prisma.notification.findFirst({
+      where: {
+        userId: input.userId,
+        type: input.type,
+        linkUrl: input.linkUrl ?? null,
+        actorId: input.actorId ?? null,
+        readAt: null,
+        createdAt: { gte: new Date(Date.now() - BUNDLE_WINDOW_MS) },
+      },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true, bundleCount: true },
+    });
+    if (!open || !input.bundle) return null;
+    const count = open.bundleCount + 1;
+    const text = input.bundle(count);
+    const row = await this.prisma.notification.update({
+      where: { id: open.id },
+      data: { title: text.title, body: text.body ?? null, bundleCount: count },
+      include: { actor: { select: { id: true, fullName: true } } },
+    });
+    void this.deliver(row, { quiet: true }).catch((err) =>
+      this.logger.warn(`No se pudo entregar el aviso ${input.type}: ${String(err)}`),
+    );
+    return row;
   }
 
   async notifyMany(inputs: NotifyInput[]) {
@@ -232,17 +272,22 @@ export class NotificationsService {
     });
   }
 
-  private async deliver(row: {
-    id: string;
-    userId: string;
-    type: string;
-    title: string;
-    body: string | null;
-    linkUrl: string | null;
-    actorId: string | null;
-    createdAt: Date;
-    actor: { id: string; fullName: string } | null;
-  }) {
+  /** `quiet`: actualiza una tarjeta que ya está en el teléfono, sin volver a sonar. */
+  private async deliver(
+    row: {
+      id: string;
+      userId: string;
+      type: string;
+      title: string;
+      body: string | null;
+      linkUrl: string | null;
+      actorId: string | null;
+      entity?: EntityKey | null;
+      createdAt: Date;
+      actor: { id: string; fullName: string } | null;
+    },
+    opts: { quiet?: boolean } = {},
+  ) {
     const unread = await this.unreadCount(row.userId);
     this.realtime?.emitToUser(row.userId, 'notification:new', { notification: row, unread });
     if (!this.push) return;
@@ -255,7 +300,9 @@ export class NotificationsService {
       type: row.type,
       kind: 'event',
       channel: meta.channel,
-      priority: meta.priority,
+      priority: opts.quiet ? 'normal' : meta.priority,
+      passive: opts.quiet,
+      entity: row.entity ?? null,
       tag: `arta-${row.id}`,
       notificationId: row.id,
       senderId: row.actorId,

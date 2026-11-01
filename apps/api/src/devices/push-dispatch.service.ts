@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import * as admin from 'firebase-admin';
 import { PrismaService } from '../common/prisma/prisma.service';
+import { pushAllowed } from '../notifications/notification-prefs';
 
 export type PushKind = 'chat' | 'event';
 
@@ -31,7 +32,30 @@ export type PushPayload = {
   badge?: number | null;
   /** Sin alerta: sincroniza el teléfono (p. ej. quitar avisos de un chat ya leído). */
   silent?: boolean;
+  /** Llega a la bandeja sin sonar ni encender la pantalla: actualizar una tarjeta, lo informativo. */
+  passive?: boolean;
+  /** De qué negocio es el aviso: ARTA o EXPLANADA; `null` si es de la cuenta. */
+  entity?: string | null;
 };
+
+const ENTITY_WORD: Record<string, string> = { ARTA: 'Arta', EXPLANADA: 'Auditorio' };
+
+/** Orden en el resumen de iOS: lo que espera una decisión arriba, lo informativo abajo. */
+const RELEVANCE: Record<string, number> = {
+  approvals: 1,
+  tasks: 0.8,
+  chat: 0.7,
+  finance: 0.6,
+  events: 0.6,
+  general: 0.3,
+  documents: 0.2,
+};
+
+/** Lo que no espera a nadie entra a la bandeja sin interrumpir, como un correo. */
+function isPassive(payload: PushPayload): boolean {
+  if (payload.passive) return true;
+  return payload.priority !== 'high' && (payload.channel === 'documents' || payload.channel === 'general');
+}
 
 /** Errores de FCM que significan que el token ya no sirve (app desinstalada o reinstalada). */
 const DEAD_TOKEN_CODES = new Set([
@@ -102,6 +126,8 @@ export class PushDispatchService {
       channel_id: payload.channelId || '',
       message_id: payload.messageId || '',
       badge: payload.badge != null ? String(payload.badge) : '',
+      entity: payload.entity || '',
+      passive: isPassive(payload) ? '1' : '',
       sent_at: new Date().toISOString(),
     };
   }
@@ -129,8 +155,13 @@ export class PushDispatchService {
     if (!this.init()) return 0;
     // No molestar: sin alerta al teléfono; los silenciosos (sincronizar leídos) sí salen.
     if (!payload.silent) {
-      const prefs = await this.prisma.user.findUnique({ where: { id: userId }, select: { chatDndUntil: true } });
+      const prefs = await this.prisma.user.findUnique({
+        where: { id: userId },
+        select: { chatDndUntil: true, notificationPrefs: true },
+      });
       if (prefs?.chatDndUntil && prefs.chatDndUntil.getTime() > Date.now()) return 0;
+      // Categorías apagadas y horario silencioso de la persona; la campana sí lo recibe.
+      if (!pushAllowed(prefs?.notificationPrefs, payload)) return 0;
     }
     const rows = await this.prisma.userPushEndpoint.findMany({
       where: { userId, fcmToken: { not: null } },
@@ -144,6 +175,8 @@ export class PushDispatchService {
     const isChat = data.kind === 'chat';
     // Las menciones salen como aviso (kind=event) pero traen conversación: necesitan «Responder».
     const repliable = isChat || !!data.channel_id;
+    const passive = data.passive === '1';
+    const subtitle = data.entity ? ENTITY_WORD[data.entity] : undefined;
     let sent = 0;
     for (const row of rows) {
       const token = row.fcmToken as string;
@@ -179,11 +212,13 @@ export class PushDispatchService {
             } as Record<string, string>,
             payload: {
               aps: {
-                alert: { title: payload.title, body: payload.body },
-                sound: 'default',
+                alert: { title: payload.title, body: payload.body, ...(subtitle ? { subtitle } : {}) },
+                ...(passive ? {} : { sound: 'default' }),
                 threadId: data.thread_id,
                 category: repliable ? 'ARTA_CHAT' : 'ARTA_EVENT',
                 mutableContent: true,
+                'interruption-level': passive ? 'passive' : 'active',
+                'relevance-score': RELEVANCE[data.channel] ?? 0.3,
                 ...badgeAps,
               },
             },

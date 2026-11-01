@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { AppShell } from '@/components/app-shell/AppShell';
 import { LoadingBlock } from '@/components/ui/LoadingBlock';
 import { PageHeader, SettingsSection } from '@/components/ui/PageChrome';
+import { NotificationPrefsCard } from '@/components/web-push/NotificationPrefsCard';
 import { WebPushCard } from '@/components/web-push/WebPushCard';
 import { useUser } from '@/lib/user-context';
 import { userHasPermission } from '@/lib/access-matrix';
@@ -94,7 +95,9 @@ export default function SettingsPage() {
   return (
     <AppShell title="Configuración">
       <div className="stack page-workspace settings-page oc-settings">
-        <PageHeader title="Configuración" description="Reglas de la organización y avisos de este navegador." />
+        <PageHeader title="Configuración" description="Tus avisos y las reglas de la organización." />
+
+        <NotificationPrefsCard />
 
         <WebPushCard />
 

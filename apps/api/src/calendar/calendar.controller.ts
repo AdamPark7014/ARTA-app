@@ -1,3 +1,4 @@
+import { dayLabel, facts, who } from '../notifications/notification-text';
 import {
   BadRequestException,
   Body,
@@ -54,6 +55,8 @@ const NOTE_INCLUDE = {
   updatedBy: { select: { id: true, fullName: true } },
 } as const;
 
+const capitalize = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
+
 /**
  * Notas libres del equipo sobre el calendario.
  *
@@ -97,8 +100,9 @@ export class CalendarController {
         organizationId: note.organizationId,
         actorId: user.id,
         type,
-        title: `${user.fullName || 'Alguien del equipo'} ${verb}`,
-        body: `${note.date} · ${note.text.slice(0, 140)}`,
+        title: `${who(user.fullName)} ${verb}`,
+        // `note.date` es AAAA-MM-DD: «el vie 7 nov», como dicen los demás avisos.
+        body: facts(capitalize(dayLabel(`${note.date}T12:00:00.000Z`)), note.text.slice(0, 140)),
         linkUrl: `/calendar?date=${note.date}`,
         entity: note.entity as EntityKey,
       });

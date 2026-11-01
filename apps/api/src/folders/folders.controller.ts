@@ -1,3 +1,4 @@
+import { facts, who } from '../notifications/notification-text';
 import {
   BadRequestException,
   Body,
@@ -103,8 +104,8 @@ export class FoldersController {
         organizationId: folder.organizationId,
         actorId: user.id,
         type,
-        title: `${user.fullName || 'Alguien del equipo'} ${verb}`,
-        body: detail ? `${detail} · ${folder.name}` : folder.name,
+        title: `${who(user.fullName)} ${verb}`,
+        body: detail ? facts(detail, folder.name) : folder.name,
         linkUrl: type === 'folder.deleted' ? '/folders' : `/folders?folder=${folder.id}`,
         entity: folder.entity,
       });

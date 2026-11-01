@@ -1,4 +1,5 @@
 import {
+  Body,
   Controller,
   Get,
   NotFoundException,
@@ -14,6 +15,7 @@ import { PrismaService } from '../common/prisma/prisma.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { entityScope } from '../common/entity-scope';
 import { NotificationsService } from './notifications.service';
+import { normalizePrefs } from './notification-prefs';
 
 type AuthUser = { id: string; roleKey: string; entities?: string[] | null };
 
@@ -34,19 +36,45 @@ export class NotificationsController {
     return { OR: [{ entity: null }, { entity: { in: scope } }] };
   }
 
-  /** Bandeja del usuario. `unread=1` deja solo lo no leído; `entity=` solo esa entidad. */
+  /** Qué llega al teléfono: categorías apagadas y horario silencioso. La campana recibe todo. */
+  @Get('preferences')
+  async preferences(@Req() req: { user: AuthUser }) {
+    const row = await this.prisma.user.findUnique({
+      where: { id: req.user.id },
+      select: { notificationPrefs: true },
+    });
+    return normalizePrefs(row?.notificationPrefs);
+  }
+
+  @Patch('preferences')
+  async savePreferences(@Req() req: { user: AuthUser }, @Body() body: unknown) {
+    const prefs = normalizePrefs(body);
+    await this.prisma.user.update({
+      where: { id: req.user.id },
+      data: { notificationPrefs: prefs as unknown as Prisma.InputJsonValue },
+    });
+    return prefs;
+  }
+
+  /**
+   * Bandeja del usuario. `unread=1` deja solo lo no leído; `entity=` solo esa
+   * entidad; `before=<fecha>` trae la siguiente página de la lista.
+   */
   @Get()
   list(
     @Req() req: { user: AuthUser },
     @Query('unread') unread?: string,
     @Query('take') take?: string,
     @Query('entity') entity?: string,
+    @Query('before') before?: string,
   ) {
     const limit = Math.min(Math.max(Number(take) || 30, 1), 100);
+    const beforeDate = before ? new Date(before) : null;
     return this.prisma.notification.findMany({
       where: {
         userId: req.user.id,
         ...(unread === '1' || unread === 'true' ? { readAt: null } : {}),
+        ...(beforeDate && !Number.isNaN(beforeDate.getTime()) ? { createdAt: { lt: beforeDate } } : {}),
         ...this.scopeWhere(req.user, entity),
       },
       include: { actor: { select: { id: true, fullName: true } } },

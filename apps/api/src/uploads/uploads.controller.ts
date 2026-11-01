@@ -1,3 +1,4 @@
+import { facts, who } from '../notifications/notification-text';
 import {
   Controller,
   Post,
@@ -79,14 +80,20 @@ export class UploadsController {
         select: { id: true, name: true, entity: true, organizationId: true },
       });
       if (!event) return;
+      const actor = who(user.fullName);
       await this.notifications.notifyEventTeam(event.id, {
         organizationId: event.organizationId,
         actorId: user.id,
         type,
-        title: `${user.fullName || 'Alguien del equipo'} ${verb}`,
-        body: `${fileName} · ${event.name}`,
+        title: `${actor} ${verb}`,
+        body: facts(fileName, event.name),
         linkUrl: `/events/${event.id}?tab=files`,
         entity: event.entity,
+        // Subir varios seguidos es una sola tarjeta en el teléfono, no una vibración por archivo.
+        bundle:
+          type === 'file.uploaded'
+            ? (count) => ({ title: `${actor} subió ${count} archivos`, body: facts(`Último: ${fileName}`, event.name) })
+            : undefined,
       });
     } catch {
       /* un aviso que falla no tumba la operación */
