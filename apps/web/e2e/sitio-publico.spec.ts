@@ -172,8 +172,10 @@ test.describe('Sitio público · Inicio', () => {
 
     await page.getByRole('button', { name: 'Pausar las fotos de la portada' }).click();
     await expect(page.getByRole('button', { name: 'Reproducir las fotos de la portada' })).toBeVisible();
+    // Se compara contra la que quedó al pausar: en un CI lento, el clic puede llegar después del siguiente cambio.
+    const paused = (await current.getAttribute('src')) as string;
     await page.waitForTimeout(7_500);
-    await expect(current).toHaveAttribute('src', '/uploads/foto-2.jpg');
+    await expect(current).toHaveAttribute('src', paused);
   });
 
   test('el aviso del próximo show se puede apagar desde Studio', async ({ page }) => {

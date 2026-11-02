@@ -3681,8 +3681,14 @@ body.sa-lock {
     border-radius: 14px;
   }
 
+  /* En dos columnas no cabe: toda la tarjeta ya lleva al show. Sigue para quien usa teclado o lector de pantalla. */
   .sa-tile .sa-arrow {
-    display: none;
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
 
   .sa-bento {

@@ -32,7 +32,8 @@ Adam: «génerale un rediseño de 360 grados», «se debe mostrar como la empres
 - Dirección y teléfono solo por el brochure de 2022: Maps muestra ahí una agencia de Mercado Libre.
 - El panel con sesión real: se revisó con datos de prueba, no con la cuenta de Arta.
 - El Auditorio solo se revisó por pruebas, no a ojo.
-- CI y Safari de `cd7aed1` siguen corriendo.
+- Web Safari falló en `cd7aed1` por una sola prueba solo de WebKit: la del botón de pausa, porque el clic llegaba tarde en el CI. Se endureció la prueba y la tarjeta de show dejó de ocultar «Ver detalles» con `display: none` (fallaba en tamaño iPhone). Falta confirmar en la siguiente corrida. Siguen 6 fallas previas en tamaño iPhone, iguales en los dos motores: chat-refs ×2, event-edit y tres del sitio.
+- El último commit cambia prueba y una regla de CSS sin efecto visual: no se desplegó, producción sigue en `cd7aed1`.
 
 **Pendiente de Adam:**
 - **Google Business:** decir «acepta» para que siga. La pestaña de Chrome quedó con nombre y categoría, sin dar «Siguiente»: eso acepta los Términos.
