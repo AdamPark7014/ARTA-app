@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import localFont from 'next/font/local';
 import '../styles/globals.scss';
+import { siteFontVars } from '@/lib/site-fonts';
 import { UserProvider } from '@/lib/user-context';
 import { ROOT_DOMAIN } from '@/lib/domains';
 import { SITE_DESCRIPTION, SITE_NAME, SITE_TAGLINE } from '@/lib/site-seo';
@@ -29,12 +30,11 @@ export const metadata: Metadata = {
 };
 
 /**
- * Letra del panel (docs/diseno/SISTEMA-VISUAL.md): Nunito en toda la interfaz y
- * Outfit solo para la palabra «EXPLANADA» del Auditorio. Viven en el repo: con
+ * Letra (docs/diseno/SISTEMA-VISUAL.md): Inter Tight e Inter en el sitio y en el panel,
+ * desde el rediseño del 02-11-2026; Nunito queda para lo que aún la nombre. Outfit es
+ * solo para la palabra «EXPLANADA» del Auditorio. Viven en el repo: con
  * `next/font/google` cada despliegue dependía de lo que contestara Google, y ya
- * tumbó dos construcciones. Las dos son variables y traen el subconjunto latino
- * (español completo): Nunito cubre del 300 al 800 del sistema y los pesos
- * intermedios (560, 650) que usan títulos y etiquetas.
+ * tumbó dos construcciones.
  */
 const nunito = localFont({
   src: './fonts/nunito-latin.woff2',
@@ -68,7 +68,7 @@ const APP_SHELL_FALLBACK =
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="es-MX" className={`${nunito.variable} ${outfit.variable}`} suppressHydrationWarning>
+    <html lang="es-MX" className={`${nunito.variable} ${outfit.variable} ${siteFontVars}`} suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: PUBLIC_FONTS_SCRIPT }} />
       </head>

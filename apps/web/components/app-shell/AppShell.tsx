@@ -168,10 +168,10 @@ export function AppShell({
         <div className="brand">
           {entity === 'ARTA' ? (
             <Image
-              src="/brand/arta-logo-ink.png"
+              src="/brand/arta-logo.png"
               alt="arta producciones"
               width={104}
-              height={57}
+              height={58}
               className="shell-logo"
               priority
             />

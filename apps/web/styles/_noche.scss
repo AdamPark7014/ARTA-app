@@ -1,0 +1,163 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   Rediseño de 360 grados del panel (02-11-2026): habla igual que el sitio.
+   Pedido de Adam: «nivel Apple o Stripe, súper complejo en backend, súper
+   amigable en UI». Va al final: manda sobre las capas anteriores sin tocarlas.
+
+   - Menú lateral de noche, con el logo blanco; el trabajo sigue sobre papel.
+   - Inter Tight e Inter, como el sitio (tokens en globals.scss).
+   - Títulos y cifras con peso, no delgados.
+   - Sin mayúsculas forzadas: etiquetas, encabezados de tabla y estados se leen
+     como frases. Lo que se imprime (formatos, PDF) conserva su formato.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Menú lateral de noche: dentro de él, los tokens de claro se invierten ── */
+
+[data-entity='ARTA'] .sidebar {
+  --text: #f7f6f3;
+  --muted: rgba(247, 246, 243, 0.72);
+  --text-3: rgba(247, 246, 243, 0.56);
+  --line: rgba(247, 246, 243, 0.1);
+  --line-strong: rgba(247, 246, 243, 0.18);
+  --hover: rgba(247, 246, 243, 0.08);
+  --hover-strong: rgba(247, 246, 243, 0.14);
+  --nav-on-bg: #f7f6f3;
+  --nav-on-fg: #0c0c0d;
+  --count-bg: rgba(247, 246, 243, 0.14);
+  --count-fg: #f7f6f3;
+  --count-on-bg: rgba(12, 12, 13, 0.1);
+  --count-on-fg: #0c0c0d;
+  --seg-bg: rgba(247, 246, 243, 0.08);
+  --bg-elev: #f7f6f3;
+  --accent-fill: #f7f6f3;
+  --on-accent: #0c0c0d;
+  color: var(--text);
+  border-right: 0;
+}
+
+/* La pestaña activa del segmentado va en papel: su texto, en tinta. */
+[data-entity='ARTA'] .sidebar .entity-switch button.active {
+  color: #0c0c0d;
+}
+
+[data-entity='ARTA'] .sidebar :focus-visible {
+  outline-color: #f7f6f3;
+}
+
+/* ── Títulos y cifras con peso ───────────────────────────────────────────── */
+
+.ph__title,
+.home-hero__hello,
+.home-hero__hello strong,
+.nf__title {
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: -0.026em;
+}
+
+.kpi .value,
+.kpi-card__value,
+.tile__value,
+.usage__value,
+.next-show__count b {
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: -0.03em;
+}
+
+.panel h2,
+.panel h3,
+.next-show__title {
+  letter-spacing: -0.016em;
+}
+
+/* ── Sin mayúsculas forzadas ─────────────────────────────────────────────── */
+
+/* Etiquetas y encabezados: se leen como frases. */
+.cap,
+.ph__eyebrow,
+.lg-card__eyebrow,
+.next-show__eyebrow,
+.nav-group-label,
+.nt-group,
+.topbar-search__section,
+.ref-panel__title,
+.ref-links__title,
+.kpi .label,
+.tile__label,
+.totals__label,
+.table th,
+.dtable th,
+.dtable--cards td.num[data-label]::before,
+.po-lines-table th,
+.ticket-zones__table th,
+.oc-mini th,
+.oc-notes > span,
+.oc-proofs__label,
+.oc-facts dt,
+.event-hero__eyebrow,
+.event-tabs__mobile-label,
+.event-hint__label,
+.event-facts dt,
+.ev-hero__eyebrow,
+.ev-hero__days-label,
+.ev-facts dt,
+.new-event__eyebrow,
+.welcome-banner__eyebrow,
+.auth-card .eyebrow,
+.fieldset legend,
+.sig-label,
+.events-pipeline__col h3,
+.format-card__key,
+.file-create-card__after-label,
+.docedit-bar__hint,
+.docedit__add-label,
+.chat-section__title,
+.chat-mentions__title,
+.chat-emoji__label,
+.task-group__toggle h2,
+.checklist-index__title,
+.field-diff__scope,
+.inv-weeks__date span,
+.inv-field > span,
+.bol-zones__total-label,
+.bol-sheet__zones tfoot td:first-child,
+.bol-sheet__eyebrow,
+.bol-sheet__label,
+.timeline__corner,
+.timeline__month,
+.fx-legend {
+  text-transform: none;
+  letter-spacing: -0.004em;
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+/* Estados y chips: chicos, pero en frase. */
+.pill,
+.state,
+.badge,
+.chat-badge,
+.inv-week__now,
+.file-create-card__badge,
+.timeline__flag,
+.ops-alert__code {
+  text-transform: none;
+  letter-spacing: -0.002em;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+/* Calendarios: los días y el mes del cuadrito. */
+.cal-grid__dow,
+.mcal__dow,
+.date-chip__month {
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 500;
+}
+
+/* La fecha de arriba empieza con mayúscula, como una frase. */
+.cap::first-letter,
+.ph__eyebrow::first-letter {
+  text-transform: uppercase;
+}

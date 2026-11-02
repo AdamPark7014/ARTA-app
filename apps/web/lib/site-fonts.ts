@@ -1,8 +1,8 @@
 import localFont from 'next/font/local';
 
 /**
- * Letra del sitio público: Inter Tight para titulares e Inter para leer (licencia SIL OFL), con todos
- * sus pesos. El panel sigue con Nunito (`app/layout.tsx`). Viven en el repo: el sitio no pide nada a Google.
+ * Letra del sitio y del panel: Inter Tight para titulares e Inter para leer (licencia SIL OFL), con
+ * todos sus pesos. Viven en el repo: no se le pide nada a Google.
  */
 const display = localFont({
   src: '../app/fonts/inter-tight-latin.woff2',

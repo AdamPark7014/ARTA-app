@@ -102,8 +102,8 @@
   --shadow-card: 0 1px 2px rgba(12, 12, 13, 0.04), 0 10px 26px rgba(12, 12, 13, 0.05);
   --shadow-md: 0 2px 6px rgba(12, 12, 13, 0.06), 0 18px 44px rgba(12, 12, 13, 0.14);
   --shadow-btn: 0 6px 16px rgba(12, 12, 13, 0.2);
-  --font-display: var(--font-nunito), "Nunito", system-ui, sans-serif;
-  --font-body: var(--font-nunito), "Nunito", system-ui, sans-serif;
+  --font-display: var(--font-sitio-display), "Inter Tight", system-ui, sans-serif;
+  --font-body: var(--font-sitio-text), "Inter", system-ui, sans-serif;
   --accent: #0c0c0d;
   --accent-deep: #3a3a40;
   --accent-fill: #0c0c0d;
@@ -113,7 +113,7 @@
   --btn-sec-bg: #ffffff;
   --btn-hover-filter: none;
   --sidebar-w: 228px;
-  --sidebar-bg: #fcfbf9;
+  --sidebar-bg: #0c0c0d;
   --topbar-bg: rgba(255, 255, 255, 0.62);
   --nav-on-bg: #0c0c0d;
   --nav-on-fg: #ffffff;
@@ -169,8 +169,8 @@
   --shadow-card: inset 0 1px 0 rgba(255, 255, 255, 0.05);
   --shadow-md: 0 18px 44px rgba(0, 0, 0, 0.62), 0 0 0 1px rgba(255, 255, 255, 0.06);
   --shadow-btn: none;
-  --font-display: var(--font-nunito), "Nunito", system-ui, sans-serif;
-  --font-body: var(--font-nunito), "Nunito", system-ui, sans-serif;
+  --font-display: var(--font-sitio-display), "Inter Tight", system-ui, sans-serif;
+  --font-body: var(--font-sitio-text), "Inter", system-ui, sans-serif;
   --accent: #c7ccd4;
   --accent-deep: #9aa1ac;
   --accent-fill: linear-gradient(135deg, #f1f3f6 0%, #c7ccd4 55%, #9aa1ac 100%);
@@ -6582,3 +6582,4 @@ textarea.pdffield__input--text {
 
 /* Barrido premium (01-11-2026): diálogos, avisos y movimiento. */
 @import "./premium";
+@import "./noche";
