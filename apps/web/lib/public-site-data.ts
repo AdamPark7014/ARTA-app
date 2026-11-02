@@ -9,7 +9,7 @@ const apiBase = () => process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'
  */
 export const SITE_CACHE = { revalidate: 30, tags: ['sitio'] };
 
-export type PublicSiteTile = { title: string; body: string; detail?: string; includes?: string; imageUrl?: string; slug?: string };
+export type PublicSiteTile = { title: string; tagline?: string; body: string; detail?: string; includes?: string; imageUrl?: string; slug?: string };
 export type PublicSiteStat = { label: string; text: string };
 export type PublicSiteFaq = { question: string; answer: string };
 
@@ -32,6 +32,11 @@ export type PublicSiteContent = {
   steps?: PublicSiteTile[];
   cta?: string;
   ctaHref?: string;
+  /** Segunda liga de la portada: para quien trae un show. */
+  secondaryLabel?: string;
+  secondaryHref?: string;
+  /** La frase de Inicio (`home_frase`). */
+  text?: string;
   imageUrl?: string;
   imageSide?: string;
   tone?: string;

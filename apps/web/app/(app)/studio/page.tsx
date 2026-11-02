@@ -614,6 +614,7 @@ export default function StudioPage() {
             onAdd={addBlock}
           />
           {texts(HERO_KEY)}
+          {texts('home_frase')}
         </>
       );
     }
@@ -621,6 +622,7 @@ export default function StudioPage() {
       return (
         <>
           {sectionEditor('home_about')}
+          {texts('home_proceso')}
           <h3 className="st-subtitle">Aliados</h3>
           {collectionEditor('aliado')}
           {texts('home_aliados')}

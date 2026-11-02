@@ -16,7 +16,11 @@ test.describe('Sitio público SSR', () => {
 
     await page.goto('/p/arta');
     await expect(page.locator('h1')).toContainText(/experiencia|Show/i);
-    await expect(page.getByRole('heading', { name: /Noticias/i })).toBeVisible();
+    await expect(page.locator('main')).toContainText('De eso nos encargamos nosotros.');
+    await expect(page.getByRole('heading', { name: 'Lo que el público ve y escucha.' })).toBeVisible();
+    // Sin noticias ni shows no enseña huecos ni ligas inventadas.
+    await expect(page.locator('#noticias')).toHaveCount(0);
+    await expect(page.locator('#cartelera')).toHaveCount(0);
     await expect(page.locator('a[href*="/p/arta/noticias/"]')).toHaveCount(0);
   });
 
@@ -29,7 +33,7 @@ test.describe('Sitio público SSR', () => {
     await page.goto('/p/arta');
     await expect(page.locator('h1')).toBeVisible();
     expect(external).toEqual([]);
-    expect(await page.locator('h1').evaluate((el) => getComputedStyle(el).fontFamily)).toMatch(/outfit/i);
+    expect(await page.locator('h1').evaluate((el) => getComputedStyle(el).fontFamily)).toMatch(/inter tight/i);
   });
 
   test('una noticia que no existe lo dice, no enseña una página rota', async ({ page }) => {
@@ -40,15 +44,15 @@ test.describe('Sitio público SSR', () => {
 
   // Sin API también: el sitio siempre tiene su texto de arranque.
   const PAGES: Array<[string, string, RegExp]> = [
-    ['/p/arta/cartelera', 'Próximos shows', /Cartelera/],
+    ['/p/arta/cartelera', 'Lo que viene.', /Cartelera/],
     ['/p/arta/nosotros', 'Producimos el show completo', /Nosotros/],
-    ['/p/arta/servicios', 'Todo lo que un show necesita', /Servicios/],
+    ['/p/arta/servicios', 'Una sola mano. Todo el show.', /Servicios/],
     ['/p/arta/servicios/produccion', 'Producción', /Producción/],
     ['/p/arta/noticias', 'Noticias', /Noticias/],
     ['/p/arta/historias', 'Detrás del show', /Historias/],
     ['/p/arta/galeria', 'Así se vive', /Galería/],
     ['/p/arta/preguntas', 'Preguntas frecuentes', /Preguntas/],
-    ['/p/arta/contacto', 'Hablemos de tu próximo show', /Contacto/],
+    ['/p/arta/contacto', 'Hablemos de tu próximo show.', /Contacto/],
   ];
 
   for (const [path, heading, title] of PAGES) {
@@ -99,17 +103,18 @@ test.describe('Sitio público SSR', () => {
 
   test('el sitemap trae todas las páginas', async ({ request }) => {
     const xml = await (await request.get(`http://127.0.0.1:${process.env.E2E_PORT || 3100}/sitemap.xml`)).text();
-    for (const path of ['/p/arta/cartelera', '/p/arta/nosotros', '/p/arta/servicios/produccion', '/p/arta/noticias', '/p/arta/preguntas', '/p/arta/contacto']) {
+    for (const path of ['/p/arta/cartelera', '/p/arta/nosotros', '/p/arta/servicios/produccion', '/p/arta/preguntas', '/p/arta/contacto']) {
       expect(xml).toContain(path);
     }
     // Sin contenido no se le ofrecen a Google: están vacías y no salen en el menú.
+    expect(xml).not.toContain('/p/arta/noticias');
     expect(xml).not.toContain('/p/arta/historias');
     expect(xml).not.toContain('/p/arta/galeria');
   });
 
   test('las páginas interiores responden aunque el API no conteste', async ({ page }) => {
     await page.goto('/p/arta/cartelera');
-    await expect(page.getByRole('heading', { level: 1, name: 'Próximos shows' })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: 'Lo que viene.' })).toBeVisible();
 
     await page.goto('/p/arta/noticias');
     await expect(page.getByRole('heading', { level: 1, name: 'Noticias' })).toBeVisible();

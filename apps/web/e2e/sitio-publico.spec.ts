@@ -32,27 +32,112 @@ test.describe('Sitio público · Inicio', () => {
     await expect(page.locator('#faq')).toHaveCount(0);
   });
 
-  test('la portada presenta el próximo show con su póster y sus boletos', async ({ page }) => {
+  test('Inicio abre diciendo qué es Arta y presenta el próximo show con su póster y sus boletos', async ({ page }) => {
     await mockStudio(page, siteState());
     await page.goto('/site?embed=1');
 
-    await expect(page.locator('h1')).toHaveText('Los Ecos de Cholula');
-    await expect(page.locator('.sa-hero__poster')).toHaveAttribute('src', '/uploads/poster-1.jpg');
-    await expect(page.locator('.sa-hero').getByRole('link', { name: 'Comprar boletos' })).toHaveAttribute(
-      'href',
-      'https://boletos.example.com/ecos',
-    );
+    await expect(page.locator('h1')).toHaveText('La experiencia del Show');
+    await expect(page.locator('.sa-hero__sub')).toHaveText('Producimos conciertos en Puebla');
+    await expect(page.locator('.sa-ribbon')).toContainText('Los Ecos de Cholula');
+    await expect(page.locator('.sa-ribbon').getByRole('link')).toHaveAttribute('href', '/p/arta/cartelera/los-ecos');
 
-    await page.getByRole('button', { name: 'Siguiente' }).click();
-    await expect(page.locator('h1')).toHaveText('Escenario, luz y público');
+    const ecos = page.locator('.sa-tile', { hasText: 'Los Ecos de Cholula' });
+    await expect(ecos.locator('.sa-tile__poster')).toHaveAttribute('src', '/uploads/poster-1.jpg');
+    await expect(ecos.getByRole('link', { name: 'Comprar boletos' })).toHaveAttribute('href', 'https://boletos.example.com/ecos');
+  });
+
+  test('la portada abre con el logo como ventana y al bajar la foto llena la pantalla', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await mockStudio(page, siteState());
+    await page.goto('/site?embed=1');
+
+    const hero = page.locator('.sa-hero');
+    await expect(hero.getByRole('img', { name: 'Arta' })).toBeVisible();
+    await expect(hero.locator('.sa-hero__copy')).toBeVisible();
+    await expect(hero).not.toHaveClass(/is-open/);
+
+    const scrollToHero = (share: number) =>
+      page.evaluate((s) => {
+        const el = document.querySelector('.sa-hero') as HTMLElement;
+        window.scrollTo(0, el.getBoundingClientRect().top + window.scrollY + (el.offsetHeight - window.innerHeight) * s);
+      }, share);
+
+    await scrollToHero(0.85);
+    await expect(hero).toHaveClass(/is-open/);
+    await expect(hero.locator('.sa-hero__copy')).toBeHidden();
+
+    // De regreso, todo vuelve a su lugar y el botón se puede tocar.
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await expect(hero).not.toHaveClass(/is-open/);
+    await expect(hero.getByRole('link', { name: 'Ver la cartelera' })).toBeVisible();
+  });
+
+  test('sin póster, una tarjeta es un escenario con reflectores; con póster, lleva su arte', async ({ page }) => {
+    const state = siteState();
+    const trio = state.news.find((n) => n.slug === 'trio-malinche');
+    if (trio) trio.coverUrl = null;
+    await mockStudio(page, state);
+    await page.goto('/site?embed=1');
+
+    await expect(page.locator('.sa-tile', { hasText: 'Trío Malinche' }).locator('.sa-lights i')).toHaveCount(2);
+    await expect(page.locator('.sa-tile', { hasText: 'Trío Malinche' }).locator('.sa-tile__poster')).toHaveCount(0);
+    await expect(page.locator('.sa-tile', { hasText: 'Los Ecos de Cholula' }).locator('.sa-lights')).toHaveCount(0);
+  });
+
+  test('las fotos de la portada se turnan y se pueden pausar', async ({ page }) => {
+    await mockStudio(page, siteState());
+    await page.goto('/site?embed=1');
+
+    const current = page.locator('.sa-hero__photo.is-on');
+    await expect(current).toHaveAttribute('src', '/uploads/foto-1.jpg');
+    await expect(current).toHaveAttribute('src', '/uploads/foto-2.jpg', { timeout: 10_000 });
+
+    await page.getByRole('button', { name: 'Pausar las fotos de la portada' }).click();
+    await expect(page.getByRole('button', { name: 'Reproducir las fotos de la portada' })).toBeVisible();
+    await page.waitForTimeout(7_500);
+    await expect(current).toHaveAttribute('src', '/uploads/foto-2.jpg');
+  });
+
+  test('el aviso del próximo show se puede apagar desde Studio', async ({ page }) => {
+    const state = siteState();
+    state.pages[0].contentJson = { ...state.pages[0].contentJson, showCount: '0' };
+    await mockStudio(page, state);
+    await page.goto('/site?embed=1');
+
+    await expect(page.locator('.sa-hero')).toBeVisible();
+    await expect(page.locator('.sa-ribbon')).toHaveCount(0);
+  });
+
+  test('la frase se lee completa y se enciende al bajar', async ({ page }) => {
+    await mockStudio(page, siteState());
+    await page.goto('/site?embed=1');
+
+    const line = page.locator('#frase .sa-say__text');
+    await expect(line).toContainText('De eso nos encargamos nosotros.');
+    await line.scrollIntoViewIfNeeded();
+    await page.evaluate(() => window.scrollBy(0, window.innerHeight));
+    await expect(line.locator('span.is-on').first()).toBeVisible();
+  });
+
+  test('cómo trabajamos cambia la foto con el paso que se está leyendo', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await mockStudio(page, siteState());
+    await page.goto('/site?embed=1');
+
+    const steps = page.locator('.sa-proc__steps > li');
+    await expect(steps).toHaveCount(4);
+    await expect(page.locator('.sa-proc__steps > li.is-on h3')).toHaveText('Planeación');
+    await steps.nth(2).evaluate((el) => el.scrollIntoView({ block: 'center', behavior: 'instant' }));
+    await expect(page.locator('.sa-proc__steps > li.is-on h3')).toHaveText('Día del show');
+    await expect(page.locator('.sa-proc__media img.is-on')).toHaveAttribute('src', '/uploads/seed-hero-3.jpg');
   });
 
   test('un botón guardado con un ancla vieja lleva a su página', async ({ page }) => {
-    await mockStudio(page, siteState());
+    const state = siteState();
+    state.pages[0].contentJson = { ...state.pages[0].contentJson, cta: 'Ver cartelera', ctaHref: '#cartelera' };
+    await mockStudio(page, state);
     await page.goto('/site?embed=1');
 
-    await page.getByRole('button', { name: 'Siguiente' }).click();
-    // La foto de prueba lo guardó como `#cartelera`.
     await expect(page.locator('.sa-hero').getByRole('link', { name: 'Ver cartelera' })).toHaveAttribute('href', '/p/arta/cartelera');
   });
 
@@ -66,14 +151,48 @@ test.describe('Sitio público · Inicio', () => {
     await expect(page.getByRole('link', { name: 'Ver todas las noticias' })).toHaveAttribute('href', '/p/arta/noticias');
     await expect(page.getByRole('link', { name: 'Ver todas las historias' })).toHaveAttribute('href', '/p/arta/historias');
     await expect(page.getByRole('link', { name: 'Ver toda la galería' })).toHaveAttribute('href', '/p/arta/galeria');
+  });
+
+  test('las preguntas no salen en Inicio salvo que se pongan desde Studio', async ({ page }) => {
+    await mockStudio(page, siteState());
+    await page.goto('/site?embed=1');
+    await expect(page.locator('.sa-hero')).toBeVisible();
+    await expect(page.locator('#faq')).toHaveCount(0);
+
+    const state = siteState();
+    state.pages.push({
+      id: 'lay',
+      sectionKey: 'site_layout',
+      published: true,
+      contentJson: { blocks: [{ id: 'faq', type: 'faq', visible: true }] },
+    });
+    await mockStudio(page, state);
+    await page.goto('/site?embed=1');
     // Inicio enseña tres preguntas; la cuarta está en su página.
     await expect(page.locator('#faq details')).toHaveCount(3);
     await expect(page.getByRole('link', { name: 'Ver todas las preguntas' })).toHaveAttribute('href', '/p/arta/preguntas');
+    // Una sección nueva no aparece sola en una maqueta ya guardada.
+    await expect(page.locator('#frase')).toHaveCount(0);
+  });
+
+  test('las tarjetas de Inicio dicen cuándo, dónde y si hay boletos', async ({ page }) => {
+    await mockStudio(page, siteState());
+    await page.goto('/site?embed=1');
+
+    const ecos = page.locator('.sa-tile', { hasText: 'Los Ecos de Cholula' });
+    await expect(ecos).toContainText('Auditorio Explanada · Puebla');
+    await expect(ecos.getByRole('link', { name: 'Comprar boletos' })).toBeVisible();
+    await expect(ecos.getByRole('link', { name: 'Ver detalles' })).toHaveAttribute('href', '/p/arta/cartelera/los-ecos');
+
+    // Agotado: el estado se enseña y no se ofrece comprar.
+    const trio = page.locator('.sa-tile', { hasText: 'Trío Malinche' });
+    await expect(trio).toContainText('Agotado');
+    await expect(trio.getByRole('link', { name: 'Comprar boletos' })).toHaveCount(0);
   });
 
   test('la cartelera dice cuándo, dónde y si hay boletos', async ({ page }) => {
     await mockStudio(page, siteState());
-    await page.goto('/site?embed=1');
+    await page.goto('/site?embed=1&pagina=cartelera');
 
     const ecos = page.locator('.sa-show', { hasText: 'Los Ecos de Cholula' });
     await expect(ecos).toContainText('Auditorio Explanada · Puebla');
@@ -86,14 +205,28 @@ test.describe('Sitio público · Inicio', () => {
     await expect(trio.getByRole('link', { name: 'Comprar boletos' })).toHaveCount(0);
   });
 
-  test('sin shows, la cartelera invita a escribir en vez de quedar vacía', async ({ page }) => {
+  test('sin shows, Inicio no enseña un hueco ni manda a una cartelera vacía', async ({ page }) => {
     const state = siteState();
     state.news = state.news.filter((n) => n.template !== 'evento');
     await mockStudio(page, state);
-    await page.goto('/site?embed=1');
+    await page.goto('/site?embed=1&modo=publicado');
 
-    await expect(page.locator('#cartelera')).toContainText('Estamos armando la próxima temporada');
-    await expect(page.locator('#cartelera').getByRole('link', { name: 'Escríbenos' })).toHaveAttribute('href', '/p/arta/contacto');
+    await expect(page.locator('.sa-hero')).toBeVisible();
+    await expect(page.locator('#cartelera')).toHaveCount(0);
+    await expect(page.locator('.sa-ribbon')).toHaveCount(0);
+    await expect(page.locator('.sa-hero').getByRole('link', { name: 'Ver la cartelera' })).toHaveCount(0);
+    await expect(page.locator('.sa-hero').getByRole('link', { name: 'Traer un show a Puebla' })).toHaveAttribute('href', '/p/arta/contacto');
+    await expect(page.locator('.sa-hero').getByRole('link', { name: 'Lo que hacemos' })).toHaveAttribute('href', '/p/arta/servicios');
+  });
+
+  test('sin shows, la página de cartelera invita a escribir en vez de quedar vacía', async ({ page }) => {
+    const state = siteState();
+    state.news = state.news.filter((n) => n.template !== 'evento');
+    await mockStudio(page, state);
+    await page.goto('/site?embed=1&pagina=cartelera');
+
+    await expect(page.locator('main')).toContainText('Estamos armando la próxima temporada');
+    await expect(page.locator('main').getByRole('link', { name: 'Escríbenos' })).toHaveAttribute('href', '/p/arta/contacto');
   });
 
   test('las historias se abren a pantalla completa y avanzan', async ({ page }) => {
@@ -178,16 +311,16 @@ test.describe('Sitio público · Inicio', () => {
     });
     expect(look.offenders).toBe(0);
     expect(look.gray).toBe(0);
-    expect(look.title).toMatch(/outfit/i);
-    expect(look.body).toMatch(/nunito/i);
+    expect(look.title).toMatch(/inter tight/i);
+    expect(look.body).toMatch(/inter/i);
   });
 });
 
 test.describe('Sitio público · páginas', () => {
   const PAGES: Array<[string, string]> = [
-    ['cartelera', 'Próximos shows'],
+    ['cartelera', 'Lo que viene.'],
     ['nosotros', 'Producimos el show completo'],
-    ['servicios', 'Todo lo que un show necesita'],
+    ['servicios', 'Una sola mano. Todo el show.'],
     ['noticias', 'Noticias'],
     ['historias', 'Detrás del show'],
     ['galeria', 'Así se vive'],
@@ -209,7 +342,7 @@ test.describe('Sitio público · páginas', () => {
   test('el menú lleva a páginas, no a anclas, y marca dónde estás', async ({ page }) => {
     await mockStudio(page, siteState());
     await page.goto('/site?embed=1&pagina=servicios');
-    await expect(page.locator('h1')).toHaveText('Todo lo que un show necesita');
+    await expect(page.locator('h1')).toHaveText('Una sola mano. Todo el show.');
 
     const hrefs = await page.locator('.sa-nav__links a').evaluateAll((els) => els.map((e) => e.getAttribute('href') || ''));
     expect(hrefs.length).toBeGreaterThan(4);
@@ -236,7 +369,7 @@ test.describe('Sitio público · páginas', () => {
     await page.goto('/site?embed=1');
 
     await page.locator('.sa-nav__links').getByRole('link', { name: 'Servicios' }).click();
-    await expect(page.locator('h1')).toHaveText('Todo lo que un show necesita');
+    await expect(page.locator('h1')).toHaveText('Una sola mano. Todo el show.');
 
     await page.getByRole('link', { name: /Producción/ }).first().click();
     await expect(page.locator('h1')).toHaveText('Producción');
@@ -244,7 +377,7 @@ test.describe('Sitio público · páginas', () => {
     await expect(page.getByText('Plantas de luz y stage hands')).toBeVisible();
 
     await page.getByRole('navigation', { name: 'Estás en' }).getByRole('link', { name: 'Servicios' }).click();
-    await expect(page.locator('h1')).toHaveText('Todo lo que un show necesita');
+    await expect(page.locator('h1')).toHaveText('Una sola mano. Todo el show.');
     expect(new URL(page.url()).pathname).toBe('/site');
   });
 
@@ -305,10 +438,11 @@ test.describe('Sitio público · páginas', () => {
     await mockStudio(page, state);
     await page.goto('/site?embed=1&modo=publicado');
 
-    // La portada no presenta shows y la foto guardada con «Ver cartelera» se queda sin ese botón.
-    await expect(page.locator('h1')).toHaveText('Escenario, luz y público');
-    await expect(page.locator('.sa-hero').getByRole('link', { name: 'Ver cartelera' })).toHaveCount(0);
-    await expect(page.locator('.sa-hero').getByRole('link', { name: 'Contacto' })).toBeVisible();
+    // La portada no presenta shows y se queda sin el botón a la cartelera; abre lo que sí hay.
+    await expect(page.locator('h1')).toHaveText('La experiencia del Show');
+    await expect(page.locator('.sa-ribbon')).toHaveCount(0);
+    await expect(page.locator('.sa-hero').getByRole('link', { name: 'Ver la cartelera' })).toHaveCount(0);
+    await expect(page.locator('.sa-hero').getByRole('link', { name: 'Traer un show a Puebla' })).toBeVisible();
     await expect(page.locator('a[href^="/p/arta/cartelera"]')).toHaveCount(0);
     await expect(page.locator('a[href^="/p/arta/servicios"]')).toHaveCount(0);
     await expect(page.getByRole('navigation', { name: 'Servicios' })).toHaveCount(0);
@@ -375,7 +509,9 @@ test.describe('Sitio público · páginas', () => {
 
     await expect(page.getByRole('heading', { name: 'Cómo trabajamos' })).toBeVisible();
     await expect(page.locator('.sa-steps li')).toHaveCount(4);
-    await expect(page.getByRole('img', { name: 'Radio 98.7' })).toBeVisible();
+    const ally = page.getByRole('img', { name: 'Radio 98.7' });
+    await ally.scrollIntoViewIfNeeded();
+    await expect(ally).toBeVisible();
   });
 
   test('una noticia y un show tienen su detalle', async ({ page }) => {
@@ -401,7 +537,7 @@ test.describe('Sitio público · páginas', () => {
       // En el teléfono también están las que no caben en la barra de computadora.
       await expect(menu.getByRole('link', { name: 'Preguntas' })).toBeVisible();
       await menu.getByRole('link', { name: 'Cartelera' }).click();
-      await expect(page.locator('h1')).toHaveText('Próximos shows');
+      await expect(page.locator('h1')).toHaveText('Lo que viene.');
       await expect(page.getByRole('button', { name: 'Abrir menú' })).toBeVisible();
 
       const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);

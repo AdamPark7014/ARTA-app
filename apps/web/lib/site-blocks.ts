@@ -5,12 +5,15 @@
  * - Cada página (`SITE_PAGES`) tiene ruta propia y sale en el menú; su orden y si se ve se guardan en
  *   la fila `site_layout` de PageContent.
  * - Inicio resume el sitio con secciones (`BlockType`) que llevan a cada página; su orden se guarda en
- *   la misma fila. La portada no entra en ese orden: el encabezado flota sobre ella.
+ *   la misma fila. La portada no entra en ese orden: siempre abre la página.
  * - El texto de cada sección vive en su propia fila (`sectionKeyOf`). La sección de Inicio y la página
  *   comparten fila: Nosotros se edita una vez y sale resumido en Inicio y completo en su página.
  */
 export type BlockType =
+  | 'frase'
   | 'cartelera'
+  | 'proceso'
+  | 'recientes'
   | 'historias'
   | 'nosotros'
   | 'servicios'
@@ -70,8 +73,8 @@ export const SITE_PAGES: SitePageMeta[] = [
     key: 'inicio',
     path: '',
     label: 'Inicio',
-    description: 'La primera página: portada con shows y fotos, y un resumen que lleva a todo lo demás.',
-    sections: [HERO_KEY],
+    description: 'La primera página: qué es Arta, sus fotos, lo que viene y un resumen que lleva a todo lo demás.',
+    sections: [HERO_KEY, 'home_frase'],
     collections: ['slides'],
   },
   {
@@ -79,7 +82,7 @@ export const SITE_PAGES: SitePageMeta[] = [
     path: '/cartelera',
     label: 'Cartelera',
     description: 'Los próximos shows, cada uno con su página. Un show pasa solo a «Shows anteriores» cuando termina su fecha.',
-    sections: ['home_cartelera'],
+    sections: ['home_cartelera', 'home_recientes'],
     collections: ['shows'],
   },
   {
@@ -87,7 +90,7 @@ export const SITE_PAGES: SitePageMeta[] = [
     path: '/nosotros',
     label: 'Nosotros',
     description: 'Quién es Arta y cómo trabaja. También están aquí los logos de los aliados.',
-    sections: ['home_about', 'home_aliados'],
+    sections: ['home_about', 'home_proceso', 'home_aliados'],
     collections: ['aliado'],
   },
   {
@@ -186,11 +189,32 @@ type BlockMeta = {
 };
 
 export const BLOCK_META: Record<BlockType, BlockMeta> = {
+  frase: {
+    label: 'Frase',
+    description: 'Lo que hace Arta, en una frase grande que se enciende al bajar.',
+    sectionKey: 'home_frase',
+    anchor: 'frase',
+    page: 'inicio',
+  },
   cartelera: {
     label: 'Próximos shows',
-    description: 'Los siguientes shows, con liga a toda la cartelera.',
+    description: 'Los siguientes shows en tarjetas grandes. Sin shows publicados no sale.',
     sectionKey: 'home_cartelera',
     anchor: 'cartelera',
+    page: 'cartelera',
+  },
+  proceso: {
+    label: 'Cómo trabajamos',
+    description: 'Los pasos de Nosotros, con una foto que cambia al bajar.',
+    sectionKey: 'home_proceso',
+    anchor: 'como-trabajamos',
+    page: 'nosotros',
+  },
+  recientes: {
+    label: 'Noches recientes',
+    description: 'Los últimos shows que ya pasaron: salen solos de la cartelera. Sin shows anteriores no sale.',
+    sectionKey: 'home_recientes',
+    anchor: 'recientes',
     page: 'cartelera',
   },
   historias: {
@@ -209,14 +233,14 @@ export const BLOCK_META: Record<BlockType, BlockMeta> = {
   },
   servicios: {
     label: 'Servicios',
-    description: 'Las tarjetas de servicios, cada una con liga a su detalle.',
+    description: 'Un mosaico con cada servicio, en foto o en texto grande, con liga a su detalle.',
     sectionKey: 'home_modulos',
     anchor: 'modulos',
     page: 'servicios',
   },
   noticias: {
     label: 'Noticias',
-    description: 'Las últimas publicaciones.',
+    description: 'Las últimas publicaciones. Sin noticias publicadas no sale.',
     sectionKey: 'home_noticias',
     anchor: 'noticias',
     page: 'noticias',
@@ -270,11 +294,11 @@ export const BLOCK_META: Record<BlockType, BlockMeta> = {
 
 /** El orden de arranque de Inicio. Toda sección base vive aquí; se oculta, no se borra. */
 export const DEFAULT_LAYOUT: LayoutBlock[] = [
-  ...(['cartelera', 'nosotros', 'servicios', 'noticias', 'historias', 'galeria', 'aliados', 'faq', 'contacto'] as BlockType[]).map(
+  ...(['frase', 'cartelera', 'servicios', 'proceso', 'historias', 'galeria', 'noticias', 'recientes', 'aliados', 'contacto'] as BlockType[]).map(
     (type) => ({ id: type as string, type, visible: true }),
   ),
-  // Ya está completa en Contacto: se puede poner, pero Inicio no la necesita.
-  { id: 'ubicacion', type: 'ubicacion', visible: false },
+  // Ya están completas en su página: se pueden poner, pero Inicio dice mejor una idea por pantalla.
+  ...(['nosotros', 'faq', 'ubicacion'] as BlockType[]).map((type) => ({ id: type as string, type, visible: false })),
 ];
 
 export function sectionKeyOf(block: Pick<LayoutBlock, 'id' | 'type'>): string {
@@ -296,7 +320,10 @@ export function resolveLayout(raw: unknown): LayoutBlock[] {
     seen.add(b.id);
     out.push({ id: String(b.id), type: b.type, visible: b.visible !== false });
   }
-  return out.length ? out : DEFAULT_LAYOUT;
+  if (!out.length) return DEFAULT_LAYOUT;
+  // Una sección base que aún no estaba en lo guardado no aparece sola: queda oculta y lista para ponerse.
+  for (const base of DEFAULT_LAYOUT) if (!seen.has(base.id)) out.push({ ...base, visible: false });
+  return out;
 }
 
 /** Páginas en el orden del menú. Una página que aún no estaba en lo guardado sale al final, visible. */
@@ -320,6 +347,8 @@ export function resolvePages(raw: unknown): LayoutPage[] {
 
 export type ServiceTile = {
   title: string;
+  /** La frase grande de su tarjeta en Inicio. */
+  tagline?: string;
   body: string;
   detail?: string;
   includes?: string;
@@ -333,17 +362,27 @@ export type ServiceTile = {
  */
 export const DEFAULT_CONTENT: Record<string, Record<string, unknown>> = {
   [HERO_KEY]: {
-    headline: 'La experiencia del Show',
-    sub: 'Producimos conciertos y espectáculos en Puebla: del primer boceto a la última luz del escenario.',
-    cta: 'Ver cartelera',
+    headline: 'La experiencia del Show.',
+    sub: 'Conciertos y espectáculos en Puebla, de principio a fin.',
+    cta: 'Ver la cartelera',
     ctaHref: pageHref('cartelera'),
-    showCount: '3',
-    ticker: '#LaExperienciadelShow\nConciertos y espectáculos\nPuebla, México',
+    secondaryLabel: 'Traer un show a Puebla',
+    secondaryHref: pageHref('contacto'),
+    showCount: '1',
+  },
+  home_frase: {
+    text: 'Cuando se apagan las luces y suena la primera nota, nadie piensa en el rider, los permisos, los camerinos ni las cuentas. De eso nos encargamos nosotros.',
+  },
+  home_proceso: {
+    headline: 'Del rider al último aplauso.',
+  },
+  home_recientes: {
+    headline: 'Noches recientes.',
   },
   home_cartelera: {
     eyebrow: 'Cartelera',
-    headline: 'Próximos shows',
-    lead: 'Lo que viene en el escenario. Aparta la fecha.',
+    headline: 'Lo que viene.',
+    lead: 'Los próximos shows en el escenario. Aparta la fecha.',
     emptyTitle: 'Estamos armando la próxima temporada',
     emptyText: 'Muy pronto anunciamos fechas. Si tienes un show en mente, escríbenos.',
     pageImage: '/uploads/seed-hero-1.jpg',
@@ -361,49 +400,49 @@ export const DEFAULT_CONTENT: Record<string, Record<string, unknown>> = {
     summary: 'Somos la productora detrás de lo que pasa arriba y abajo del escenario: una sola mano de principio a fin, con el mismo cuidado en cada fecha.',
     body: 'Somos la productora detrás de lo que pasa arriba y abajo del escenario. Montaje, audio e iluminación, hospitalidad para los artistas, boletaje, campaña y cierre: una sola mano de principio a fin, con el mismo cuidado en cada fecha.\n\nDesde Puebla acompañamos a cada artista y a cada promotor desde que llega el rider hasta que se cierran las cuentas, para que el público solo tenga que llegar y vivirlo.',
     imageUrl: '/uploads/seed-hero-2.jpg',
-    pageImage: '/uploads/seed-news-3.jpg',
-    stats: [
-      { label: 'Show', text: 'Producción integral de conciertos y espectáculos' },
-      { label: 'Puebla', text: 'Nuestra base, con shows en toda la región' },
-      { label: 'Equipo', text: 'Del rider al último aplauso' },
-    ],
+    pageImage: '/uploads/seed-hero-1.jpg',
+    stats: [],
     stepsTitle: 'Cómo trabajamos',
     steps: [
-      { title: 'Planeación', body: 'Recibimos el rider y definimos contigo la fecha, el recinto y el alcance del show.' },
-      { title: 'Preproducción', body: 'Cerramos proveedores, hospitalidad, artes y campaña, con un responsable para cada parte.' },
-      { title: 'Día del show', body: 'Montaje, pruebas y función con un minuto a minuto que todo el equipo conoce.' },
-      { title: 'Cierre', body: 'Desmontaje, proveedores liquidados y cuentas claras de la fecha.' },
+      { title: 'Planeación', body: 'Recibimos el rider y definimos contigo la fecha, el recinto y el alcance del show.', imageUrl: '/uploads/seed-news-2.jpg' },
+      { title: 'Preproducción', body: 'Cerramos proveedores, hospitalidad, artes y campaña, con un responsable para cada parte.', imageUrl: '/uploads/seed-hero-2.jpg' },
+      { title: 'Día del show', body: 'Montaje, pruebas y función con un minuto a minuto que todo el equipo conoce.', imageUrl: '/uploads/seed-hero-3.jpg' },
+      { title: 'Cierre', body: 'Desmontaje, proveedores liquidados y cuentas claras de la fecha.', imageUrl: '/uploads/seed-hero-1.jpg' },
     ],
   },
   home_modulos: {
     eyebrow: 'Servicios',
-    headline: 'Todo lo que un show necesita',
+    headline: 'Una sola mano. Todo el show.',
     lead: 'Un solo equipo se hace cargo de cada parte, para que el público solo tenga que llegar y vivirlo.',
     pageImage: '/uploads/seed-hero-1.jpg',
     tiles: [
       {
         title: 'Producción',
+        tagline: 'Lo que el público ve y escucha.',
         body: 'Audio, iluminación, escenario, plantas de luz y staff, con su minuto a minuto.',
         detail: 'Armamos lo que el público ve y escucha. Partimos del rider del artista, reunimos a los proveedores que hacen falta y coordinamos a cada equipo para que todo esté listo a tiempo.',
         includes: 'Revisión de los riders del artista\nProveedores de audio, iluminación y escenario\nPlantas de luz y stage hands\nProduction managers y encargados por equipo\nMinuto a minuto del día del show',
-        imageUrl: '/uploads/seed-hero-1.jpg',
+        imageUrl: '/uploads/seed-hero-3.jpg',
       },
       {
         title: 'Hospitalidad',
-        body: 'Hospedaje, traslados, alimentos y camerinos para artistas y equipo.',
+        tagline: 'Hotel. Traslados. Catering. Camerinos.',
+        body: 'Para que la única preocupación del artista sea el escenario.',
         detail: 'Cuidamos a quienes hacen posible el show desde que llegan a la ciudad hasta que se van, para que su única preocupación sea el escenario.',
         includes: 'Hotel para el artista y su equipo\nTraslados y transportación\nCatering con sus horarios de servicio\nCamerinos preparados',
-        imageUrl: '/uploads/seed-news-3.jpg',
+        imageUrl: '/uploads/seed-hero-1.jpg',
       },
       {
         title: 'Comercial',
-        body: 'Boletaje, patrocinios, artes y campaña de difusión.',
+        tagline: 'Que se sepa y se venda.',
+        body: 'Boletaje, patrocinios, artes, campaña y prensa.',
         detail: 'Hacemos que el show se sepa y se venda: desde el arte del cartel hasta la rueda de prensa, con todo autorizado antes de salir.',
         includes: 'Boletera y venta de boletos\nPatrocinios y convenios\nArtes del show con autorización\nCampaña de difusión\nRueda de prensa y atención a medios\nDistribución de pendones',
         imageUrl: '/uploads/seed-hero-2.jpg',
       },
       {
         title: 'Cierre',
+        tagline: 'El show termina cuando las cuentas cuadran.',
         body: 'Cuentas claras, proveedores liquidados y un reporte de cada fecha.',
         detail: 'El show termina cuando las cuentas cuadran. Llevamos el control del dinero de cada fecha y lo entregamos en orden.',
         includes: 'Corrida financiera de la fecha\nÓrdenes de compra y anticipos a proveedores\nEntregas y autorizaciones firmadas\nReporte de cierre del show',
@@ -462,7 +501,7 @@ export const DEFAULT_CONTENT: Record<string, Record<string, unknown>> = {
   },
   home_cta: {
     eyebrow: 'Contacto',
-    headline: 'Hablemos de tu próximo show',
+    headline: 'Hablemos de tu próximo show.',
     body: 'Cuéntanos la fecha, el recinto y lo que tienes en mente. Te respondemos con una propuesta de producción.',
     cta: 'Escribir a Arta',
     pageImage: '/uploads/seed-hero-2.jpg',
@@ -518,6 +557,9 @@ const TONE_OPTIONS: FieldOption[] = [
 /** Nombre de cada bloque de textos dentro del editor de su página. */
 export const SECTION_LABELS: Record<string, string> = {
   [HERO_KEY]: 'Textos de la portada',
+  home_frase: 'La frase de Inicio',
+  home_proceso: 'Cómo trabajamos en Inicio',
+  home_recientes: 'Noches recientes en Inicio',
   home_cartelera: 'Textos de la página',
   home_historias: 'Textos de la página',
   home_about: 'Textos y fotos de la página',
@@ -534,24 +576,29 @@ export const SECTION_LABELS: Record<string, string> = {
 /** Campos de texto de cada sección. Lo que es lista de contenido (shows, historias…) va aparte. */
 export const SECTION_FIELDS: Record<string, Field[]> = {
   [HERO_KEY]: [
-    { key: 'headline', label: 'Titular de respaldo', type: 'text', hint: 'Se usa si una foto de portada no trae título.', half: true },
-    { key: 'cta', label: 'Botón de respaldo', type: 'text', half: true },
-    { key: 'sub', label: 'Texto de respaldo', type: 'textarea', rows: 2 },
+    { key: 'headline', label: 'Titular', type: 'text', half: true },
+    { key: 'cta', label: 'Botón', type: 'text', half: true },
+    { key: 'sub', label: 'Texto', type: 'textarea', rows: 2 },
     { key: 'ctaHref', label: 'Enlace del botón', type: 'link' },
+    { key: 'secondaryLabel', label: 'Segunda liga', type: 'text', half: true, hint: 'Para quien trae un show, no para quien viene a verlo.' },
+    { key: 'secondaryHref', label: 'Enlace de la segunda liga', type: 'link' },
     {
       key: 'showCount',
-      label: 'Shows en la portada',
+      label: 'Aviso del próximo show',
       type: 'select',
-      hint: 'Los próximos shows entran solos a la portada, con su póster.',
+      hint: 'La franja de arriba que anuncia el siguiente show. Sale sola de la cartelera.',
       options: [
-        { value: '0', label: 'Ninguno, solo fotos' },
-        { value: '1', label: 'El próximo show' },
-        { value: '2', label: 'Los próximos 2' },
-        { value: '3', label: 'Los próximos 3' },
+        { value: '1', label: 'Enseñar el próximo show' },
+        { value: '0', label: 'No enseñar' },
       ],
     },
     { key: 'ticker', label: 'Cinta debajo de la portada', type: 'textarea', rows: 3, hint: 'Una frase por renglón. Vacío = sin cinta.' },
   ],
+  home_frase: [
+    { key: 'text', label: 'Frase', type: 'textarea', rows: 4, hint: 'Se enciende palabra por palabra al bajar. Mejor corta: una o dos oraciones.' },
+  ],
+  home_proceso: [{ key: 'headline', label: 'Titular', type: 'text', hint: 'Los pasos y sus fotos son los de arriba, en «Pasos».' }],
+  home_recientes: [{ key: 'headline', label: 'Titular', type: 'text', hint: 'Los shows salen solos: los que ya pasaron en la cartelera.' }],
   home_cartelera: [
     EYEBROW,
     HEADLINE,
@@ -588,6 +635,7 @@ export const SECTION_FIELDS: Record<string, Field[]> = {
       fields: [
         { key: 'title', label: 'Paso', type: 'text' },
         { key: 'body', label: 'Qué pasa en este paso', type: 'textarea', rows: 2 },
+        { key: 'imageUrl', label: 'Foto del paso en Inicio', type: 'media', ratio: 'Vertical o cuadrada' },
       ],
     },
     ...PAGE_FIELDS,
@@ -605,6 +653,7 @@ export const SECTION_FIELDS: Record<string, Field[]> = {
       hint: 'Cada servicio tiene su página con el texto, la foto y lo que incluye.',
       fields: [
         { key: 'title', label: 'Nombre', type: 'text' },
+        { key: 'tagline', label: 'Frase grande en Inicio', type: 'text', hint: 'Ej. Que se sepa y se venda. Se parte en renglones en cada punto.' },
         { key: 'body', label: 'Resumen', type: 'textarea', rows: 2, hint: 'Lo que se lee en la tarjeta.' },
         { key: 'detail', label: 'Texto de su página', type: 'textarea', rows: 4 },
         { key: 'includes', label: 'Qué incluye', type: 'textarea', rows: 5, hint: 'Una cosa por renglón.' },

@@ -14,6 +14,12 @@ export function showDateParts(iso?: string | null) {
     year: part({ year: 'numeric' }),
     long: part({ weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }),
     short: part({ day: 'numeric', month: 'short' }),
+    /** «5 de noviembre», con el año solo si no es este. */
+    dayMonth:
+      d.getUTCFullYear() === new Date().getUTCFullYear()
+        ? part({ day: 'numeric', month: 'long' })
+        : part({ day: 'numeric', month: 'long', year: 'numeric' }),
+    weekdayLong: part({ weekday: 'long' }),
   };
 }
 

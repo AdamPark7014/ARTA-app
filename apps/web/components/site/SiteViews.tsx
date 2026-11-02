@@ -61,16 +61,10 @@ type PageHeadProps = {
   children?: ReactNode;
 };
 
-/** La cabecera de cada página: foto a color (o tinta con el motivo), migas y título. */
+/** La cabecera de cada página: migas y título sobre papel, y su foto a color debajo. */
 export function PageHead({ crumbs, eyebrow, title, lead, image, children }: PageHeadProps) {
   return (
-    <header className={`sa-pagehead ${image ? 'has-image' : ''}`.trim()}>
-      {image ? (
-        // eslint-disable-next-line @next/next/no-img-element -- foto dinámica de Studio
-        <img className="sa-pagehead__img" src={image} alt="" decoding="async" />
-      ) : (
-        <span className="sa-pagehead__motif" aria-hidden="true" />
-      )}
+    <header className="sa-pagehead">
       <div className="sa-pagehead__inner">
         <SiteCrumbs crumbs={crumbs} />
         {eyebrow ? <p className="sa-eyebrow">{eyebrow}</p> : null}
@@ -78,6 +72,10 @@ export function PageHead({ crumbs, eyebrow, title, lead, image, children }: Page
         {lead ? <p className="sa-lead">{lead}</p> : null}
         {children}
       </div>
+      {image ? (
+        // eslint-disable-next-line @next/next/no-img-element -- foto dinámica de Studio
+        <img className="sa-pagehead__img" src={image} alt="" decoding="async" />
+      ) : null}
     </header>
   );
 }
@@ -131,7 +129,7 @@ function PastShows({ past, tone = 'tinta', title, eyebrow }: { past: PublicSiteN
 export function CarteleraView({ data, preview, upcoming, past = [] }: ViewProps & { upcoming: PublicSiteNewsItem[]; past?: PublicSiteNewsItem[] }) {
   const content = sectionContent(data, 'home_cartelera');
   return (
-    <SitePage data={data} active="cartelera" overDark preview={preview}>
+    <SitePage data={data} active="cartelera" preview={preview}>
       <main id="contenido">
         <SimpleHead pageKey="cartelera" content={content} />
         <section className="sa-sec sa-sec--papel" aria-label="Próximos shows">
@@ -240,7 +238,7 @@ export function NosotrosView({ data, preview }: ViewProps) {
   const steps = content.steps?.filter((s) => s.title?.trim()) ?? [];
   const services = isPageOff(data, 'servicios') ? [] : servicesOf(data);
   return (
-    <SitePage data={data} active="nosotros" overDark preview={preview}>
+    <SitePage data={data} active="nosotros" preview={preview}>
       <main id="contenido">
         <PageHead
           crumbs={[{ label: 'Inicio', href: HOME_HREF }, { label: 'Nosotros' }]}
@@ -309,7 +307,7 @@ export function ServiciosView({ data, preview }: ViewProps) {
   const content = sectionContent(data, 'home_modulos');
   const services = servicesOf(data);
   return (
-    <SitePage data={data} active="servicios" overDark preview={preview}>
+    <SitePage data={data} active="servicios" preview={preview}>
       <main id="contenido">
         <SimpleHead pageKey="servicios" content={content} />
         <section className="sa-sec sa-sec--blanco" aria-label="Servicios">
@@ -345,7 +343,7 @@ export function ServiciosView({ data, preview }: ViewProps) {
 export function ServicioView({ data, preview, service }: ViewProps & { service: Service }) {
   const others = servicesOf(data).filter((s) => s.slug !== service.slug);
   return (
-    <SitePage data={data} active="servicios" overDark preview={preview}>
+    <SitePage data={data} active="servicios" preview={preview}>
       <main id="contenido">
         <PageHead
           crumbs={[{ label: 'Inicio', href: HOME_HREF }, { label: 'Servicios', href: pageHref('servicios') }, { label: service.title }]}
@@ -393,7 +391,7 @@ export function NoticiasView({ data, preview, news }: ViewProps & { news: Public
   const content = sectionContent(data, 'home_noticias');
   const [first, ...rest] = news;
   return (
-    <SitePage data={data} active="noticias" overDark preview={preview}>
+    <SitePage data={data} active="noticias" preview={preview}>
       <main id="contenido">
         <SimpleHead pageKey="noticias" content={content} />
         <section className="sa-sec sa-sec--papel" aria-label="Publicaciones">
@@ -484,7 +482,7 @@ export function HistoriasView({ data, preview }: ViewProps) {
   const content = sectionContent(data, 'home_historias');
   const items = itemsOf(data, 'historia');
   return (
-    <SitePage data={data} active="historias" overDark preview={preview}>
+    <SitePage data={data} active="historias" preview={preview}>
       <main id="contenido">
         <SimpleHead pageKey="historias" content={content} />
         <section className="sa-sec sa-sec--tinta" aria-label="Todas las historias">
@@ -500,7 +498,7 @@ export function GaleriaView({ data, preview }: ViewProps) {
   const content = sectionContent(data, 'home_galeria');
   const items = itemsOf(data, 'foto');
   return (
-    <SitePage data={data} active="galeria" overDark preview={preview}>
+    <SitePage data={data} active="galeria" preview={preview}>
       <main id="contenido">
         <SimpleHead pageKey="galeria" content={content} />
         <section className="sa-sec sa-sec--tinta" aria-label="Todas las fotos">
@@ -516,7 +514,7 @@ export function PreguntasView({ data, preview }: ViewProps) {
   const content = sectionContent(data, 'home_faq');
   const faqs = content.faqs?.filter((f) => f.question?.trim()) ?? [];
   return (
-    <SitePage data={data} active="preguntas" overDark preview={preview}>
+    <SitePage data={data} active="preguntas" preview={preview}>
       <main id="contenido">
         <SimpleHead pageKey="preguntas" content={content} />
         <section className="sa-sec sa-sec--blanco sa-faqpage" aria-label="Preguntas y respuestas">
@@ -535,7 +533,7 @@ export function ContactoView({ data, preview }: ViewProps) {
   const contact = contactFromSettings(settings);
   const socials = socialProfiles(settings);
   return (
-    <SitePage data={data} active="contacto" overDark preview={preview}>
+    <SitePage data={data} active="contacto" preview={preview}>
       <main id="contenido">
         <PageHead
           crumbs={[{ label: 'Inicio', href: HOME_HREF }, { label: 'Contacto' }]}

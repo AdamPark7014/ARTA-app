@@ -14,9 +14,9 @@ import { Prisma, PrismaClient } from '@prisma/client';
  */
 
 const HERO = {
-  headline: 'La experiencia del Show',
-  sub: 'Producimos conciertos y espectáculos en Puebla: del primer boceto a la última luz del escenario.',
-  cta: 'Ver cartelera',
+  headline: 'La experiencia del Show.',
+  sub: 'Conciertos y espectáculos en Puebla, de principio a fin.',
+  cta: 'Ver la cartelera',
   ctaHref: '/p/arta/cartelera',
 };
 
@@ -25,28 +25,23 @@ const ABOUT = {
   headline: 'Producimos el show completo',
   body:
     'Somos la productora detrás de lo que pasa arriba y abajo del escenario. Montaje, audio e iluminación, hospitalidad para los artistas, boletaje, campaña y cierre: una sola mano de principio a fin, con el mismo cuidado en cada fecha.',
-  stats: [
-    { label: 'Show', text: 'Producción integral de conciertos y espectáculos' },
-    { label: 'Puebla', text: 'Nuestra base, con shows en toda la región' },
-    { label: 'Equipo', text: 'Del rider al último aplauso' },
-  ],
 };
 
 const MODULOS = {
-  eyebrow: 'Lo que hacemos',
-  headline: 'Todo lo que un show necesita',
+  eyebrow: 'Servicios',
+  headline: 'Una sola mano. Todo el show.',
   lead: 'Un solo equipo se hace cargo de cada parte, para que el público solo tenga que llegar y vivirlo.',
   tiles: [
     { title: 'Producción', body: 'Audio, iluminación, escenario, plantas de luz y staff, con su minuto a minuto.' },
-    { title: 'Hospitalidad', body: 'Hospedaje, traslados, alimentos y camerinos para artistas y equipo.' },
-    { title: 'Comercial', body: 'Boletaje, patrocinios, artes y campaña de difusión.' },
+    { title: 'Hospitalidad', body: 'Para que la única preocupación del artista sea el escenario.' },
+    { title: 'Comercial', body: 'Boletaje, patrocinios, artes, campaña y prensa.' },
     { title: 'Cierre', body: 'Cuentas claras, proveedores liquidados y un reporte de cada fecha.' },
   ],
 };
 
 const CTA = {
   eyebrow: 'Contacto',
-  headline: 'Hablemos de tu próximo show',
+  headline: 'Hablemos de tu próximo show.',
   body: 'Cuéntanos la fecha, el recinto y lo que tienes en mente. Te respondemos con una propuesta de producción.',
   cta: 'Escribir a Arta',
 };

@@ -54,9 +54,8 @@ test.describe('Sitio público sin noticias inventadas', () => {
     );
 
     await page.goto('/p/arta');
-    await expect(page.getByRole('heading', { name: /Noticias/i })).toBeVisible();
-    await expect(page.getByText(/Pronto publicaremos novedades/i)).toBeVisible();
+    await expect(page.locator('h1')).toContainText(/experiencia/i);
+    await expect(page.locator('#noticias')).toHaveCount(0);
     await expect(page.locator('a[href*="/p/arta/noticias/"]')).toHaveCount(0);
-    await expect(page.getByRole('heading', { name: /Preguntas frecuentes/i })).toBeVisible();
   });
 });

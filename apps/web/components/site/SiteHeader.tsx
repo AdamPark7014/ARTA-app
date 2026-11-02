@@ -10,8 +10,6 @@ type SiteHeaderProps = {
   links: SiteLink[];
   /** Página en la que estamos: el menú la marca. */
   active?: PageKey;
-  /** Hay foto o tinta debajo: el encabezado arranca transparente. Si no, sólido sobre papel. */
-  overDark?: boolean;
 };
 
 /** La marca: el SVG va como máscara para que tome el color del encabezado sin cargar dos archivos. */
@@ -19,17 +17,9 @@ export function SiteLogo({ className = '' }: { className?: string }) {
   return <span className={`sa-logo ${className}`.trim()} role="img" aria-label="Arta Producciones" />;
 }
 
-export function SiteHeader({ links, active, overDark = false }: SiteHeaderProps) {
-  const [scrolled, setScrolled] = useState(false);
+export function SiteHeader({ links, active }: SiteHeaderProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const closeMenu = useCallback(() => setMenuOpen(false), []);
-
-  useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 24);
-    onScroll();
-    window.addEventListener('scroll', onScroll, { passive: true });
-    return () => window.removeEventListener('scroll', onScroll);
-  }, []);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -44,12 +34,11 @@ export function SiteHeader({ links, active, overDark = false }: SiteHeaderProps)
     };
   }, [menuOpen, closeMenu]);
 
-  const light = (!overDark || scrolled) && !menuOpen;
   const contact = links.find((l) => l.key === 'contacto');
   const bar = links.filter((l) => l.key !== 'inicio' && l.key !== 'contacto' && !l.secondary);
 
   return (
-    <header className={`sa-nav ${light ? 'is-light' : ''} ${menuOpen ? 'is-open' : ''}`.trim()}>
+    <header className={`sa-nav ${menuOpen ? 'is-open' : 'is-light'}`}>
       <Link href="/p/arta" className="sa-nav__brand" onClick={closeMenu} aria-label="Arta Producciones, inicio">
         <SiteLogo />
       </Link>

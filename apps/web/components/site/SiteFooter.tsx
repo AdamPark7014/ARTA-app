@@ -8,12 +8,10 @@ import { contactFromSettings, socialProfiles } from '@/lib/site-seo';
 type SiteFooterProps = {
   data: Pick<PublicSiteData, 'pages'>;
   links: SiteLink[];
-  /** Foto que se asoma dentro de las letras. */
-  markImage?: string | null;
 };
 
 /** El pie es el mapa del sitio: todas las páginas, los servicios, cómo escribir y lo legal. */
-export function SiteFooter({ data, links, markImage }: SiteFooterProps) {
+export function SiteFooter({ data, links }: SiteFooterProps) {
   const settings = siteSettings(data);
   const contact = contactFromSettings(settings);
   const socials = socialProfiles(settings);
@@ -67,12 +65,6 @@ export function SiteFooter({ data, links, markImage }: SiteFooterProps) {
           </a>
         </div>
       </div>
-      <div
-        className="sa-footer__mark"
-        role="img"
-        aria-label="Arta"
-        style={markImage ? { backgroundImage: `url(${markImage})` } : undefined}
-      />
       <div className="sa-footer__bottom">
         <span>© {new Date().getFullYear()} Arta Producciones</span>
         <span>{contact.city}, México</span>

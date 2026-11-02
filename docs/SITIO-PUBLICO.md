@@ -7,6 +7,31 @@ total en Studio web para que los practicantes puedan subir, quitar, bajar y pone
 El mismo día, también de Adam: «las fotos a color pero colores que combinen con la uiux del sitio» y «no quiero una landing
 page, dale un desarrollo profesional». Desde entonces es un sitio de páginas reales, no una página larga.
 
+El 02-11-2026, viendo esa versión: «el modelo de la página principal sigue feo, poco premium y profesional, no se ve nivel Apple,
+la página no me dice nada». Se le enseñaron dos muestras y dejó elegir: quedó la clara, al estilo del inicio de apple.com.
+
+## Inicio
+
+Una idea por pantalla y nada que no diga algo. En orden:
+
+| Qué | De dónde sale |
+|---|---|
+| Franja del próximo show | `data.shows[0]`; se apaga con `home_hero.showCount = 0` |
+| Portada: titular, texto y dos ligas | `home_hero`. La segunda liga es para quien trae un show, no para quien viene a verlo |
+| El logo como ventana al show, que se abre al bajar hasta llenar la pantalla (`HomeHero`) | `HeroSlide`: si hay varias se turnan, con botón de pausa. Ya no llevan texto. Sin JavaScript o con «reducir movimiento» se queda en la primera imagen |
+| La frase que se enciende (`LitLine`) | `home_frase` |
+| Mosaico de shows (`ShowTile`) | La cartelera. Con póster, el arte se asoma abajo y le da el color a la tarjeta; sin póster, un escenario a oscuras con reflectores (`StageLights`), para no fingir una foto que no es de ese show |
+| Mosaico de servicios | `home_modulos.tiles`: se turnan foto y texto grande. `tagline` es su frase; se parte en renglones en cada punto |
+| Cómo trabajamos (`ProcessScroll`) | Los pasos de `home_about`, cada uno con su foto; el titular, de `home_proceso` |
+| Noches recientes | Los shows que ya pasaron (`/studio/public/shows`); el titular, de `home_recientes` |
+| Invitación a escribir | `home_cta`; la foto es su `pageImage` |
+
+**Sin contenido no hay hueco:** Próximos shows, Noticias, Noches recientes, Historias, Galería y Aliados no salen si están vacías.
+Sin shows, el botón de la portada ya no lleva a una cartelera vacía: abre «Traer un show a Puebla» y «Lo que hacemos».
+
+Nosotros, Preguntas y Ubicación siguen como secciones de Inicio pero van ocultas: ya están completas en su página. En una maqueta ya
+guardada, una sección base nueva entra oculta (`resolveLayout`), no aparece sola.
+
 ## La idea
 
 Cada sección es **su propia página con ruta**, e Inicio resume y lleva a cada una. El sitio y Studio usan el mismo catálogo
@@ -14,7 +39,7 @@ Cada sección es **su propia página con ruta**, e Inicio resume y lleva a cada 
 
 | Ruta | Qué tiene | Se edita en Studio en |
 |---|---|---|
-| `/p/arta` | Portada y resumen de todo | Inicio: fotos, orden de secciones y textos |
+| `/p/arta` | Ver «Inicio» arriba | Inicio: fotos, orden de secciones y textos |
 | `/p/arta/cartelera` y `/[slug]` | Próximos shows, anteriores y el detalle de cada uno | Cartelera |
 | `/p/arta/nosotros` | Quiénes son, datos, cómo trabajan, aliados | Nosotros |
 | `/p/arta/servicios` y `/[slug]` | Los servicios y qué incluye cada uno | Servicios |
@@ -47,7 +72,7 @@ resumido en Inicio (`summary`) y completo en su página (`body`). Cada página s
 | Noticias | `NewsPost` con otra plantilla o sin ella |
 | Historias, galería, aliados | `SiteItem` (`kind`: `historia`, `foto`, `aliado`) |
 
-La portada no entra en el orden: el encabezado flota sobre ella. Las secciones base se ocultan, no se borran; las
+La portada no entra en el orden: siempre abre la página. Las secciones base se ocultan, no se borran; las
 agregadas a Inicio («Texto con foto», «Anuncio») se borran al publicar la maqueta sin ellas. Historias y Galería no salen en el
 menú, en Inicio ni en el sitemap mientras no tengan nada publicado.
 
@@ -56,7 +81,10 @@ feed, su sección deja de salir en Inicio y la portada se queda sin los botones 
 la sigue enseñando, para poder editarla. Inicio y Contacto no se quitan (`FIXED_PAGES`): todos los botones llevan a Contacto.
 
 **Un show sale solo de la cartelera** al terminar su día en Puebla (`startOfTodayMx`) y pasa a «Shows anteriores» en
-`/p/arta/cartelera`. Los próximos shows con póster entran solos a la portada (`home_hero.showCount`).
+`/p/arta/cartelera` y a «Noches recientes» en Inicio.
+
+**La cartelera no lee los eventos del panel:** son `NewsPost` capturados en Studio. Un `Event` puede ser de prueba o no estar anunciado, y
+sus archivos no siempre son el arte del show: el `100X200.jpg` de Earth, Wind & Fire es el pendón de otro festival.
 
 ## Borradores y publicación
 
@@ -75,7 +103,9 @@ la sigue enseñando, para poder editarla. Inicio y Contacto no se quitan (`FIXED
 ## Estilos y marca
 
 `apps/web/styles/sitio.scss` (clases `sa-`) lo cargan solo `/p/arta` y `/site`; `styles/studio.scss` (clases `st-`), solo
-`/studio`. Tinta y papel, sin dorado. Titulares en Outfit y texto en Nunito, ambas locales: el sitio no pide nada a Google Fonts.
+`/studio`. Tinta y papel, sin dorado. Titulares en Inter Tight (peso 600) y texto en Inter, sin mayúsculas forzadas: viven en
+`app/fonts/` (licencia SIL OFL, de `@fontsource-variable`) y las carga `lib/site-fonts.ts`, así que el panel no las descarga. El sitio no
+pide nada a Google Fonts.
 
 Marca en `public/brand/`: `arta-logo.svg`, `arta-wordmark.svg` (solo las letras) y `arta-motivo.svg`, la «a» girada del pie
 corporativo (`arta-footer.png`). Vectorizados de esos PNG: si diseño entrega los originales, se reemplazan sin tocar código.

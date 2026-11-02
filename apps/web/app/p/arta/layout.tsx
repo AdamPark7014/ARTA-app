@@ -35,8 +35,8 @@ export const metadata: Metadata = {
   },
 };
 
-/** Safari tiñe su barra con esto: el sitio abre sobre tinta. */
-export const viewport: Viewport = { themeColor: '#0c0c0d' };
+/** Safari tiñe su barra con esto: el sitio abre sobre papel. */
+export const viewport: Viewport = { themeColor: '#f7f6f3' };
 
 export default function PublicArtaLayout({ children }: { children: React.ReactNode }) {
   return children;

@@ -1,4 +1,4 @@
-import { externalProps, showDateParts, showTimeLabel, ticketHref } from './site-format';
+import { externalProps } from './site-format';
 import {
   BLOCK_META,
   DEFAULT_CONTENT,
@@ -14,23 +14,19 @@ import {
   type PageKey,
   type ServiceTile,
 } from './site-blocks';
-import { heroContent, sectionContent, type PublicSiteData, type PublicSiteItem } from './public-site-data';
+import { heroContent, sectionContent, type PublicSiteData, type PublicSiteItem, type PublicSiteNewsItem } from './public-site-data';
 import { slugify } from './studio-templates';
 
-/** Lo que pinta la portada, venga de una foto subida o de un show de la cartelera. */
-export type HeroSlideView = {
-  id: string;
-  kind: 'foto' | 'show';
-  eyebrow?: string;
+export type HeroPhoto = { id: string; imageUrl: string; focus?: string | null; draft?: boolean };
+export type HeroLink = { label: string; href: string };
+
+/** La portada: qué es Arta, a dónde ir y las fotos que se turnan en su marco. */
+export type HeroView = {
   title: string;
-  subtitle?: string;
-  imageUrl?: string;
-  focus?: string | null;
-  ctaLabel?: string;
-  ctaHref?: string;
-  secondaryLabel?: string;
-  secondaryHref?: string;
-  draft?: boolean;
+  sub?: string;
+  primary: HeroLink | null;
+  secondary: HeroLink | null;
+  photos: HeroPhoto[];
 };
 
 export const HOME_HREF = SITE_BASE;
@@ -49,13 +45,16 @@ export function isPageOff(data: Pick<PublicSiteData, 'pages'>, key: PageKey): bo
   return resolvePages(layoutOf(data)).some((page) => page.key === key && !page.visible);
 }
 
-/** Secciones de Inicio que salen, en su orden. Sin contenido, las de solo fotos no enseñan un hueco. */
-export function visibleBlocks(data: PublicSiteData, preview = false): LayoutBlock[] {
+/** Secciones de Inicio que salen, en su orden. Sin contenido, una sección no enseña un hueco: no sale. */
+export function visibleBlocks(data: PublicSiteData, preview = false, past: PublicSiteNewsItem[] = []): LayoutBlock[] {
   return resolveLayout(layoutOf(data)).filter((block) => {
     if (!block.visible) return false;
     const { page } = BLOCK_META[block.type];
     if (page && isPageOff(data, page)) return false;
     if (preview) return true;
+    if (block.type === 'cartelera') return data.shows.length > 0;
+    if (block.type === 'recientes') return past.length > 0;
+    if (block.type === 'noticias') return data.news.length > 0;
     if (block.type === 'historias') return itemsOf(data, 'historia').length > 0;
     if (block.type === 'galeria') return itemsOf(data, 'foto').length > 0;
     if (block.type === 'aliados') return itemsOf(data, 'aliado').length > 0;
@@ -65,12 +64,13 @@ export function visibleBlocks(data: PublicSiteData, preview = false): LayoutBloc
 
 export type SiteLink = { key: PageKey; label: string; href: string; secondary?: boolean };
 
-/** El menú: las páginas que se ven, en su orden. Historias y Galería no salen mientras estén vacías. */
+/** El menú: las páginas que se ven, en su orden. Noticias, Historias y Galería no salen mientras estén vacías. */
 export function visiblePages(data: PublicSiteData, preview = false): SiteLink[] {
   return resolvePages(layoutOf(data))
     .filter((page) => {
       if (!page.visible) return false;
       if (preview) return true;
+      if (page.key === 'noticias') return data.news.length > 0;
       if (page.key === 'historias') return itemsOf(data, 'historia').length > 0;
       if (page.key === 'galeria') return itemsOf(data, 'foto').length > 0;
       return true;
@@ -114,49 +114,41 @@ export function servicesOf(data: Pick<PublicSiteData, 'pages'>): Service[] {
   return out;
 }
 
-export function buildHeroSlides(data: PublicSiteData): HeroSlideView[] {
+/** Las fotos de la portada, para quien necesite una: pasos sin foto, tarjetas de shows sin póster. */
+export const heroPhotoUrls = (data: Pick<PublicSiteData, 'slides'>) => data.slides.map((s) => s.imageUrl).filter(Boolean);
+
+export function buildHero(data: PublicSiteData): HeroView {
   const hero = heroContent(data);
-  const howMany = Number(hero.showCount ?? 3);
-  const contact = pageHref('contacto');
-  const shows: HeroSlideView[] = (isPageOff(data, 'cartelera') ? [] : data.shows)
-    .filter((s) => s.coverUrl)
-    .slice(0, Number.isFinite(howMany) ? howMany : 3)
-    .map((s) => {
-      const date = showDateParts(s.eventDate);
-      const tickets = ticketHref(s);
-      return {
-        id: `show-${s.id}`,
-        kind: 'show',
-        eyebrow: date ? `Próximo show · ${date.short}` : 'Próximo show',
-        title: s.title,
-        subtitle: [s.venue, s.city, showTimeLabel(s.eventTime)].filter(Boolean).join(' · ') || s.excerpt || undefined,
-        imageUrl: s.coverUrl || undefined,
-        ctaLabel: tickets ? s.ctaLabel || 'Comprar boletos' : 'Ver detalles',
-        ctaHref: tickets || showHref(s.slug),
-        secondaryLabel: tickets ? 'Ver detalles' : undefined,
-        secondaryHref: tickets ? showHref(s.slug) : undefined,
-        draft: s.published === false,
-      };
-    });
-  const photos: HeroSlideView[] = data.slides.map((s) => {
-    const saved = s.ctaHref || hero.ctaHref;
-    const href = saved ? resolveSiteHref(saved) : undefined;
-    const route = href ? parseSitePath(href) : null;
-    return {
-      id: s.id,
-      kind: 'foto',
-      title: s.title || hero.headline || 'La experiencia del Show',
-      subtitle: s.subtitle || hero.sub || undefined,
-      imageUrl: s.imageUrl,
-      focus: s.focus,
-      ctaLabel: s.ctaLabel || hero.cta || undefined,
-      ctaHref: route && isPageOff(data, route.page) ? undefined : href,
-      secondaryLabel: 'Contacto',
-      secondaryHref: contact,
-      draft: s.active === false,
-    };
-  });
-  return [...shows, ...photos];
+  /** Una liga a una página quitada no se pinta. */
+  const link = (label?: string, raw?: string): HeroLink | null => {
+    if (!label?.trim() || !raw?.trim()) return null;
+    const href = resolveSiteHref(raw);
+    const route = parseSitePath(href);
+    return route && isPageOff(data, route.page) ? null : { label, href };
+  };
+  const main = link(hero.cta, hero.ctaHref);
+  const other = link(hero.secondaryLabel, hero.secondaryHref);
+  // Sin shows, «Ver la cartelera» llevaría a una página casi vacía: abre lo que sí hay.
+  const toEmptyBill = !data.shows.length && !!main && parseSitePath(main.href)?.page === 'cartelera';
+  const primary = main && !toEmptyBill ? main : other;
+  const secondary = primary === other ? link('Lo que hacemos', pageHref('servicios')) : other;
+  return {
+    title: hero.headline || 'La experiencia del Show.',
+    sub: hero.sub || undefined,
+    primary,
+    secondary,
+    photos: data.slides
+      .filter((s) => s.imageUrl)
+      .map((s) => ({ id: s.id, imageUrl: s.imageUrl, focus: s.focus, draft: s.active === false })),
+  };
+}
+
+/** El show que anuncia la franja de arriba de Inicio. */
+export function nextShowOf(data: PublicSiteData): PublicSiteNewsItem | null {
+  if (isPageOff(data, 'cartelera')) return null;
+  const wanted = Number(heroContent(data).showCount ?? 1);
+  if (Number.isFinite(wanted) && wanted <= 0) return null;
+  return data.shows[0] ?? null;
 }
 
 /** Página que corresponde a una ruta del sitio. La vista previa navega con esto, sin salir de Studio. */
