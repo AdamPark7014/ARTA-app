@@ -81,12 +81,12 @@ describe('PurchaseOrdersController authorization (e2e, real DB)', () => {
   describe('addProof', () => {
     it('blocks uploading a payment proof to another org PO', async () => {
       await expect(
-        controller.addProof({ user: userInOrgA() }, poB.id, { fileUrl: '/uploads/fake.pdf' }),
+        controller.addProof({ user: userInOrgA('contabilidad') }, poB.id, { fileUrl: '/uploads/fake.pdf' }),
       ).rejects.toThrow(ForbiddenException);
     });
 
     it('allows uploading a proof to a PO in the caller own org', async () => {
-      const proof = await controller.addProof({ user: userInOrgA() }, poA.id, {
+      const proof = await controller.addProof({ user: userInOrgA('contabilidad') }, poA.id, {
         fileUrl: '/uploads/real.pdf',
       });
       expect(proof.purchaseOrderId).toBe(poA.id);
@@ -115,7 +115,7 @@ describe('PurchaseOrdersController authorization (e2e, real DB)', () => {
 
     it('allows the fallthrough branch for a role that does hold PO_AUTHORIZE', async () => {
       const updated = await controller.setStatus(
-        { user: userInOrgA('gerente_arta', []) },
+        { user: userInOrgA('dir_general', []) },
         poA.id,
         { status: 'PENDING_AUTH' as never },
       );
@@ -125,7 +125,7 @@ describe('PurchaseOrdersController authorization (e2e, real DB)', () => {
 
   describe('remove', () => {
     it('blocks deleting a PO that belongs to another org', async () => {
-      await expect(controller.remove({ user: userInOrgA() }, poB.id)).rejects.toThrow(
+      await expect(controller.remove({ user: userInOrgA('compras') }, poB.id)).rejects.toThrow(
         ForbiddenException,
       );
       // Confirm it genuinely was not deleted.

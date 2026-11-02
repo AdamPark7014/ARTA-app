@@ -27,7 +27,7 @@ export type Checklist = {
   lastEditedAt?: string | null;
   lastEditedBy?: { fullName: string } | null;
   /** En `GET /checklists/:id` llega el template completo; en la lista del evento viene solo { key }. */
-  template?: { id?: string; key: string };
+  template?: { id?: string; key: string; name?: string };
   pdfUrl?: string | null;
   pdfGeneratedAt?: string | null;
   /** Dónde quedó cada dato dentro del PDF, para escribir encima del documento */

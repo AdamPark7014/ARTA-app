@@ -31,8 +31,9 @@ Límite conocido: `/uploads/*` se sirve estático, así que quien ya tenga la UR
 
 ## Quién aprueba cada formato
 
-- **Evento General, Artes de shows y Pendones** (`TOP_APPROVAL_FORMATS`, con `CUSTOM`, que es Pendones en
-  Excel): basta uno de Chacho o Arturo.
+- **Evento General, Artes de shows y Pendones** (`TOP_APPROVAL_FORMATS`): basta uno de Chacho o Arturo. La
+  Distribución de Pendones en Excel cuenta como Pendones (`formatRuleKey`), porque comparte `CUSTOM` con las
+  plantillas que crea el equipo, y esas no se reservan.
 - **Los demás de Arta:** también Leida y Sol.
 - **Los de Auditorio:** Rodrigo, Chacho o Arturo.
 

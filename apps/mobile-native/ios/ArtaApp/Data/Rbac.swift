@@ -201,8 +201,13 @@ enum Rbac {
 
     // MARK: Formatos
 
-    /// Evento General, Artes y Pendones los aprueban solo Chacho o Arturo. `CUSTOM` es Pendones en Excel.
-    static let TOP_APPROVAL_FORMATS: Set<String> = ["EVENTO_GENERAL", "ARTES_SHOWS", "PENDONES", "CUSTOM"]
+    /// Evento General, Artes y Pendones los aprueban solo Chacho o Arturo.
+    static let TOP_APPROVAL_FORMATS: Set<String> = ["EVENTO_GENERAL", "ARTES_SHOWS", "PENDONES"]
+    /// El libro de Pendones comparte `CUSTOM` con las plantillas propias del equipo: solo él se reserva.
+    static func formatRuleKey(key: String?, name: String?) -> String {
+        if key == "CUSTOM", (name ?? "").lowercased().contains("pendones") { return "PENDONES" }
+        return key ?? ""
+    }
     /// Formatos generales: donde Monse y Kika suben imágenes.
     static let GENERAL_FORMATS: Set<String> = ["EVENTO_GENERAL", "CHECKLIST_AUDITORIO"]
     static let BAR_MERCH_FORMATS: Set<String> = ["BARRA", "MERCH"]

@@ -182,8 +182,12 @@ object Rbac {
 
     // ─── Formatos ───────────────────────────────────────────────────────────
 
-    /** Evento General, Artes y Pendones los aprueban solo Chacho o Arturo. `CUSTOM` es Pendones en Excel. */
-    val TOP_APPROVAL_FORMATS = setOf("EVENTO_GENERAL", "ARTES_SHOWS", "PENDONES", "CUSTOM")
+    /** Evento General, Artes y Pendones los aprueban solo Chacho o Arturo. */
+    val TOP_APPROVAL_FORMATS = setOf("EVENTO_GENERAL", "ARTES_SHOWS", "PENDONES")
+
+    /** El libro de Pendones comparte `CUSTOM` con las plantillas propias del equipo: solo él se reserva. */
+    fun formatRuleKey(key: String?, name: String?): String =
+        if (key == "CUSTOM" && name.orEmpty().contains("pendones", ignoreCase = true)) "PENDONES" else key.orEmpty()
 
     /** Formatos generales: donde Monse y Kika suben imágenes. */
     val GENERAL_FORMATS = setOf("EVENTO_GENERAL", "CHECKLIST_AUDITORIO")

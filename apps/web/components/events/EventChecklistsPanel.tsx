@@ -10,6 +10,7 @@ import {
   canApproveFormat,
   canCreateFormats,
   canEditFormat,
+  formatRuleKey,
   type AccessUser,
 } from '@arta/rbac';
 import { createEventFile } from '@/lib/file-save';
@@ -346,7 +347,7 @@ export function EventChecklistsPanel({
   const lockedByStatus = status === 'APPROVED' || status === 'SEALED';
   const formatKey = activeChecklist?.template?.key ?? '';
   const canEditThis = canEditFormat(access, event.entity, formatKey);
-  const canApproveThis = canApproveFormat(access, event.entity, formatKey);
+  const canApproveThis = canApproveFormat(access, event.entity, formatRuleKey(activeChecklist?.template));
   /** Evento cerrado o formato que a esta persona no le toca editar. */
   const locked = closed || !canEditThis;
   const canAttach = !closed && canAddFormatImages(access, event.entity, formatKey);
@@ -378,9 +379,9 @@ export function EventChecklistsPanel({
   const canSign = useMemo<SignPermissions>(
     () => ({
       delivered: canEditFormat(access, event.entity, activeChecklist?.template?.key ?? ''),
-      authorized: canApproveFormat(access, event.entity, activeChecklist?.template?.key ?? ''),
+      authorized: canApproveFormat(access, event.entity, formatRuleKey(activeChecklist?.template)),
     }),
-    [access, event.entity, activeChecklist?.template?.key],
+    [access, event.entity, activeChecklist?.template],
   );
 
   const stats = useMemo(() => {

@@ -52,7 +52,8 @@ export function DocStatusControl({ status, roleKey, canApprove: canApproveHere, 
   const [reason, setReason] = useState('');
 
   const canApprove = canApproveHere ?? APPROVERS.has(roleKey);
-  const canUnseal = canApproveHere ?? UNSEALERS.has(roleKey);
+  // Reabrir un sellado también pide dirección: gerencia aprueba, pero no reabre.
+  const canUnseal = (canApproveHere ?? true) && UNSEALERS.has(roleKey);
 
   async function go(next: DocStatus, why?: string) {
     await onChange(next, why);

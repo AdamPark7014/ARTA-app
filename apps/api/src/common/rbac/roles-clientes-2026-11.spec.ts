@@ -4,6 +4,7 @@ import { EventsController } from '../../events/events.controller';
 import { SlotsController } from '../../slots/slots.controller';
 import { TicketingController } from '../../ticketing/ticketing.controller';
 import {
+  formatRuleKey,
   ALL_ROLES,
   ASSIGNABLE_PERMISSIONS,
   canAddFormatImages,
@@ -46,7 +47,7 @@ const ALL_MODULES: EventModule[] = [
 /** El Auditorio no lleva corrida, campaña ni convenios. */
 const AUDITORIO_MODULES: EventModule[] = ['formats', 'po', 'adendum', 'ticketing', 'tasks', 'documents', 'testigos'];
 
-/** `CUSTOM` es la Distribución de Pendones en Excel. */
+/** `CUSTOM` es la Distribución de Pendones en Excel y cualquier plantilla propia. */
 const ARTA_FORMATS = [
   'EVENTO_GENERAL',
   'PRODUCCION',
@@ -106,7 +107,7 @@ const DIRECCION_ADJUNTA: Access = {
     modules: ALL_MODULES,
     see: ARTA_FORMATS,
     edit: ARTA_FORMATS,
-    approve: ['PRODUCCION', 'HOSPEDAJE', 'TRANSPORTACION', 'RUEDA_PRENSA', 'CATERING'],
+    approve: ['PRODUCCION', 'HOSPEDAJE', 'TRANSPORTACION', 'RUEDA_PRENSA', 'CATERING', 'CUSTOM'],
     info: true,
     ticketing: true,
   },
@@ -443,7 +444,14 @@ describe('lo que el cliente pidió sobre todo', () => {
     });
 
     it('la Distribución de Pendones en Excel (CUSTOM) en Arta va igual', () => {
-      expect(rolesWhere((u) => canApproveFormat(u, 'ARTA', 'CUSTOM'))).toEqual(['dir_general', 'super_admin']);
+      const key = formatRuleKey({ key: 'CUSTOM', name: 'Distribución de Pendones (Excel)' });
+      expect(rolesWhere((u) => canApproveFormat(u, 'ARTA', key))).toEqual(['dir_general', 'super_admin']);
+    });
+
+    it('una plantilla propia del equipo (CUSTOM) sí la aprueban Leida y Sol', () => {
+      const key = formatRuleKey({ key: 'CUSTOM', name: 'Checklist de sonido' });
+      const leida = { roleKey: 'dir_adjunta', entities: ONLY_ARTA };
+      expect(canApproveFormat(leida, 'ARTA', key)).toBe(true);
     });
 
     it('Leida y Sol sí aprueban los demás de Arta', () => {

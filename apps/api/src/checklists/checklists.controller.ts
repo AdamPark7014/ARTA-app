@@ -42,6 +42,7 @@ import {
   canApproveFormat,
   canEditFormat,
   canSeeFormat,
+  formatRuleKey,
   TOP_APPROVAL_FORMATS,
   canAccessEventOps,
   hasPermission,
@@ -529,7 +530,7 @@ export class ChecklistsController {
       where: { id },
       include: {
         event: true,
-        template: { select: { key: true } },
+        template: { select: { key: true, name: true } },
         lastEditedBy: { select: { fullName: true } },
       },
     });
@@ -636,7 +637,7 @@ export class ChecklistsController {
   async revisionHistory(@Req() req: { user: AuthUser }, @Param('id') id: string) {
     const item = await this.prisma.checklistInstance.findUnique({
       where: { id },
-      include: { event: true, template: { select: { key: true } } },
+      include: { event: true, template: { select: { key: true, name: true } } },
     });
     if (!item) throw new BadRequestException('Checklist no encontrado');
     this.assertEventAccess(req.user, item.event);
@@ -658,7 +659,7 @@ export class ChecklistsController {
 
     const existing = await this.prisma.checklistInstance.findUnique({
       where: { id },
-      include: { event: true, template: { select: { key: true } } },
+      include: { event: true, template: { select: { key: true, name: true } } },
     });
     if (!existing) throw new BadRequestException('Checklist no encontrado');
     this.assertEventAccess(req.user, existing.event);
@@ -668,9 +669,9 @@ export class ChecklistsController {
     // Autorizar: gerencia en Arta / dirección del Auditorio / dirección general
     if (body.kind === 'AUTORIZADO') {
       const entity = existing.event.entity;
-      if (!canApproveFormat(req.user, entity, existing.template?.key ?? '')) {
+      if (!canApproveFormat(req.user, entity, formatRuleKey(existing.template))) {
         throw new ForbiddenException(
-          TOP_APPROVAL_FORMATS.includes(existing.template?.key ?? '')
+          TOP_APPROVAL_FORMATS.includes(formatRuleKey(existing.template))
             ? 'Este formato lo autorizan Chacho o Arturo'
             : 'No puedes firmar como Autorizado en esta entidad',
         );
@@ -762,7 +763,7 @@ export class ChecklistsController {
   async forcePdf(@Req() req: { user: AuthUser }, @Param('id') id: string) {
     const existing = await this.prisma.checklistInstance.findUnique({
       where: { id },
-      include: { event: true, template: { select: { key: true } } },
+      include: { event: true, template: { select: { key: true, name: true } } },
     });
     if (!existing) throw new BadRequestException('Checklist no encontrado');
     this.assertEventAccess(req.user, existing.event);
@@ -801,16 +802,16 @@ export class ChecklistsController {
 
     const existing = await this.prisma.checklistInstance.findUnique({
       where: { id },
-      include: { event: true, template: { select: { key: true } } },
+      include: { event: true, template: { select: { key: true, name: true } } },
     });
     if (!existing) throw new BadRequestException('Checklist no encontrado');
     this.assertEventAccess(req.user, existing.event);
     this.assertChecklistEdit(req.user);
     assertEventNotClosed(existing.event.status);
     if (to === DocStatus.APPROVED || to === DocStatus.SEALED || existing.status === DocStatus.SEALED) {
-      if (!canApproveFormat(req.user, existing.event.entity, existing.template?.key ?? '')) {
+      if (!canApproveFormat(req.user, existing.event.entity, formatRuleKey(existing.template))) {
         throw new ForbiddenException(
-          TOP_APPROVAL_FORMATS.includes(existing.template?.key ?? '')
+          TOP_APPROVAL_FORMATS.includes(formatRuleKey(existing.template))
             ? 'Evento General, Artes y Pendones los aprueban Chacho o Arturo'
             : 'Este formato no te toca aprobarlo',
         );
@@ -899,7 +900,7 @@ export class ChecklistsController {
     if (!this.notifications) return;
     const organizationId = doc.event.organizationId ?? null;
     const entity = doc.event.entity as EntityKey;
-    const formatKey = doc.template?.key ?? '';
+    const formatKey = formatRuleKey(doc.template);
     const linkUrl = `/events/${doc.eventId}?tab=checklists&checklist=${doc.id}`;
     const text = (kind: ChecklistNoticeKind) => checklistNotice(kind, { actor: actor.fullName, doc, event: doc.event });
 
@@ -999,7 +1000,7 @@ export class ChecklistsController {
   ) {
     const existing = await this.prisma.checklistInstance.findUnique({
       where: { id },
-      include: { event: true, template: { select: { key: true } } },
+      include: { event: true, template: { select: { key: true, name: true } } },
     });
     if (!existing) throw new BadRequestException('Checklist no encontrado');
     this.assertEventAccess(req.user, existing.event);

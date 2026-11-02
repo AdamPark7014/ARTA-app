@@ -534,9 +534,18 @@ export function canEditTestigos(user: AccessUser, entity: EntityKey | string): b
 
 /**
  * Evento General, Artes y Pendones los aprueban solo Chacho o Arturo (01-11-2026); los demás de Arta,
- * también Leida y Sol. `CUSTOM` es Distribución de Pendones en su versión de Excel.
+ * también Leida y Sol.
  */
-export const TOP_APPROVAL_FORMATS = ['EVENTO_GENERAL', 'ARTES_SHOWS', 'PENDONES', 'CUSTOM'];
+export const TOP_APPROVAL_FORMATS = ['EVENTO_GENERAL', 'ARTES_SHOWS', 'PENDONES'];
+
+/**
+ * La clave que cuenta para aprobar. Distribución de Pendones en Excel y las plantillas que crea el
+ * equipo comparten `CUSTOM`: el libro de Pendones cuenta como Pendones y las demás no se reservan.
+ */
+export function formatRuleKey(template?: { key?: string | null; name?: string | null } | null): string {
+  const key = template?.key ?? '';
+  return key === 'CUSTOM' && /pendones/i.test(template?.name ?? '') ? 'PENDONES' : key;
+}
 /** Formatos generales: donde Monse y Kika suben imágenes. */
 export const GENERAL_FORMATS = ['EVENTO_GENERAL', 'CHECKLIST_AUDITORIO'];
 export const BAR_MERCH_FORMATS = ['BARRA', 'MERCH'];

@@ -134,7 +134,8 @@ describe('Chat con referencias (e2e, base real)', () => {
     await expect(prisma.notification.count({ where: { userId: ids.author, type: 'notice.seen' } })).resolves.toBe(1);
 
     const sent = await notifications.sentBy(ids.author, { entities: ['ARTA'] });
-    expect(sent[0].recipients[0]).toMatchObject({ id: ids.owner, seenAt: expect.any(Date) });
+    // El mismo aviso le llega a más gente; aquí importa la fila de quien lo abrió.
+    expect(sent[0].recipients.find((r) => r.id === ids.owner)).toMatchObject({ seenAt: expect.any(Date) });
   });
 
   it('el otro negocio ve la etiqueta, sin estado ni liga', async () => {
