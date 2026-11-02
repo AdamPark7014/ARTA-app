@@ -39,11 +39,10 @@ son de dirección. Probado en el contenedor (plantilla, Excel y PDF), **no con e
 - Compilación incremental de Android tras cambios grandes: cientos de `Unresolved reference` en archivos tocados. Es la caché; `--rerun` lo arregla.
 - El seed corre en cada arranque. No pisa roles y, desde `5abee55`, tampoco Studio.
 
-**Interpretaciones que Adam debe confirmar:** «arte general, show y pendones» = Evento General, Artes de shows y Pendones (+Excel), y basta
+**Interpretaciones confirmadas por Adam (01-11):** «arte general, show y pendones» = Evento General, Artes de shows y Pendones (+Excel), y basta
 uno de Chacho o Arturo; formatos de Auditorio los aprueban Rodrigo, Chacho o Arturo; OC en solo lectura para Leida y Sol, sin acceso Williams
-y Rodrigo; «checklists generales» de Monse y Kika = Evento General y Checklist Auditorio; Iliana en los dos negocios con correo supuesto
-`iliana@artaproducciones.com`; practicante publica por omisión y se quita por perfil; Paula conserva editar campaña, convenios y boletera
-de la junta 23-10.
+y Rodrigo; «checklists generales» de Monse y Kika = Evento General y Checklist Auditorio; Iliana en los dos negocios; practicante publica por omisión y se quita por perfil; Paula conserva editar campaña, convenios y boletera
+de la junta 23-10. Lo único aún supuesto es el correo de Iliana, `iliana@artaproducciones.com`.
 
 **Verificado:** API 1129 de 1131 (un PDF por tiempo con la máquina cargada, pasa solo; 1 omitida ajena) y 55 con base real en CI; web 218 en
 Chromium y Safari de CI; capturas 1536 y 390 sin cortes ni encimados; migraciones `20261102000000` y `20261102010000` aplicadas, columnas
