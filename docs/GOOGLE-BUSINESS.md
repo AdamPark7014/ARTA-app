@@ -3,6 +3,10 @@
 Todo lo que pide el alta del Perfil de Negocio de Google, listo para copiar. Las imágenes están en `docs/google-business/`.
 Solo hay datos que ya son públicos. Las constancias y los comprobantes no van en este repo, que es público.
 
+## Dónde va el alta
+
+Adam aceptó los Términos el 02-11-2026; la cuenta es la suya. Ya capturado: nombre, categoría principal, negocio sin dirección pública, las cuatro zonas de servicio, teléfono y sitio web. Falta la dirección privada para verificar, la verificación, la descripción, los servicios, las fotos y las categorías adicionales. Antes de seguir, revisar en qué paso quedó y **no crear otro perfil**.
+
 ## Lo que falta confirmar
 
 Los datos salen del sitio oficial anterior de Arta (`artaproductions.com`) y de su brochure de 2022.
@@ -23,10 +27,10 @@ Los datos salen del sitio oficial anterior de Arta (`artaproductions.com`) y de 
 | Categoría principal | Empresa de organización de eventos |
 | Categorías adicionales | Agencia de espectáculos; Organizador de eventos |
 | Tipo de perfil | Negocio de servicio en una zona, sin dirección pública. Arta no recibe público en su oficina: sus shows son en cada recinto |
-| Zona de servicio | Puebla, San Andrés Cholula, San Pedro Cholula, Toluca, Querétaro, Boca del Río |
+| Zona de servicio | Puebla (estado), Querétaro, Toluca, Boca del Río |
 | Dirección para verificar (no se publica) | La de arriba, cuando se confirme |
 | Teléfono | +52 222 583 0062 |
-| Sitio web | https://artaproducciones.com/p/arta |
+| Sitio web | https://artaproducciones.com |
 | Instagram | https://www.instagram.com/arta_producciones/ |
 | Facebook | https://www.facebook.com/ARTAproduccionesMX |
 | TikTok | https://www.tiktok.com/@artaproducciones_mxo |
