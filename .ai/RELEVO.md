@@ -4,9 +4,27 @@
 - **Fecha:** 2026-11-02
 - **Rama:** main
   (Adam es el único programador).
-- **Producción:** `390dfb7` desplegado desde `main` el 2026-11-02 (`bash deploy/update.sh` en `/var/www/arta-app`, log
-  `/root/arta-deploy-20261102-B.log`; respaldo automático en `/root/arta-backups/`). Disco al 73 %: al 90 % se cae la BD. Cada despliegue suma caché de
-  compilación: `docker builder prune -af --filter until=2h` liberó 8 GB; correrlo si pasa de 85 %.
+- **Producción:** `b7d30c1` desplegado desde `main` el 2026-11-02 (`bash deploy/update.sh` en `/var/www/arta-app`, log
+  `/root/arta-deploy-20261102-E.log`; respaldo automático en `/root/arta-backups/`). Disco al 73 %: **un despliegue lo subió a 90 %, donde se cae la BD.** Antes de cada
+  despliegue, `docker builder prune -af`.
+
+## Turno claude-code (2026-11-02, tarde): rediseño de 360 grados del sitio y lo real de Arta
+
+Adam: «génerale un rediseño de 360 grados», «se debe mostrar como la empresa de los eventos e info, pero no registros internos», «añade a Arta en Google Business con mi Chrome», «con ayuda de las skills de diseño dale un rediseño de 360 grados a todo el sistema». **Guías: `docs/SITIO-PUBLICO.md`, `docs/GOOGLE-BUSINESS.md`.**
+
+**Sitio (`c7c1a73` a `b7d30c1`, en producción):** portada oscura con los pósters reales en tres columnas que corren; próximos shows con el póster entero; quiénes somos con cifras; trayectoria con fotos reales y artistas; servicios en cuatro tarjetas; recintos; oficina con mapa a color; invitación con reflectores. Menú y pie de noche. Inicio bajó de 16,467 a 8,572 px. Fuera «Lo complicado es nuestro» y la frase gigante.
+
+**Lo real de Arta:** su sitio anterior `artaproductions.com` y `Brochure_Arta.pdf` (2022) dan 18+ años, 100+ conciertos, capacidad de 30 mil asistentes, artistas, dirección, teléfono y las 28 fotos de `/uploads/site/galeria/` (filas `SiteItem` tipo `foto`, en el volumen, no en el repo). Datos publicados directo en la base: `site_ajustes`, `home_modulos`, `home_about`, `home_hero.sub`, `HeroSlide`.
+
+**Shows:** 18 publicados. Se revisaron 540 pósters de arema y 191 de eticket: nuevos con logo son Mijares, Boaventura ×2, Edición Especial, Allison, Santanera y Foreigner. La misma gira puede no ser de Arta en otra ciudad: EWF Mérida, Finde Toluca y Calle 24 Mérida no llevan el logo. Yuri & Lucero tampoco.
+
+**iOS:** `32524a5` no compilaba (`AppRouter.home(for:)` sin `.cartelera`); arreglado en `c7c1a73`, y las capturas de `e7957ad` salieron bien.
+
+**Google Business:** la pestaña de Chrome quedó con nombre y categoría puestos, sin dar «Siguiente»: eso acepta los Términos y le toca a Adam decirlo.
+
+**Verificado:** 98 pruebas de web en local; CI verde en `e7957ad`; producción con capturas, sin imágenes rotas y 0 errores en logs. **No verificado:** dirección y teléfono solo por el brochure de 2022 (Maps muestra ahí una agencia de Mercado Libre); Web Safari falló en `e7957ad` y falta ver cuáles; las skills de diseño no están activas: Adam tiene que dar clic en la tarjeta.
+
+**Sigue:** rediseño del panel (variables en `globals.scss`, menú de noche, Inter) y de las apps.
 
 ## Turno claude-code (2026-11-02): Inicio nuevo, shows reales y cartelera en las apps
 
