@@ -176,6 +176,12 @@ model User {
   /// Etiqueta de la temporada: «Primavera 2027».
   accessLabel     String?
   publicityProofs PublicityProof[] @relation("PublicityProofAuthor")
+  /// Aceptó que la app registre su ubicación de 10:00 a 18:00 (docs/UBICACION.md).
+  locationConsentAt DateTime?
+  /// ok | sin_permiso | apagada: el motivo de un hueco, para dirección.
+  locationState     String?
+  locationStateAt   DateTime?
+  locationPoints    LocationPoint[]
   id               String        @id @default(cuid())
   email            String        @unique
   passwordHash     String
@@ -682,6 +688,24 @@ model TaskAssignment {
   @@index([organizationId, entity])
 }
 
+/// Punto de ubicación que mandó la app, dentro del horario (docs/UBICACION.md). Se borra a los 90 días.
+model LocationPoint {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lat        Float
+  lng        Float
+  accuracyM  Float?
+  /// La hora del teléfono al medir, no la de llegada: un punto puede esperar sin conexión.
+  capturedAt DateTime
+  /// ios | android
+  platform   String?
+  createdAt  DateTime @default(now())
+
+  @@index([userId, capturedAt])
+  @@index([capturedAt])
+}
+
 /// Testigo de publicidad: la prueba de que algo salió (foto del espectacular, nota, post, spot).
 /// Los suben los practicantes y se junta en un archivo final por evento.
 model PublicityProof {
@@ -699,8 +723,9 @@ model PublicityProof {
   link        String?
   /// Cuándo salió, no cuándo se subió.
   publishedAt DateTime?
-  /// Se puede enseñar en la página del show.
+  /// Mandado al sitio: su foto está en la galería de Studio (`SiteItem`), como borrador hasta que se publique.
   isPublic    Boolean   @default(false)
+  siteItemId  String?
   createdById String?
   createdBy   User?     @relation("PublicityProofAuthor", fields: [createdById], references: [id])
   createdAt   DateTime  @default(now())

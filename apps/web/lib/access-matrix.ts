@@ -92,6 +92,14 @@ export const NAV_ITEMS: NavItem[] = [
   },
   // Junta 11-09-2026: «crear un chat interno entre todos y personal».
   { href: '/chat', label: 'Chat', group: 'Equipo', keywords: 'mensajes equipo conversacion personal' },
+  // 01-11-2026: la ubicación del equipo en las apps solo la ven Chacho y Arturo (docs/UBICACION.md).
+  {
+    href: '/ubicacion',
+    label: 'Ubicación',
+    roles: ['dir_general', 'super_admin'],
+    group: 'Equipo',
+    keywords: 'gps mapa recorrido geolocalizacion donde esta',
+  },
 
   // ── Eventos: las cuatro entradas que pidió la junta ────────────────────────
   {

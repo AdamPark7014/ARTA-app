@@ -17,7 +17,7 @@ import { AdvanceStatus, DocType, Prisma } from '@prisma/client';
 import { entityScope } from '../common/entity-scope';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { hasPermission, canAccessEventOps, isDirectionRole, PERMISSIONS, type EntityKey, type RoleKey } from '../common/rbac/roles';
+import { entityHasModule, hasPermission, canAccessEventOps, isDirectionRole, PERMISSIONS, type EntityKey, type RoleKey } from '../common/rbac/roles';
 import { assertSameTenant, tenantIdOf } from '../common/tenant';
 import { assertEventNotClosed } from '../common/event-guards';
 import { formatProgress } from '../common/checklist-progress';
@@ -351,7 +351,8 @@ export class FinanceController {
   @Get('event/:eventId')
   async list(@Req() req: { user: AuthUser }, @Param('eventId') eventId: string) {
     this.assertCorridaView(req.user);
-    await this.assertEventOps(req.user, eventId);
+    const event = await this.assertEventOps(req.user, eventId);
+    if (!entityHasModule(event.entity, 'corrida')) return [];
     return this.prisma.financeRun.findMany({ where: { eventId } });
   }
 

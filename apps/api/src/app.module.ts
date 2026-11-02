@@ -38,6 +38,7 @@ import { ChatModule } from './chat/chat.module';
 import { FinanzasModule } from './finanzas/finanzas.module';
 import { PracticantesModule } from './practicantes/practicantes.module';
 import { TestigosModule } from './testigos/testigos.module';
+import { UbicacionModule } from './ubicacion/ubicacion.module';
 import { RealtimeModule } from './realtime/realtime.module';
 import { DevicesModule } from './devices/devices.module';
 import { SlotsController } from './slots/slots.controller';
@@ -85,6 +86,7 @@ import { DirectionService } from './common/rbac/direction.service';
     FinanzasModule,
     PracticantesModule,
     TestigosModule,
+    UbicacionModule,
   ],
   controllers: [SlotsController, OriginalDownloadController, FileInlineController],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }, DirectionService],

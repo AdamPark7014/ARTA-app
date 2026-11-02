@@ -57,6 +57,11 @@ type AuthUser = {
   fullName?: string;
 };
 
+/** Lo único que puede ir a la galería: una foto ya subida. */
+function isSitePhoto(row: { fileUrl: string | null; mimeType: string | null }) {
+  return !!row.fileUrl && !!row.mimeType?.startsWith('image/');
+}
+
 class TestigoDto {
   @IsOptional() @IsString() @MaxLength(200) title?: string;
   @IsOptional() @IsIn(TESTIGO_MEDIA as unknown as string[]) medium?: string;
@@ -156,7 +161,7 @@ export class TestigosController {
       discard();
       throw new BadRequestException('La liga debe empezar con http:// o https://');
     }
-    return this.prisma.publicityProof.create({
+    const created = await this.prisma.publicityProof.create({
       data: {
         eventId,
         medium: dto.medium || 'OTRO',
@@ -168,11 +173,39 @@ export class TestigosController {
         mimeType: file ? mediaMimeFor(file.originalname) || file.mimetype : null,
         sizeBytes: file?.size ?? null,
         publishedAt: dto.publishedAt ? new Date(dto.publishedAt) : null,
-        isPublic: String(dto.isPublic) === 'true',
+        isPublic: false,
         createdById: req.user.id,
       },
       include: { createdBy: AUTHOR },
     });
+    // Sin foto no hay qué mandar a la galería: se queda como testigo y ya.
+    return dto.isPublic && isSitePhoto(created) ? this.sendToSite(created) : created;
+  }
+
+  /**
+   * «Para el sitio»: la foto entra a la galería de Studio como borrador y ahí se publica o se baja, como
+   * cualquier otra (01-11-2026, «subible a la página web»). Quien la quita de aquí la quita también de allá.
+   */
+  private async sendToSite<T extends { id: string; title: string; note: string | null; fileUrl: string | null }>(row: T) {
+    const item = await this.prisma.siteItem.create({
+      data: {
+        kind: 'foto',
+        title: row.title,
+        caption: row.note,
+        mediaUrl: row.fileUrl as string,
+        mediaType: 'image',
+        active: false,
+      },
+    });
+    return this.prisma.publicityProof.update({
+      where: { id: row.id },
+      data: { isPublic: true, siteItemId: item.id },
+      include: { createdBy: AUTHOR },
+    });
+  }
+
+  private async removeFromSite(siteItemId: string | null) {
+    if (siteItemId) await this.prisma.siteItem.deleteMany({ where: { id: siteItemId } });
   }
 
   @Patch(':id')
@@ -181,6 +214,11 @@ export class TestigosController {
     if (!row) throw new NotFoundException('Testigo no encontrado');
     const event = await this.eventFor(req.user, row.eventId);
     this.assertEdit(req.user, event.entity);
+    if (dto.isPublic === true && !row.isPublic) {
+      if (!isSitePhoto(row)) throw new BadRequestException('A la galería del sitio solo van fotos');
+      await this.sendToSite(row);
+    }
+    if (dto.isPublic === false && row.isPublic) await this.removeFromSite(row.siteItemId);
     return this.prisma.publicityProof.update({
       where: { id },
       data: {
@@ -189,7 +227,7 @@ export class TestigosController {
         ...(dto.note !== undefined ? { note: dto.note.trim() || null } : {}),
         ...(dto.link !== undefined ? { link: dto.link.trim() || null } : {}),
         ...(dto.publishedAt !== undefined ? { publishedAt: dto.publishedAt ? new Date(dto.publishedAt) : null } : {}),
-        ...(dto.isPublic !== undefined ? { isPublic: dto.isPublic } : {}),
+        ...(dto.isPublic === false ? { isPublic: false, siteItemId: null } : {}),
       },
       include: { createdBy: AUTHOR },
     });
@@ -205,6 +243,7 @@ export class TestigosController {
     if (row.createdById !== req.user.id && !isDirectionRole(req.user.roleKey)) {
       throw new ForbiddenException('Solo quien lo subió o dirección lo borra');
     }
+    await this.removeFromSite(row.siteItemId);
     await this.prisma.publicityProof.delete({ where: { id } });
     return { ok: true };
   }

@@ -57,7 +57,7 @@ pestaña Adendum del evento y Finanzas los juntan; se crean y autorizan como cua
 - **Boletera en Resumen:** `Event.boleteraUrl`, solo `https://`, embebida con `sandbox`. Una boletera puede
   negarse a salir embebida y el navegador no avisa, por eso «Abrir aparte» siempre está a la vista.
 - **Testigos de publicidad:** `PublicityProof`, `/testigos/*`. Foto, archivo o liga por medio; `POST
-  /testigos/event/:id/pdf` arma el archivo final. `isPublic` marca lo que puede usar el sitio.
+  /testigos/event/:id/pdf` arma el archivo final. «Mandar al sitio» crea un borrador en la galería de Studio.
 - **Perfiles de practicante:** `/studio/practicantes`, `/practicantes`. Vencen con `User.accessExpiresAt`, que
   revisan el login y `jwt.strategy`: al vencer sale aunque tenga la sesión abierta. La contraseña se enseña una
   vez. Publicar lo da `studio.publish`, por perfil.

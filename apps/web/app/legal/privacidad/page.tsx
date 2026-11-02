@@ -84,9 +84,15 @@ export default function PrivacidadPage() {
             <strong>Actividad de trabajo:</strong> tareas, aprobaciones, anticipos, órdenes de compra, formatos,
             documentos y demás registros que generas como parte de tu trabajo en los eventos de {ORGANIZATION}.
           </li>
+          <li>
+            <strong>Ubicación:</strong> si tu organización la usa, y solo si la aceptas en la aplicación y das el permiso
+            del teléfono, se registra tu ubicación precisa cada media hora, de 10:00 a 18:00 (hora de Puebla). Fuera de
+            ese horario no se registra. La aplicación explica esto antes de pedir el permiso, y puedes retirarlo cuando
+            quieras en los ajustes del teléfono.
+          </li>
         </ul>
         <p className={styles.p}>
-          La aplicación <strong>no recaba tu ubicación</strong>, no contiene publicidad, no usa identificadores
+          La aplicación no contiene publicidad, no usa identificadores
           publicitarios ni herramientas de analítica, y <strong>no vende ni cede datos personales</strong> a terceros.
           No se recaban datos personales sensibles.
         </p>
@@ -98,6 +104,7 @@ export default function PrivacidadPage() {
           <li>Darte acceso a la aplicación y al panel con los permisos de tu rol.</li>
           <li>Coordinar la producción de eventos: tareas, chat del equipo, aprobaciones, anticipos y documentos.</li>
           <li>Enviarte avisos de lo que requiere tu atención.</li>
+          <li>Que la dirección de tu organización coordine al equipo durante montajes y eventos, con tu ubicación en horario de trabajo.</li>
           <li>Mantener la seguridad de la cuenta y el historial de cambios que exige la operación.</li>
           <li>Cumplir obligaciones legales y requerimientos de autoridad competente.</li>
         </ul>
@@ -119,7 +126,8 @@ export default function PrivacidadPage() {
         <p className={styles.p}>
           Toda la comunicación entre la aplicación y el servidor viaja <strong>cifrada</strong> (HTTPS). El acceso a
           la información está limitado al personal autorizado. Los datos se conservan mientras la cuenta esté
-          activa y, después, solo el tiempo que exijan la ley o el contrato con {ORGANIZATION}.
+          activa y, después, solo el tiempo que exijan la ley o el contrato con {ORGANIZATION}. La ubicación solo la ve
+          la dirección general de tu organización, queda registro de quién la consulta y se borra sola a los 90 días.
         </p>
       </section>
 

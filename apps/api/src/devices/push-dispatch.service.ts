@@ -161,6 +161,48 @@ export class PushDispatchService {
   }
 
   /** `badge` sin definir = total de la app; `null` = no tocar el globo. */
+  /**
+   * Pedirle un punto de ubicación al teléfono (docs/UBICACION.md). Android mide con un push de datos sin
+   * avisar; iOS no puede medir con la app cerrada, así que solo si toca recibe un recordatorio visible.
+   */
+  async sendLocationPing(userId: string, iosReminder: boolean): Promise<number> {
+    if (!this.init()) return 0;
+    const rows = await this.prisma.userPushEndpoint.findMany({
+      where: { userId, fcmToken: { not: null }, platform: { in: ['android', 'ios'] } },
+      select: { id: true, fcmToken: true, platform: true },
+    });
+    let sent = 0;
+    for (const row of rows) {
+      const token = row.fcmToken as string;
+      try {
+        if (row.platform === 'android') {
+          await admin.messaging().send({
+            token,
+            data: { type: 'location.ping', kind: 'event', silent: '1' },
+            android: { priority: 'high' },
+          });
+          sent += 1;
+        } else if (iosReminder) {
+          const title = 'Comparte tu ubicación';
+          const body = 'Abre ARTA para registrar tu ubicación de hoy.';
+          await admin.messaging().send({
+            token,
+            notification: { title, body },
+            data: { type: 'location.reminder', kind: 'event', url: '/dashboard' },
+            apns: {
+              headers: { 'apns-priority': '5', 'apns-collapse-id': 'arta-ubicacion' },
+              payload: { aps: { alert: { title, body }, sound: 'default', threadId: 'ubicacion' } },
+            },
+          });
+          sent += 1;
+        }
+      } catch (err) {
+        this.logger.warn(`Push de ubicación falló: ${String(err)}`);
+      }
+    }
+    return sent;
+  }
+
   async sendToUser(userId: string, payload: PushPayload): Promise<number> {
     if (!this.init()) return 0;
     // No molestar: sin alerta al teléfono; los silenciosos (sincronizar leídos) sí salen.

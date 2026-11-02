@@ -2,7 +2,7 @@ import { BadRequestException, Body, Controller, ForbiddenException, Param, Post,
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { assertEventNotClosed } from '../common/event-guards';
-import { canAccessEventOps, PERMISSIONS, hasPermission, type EntityKey, type RoleKey } from '../common/rbac/roles';
+import { canAccessEventOps, entityHasModule, PERMISSIONS, hasPermission, type EntityKey, type RoleKey } from '../common/rbac/roles';
 import { FinanceExcelService } from './finance-excel.service';
 import { ExcelPdfService } from '../uploads/excel-pdf.service';
 import { uploadRoot } from '../uploads/upload-storage';
@@ -36,6 +36,7 @@ export class FinanceExcelController {
     }
     const event = await this.prisma.event.findUnique({ where: { id: eventId } });
     if (!event) throw new ForbiddenException('Evento no encontrado');
+    if (!entityHasModule(event.entity, 'corrida')) throw new ForbiddenException('El Auditorio no lleva corrida');
     if (!canAccessEventOps(req.user.entities as EntityKey[], role as RoleKey, event.entity as EntityKey)) {
       throw new ForbiddenException();
     }

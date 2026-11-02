@@ -423,6 +423,20 @@ export function canCreateTasks(roleKey: string | null | undefined): boolean {
   );
 }
 
+// ─── Ubicación en las apps, de 10:00 a 18:00 (01-11-2026, docs/UBICACION.md) ───────
+
+/** A Chacho y a Arturo no se les mide; `super_admin` es la cuenta de plataforma. */
+export const LOCATION_EXEMPT_ROLES: readonly string[] = [ROLES.DIR_GENERAL, ROLES.SUPER_ADMIN];
+
+export function isLocationTracked(roleKey: string | null | undefined): boolean {
+  return !!roleKey && !LOCATION_EXEMPT_ROLES.includes(roleKey);
+}
+
+/** Es dato sensible: la ven solo ellos, y no se abre con permisos extra. */
+export function canSeeTeamLocation(roleKey: string | null | undefined): boolean {
+  return roleKey === ROLES.DIR_GENERAL || roleKey === ROLES.SUPER_ADMIN;
+}
+
 // ─── Qué ve y qué edita cada quien (01-11-2026, docs/ROLES-Y-PERMISOS.md) ──────
 
 export type AccessUser = {

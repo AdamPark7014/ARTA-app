@@ -51,7 +51,7 @@ type Props = {
 
 /**
  * Testigos de publicidad: la prueba de que cada anuncio salió. Los practicantes los van subiendo y al
- * final se arma un solo archivo por evento. Lo marcado «en el sitio» es lo que puede usar Studio.
+ * final se arma un solo archivo por evento. Lo mandado al sitio cae como borrador en la galería de Studio.
  */
 export function EventWitnessPanel({ eventId, closed, canEdit, flash }: Props) {
   const [rows, setRows] = useState<Witness[] | null>(null);
@@ -129,6 +129,7 @@ export function EventWitnessPanel({ eventId, closed, canEdit, flash }: Props) {
   async function togglePublic(row: Witness) {
     try {
       await api(`/testigos/${row.id}`, { method: 'PATCH', body: JSON.stringify({ isPublic: !row.isPublic }) });
+      flash(row.isPublic ? 'Quitado de la galería del sitio' : 'En la galería de Studio, listo para publicar');
       await load();
     } catch (err) {
       flash(err instanceof Error ? err.message : 'No se pudo cambiar', 'error');
@@ -250,7 +251,7 @@ export function EventWitnessPanel({ eventId, closed, canEdit, flash }: Props) {
                 checked={form.isPublic}
                 onChange={(e) => setForm({ ...form, isPublic: e.target.checked })}
               />
-              <span>Disponible para el sitio web</span>
+              <span>Mandar la foto a la galería del sitio (queda como borrador en Studio)</span>
             </label>
             <div className="sx-actions witness-form__wide">
               <button className="btn btn-sm" type="submit" disabled={busy || !!problem}>
@@ -278,7 +279,7 @@ export function EventWitnessPanel({ eventId, closed, canEdit, flash }: Props) {
         <>
           <div className="tiles">
             <Tile label="Testigos" value={rows.length} sub={`${counts.size} ${counts.size === 1 ? 'medio' : 'medios'}`} />
-            <Tile label="Para el sitio" value={onSite} sub={onSite ? 'Disponibles en Studio' : 'Ninguno marcado'} />
+            <Tile label="Para el sitio" value={onSite} sub={onSite ? 'En la galería de Studio, por publicar' : 'Ninguno mandado'} />
           </div>
           {options.length > 2 ? <Seg options={options} value={filter} onChange={setFilter} label="Filtrar por medio" /> : null}
           <div className="witness-grid">
@@ -298,7 +299,7 @@ export function EventWitnessPanel({ eventId, closed, canEdit, flash }: Props) {
                 <div className="witness-card__body">
                   <div className="witness-card__meta">
                     <Pill tone="draft">{MEDIUM_LABEL[row.medium] ?? row.medium}</Pill>
-                    {row.isPublic ? <Pill tone="ok">En el sitio</Pill> : null}
+                    {row.isPublic ? <Pill tone="ok">En Studio</Pill> : null}
                   </div>
                   <h4 className="witness-card__title">{row.title}</h4>
                   {row.note ? <p className="t-small muted">{row.note}</p> : null}
@@ -318,9 +319,11 @@ export function EventWitnessPanel({ eventId, closed, canEdit, flash }: Props) {
                     ) : null}
                     {editable ? (
                       <>
-                        <button className="btn-quiet" type="button" onClick={() => void togglePublic(row)}>
-                          {row.isPublic ? 'Quitar del sitio' : 'Para el sitio'}
-                        </button>
+                        {row.fileUrl && row.mimeType?.startsWith('image/') ? (
+                          <button className="btn-quiet" type="button" onClick={() => void togglePublic(row)}>
+                            {row.isPublic ? 'Quitar del sitio' : 'Mandar al sitio'}
+                          </button>
+                        ) : null}
                         <button className="btn-quiet" type="button" onClick={() => void remove(row)}>
                           Quitar
                         </button>

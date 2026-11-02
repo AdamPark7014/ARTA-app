@@ -21,4 +21,4 @@ export const ORGANIZATION_SITE = 'https://artaproducciones.com/';
 export const APP_NAME = 'ARTA';
 export const APP_ID = 'com.artaproducciones.ops';
 
-export const LEGAL_UPDATED = '07/10/2026';
+export const LEGAL_UPDATED = '1 de noviembre de 2026';
