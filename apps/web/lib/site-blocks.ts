@@ -391,7 +391,7 @@ export const DEFAULT_CONTENT: Record<string, Record<string, unknown>> = {
     sub: 'Conciertos, giras y espectáculos, de principio a fin.',
     cta: 'Ver la cartelera',
     ctaHref: pageHref('cartelera'),
-    secondaryLabel: 'Traer un show a Puebla',
+    secondaryLabel: 'Producir un show con Arta',
     secondaryHref: pageHref('contacto'),
     showCount: '1',
   },

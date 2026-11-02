@@ -2,6 +2,7 @@ import Link from 'next/link';
 import type { CSSProperties, ReactNode } from 'react';
 import { Galeria } from '@/components/site/Galeria';
 import { Historias } from '@/components/site/Historias';
+import { MotionToggle } from '@/components/site/MotionToggle';
 import { ProcessScroll } from '@/components/site/ProcessScroll';
 import { VenueMap, directionsUrl } from '@/components/site/VenueMap';
 import {
@@ -333,6 +334,7 @@ function Muro({ block, content, shows, past }: { block: LayoutBlock; content: Pu
           </h2>
           {content.lead ? <p className="sa-rowhead__lead">{content.lead}</p> : null}
         </div>
+        {posters.length ? <MotionToggle what="los pósters" /> : null}
       </header>
       {posters.length ? <PosterRow shows={posters} /> : <PreviewEmpty>Aquí corren los pósters de los shows. Súbelos en Cartelera.</PreviewEmpty>}
     </Section>
@@ -426,10 +428,15 @@ function Trayectoria({ block, content, photos, gallery }: { block: LayoutBlock; 
         <h2 id={`${anchorOf(block)}-t`} className="sa-title">
           {content.headline}
         </h2>
-        {list.length && gallery ? (
-          <Link className="sa-arrow" href={pageHref('galeria')}>
-            Ver la galería
-          </Link>
+        {list.length ? (
+          <div className="sa-rowhead__aside">
+            {gallery ? (
+              <Link className="sa-arrow" href={pageHref('galeria')}>
+                Ver la galería
+              </Link>
+            ) : null}
+            <MotionToggle what="las fotos" />
+          </div>
         ) : null}
       </header>
       {list.length ? (
@@ -439,7 +446,7 @@ function Trayectoria({ block, content, photos, gallery }: { block: LayoutBlock; 
               list.map((photo) => (
                 <figure key={`${copy}-${photo.id}`} aria-hidden={copy ? true : undefined}>
                   {/* eslint-disable-next-line @next/next/no-img-element -- foto dinámica de Studio */}
-                  <img src={photo.mediaUrl} alt={copy ? '' : photo.title || ''} loading="lazy" decoding="async" />
+                  <img src={photo.mediaUrl} alt="" loading="lazy" decoding="async" />
                   {photo.title ? <figcaption>{photo.title}</figcaption> : null}
                 </figure>
               )),

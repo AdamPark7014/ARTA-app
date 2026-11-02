@@ -5,7 +5,11 @@ Solo hay datos que ya son públicos. Las constancias y los comprobantes no van e
 
 ## Dónde va el alta
 
-Adam aceptó los Términos el 02-11-2026; la cuenta es la suya. Ya capturado: nombre, categoría principal, negocio sin dirección pública, las cuatro zonas de servicio, teléfono y sitio web. Falta la dirección privada para verificar, la verificación, la descripción, los servicios, las fotos y las categorías adicionales. Antes de seguir, revisar en qué paso quedó y **no crear otro perfil**.
+**Creado el 02-11-2026** en la cuenta de Adam, id `17016989438206637428`, y **sin verificar**: nadie lo ve hasta que se verifique.
+
+- **Hecho:** nombre, categoría principal y una adicional (Agencia de espectáculos), descripción, teléfono, sitio, Instagram, Facebook, cuatro zonas de servicio, sin dirección pública, 10 servicios, logo, portada y 10 fotos.
+- **Falta:** verificar (`business.google.com/verify/l/17016989438206637428`), que pide primero la dirección postal, y TikTok. Las publicaciones se pueden agregar después de verificar.
+- **Para editar:** `https://www.google.com/local/business/4135616651570994165/editprofile/info?hl=es`; ahí los clics y las capturas sí funcionan, a diferencia del recuadro dentro de la búsqueda. Fotos: `.../promote/photos/add?hl=es`, de una en una: al subir 10 juntas Google rechazó una.
 
 ## Lo que falta confirmar
 

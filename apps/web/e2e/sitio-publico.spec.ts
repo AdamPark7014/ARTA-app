@@ -92,6 +92,12 @@ test.describe('Sitio público · Inicio', () => {
     await expect(track.locator('.sa-track__names')).toContainText('Luis Miguel');
     // Corre sin saltos porque va repetida; quien usa lector de pantalla la oye una vez.
     await expect(track.locator('figure[aria-hidden="true"]').first()).toBeAttached();
+
+    // Lo que corre solo se puede pausar sin ratón (WCAG 2.2.2).
+    await track.getByRole('button', { name: 'Pausar las fotos' }).click();
+    await expect(track).toHaveClass(/is-paused/);
+    await track.getByRole('button', { name: 'Reproducir las fotos' }).click();
+    await expect(track).not.toHaveClass(/is-paused/);
   });
 
   test('el muro corre con los pósters de los shows y lleva a cada uno', async ({ page }) => {
@@ -318,7 +324,7 @@ test.describe('Sitio público · Inicio', () => {
     await expect(page.locator('#cartelera')).toHaveCount(0);
     await expect(page.locator('.sa-ribbon')).toHaveCount(0);
     await expect(page.locator('.sa-hero').getByRole('link', { name: 'Ver la cartelera' })).toHaveCount(0);
-    await expect(page.locator('.sa-hero').getByRole('link', { name: 'Traer un show a Puebla' })).toHaveAttribute('href', '/p/arta/contacto');
+    await expect(page.locator('.sa-hero').getByRole('link', { name: 'Producir un show con Arta' })).toHaveAttribute('href', '/p/arta/contacto');
     await expect(page.locator('.sa-hero').getByRole('link', { name: 'Lo que hacemos' })).toHaveAttribute('href', '/p/arta/servicios');
   });
 
@@ -545,7 +551,7 @@ test.describe('Sitio público · páginas', () => {
     await expect(page.locator('h1')).toHaveText('La experiencia del Show');
     await expect(page.locator('.sa-ribbon')).toHaveCount(0);
     await expect(page.locator('.sa-hero').getByRole('link', { name: 'Ver la cartelera' })).toHaveCount(0);
-    await expect(page.locator('.sa-hero').getByRole('link', { name: 'Traer un show a Puebla' })).toBeVisible();
+    await expect(page.locator('.sa-hero').getByRole('link', { name: 'Producir un show con Arta' })).toBeVisible();
     await expect(page.locator('a[href^="/p/arta/cartelera"]')).toHaveCount(0);
     await expect(page.locator('a[href^="/p/arta/servicios"]')).toHaveCount(0);
     await expect(page.getByRole('navigation', { name: 'Servicios' })).toHaveCount(0);

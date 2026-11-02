@@ -36,11 +36,12 @@ Adam: «génerale un rediseño de 360 grados», «se debe mostrar como la empres
 - El último commit cambia prueba y una regla de CSS sin efecto visual: no se desplegó, producción sigue en `cd7aed1`.
 
 **Pendiente de Adam:**
-- **Google Business:** Adam aceptó los Términos el 02-11 y el alta va a medias en la cuenta ad.pozo.ont@gmail.com. Ya capturado: Arta Producciones, Empresa de organización de eventos, sin dirección pública, zonas Puebla, Querétaro, Toluca y Boca del Río, teléfono +52 222 583 0062 y artaproducciones.com. Chrome se desconectó justo al dar «Siguiente» en contacto: al volver, revisar en qué paso quedó y no crear otro perfil. Falta dirección privada, verificación (de Arta), descripción, servicios y fotos.
-- **Skills de diseño:** no están activas. Se activan con un clic en la tarjeta; hasta entonces el rediseño usó el criterio propio.
+- **Google Business:** perfil creado y completo, id `17016989438206637428`, sin verificar. La verificación pide la dirección postal: Adam tiene que confirmarla (Calle Tlaxco 720 u otra). El código o el video le tocan a Arta. Detalle en `docs/GOOGLE-BUSINESS.md`.
 - Fotos de la oficina y del equipo. Confirmar dirección, teléfono y que `contacto@artaproducciones.com` recibe.
 
-**Sigue:** las pantallas del panel una por una, si hace falta más que el lenguaje común: tablero de Inicio, evento y formatos son los candidatos.
+**Skills de diseño:** activas desde esta tarde. Se pasaron crítica, accesibilidad y sistema de diseño: hallazgos en `docs/diseno/AUDITORIA-2026-11.md`, los de teléfono, movimiento y lector de pantalla ya corregidos.
+
+**Sigue:** variantes chicas de pósters y fotos (la portada baja 2.5 a 4.5 MB); juntar las capas de estilos, según la auditoría; y las pantallas del panel una por una si hace falta más que el lenguaje común.
 
 ## Turno claude-code (2026-11-02): Inicio nuevo, shows reales y cartelera en las apps
 

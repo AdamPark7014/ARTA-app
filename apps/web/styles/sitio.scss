@@ -788,6 +788,33 @@ body.sa-lock {
   color: var(--on-ink-2);
 }
 
+.sa-rowhead__aside {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+/* Pausa lo que corre solo. */
+.sa-motion {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  color: inherit;
+  box-shadow: inset 0 0 0 1px var(--line-ink);
+  transition: background 180ms var(--ease);
+}
+
+.sa-motion:hover {
+  background: rgba(247, 246, 243, 0.1);
+}
+
+.sa-sec.is-paused .sa-wall__track {
+  animation-play-state: paused;
+}
+
 /* La cartelera sigue a la portada sobre el mismo negro: no hace falta aire de más. */
 .sa-bill {
   padding-top: clamp(32px, 4vw, 64px);
@@ -1321,6 +1348,11 @@ body.sa-lock {
 /* Invitación a escribir: un escenario a oscuras con sus reflectores, y el texto al centro. */
 .sa-band .sa-lights {
   opacity: 0.72;
+}
+
+/* Solo adorna: quieta no distrae de lo que hay que leer. */
+.sa-band .sa-lights i {
+  animation: none;
 }
 
 .sa-band {
@@ -3681,11 +3713,40 @@ body.sa-lock {
     border-radius: 14px;
   }
 
+  /* Lo que se toca con el dedo mide al menos 44 px (WCAG 2.5.5). */
+  .sa-btn--small,
+  .sa-arrow,
+  .sa-link {
+    min-height: 44px;
+  }
+
+  .sa-footer__col {
+    gap: 0;
+  }
+
+  .sa-footer__col a,
+  .sa-place__ways a,
+  .sa-contact__ways a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+  }
+
+  .sa-nav__brand {
+    padding-block: 6px;
+  }
+
+  .sa-hero__pause {
+    width: 44px;
+    height: 44px;
+  }
+
   /* En dos columnas no cabe: toda la tarjeta ya lleva al show. Sigue para quien usa teclado o lector de pantalla. */
   .sa-tile .sa-arrow {
     position: absolute;
     width: 1px;
     height: 1px;
+    min-height: 0;
     overflow: hidden;
     clip-path: inset(50%);
     white-space: nowrap;
