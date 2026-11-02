@@ -30,7 +30,7 @@
   --display: var(--font-sitio-display), 'Inter Tight', -apple-system, 'Segoe UI', system-ui, sans-serif;
   --body: var(--font-sitio-text), 'Inter', -apple-system, 'Segoe UI', system-ui, sans-serif;
   --gutter: clamp(20px, 4vw, 64px);
-  --sec-y: clamp(84px, 11vw, 168px);
+  --sec-y: clamp(72px, 8.5vw, 128px);
   --nav-h: 52px;
   --radius: 20px;
   --radius-lg: 28px;
@@ -232,17 +232,17 @@ body.sa-lock {
 .sa-title {
   font-family: var(--display);
   font-weight: 600;
-  font-size: clamp(2.5rem, 6vw, 5.5rem);
-  line-height: 1.05;
-  letter-spacing: -0.018em;
+  font-size: clamp(2.25rem, 4.6vw, 4.25rem);
+  line-height: 1.04;
+  letter-spacing: -0.026em;
   text-wrap: balance;
 }
 
 .sa-title--xl {
   font-weight: 600;
-  font-size: clamp(2.75rem, 7vw, 6.5rem);
-  line-height: 1.02;
-  letter-spacing: -0.018em;
+  font-size: clamp(2.75rem, 5.8vw, 5.25rem);
+  line-height: 1;
+  letter-spacing: -0.03em;
 }
 
 .sa-lead {
@@ -333,12 +333,17 @@ body.sa-lock {
   color: var(--on-ink);
 }
 
-.sa-nav.is-light {
-  color: var(--text);
-  background: rgba(247, 246, 243, 0.76);
+/* El menú abierto llena la pantalla: un fondo con `backdrop-filter` lo encerraría en la barra. */
+.sa-nav.is-solid {
+  background: rgba(12, 12, 13, 0.94);
   -webkit-backdrop-filter: saturate(1.8) blur(20px);
   backdrop-filter: saturate(1.8) blur(20px);
-  box-shadow: 0 1px 0 var(--line);
+  box-shadow: 0 1px 0 rgba(247, 246, 243, 0.08);
+}
+
+.sa-nav .sa-btn {
+  background: var(--paper);
+  color: var(--ink);
 }
 
 .sa-nav__brand {
@@ -444,49 +449,82 @@ body.sa-lock {
   color: var(--on-ink);
 }
 
-/* ─── Aviso del próximo show ─────────────────────────────────────────────── */
-
-.sa-ribbon {
-  padding: 11px var(--gutter);
-  background: var(--paper-2);
-  color: var(--text-2);
-  font-size: 13.5px;
-  line-height: 1.35;
-  text-align: center;
-}
-
-.sa-ribbon a {
-  color: var(--text);
-  font-weight: 500;
-  white-space: nowrap;
-}
-
-/* ─── Portada: el logo es una ventana al show; al bajar se abre hasta llenar la pantalla ── */
+/* ─── Portada: qué es Arta y sus shows, los pósters de verdad corriendo despacio ── */
 
 .sa-hero {
   position: relative;
-}
-
-.sa-hero.is-live {
-  height: calc(100svh + 120vh);
-}
-
-.sa-hero__pin {
-  position: sticky;
-  top: var(--nav-h);
-  height: calc(100svh - var(--nav-h));
-  min-height: 500px;
+  isolation: isolate;
   overflow: hidden;
   background: var(--ink);
+  color: var(--on-ink);
 }
 
-/* Empieza un poco más cerca y más arriba: el escenario cae dentro de las letras. */
+/* El color del próximo show, como una luz detrás del titular. */
+.sa-hero__glow {
+  position: absolute;
+  inset: -30% auto -30% -16%;
+  z-index: -3;
+  width: 74%;
+  background-position: center;
+  background-size: cover;
+  filter: blur(110px) saturate(1.5) brightness(0.62);
+  opacity: 0.6;
+}
+
+.sa-hero__wall {
+  position: absolute;
+  top: -22%;
+  right: -4%;
+  bottom: -22%;
+  z-index: -2;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: clamp(12px, 1.25vw, 20px);
+  width: min(60%, 1040px);
+  transform: rotate(7deg);
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 24%);
+  mask-image: linear-gradient(90deg, transparent, #000 24%);
+}
+
+.sa-hero__reel {
+  animation: sa-reel 90s linear infinite;
+  will-change: transform;
+}
+
+.sa-hero__col.is-reverse .sa-hero__reel {
+  animation-direction: reverse;
+}
+
+.sa-hero.is-paused .sa-hero__reel {
+  animation-play-state: paused;
+}
+
+.sa-hero__reel a {
+  display: block;
+  margin-bottom: clamp(12px, 1.25vw, 20px);
+  overflow: hidden;
+  border-radius: 14px;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
+}
+
+.sa-hero__reel img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+@keyframes sa-reel {
+  to {
+    transform: translateY(-50%);
+  }
+}
+
 .sa-hero__photos {
   position: absolute;
-  inset: 0;
-  transform: translateY(-5%) scale(1.14);
-  transform-origin: 50% 56%;
-  will-change: transform;
+  inset: 0 0 0 34%;
+  z-index: -2;
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 34%);
+  mask-image: linear-gradient(90deg, transparent, #000 34%);
 }
 
 .sa-hero__photo {
@@ -504,90 +542,98 @@ body.sa-lock {
   opacity: 1;
 }
 
-.sa-hero__shade {
+/* Las orillas se funden con la página: el muro no termina en un corte. */
+.sa-hero::after {
+  content: '';
   position: absolute;
   inset: 0;
-  background: linear-gradient(180deg, rgba(12, 12, 13, 0) 55%, rgba(12, 12, 13, 0.55));
-  opacity: var(--closing, 0);
+  z-index: -1;
+  background: linear-gradient(180deg, rgba(12, 12, 13, 0.5), rgba(12, 12, 13, 0) 16%, rgba(12, 12, 13, 0) 76%, var(--ink));
   pointer-events: none;
 }
 
-.sa-hero__open {
-  position: absolute;
-  inset: 0;
+.sa-hero__inner {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: clamp(20px, 3.4vh, 36px);
-  padding: 0 var(--gutter) clamp(24px, 5vh, 56px);
-}
-
-.sa-hero.is-open .sa-hero__open {
-  visibility: hidden;
-}
-
-.sa-hero__mark {
-  position: relative;
-  flex: 0 0 auto;
-  width: min(66vw, calc((100svh - var(--nav-h)) * 1.32));
-  aspect-ratio: 1200 / 466;
-}
-
-.sa-hero__window {
-  position: absolute;
-  inset: 0;
-  display: block;
-  width: 100%;
-  height: 100%;
-  overflow: visible;
-  fill: var(--paper);
-  transform-origin: 57.67% 42.06%;
+  min-height: max(560px, calc(100svh - var(--nav-h)));
+  padding: clamp(24px, 4vh, 48px) var(--gutter) clamp(24px, 4vh, 44px);
 }
 
 .sa-hero__copy {
-  position: relative;
-  text-align: center;
+  max-width: min(48%, 760px);
+  margin-block: auto;
+  padding-block: clamp(16px, 3vh, 32px);
+}
+
+.sa-hero__brand {
+  margin-bottom: clamp(12px, 2vh, 20px);
+  font-size: clamp(15px, 1.2vw, 18px);
+  font-weight: 500;
+  color: var(--on-ink-2);
 }
 
 .sa-hero__title {
   font-family: var(--display);
   font-weight: 600;
-  font-size: clamp(2.35rem, 5vw, 4.9rem);
-  line-height: 1.02;
-  letter-spacing: -0.02em;
+  font-size: clamp(3rem, 6.4vw, 6.6rem);
+  line-height: 0.98;
+  letter-spacing: -0.032em;
   text-wrap: balance;
 }
 
 .sa-hero__sub {
-  margin: clamp(8px, 1.4vh, 14px) auto clamp(16px, 2.6vh, 26px);
-  font-family: var(--display);
-  font-size: clamp(1.15rem, 1.9vw, 1.7rem);
-  font-weight: 500;
-  line-height: 1.18;
-  letter-spacing: -0.008em;
-  color: var(--text-2);
+  margin-top: clamp(16px, 2.6vh, 28px);
+  font-size: clamp(1.1rem, 1.55vw, 1.45rem);
+  line-height: 1.36;
+  letter-spacing: -0.012em;
+  color: var(--on-ink-2);
   text-wrap: balance;
 }
 
-.sa-hero__tag {
-  position: absolute;
-  inset: auto 0 clamp(28px, 6vh, 64px);
-  font-family: var(--display);
-  font-size: clamp(1.4rem, 3vw, 2.6rem);
-  font-weight: 600;
-  letter-spacing: -0.012em;
-  text-align: center;
-  color: #ffffff;
-  text-shadow: 0 2px 30px rgba(0, 0, 0, 0.5);
-  opacity: var(--closing, 0);
-  pointer-events: none;
+.sa-hero .sa-cta {
+  justify-content: flex-start;
+  margin-top: clamp(24px, 3.8vh, 40px);
+}
+
+.sa-hero .sa-btn {
+  background: var(--paper);
+  color: var(--ink);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .sa-hero__copy > *,
+  .sa-ribbon {
+    animation: sa-rise 900ms var(--ease) both;
+  }
+
+  .sa-hero__copy > :nth-child(2) {
+    animation-delay: 70ms;
+  }
+
+  .sa-hero__copy > :nth-child(3) {
+    animation-delay: 140ms;
+  }
+
+  .sa-hero__copy > :nth-child(4) {
+    animation-delay: 210ms;
+  }
+
+  .sa-ribbon {
+    animation-delay: 300ms;
+  }
+}
+
+@keyframes sa-rise {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
 }
 
 .sa-hero__draft {
   position: absolute;
   top: 18px;
-  left: 18px;
+  right: 18px;
 }
 
 .sa-hero__pause {
@@ -610,119 +656,187 @@ body.sa-lock {
   background: rgba(40, 40, 44, 0.8);
 }
 
-/* ─── Quiénes somos: a tamaño de lectura, no un cartel ───────────────────── */
+/* El próximo show, a la mano. */
+.sa-ribbon {
+  max-width: min(100%, 540px);
+}
+
+.sa-ribbon a {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 18px 10px 10px;
+  border-radius: 18px;
+  background: rgba(30, 30, 34, 0.72);
+  box-shadow: inset 0 0 0 1px rgba(247, 246, 243, 0.12);
+  -webkit-backdrop-filter: blur(26px) saturate(1.4);
+  backdrop-filter: blur(26px) saturate(1.4);
+  transition: background 220ms var(--ease);
+}
+
+.sa-ribbon a:hover {
+  background: rgba(46, 46, 52, 0.8);
+}
+
+.sa-ribbon img {
+  flex: 0 0 auto;
+  width: 54px;
+  height: 68px;
+  object-fit: cover;
+  border-radius: 9px;
+}
+
+.sa-ribbon__text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.sa-ribbon small {
+  display: block;
+  font-size: 13px;
+  line-height: 1.35;
+  color: var(--on-ink-2);
+}
+
+.sa-ribbon strong {
+  display: block;
+  font-family: var(--display);
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.012em;
+}
+
+.sa-ribbon__go {
+  flex: 0 0 auto;
+  width: 9px;
+  height: 9px;
+  margin-right: 4px;
+  border-top: 1.8px solid currentColor;
+  border-right: 1.8px solid currentColor;
+  transform: rotate(45deg);
+  transition: transform 260ms var(--ease);
+}
+
+.sa-ribbon a:hover .sa-ribbon__go {
+  transform: rotate(45deg) translate(2px, -2px);
+}
+
+/* ─── Quiénes somos: a tamaño de lectura, con los datos de la temporada ──── */
 
 .sa-say {
-  padding-block: clamp(64px, 11vh, 120px);
-}
-
-.sa-say__copy {
-  max-width: 720px;
-  margin-inline: auto;
-  text-align: center;
-}
-
-.sa-say__copy .sa-eyebrow {
-  margin-bottom: 12px;
-}
-
-.sa-say__title {
-  margin: 0 0 16px;
-  font-family: var(--display);
-  font-weight: 600;
-  font-size: clamp(1.75rem, 3.2vw, 2.75rem);
-  line-height: 1.1;
-  letter-spacing: -0.02em;
+  display: grid;
+  grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+  gap: clamp(40px, 7vw, 120px);
+  align-items: end;
 }
 
 .sa-say__text {
-  margin: 0 0 22px;
+  max-width: 34em;
+  margin: clamp(16px, 2vw, 24px) 0 clamp(18px, 2vw, 26px);
   font-size: clamp(1.06rem, 1.5vw, 1.3rem);
   line-height: 1.5;
   color: var(--text-2);
+  text-wrap: pretty;
 }
 
-/* ─── Mosaicos: titular al centro y tarjetas casi a todo lo ancho ────────── */
-
-.sa-sec--mosaic {
-  padding-inline: 12px;
+.sa-say__stats > div {
+  display: flex;
+  align-items: baseline;
+  gap: 18px;
+  padding-block: clamp(14px, 1.6vw, 22px);
+  border-top: 1px solid var(--line-strong);
 }
 
-.sa-headc {
-  padding-inline: var(--gutter);
-  margin-bottom: clamp(32px, 4.4vw, 60px);
-  text-align: center;
-}
-
-.sa-headc__lead {
-  max-width: 30em;
-  margin: clamp(14px, 1.6vw, 22px) auto 0;
+.sa-say__stats dd {
+  order: -1;
+  min-width: 1.5em;
   font-family: var(--display);
-  font-size: clamp(1.2rem, 2vw, 1.75rem);
-  font-weight: 500;
-  line-height: 1.2;
-  letter-spacing: -0.008em;
+  font-weight: 600;
+  font-size: clamp(2.6rem, 4.6vw, 4.25rem);
+  line-height: 1;
+  letter-spacing: -0.034em;
+}
+
+.sa-say__stats dt {
+  font-size: clamp(15px, 1.2vw, 17px);
   color: var(--text-2);
-  text-wrap: balance;
 }
 
-.sa-headc .sa-arrow {
-  margin-top: clamp(16px, 1.8vw, 24px);
+/* ─── Encabezado de cada sección: el titular a un lado, a dónde sigue al otro ── */
+
+.sa-rowhead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 14px 40px;
+  margin-bottom: clamp(28px, 3.6vw, 56px);
 }
 
-.sa-more {
-  margin-top: clamp(24px, 3vw, 36px);
-  text-align: center;
+.sa-rowhead__lead {
+  max-width: 34em;
+  margin-top: clamp(10px, 1.2vw, 16px);
+  font-size: clamp(1.06rem, 1.45vw, 1.28rem);
+  line-height: 1.45;
+  color: var(--text-2);
+  text-wrap: pretty;
 }
 
-/* Un show: su arte le da el color a la tarjeta y se asoma abajo. */
+.sa-sec--tinta .sa-rowhead__lead {
+  color: var(--on-ink-2);
+}
+
+/* La cartelera sigue a la portada sobre el mismo negro: no hace falta aire de más. */
+.sa-bill {
+  padding-top: clamp(32px, 4vw, 64px);
+}
+
+/* Un show: su póster entero, sin recortar, sobre su propio color. */
 .sa-mosaic {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: clamp(36px, 3.8vw, 56px) clamp(14px, 1.6vw, 24px);
 }
 
 .sa-tile {
-  position: relative;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  min-height: clamp(400px, 32vw, 480px);
-  padding: clamp(40px, 4.4vw, 64px) 24px;
-  border-radius: 26px;
+  min-width: 0;
+}
+
+.sa-tile__media {
+  position: relative;
+  display: block;
+  aspect-ratio: 4 / 5;
   overflow: hidden;
   isolation: isolate;
-  text-align: center;
+  border-radius: 18px;
+  background: var(--ink-2);
+  transition:
+    transform 520ms var(--ease),
+    box-shadow 520ms var(--ease);
 }
 
-.sa-tile--wide {
-  grid-column: 1 / -1;
-  min-height: clamp(440px, 36vw, 560px);
+.sa-tile:hover .sa-tile__media {
+  transform: translateY(-6px);
+  box-shadow: 0 26px 60px rgba(0, 0, 0, 0.55);
 }
 
-.sa-tile.has-poster {
-  justify-content: flex-start;
-  min-height: clamp(520px, 44vw, 640px);
-}
-
-.sa-tile--wide.has-poster {
-  justify-content: center;
-}
-
-.sa-tile {
-  background: var(--ink);
-  color: var(--on-ink);
-}
-
-/* Con póster, su color llena la tarjeta. */
 .sa-tile__glow {
   position: absolute;
-  inset: -14%;
+  inset: -12%;
   z-index: -1;
   background-position: center;
   background-size: cover;
-  filter: blur(46px) saturate(1.4) brightness(0.5);
+  filter: blur(26px) saturate(1.3) brightness(0.62);
+}
+
+.sa-tile__poster {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }
 
 /* Sin póster, un escenario a oscuras con sus reflectores. */
@@ -763,50 +877,54 @@ body.sa-lock {
 }
 
 .sa-tile__copy {
-  max-width: 100%;
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  align-items: flex-start;
+  padding-top: clamp(12px, 1.2vw, 18px);
 }
 
 .sa-tile__when {
-  margin-bottom: 10px;
-  font-size: clamp(15px, 1.2vw, 17px);
+  font-size: 14.5px;
   font-weight: 500;
-  opacity: 0.92;
+  color: var(--on-ink-2);
+}
+
+.sa-tile__soon {
+  color: #ffb058;
 }
 
 .sa-tile h3 {
+  margin-top: 4px;
   font-family: var(--display);
   font-weight: 600;
-  font-size: clamp(2.4rem, 5vw, 4.6rem);
-  line-height: 1;
+  font-size: clamp(1.2rem, 1.65vw, 1.55rem);
+  line-height: 1.14;
   letter-spacing: -0.018em;
   text-wrap: balance;
 }
 
-.sa-tile--wide h3 {
-  font-size: clamp(2.9rem, 7.2vw, 6.9rem);
-  letter-spacing: -0.024em;
-}
-
 .sa-tile.is-cancelled h3 {
   text-decoration: line-through;
-  text-decoration-thickness: 3px;
+  text-decoration-thickness: 2px;
 }
 
 .sa-tile__sub {
-  margin: 12px 0 20px;
-  font-family: var(--display);
-  font-size: clamp(1.1rem, 1.7vw, 1.5rem);
-  font-weight: 500;
-  letter-spacing: -0.008em;
-  opacity: 0.94;
+  margin-top: 6px;
+  font-size: 14.5px;
+  line-height: 1.35;
+  color: var(--on-ink-2);
 }
 
 .sa-tile .sa-cta {
-  gap: 10px 22px;
+  justify-content: flex-start;
+  gap: 8px 16px;
+  margin-top: auto;
+  padding-top: 14px;
 }
 
 .sa-tile .sa-arrow {
-  font-size: 16px;
+  font-size: 14.5px;
 }
 
 .sa-tile .sa-btn {
@@ -819,67 +937,23 @@ body.sa-lock {
   box-shadow: inset 0 0 0 1px var(--line-ink);
 }
 
-.sa-tile__poster {
-  width: min(58%, 280px);
-  margin-top: clamp(24px, 3vw, 36px);
-  margin-bottom: calc(-1 * clamp(96px, 10vw, 150px));
-  border-radius: 12px;
-  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.5);
-}
-
-.sa-tile--wide.has-poster {
-  flex-direction: row;
-  gap: clamp(36px, 6vw, 96px);
-  text-align: left;
-}
-
-.sa-tile--wide.has-poster .sa-cta {
-  justify-content: flex-start;
-}
-
-.sa-tile--wide.has-poster .sa-tile__copy {
-  flex: 0 1 58%;
-}
-
-.sa-tile--wide.has-poster .sa-tile__poster {
-  flex: 0 0 auto;
-  width: min(28%, 340px);
-  margin: 0;
-}
-
-/* Servicios: se turnan foto y texto grande. */
+/* Servicios: cuatro tarjetas altas iguales, con su foto. */
 .sa-bento {
   display: grid;
-  grid-template-columns: repeat(12, minmax(0, 1fr));
-  gap: 14px;
-  padding-inline: max(0px, calc(var(--gutter) - 36px));
-}
-
-.sa-bt--big {
-  grid-column: span 7;
-}
-
-.sa-bt--small {
-  grid-column: span 5;
-}
-
-.sa-bt--full {
-  grid-column: 1 / -1;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: clamp(10px, 1vw, 16px);
 }
 
 .sa-bt > a {
   position: relative;
   display: flex;
   flex-direction: column;
-  height: clamp(480px, 44vw, 620px);
-  padding: clamp(26px, 3vw, 40px);
-  border-radius: 30px;
+  justify-content: flex-end;
+  height: clamp(420px, 37vw, 560px);
+  padding: clamp(20px, 2vw, 28px);
   overflow: hidden;
   isolation: isolate;
-  background: var(--white);
-}
-
-.sa-bt--photo > a {
+  border-radius: 22px;
   background: var(--ink);
   color: var(--on-ink);
 }
@@ -900,95 +974,47 @@ body.sa-lock {
 }
 
 .sa-bt > a:hover .sa-bt__media img {
-  transform: scale(1.04);
+  transform: scale(1.05);
 }
 
 .sa-bt__media::after {
   content: '';
   position: absolute;
   inset: 0;
-  background: linear-gradient(180deg, rgba(12, 12, 13, 0.62), rgba(12, 12, 13, 0) 46%, rgba(12, 12, 13, 0) 62%, rgba(12, 12, 13, 0.72));
+  background: linear-gradient(180deg, rgba(12, 12, 13, 0) 28%, rgba(12, 12, 13, 0.88) 82%);
 }
 
 .sa-bt__label {
-  margin-bottom: 10px;
-  font-size: clamp(15px, 1.2vw, 17px);
-  font-weight: 600;
-  opacity: 0.86;
+  margin-bottom: 8px;
+  font-size: 14.5px;
+  font-weight: 500;
+  color: var(--on-ink-2);
 }
 
 .sa-bt h3 {
   font-family: var(--display);
   font-weight: 600;
-  font-size: clamp(1.9rem, 3.5vw, 3.4rem);
-  line-height: 1.06;
+  font-size: clamp(1.4rem, 1.9vw, 1.85rem);
+  line-height: 1.12;
   letter-spacing: -0.018em;
   text-wrap: balance;
 }
 
-.sa-bt h3.sa-bt__stack {
-  font-size: clamp(2.6rem, 5.3vw, 5.1rem);
-  line-height: 1.04;
-  letter-spacing: -0.018em;
-}
-
-.sa-bt__stack span {
-  display: block;
-}
-
 .sa-bt__foot {
-  margin-top: auto;
-  padding-right: 52px;
-  max-width: 28em;
-  color: var(--text-2);
+  margin-top: 10px;
+  font-size: 15px;
+  line-height: 1.4;
+  color: var(--on-ink-2);
 }
 
-.sa-bt--photo .sa-bt__foot {
-  color: rgba(247, 246, 243, 0.92);
-}
-
-.sa-bt__plus {
-  position: absolute;
-  right: clamp(18px, 2vw, 26px);
-  bottom: clamp(18px, 2vw, 26px);
-  display: grid;
-  place-items: center;
-  width: 38px;
-  height: 38px;
-  border-radius: 50%;
-  background: rgba(127, 127, 127, 0.26);
-  -webkit-backdrop-filter: blur(14px);
-  backdrop-filter: blur(14px);
-  transition: transform 360ms var(--ease);
-}
-
-.sa-bt > a:hover .sa-bt__plus {
-  transform: scale(1.12);
-}
-
-.sa-bt__plus::before,
-.sa-bt__plus::after {
-  content: '';
-  position: absolute;
-  border-radius: 2px;
-  background: currentColor;
-}
-
-.sa-bt__plus::before {
-  width: 14px;
-  height: 2px;
-}
-
-.sa-bt__plus::after {
-  width: 2px;
-  height: 14px;
-}
-
-
-/* Muro de pósters: dos filas que corren en sentidos contrarios. */
+/* Muro de pósters: lo que ya pasó, corriendo. */
 .sa-wall {
   padding-inline: 0;
   overflow: hidden;
+}
+
+.sa-wall .sa-rowhead {
+  padding-inline: var(--gutter);
 }
 
 .sa-wall__row {
@@ -1035,48 +1061,19 @@ body.sa-lock {
   }
 }
 
-.sa-wall__stats {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 24px clamp(40px, 7vw, 110px);
-  margin-top: clamp(40px, 5vw, 72px);
-  padding-inline: var(--gutter);
-  text-align: center;
-}
-
-.sa-wall__stats dd {
-  font-family: var(--display);
-  font-weight: 600;
-  font-size: clamp(3rem, 6vw, 5.5rem);
-  line-height: 1;
-  letter-spacing: -0.024em;
-}
-
-.sa-wall__stats dt {
-  margin-top: 8px;
-  font-size: 15px;
-  color: var(--on-ink-2);
-}
-
-.sa-wall .sa-headc__lead {
-  color: var(--on-ink-2);
-}
-
 /* Recintos */
 .sa-venues ul {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 14px;
-  padding-inline: max(0px, calc(var(--gutter) - 36px));
+  gap: clamp(10px, 1vw, 16px);
 }
 
 .sa-venues li {
   display: flex;
   flex-direction: column;
-  min-height: 320px;
-  padding: clamp(24px, 2.6vw, 34px);
-  border-radius: 26px;
+  min-height: 300px;
+  padding: clamp(22px, 2.2vw, 30px);
+  border-radius: 22px;
   background: var(--white);
 }
 
@@ -1266,26 +1263,18 @@ body.sa-lock {
   text-align: right;
 }
 
-/* Invitación a escribir: la foto a todo lo ancho, el texto al centro. */
+/* Invitación a escribir: un escenario a oscuras con sus reflectores, y el texto al centro. */
+.sa-band .sa-lights {
+  opacity: 0.72;
+}
+
 .sa-band {
   display: grid;
   place-items: center;
-  min-height: clamp(540px, 84vh, 820px);
-  margin: 0 12px;
-  border-radius: 30px;
+  min-height: clamp(460px, 72vh, 720px);
   overflow: hidden;
   isolation: isolate;
   text-align: center;
-}
-
-.sa-band__img {
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  filter: var(--photo) brightness(0.4);
 }
 
 .sa-band__copy {
@@ -1305,9 +1294,24 @@ body.sa-lock {
   text-wrap: balance;
 }
 
-/* Cabecera de cada página: título sobre papel y su foto debajo. */
+/* Cabecera de cada página: de noche, como la portada, con su foto debajo. */
 .sa-pagehead {
-  padding: clamp(44px, 7vh, 84px) 0 0;
+  padding: clamp(40px, 6vh, 72px) 0 clamp(36px, 5vw, 64px);
+  background: var(--ink);
+  color: var(--on-ink);
+}
+
+.sa-pagehead .sa-lead {
+  color: var(--on-ink-2);
+}
+
+.sa-pagehead .sa-eyebrow {
+  color: var(--on-ink-3);
+}
+
+.sa-pagehead .sa-crumbs a,
+.sa-sec--tinta .sa-crumbs a {
+  color: var(--on-ink-2);
 }
 
 .sa-pagehead__inner {
@@ -1318,12 +1322,12 @@ body.sa-lock {
 
 .sa-pagehead__img {
   display: block;
-  width: calc(100% - 24px);
+  width: calc(100% - 2 * var(--gutter));
   height: auto;
-  aspect-ratio: 21 / 9;
-  margin: clamp(32px, 4vw, 52px) 12px 0;
+  aspect-ratio: 3 / 1;
+  margin: clamp(28px, 3.4vw, 44px) var(--gutter) 0;
   object-fit: cover;
-  border-radius: 30px;
+  border-radius: 22px;
   filter: var(--photo);
 }
 
@@ -1397,6 +1401,28 @@ body.sa-lock {
 
 .sa-sec--tinta .sa-lead {
   color: var(--on-ink-2);
+}
+
+.sa-sec--tinta .sa-btn:not(.sa-btn--ghost-ink) {
+  background: var(--paper);
+  color: var(--ink);
+}
+
+.sa-sec--tinta .sa-status {
+  color: var(--on-ink);
+  box-shadow: inset 0 0 0 1px var(--line-ink);
+}
+
+.sa-sec--tinta .sa-facts {
+  border-top-color: var(--line-ink);
+}
+
+.sa-sec--tinta .sa-facts > div {
+  border-bottom-color: var(--line-ink);
+}
+
+.sa-sec--tinta .sa-facts dt {
+  color: var(--on-ink-3);
 }
 
 .sa-head {
@@ -3033,6 +3059,23 @@ body.sa-lock {
   align-items: start;
 }
 
+/* La página de un show toma el color de su póster. */
+.sa-showpage {
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.sa-showpage__glow {
+  position: absolute;
+  inset: -20% auto -20% -14%;
+  z-index: -1;
+  width: 70%;
+  background-position: center;
+  background-size: cover;
+  filter: blur(110px) saturate(1.4) brightness(0.6);
+  opacity: 0.55;
+}
+
 .sa-showpage__poster {
   position: sticky;
   top: 92px;
@@ -3148,10 +3191,19 @@ body.sa-lock {
 /* ─── Pie ────────────────────────────────────────────────────────────────── */
 
 .sa-footer {
-  background: var(--paper);
-  color: var(--text-2);
-  padding: clamp(40px, 5vw, 64px) var(--gutter) max(24px, env(safe-area-inset-bottom));
-  font-size: 13px;
+  background: var(--ink);
+  color: var(--on-ink-2);
+  padding: clamp(48px, 5vw, 72px) var(--gutter) max(24px, env(safe-area-inset-bottom));
+  font-size: 13.5px;
+  border-top: 1px solid rgba(247, 246, 243, 0.08);
+}
+
+.sa-footer__mark {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin-top: clamp(32px, 4vw, 56px);
+  fill: rgba(247, 246, 243, 0.05);
 }
 
 .sa-footer__top {
@@ -3159,7 +3211,7 @@ body.sa-lock {
   grid-template-columns: minmax(0, 2fr) repeat(2, minmax(0, 1fr)) minmax(0, 1.7fr) minmax(0, 1fr);
   gap: 32px clamp(24px, 3vw, 48px);
   padding-bottom: clamp(28px, 3vw, 40px);
-  border-bottom: 1px solid var(--line);
+  border-bottom: 1px solid var(--line-ink);
 }
 
 .sa-footer__tagline {
@@ -3168,7 +3220,7 @@ body.sa-lock {
   font-size: 21px;
   line-height: 1.15;
   letter-spacing: -0.008em;
-  color: var(--text);
+  color: var(--on-ink);
 }
 
 .sa-footer__note {
@@ -3179,7 +3231,7 @@ body.sa-lock {
 .sa-footer__tag {
   margin-top: 12px;
   font-weight: 500;
-  color: var(--text);
+  color: var(--on-ink);
 }
 
 .sa-footer__col {
@@ -3191,9 +3243,9 @@ body.sa-lock {
 
 .sa-footer__col h2 {
   margin-bottom: 4px;
-  font-size: 13px;
+  font-size: 13.5px;
   font-weight: 600;
-  color: var(--text);
+  color: var(--on-ink);
 }
 
 .sa-footer__col a {
@@ -3205,7 +3257,7 @@ body.sa-lock {
 }
 
 .sa-footer__col a:hover {
-  color: var(--text);
+  color: var(--on-ink);
   text-decoration: underline;
   text-underline-offset: 3px;
 }
@@ -3216,7 +3268,7 @@ body.sa-lock {
   justify-content: space-between;
   gap: 8px 24px;
   margin-top: 18px;
-  color: var(--text-3);
+  color: var(--on-ink-3);
 }
 
 /* ─── Entrada al bajar ───────────────────────────────────────────────────── */
@@ -3235,6 +3287,14 @@ body.sa-lock {
 /* ─── Tamaños ────────────────────────────────────────────────────────────── */
 
 @media (max-width: 1100px) {
+  .sa-mosaic {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .sa-bento {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .sa-about,
   .sa-newsgrid,
   .sa-contact,
@@ -3508,63 +3568,74 @@ body.sa-lock {
     min-height: 240px;
   }
 
-  .sa-hero__mark {
-    width: min(88vw, calc((100svh - var(--nav-h)) * 1.1));
+  /* En el teléfono: primero el titular y, detrás de la tarjeta del próximo show, los pósters. */
+  .sa-hero__glow {
+    inset: -10% -20% 40%;
+    width: auto;
+  }
+
+  .sa-hero__wall {
+    top: 46%;
+    right: -14%;
+    bottom: -30%;
+    left: -14%;
+    width: auto;
+    transform: rotate(5deg);
+    -webkit-mask-image: linear-gradient(180deg, transparent, #000 24%);
+    mask-image: linear-gradient(180deg, transparent, #000 24%);
   }
 
   .sa-hero__photos {
-    transform: translateY(-15%) scale(1.4);
+    inset: 44% 0 0;
+    -webkit-mask-image: linear-gradient(180deg, transparent, #000 34%);
+    mask-image: linear-gradient(180deg, transparent, #000 34%);
+  }
+
+  .sa-hero__copy {
+    max-width: 100%;
+    margin-block: 0 auto;
+    padding-block: clamp(8px, 2vh, 20px) 24px;
+  }
+
+  .sa-hero__title {
+    font-size: clamp(2.9rem, 13.6vw, 5rem);
+  }
+
+  .sa-hero__pause {
+    top: 12px;
+    right: 12px;
+    bottom: auto;
+  }
+
+  .sa-ribbon {
+    max-width: 100%;
+    margin-top: clamp(150px, 24vh, 260px);
+  }
+
+  .sa-say {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 32px;
   }
 
   .sa-mosaic {
-    grid-template-columns: minmax(0, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 30px 12px;
   }
 
-  .sa-tile,
-  .sa-tile--wide {
-    min-height: 400px;
+  .sa-tile__media {
+    border-radius: 14px;
   }
 
-  .sa-tile.has-poster,
-  .sa-tile--wide.has-poster {
-    justify-content: flex-start;
-    min-height: 560px;
-  }
-
-  .sa-tile--wide.has-poster {
-    flex-direction: column;
-    gap: 0;
-    text-align: center;
-  }
-
-  .sa-tile--wide.has-poster .sa-cta {
-    justify-content: center;
-  }
-
-  .sa-tile--wide.has-poster .sa-tile__copy {
-    flex: 0 0 auto;
-  }
-
-  .sa-tile--wide.has-poster .sa-tile__poster {
-    width: min(58%, 280px);
-    margin-top: 28px;
-    margin-bottom: -96px;
+  .sa-tile .sa-arrow {
+    display: none;
   }
 
   .sa-bento {
     grid-template-columns: minmax(0, 1fr);
-    padding-inline: 0;
-  }
-
-  .sa-bt--big,
-  .sa-bt--small,
-  .sa-bt--full {
-    grid-column: auto;
   }
 
   .sa-bt > a {
-    height: auto;
-    min-height: 460px;
+    height: 380px;
   }
 
   .sa-proc {
@@ -3611,17 +3682,15 @@ body.sa-lock {
   }
 
   .sa-pagehead__img {
-    aspect-ratio: 4 / 3;
-    border-radius: 22px;
+    aspect-ratio: 16 / 9;
+    border-radius: 18px;
   }
 
-  .sa-band {
-    border-radius: 22px;
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .sa-lights i {
+  .sa-lights i,
+  .sa-hero__reel {
     animation: none;
   }
 
@@ -3634,8 +3703,7 @@ body.sa-lock {
   }
 
   .sa-proc__media img,
-  .sa-proc__steps li,
-  .sa-say__text span {
+  .sa-proc__steps li {
     transition: none;
   }
 }

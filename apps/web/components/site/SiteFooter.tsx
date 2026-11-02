@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { ARTA_WORDMARK_PATH } from '@/lib/arta-wordmark';
 import { panelLoginUrl } from '@/lib/domains';
 import { siteSettings, type PublicSiteData } from '@/lib/public-site-data';
 import { serviceHref } from '@/lib/site-blocks';
@@ -69,6 +70,9 @@ export function SiteFooter({ data, links }: SiteFooterProps) {
         <span>© {new Date().getFullYear()} Arta Producciones</span>
         <span>{contact.city}, México</span>
       </div>
+      <svg className="sa-footer__mark" viewBox="0 0 1200 466" aria-hidden="true">
+        <path fillRule="evenodd" d={ARTA_WORDMARK_PATH} />
+      </svg>
     </footer>
   );
 }

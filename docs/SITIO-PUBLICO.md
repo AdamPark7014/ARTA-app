@@ -16,16 +16,17 @@ Una idea por pantalla y nada que no diga algo. En orden:
 
 | Qué | De dónde sale |
 |---|---|
-| Franja del próximo show | `data.shows[0]`; se apaga con `home_hero.showCount = 0` |
-| Portada: titular, texto y dos ligas | `home_hero`. La segunda liga es para quien trae un show, no para quien viene a verlo |
-| El logo como ventana al show, que se abre al bajar hasta llenar la pantalla (`HomeHero`) | `HeroSlide`: si hay varias se turnan, con botón de pausa. Ya no llevan texto. Sin JavaScript o con «reducir movimiento» se queda en la primera imagen |
-| Mosaico de shows (`ShowTile`) | La cartelera. Con póster, el arte se asoma abajo y le da el color a la tarjeta; sin póster, un escenario a oscuras con reflectores (`StageLights`), para no fingir una foto que no es de ese show |
-| Quiénes somos | `home_frase`: etiqueta, titular y dos líneas a tamaño de lectura, con liga a Nosotros |
-| Muro de pósters, con los datos de la temporada | Los pósters de los shows, próximos y pasados (`home_muro`). Datos calculados de la cartelera, nunca escritos a mano. Con menos de 5 pósters no sale |
-| Mosaico de servicios | `home_modulos.tiles`: se turnan foto y texto grande. `tagline` es su frase; se parte en renglones en cada punto |
+| Portada (`HomeHero`) | `home_hero`: titular, texto y dos ligas. Detrás, los pósters reales en tres columnas que corren; con menos de 5 pósters, las fotos de `HeroSlide`. Se pausa, y se queda quieta con «reducir movimiento» |
+| Tarjeta del próximo show | `data.shows[0]`, dentro de la portada; se apaga con `home_hero.showCount = 0` |
+| Próximos shows (`ShowTile`) | La cartelera, hasta 8. El póster va entero, sin recortar, sobre su propio color. Sin póster, un escenario a oscuras con reflectores (`StageLights`) |
+| Quiénes somos | `home_frase`: etiqueta, titular y dos líneas a tamaño de lectura, con liga a Nosotros. Los datos (shows, escenarios, ciudades) salen de la cartelera, nunca a mano |
+| Servicios | `home_modulos.tiles`: cuatro tarjetas altas iguales, con su foto y su `tagline` |
+| Muro de pósters | Los shows que ya pasaron (`home_muro`), en una fila que corre. Si son menos de 5, entran también los próximos |
 | Recintos | `home_recintos`: dirección, cómo llegar y su siguiente show, que reconoce por una palabra (`match`) |
 | Oficina | `home_ubicacion`: dirección y mapa a color, más teléfono, correo y redes de «Datos del sitio» |
 | Invitación a escribir | `home_cta`; la foto es su `pageImage` |
+
+**El ritmo es noche y día:** portada y próximos shows de noche, porque los pósters lucen sobre negro; quiénes somos y servicios de día; el muro de noche; recintos y oficina de día; la invitación y el pie de noche. Las páginas abren de noche, como la portada.
 
 **Inicio habla al público:** qué viene, quién es Arta, qué ha hecho, qué ofrece, dónde y cómo hablarle. Adam (02-11): «se debe mostrar como la empresa de los eventos e info, pero no registros internos» aunque sean de ejemplo. Nada de órdenes de compra, corridas ni minutos a minuto. «Cómo trabajamos» y «Noches recientes» quedan ocultas por omisión: se pueden poner desde Studio.
 

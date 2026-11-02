@@ -38,7 +38,7 @@ export function SiteHeader({ links, active }: SiteHeaderProps) {
   const bar = links.filter((l) => l.key !== 'inicio' && l.key !== 'contacto' && !l.secondary);
 
   return (
-    <header className={`sa-nav ${menuOpen ? 'is-open' : 'is-light'}`}>
+    <header className={`sa-nav ${menuOpen ? 'is-open' : 'is-solid'}`}>
       <Link href="/p/arta" className="sa-nav__brand" onClick={closeMenu} aria-label="Arta Producciones, inicio">
         <SiteLogo />
       </Link>

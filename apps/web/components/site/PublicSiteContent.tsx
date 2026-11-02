@@ -26,8 +26,7 @@ export function PublicSiteContent({ data, past = [], preview = false }: PublicSi
   return (
     <SitePage data={data} active="inicio" preview={preview}>
       {preview ? null : <LegacyAnchors />}
-      {next ? <NextShowRibbon show={next} /> : null}
-      <HomeHero hero={buildHero(data)} />
+      <HomeHero hero={buildHero(data, past)} next={next ? <NextShowRibbon show={next} /> : null} />
       {ticker.length ? (
         <div className="sa-ticker" aria-label={ticker.join('. ')}>
           {[0, 1, 2, 3].map((copy) => (

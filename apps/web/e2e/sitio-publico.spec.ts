@@ -46,30 +46,29 @@ test.describe('Sitio público · Inicio', () => {
     await expect(ecos.getByRole('link', { name: 'Comprar boletos' })).toHaveAttribute('href', 'https://boletos.example.com/ecos');
   });
 
-  test('la portada abre con el logo como ventana y al bajar la foto llena la pantalla', async ({ page }) => {
+  test('con cinco pósters o más, la portada enseña los shows en movimiento y se puede pausar', async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 800 });
-    await mockStudio(page, siteState());
+    const state = siteState();
+    const ecos = state.news.find((n) => n.slug === 'los-ecos') as (typeof state.news)[number];
+    for (let i = 0; i < 5; i += 1) state.news.push({ ...ecos, id: `extra-${i}`, slug: `extra-${i}`, title: `Show ${i}` });
+    await mockStudio(page, state);
     await page.goto('/site?embed=1');
 
     const hero = page.locator('.sa-hero');
-    await expect(hero.getByRole('img', { name: 'Arta' })).toBeVisible();
-    await expect(hero.locator('.sa-hero__copy')).toBeVisible();
-    await expect(hero).not.toHaveClass(/is-open/);
-
-    const scrollToHero = (share: number) =>
-      page.evaluate((s) => {
-        const el = document.querySelector('.sa-hero') as HTMLElement;
-        window.scrollTo(0, el.getBoundingClientRect().top + window.scrollY + (el.offsetHeight - window.innerHeight) * s);
-      }, share);
-
-    await scrollToHero(0.85);
-    await expect(hero).toHaveClass(/is-open/);
-    await expect(hero.locator('.sa-hero__copy')).toBeHidden();
-
-    // De regreso, todo vuelve a su lugar y el botón se puede tocar.
-    await page.evaluate(() => window.scrollTo(0, 0));
-    await expect(hero).not.toHaveClass(/is-open/);
+    await expect(hero.locator('.sa-hero__wall img').first()).toBeVisible();
+    await expect(hero.locator('.sa-hero__photo')).toHaveCount(0);
     await expect(hero.getByRole('link', { name: 'Ver la cartelera' })).toBeVisible();
+
+    // El muro es adorno: no estorba al teclado ni a quien usa lector de pantalla.
+    await expect(hero.locator('.sa-hero__wall')).toHaveAttribute('aria-hidden', 'true');
+    await expect(hero.locator('.sa-hero__wall a').first()).toHaveAttribute('tabindex', '-1');
+
+    await hero.getByRole('button', { name: 'Pausar los pósters de la portada' }).click();
+    await expect(hero).toHaveClass(/is-paused/);
+    await expect(hero.getByRole('button', { name: 'Reproducir los pósters de la portada' })).toBeVisible();
+
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+    expect(overflow).toBeLessThanOrEqual(0);
   });
 
   test('sin póster, una tarjeta es un escenario con reflectores; con póster, lleva su arte', async ({ page }) => {
@@ -93,7 +92,7 @@ test.describe('Sitio público · Inicio', () => {
     await expect(wall.getByRole('link', { name: 'Los Ecos de Cholula' })).toHaveAttribute('href', '/p/arta/cartelera/los-ecos');
     // Corre sin saltos porque va repetido, pero se lee y se tabula una sola vez.
     await expect(wall.locator('a[aria-hidden="true"]').first()).toHaveAttribute('tabindex', '-1');
-    await expect(wall.locator('.sa-wall__stats')).toContainText('shows esta temporada');
+    await expect(page.locator('#frase .sa-say__stats')).toContainText('shows esta temporada');
   });
 
   test('Inicio habla de los shows y de la empresa, no de registros internos', async ({ page }) => {
@@ -178,7 +177,7 @@ test.describe('Sitio público · Inicio', () => {
     await page.goto('/site?embed=1');
 
     const about = page.locator('#frase');
-    await expect(about.getByRole('heading', { name: 'Arta Producciones.' })).toBeVisible();
+    await expect(about.getByRole('heading', { name: 'Hacemos que los shows pasen.' })).toBeVisible();
     await expect(about.getByRole('link', { name: 'Conoce a Arta' })).toHaveAttribute('href', '/p/arta/nosotros');
     const size = await about.locator('.sa-say__text').evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
     expect(size).toBeLessThan(24);

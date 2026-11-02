@@ -21,7 +21,11 @@ export type HeroPhoto = { id: string; imageUrl: string; focus?: string | null; d
 export type HeroLink = { label: string; href: string };
 
 /** La portada: qué es Arta, a dónde ir y las fotos que se turnan en su marco. */
+export type HeroPoster = { id: string; slug: string; title: string; coverUrl: string };
+
 export type HeroView = {
+  /** Pósters de los shows, los que vienen primero. Con suficientes, son la portada. */
+  posters: HeroPoster[];
   title: string;
   sub?: string;
   primary: HeroLink | null;
@@ -124,7 +128,7 @@ export function servicesOf(data: Pick<PublicSiteData, 'pages'>): Service[] {
 /** Las fotos de la portada, para quien necesite una: pasos sin foto, tarjetas de shows sin póster. */
 export const heroPhotoUrls = (data: Pick<PublicSiteData, 'slides'>) => data.slides.map((s) => s.imageUrl).filter(Boolean);
 
-export function buildHero(data: PublicSiteData): HeroView {
+export function buildHero(data: PublicSiteData, past: PublicSiteNewsItem[] = []): HeroView {
   const hero = heroContent(data);
   /** Una liga a una página quitada no se pinta. */
   const link = (label?: string, raw?: string): HeroLink | null => {
@@ -144,6 +148,7 @@ export function buildHero(data: PublicSiteData): HeroView {
     sub: hero.sub || undefined,
     primary,
     secondary,
+    posters: posterShows(data.shows, past).map((s) => ({ id: s.id, slug: s.slug, title: s.title, coverUrl: s.coverUrl as string })),
     photos: data.slides
       .filter((s) => s.imageUrl)
       .map((s) => ({ id: s.id, imageUrl: s.imageUrl, focus: s.focus, draft: s.active === false })),

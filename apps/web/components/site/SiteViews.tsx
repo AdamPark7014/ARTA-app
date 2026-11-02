@@ -158,7 +158,8 @@ export function ShowView({ data, preview, show, others }: ViewProps & { show: Pu
   return (
     <SitePage data={data} active="cartelera" preview={preview}>
       <main id="contenido">
-        <article className="sa-sec sa-sec--papel sa-showpage">
+        <article className="sa-sec sa-sec--tinta sa-showpage">
+          {show.coverUrl ? <span className="sa-showpage__glow" style={{ backgroundImage: `url(${show.coverUrl})` }} aria-hidden="true" /> : null}
           <div className="sa-showpage__poster" data-reveal>
             {show.coverUrl ? (
               // eslint-disable-next-line @next/next/no-img-element -- póster dinámico de Studio

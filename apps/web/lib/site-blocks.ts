@@ -193,14 +193,14 @@ type BlockMeta = {
 export const BLOCK_META: Record<BlockType, BlockMeta> = {
   frase: {
     label: 'Quiénes somos',
-    description: 'Dos líneas que dicen qué es Arta, con liga a Nosotros.',
+    description: 'Dos líneas que dicen qué es Arta y los datos de la temporada, con liga a Nosotros.',
     sectionKey: 'home_frase',
     anchor: 'frase',
     page: 'inicio',
   },
   cartelera: {
     label: 'Próximos shows',
-    description: 'Los siguientes shows en tarjetas grandes. Sin shows publicados no sale.',
+    description: 'Los siguientes shows, con su póster y sus boletos. Sin shows publicados no sale.',
     sectionKey: 'home_cartelera',
     anchor: 'cartelera',
     page: 'cartelera',
@@ -221,7 +221,7 @@ export const BLOCK_META: Record<BlockType, BlockMeta> = {
   },
   muro: {
     label: 'Muro de pósters',
-    description: 'Los pósters de los shows, en movimiento, con los datos de la temporada. Salen solos de la cartelera.',
+    description: 'Los pósters de los shows que ya pasaron, en movimiento. Salen solos de la cartelera.',
     sectionKey: 'home_muro',
     anchor: 'temporada',
     page: 'cartelera',
@@ -249,7 +249,7 @@ export const BLOCK_META: Record<BlockType, BlockMeta> = {
   },
   servicios: {
     label: 'Servicios',
-    description: 'Un mosaico con cada servicio, en foto o en texto grande, con liga a su detalle.',
+    description: 'Una tarjeta con foto por cada servicio, con liga a su detalle.',
     sectionKey: 'home_modulos',
     anchor: 'modulos',
     page: 'servicios',
@@ -311,7 +311,7 @@ export const BLOCK_META: Record<BlockType, BlockMeta> = {
 /** El orden de arranque de Inicio. Toda sección base vive aquí; se oculta, no se borra. */
 export const DEFAULT_LAYOUT: LayoutBlock[] = [
   // Lo que le importa a quien llega: qué viene, quién es Arta, qué ha hecho, qué ofrece, dónde y cómo hablarle.
-  ...(['cartelera', 'frase', 'muro', 'servicios', 'recintos', 'historias', 'galeria', 'noticias', 'aliados', 'ubicacion', 'contacto'] as BlockType[]).map(
+  ...(['cartelera', 'frase', 'servicios', 'muro', 'recintos', 'historias', 'galeria', 'noticias', 'aliados', 'ubicacion', 'contacto'] as BlockType[]).map(
     (type) => ({ id: type as string, type, visible: true }),
   ),
   // Ya están completas en su página: se pueden poner, pero Inicio se lee mejor sin repetir.
@@ -380,7 +380,7 @@ export type ServiceTile = {
 export const DEFAULT_CONTENT: Record<string, Record<string, unknown>> = {
   [HERO_KEY]: {
     headline: 'La experiencia del Show.',
-    sub: 'Conciertos y espectáculos en Puebla, de principio a fin.',
+    sub: 'Conciertos, giras y espectáculos, de principio a fin.',
     cta: 'Ver la cartelera',
     ctaHref: pageHref('cartelera'),
     secondaryLabel: 'Traer un show a Puebla',
@@ -389,7 +389,7 @@ export const DEFAULT_CONTENT: Record<string, Record<string, unknown>> = {
   },
   home_frase: {
     eyebrow: 'Quiénes somos',
-    headline: 'Arta Producciones.',
+    headline: 'Hacemos que los shows pasen.',
     text: 'Traemos conciertos, giras y espectáculos a Puebla y a otras ciudades de México. Nos encargamos de todo lo que pasa arriba y abajo del escenario, para que tú solo llegues y lo vivas.',
   },
   home_proceso: {
@@ -416,7 +416,6 @@ export const DEFAULT_CONTENT: Record<string, Record<string, unknown>> = {
     lead: 'Los próximos shows en el escenario. Aparta la fecha.',
     emptyTitle: 'Estamos armando la próxima temporada',
     emptyText: 'Muy pronto anunciamos fechas. Si tienes un show en mente, escríbenos.',
-    pageImage: '/uploads/seed-hero-1.jpg',
   },
   home_historias: {
     eyebrow: 'Historias',
@@ -473,7 +472,7 @@ export const DEFAULT_CONTENT: Record<string, Record<string, unknown>> = {
       },
       {
         title: 'Cierre',
-        tagline: 'Cuentas claras en cada fecha.',
+        tagline: 'Nada queda pendiente.',
         body: 'Proveedores al corriente y un reporte de cada show.',
         detail: 'Llevamos el control de cada fecha y lo entregamos en orden, para que el promotor y el artista sepan cómo salió.',
         includes: 'Control de ingresos y gastos de la fecha\nPago a proveedores\nEntrega al promotor y al artista\nReporte final del show',
@@ -536,7 +535,6 @@ export const DEFAULT_CONTENT: Record<string, Record<string, unknown>> = {
     headline: 'Hablemos de tu próximo show.',
     body: 'Cuéntanos la fecha, el recinto y lo que tienes en mente. Te respondemos con una propuesta de producción.',
     cta: 'Escribir a Arta',
-    pageImage: '/uploads/seed-hero-2.jpg',
   },
   [SETTINGS_KEY]: {
     tagline: 'La experiencia del Show',

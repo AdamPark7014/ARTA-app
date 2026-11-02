@@ -1,23 +1,14 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useRef, useState } from 'react';
-import { ARTA_WORDMARK_PATH } from '@/lib/arta-wordmark';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { externalProps, focusCss } from '@/lib/site-format';
-import type { HeroLink, HeroView } from '@/lib/site-model';
+import { MIN_WALL_POSTERS, showHref, type HeroLink, type HeroPoster, type HeroView } from '@/lib/site-model';
 
 const PHOTO_MS = 7000;
-
-/**
- * El punto más grueso de las letras (la unión de la «t»), en unidades del dibujo de 1200 × 466:
- * ahí se acerca la cámara, para que la letra termine cubriendo toda la pantalla.
- */
-const FOCUS = { x: 692, y: 196, radius: 62 };
-
-/** Hasta dónde del recorrido se abre el logo; lo demás es la foto a pantalla completa. */
-const OPEN_AT = 0.7;
-
-const clamp = (value: number, min = 0, max = 1) => Math.min(max, Math.max(min, value));
+const COLUMNS = 3;
+/** Cada columna tiene que llenar la pantalla: con pocos pósters, la lista se repite. */
+const POSTERS_PER_COLUMN = 5;
 
 /** Ligas del sitio sin recargar la página; boletos y sitios externos, en otra pestaña. */
 function HeroAnchor({ link, className }: { link: HeroLink; className: string }) {
@@ -35,23 +26,48 @@ function HeroAnchor({ link, className }: { link: HeroLink; className: string }) 
   );
 }
 
+function columnsOf(posters: HeroPoster[]) {
+  return Array.from({ length: COLUMNS }, (_, column) => {
+    let list = posters.filter((_, i) => i % COLUMNS === column);
+    while (list.length && list.length < POSTERS_PER_COLUMN) list = [...list, ...list];
+    return list;
+  });
+}
+
+/** Los pósters reales de Arta en tres columnas que corren: dos veces la misma lista, para que no brinque. */
+function PosterWall({ posters }: { posters: HeroPoster[] }) {
+  return (
+    <div className="sa-hero__wall" aria-hidden="true">
+      {columnsOf(posters).map((list, column) => (
+        <div key={column} className={`sa-hero__col ${column === 1 ? 'is-reverse' : ''}`.trim()}>
+          <div className="sa-hero__reel" style={{ animationDuration: `${column === 1 ? 104 : 86 + column * 6}s` }}>
+            {[...list, ...list].map((poster, i) => (
+              <Link key={`${poster.id}-${i}`} href={showHref(poster.slug)} tabIndex={-1}>
+                {/* eslint-disable-next-line @next/next/no-img-element -- póster dinámico de Studio */}
+                <img src={poster.coverUrl} alt="" decoding="async" />
+              </Link>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 /**
- * La portada: el logo de Arta es una ventana al show y, al bajar, se abre hasta llenar la pantalla con
- * la foto. Sin JavaScript o con «reducir movimiento» se queda en su primera imagen, que se lee completa.
+ * La portada dice qué es Arta y enseña sus shows: los pósters de verdad, corriendo despacio, y el
+ * próximo a la mano. Con pocos pósters (la vista previa, una temporada que empieza) salen las fotos de
+ * Studio. Sin JavaScript o con «reducir movimiento» se queda quieta y se lee completa.
  */
-export function HomeHero({ hero }: { hero: HeroView }) {
+export function HomeHero({ hero, next }: { hero: HeroView; next?: ReactNode }) {
   const section = useRef<HTMLElement>(null);
-  const pin = useRef<HTMLDivElement>(null);
-  const mark = useRef<HTMLDivElement>(null);
-  const windowShape = useRef<SVGSVGElement>(null);
-  const copy = useRef<HTMLDivElement>(null);
-  const photos = useRef<HTMLDivElement>(null);
-  const tag = useRef<HTMLParagraphElement>(null);
   const [index, setIndex] = useState(0);
   const [paused, setPaused] = useState(false);
+  const [offscreen, setOffscreen] = useState(false);
   const [reducedMotion, setReducedMotion] = useState(false);
-  const [live, setLive] = useState(false);
-  const total = hero.photos.length;
+  const wall = hero.posters.length >= MIN_WALL_POSTERS;
+  const total = wall ? 0 : hero.photos.length;
+  const moving = wall || total > 1;
 
   useEffect(() => {
     const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -72,80 +88,24 @@ export function HomeHero({ hero }: { hero: HeroView }) {
     return () => clearTimeout(t);
   }, [paused, reducedMotion, index, total]);
 
+  // Fuera de la pantalla no hay nada que animar.
   useEffect(() => {
-    setLive(!reducedMotion && total > 0);
-    if (reducedMotion || !total) return;
+    if (!section.current || typeof IntersectionObserver === 'undefined') return;
+    const io = new IntersectionObserver(([entry]) => setOffscreen(!entry.isIntersecting));
+    io.observe(section.current);
+    return () => io.disconnect();
+  }, []);
 
-    let queued = false;
-    let stickyTop = 0;
-    let maxScale = 1;
-    let startScale = 1.14;
-    let startShift = -5;
-
-    const measure = () => {
-      if (!pin.current || !mark.current) return;
-      stickyTop = parseFloat(getComputedStyle(pin.current).top) || 0;
-      const { offsetLeft, offsetTop, offsetWidth, offsetHeight } = mark.current;
-      const x = offsetLeft + (FOCUS.x / 1200) * offsetWidth;
-      const y = offsetTop + (FOCUS.y / 466) * offsetHeight;
-      const { clientWidth, clientHeight } = pin.current;
-      const farthest = Math.hypot(Math.max(x, clientWidth - x), Math.max(y, clientHeight - y));
-      maxScale = farthest / ((FOCUS.radius * offsetWidth) / 1200);
-      // En el teléfono la foto va más cerca: el escenario tiene que caer dentro de las letras.
-      const narrow = window.innerWidth <= 820;
-      startScale = narrow ? 1.4 : 1.14;
-      startShift = narrow ? -15 : -5;
-    };
-
-    const apply = () => {
-      queued = false;
-      const root = section.current;
-      if (!root || !pin.current || !windowShape.current || !copy.current || !photos.current || !tag.current) return;
-      const travel = Math.max(1, root.offsetHeight - pin.current.offsetHeight);
-      const progress = clamp((stickyTop - root.getBoundingClientRect().top) / travel);
-      const zoom = clamp(progress / OPEN_AT);
-
-      windowShape.current.style.transform = `scale(${Math.pow(maxScale, Math.pow(zoom, 1.55)).toFixed(3)})`;
-      root.classList.toggle('is-open', zoom >= 1);
-
-      const fade = clamp(1 - progress / 0.09);
-      copy.current.style.opacity = fade.toFixed(3);
-      copy.current.style.transform = `translateY(${(-progress * 180).toFixed(1)}px)`;
-      copy.current.style.visibility = fade > 0 ? 'visible' : 'hidden';
-
-      const rest = 1 - zoom;
-      photos.current.style.transform = `translateY(${(startShift * rest).toFixed(2)}%) scale(${(1 + (startScale - 1) * rest).toFixed(3)})`;
-
-      const closing = clamp((progress - 0.76) / 0.14);
-      root.style.setProperty('--closing', closing.toFixed(3));
-      tag.current.style.transform = `translateY(${((1 - closing) * 14).toFixed(1)}px)`;
-    };
-
-    const onScroll = () => {
-      if (queued) return;
-      queued = true;
-      requestAnimationFrame(apply);
-    };
-    const onResize = () => {
-      measure();
-      onScroll();
-    };
-
-    measure();
-    apply();
-    window.addEventListener('scroll', onScroll, { passive: true });
-    window.addEventListener('resize', onResize);
-    return () => {
-      window.removeEventListener('scroll', onScroll);
-      window.removeEventListener('resize', onResize);
-    };
-    // `live` cambia la altura de la sección: se vuelve a medir con ella ya puesta.
-  }, [reducedMotion, total, live]);
+  const glow = hero.posters[0]?.coverUrl;
+  const what = wall ? 'los pósters' : 'las fotos';
 
   return (
-    <section className={`sa-hero ${live ? 'is-live' : ''}`.trim()} ref={section} aria-labelledby="portada-t">
-      <div className="sa-hero__pin" ref={pin}>
-        <div className="sa-hero__photos" ref={photos}>
+    <section className={`sa-hero ${paused || offscreen ? 'is-paused' : ''}`.trim()} ref={section} aria-labelledby="portada-t">
+      {glow ? <span className="sa-hero__glow" style={{ backgroundImage: `url(${glow})` }} aria-hidden="true" /> : null}
+      {wall ? (
+        <PosterWall posters={hero.posters} />
+      ) : (
+        <div className="sa-hero__photos">
           {hero.photos.map((photo, i) => (
             // eslint-disable-next-line @next/next/no-img-element -- fotos dinámicas de Studio
             <img
@@ -159,42 +119,34 @@ export function HomeHero({ hero }: { hero: HeroView }) {
             />
           ))}
         </div>
-        <span className="sa-hero__shade" aria-hidden="true" />
-        <div className="sa-hero__open">
-          <div className="sa-hero__mark" ref={mark}>
-            {/* Una hoja de papel con las letras recortadas: detrás está la foto. */}
-            <svg className="sa-hero__window" ref={windowShape} viewBox="0 0 1200 466" role="img" aria-label="Arta">
-              <path fillRule="evenodd" d={`M-14000 -14000H15200V14466H-14000Z ${ARTA_WORDMARK_PATH}`} />
-            </svg>
-          </div>
-          <div className="sa-hero__copy" ref={copy}>
-            <h1 id="portada-t" className="sa-hero__title">
-              {hero.title}
-            </h1>
-            {hero.sub ? <p className="sa-hero__sub">{hero.sub}</p> : null}
-            <div className="sa-cta">
-              {hero.primary ? <HeroAnchor link={hero.primary} className="sa-btn" /> : null}
-              {hero.secondary ? <HeroAnchor link={hero.secondary} className="sa-arrow" /> : null}
-            </div>
+      )}
+      <div className="sa-hero__inner">
+        <div className="sa-hero__copy">
+          <p className="sa-hero__brand">Arta Producciones</p>
+          <h1 id="portada-t" className="sa-hero__title">
+            {hero.title}
+          </h1>
+          {hero.sub ? <p className="sa-hero__sub">{hero.sub}</p> : null}
+          <div className="sa-cta">
+            {hero.primary ? <HeroAnchor link={hero.primary} className="sa-btn" /> : null}
+            {hero.secondary ? <HeroAnchor link={hero.secondary} className="sa-arrow" /> : null}
           </div>
         </div>
-        <p className="sa-hero__tag" ref={tag} aria-hidden="true">
-          #LaExperienciadelShow
-        </p>
-        {hero.photos[index]?.draft ? <span className="sa-draft sa-hero__draft">Borrador</span> : null}
-        {total > 1 && !reducedMotion ? (
-          <button
-            type="button"
-            className="sa-hero__pause"
-            aria-label={paused ? 'Reproducir las fotos de la portada' : 'Pausar las fotos de la portada'}
-            onClick={() => setPaused((v) => !v)}
-          >
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">
-              <path d={paused ? 'M8 5l11 7-11 7V5z' : 'M7 5h4v14H7zM13 5h4v14h-4z'} />
-            </svg>
-          </button>
-        ) : null}
+        {next}
       </div>
+      {!wall && hero.photos[index]?.draft ? <span className="sa-draft sa-hero__draft">Borrador</span> : null}
+      {moving && !reducedMotion ? (
+        <button
+          type="button"
+          className="sa-hero__pause"
+          aria-label={paused ? `Reproducir ${what} de la portada` : `Pausar ${what} de la portada`}
+          onClick={() => setPaused((v) => !v)}
+        >
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">
+            <path d={paused ? 'M8 5l11 7-11 7V5z' : 'M7 5h4v14H7zM13 5h4v14h-4z'} />
+          </svg>
+        </button>
+      ) : null}
     </section>
   );
 }

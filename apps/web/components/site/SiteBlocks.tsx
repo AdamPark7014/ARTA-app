@@ -26,7 +26,7 @@ import {
   showTimeLabel,
   ticketHref,
 } from '@/lib/site-format';
-import { heroPhotoUrls, itemsOf, newsHref, posterShows, servicesOf, showHref, type Service } from '@/lib/site-model';
+import { MIN_WALL_POSTERS, heroPhotoUrls, itemsOf, newsHref, posterShows, servicesOf, showHref, type Service } from '@/lib/site-model';
 import { VENUE_ADDRESS, contactFromSettings, socialProfiles } from '@/lib/site-seo';
 
 type Tone = 'papel' | 'blanco' | 'tinta';
@@ -174,17 +174,26 @@ function Sentences({ text }: { text?: string }) {
   );
 }
 
-/** La franja de arriba de Inicio: el siguiente show, en una línea. */
+/** El siguiente show, a la mano desde la portada: toda la tarjeta lleva a su página. */
 export function NextShowRibbon({ show }: { show: PublicSiteNewsItem }) {
   const date = showDateParts(show.eventDate);
   const days = daysUntil(show.eventDate);
   const lead = days !== null && days >= 0 && days <= 6 ? 'Esta semana' : 'Próximo show';
   const when = date ? `${date.weekdayLong[0].toUpperCase()}${date.weekdayLong.slice(1)} ${date.dayMonth}` : '';
-  const where = [when, show.venue].filter(Boolean).join(', ');
   return (
     <p className="sa-ribbon">
-      {lead}: {show.title}.{where ? ` ${where}.` : ''}{' '}
-      <Link href={showHref(show.slug)}>Ver detalles&nbsp;›</Link>
+      <Link href={showHref(show.slug)}>
+        {show.coverUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element -- póster dinámico de Studio
+          <img src={show.coverUrl} alt="" decoding="async" />
+        ) : null}
+        <span className="sa-ribbon__text">
+          <small>{[lead, when].filter(Boolean).join(' · ')}</small>
+          <strong>{show.title}</strong>
+          {show.venue ? <small>{show.venue}</small> : null}
+        </span>
+        <span className="sa-ribbon__go" aria-hidden="true" />
+      </Link>
     </p>
   );
 }
@@ -212,35 +221,42 @@ function StageLights({ index, wide }: { index: number; wide: boolean }) {
   );
 }
 
-/** La tarjeta de un show. Con póster: el arte se asoma abajo y le da el color a la tarjeta. */
-function ShowTile({ show, wide, index }: { show: PublicSiteNewsItem; wide: boolean; index: number }) {
+/** Un show: su póster entero, sin recortar, sobre su propio color; abajo, cuándo, qué, dónde y boletos. */
+function ShowTile({ show, index }: { show: PublicSiteNewsItem; index: number }) {
   const date = showDateParts(show.eventDate);
   const tickets = ticketHref(show);
   const status = showStatusOf(show);
   const time = showTimeLabel(show.eventTime);
-  const classes = [
-    'sa-tile',
-    wide ? 'sa-tile--wide' : '',
-    show.coverUrl ? 'has-poster' : '',
-    status === 'cancelado' ? 'is-cancelled' : '',
-  ];
+  // Cerca de la fecha, cuánto falta; encima del póster taparía el arte.
+  const days = daysUntil(show.eventDate);
+  const soon = days !== null && days >= 0 && days <= 30 ? countdownLabel(show.eventDate) : '';
+  const classes = ['sa-tile', show.coverUrl ? 'has-poster' : '', status === 'cancelado' ? 'is-cancelled' : ''];
   return (
     <article className={classes.filter(Boolean).join(' ')} data-reveal>
-      {show.coverUrl ? (
-        <span className="sa-tile__glow" style={{ backgroundImage: `url(${show.coverUrl})` }} aria-hidden="true" />
-      ) : (
-        <StageLights index={index} wide={wide} />
-      )}
+      <Link className="sa-tile__media" href={showHref(show.slug)} tabIndex={-1} aria-label={`Ver ${show.title}`}>
+        {show.coverUrl ? (
+          <>
+            <span className="sa-tile__glow" style={{ backgroundImage: `url(${show.coverUrl})` }} aria-hidden="true" />
+            {/* eslint-disable-next-line @next/next/no-img-element -- póster dinámico de Studio */}
+            <img className="sa-tile__poster" src={show.coverUrl} alt={`Póster de ${show.title}`} loading="lazy" decoding="async" />
+          </>
+        ) : (
+          <StageLights index={index} wide={false} />
+        )}
+      </Link>
       <div className="sa-tile__copy">
-        <p className="sa-tile__when">{[date?.dayMonth || 'Fecha por definir', show.venue, show.city].filter(Boolean).join(' · ')}</p>
+        <p className="sa-tile__when">
+          {[date?.dayMonth || 'Fecha por definir', time].filter(Boolean).join(' · ')}
+          {soon ? <span className="sa-tile__soon"> · {soon}</span> : null}
+        </p>
         <DraftTag show={show.published === false} />
         <h3>
           <Link href={showHref(show.slug)}>{show.title}</Link>
         </h3>
-        <p className="sa-tile__sub">{[time, countdownLabel(show.eventDate)].filter(Boolean).join(' · ') || show.excerpt}</p>
+        <p className="sa-tile__sub">{[show.venue, show.city].filter(Boolean).join(' · ') || show.excerpt}</p>
         <div className="sa-cta">
           {tickets ? (
-            <a className="sa-btn" href={tickets} {...externalProps(tickets)}>
+            <a className="sa-btn sa-btn--small" href={tickets} {...externalProps(tickets)}>
               {show.ctaLabel || 'Boletos'}
             </a>
           ) : (
@@ -251,37 +267,31 @@ function ShowTile({ show, wide, index }: { show: PublicSiteNewsItem; wide: boole
           </Link>
         </div>
       </div>
-      {show.coverUrl ? (
-        // eslint-disable-next-line @next/next/no-img-element -- póster dinámico de Studio
-        <img className="sa-tile__poster" src={show.coverUrl} alt={`Póster de ${show.title}`} loading="lazy" decoding="async" />
-      ) : null}
     </article>
   );
 }
 
 function Cartelera({ block, content, shows }: { block: LayoutBlock; content: PublicSiteContent; shows: PublicSiteNewsItem[] }) {
-  const list = shows.slice(0, 5);
+  const list = shows.slice(0, 8);
   return (
-    <Section block={block} tone="papel" className="sa-sec--mosaic">
-      <header className="sa-headc" data-reveal>
+    <Section block={block} tone="tinta" className="sa-bill">
+      <header className="sa-rowhead" data-reveal>
         <h2 id={`${anchorOf(block)}-t`} className="sa-title">
           {content.headline}
         </h2>
+        <Link className="sa-arrow" href={pageHref('cartelera')}>
+          Ver toda la cartelera
+        </Link>
       </header>
       {list.length ? (
         <div className="sa-mosaic">
           {list.map((show, i) => (
-            <ShowTile key={show.id} show={show} index={i} wide={i === 0 && list.length % 2 === 1} />
+            <ShowTile key={show.id} show={show} index={i} />
           ))}
         </div>
       ) : (
         <PreviewEmpty>Aún no hay shows publicados. Agrégalos en Cartelera y aparecen aquí.</PreviewEmpty>
       )}
-      <p className="sa-more" data-reveal>
-        <Link className="sa-arrow" href={pageHref('cartelera')}>
-          Ver toda la cartelera
-        </Link>
-      </p>
     </Section>
   );
 }
@@ -311,43 +321,20 @@ function PosterRow({ shows, reverse }: { shows: PublicSiteNewsItem[]; reverse?: 
 }
 
 function Muro({ block, content, shows, past }: { block: LayoutBlock; content: PublicSiteContent; shows: PublicSiteNewsItem[]; past: PublicSiteNewsItem[] }) {
-  const posters = posterShows(shows, past);
-  const half = Math.ceil(posters.length / 2);
-  const all = [...shows, ...past];
-  const venues = new Set(all.map((show) => show.venue?.trim().toLowerCase()).filter(Boolean));
-  // Cholula y San Andrés son la misma zona que Puebla: contarlas aparte inflaría el dato.
-  const cities = new Set(all.map((show) => show.city?.trim().toLowerCase().replace(/.*cholula.*/, 'puebla')).filter(Boolean));
-  const nextDays = daysUntil(shows[0]?.eventDate);
-  const stats = [
-    { value: String(all.length), label: all.length === 1 ? 'show esta temporada' : 'shows esta temporada' },
-    { value: String(venues.size), label: venues.size === 1 ? 'escenario' : 'escenarios' },
-    ...(cities.size > 1 ? [{ value: String(cities.size), label: 'ciudades' }] : []),
-    ...(nextDays !== null && nextDays >= 0 ? [{ value: String(nextDays), label: nextDays === 1 ? 'día para el próximo show' : 'días para el próximo show' }] : []),
-  ];
+  // La portada ya enseña lo que viene: aquí va lo que ya pasó, si alcanza para llenar la fila.
+  const done = posterShows([], past);
+  const posters = done.length >= MIN_WALL_POSTERS ? done : posterShows(shows, past);
   return (
     <Section block={block} tone="tinta" className="sa-wall">
-      <header className="sa-headc" data-reveal>
-        <h2 id={`${anchorOf(block)}-t`} className="sa-title">
-          {content.headline}
-        </h2>
-        {content.lead ? <p className="sa-headc__lead">{content.lead}</p> : null}
+      <header className="sa-rowhead" data-reveal>
+        <div>
+          <h2 id={`${anchorOf(block)}-t`} className="sa-title">
+            {content.headline}
+          </h2>
+          {content.lead ? <p className="sa-rowhead__lead">{content.lead}</p> : null}
+        </div>
       </header>
-      {posters.length ? (
-        <>
-          <PosterRow shows={posters.slice(0, half)} />
-          {posters.length > 1 ? <PosterRow shows={posters.slice(half)} reverse /> : null}
-          <dl className="sa-wall__stats" data-reveal>
-            {stats.map((stat) => (
-              <div key={stat.label}>
-                <dd>{stat.value}</dd>
-                <dt>{stat.label}</dt>
-              </div>
-            ))}
-          </dl>
-        </>
-      ) : (
-        <PreviewEmpty>Aquí corren los pósters de los shows. Súbelos en Cartelera.</PreviewEmpty>
-      )}
+      {posters.length ? <PosterRow shows={posters} /> : <PreviewEmpty>Aquí corren los pósters de los shows. Súbelos en Cartelera.</PreviewEmpty>}
     </Section>
   );
 }
@@ -355,8 +342,8 @@ function Muro({ block, content, shows, past }: { block: LayoutBlock; content: Pu
 function Recintos({ block, content, shows }: { block: LayoutBlock; content: PublicSiteContent; shows: PublicSiteNewsItem[] }) {
   const venues = (content.venues ?? []).filter((venue) => venue.name?.trim());
   return (
-    <Section block={block} tone="papel" className="sa-sec--mosaic sa-venues">
-      <header className="sa-headc" data-reveal>
+    <Section block={block} tone="papel" className="sa-venues">
+      <header className="sa-rowhead" data-reveal>
         <h2 id={`${anchorOf(block)}-t`} className="sa-title">
           {content.headline}
         </h2>
@@ -393,20 +380,45 @@ function Recintos({ block, content, shows }: { block: LayoutBlock; content: Publ
   );
 }
 
-/** Quiénes somos: un titular y dos líneas a tamaño de lectura, no un cartel. */
-function Frase({ block, content }: { block: LayoutBlock; content: PublicSiteContent }) {
+/** Lo que se puede contar sin escribirlo a mano: sale de la cartelera y nunca se queda viejo. */
+function seasonStats(shows: PublicSiteNewsItem[], past: PublicSiteNewsItem[]) {
+  const all = [...shows, ...past];
+  if (!all.length) return [];
+  const venues = new Set(all.map((show) => show.venue?.trim().toLowerCase()).filter(Boolean));
+  // Cholula y San Andrés son la misma zona que Puebla: contarlas aparte inflaría el dato.
+  const cities = new Set(all.map((show) => show.city?.trim().toLowerCase().replace(/.*cholula.*/, 'puebla')).filter(Boolean));
+  return [
+    { value: all.length, label: all.length === 1 ? 'show esta temporada' : 'shows esta temporada' },
+    { value: venues.size, label: venues.size === 1 ? 'escenario' : 'escenarios' },
+    { value: cities.size, label: cities.size === 1 ? 'ciudad' : 'ciudades' },
+  ].filter((stat) => stat.value > 0);
+}
+
+/** Quiénes somos: un titular, dos líneas a tamaño de lectura y los datos de la temporada. */
+function Frase({ block, content, shows, past }: { block: LayoutBlock; content: PublicSiteContent; shows: PublicSiteNewsItem[]; past: PublicSiteNewsItem[] }) {
+  const stats = seasonStats(shows, past);
   return (
     <Section block={block} tone="papel" className="sa-say">
       <div className="sa-say__copy" data-reveal>
         {content.eyebrow ? <p className="sa-eyebrow">{content.eyebrow}</p> : null}
-        <h2 id={`${anchorOf(block)}-t`} className="sa-say__title">
-          {content.headline || 'Arta Producciones.'}
+        <h2 id={`${anchorOf(block)}-t`} className="sa-title">
+          {content.headline}
         </h2>
         <p className="sa-say__text">{content.text}</p>
         <Link className="sa-arrow" href={pageHref('nosotros')}>
           Conoce a Arta
         </Link>
       </div>
+      {stats.length ? (
+        <dl className="sa-say__stats" data-reveal>
+          {stats.map((stat) => (
+            <div key={stat.label}>
+              <dt>{stat.label}</dt>
+              <dd>{stat.value}</dd>
+            </div>
+          ))}
+        </dl>
+      ) : null}
     </Section>
   );
 }
@@ -548,34 +560,20 @@ export function ServiceCards({ services }: { services: Service[] }) {
   );
 }
 
-/** Un servicio en el mosaico de Inicio: se turnan foto y texto grande. */
-function ServiceTileBento({ service, index, full }: { service: Service; index: number; full: boolean }) {
-  const turn = index % 4;
-  const photo = turn % 2 === 0 ? service.imageUrl : undefined;
-  const words = (service.tagline || '').split(/(?<=\.)\s+/).filter(Boolean);
-  const stacked = !photo && words.length > 1;
-  const span = full ? 'full' : turn === 0 || turn === 3 ? 'big' : 'small';
+/** Un servicio en Inicio: una tarjeta alta, con su foto, su frase y a dónde lleva. */
+function ServiceTileBento({ service }: { service: Service }) {
   return (
-    <li className={`sa-bt sa-bt--${span} ${photo ? 'sa-bt--photo' : ''}`.trim()} data-reveal>
+    <li className={`sa-bt ${service.imageUrl ? 'sa-bt--photo' : ''}`.trim()} data-reveal>
       <Link href={serviceHref(service.slug)}>
-        {photo ? (
+        {service.imageUrl ? (
           <span className="sa-bt__media">
             {/* eslint-disable-next-line @next/next/no-img-element -- foto dinámica de Studio */}
-            <img src={photo} alt="" loading="lazy" decoding="async" />
+            <img src={service.imageUrl} alt="" loading="lazy" decoding="async" />
           </span>
         ) : null}
         <span className="sa-bt__label">{service.title}</span>
-        {stacked ? (
-          <h3 className="sa-bt__stack">
-            {words.map((word) => (
-              <span key={word}>{word}</span>
-            ))}
-          </h3>
-        ) : (
-          <h3>{service.tagline || service.title}</h3>
-        )}
+        <h3>{service.tagline || service.title}</h3>
         <p className="sa-bt__foot">{service.body}</p>
-        <span className="sa-bt__plus" aria-hidden="true" />
       </Link>
     </li>
   );
@@ -583,19 +581,21 @@ function ServiceTileBento({ service, index, full }: { service: Service; index: n
 
 function Servicios({ block, content, services }: { block: LayoutBlock; content: PublicSiteContent; services: Service[] }) {
   return (
-    <Section block={block} tone="papel" className="sa-sec--mosaic">
-      <header className="sa-headc" data-reveal>
-        <h2 id={`${anchorOf(block)}-t`} className="sa-title">
-          <Sentences text={content.headline} />
-        </h2>
-        {content.lead ? <p className="sa-headc__lead">{content.lead}</p> : null}
+    <Section block={block} tone="papel" className="sa-services-sec">
+      <header className="sa-rowhead" data-reveal>
+        <div>
+          <h2 id={`${anchorOf(block)}-t`} className="sa-title">
+            <Sentences text={content.headline} />
+          </h2>
+          {content.lead ? <p className="sa-rowhead__lead">{content.lead}</p> : null}
+        </div>
         <Link className="sa-arrow" href={pageHref('servicios')}>
           Ver todos los servicios
         </Link>
       </header>
       <ul className="sa-bento">
-        {services.map((service, i) => (
-          <ServiceTileBento key={service.slug} service={service} index={i} full={i === services.length - 1 && services.length % 2 === 1} />
+        {services.map((service) => (
+          <ServiceTileBento key={service.slug} service={service} />
         ))}
       </ul>
     </Section>
@@ -815,10 +815,7 @@ export function CtaBand({ data, id, block }: { data: Pick<PublicSiteData, 'pages
   const titleId = `${id || 'invitacion'}-t`;
   return (
     <section id={id} data-block={block} className="sa-sec sa-sec--tinta sa-band" aria-labelledby={titleId}>
-      {content.pageImage ? (
-        // eslint-disable-next-line @next/next/no-img-element -- foto dinámica de Studio
-        <img className="sa-band__img" src={content.pageImage} alt="" loading="lazy" decoding="async" />
-      ) : null}
+      <StageLights index={0} wide />
       <div className="sa-band__copy" data-reveal>
         <h2 id={titleId} className="sa-title sa-title--xl">
           {content.headline}
@@ -901,7 +898,7 @@ export function SiteBlock({ block, data, past = [] }: { block: LayoutBlock; data
   const content = sectionContent(data, key);
   switch (block.type) {
     case 'frase':
-      return <Frase block={block} content={content} />;
+      return <Frase block={block} content={content} shows={data.shows} past={past} />;
     case 'cartelera':
       return <Cartelera block={block} content={content} shows={data.shows} />;
     case 'proceso':
