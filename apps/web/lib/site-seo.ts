@@ -8,9 +8,9 @@ import {
   type PublicSiteData,
   type PublicSiteFaq,
   type PublicSiteNewsItem,
-  type PublicSiteTile,
 } from '@/lib/public-site-data';
-import { BLOCK_META, DEFAULT_CONTENT, LAYOUT_KEY, resolveLayout } from '@/lib/site-blocks';
+import { BLOCK_META, DEFAULT_CONTENT, LAYOUT_KEY, pageHref, pageMeta, resolveLayout, serviceHref, type PageKey } from '@/lib/site-blocks';
+import { servicesOf, type Service } from '@/lib/site-model';
 
 export const SITE_NAME = 'Arta Producciones';
 export const SITE_TAGLINE = 'La experiencia del Show';
@@ -392,33 +392,77 @@ export function faqPageNode(faqs: PublicSiteFaq[] = PUBLIC_FAQ) {
   };
 }
 
-function slugify(text: string): string {
-  return text
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-|-$/g, '');
-}
-
-/** Servicios = las tarjetas visibles de `#modulos` (editables en Studio), no una lista aparte. */
-export function serviceNodes(tiles: PublicSiteTile[]) {
-  const home = absoluteUrl(HOME_PATH);
-  return tiles
-    .filter((t) => t.title?.trim())
-    .map((t) => ({
+/** Servicios = los que se ven en el sitio (editables en Studio), cada uno con su página. */
+export function serviceNodes(services: Service[]) {
+  return services.map((s) => {
+    const url = absoluteUrl(serviceHref(s.slug));
+    return {
       '@type': 'Service',
-      '@id': `${home}#servicio-${slugify(t.title)}`,
-      name: t.title,
-      serviceType: t.title,
-      description: t.body,
+      '@id': `${url}#servicio`,
+      name: s.title,
+      serviceType: s.title,
+      description: s.body,
       provider: { '@id': ORG_ID() },
       areaServed: [
         { '@type': 'State', name: 'Puebla' },
         { '@type': 'Country', name: 'México' },
       ],
-      url: `${home}#modulos`,
-    }));
+      url,
+    };
+  });
+}
+
+/** Título y descripción de una página: lo que diga Studio y, si no, su nombre y su entrada. */
+export function pageMetadata(data: Pick<PublicSiteData, 'pages'>, key: PageKey): Metadata {
+  const meta = pageMeta(key);
+  const content = sectionContent(data, meta.sections[0]);
+  return buildPublicMetadata({
+    title: content.seoTitle?.trim() || meta.label,
+    description: content.seoDescription?.trim() || content.lead || content.summary || content.body || meta.description,
+    path: pageHref(key),
+    image: content.pageImage,
+    imageAlt: meta.label,
+  });
+}
+
+/** `@graph` de una página del sitio con sus migas. */
+export function sitePageGraphJsonLd(data: Pick<PublicSiteData, 'pages'>, key: PageKey) {
+  const meta = pageMeta(key);
+  const content = sectionContent(data, meta.sections[0]);
+  return simplePageGraphJsonLd({
+    path: pageHref(key),
+    name: meta.label,
+    description: content.seoDescription?.trim() || content.lead || content.summary || undefined,
+    settings: siteSettings(data),
+  });
+}
+
+/** `@graph` de Preguntas: el FAQ va donde están todas las preguntas, no en el resumen de Inicio. */
+export function faqGraphJsonLd(data: Pick<PublicSiteData, 'pages'>) {
+  const faqs = sectionContent(data, 'home_faq').faqs?.filter((f) => f.question?.trim()) ?? [];
+  const graph = sitePageGraphJsonLd(data, 'preguntas');
+  return faqs.length ? { ...graph, '@graph': [...graph['@graph'], faqPageNode(faqs)] } : graph;
+}
+
+/** `@graph` de la página de un servicio. */
+export function serviceGraphJsonLd(data: Pick<PublicSiteData, 'pages'>, service: Service) {
+  const path = serviceHref(service.slug);
+  const url = absoluteUrl(path);
+  const crumbs: Crumb[] = [
+    { name: 'Inicio', path: HOME_PATH },
+    { name: 'Servicios', path: pageHref('servicios') },
+    { name: service.title, path },
+  ];
+  return {
+    '@context': 'https://schema.org',
+    '@graph': [
+      organizationNode(siteSettings(data)),
+      websiteNode(),
+      ...serviceNodes([service]),
+      webPageNode({ path, name: service.title, description: service.body, crumbs }),
+      breadcrumbNode(url, crumbs),
+    ],
+  };
 }
 
 const EVENT_STATUS: Record<string, string> = {
@@ -469,11 +513,8 @@ export function showEventNode(show: PublicNewsPost | PublicSiteNewsItem) {
 export function homePageGraphJsonLd(data?: PublicSiteData) {
   const pages = data?.pages ?? [];
   const blocks = resolveLayout(pages.find((p) => p.sectionKey === LAYOUT_KEY)?.contentJson).filter((b) => b.visible);
-  const contentOf = (key: string) => sectionContent({ pages }, key);
   const has = (type: keyof typeof BLOCK_META) => blocks.some((b) => b.type === type);
   const settings = siteSettings({ pages });
-  const tiles = contentOf('home_modulos').tiles ?? [];
-  const faqs = contentOf('home_faq').faqs?.filter((f) => f.question?.trim()) ?? [];
   return {
     '@context': 'https://schema.org',
     '@graph': [
@@ -485,8 +526,7 @@ export function homePageGraphJsonLd(data?: PublicSiteData) {
         mentions: [{ '@id': VENUE_ID() }],
       }),
       venueNode(),
-      ...(has('faq') && faqs.length ? [faqPageNode(faqs)] : []),
-      ...(has('servicios') ? serviceNodes(tiles) : []),
+      ...(has('servicios') ? serviceNodes(servicesOf({ pages })) : []),
       ...(has('cartelera') ? (data?.shows ?? []).map(showEventNode) : []),
     ],
   };
@@ -544,7 +584,7 @@ export function showGraphJsonLd(show: PublicNewsPost) {
   const url = absoluteUrl(path);
   const crumbs: Crumb[] = [
     { name: 'Inicio', path: HOME_PATH },
-    { name: 'Cartelera', path: `${HOME_PATH}/cartelera` },
+    { name: 'Cartelera', path: pageHref('cartelera') },
     { name: show.title, path },
   ];
   return {
@@ -560,7 +600,7 @@ export function showGraphJsonLd(show: PublicNewsPost) {
 }
 
 /** `@graph` de una página suelta (contratar, legales): página + migas desde la portada. */
-export function simplePageGraphJsonLd(opts: { path: string; name: string; description?: string }) {
+export function simplePageGraphJsonLd(opts: { path: string; name: string; description?: string; settings?: PublicSiteContent }) {
   const url = absoluteUrl(opts.path);
   const crumbs: Crumb[] = [
     { name: 'Inicio', path: HOME_PATH },
@@ -569,7 +609,7 @@ export function simplePageGraphJsonLd(opts: { path: string; name: string; descri
   return {
     '@context': 'https://schema.org',
     '@graph': [
-      organizationNode(),
+      organizationNode(opts.settings),
       websiteNode(),
       webPageNode({ path: opts.path, name: opts.name, description: opts.description, crumbs }),
       breadcrumbNode(url, crumbs),

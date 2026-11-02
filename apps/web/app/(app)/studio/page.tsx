@@ -7,16 +7,16 @@ import { AppShell } from '@/components/app-shell/AppShell';
 import { CollectionEditor } from '@/components/studio/CollectionEditor';
 import { COLLECTIONS, type CollectionConfig, type StudioRow } from '@/components/studio/collections';
 import type { FormValues } from '@/components/studio/FieldsForm';
+import { HomeSections } from '@/components/studio/HomeSections';
 import { PreviewPane, type PreviewHandle } from '@/components/studio/PreviewPane';
 import { SectionEditor } from '@/components/studio/SectionEditor';
-import { StudioOutline, type OutlineCount } from '@/components/studio/StudioOutline';
+import { StudioOutline } from '@/components/studio/StudioOutline';
 import { askConfirm } from '@/components/ui/AskDialog';
 import { LoadingBlock } from '@/components/ui/LoadingBlock';
 import { ActionLink, FlashMessage, PageHeader } from '@/components/ui/PageChrome';
 import { canPublishStudio, type RoleKey } from '@arta/rbac';
 import { api } from '@/lib/api';
 import {
-  BLOCK_COLLECTION,
   BLOCK_META,
   CUSTOM_DEFAULTS,
   CUSTOM_FIELDS,
@@ -24,15 +24,23 @@ import {
   HERO_KEY,
   LAYOUT_KEY,
   SECTION_FIELDS,
+  SECTION_LABELS,
   SETTINGS_KEY,
+  SITE_PAGES,
   anchorOf,
+  pageHref,
+  pageMeta,
   resolveLayout,
+  resolvePages,
   sectionKeyOf,
   type BlockType,
   type CollectionKey,
-  type Field,
   type LayoutBlock,
+  type LayoutPage,
+  type PageKey,
+  type ServiceTile,
 } from '@/lib/site-blocks';
+import { withServiceDefaults } from '@/lib/site-model';
 import { uniqueSlug } from '@/lib/studio-templates';
 import { useUser } from '@/lib/user-context';
 
@@ -53,33 +61,32 @@ const isProposal = (p: Page) => p.sectionKey.endsWith(PROPOSAL_SUFFIX);
 
 type Notice = { variant: 'success' | 'error' | 'warn' | 'info'; text: string };
 
-/** Avisos viejos llegan con `?tab=`; los nuevos, con el nombre del contenido. */
-const TAB_TO_BLOCK: Record<string, string> = {
-  carousel: 'portada',
-  sections: 'portada',
+/** Los avisos de revisión llegan con `?tab=`: el nombre viejo de la pestaña o el del contenido. */
+const TAB_TO_PAGE: Record<string, string> = {
+  carousel: 'inicio',
+  sections: 'inicio',
   news: 'noticias',
   shows: 'cartelera',
   historia: 'historias',
   foto: 'galeria',
-  aliado: 'aliados',
+  aliado: 'nosotros',
 };
 
-const LINK_SUGGESTIONS = [
-  { value: '#cartelera', label: 'Cartelera' },
-  { value: '#historias', label: 'Historias' },
-  { value: '#nosotros', label: 'Nosotros' },
-  { value: '#modulos', label: 'Lo que hacemos' },
-  { value: '#noticias', label: 'Noticias' },
-  { value: '#galeria', label: 'Galería' },
-  { value: '#contacto', label: 'Contacto' },
-];
+/** Nombres anteriores de `?bloque=`, cuando cada sección era una entrada. */
+const OLD_BLOCKS: Record<string, string> = { portada: 'inicio', faq: 'preguntas', aliados: 'nosotros', ubicacion: 'contacto' };
+
+const LINK_SUGGESTIONS = SITE_PAGES.map((page) => ({ value: pageHref(page.key), label: page.label }));
+
+const COLLECTION_NOUNS: Partial<Record<CollectionKey, [string, string]>> = {
+  slides: ['foto', 'fotos'],
+  shows: ['show', 'shows'],
+  news: ['noticia', 'noticias'],
+  historia: ['historia', 'historias'],
+  foto: ['foto', 'fotos'],
+};
 
 function errorText(e: unknown) {
   return e instanceof Error ? e.message : 'Algo falló. Inténtalo de nuevo.';
-}
-
-function rowsDraftCount(config: CollectionConfig, rows: StudioRow[]): OutlineCount {
-  return { total: rows.length, drafts: rows.filter((r) => !config.view(r).live).length };
 }
 
 export default function StudioPage() {
@@ -92,7 +99,7 @@ export default function StudioPage() {
   const [slides, setSlides] = useState<StudioRow[]>([]);
   const [news, setNews] = useState<StudioRow[]>([]);
   const [items, setItems] = useState<StudioRow[]>([]);
-  const [selected, setSelected] = useState('portada');
+  const [selected, setSelected] = useState('inicio');
   const [previewOpen, setPreviewOpen] = useState(false);
   const preview = useRef<PreviewHandle | null>(null);
 
@@ -130,7 +137,8 @@ export default function StudioPage() {
       .catch((e) => setNotice({ variant: 'error', text: errorText(e) }))
       .finally(() => setLoading(false));
     const params = new URLSearchParams(window.location.search);
-    const wanted = params.get('bloque') || TAB_TO_BLOCK[params.get('tab') || ''];
+    const bloque = params.get('bloque');
+    const wanted = (bloque && (OLD_BLOCKS[bloque] || bloque)) || TAB_TO_PAGE[params.get('tab') || ''];
     if (wanted) setSelected(wanted);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
@@ -141,10 +149,9 @@ export default function StudioPage() {
     [pages],
   );
 
-  const blocks = useMemo(
-    () => resolveLayout((proposals.get(LAYOUT_KEY) ?? live.get(LAYOUT_KEY))?.contentJson),
-    [proposals, live],
-  );
+  const layout = (proposals.get(LAYOUT_KEY) ?? live.get(LAYOUT_KEY))?.contentJson;
+  const blocks = useMemo(() => resolveLayout(layout), [layout]);
+  const menuPages = useMemo(() => resolvePages(layout), [layout]);
 
   const rowsOf = useCallback(
     (key: CollectionKey): StudioRow[] => {
@@ -169,18 +176,39 @@ export default function StudioPage() {
     [proposals, live],
   );
 
-  const counts = useMemo(() => {
-    const out: Record<string, OutlineCount | undefined> = { portada: rowsDraftCount(COLLECTIONS.slides, slides) };
-    for (const block of blocks) {
-      const key = BLOCK_COLLECTION[block.type];
-      if (key) out[block.id] = rowsDraftCount(COLLECTIONS[key], rowsOf(key));
-    }
-    return out;
-  }, [blocks, rowsOf, slides]);
+  const hasDraftIn = useCallback((key: PageKey) => pageMeta(key).sections.some((section) => proposals.has(section)), [proposals]);
+
+  /** Una línea por página en la lista: qué tiene y en qué estado está. */
+  const statusOf = useCallback(
+    (page: LayoutPage) => {
+      if (!page.visible) return 'Quitada del sitio';
+      if (hasDraftIn(page.key)) return 'Borrador sin publicar';
+      if (page.key === 'nosotros') return 'Textos, fotos y aliados';
+      if (page.key === 'contacto') return 'Formulario, dirección y mapa';
+      const textOf = (key: string, field: string, noun: string, plural: string) => {
+        const list = (proposals.get(key) ?? live.get(key))?.contentJson?.[field] ?? DEFAULT_CONTENT[key]?.[field];
+        const total = Array.isArray(list) ? list.length : 0;
+        return `${total} ${total === 1 ? noun : plural}`;
+      };
+      if (page.key === 'servicios') return textOf('home_modulos', 'tiles', 'servicio', 'servicios');
+      if (page.key === 'preguntas') return textOf('home_faq', 'faqs', 'pregunta', 'preguntas');
+      const key = pageMeta(page.key).collections[0];
+      const noun = key ? COLLECTION_NOUNS[key] : undefined;
+      if (!key || !noun) return 'Textos y fotos';
+      const rows = rowsOf(key);
+      if (!rows.length) {
+        const hidden = page.key === 'historias' || page.key === 'galeria';
+        return hidden ? `Sin ${noun[1]}: aún no sale en el menú` : `Sin ${noun[1]} todavía`;
+      }
+      const draftCount = rows.filter((r) => !COLLECTIONS[key].view(r).live).length;
+      const label = `${rows.length} ${rows.length === 1 ? noun[0] : noun[1]}`;
+      return draftCount ? `${label} · ${draftCount} sin publicar` : label;
+    },
+    [hasDraftIn, proposals, live, rowsOf],
+  );
 
   const blockDrafts = useMemo(() => {
     const out = new Set<string>();
-    if (proposals.has(SETTINGS_KEY)) out.add('ajustes');
     for (const block of blocks) if (proposals.has(sectionKeyOf(block))) out.add(block.id);
     return out;
   }, [blocks, proposals]);
@@ -189,12 +217,13 @@ export default function StudioPage() {
   const pendingSections = useMemo(() => {
     const names = new Map<string, string>();
     for (const key of proposals.keys()) {
-      if (key === LAYOUT_KEY) names.set(key, 'El orden de la página');
+      if (key === LAYOUT_KEY) names.set(key, 'El orden del sitio');
       else if (key === HERO_KEY) names.set(key, 'Portada');
       else if (key === SETTINGS_KEY) names.set(key, 'Datos del sitio');
       else {
+        const page = SITE_PAGES.find((p) => p.sections.includes(key));
         const block = blocks.find((b) => sectionKeyOf(b) === key);
-        names.set(key, block ? labelOf(block) : proposals.get(key)?.title || key);
+        names.set(key, page ? page.label : block ? labelOf(block) : proposals.get(key)?.title || key);
       }
     }
     return names;
@@ -207,7 +236,7 @@ export default function StudioPage() {
         out.push({ id: n.id, title: n.title, block: n.template === 'evento' ? 'cartelera' : 'noticias' });
       }
     }
-    const blockOf: Record<string, string> = { historia: 'historias', foto: 'galeria', aliado: 'aliados' };
+    const blockOf: Record<string, string> = { historia: 'historias', foto: 'galeria', aliado: 'nosotros' };
     for (const i of items) {
       if (!i.active && i.reviewRequestedAt) out.push({ id: i.id, title: i.title || 'Sin título', block: blockOf[i.kind] });
     }
@@ -238,35 +267,43 @@ export default function StudioPage() {
     }
   }
 
-  function scrollPreviewTo(id: string) {
-    if (id === 'ajustes' || id === 'portada') {
-      preview.current?.post({ type: 'scrollTo', anchor: id === 'ajustes' ? 'contacto' : 'portada' });
+  /** La vista previa abre la página que se está editando. */
+  function showInPreview(id: string) {
+    const custom = blocks.find((b) => b.id === id && BLOCK_META[b.type].custom);
+    if (custom) {
+      preview.current?.post({ type: 'page', page: 'inicio' });
+      preview.current?.post({ type: 'scrollTo', anchor: anchorOf(custom) });
       return;
     }
-    const target = blocks.find((b) => b.id === id);
-    if (target) preview.current?.post({ type: 'scrollTo', anchor: anchorOf(target) });
+    const page = SITE_PAGES.find((p) => p.key === id);
+    // Los datos del sitio salen sobre todo en Contacto.
+    preview.current?.post({ type: 'page', page: page ? page.key : 'contacto' });
   }
 
   function selectBlock(id: string) {
     setSelected(id);
-    scrollPreviewTo(id);
+    showInPreview(id);
     // En el teléfono el editor queda debajo de la lista: que se vea qué se abrió.
     if (window.matchMedia('(max-width: 820px)').matches) {
       requestAnimationFrame(() => document.querySelector('.st-editor')?.scrollIntoView({ block: 'start' }));
     }
   }
 
-  // La vista previa abre donde se está editando.
-  const scrollPreviewToSelected = () => scrollPreviewTo(selected);
+  const previewReady = () => showInPreview(selected);
 
   // ─── Maqueta ───────────────────────────────────────────────────────────────
 
-  async function saveLayout(next: LayoutBlock[]) {
-    preview.current?.post({ type: 'layout', blocks: next });
+  async function saveLayout(nextBlocks: LayoutBlock[], nextPages: LayoutPage[] = menuPages) {
+    preview.current?.post({ type: 'layout', blocks: nextBlocks, pages: nextPages });
     await run(async () => {
       await api('/studio/pages', {
         method: 'PUT',
-        body: JSON.stringify({ sectionKey: LAYOUT_KEY, title: 'Maqueta', draft: true, contentJson: { blocks: next } }),
+        body: JSON.stringify({
+          sectionKey: LAYOUT_KEY,
+          title: 'Maqueta',
+          draft: true,
+          contentJson: { blocks: nextBlocks, pages: nextPages },
+        }),
       });
       await load();
     });
@@ -283,11 +320,20 @@ export default function StudioPage() {
     void saveLayout(blocks.map((b) => (b.id === block.id ? { ...b, visible: !b.visible } : b)));
   }
 
+  function movePage(index: number, delta: number) {
+    const next = [...menuPages];
+    const [page] = next.splice(index, 1);
+    next.splice(index + delta, 0, page);
+    void saveLayout(blocks, next);
+  }
+
+  function togglePage(page: LayoutPage) {
+    void saveLayout(blocks, menuPages.map((p) => (p.key === page.key ? { ...p, visible: !p.visible } : p)));
+  }
+
   function addBlock(type: BlockType) {
     const id = Math.random().toString(36).slice(2, 10);
-    const at = blocks.findIndex((b) => b.id === selected);
-    const next = [...blocks];
-    next.splice(at >= 0 ? at + 1 : next.length, 0, { id, type, visible: true });
+    const next = [...blocks, { id, type, visible: true }];
     setSelected(id);
     void saveLayout(next);
   }
@@ -300,7 +346,7 @@ export default function StudioPage() {
       danger: true,
     });
     if (!yes) return;
-    if (selected === block.id) setSelected('portada');
+    if (selected === block.id) setSelected('inicio');
     void saveLayout(blocks.filter((b) => b.id !== block.id));
   }
 
@@ -475,48 +521,128 @@ export default function StudioPage() {
 
   // ─── Pantalla ──────────────────────────────────────────────────────────────
 
-  const block = blocks.find((b) => b.id === selected);
-  const isPortada = selected === 'portada' || (!block && selected !== 'ajustes');
+  const customBlock = blocks.find((b) => b.id === selected && BLOCK_META[b.type].custom);
   const isSettings = selected === 'ajustes';
-  const sectionKey = isSettings ? SETTINGS_KEY : isPortada ? HERO_KEY : sectionKeyOf(block as LayoutBlock);
-  const blockType = block?.type;
-  const collectionKey: CollectionKey | undefined = isPortada ? 'slides' : blockType ? BLOCK_COLLECTION[blockType] : undefined;
-  const fields: Field[] = (blockType && CUSTOM_FIELDS[blockType]) || SECTION_FIELDS[sectionKey] || [];
-  const title = isSettings ? 'Datos del sitio' : isPortada ? 'Portada' : labelOf(block as LayoutBlock);
+  const currentPage = SITE_PAGES.find((p) => p.key === selected) ?? (customBlock || isSettings ? undefined : pageMeta('inicio'));
+
+  const title = isSettings ? 'Datos del sitio' : customBlock ? labelOf(customBlock) : (currentPage as NonNullable<typeof currentPage>).label;
   const description = isSettings
     ? 'Lo que sale en el pie y en contacto: correo, teléfono, WhatsApp, redes y lema.'
-    : isPortada
-      ? 'Lo primero que se ve: los próximos shows y tus fotos, a pantalla completa.'
-      : BLOCK_META[(block as LayoutBlock).type].description;
-
-  const draftRow = proposals.get(sectionKey);
-  const savedContent = (draftRow ?? live.get(sectionKey))?.contentJson;
-  const initial = useMemo<FormValues>(
-    () => ({
-      ...(DEFAULT_CONTENT[sectionKey] ?? (blockType ? CUSTOM_DEFAULTS[blockType] : undefined) ?? {}),
-      ...savedContent,
-    }),
-    [sectionKey, blockType, savedContent],
-  );
+    : customBlock
+      ? BLOCK_META[customBlock.type].description
+      : (currentPage as NonNullable<typeof currentPage>).description;
 
   const pendingNames = [...pendingSections.values()];
 
-  const sectionEditor = (
-    <SectionEditor
-      key={sectionKey}
-      fields={fields}
-      initial={initial}
-      hasDraft={!!draftRow}
-      canPublish={canPublish}
-      busy={busy}
-      linkOptions={LINK_SUGGESTIONS}
-      onLive={(values) => preview.current?.post({ type: 'section', sectionKey, contentJson: values })}
-      onSave={(values, publish) => saveSection(sectionKey, title, values, publish)}
-      onDiscard={() => discardDraft(sectionKey, title)}
-      onReview={() => requestSectionReview(sectionKey)}
-      onError={(text) => say('error', text)}
-    />
-  );
+  /** Los textos de una sección: el borrador si hay, si no lo publicado o el texto de arranque. */
+  function sectionEditor(sectionKey: string, type?: BlockType, heading?: string) {
+    const draftRow = proposals.get(sectionKey);
+    const saved = (draftRow ?? live.get(sectionKey))?.contentJson;
+    const fields = (type && CUSTOM_FIELDS[type]) || SECTION_FIELDS[sectionKey] || [];
+    const name = heading || SECTION_LABELS[sectionKey] || title;
+    const initial = {
+      ...(DEFAULT_CONTENT[sectionKey] ?? (type ? CUSTOM_DEFAULTS[type] : undefined) ?? {}),
+      ...saved,
+    };
+    // El formulario enseña lo mismo que el sitio: un servicio viejo trae aquí su detalle de arranque.
+    if (sectionKey === 'home_modulos' && Array.isArray(initial.tiles)) {
+      initial.tiles = (initial.tiles as ServiceTile[]).map(withServiceDefaults);
+    }
+    return (
+      <SectionEditor
+        key={sectionKey}
+        fields={fields}
+        initial={initial}
+        hasDraft={!!draftRow}
+        canPublish={canPublish}
+        busy={busy}
+        linkOptions={LINK_SUGGESTIONS}
+        onLive={(values) => preview.current?.post({ type: 'section', sectionKey, contentJson: values })}
+        onSave={(values, publish) => saveSection(sectionKey, name, values, publish)}
+        onDiscard={() => discardDraft(sectionKey, name)}
+        onReview={() => requestSectionReview(sectionKey)}
+        onError={(text) => say('error', text)}
+      />
+    );
+  }
+
+  function collectionEditor(key: CollectionKey) {
+    const config = COLLECTIONS[key];
+    return (
+      <CollectionEditor
+        key={key}
+        config={config}
+        rows={rowsOf(key)}
+        canPublish={canPublish}
+        busy={busy}
+        linkOptions={LINK_SUGGESTIONS}
+        onSave={(values, id, publish) => saveRow(config, values, id, publish)}
+        onSetLive={(row, value) => setRowLive(config, row, value)}
+        onRemove={(row) => removeRow(config, row)}
+        onMove={(ids) => moveRows(config, ids)}
+        onReview={async (row) => {
+          await reviewRow(config, row);
+        }}
+        onError={(text) => say('error', text)}
+      />
+    );
+  }
+
+  /** Editor de la página: su contenido primero y sus textos después. */
+  function pageEditor(page: NonNullable<typeof currentPage>) {
+    const texts = (key: string) => (
+      <details className="st-texts" key={`t-${key}`}>
+        <summary>{SECTION_LABELS[key]}</summary>
+        {sectionEditor(key)}
+      </details>
+    );
+    if (page.key === 'inicio') {
+      return (
+        <>
+          <h3 className="st-subtitle">Fotos de la portada</h3>
+          {collectionEditor('slides')}
+          <HomeSections
+            blocks={blocks}
+            pages={menuPages}
+            drafts={blockDrafts}
+            labelOf={labelOf}
+            busy={busy}
+            onOpen={(block) => selectBlock(BLOCK_META[block.type].custom ? block.id : (BLOCK_META[block.type].page as string))}
+            onMove={moveBlock}
+            onToggle={toggleBlock}
+            onRemove={(block) => void removeBlock(block)}
+            onAdd={addBlock}
+          />
+          {texts(HERO_KEY)}
+        </>
+      );
+    }
+    if (page.key === 'nosotros') {
+      return (
+        <>
+          {sectionEditor('home_about')}
+          <h3 className="st-subtitle">Aliados</h3>
+          {collectionEditor('aliado')}
+          {texts('home_aliados')}
+        </>
+      );
+    }
+    if (page.collections.length) {
+      return (
+        <>
+          {collectionEditor(page.collections[0])}
+          {page.sections.map(texts)}
+        </>
+      );
+    }
+    const [first, ...rest] = page.sections;
+    return (
+      <>
+        {sectionEditor(first)}
+        {rest.map(texts)}
+      </>
+    );
+  }
 
   return (
     <AppShell title="Studio · Sitio Arta">
@@ -555,7 +681,7 @@ export default function StudioPage() {
                 {canPublish ? (
                   <div className="st-pending__actions">
                     {proposals.has(LAYOUT_KEY) ? (
-                      <button className="btn ghost btn-sm" type="button" disabled={busy} onClick={() => void discardDraft(LAYOUT_KEY, 'el orden de la página')}>
+                      <button className="btn ghost btn-sm" type="button" disabled={busy} onClick={() => void discardDraft(LAYOUT_KEY, 'el orden del sitio')}>
                         Descartar orden
                       </button>
                     ) : null}
@@ -594,62 +720,53 @@ export default function StudioPage() {
 
             <div className="st-grid">
               <StudioOutline
-                blocks={blocks}
-                selected={isPortada ? 'portada' : selected}
-                counts={counts}
-                drafts={blockDrafts}
-                labelOf={labelOf}
+                pages={menuPages}
+                selected={customBlock ? 'inicio' : isSettings ? 'ajustes' : (currentPage as NonNullable<typeof currentPage>).key}
+                statusOf={statusOf}
+                settingsDraft={proposals.has(SETTINGS_KEY)}
                 busy={busy}
                 onSelect={selectBlock}
-                onMove={moveBlock}
-                onToggle={toggleBlock}
-                onRemove={(b) => void removeBlock(b)}
-                onAdd={addBlock}
+                onMove={movePage}
+                onToggle={togglePage}
               />
 
               <section className="st-editor" aria-labelledby="st-editor-title">
                 <header className="st-editor__head">
-                  <h2 id="st-editor-title">{title}</h2>
+                  {customBlock ? (
+                    <button type="button" className="btn-quiet st-back" onClick={() => selectBlock('inicio')}>
+                      ← Inicio
+                    </button>
+                  ) : null}
+                  <div className="st-editor__title">
+                    <h2 id="st-editor-title">{title}</h2>
+                    {currentPage ? (
+                      <a className="st-pagelink" href={pageHref(currentPage.key)} target="_blank" rel="noopener noreferrer">
+                        Ver página publicada
+                      </a>
+                    ) : null}
+                  </div>
                   <p>{description}</p>
-                  {block && !block.visible ? (
+                  {currentPage && !menuPages.find((p) => p.key === currentPage.key)?.visible ? (
                     <p className="st-banner">
-                      <strong>Esta sección está quitada del sitio.</strong> Tócala en «Poner» para que vuelva a salir.
+                      <strong>Esta página está quitada del sitio.</strong> Tócala en «Poner», en la lista de páginas, para que vuelva a salir.
+                    </p>
+                  ) : null}
+                  {customBlock && !customBlock.visible ? (
+                    <p className="st-banner">
+                      <strong>Esta sección está quitada de Inicio.</strong> Tócala en «Poner» para que vuelva a salir.
                     </p>
                   ) : null}
                 </header>
 
-                {collectionKey ? (
-                  <CollectionEditor
-                    config={COLLECTIONS[collectionKey]}
-                    rows={rowsOf(collectionKey)}
-                    canPublish={canPublish}
-                    busy={busy}
-                    linkOptions={LINK_SUGGESTIONS}
-                    onSave={(values, id, publish) => saveRow(COLLECTIONS[collectionKey], values, id, publish)}
-                    onSetLive={(row, value) => setRowLive(COLLECTIONS[collectionKey], row, value)}
-                    onRemove={(row) => removeRow(COLLECTIONS[collectionKey], row)}
-                    onMove={(ids) => moveRows(COLLECTIONS[collectionKey], ids)}
-                    onReview={async (row) => {
-                      await reviewRow(COLLECTIONS[collectionKey], row);
-                    }}
-                    onError={(text) => say('error', text)}
-                  />
-                ) : null}
-
-                {fields.length ? (
-                  collectionKey ? (
-                    <details className="st-texts">
-                      <summary>Textos de la sección</summary>
-                      {sectionEditor}
-                    </details>
-                  ) : (
-                    sectionEditor
-                  )
-                ) : null}
+                {isSettings
+                  ? sectionEditor(SETTINGS_KEY)
+                  : customBlock
+                    ? sectionEditor(sectionKeyOf(customBlock), customBlock.type, labelOf(customBlock))
+                    : pageEditor(currentPage as NonNullable<typeof currentPage>)}
               </section>
 
               <div className={`st-preview-slot ${previewOpen ? 'is-open' : ''}`.trim()}>
-                <PreviewPane ref={preview} onClose={() => setPreviewOpen(false)} onReady={scrollPreviewToSelected} />
+                <PreviewPane ref={preview} onClose={() => setPreviewOpen(false)} onReady={previewReady} />
               </div>
             </div>
           </>

@@ -6,6 +6,8 @@ import '@/styles/sitio.scss';
 import { PublicSite } from '@/components/site/PublicSite';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { LoadingBlock } from '@/components/ui/LoadingBlock';
+import { SITE_PAGES } from '@/lib/site-blocks';
+import type { SiteRoute } from '@/lib/site-model';
 import { useUser } from '@/lib/user-context';
 
 /**
@@ -26,6 +28,10 @@ export default function SitePreviewPage() {
 
   const embed = params?.get('embed') === '1';
   const mode = useMemo(() => (params?.get('modo') === 'publicado' ? 'publicado' : 'borradores'), [params]);
+  const initial = useMemo<SiteRoute>(() => {
+    const page = SITE_PAGES.find((p) => p.key === params?.get('pagina'))?.key ?? 'inicio';
+    return { page, slug: params?.get('slug') || undefined };
+  }, [params]);
 
   if (loading || !params) {
     return (
@@ -66,7 +72,7 @@ export default function SitePreviewPage() {
           <Link href="/studio">Volver a Studio</Link>
         </div>
       )}
-      <PublicSite mode={mode} embed={embed} />
+      <PublicSite mode={mode} embed={embed} initial={initial} />
     </>
   );
 }

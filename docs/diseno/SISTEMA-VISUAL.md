@@ -177,6 +177,7 @@ El sitio de Arta dejó el dorado: es tinta y papel como el panel, con más escal
 
 - **Titulares:** Outfit 800/900 con tracking cerrado, la letra de la marca. **Texto:** Nunito. Las dos locales.
 - **Motivo:** la «a» girada del pie corporativo (`public/brand/arta-motivo.svg`), en la portada, el menú del teléfono y contacto.
-- **Pie:** las letras «arta» a todo lo ancho con una foto del show asomándose (`arta-wordmark.svg`).
-- **Fotos:** portada y galería en blanco y negro con CSS (la galería se ve a color al ampliar); pósters e historias, a color.
+- **Pie:** mapa del sitio y las letras «arta» a todo lo ancho con una foto del show asomándose (`arta-wordmark.svg`).
+- **Páginas:** cabecera con foto a color o tinta con el motivo, y migas. El menú marca dónde estás.
+- **Fotos:** a color con un ajuste discreto (`--photo`), pedido de Adam el 01-11-2026; pósters tal cual; logos de aliados y mapa en un tono.
 - **Foto de Nosotros:** recorte en arco, el de las letras de la marca.

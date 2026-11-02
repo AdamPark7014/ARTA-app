@@ -181,6 +181,103 @@
   color: var(--muted);
 }
 
+/* Secciones de Inicio, dentro del editor */
+.st-subtitle {
+  margin: 8px 0 0;
+  font-size: 14.5px;
+  font-weight: 650;
+}
+
+.st-home {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
+.st-home__list {
+  display: grid;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.st-home__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 2px 12px;
+  padding: 7px 0;
+  border-top: 1px solid var(--line);
+}
+
+.st-home__row:first-child {
+  border-top: 0;
+}
+
+.st-home__row.is-off .st-home__open strong {
+  text-decoration: line-through;
+  opacity: 0.6;
+}
+
+.st-home__open {
+  display: grid;
+  flex: 1 1 200px;
+  min-width: 0;
+  gap: 1px;
+  padding: 2px 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.st-home__open strong {
+  font-size: 13.5px;
+  font-weight: 650;
+}
+
+.st-home__open:hover strong {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.st-home__open span {
+  font-size: 11.5px;
+  color: var(--text-3);
+}
+
+.st-home__row .st-order {
+  padding: 0;
+}
+
+.st-back {
+  margin-bottom: 4px;
+  font-size: 12.5px;
+}
+
+.st-editor__title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 2px 12px;
+}
+
+.st-pagelink {
+  font-size: 12.5px;
+  font-weight: 650;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  white-space: nowrap;
+}
+
 .st-outline__settings {
   border-top: 1px solid var(--line);
   border-radius: 0;

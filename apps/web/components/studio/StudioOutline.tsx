@@ -1,133 +1,66 @@
 'use client';
 
-import { useState } from 'react';
-import { BLOCK_META, type BlockType, type LayoutBlock } from '@/lib/site-blocks';
-
-export type OutlineCount = { total: number; drafts: number };
+import { FIXED_PAGES, pageMeta, type LayoutPage } from '@/lib/site-blocks';
 
 type StudioOutlineProps = {
-  blocks: LayoutBlock[];
+  pages: LayoutPage[];
+  /** Lo que está seleccionado: una página, `ajustes` o una sección agregada a Inicio. */
   selected: string;
-  counts: Record<string, OutlineCount | undefined>;
-  drafts: Set<string>;
-  /** Etiqueta con que se ve una sección en la lista. */
-  labelOf: (block: LayoutBlock) => string;
+  /** Una línea por página: qué tiene, si está en borrador o quitada. */
+  statusOf: (page: LayoutPage) => string;
+  settingsDraft: boolean;
   busy: boolean;
   onSelect: (id: string) => void;
   onMove: (index: number, delta: number) => void;
-  onToggle: (block: LayoutBlock) => void;
-  onRemove: (block: LayoutBlock) => void;
-  onAdd: (type: BlockType) => void;
+  onToggle: (page: LayoutPage) => void;
 };
 
-const NOUNS: Partial<Record<BlockType | 'portada', [string, string]>> = {
-  portada: ['foto', 'fotos'],
-  cartelera: ['show', 'shows'],
-  historias: ['historia', 'historias'],
-  noticias: ['noticia', 'noticias'],
-  galeria: ['foto', 'fotos'],
-  aliados: ['aliado', 'aliados'],
-};
-
-function countLabel(kind: BlockType | 'portada', count?: OutlineCount) {
-  const noun = NOUNS[kind];
-  if (!count || !noun) return 'Textos y fotos';
-  if (!count.total) return `Sin ${noun[1]} todavía`;
-  const label = `${count.total} ${count.total === 1 ? noun[0] : noun[1]}`;
-  return count.drafts ? `${label} · ${count.drafts} sin publicar` : label;
-}
-
-/** La maqueta: la página de arriba a abajo, tal como sale en el sitio. */
-export function StudioOutline({
-  blocks,
-  selected,
-  counts,
-  drafts,
-  labelOf,
-  busy,
-  onSelect,
-  onMove,
-  onToggle,
-  onRemove,
-  onAdd,
-}: StudioOutlineProps) {
-  const [adding, setAdding] = useState(false);
-  const customTypes = (Object.keys(BLOCK_META) as BlockType[]).filter((t) => BLOCK_META[t].custom);
-
+/** El sitio, página por página, en el orden del menú. */
+export function StudioOutline({ pages, selected, statusOf, settingsDraft, busy, onSelect, onMove, onToggle }: StudioOutlineProps) {
   return (
-    <nav className="st-outline" aria-label="Maqueta del sitio">
-      <p className="st-outline__cap">La página, de arriba a abajo</p>
+    <nav className="st-outline" aria-label="Páginas del sitio">
+      <p className="st-outline__cap">Páginas del sitio</p>
       <ol>
-        <li className={`st-block ${selected === 'portada' ? 'is-selected' : ''}`.trim()}>
-          <button type="button" className="st-block__main" aria-current={selected === 'portada'} onClick={() => onSelect('portada')}>
-            <strong>Portada</strong>
-            <span>{countLabel('portada', counts.portada)}</span>
-          </button>
-          <span className="st-block__fixed">Siempre arriba</span>
-        </li>
-        {blocks.map((block, index) => {
-          const meta = BLOCK_META[block.type];
-          const label = labelOf(block);
+        {pages.map((page, index) => {
+          const { label } = pageMeta(page.key);
+          const fixed = page.key === 'inicio';
           return (
-            <li
-              key={block.id}
-              className={`st-block ${selected === block.id ? 'is-selected' : ''} ${block.visible ? '' : 'is-off'}`.trim()}
-            >
-              <button type="button" className="st-block__main" aria-current={selected === block.id} onClick={() => onSelect(block.id)}>
+            <li key={page.key} className={`st-block ${selected === page.key ? 'is-selected' : ''} ${page.visible ? '' : 'is-off'}`.trim()}>
+              <button type="button" className="st-block__main" aria-current={selected === page.key} onClick={() => onSelect(page.key)}>
                 <strong>{label}</strong>
-                <span>
-                  {!block.visible ? 'Quitada del sitio' : drafts.has(block.id) ? 'Borrador sin publicar' : countLabel(block.type, counts[block.id])}
-                </span>
+                <span>{statusOf(page)}</span>
               </button>
-              <div className="st-order">
-                <button type="button" disabled={busy || index === 0} aria-label={`Subir ${label}`} onClick={() => onMove(index, -1)}>
-                  Subir
-                </button>
-                <button
-                  type="button"
-                  disabled={busy || index === blocks.length - 1}
-                  aria-label={`Bajar ${label}`}
-                  onClick={() => onMove(index, 1)}
-                >
-                  Bajar
-                </button>
-                <button type="button" disabled={busy} aria-label={`${block.visible ? 'Quitar del sitio' : 'Poner en el sitio'} ${label}`} onClick={() => onToggle(block)}>
-                  {block.visible ? 'Quitar' : 'Poner'}
-                </button>
-                {meta.custom ? (
-                  <button type="button" disabled={busy} aria-label={`Borrar ${label}`} onClick={() => onRemove(block)}>
-                    Borrar
+              {fixed ? (
+                <span className="st-block__fixed">Siempre primero</span>
+              ) : (
+                <div className="st-order">
+                  <button type="button" disabled={busy || index <= 1} aria-label={`Subir ${label} en el menú`} onClick={() => onMove(index, -1)}>
+                    Subir
                   </button>
-                ) : null}
-              </div>
+                  <button
+                    type="button"
+                    disabled={busy || index === pages.length - 1}
+                    aria-label={`Bajar ${label} en el menú`}
+                    onClick={() => onMove(index, 1)}
+                  >
+                    Bajar
+                  </button>
+                  {FIXED_PAGES.includes(page.key) ? null : (
+                    <button
+                      type="button"
+                      disabled={busy}
+                      aria-label={`${page.visible ? 'Quitar del sitio' : 'Poner en el sitio'} la página ${label}`}
+                      onClick={() => onToggle(page)}
+                    >
+                      {page.visible ? 'Quitar' : 'Poner'}
+                    </button>
+                  )}
+                </div>
+              )}
             </li>
           );
         })}
       </ol>
-      {adding ? (
-        <div className="st-outline__add">
-          {customTypes.map((type) => (
-            <button
-              key={type}
-              type="button"
-              onClick={() => {
-                setAdding(false);
-                onAdd(type);
-              }}
-            >
-              <strong>{BLOCK_META[type].label}</strong>
-              <span>{BLOCK_META[type].description}</span>
-            </button>
-          ))}
-          <button type="button" className="btn-quiet" onClick={() => setAdding(false)}>
-            Cancelar
-          </button>
-        </div>
-      ) : (
-        <button type="button" className="btn ghost btn-sm st-outline__addbtn" disabled={busy} onClick={() => setAdding(true)}>
-          + Poner sección nueva
-        </button>
-      )}
       <button
         type="button"
         className={`st-block__main st-outline__settings ${selected === 'ajustes' ? 'is-selected' : ''}`.trim()}
@@ -135,7 +68,7 @@ export function StudioOutline({
         onClick={() => onSelect('ajustes')}
       >
         <strong>Datos del sitio</strong>
-        <span>{drafts.has('ajustes') ? 'Borrador sin publicar' : 'Correo, teléfono, redes y lema'}</span>
+        <span>{settingsDraft ? 'Borrador sin publicar' : 'Correo, teléfono, redes y lema'}</span>
       </button>
     </nav>
   );

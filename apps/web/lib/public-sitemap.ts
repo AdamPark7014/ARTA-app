@@ -2,6 +2,8 @@ import type { MetadataRoute } from 'next';
 import { LEGAL_UPDATED } from '@/app/legal/legal-data';
 import { ROOT_DOMAIN } from '@/lib/domains';
 import { SITE_CACHE, fetchPublicShows, fetchPublicSiteData } from '@/lib/public-site-data';
+import { serviceHref } from '@/lib/site-blocks';
+import { isPageOff, servicesOf, visiblePages } from '@/lib/site-model';
 
 type NewsIndexRow = {
   slug: string;
@@ -78,11 +80,24 @@ export async function buildPublicSitemap(): Promise<MetadataRoute.Sitemap> {
       changeFrequency: 'weekly',
       priority: 1,
     },
-    { url: `${base}/p/arta/cartelera`, ...withDate(homeModified), changeFrequency: 'weekly', priority: 0.9 },
-    { url: `${base}/p/arta/noticias`, ...withDate(homeModified), changeFrequency: 'weekly', priority: 0.7 },
+    // Las páginas que se ven en el menú: las vacías o quitadas en Studio no entran.
+    ...visiblePages(site)
+      .filter((page) => page.key !== 'inicio')
+      .map((page) => ({
+        url: `${base}${page.href}`,
+        ...withDate(homeModified),
+        changeFrequency: 'weekly' as const,
+        priority: page.key === 'cartelera' ? 0.9 : 0.7,
+      })),
+    ...(isPageOff(site, 'servicios') ? [] : servicesOf(site)).map((service) => ({
+      url: `${base}${serviceHref(service.slug)}`,
+      ...withDate(homeModified),
+      changeFrequency: 'monthly' as const,
+      priority: 0.7,
+    })),
   ];
 
-  for (const show of [...shows.upcoming, ...shows.past]) {
+  for (const show of isPageOff(site, 'cartelera') ? [] : [...shows.upcoming, ...shows.past]) {
     entries.push({
       url: `${base}/p/arta/cartelera/${show.slug}`,
       ...withDate(toDate(show.updatedAt) || toDate(show.publishedAt)),
@@ -91,7 +106,7 @@ export async function buildPublicSitemap(): Promise<MetadataRoute.Sitemap> {
     });
   }
 
-  for (const row of news) {
+  for (const row of isPageOff(site, 'noticias') ? [] : news) {
     // Los shows ya entraron arriba con su dirección de cartelera.
     if (row.template === 'evento') continue;
     entries.push({

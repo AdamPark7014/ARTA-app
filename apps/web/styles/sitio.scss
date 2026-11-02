@@ -6,6 +6,8 @@
    Marca: tinta y papel, como el panel (docs/diseno/SISTEMA-VISUAL.md). Sin dorado.
    Letra: Outfit para titulares (la de la marca) y Nunito para leer; viven en el
    repo. El motivo es la «a» girada del pie corporativo (`brand/arta-motivo.svg`).
+   Las fotos van a color (pedido de Adam, 02-11-2026) con `--photo`, un ajuste
+   discreto para que ningún color pelee con la tinta. Pósters y logos no llevan ajuste.
    ═══════════════════════════════════════════════════════════════════════════ */
 
 .sa {
@@ -31,6 +33,7 @@
   --radius: 20px;
   --radius-lg: 28px;
   --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --photo: saturate(0.9) contrast(1.04);
 
   background: var(--paper);
   color: var(--text);
@@ -194,11 +197,6 @@ body.sa-lock {
   background-size: 30% 1.5px;
 }
 
-.sa-link--back::before {
-  content: '←';
-  font-weight: 700;
-}
-
 .sa-eyebrow {
   font-size: 12px;
   font-weight: 800;
@@ -357,7 +355,8 @@ body.sa-lock {
   transition: background-size 220ms var(--ease);
 }
 
-.sa-nav__links > a:not(.sa-btn):hover {
+.sa-nav__links > a:not(.sa-btn):hover,
+.sa-nav__links > a[aria-current='page']:not(.sa-btn) {
   background-size: 100% 1.5px;
 }
 
@@ -450,9 +449,14 @@ body.sa-lock {
 .sa-menu a {
   font-family: var(--display);
   font-weight: 900;
-  font-size: clamp(2.3rem, 11vw, 3.6rem);
-  line-height: 1.12;
+  font-size: clamp(2rem, 9.6vw, 3.4rem);
+  line-height: 1.14;
   letter-spacing: -0.035em;
+  color: var(--on-ink-2);
+}
+
+.sa-menu a[aria-current='page'] {
+  color: var(--on-ink);
 }
 
 /* ─── Portada ────────────────────────────────────────────────────────────── */
@@ -491,13 +495,9 @@ body.sa-lock {
 }
 
 .sa-hero__slide--foto .sa-hero__img {
-  filter: grayscale(1) contrast(1.08) brightness(0.88);
+  filter: var(--photo) brightness(0.94);
   transform: scale(1.08);
   transition: transform 9s linear;
-}
-
-.sa-hero--color .sa-hero__slide--foto .sa-hero__img {
-  filter: contrast(1.04) brightness(0.9);
 }
 
 .sa-hero__slide--foto.is-active .sa-hero__img {
@@ -514,9 +514,11 @@ body.sa-lock {
   position: absolute;
   inset: 0;
   z-index: -2;
+  /* A color hay fotos muy claras: el texto se apoya en tinta por abajo y por la izquierda. */
   background:
     linear-gradient(180deg, rgba(12, 12, 13, 0.62) 0%, rgba(12, 12, 13, 0) 22%),
-    linear-gradient(0deg, rgba(12, 12, 13, 0.94) 0%, rgba(12, 12, 13, 0.62) 30%, rgba(12, 12, 13, 0) 68%);
+    linear-gradient(90deg, rgba(12, 12, 13, 0.55) 0%, rgba(12, 12, 13, 0) 62%),
+    linear-gradient(0deg, rgba(12, 12, 13, 0.92) 0%, rgba(12, 12, 13, 0.6) 32%, rgba(12, 12, 13, 0) 70%);
 }
 
 .sa-hero__motif {
@@ -1076,6 +1078,7 @@ body.sa-lock {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  filter: var(--photo);
 }
 
 .sa-story-card__shade {
@@ -1114,6 +1117,17 @@ body.sa-lock {
   position: absolute;
   top: 12px;
   left: 12px;
+}
+
+/* Página de historias: todas a la vista, con el mismo visor. */
+.sa-storygrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 14px;
+}
+
+.sa-storygrid .sa-story-card {
+  width: 100%;
 }
 
 .sa-rail-arrows {
@@ -1322,7 +1336,7 @@ body.sa-lock {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  filter: grayscale(1) contrast(1.06);
+  filter: var(--photo);
 }
 
 .sa-stats {
@@ -1352,7 +1366,15 @@ body.sa-lock {
   font-size: 16px;
 }
 
-/* ─── Lo que hacemos ─────────────────────────────────────────────────────── */
+/* Nosotros, en su página: el texto completo manda; el arco lo acompaña. */
+.sa-about > .sa-prose {
+  align-self: center;
+  margin: 0;
+  font-size: clamp(1.16rem, 1.7vw, 1.42rem);
+  line-height: 1.6;
+}
+
+/* ─── Servicios ─────────────────────────────────────────────────────────── */
 
 .sa-services {
   display: grid;
@@ -1360,11 +1382,11 @@ body.sa-lock {
   gap: 14px;
 }
 
-.sa-services > li {
+.sa-services > li > a {
   display: flex;
   flex-direction: column;
-  min-height: 300px;
-  padding: 26px;
+  height: 100%;
+  overflow: hidden;
   border-radius: var(--radius);
   background: var(--paper);
   transition:
@@ -1373,18 +1395,38 @@ body.sa-lock {
     transform 240ms var(--ease);
 }
 
-.sa-services > li:hover {
+.sa-services > li > a:hover {
   background: var(--ink);
   color: var(--on-ink);
   transform: translateY(-4px);
 }
 
-.sa-services > li:hover p,
-.sa-services > li:hover .sa-services__n {
+.sa-services > li > a:hover p,
+.sa-services > li > a:hover .sa-services__n {
   color: var(--on-ink-2);
 }
 
+.sa-services__media {
+  display: block;
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+  background: var(--ink);
+}
+
+.sa-services__media img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  filter: var(--photo);
+  transition: transform 600ms var(--ease);
+}
+
+.sa-services > li > a:hover img {
+  transform: scale(1.04);
+}
+
 .sa-services__n {
+  margin: 22px 24px 0;
   font-size: 13px;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
@@ -1393,18 +1435,175 @@ body.sa-lock {
 }
 
 .sa-services h3 {
-  margin-top: auto;
+  margin: 10px 24px 0;
   font-family: var(--display);
   font-weight: 800;
-  font-size: clamp(1.55rem, 2.3vw, 2.05rem);
+  font-size: clamp(1.45rem, 2.1vw, 1.9rem);
   line-height: 1.05;
   letter-spacing: -0.028em;
 }
 
 .sa-services p {
-  margin-top: 12px;
+  margin: 10px 24px 0;
   font-size: 16px;
   color: var(--text-2);
+}
+
+.sa-services__more {
+  margin: auto 24px 22px;
+  padding-top: 16px;
+  font-size: 14.5px;
+  font-weight: 800;
+}
+
+/* Página de servicios: cada uno con su foto, en filas. */
+.sa-servicelist {
+  display: grid;
+}
+
+.sa-servicelist > li + li {
+  border-top: 1px solid var(--line-strong);
+}
+
+.sa-servicelist a {
+  display: grid;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+  align-items: center;
+  gap: clamp(24px, 4vw, 64px);
+  padding: clamp(24px, 3.4vw, 48px) 0;
+}
+
+.sa-servicelist__media {
+  display: block;
+  aspect-ratio: 16 / 10;
+  overflow: hidden;
+  border-radius: var(--radius);
+  background: var(--ink);
+}
+
+.sa-servicelist__media img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  filter: var(--photo);
+  transition: transform 600ms var(--ease);
+}
+
+.sa-servicelist a:hover img {
+  transform: scale(1.03);
+}
+
+.sa-servicelist__copy {
+  display: block;
+}
+
+.sa-servicelist__n {
+  display: block;
+  font-size: 13px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.08em;
+  color: var(--text-3);
+}
+
+.sa-servicelist h2 {
+  margin-top: 8px;
+  font-family: var(--display);
+  font-weight: 800;
+  font-size: clamp(2rem, 4vw, 3.5rem);
+  line-height: 1.02;
+  letter-spacing: -0.035em;
+}
+
+.sa-servicelist p {
+  margin: 14px 0 20px;
+  max-width: 52ch;
+  font-size: 1.1rem;
+  color: var(--text-2);
+}
+
+/* Detalle de un servicio */
+.sa-service {
+  display: grid;
+  grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+  gap: clamp(28px, 5vw, 88px);
+  align-items: start;
+}
+
+.sa-service .sa-prose {
+  margin: 0;
+  font-size: clamp(1.14rem, 1.7vw, 1.4rem);
+}
+
+.sa-includes {
+  padding: clamp(22px, 2.6vw, 34px);
+  border-radius: var(--radius);
+  background: var(--white);
+  box-shadow: 0 1px 2px rgba(12, 12, 13, 0.04), 0 10px 26px rgba(12, 12, 13, 0.05);
+}
+
+.sa-includes h2 {
+  font-family: var(--display);
+  font-weight: 800;
+  font-size: 1.5rem;
+  letter-spacing: -0.02em;
+}
+
+.sa-includes ul {
+  display: grid;
+  margin-top: 14px;
+}
+
+.sa-includes li {
+  position: relative;
+  padding: 11px 0 11px 28px;
+  border-top: 1px solid var(--line);
+  font-weight: 600;
+}
+
+.sa-includes li::before {
+  content: '';
+  position: absolute;
+  left: 3px;
+  top: 17px;
+  width: 11px;
+  height: 6px;
+  border-left: 2px solid var(--ink);
+  border-bottom: 2px solid var(--ink);
+  transform: rotate(-45deg);
+}
+
+/* Cómo trabajamos */
+.sa-steps {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: clamp(20px, 3vw, 40px);
+}
+
+.sa-steps > li {
+  padding-top: 18px;
+  border-top: 1.5px solid var(--line-ink);
+}
+
+.sa-steps span {
+  font-size: 13px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.08em;
+  color: var(--on-ink-3);
+}
+
+.sa-steps h3 {
+  margin-top: 26px;
+  font-family: var(--display);
+  font-weight: 800;
+  font-size: clamp(1.45rem, 2.2vw, 1.9rem);
+  letter-spacing: -0.025em;
+}
+
+.sa-steps p {
+  margin-top: 10px;
+  color: var(--on-ink-2);
 }
 
 /* ─── Noticias ───────────────────────────────────────────────────────────── */
@@ -1468,6 +1667,7 @@ body.sa-lock {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  filter: var(--photo);
   transition: transform 600ms var(--ease);
 }
 
@@ -1535,8 +1735,24 @@ body.sa-lock {
 
 .sa-newslist {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(340px, 100%), 1fr));
   gap: clamp(32px, 4vw, 56px) clamp(20px, 3vw, 36px);
+}
+
+/* La primera noticia de la página de noticias, a todo lo ancho. */
+.sa-newsfirst {
+  margin-bottom: clamp(40px, 5vw, 72px);
+}
+
+.sa-newsfirst .sa-news--large {
+  display: grid;
+  grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+  align-items: end;
+  gap: clamp(20px, 4vw, 56px);
+}
+
+.sa-newsfirst .sa-news__body {
+  margin: 0;
 }
 
 /* ─── Galería ────────────────────────────────────────────────────────────── */
@@ -1596,15 +1812,12 @@ body.sa-lock {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  filter: grayscale(1) contrast(1.06);
-  transition:
-    filter 400ms ease,
-    transform 700ms var(--ease);
+  filter: var(--photo);
+  transition: transform 700ms var(--ease);
 }
 
 .sa-gallery button:hover img,
 .sa-gallery button:focus-visible img {
-  filter: none;
   transform: scale(1.03);
 }
 
@@ -1674,8 +1887,9 @@ body.sa-lock {
 /* ─── Aliados ────────────────────────────────────────────────────────────── */
 
 .sa-allies {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  /* Flex y no rejilla: las celdas que sobran en la última fila dejaban un hueco gris. */
+  display: flex;
+  flex-wrap: wrap;
   gap: 1px;
   overflow: hidden;
   border-radius: var(--radius);
@@ -1685,6 +1899,7 @@ body.sa-lock {
 
 .sa-allies > li {
   position: relative;
+  flex: 1 1 170px;
   display: grid;
   place-items: center;
   height: 124px;
@@ -1863,7 +2078,8 @@ body.sa-lock {
   color: var(--on-ink-3);
 }
 
-.sa-contact__ways a {
+.sa-contact__ways a,
+.sa-contact__ways b {
   font-weight: 700;
   font-size: 1.15rem;
   overflow-wrap: anywhere;
@@ -1987,6 +2203,7 @@ body.sa-lock {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  filter: var(--photo);
 }
 
 .sa-banner {
@@ -2007,7 +2224,7 @@ body.sa-lock {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  filter: grayscale(1) contrast(1.06);
+  filter: var(--photo);
 }
 
 .sa-banner.has-image::before {
@@ -2026,14 +2243,133 @@ body.sa-lock {
   margin-top: 28px;
 }
 
-/* ─── Páginas interiores ─────────────────────────────────────────────────── */
+/* ─── Páginas ────────────────────────────────────────────────────────────── */
 
-.sa--inner main {
+.sa--solid main {
   padding-top: 72px;
 }
 
-.sa-page__head {
-  margin-bottom: clamp(36px, 5vw, 72px);
+.sa-pagehead {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  min-height: clamp(380px, 60vh, 640px);
+  padding: 128px var(--gutter) clamp(44px, 6vw, 84px);
+  overflow: hidden;
+  isolation: isolate;
+  background: var(--ink) radial-gradient(900px 560px at 68% 18%, rgba(199, 204, 212, 0.14), transparent 70%);
+  color: var(--on-ink);
+}
+
+.sa-pagehead__img {
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  filter: var(--photo) brightness(0.94);
+}
+
+.sa-pagehead.has-image::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background:
+    linear-gradient(180deg, rgba(12, 12, 13, 0.6) 0%, rgba(12, 12, 13, 0) 30%),
+    linear-gradient(90deg, rgba(12, 12, 13, 0.6) 0%, rgba(12, 12, 13, 0) 66%),
+    linear-gradient(0deg, rgba(12, 12, 13, 0.9) 0%, rgba(12, 12, 13, 0.45) 40%, rgba(12, 12, 13, 0) 76%);
+}
+
+.sa-pagehead__motif {
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: -1;
+  height: 100%;
+  aspect-ratio: 380 / 299;
+  background: var(--ink-3);
+  -webkit-mask: url('/brand/arta-motivo.svg') right center / auto 100% no-repeat;
+  mask: url('/brand/arta-motivo.svg') right center / auto 100% no-repeat;
+}
+
+.sa-pagehead__inner {
+  width: 100%;
+  max-width: 1120px;
+}
+
+.sa-pagehead .sa-eyebrow {
+  color: var(--on-ink-2);
+}
+
+.sa-pagehead .sa-lead {
+  color: var(--on-ink-2);
+}
+
+.sa-crumbs {
+  margin-bottom: 22px;
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.sa-crumbs ol {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+}
+
+.sa-crumbs li + li::before {
+  content: '/';
+  margin-right: 8px;
+  opacity: 0.5;
+}
+
+.sa-crumbs a {
+  color: var(--text-2);
+}
+
+.sa-crumbs a:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.sa-crumbs [aria-current] {
+  color: var(--text-3);
+}
+
+.sa-pagehead .sa-crumbs a {
+  color: var(--on-ink-2);
+}
+
+.sa-pagehead .sa-crumbs [aria-current] {
+  color: var(--on-ink-3);
+}
+
+.sa-faqpage .sa-faq {
+  max-width: 900px;
+  margin-inline: auto;
+}
+
+/* Invitación a escribir, al final de las páginas. */
+.sa-band {
+  overflow: hidden;
+}
+
+.sa-band__copy {
+  position: relative;
+  max-width: 1040px;
+}
+
+.sa-band__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 30px;
+}
+
+.sa-btn--spaced {
+  margin-top: 28px;
 }
 
 .sa-notfound {
@@ -2049,13 +2385,18 @@ body.sa-lock {
   margin-top: 22px;
 }
 
+/* Título y texto en la misma columna; la foto se sale de ella. */
 .sa-article__head {
-  max-width: 980px;
+  max-width: 760px;
   margin-inline: auto;
 }
 
-.sa-article__head .sa-link--back {
-  margin-bottom: 28px;
+.sa-article__head .sa-title--xl {
+  font-size: clamp(2.2rem, 4.4vw, 4rem);
+}
+
+.sa-article .sa-prose {
+  max-width: 760px;
 }
 
 .sa-article__head time {
@@ -2123,10 +2464,6 @@ body.sa-lock {
   aspect-ratio: 4 / 5;
 }
 
-.sa-showpage__copy .sa-link--back {
-  margin-bottom: 26px;
-}
-
 .sa-showpage__copy .sa-btn--large {
   margin-top: 30px;
 }
@@ -2184,7 +2521,7 @@ body.sa-lock {
 
 .sa-past {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr));
   gap: clamp(20px, 2.4vw, 32px) 16px;
 }
 
@@ -2235,7 +2572,7 @@ body.sa-lock {
 
 .sa-footer__top {
   display: grid;
-  grid-template-columns: minmax(0, 2.2fr) repeat(auto-fit, minmax(150px, 1fr));
+  grid-template-columns: minmax(0, 2fr) repeat(2, minmax(0, 1fr)) minmax(0, 1.7fr) minmax(0, 1fr);
   gap: 36px clamp(24px, 3vw, 48px);
 }
 
@@ -2283,9 +2620,17 @@ body.sa-lock {
   overflow-wrap: anywhere;
 }
 
+.sa-footer__col--wide a {
+  overflow-wrap: normal;
+}
+
 /* En la vista previa el marco mide lo que el panel de Studio, no una ventana real. */
 [data-preview='on'] .sa-hero {
   min-height: min(100vh, 820px);
+}
+
+[data-preview='on'] .sa-pagehead {
+  min-height: min(60vh, 520px);
 }
 
 .sa-footer__col a:hover {
@@ -2301,7 +2646,7 @@ body.sa-lock {
   background: var(--on-ink) center / cover no-repeat;
   -webkit-mask: url('/brand/arta-wordmark.svg') center / contain no-repeat;
   mask: url('/brand/arta-wordmark.svg') center / contain no-repeat;
-  filter: grayscale(1) contrast(1.15) brightness(1.5);
+  filter: saturate(0.95) brightness(1.25);
 }
 
 .sa-footer__bottom {
@@ -2336,7 +2681,9 @@ body.sa-lock {
   .sa-place,
   .sa-faqsec,
   .sa-free,
-  .sa-showpage {
+  .sa-showpage,
+  .sa-service,
+  .sa-newsfirst .sa-news--large {
     grid-template-columns: minmax(0, 1fr);
   }
 
@@ -2554,13 +2901,19 @@ body.sa-lock {
     bottom: 76px;
   }
 
-  .sa-services > li {
-    min-height: 0;
-    padding: 22px;
+  .sa-servicelist a {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 18px;
   }
 
-  .sa-services h3 {
-    margin-top: 30px;
+  .sa-pagehead {
+    min-height: clamp(320px, 52vh, 460px);
+    padding-top: 104px;
+  }
+
+  .sa-storygrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
   }
 
   .sa-gallery {
@@ -2583,11 +2936,8 @@ body.sa-lock {
     grid-row: span 1;
   }
 
-  .sa-allies {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
   .sa-allies > li {
+    flex-basis: 40%;
     height: 100px;
     padding: 16px;
   }

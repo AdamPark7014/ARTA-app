@@ -1,4 +1,5 @@
-import { fetchPublicNewsList } from '@/lib/public-site-data';
+import { fetchPublicNewsList, fetchPublicSiteData } from '@/lib/public-site-data';
+import { isPageOff } from '@/lib/site-model';
 import { SITE_NAME, absoluteMediaUrl, siteOrigin } from '@/lib/site-seo';
 
 export const revalidate = 300;
@@ -26,11 +27,13 @@ function mediaBlock(coverUrl: string | null | undefined, title: string): string 
 }
 
 export async function GET() {
-  const posts = await fetchPublicNewsList();
+  const [posts, site] = await Promise.all([fetchPublicNewsList(), fetchPublicSiteData('ARTA')]);
   const base = siteOrigin();
+  const pageOf = (template?: string | null) => (template === 'evento' ? 'cartelera' : 'noticias');
   const items = posts
+    .filter((post) => !isPageOff(site, pageOf(post.template)))
     .map((post) => {
-      const link = `${base}/p/arta/${post.template === 'evento' ? 'cartelera' : 'noticias'}/${post.slug}`;
+      const link = `${base}/p/arta/${pageOf(post.template)}/${post.slug}`;
       const pub = post.publishedAt ? new Date(post.publishedAt).toUTCString() : new Date().toUTCString();
       const desc = escapeXml(post.excerpt?.trim() || post.title);
       return `<item>
@@ -47,7 +50,7 @@ export async function GET() {
 <rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:media="http://search.yahoo.com/mrss/">
   <channel>
     <title>${escapeXml(SITE_NAME)} · Noticias</title>
-    <link>${base}/p/arta#noticias</link>
+    <link>${base}/p/arta/noticias</link>
     <description>Noticias y novedades de Arta Producciones</description>
     <language>es-mx</language>
     <atom:link href="${base}/p/arta/feed.xml" rel="self" type="application/rss+xml"/>

@@ -241,7 +241,7 @@ function TextField({
           id={id}
           aria-describedby={hintId}
           type={field.type === 'date' ? 'date' : field.type === 'time' ? 'time' : 'text'}
-          placeholder={field.placeholder ?? (field.type === 'link' ? 'https://… o elige una sección' : undefined)}
+          placeholder={field.placeholder ?? (field.type === 'link' ? 'https://… o elige una página' : undefined)}
           list={listId}
           value={value}
           onChange={(e) => onValue(e.target.value)}

@@ -1,14 +1,29 @@
 'use client';
 
+import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { externalProps, focusCss } from '@/lib/site-format';
 import type { HeroSlideView } from '@/lib/site-model';
 
 type HeroCarouselProps = {
   slides: HeroSlideView[];
-  /** `bn` = fotos en blanco y negro, como la marca; los pósters de los shows siempre van a color. */
-  tone?: string;
 };
+
+/** Ligas del sitio sin recargar la página; boletos y sitios externos, en otra pestaña. */
+function HeroLink({ href, className, children }: { href: string; className: string; children: React.ReactNode }) {
+  if (href.startsWith('/')) {
+    return (
+      <Link className={className} href={href}>
+        {children}
+      </Link>
+    );
+  }
+  return (
+    <a className={className} href={href} {...externalProps(href)}>
+      {children}
+    </a>
+  );
+}
 
 const SLIDE_MS = 7000;
 
@@ -20,7 +35,7 @@ function Icon({ d }: { d: string }) {
   );
 }
 
-export function HeroCarousel({ slides, tone = 'bn' }: HeroCarouselProps) {
+export function HeroCarousel({ slides }: HeroCarouselProps) {
   const [index, setIndex] = useState(0);
   const [hovering, setHovering] = useState(false);
   const [userPaused, setUserPaused] = useState(false);
@@ -56,7 +71,7 @@ export function HeroCarousel({ slides, tone = 'bn' }: HeroCarouselProps) {
 
   return (
     <section
-      className={`sa-hero ${tone === 'color' ? 'sa-hero--color' : ''}`.trim()}
+      className="sa-hero"
       aria-roledescription="carrusel"
       aria-label="Portada"
       onMouseEnter={() => setHovering(true)}
@@ -102,14 +117,14 @@ export function HeroCarousel({ slides, tone = 'bn' }: HeroCarouselProps) {
           {current.subtitle ? <p className="sa-hero__sub">{current.subtitle}</p> : null}
           <div className="sa-hero__actions">
             {current.ctaLabel && current.ctaHref ? (
-              <a className="sa-btn sa-btn--on-ink" href={current.ctaHref} {...externalProps(current.ctaHref)}>
+              <HeroLink className="sa-btn sa-btn--on-ink" href={current.ctaHref}>
                 {current.ctaLabel}
-              </a>
+              </HeroLink>
             ) : null}
             {current.secondaryLabel && current.secondaryHref ? (
-              <a className="sa-btn sa-btn--ghost-ink" href={current.secondaryHref}>
+              <HeroLink className="sa-btn sa-btn--ghost-ink" href={current.secondaryHref}>
                 {current.secondaryLabel}
-              </a>
+              </HeroLink>
             ) : null}
           </div>
         </div>

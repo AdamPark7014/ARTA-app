@@ -11,7 +11,7 @@ function isVideo(item: PublicSiteItem) {
 }
 
 /** Historias: fila de tarjetas verticales que se abren a pantalla completa, una tras otra. */
-export function Historias({ items }: { items: PublicSiteItem[] }) {
+export function Historias({ items, grid = false }: { items: PublicSiteItem[]; grid?: boolean }) {
   const [open, setOpen] = useState<number | null>(null);
   const railRef = useRef<HTMLUListElement | null>(null);
   const lastTrigger = useRef<HTMLElement | null>(null);
@@ -24,7 +24,7 @@ export function Historias({ items }: { items: PublicSiteItem[] }) {
   return (
     <>
       <div className="sa-rail-wrap">
-        <ul className="sa-rail" ref={railRef} data-count={items.length}>
+        <ul className={grid ? 'sa-storygrid' : 'sa-rail'} ref={railRef} data-count={items.length}>
           {items.map((item, i) => (
             <li key={item.id}>
               <button
@@ -57,7 +57,7 @@ export function Historias({ items }: { items: PublicSiteItem[] }) {
             </li>
           ))}
         </ul>
-        {items.length > 4 ? (
+        {!grid && items.length > 4 ? (
           <div className="sa-rail-arrows">
             <button type="button" aria-label="Historias anteriores" onClick={() => scrollRail(-1)}>
               ‹

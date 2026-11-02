@@ -1,40 +1,30 @@
 import { HeroCarousel } from '@/components/site/HeroCarousel';
+import { LegacyAnchors } from '@/components/site/LegacyAnchors';
 import { SiteBlock } from '@/components/site/SiteBlocks';
-import { SiteFooter } from '@/components/site/SiteFooter';
-import { SiteHeader } from '@/components/site/SiteHeader';
-import { SiteMotion } from '@/components/site/SiteMotion';
+import { SitePage } from '@/components/site/SitePage';
 import { heroContent, type PublicSiteData } from '@/lib/public-site-data';
-import { BLOCK_META, anchorOf } from '@/lib/site-blocks';
-import { HOME_HREF, buildHeroSlides, buildNav, visibleBlocks } from '@/lib/site-model';
+import { BLOCK_META } from '@/lib/site-blocks';
+import { buildHeroSlides, visibleBlocks } from '@/lib/site-model';
 
 type PublicSiteContentProps = {
   data: PublicSiteData;
-  /** Vista previa de Studio: se enseñan borradores y las ligas de sección no salen de la página. */
+  /** Vista previa de Studio: se enseñan borradores. */
   preview?: boolean;
 };
 
-/** La página completa, para el sitio (servidor) y para la vista previa (cliente). */
+/** Inicio, para el sitio (servidor) y para la vista previa (cliente): resume y lleva a cada página. */
 export function PublicSiteContent({ data, preview = false }: PublicSiteContentProps) {
   const blocks = visibleBlocks(data, preview);
-  const homeHref = preview ? '' : HOME_HREF;
-  const nav = buildNav(blocks, homeHref);
   const hero = heroContent(data);
-  const contact = blocks.find((b) => b.type === 'contacto');
-  const contactHref = contact ? `${homeHref}#${anchorOf(contact)}` : `mailto:contacto@artaproducciones.com`;
   const ticker = (hero.ticker || '')
     .split('\n')
     .map((t) => t.trim())
     .filter(Boolean);
-  const slides = buildHeroSlides(data);
-  const markImage = slides.find((s) => s.kind === 'foto' && s.imageUrl)?.imageUrl;
 
   return (
-    <div className="sa" data-preview={preview ? 'on' : undefined}>
-      <a className="sa-skip" href="#contenido">
-        Saltar al contenido
-      </a>
-      <SiteHeader nav={nav} homeHref={homeHref} contactHref={contactHref} />
-      <HeroCarousel slides={slides} tone={hero.tone} />
+    <SitePage data={data} active="inicio" overDark preview={preview}>
+      {preview ? null : <LegacyAnchors />}
+      <HeroCarousel slides={buildHeroSlides(data)} />
       {ticker.length ? (
         <div className="sa-ticker" aria-label={ticker.join('. ')}>
           {[0, 1, 2, 3].map((copy) => (
@@ -47,12 +37,8 @@ export function PublicSiteContent({ data, preview = false }: PublicSiteContentPr
         </div>
       ) : null}
       <main id="contenido">
-        {blocks.map((block) =>
-          BLOCK_META[block.type] ? <SiteBlock key={block.id} block={block} data={data} /> : null,
-        )}
+        {blocks.map((block) => (BLOCK_META[block.type] ? <SiteBlock key={block.id} block={block} data={data} /> : null))}
       </main>
-      <SiteFooter data={data} nav={nav} markImage={markImage} />
-      <SiteMotion />
-    </div>
+    </SitePage>
   );
 }

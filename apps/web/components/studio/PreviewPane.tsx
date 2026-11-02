@@ -11,6 +11,7 @@ type DistributedMessage =
   | Omit<Extract<PreviewMessage, { type: 'section' }>, 'source'>
   | Omit<Extract<PreviewMessage, { type: 'layout' }>, 'source'>
   | Omit<Extract<PreviewMessage, { type: 'reload' }>, 'source'>
+  | Omit<Extract<PreviewMessage, { type: 'page' }>, 'source'>
   | Omit<Extract<PreviewMessage, { type: 'scrollTo' }>, 'source'>;
 
 type Device = 'computadora' | 'telefono';

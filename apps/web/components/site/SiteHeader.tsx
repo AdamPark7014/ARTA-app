@@ -1,15 +1,17 @@
 'use client';
 
+import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
-
-export type SiteNavLink = { label: string; href: string };
+import type { PageKey } from '@/lib/site-blocks';
+import type { SiteLink } from '@/lib/site-model';
 
 type SiteHeaderProps = {
-  nav: SiteNavLink[];
-  homeHref?: string;
-  contactHref: string;
-  /** Páginas sin portada oscura: el encabezado arranca sólido, sobre papel. */
-  solid?: boolean;
+  /** Todas las páginas que se ven, en el orden del menú. */
+  links: SiteLink[];
+  /** Página en la que estamos: el menú la marca. */
+  active?: PageKey;
+  /** Hay foto o tinta debajo: el encabezado arranca transparente. Si no, sólido sobre papel. */
+  overDark?: boolean;
 };
 
 /** La marca: el SVG va como máscara para que tome el color del encabezado sin cargar dos archivos. */
@@ -17,7 +19,7 @@ export function SiteLogo({ className = '' }: { className?: string }) {
   return <span className={`sa-logo ${className}`.trim()} role="img" aria-label="Arta Producciones" />;
 }
 
-export function SiteHeader({ nav, homeHref = '/p/arta', contactHref, solid = false }: SiteHeaderProps) {
+export function SiteHeader({ links, active, overDark = false }: SiteHeaderProps) {
   const [scrolled, setScrolled] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const closeMenu = useCallback(() => setMenuOpen(false), []);
@@ -42,22 +44,26 @@ export function SiteHeader({ nav, homeHref = '/p/arta', contactHref, solid = fal
     };
   }, [menuOpen, closeMenu]);
 
-  const light = (solid || scrolled) && !menuOpen;
+  const light = (!overDark || scrolled) && !menuOpen;
+  const contact = links.find((l) => l.key === 'contacto');
+  const bar = links.filter((l) => l.key !== 'inicio' && l.key !== 'contacto' && !l.secondary);
 
   return (
     <header className={`sa-nav ${light ? 'is-light' : ''} ${menuOpen ? 'is-open' : ''}`.trim()}>
-      <a href={homeHref || '#'} className="sa-nav__brand" onClick={closeMenu} aria-label="Arta Producciones, inicio">
+      <Link href="/p/arta" className="sa-nav__brand" onClick={closeMenu} aria-label="Arta Producciones, inicio">
         <SiteLogo />
-      </a>
+      </Link>
       <nav className="sa-nav__links" aria-label="Principal">
-        {nav.map((link) => (
-          <a key={link.href} href={link.href}>
+        {bar.map((link) => (
+          <Link key={link.key} href={link.href} aria-current={link.key === active ? 'page' : undefined}>
             {link.label}
-          </a>
+          </Link>
         ))}
-        <a className="sa-btn sa-btn--nav" href={contactHref}>
-          Contacto
-        </a>
+        {contact ? (
+          <Link className="sa-btn sa-btn--nav" href={contact.href} aria-current={active === 'contacto' ? 'page' : undefined}>
+            {contact.label}
+          </Link>
+        ) : null}
       </nav>
       <button
         type="button"
@@ -72,14 +78,11 @@ export function SiteHeader({ nav, homeHref = '/p/arta', contactHref, solid = fal
       </button>
       <div id="sa-menu" className="sa-menu" hidden={!menuOpen}>
         <nav aria-label="Menú">
-          {nav.map((link) => (
-            <a key={link.href} href={link.href} onClick={closeMenu}>
+          {links.map((link) => (
+            <Link key={link.key} href={link.href} onClick={closeMenu} aria-current={link.key === active ? 'page' : undefined}>
               {link.label}
-            </a>
+            </Link>
           ))}
-          <a href={contactHref} onClick={closeMenu}>
-            Contacto
-          </a>
         </nav>
       </div>
     </header>

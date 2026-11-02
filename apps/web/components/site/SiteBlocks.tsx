@@ -1,10 +1,9 @@
+import Link from 'next/link';
 import type { ReactNode } from 'react';
-import { ContactForm } from '@/components/site/ContactForm';
 import { Galeria } from '@/components/site/Galeria';
 import { Historias } from '@/components/site/Historias';
 import { VenueMap, directionsUrl } from '@/components/site/VenueMap';
 import {
-  FALLBACK_MODULE_TILES,
   sectionContent,
   siteSettings,
   type PublicSiteContent,
@@ -12,11 +11,12 @@ import {
   type PublicSiteItem,
   type PublicSiteNewsItem,
 } from '@/lib/public-site-data';
-import { anchorOf, sectionKeyOf, type LayoutBlock } from '@/lib/site-blocks';
+import { anchorOf, pageHref, serviceHref, resolveSiteHref, sectionKeyOf, type LayoutBlock } from '@/lib/site-blocks';
 import {
   SHOW_STATUS_LABEL,
   countdownLabel,
   externalProps,
+  paragraphs,
   publishedLabel,
   safeHref,
   showDateParts,
@@ -24,8 +24,8 @@ import {
   showTimeLabel,
   ticketHref,
 } from '@/lib/site-format';
-import { itemsOf, newsHref, showHref } from '@/lib/site-model';
-import { VENUE_ADDRESS, contactFromSettings, socialProfiles } from '@/lib/site-seo';
+import { itemsOf, newsHref, servicesOf, showHref, type Service } from '@/lib/site-model';
+import { VENUE_ADDRESS, contactFromSettings } from '@/lib/site-seo';
 
 type Tone = 'papel' | 'blanco' | 'tinta';
 
@@ -46,18 +46,18 @@ function Section({ block, tone, className = '', children }: SectionProps) {
 }
 
 type HeadProps = {
-  block: Pick<LayoutBlock, 'id' | 'type'>;
+  titleId?: string;
   content: PublicSiteContent;
   children?: ReactNode;
   wide?: boolean;
 };
 
-function SectionHead({ block, content, children, wide }: HeadProps) {
+export function SectionHead({ titleId, content, children, wide }: HeadProps) {
   return (
     <header className={`sa-head ${wide ? 'sa-head--wide' : ''}`.trim()} data-reveal>
       <div className="sa-head__copy">
         {content.eyebrow ? <p className="sa-eyebrow">{content.eyebrow}</p> : null}
-        <h2 id={`${anchorOf(block)}-t`} className="sa-title">
+        <h2 id={titleId} className="sa-title">
           {content.headline}
         </h2>
         {content.lead ? <p className="sa-lead">{content.lead}</p> : null}
@@ -72,7 +72,7 @@ function PreviewEmpty({ children }: { children: ReactNode }) {
   return <p className="sa-preview-empty">{children}</p>;
 }
 
-function DraftTag({ show }: { show: boolean }) {
+export function DraftTag({ show }: { show: boolean }) {
   return show ? <span className="sa-draft">Borrador</span> : null;
 }
 
@@ -103,7 +103,7 @@ export function ShowRow({ show }: { show: PublicSiteNewsItem }) {
       </div>
       <div className="sa-show__main">
         <h3>
-          <a href={showHref(show.slug)}>{show.title}</a>
+          <Link href={showHref(show.slug)}>{show.title}</Link>
         </h3>
         <p>{[where, time].filter(Boolean).join(' · ') || show.excerpt}</p>
       </div>
@@ -124,43 +124,50 @@ export function ShowRow({ show }: { show: PublicSiteNewsItem }) {
   );
 }
 
-function Cartelera({ block, content, shows }: { block: LayoutBlock; content: PublicSiteContent; shows: PublicSiteNewsItem[] }) {
+export function ShowsEmpty({ content }: { content: PublicSiteContent }) {
+  return (
+    <div className="sa-empty" data-reveal>
+      <span className="sa-empty__motif" aria-hidden="true" />
+      <h3>{content.emptyTitle}</h3>
+      <p>{content.emptyText}</p>
+      <Link className="sa-btn" href={pageHref('contacto')}>
+        Escríbenos
+      </Link>
+    </div>
+  );
+}
+
+/** Póster del siguiente show junto a la lista. */
+export function ShowsBill({ shows }: { shows: PublicSiteNewsItem[] }) {
   const featured = shows.find((s) => s.coverUrl);
   const countdown = countdownLabel(featured?.eventDate);
   return (
+    <div className={`sa-bill ${featured ? 'has-feature' : ''}`.trim()}>
+      {featured ? (
+        <Link className="sa-feature" href={showHref(featured.slug)} data-reveal>
+          {/* eslint-disable-next-line @next/next/no-img-element -- póster dinámico de Studio */}
+          <img src={featured.coverUrl as string} alt={`Póster de ${featured.title}`} loading="lazy" decoding="async" />
+          <span className="sa-feature__tag">{countdown || 'Próximo show'}</span>
+        </Link>
+      ) : null}
+      <ol className="sa-shows">
+        {shows.map((show) => (
+          <ShowRow key={show.id} show={show} />
+        ))}
+      </ol>
+    </div>
+  );
+}
+
+function Cartelera({ block, content, shows }: { block: LayoutBlock; content: PublicSiteContent; shows: PublicSiteNewsItem[] }) {
+  return (
     <Section block={block} tone="papel">
-      <SectionHead block={block} content={content} wide>
-        {shows.length ? (
-          <a className="sa-link" href="/p/arta/cartelera">
-            Ver toda la cartelera
-          </a>
-        ) : null}
+      <SectionHead titleId={`${anchorOf(block)}-t`} content={content} wide>
+        <Link className="sa-link" href={pageHref('cartelera')}>
+          Ver toda la cartelera
+        </Link>
       </SectionHead>
-      {shows.length ? (
-        <div className={`sa-bill ${featured ? 'has-feature' : ''}`.trim()}>
-          {featured ? (
-            <a className="sa-feature" href={showHref(featured.slug)} data-reveal>
-              {/* eslint-disable-next-line @next/next/no-img-element -- póster dinámico de Studio */}
-              <img src={featured.coverUrl as string} alt={`Póster de ${featured.title}`} loading="lazy" decoding="async" />
-              <span className="sa-feature__tag">{countdown || 'Próximo show'}</span>
-            </a>
-          ) : null}
-          <ol className="sa-shows">
-            {shows.slice(0, 8).map((show) => (
-              <ShowRow key={show.id} show={show} />
-            ))}
-          </ol>
-        </div>
-      ) : (
-        <div className="sa-empty" data-reveal>
-          <span className="sa-empty__motif" aria-hidden="true" />
-          <h3>{content.emptyTitle}</h3>
-          <p>{content.emptyText}</p>
-          <a className="sa-btn" href="#contacto">
-            Escríbenos
-          </a>
-        </div>
-      )}
+      {shows.length ? <ShowsBill shows={shows.slice(0, 4)} /> : <ShowsEmpty content={content} />}
     </Section>
   );
 }
@@ -168,15 +175,35 @@ function Cartelera({ block, content, shows }: { block: LayoutBlock; content: Pub
 function HistoriasBlock({ block, content, items }: { block: LayoutBlock; content: PublicSiteContent; items: PublicSiteItem[] }) {
   return (
     <Section block={block} tone="tinta" className="sa-sec--rail">
-      <SectionHead block={block} content={content} wide />
+      <SectionHead titleId={`${anchorOf(block)}-t`} content={content} wide>
+        {items.length ? (
+          <Link className="sa-link" href={pageHref('historias')}>
+            Ver todas las historias
+          </Link>
+        ) : null}
+      </SectionHead>
       {items.length ? <Historias items={items} /> : <PreviewEmpty>Aún no hay historias. Súbelas desde Studio y aparecen aquí.</PreviewEmpty>}
     </Section>
   );
 }
 
+export function StatsRow({ content }: { content: PublicSiteContent }) {
+  const stats = content.stats?.filter((s) => s.label?.trim()) ?? [];
+  if (!stats.length) return null;
+  return (
+    <dl className="sa-stats" data-reveal>
+      {stats.map((s) => (
+        <div key={s.label}>
+          <dt>{s.label}</dt>
+          <dd>{s.text}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
 function Nosotros({ block, content }: { block: LayoutBlock; content: PublicSiteContent }) {
   const image = content.imageUrl;
-  const stats = content.stats?.filter((s) => s.label?.trim()) ?? [];
   return (
     <Section block={block} tone="papel" className="sa-about">
       <div className="sa-about__copy" data-reveal>
@@ -184,7 +211,10 @@ function Nosotros({ block, content }: { block: LayoutBlock; content: PublicSiteC
         <h2 id={`${anchorOf(block)}-t`} className="sa-title sa-title--xl">
           {content.headline}
         </h2>
-        <p className="sa-lead">{content.body || content.lead}</p>
+        <p className="sa-lead">{content.summary || paragraphs(content.body)[0] || content.lead}</p>
+        <Link className="sa-btn sa-btn--spaced" href={pageHref('nosotros')}>
+          Conoce a Arta
+        </Link>
       </div>
       {image ? (
         <div className="sa-about__media" data-reveal>
@@ -192,36 +222,46 @@ function Nosotros({ block, content }: { block: LayoutBlock; content: PublicSiteC
           <img src={image} alt="" loading="lazy" decoding="async" />
         </div>
       ) : null}
-      {stats.length ? (
-        <dl className="sa-stats" data-reveal>
-          {stats.map((s) => (
-            <div key={s.label}>
-              <dt>{s.label}</dt>
-              <dd>{s.text}</dd>
-            </div>
-          ))}
-        </dl>
-      ) : null}
+      <StatsRow content={content} />
     </Section>
   );
 }
 
-function Servicios({ block, content }: { block: LayoutBlock; content: PublicSiteContent }) {
-  const tiles = content.tiles?.filter((t) => t.title?.trim()) ?? FALLBACK_MODULE_TILES;
+/** Tarjeta de un servicio: lleva a su página. */
+export function ServiceCards({ services }: { services: Service[] }) {
   return (
-    <Section block={block} tone="blanco">
-      <SectionHead block={block} content={content} />
-      <ol className="sa-services" data-count={tiles.length}>
-        {tiles.map((t, i) => (
-          <li key={`${t.title}-${i}`} data-reveal>
+    <ol className="sa-services" data-count={services.length}>
+      {services.map((service, i) => (
+        <li key={service.slug} data-reveal>
+          <Link href={serviceHref(service.slug)}>
+            {service.imageUrl ? (
+              <span className="sa-services__media">
+                {/* eslint-disable-next-line @next/next/no-img-element -- foto dinámica de Studio */}
+                <img src={service.imageUrl} alt="" loading="lazy" decoding="async" />
+              </span>
+            ) : null}
             <span className="sa-services__n" aria-hidden="true">
               {String(i + 1).padStart(2, '0')}
             </span>
-            <h3>{t.title}</h3>
-            <p>{t.body}</p>
-          </li>
-        ))}
-      </ol>
+            <h3>{service.title}</h3>
+            <p>{service.body}</p>
+            <span className="sa-services__more">Ver qué incluye</span>
+          </Link>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+function Servicios({ block, content, services }: { block: LayoutBlock; content: PublicSiteContent; services: Service[] }) {
+  return (
+    <Section block={block} tone="blanco">
+      <SectionHead titleId={`${anchorOf(block)}-t`} content={content} wide>
+        <Link className="sa-link" href={pageHref('servicios')}>
+          Ver todos los servicios
+        </Link>
+      </SectionHead>
+      <ServiceCards services={services} />
     </Section>
   );
 }
@@ -229,21 +269,21 @@ function Servicios({ block, content }: { block: LayoutBlock; content: PublicSite
 export function NewsCard({ post, large }: { post: PublicSiteNewsItem; large?: boolean }) {
   return (
     <article className={`sa-news ${large ? 'sa-news--large' : ''}`.trim()} data-reveal>
-      <a href={newsHref(post.slug)} className="sa-news__media" tabIndex={-1} aria-hidden="true">
+      <Link href={newsHref(post.slug)} className="sa-news__media" tabIndex={-1} aria-hidden="true">
         {post.coverUrl ? (
           // eslint-disable-next-line @next/next/no-img-element -- portada dinámica de Studio
           <img src={post.coverUrl} alt="" loading="lazy" decoding="async" />
         ) : (
           <span className="sa-news__placeholder" />
         )}
-      </a>
+      </Link>
       <div className="sa-news__body">
         <div className="sa-news__meta">
           <DraftTag show={post.published === false} />
           {post.publishedAt ? <time dateTime={post.publishedAt}>{publishedLabel(post.publishedAt)}</time> : null}
         </div>
         <h3>
-          <a href={newsHref(post.slug)}>{post.title}</a>
+          <Link href={newsHref(post.slug)}>{post.title}</Link>
         </h3>
         {post.excerpt ? <p>{post.excerpt}</p> : null}
       </div>
@@ -252,15 +292,13 @@ export function NewsCard({ post, large }: { post: PublicSiteNewsItem; large?: bo
 }
 
 function Noticias({ block, content, news }: { block: LayoutBlock; content: PublicSiteContent; news: PublicSiteNewsItem[] }) {
-  const [first, ...rest] = news.slice(0, 5);
+  const [first, ...rest] = news.slice(0, 4);
   return (
     <Section block={block} tone="papel">
-      <SectionHead block={block} content={content} wide>
-        {news.length ? (
-          <a className="sa-link" href="/p/arta/noticias">
-            Ver todas las noticias
-          </a>
-        ) : null}
+      <SectionHead titleId={`${anchorOf(block)}-t`} content={content} wide>
+        <Link className="sa-link" href={pageHref('noticias')}>
+          Ver todas las noticias
+        </Link>
       </SectionHead>
       {first ? (
         <div className={`sa-newsgrid ${rest.length ? '' : 'is-single'}`.trim()}>
@@ -283,42 +321,66 @@ function Noticias({ block, content, news }: { block: LayoutBlock; content: Publi
 function GaleriaBlock({ block, content, items }: { block: LayoutBlock; content: PublicSiteContent; items: PublicSiteItem[] }) {
   return (
     <Section block={block} tone="tinta">
-      <SectionHead block={block} content={content} wide />
-      {items.length ? <Galeria items={items} /> : <PreviewEmpty>Aún no hay fotos. Súbelas desde Studio y aparecen aquí.</PreviewEmpty>}
+      <SectionHead titleId={`${anchorOf(block)}-t`} content={content} wide>
+        {items.length ? (
+          <Link className="sa-link" href={pageHref('galeria')}>
+            Ver toda la galería
+          </Link>
+        ) : null}
+      </SectionHead>
+      {items.length ? <Galeria items={items.slice(0, 7)} /> : <PreviewEmpty>Aún no hay fotos. Súbelas desde Studio y aparecen aquí.</PreviewEmpty>}
     </Section>
+  );
+}
+
+export function AlliesGrid({ items }: { items: PublicSiteItem[] }) {
+  return (
+    <ul className="sa-allies" data-reveal>
+      {items.map((item) => {
+        const link = safeHref(item.linkHref);
+        const logo = (
+          // eslint-disable-next-line @next/next/no-img-element -- logo dinámico de Studio
+          <img src={item.mediaUrl} alt={item.title || 'Aliado'} loading="lazy" decoding="async" />
+        );
+        return (
+          <li key={item.id}>
+            {link ? (
+              <a href={link} {...externalProps(link)}>
+                {logo}
+              </a>
+            ) : (
+              logo
+            )}
+            <DraftTag show={item.active === false} />
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 
 function Aliados({ block, content, items }: { block: LayoutBlock; content: PublicSiteContent; items: PublicSiteItem[] }) {
   return (
     <Section block={block} tone="papel">
-      <SectionHead block={block} content={content} />
-      {items.length ? (
-        <ul className="sa-allies" data-reveal>
-          {items.map((item) => {
-            const link = safeHref(item.linkHref);
-            const logo = (
-              // eslint-disable-next-line @next/next/no-img-element -- logo dinámico de Studio
-              <img src={item.mediaUrl} alt={item.title || 'Aliado'} loading="lazy" decoding="async" />
-            );
-            return (
-              <li key={item.id}>
-                {link ? (
-                  <a href={link} {...externalProps(link)}>
-                    {logo}
-                  </a>
-                ) : (
-                  logo
-                )}
-                <DraftTag show={item.active === false} />
-              </li>
-            );
-          })}
-        </ul>
-      ) : (
-        <PreviewEmpty>Aún no hay aliados. Sube sus logos desde Studio y aparecen aquí.</PreviewEmpty>
-      )}
+      <SectionHead titleId={`${anchorOf(block)}-t`} content={content} />
+      {items.length ? <AlliesGrid items={items} /> : <PreviewEmpty>Aún no hay aliados. Sube sus logos desde Studio y aparecen aquí.</PreviewEmpty>}
     </Section>
+  );
+}
+
+export function FaqList({ faqs }: { faqs: NonNullable<PublicSiteContent['faqs']> }) {
+  return (
+    <div className="sa-faq" data-reveal>
+      {faqs.map((item) => (
+        <details key={item.question}>
+          <summary>
+            {item.question}
+            <span aria-hidden="true" />
+          </summary>
+          <p>{item.answer}</p>
+        </details>
+      ))}
+    </div>
   );
 }
 
@@ -326,31 +388,27 @@ function Faq({ block, content }: { block: LayoutBlock; content: PublicSiteConten
   const faqs = content.faqs?.filter((f) => f.question?.trim()) ?? [];
   return (
     <Section block={block} tone="blanco" className="sa-faqsec">
-      <SectionHead block={block} content={content} />
-      <div className="sa-faq" data-reveal>
-        {faqs.map((item) => (
-          <details key={item.question}>
-            <summary>
-              {item.question}
-              <span aria-hidden="true" />
-            </summary>
-            <p>{item.answer}</p>
-          </details>
-        ))}
-      </div>
+      <SectionHead titleId={`${anchorOf(block)}-t`} content={content}>
+        {faqs.length > 3 ? (
+          <Link className="sa-link" href={pageHref('preguntas')}>
+            Ver todas las preguntas
+          </Link>
+        ) : null}
+      </SectionHead>
+      <FaqList faqs={faqs.slice(0, 3)} />
     </Section>
   );
 }
 
-function Ubicacion({ block, content }: { block: LayoutBlock; content: PublicSiteContent }) {
+export function PlaceSection({ content, titleId, id, as: Tag = 'h2' }: { content: PublicSiteContent; titleId: string; id?: string; as?: 'h2' }) {
   const address = content.address || VENUE_ADDRESS;
   return (
-    <Section block={block} tone="papel" className="sa-place">
+    <section id={id} className="sa-sec sa-sec--papel sa-place" aria-labelledby={titleId}>
       <div className="sa-place__copy" data-reveal>
         {content.eyebrow ? <p className="sa-eyebrow">{content.eyebrow}</p> : null}
-        <h2 id={`${anchorOf(block)}-t`} className="sa-title">
+        <Tag id={titleId} className="sa-title">
           {content.headline}
-        </h2>
+        </Tag>
         {content.lead ? <p className="sa-lead">{content.lead}</p> : null}
         <address>{address}</address>
         <a className="sa-btn" href={directionsUrl(address)} target="_blank" rel="noopener noreferrer">
@@ -360,57 +418,40 @@ function Ubicacion({ block, content }: { block: LayoutBlock; content: PublicSite
       <div data-reveal>
         <VenueMap address={address} />
       </div>
-    </Section>
+    </section>
   );
 }
 
-function Contacto({ block, content, data }: { block: LayoutBlock; content: PublicSiteContent; data: PublicSiteData }) {
-  const settings = siteSettings(data);
-  const contact = contactFromSettings(settings);
-  const socials = socialProfiles(settings);
+/** Invitación a escribir: cierra Inicio y las páginas de contenido. */
+export function CtaBand({ data, id, block }: { data: Pick<PublicSiteData, 'pages'>; id?: string; block?: string }) {
+  const content = sectionContent(data, 'home_cta');
+  const contact = contactFromSettings(siteSettings(data));
+  const titleId = `${id || 'invitacion'}-t`;
   return (
-    <Section block={block} tone="tinta" className="sa-contact">
+    <section id={id} data-block={block} className="sa-sec sa-sec--tinta sa-band" aria-labelledby={titleId}>
       <span className="sa-contact__motif" aria-hidden="true" />
-      <div className="sa-contact__copy" data-reveal>
+      <div className="sa-band__copy" data-reveal>
         {content.eyebrow ? <p className="sa-eyebrow">{content.eyebrow}</p> : null}
-        <h2 id={`${anchorOf(block)}-t`} className="sa-title sa-title--xl">
+        <h2 id={titleId} className="sa-title sa-title--xl">
           {content.headline}
         </h2>
         {content.body ? <p className="sa-lead">{content.body}</p> : null}
-        <ul className="sa-contact__ways">
-          <li>
-            <span>Correo</span>
-            <a href={`mailto:${contact.email}`}>{contact.email}</a>
-          </li>
-          {contact.phone ? (
-            <li>
-              <span>Teléfono</span>
-              <a href={`tel:${contact.phone.replace(/\s/g, '')}`}>{contact.phone}</a>
-            </li>
-          ) : null}
-          {socials.length ? (
-            <li>
-              <span>Redes</span>
-              <div>
-                {socials.map((p) => (
-                  <a key={p.url} href={p.url} target="_blank" rel="noopener noreferrer me">
-                    {p.label}
-                  </a>
-                ))}
-              </div>
-            </li>
-          ) : null}
-        </ul>
+        <div className="sa-band__actions">
+          <Link className="sa-btn sa-btn--on-ink" href={pageHref('contacto')}>
+            {content.cta || 'Escribir a Arta'}
+          </Link>
+          <a className="sa-btn sa-btn--ghost-ink" href={`mailto:${contact.email}`}>
+            {contact.email}
+          </a>
+        </div>
       </div>
-      <div data-reveal>
-        <ContactForm email={contact.email} whatsapp={contact.whatsapp} submitLabel={content.cta || 'Escribir a Arta'} />
-      </div>
-    </Section>
+    </section>
   );
 }
 
 function TextoLibre({ block, content }: { block: LayoutBlock; content: PublicSiteContent }) {
-  const link = safeHref(content.ctaHref);
+  const raw = safeHref(content.ctaHref);
+  const link = raw ? resolveSiteHref(raw) : null;
   const dark = content.tone === 'tinta';
   return (
     <Section
@@ -441,7 +482,8 @@ function TextoLibre({ block, content }: { block: LayoutBlock; content: PublicSit
 }
 
 function Anuncio({ block, content }: { block: LayoutBlock; content: PublicSiteContent }) {
-  const link = safeHref(content.ctaHref);
+  const raw = safeHref(content.ctaHref);
+  const link = raw ? resolveSiteHref(raw) : null;
   const paper = content.tone === 'papel' && !content.imageUrl;
   return (
     <Section block={block} tone={paper ? 'blanco' : 'tinta'} className={`sa-banner ${content.imageUrl ? 'has-image' : ''}`.trim()}>
@@ -465,7 +507,7 @@ function Anuncio({ block, content }: { block: LayoutBlock; content: PublicSiteCo
   );
 }
 
-/** Pinta una sección de la maqueta con su contenido. */
+/** Pinta una sección de Inicio: cada una resume algo y lleva a su página. */
 export function SiteBlock({ block, data }: { block: LayoutBlock; data: PublicSiteData }) {
   const key = sectionKeyOf(block);
   const content = sectionContent(data, key);
@@ -477,7 +519,7 @@ export function SiteBlock({ block, data }: { block: LayoutBlock; data: PublicSit
     case 'nosotros':
       return <Nosotros block={block} content={content} />;
     case 'servicios':
-      return <Servicios block={block} content={content} />;
+      return <Servicios block={block} content={content} services={servicesOf(data)} />;
     case 'noticias':
       return <Noticias block={block} content={content} news={data.news} />;
     case 'galeria':
@@ -487,9 +529,9 @@ export function SiteBlock({ block, data }: { block: LayoutBlock; data: PublicSit
     case 'faq':
       return <Faq block={block} content={content} />;
     case 'ubicacion':
-      return <Ubicacion block={block} content={sectionContent(data, key, { address: VENUE_ADDRESS })} />;
+      return <PlaceSection id={anchorOf(block)} titleId={`${anchorOf(block)}-t`} content={sectionContent(data, key, { address: VENUE_ADDRESS })} />;
     case 'contacto':
-      return <Contacto block={block} content={content} data={data} />;
+      return <CtaBand data={data} id={anchorOf(block)} block={block.id} />;
     case 'texto':
       return <TextoLibre block={block} content={content} />;
     case 'anuncio':

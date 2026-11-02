@@ -9,7 +9,7 @@ const apiBase = () => process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'
  */
 export const SITE_CACHE = { revalidate: 30, tags: ['sitio'] };
 
-export type PublicSiteTile = { title: string; body: string };
+export type PublicSiteTile = { title: string; body: string; detail?: string; includes?: string; imageUrl?: string; slug?: string };
 export type PublicSiteStat = { label: string; text: string };
 export type PublicSiteFaq = { question: string; answer: string };
 
@@ -21,6 +21,15 @@ export type PublicSiteContent = {
   sub?: string;
   lead?: string;
   body?: string;
+  /** Lo que se lee en Inicio; `body` es el texto completo de la página. */
+  summary?: string;
+  /** Foto de la cabecera de la página y cómo sale en Google. */
+  pageImage?: string;
+  seoTitle?: string;
+  seoDescription?: string;
+  /** Pasos de «Cómo trabajamos» (Nosotros). */
+  stepsTitle?: string;
+  steps?: PublicSiteTile[];
   cta?: string;
   ctaHref?: string;
   imageUrl?: string;
@@ -124,7 +133,7 @@ export const FALLBACK_SLIDES: PublicSiteSlide[] = [
     subtitle: 'Producimos conciertos y espectáculos en Puebla',
     imageUrl: '/uploads/seed-hero-1.jpg',
     ctaLabel: 'Ver cartelera',
-    ctaHref: '#cartelera',
+    ctaHref: '/p/arta/cartelera',
   },
   {
     id: '2',
@@ -132,15 +141,15 @@ export const FALLBACK_SLIDES: PublicSiteSlide[] = [
     subtitle: 'Cada fecha, con el mismo cuidado de principio a fin',
     imageUrl: '/uploads/seed-hero-2.jpg',
     ctaLabel: 'Conoce Arta',
-    ctaHref: '#nosotros',
+    ctaHref: '/p/arta/nosotros',
   },
   {
     id: '3',
     title: 'Cada detalle cuenta',
     subtitle: 'Audio, iluminación, hospitalidad y boletaje en una sola mano',
     imageUrl: '/uploads/seed-hero-3.jpg',
-    ctaLabel: 'Lo que hacemos',
-    ctaHref: '#modulos',
+    ctaLabel: 'Nuestros servicios',
+    ctaHref: '/p/arta/servicios',
   },
 ];
 

@@ -17,7 +17,7 @@ const HERO = {
   headline: 'La experiencia del Show',
   sub: 'Producimos conciertos y espectáculos en Puebla: del primer boceto a la última luz del escenario.',
   cta: 'Ver cartelera',
-  ctaHref: '#cartelera',
+  ctaHref: '/p/arta/cartelera',
 };
 
 const ABOUT = {
@@ -51,6 +51,9 @@ const CTA = {
   cta: 'Escribir a Arta',
 };
 
+/** Fotos de arranque que usan las cabeceras de las páginas (`DEFAULT_CONTENT` en `web/lib/site-blocks.ts`). */
+const PAGE_ASSETS = ['seed-news-2.jpg', 'seed-news-3.jpg'];
+
 const STUDIO_PAGES: Array<{ sectionKey: string; title: string; contentJson: Record<string, unknown> }> = [
   { sectionKey: 'home_hero', title: 'Portada', contentJson: HERO },
   { sectionKey: 'home_about', title: 'Nosotros', contentJson: ABOUT },
@@ -64,7 +67,7 @@ const SEED_SLIDES = [
     subtitle: 'Producimos conciertos y espectáculos en Puebla',
     file: 'seed-hero-1.jpg',
     ctaLabel: 'Ver cartelera',
-    ctaHref: '#cartelera',
+    ctaHref: '/p/arta/cartelera',
     sortOrder: 0,
   },
   {
@@ -72,15 +75,15 @@ const SEED_SLIDES = [
     subtitle: 'Cada fecha, con el mismo cuidado de principio a fin',
     file: 'seed-hero-2.jpg',
     ctaLabel: 'Conoce Arta',
-    ctaHref: '#nosotros',
+    ctaHref: '/p/arta/nosotros',
     sortOrder: 1,
   },
   {
     title: 'Cada detalle cuenta',
     subtitle: 'Audio, iluminación, hospitalidad y boletaje en una sola mano',
     file: 'seed-hero-3.jpg',
-    ctaLabel: 'Lo que hacemos',
-    ctaHref: '#modulos',
+    ctaLabel: 'Nuestros servicios',
+    ctaHref: '/p/arta/servicios',
     sortOrder: 2,
   },
 ];
@@ -188,6 +191,7 @@ async function retirePlaceholders(prisma: PrismaClient) {
 export async function seedStudioContent(prisma: PrismaClient, ensureSeedAsset: (file: string) => string) {
   // Los archivos sí se copian siempre: lo sembrado no debe quedar con la imagen rota en un volumen nuevo.
   const slides = SEED_SLIDES.map((s) => ({ ...s, imageUrl: ensureSeedAsset(s.file) }));
+  PAGE_ASSETS.forEach(ensureSeedAsset);
 
   const hasSite = (await prisma.pageContent.count({ where: { entity: 'ARTA' } })) > 0;
   if (hasSite) {

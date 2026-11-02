@@ -12,10 +12,13 @@ export async function GET() {
 ## Canonical
 
 - Home: ${base}/p/arta
-- Noticias: ${base}/p/arta#noticias
+- Cartelera: ${base}/p/arta/cartelera
+- Nosotros: ${base}/p/arta/nosotros
+- Servicios: ${base}/p/arta/servicios
+- Noticias: ${base}/p/arta/noticias
 - Feed RSS: ${base}/p/arta/feed.xml
-- FAQ: ${base}/p/arta#faq
-- Contacto: ${base}/p/arta#contacto
+- Preguntas frecuentes: ${base}/p/arta/preguntas
+- Contacto: ${base}/p/arta/contacto
 - Contratar la plataforma ARTA: ${base}/contratar
 - Aviso de privacidad: ${base}/legal/privacidad
 - Sitemap: ${base}/sitemap.xml

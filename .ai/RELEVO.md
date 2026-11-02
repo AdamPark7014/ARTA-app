@@ -7,6 +7,56 @@
 - **Producción:** `ceb81f9` desplegado desde `main` el 2026-11-01 (`bash deploy/update.sh` en `/var/www/arta-app`, log
   `/root/arta-deploy-20261101-R.log`; respaldo automático en `/root/arta-backups/`). Disco al 81 %: al 90 % se cae la BD.
 
+## Turno claude-code (2026-11-01, noche): el sitio público ya es un sitio de páginas, con fotos a color
+
+Adam vio `/p/arta#noticias` y pidió: «las fotos de la pagina web a color porfa pero colores que combinen con la uiux del sitio» y
+«no quiero una landing page dale un desarrollo profesional a la pagina». Sesión aparte de la de geolocalización. **No se ha
+desplegado:** lo despliega la sesión principal junto con lo suyo, antes de subir las apps a tiendas. Guía: `docs/SITIO-PUBLICO.md`.
+
+**Hecho:**
+- **Fotos a color** con un ajuste discreto (`--photo` en `styles/sitio.scss`) y velos laterales para que el texto se lea. Solo logos
+  de aliados y mapa van en un tono. `seed-hero-3.jpg` era un fiordo noruego: ahora es un cantante; `seed-news-2/3` se reescalaron con
+  Real-ESRGAN. Se copian en cada arranque, sin tocar la base. **Son fotos de archivo:** Hospitalidad usa la de un estudio de música.
+- **Páginas reales:** `/p/arta/cartelera` y su show, `nosotros`, `servicios` y cada servicio, `noticias` y su nota, `historias` (siguen
+  tipo Instagram, con el mismo visor), `galeria`, `preguntas` y `contacto` con formulario, datos y mapa. Inicio resume y lleva a ellas.
+  Las vistas viven en `components/site/SiteViews.tsx`; `/site` pinta lo mismo con borradores y navega por dentro.
+- **Navegación:** menú a páginas con la actual marcada, migas, menú móvil con todas y pie con mapa del sitio. Cada página con título,
+  descripción, JSON-LD y lugar en el sitemap. `/p/arta#noticias` y las demás anclas redirigen (`LegacyAnchors`), y los botones ya
+  guardados con `#algo` se corrigen al pintar (`resolveSiteHref`).
+- **Studio por páginas:** lista de páginas con Subir, Bajar, Quitar y Poner; en Inicio, fotos y secciones aparte; la vista previa abre
+  la página que estás editando. Cada página suma foto de cabecera, título y descripción para Google. Cada servicio suma texto de su
+  página, qué incluye y foto. Sin migración: el orden va en `site_layout.contentJson.pages`.
+- **Quitar una página la retira de verdad** (`isPageOff`): su ruta da 404, sale de menú, pie, sitemap y feed, y de Inicio su sección y
+  los botones que llevaban ahí. Inicio y Contacto no se quitan (`FIXED_PAGES`).
+- **Filas de producción:** los servicios guardados solo traen título y resumen. `withServiceDefaults` les pone su detalle por nombre, en
+  el sitio y en el formulario de Studio, para que quien edita vea lo mismo que el público.
+
+**Verificado** con build de producción limpio (API apagada al compilar): 268 pruebas web en verde; la única que falla es `real-stack-files.spec.ts`. Auditoría `sitio` en verde (48) a 1536 y
+390 px, con capturas revisadas de todas las páginas y de Studio. Recorrido contra API y base real (`arta_sitio`) con 47 revisiones: el
+practicante deja borrador y lo manda a revisión, la API le da 403 al publicar, dirección publica y sale sin esperar, orden de Inicio y
+del menú, página quitada con 404 y de vuelta, servicio editado que se ve en su página, anclas viejas, sitemap y feed. API: `tsc` y
+`jest` en verde (1170, una omitida).
+
+**Avisos de la auditoría que no son errores:** el contraste 1.00:1 en menú y `.sa-link` es el subrayado (`linear-gradient(currentColor…)`),
+que el auditor toma como fondo. **`real-stack-files.spec.ts` falla aquí** porque pide una API en el puerto 4000; no toca el sitio.
+
+**No verificado:** Safari real (WebKit bloqueado en Windows desde la app; lo cubre `web-safari.yml`). Con los datos de producción, porque
+no se ha desplegado.
+
+**A medias / lo que Adam debe saber:** producción sigue sin shows, noticias ni historias reales: la portada mejora en cuanto suban
+contenido. Las fotos son de archivo hasta que manden las suyas. `llms.txt` lista las rutas fijas aunque una página esté quitada.
+
+**Siguiente:** tras desplegar, revisar `/p/arta`, `/p/arta/servicios/produccion` y `/p/arta#noticias` en producción, y publicar en Studio
+algo de prueba para ver que refresca.
+
+**Trampas de este turno:**
+- `next build` reutiliza la caché de `fetch` de la carpeta de build: con datos de un `next dev` anterior sirve contenido viejo con la API
+  apagada. Para probar «sin API», borrar antes `.next-sitio`.
+- Next sirve la copia vieja y regenera detrás: el sitemap se pone al día en la segunda visita y el feed cada 300 s.
+
+**No tocar:** `apps/api/src/ubicacion/`, `apps/mobile-native/`, `packages/rbac` y la política de privacidad son de la sesión de
+geolocalización mientras siga abierta.
+
 ## Turno claude-code (2026-11-01, noche): roles del cliente, adendum, testigos y Finanzas
 
 Adam pasó la matriz real por persona. **Guía: `docs/ROLES-Y-PERMISOS.md`.** Reglas en `packages/rbac/src/roles.ts` con copia

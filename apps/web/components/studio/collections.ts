@@ -58,7 +58,7 @@ const orNull = (v: unknown) => str(v) || null;
 
 function badLink(values: FormValues, key: string): string[] {
   const href = str(values[key]);
-  return href && !isSafeCtaHref(href) ? ['un enlace válido (https://, #sección, mailto: o tel:)'] : [];
+  return href && !isSafeCtaHref(href) ? ['un enlace válido (https://, una página del sitio, mailto: o tel:)'] : [];
 }
 
 function showDateLabel(row: StudioRow) {
@@ -84,7 +84,7 @@ const slides: CollectionConfig = {
     { key: 'ctaHref', label: 'Enlace del botón', type: 'link', half: true },
     FOCUS_FIELD,
   ],
-  blank: () => ({ imageUrl: '', title: '', subtitle: '', ctaLabel: 'Ver cartelera', ctaHref: '#cartelera', focus: 'centro' }),
+  blank: () => ({ imageUrl: '', title: '', subtitle: '', ctaLabel: 'Ver cartelera', ctaHref: '/p/arta/cartelera', focus: 'centro' }),
   fromRow: (r) => ({
     imageUrl: r.imageUrl || '',
     title: r.title || '',

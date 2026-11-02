@@ -29,10 +29,18 @@ type Step = { name: string; path: string; action?: (page: Page) => Promise<void>
 
 const STEPS: Step[] = [
   { name: 'sitio', path: '/site?embed=1&modo=publicado' },
-  {
-    name: 'sitio-borradores',
-    path: '/site?embed=1',
-  },
+  { name: 'sitio-borradores', path: '/site?embed=1' },
+  { name: 'sitio-cartelera', path: '/site?embed=1&modo=publicado&pagina=cartelera' },
+  { name: 'sitio-show', path: '/site?embed=1&modo=publicado&pagina=cartelera&slug=los-ecos' },
+  { name: 'sitio-nosotros', path: '/site?embed=1&modo=publicado&pagina=nosotros' },
+  { name: 'sitio-servicios', path: '/site?embed=1&modo=publicado&pagina=servicios' },
+  { name: 'sitio-servicio', path: '/site?embed=1&modo=publicado&pagina=servicios&slug=produccion' },
+  { name: 'sitio-noticias', path: '/site?embed=1&modo=publicado&pagina=noticias' },
+  { name: 'sitio-noticia', path: '/site?embed=1&modo=publicado&pagina=noticias&slug=festival-de-verano' },
+  { name: 'sitio-historias', path: '/site?embed=1&modo=publicado&pagina=historias' },
+  { name: 'sitio-galeria', path: '/site?embed=1&modo=publicado&pagina=galeria' },
+  { name: 'sitio-preguntas', path: '/site?embed=1&modo=publicado&pagina=preguntas' },
+  { name: 'sitio-contacto', path: '/site?embed=1&modo=publicado&pagina=contacto' },
   {
     name: 'sitio-menu',
     path: '/site?embed=1&modo=publicado',
@@ -49,7 +57,9 @@ const STEPS: Step[] = [
       await page.getByRole('dialog').waitFor();
     },
   },
-  { name: 'studio-portada', path: '/studio' },
+  { name: 'studio-inicio', path: '/studio' },
+  { name: 'studio-servicios', path: '/studio?bloque=servicios' },
+  { name: 'studio-contacto', path: '/studio?bloque=contacto' },
   { name: 'studio-cartelera', path: '/studio?bloque=cartelera' },
   {
     name: 'studio-show-nuevo',
