@@ -37,6 +37,8 @@ export type PublicSiteContent = {
   secondaryHref?: string;
   /** La frase de Inicio (`home_frase`). */
   text?: string;
+  /** Recintos de Inicio (`home_recintos`). */
+  venues?: Array<{ name: string; address: string; match?: string }>;
   imageUrl?: string;
   imageSide?: string;
   tone?: string;

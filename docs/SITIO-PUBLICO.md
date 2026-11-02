@@ -23,6 +23,9 @@ Una idea por pantalla y nada que no diga algo. En orden:
 | Mosaico de shows (`ShowTile`) | La cartelera. Con póster, el arte se asoma abajo y le da el color a la tarjeta; sin póster, un escenario a oscuras con reflectores (`StageLights`), para no fingir una foto que no es de ese show |
 | Mosaico de servicios | `home_modulos.tiles`: se turnan foto y texto grande. `tagline` es su frase; se parte en renglones en cada punto |
 | Cómo trabajamos (`ProcessScroll`) | Los pasos de `home_about`, cada uno con su foto; el titular, de `home_proceso` |
+| Muro de pósters, con los datos de la temporada | Los pósters de los shows, próximos y pasados (`home_muro`). Datos calculados de la cartelera, nunca escritos a mano. Con menos de 5 pósters no sale |
+| El sistema (`SystemShowcase`) | `home_sistema`. Pantallas de ejemplo con datos inventados, y el pie lo dice. Habla a promotores y artistas |
+| Recintos | `home_recintos`: dirección, cómo llegar y su siguiente show, que reconoce por una palabra (`match`) |
 | Noches recientes | Los shows que ya pasaron (`/studio/public/shows`); el titular, de `home_recientes` |
 | Invitación a escribir | `home_cta`; la foto es su `pageImage` |
 
@@ -82,6 +85,8 @@ la sigue enseñando, para poder editarla. Inicio y Contacto no se quitan (`FIXED
 
 **Un show sale solo de la cartelera** al terminar su día en Puebla (`startOfTodayMx`) y pasa a «Shows anteriores» en
 `/p/arta/cartelera` y a «Noches recientes» en Inicio.
+
+**Página de un show:** guardar en calendario (Google o `.ics`) y compartir. Uno que ya pasó dice «Ya se presentó» y no ofrece boletos.
 
 **La cartelera no lee los eventos del panel:** son `NewsPost` capturados en Studio. Un `Event` puede ser de prueba o no estar anunciado, y
 sus archivos no siempre son el arte del show: el `100X200.jpg` de Earth, Wind & Fire es el pendón de otro festival.

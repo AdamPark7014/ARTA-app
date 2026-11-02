@@ -615,6 +615,7 @@ export default function StudioPage() {
           />
           {texts(HERO_KEY)}
           {texts('home_frase')}
+          {texts('home_sistema')}
         </>
       );
     }

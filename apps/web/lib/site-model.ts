@@ -45,6 +45,12 @@ export function isPageOff(data: Pick<PublicSiteData, 'pages'>, key: PageKey): bo
   return resolvePages(layoutOf(data)).some((page) => page.key === key && !page.visible);
 }
 
+/** Con menos pósters el muro se ve repetido: mejor no sale. */
+export const MIN_WALL_POSTERS = 5;
+
+/** Los shows con póster: primero lo que viene, luego lo más reciente. */
+export const posterShows = (shows: PublicSiteNewsItem[], past: PublicSiteNewsItem[] = []) => [...shows, ...past].filter((s) => s.coverUrl);
+
 /** Secciones de Inicio que salen, en su orden. Sin contenido, una sección no enseña un hueco: no sale. */
 export function visibleBlocks(data: PublicSiteData, preview = false, past: PublicSiteNewsItem[] = []): LayoutBlock[] {
   return resolveLayout(layoutOf(data)).filter((block) => {
@@ -54,6 +60,7 @@ export function visibleBlocks(data: PublicSiteData, preview = false, past: Publi
     if (preview) return true;
     if (block.type === 'cartelera') return data.shows.length > 0;
     if (block.type === 'recientes') return past.length > 0;
+    if (block.type === 'muro') return posterShows(data.shows, past).length >= MIN_WALL_POSTERS;
     if (block.type === 'noticias') return data.news.length > 0;
     if (block.type === 'historias') return itemsOf(data, 'historia').length > 0;
     if (block.type === 'galeria') return itemsOf(data, 'foto').length > 0;

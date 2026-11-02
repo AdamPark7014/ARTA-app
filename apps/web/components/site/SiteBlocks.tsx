@@ -3,6 +3,7 @@ import type { CSSProperties, ReactNode } from 'react';
 import { Galeria } from '@/components/site/Galeria';
 import { Historias } from '@/components/site/Historias';
 import { LitLine } from '@/components/site/LitLine';
+import { SystemShowcase } from '@/components/site/SystemShowcase';
 import { ProcessScroll } from '@/components/site/ProcessScroll';
 import { VenueMap, directionsUrl } from '@/components/site/VenueMap';
 import {
@@ -27,7 +28,7 @@ import {
   showTimeLabel,
   ticketHref,
 } from '@/lib/site-format';
-import { heroPhotoUrls, itemsOf, newsHref, servicesOf, showHref, type Service } from '@/lib/site-model';
+import { heroPhotoUrls, itemsOf, newsHref, posterShows, servicesOf, showHref, type Service } from '@/lib/site-model';
 import { VENUE_ADDRESS, contactFromSettings } from '@/lib/site-seo';
 
 type Tone = 'papel' | 'blanco' | 'tinta';
@@ -283,6 +284,130 @@ function Cartelera({ block, content, shows }: { block: LayoutBlock; content: Pub
           Ver toda la cartelera
         </Link>
       </p>
+    </Section>
+  );
+}
+
+/** Una fila del muro: tres veces la misma lista, para que corra sin saltos. Solo la primera se lee y se tabula. */
+function PosterRow({ shows, reverse }: { shows: PublicSiteNewsItem[]; reverse?: boolean }) {
+  return (
+    <div className={`sa-wall__row ${reverse ? 'is-reverse' : ''}`.trim()}>
+      <div className="sa-wall__track">
+        {[0, 1, 2].map((copy) =>
+          shows.map((show) => (
+            <Link
+              key={`${copy}-${show.id}`}
+              href={showHref(show.slug)}
+              aria-label={copy ? undefined : show.title}
+              aria-hidden={copy ? true : undefined}
+              tabIndex={copy ? -1 : undefined}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element -- póster dinámico de Studio */}
+              <img src={show.coverUrl as string} alt="" loading="lazy" decoding="async" />
+            </Link>
+          )),
+        )}
+      </div>
+    </div>
+  );
+}
+
+function Muro({ block, content, shows, past }: { block: LayoutBlock; content: PublicSiteContent; shows: PublicSiteNewsItem[]; past: PublicSiteNewsItem[] }) {
+  const posters = posterShows(shows, past);
+  const half = Math.ceil(posters.length / 2);
+  const all = [...shows, ...past];
+  const venues = new Set(all.map((show) => show.venue?.trim().toLowerCase()).filter(Boolean));
+  const nextDays = daysUntil(shows[0]?.eventDate);
+  const stats = [
+    { value: String(all.length), label: all.length === 1 ? 'show esta temporada' : 'shows esta temporada' },
+    { value: String(venues.size), label: venues.size === 1 ? 'escenario' : 'escenarios' },
+    ...(nextDays !== null && nextDays >= 0 ? [{ value: String(nextDays), label: nextDays === 1 ? 'día para el próximo show' : 'días para el próximo show' }] : []),
+  ];
+  return (
+    <Section block={block} tone="tinta" className="sa-wall">
+      <header className="sa-headc" data-reveal>
+        <h2 id={`${anchorOf(block)}-t`} className="sa-title">
+          {content.headline}
+        </h2>
+        {content.lead ? <p className="sa-headc__lead">{content.lead}</p> : null}
+      </header>
+      {posters.length ? (
+        <>
+          <PosterRow shows={posters.slice(0, half)} />
+          {posters.length > 1 ? <PosterRow shows={posters.slice(half)} reverse /> : null}
+          <dl className="sa-wall__stats" data-reveal>
+            {stats.map((stat) => (
+              <div key={stat.label}>
+                <dd>{stat.value}</dd>
+                <dt>{stat.label}</dt>
+              </div>
+            ))}
+          </dl>
+        </>
+      ) : (
+        <PreviewEmpty>Aquí corren los pósters de los shows. Súbelos en Cartelera.</PreviewEmpty>
+      )}
+    </Section>
+  );
+}
+
+function Sistema({ block, content }: { block: LayoutBlock; content: PublicSiteContent }) {
+  return (
+    <Section block={block} tone="tinta" className="sa-system">
+      <span className="sa-system__mesh" aria-hidden="true">
+        <i />
+        <i />
+        <i />
+      </span>
+      <header className="sa-system__head" data-reveal>
+        {content.eyebrow ? <p className="sa-eyebrow">{content.eyebrow}</p> : null}
+        <h2 id={`${anchorOf(block)}-t`} className="sa-title sa-title--xl">
+          {content.headline}
+        </h2>
+        {content.lead ? <p className="sa-system__lead">{content.lead}</p> : null}
+      </header>
+      <SystemShowcase />
+    </Section>
+  );
+}
+
+function Recintos({ block, content, shows }: { block: LayoutBlock; content: PublicSiteContent; shows: PublicSiteNewsItem[] }) {
+  const venues = (content.venues ?? []).filter((venue) => venue.name?.trim());
+  return (
+    <Section block={block} tone="papel" className="sa-sec--mosaic sa-venues">
+      <header className="sa-headc" data-reveal>
+        <h2 id={`${anchorOf(block)}-t`} className="sa-title">
+          {content.headline}
+        </h2>
+      </header>
+      <ul>
+        {venues.map((venue) => {
+          const key = (venue.match || venue.name).trim().toLowerCase();
+          const next = shows.find((show) => show.venue?.toLowerCase().includes(key));
+          const date = next ? showDateParts(next.eventDate) : null;
+          return (
+            <li key={venue.name} data-reveal>
+              <h3>{venue.name}</h3>
+              <address>{venue.address}</address>
+              {next ? (
+                <Link className="sa-venues__next" href={showHref(next.slug)}>
+                  {next.coverUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element -- póster dinámico de Studio
+                    <img src={next.coverUrl} alt="" loading="lazy" decoding="async" />
+                  ) : null}
+                  <span>
+                    <small>{date ? `Próximo · ${date.dayMonth}` : 'Próximo show'}</small>
+                    <strong>{next.title}</strong>
+                  </span>
+                </Link>
+              ) : null}
+              <a className="sa-arrow" href={directionsUrl(venue.address)} target="_blank" rel="noopener noreferrer">
+                Cómo llegar
+              </a>
+            </li>
+          );
+        })}
+      </ul>
     </Section>
   );
 }
@@ -751,6 +876,12 @@ export function SiteBlock({ block, data, past = [] }: { block: LayoutBlock; data
       return <Proceso block={block} content={content} data={data} />;
     case 'recientes':
       return <Recientes block={block} content={content} past={past} />;
+    case 'muro':
+      return <Muro block={block} content={content} shows={data.shows} past={past} />;
+    case 'sistema':
+      return <Sistema block={block} content={content} />;
+    case 'recintos':
+      return <Recintos block={block} content={content} shows={data.shows} />;
     case 'historias':
       return <HistoriasBlock block={block} content={content} items={itemsOf(data, 'historia')} />;
     case 'nosotros':

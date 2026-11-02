@@ -14,6 +14,9 @@ export type BlockType =
   | 'cartelera'
   | 'proceso'
   | 'recientes'
+  | 'muro'
+  | 'sistema'
+  | 'recintos'
   | 'historias'
   | 'nosotros'
   | 'servicios'
@@ -74,7 +77,7 @@ export const SITE_PAGES: SitePageMeta[] = [
     path: '',
     label: 'Inicio',
     description: 'La primera página: qué es Arta, sus fotos, lo que viene y un resumen que lleva a todo lo demás.',
-    sections: [HERO_KEY, 'home_frase'],
+    sections: [HERO_KEY, 'home_frase', 'home_sistema'],
     collections: ['slides'],
   },
   {
@@ -82,7 +85,7 @@ export const SITE_PAGES: SitePageMeta[] = [
     path: '/cartelera',
     label: 'Cartelera',
     description: 'Los próximos shows, cada uno con su página. Un show pasa solo a «Shows anteriores» cuando termina su fecha.',
-    sections: ['home_cartelera', 'home_recientes'],
+    sections: ['home_cartelera', 'home_muro', 'home_recientes'],
     collections: ['shows'],
   },
   {
@@ -139,7 +142,7 @@ export const SITE_PAGES: SitePageMeta[] = [
     path: '/contacto',
     label: 'Contacto',
     description: 'Formulario, datos para escribirle a Arta, dirección y mapa.',
-    sections: ['home_cta', 'home_ubicacion'],
+    sections: ['home_cta', 'home_ubicacion', 'home_recintos'],
     collections: [],
   },
 ];
@@ -216,6 +219,27 @@ export const BLOCK_META: Record<BlockType, BlockMeta> = {
     sectionKey: 'home_recientes',
     anchor: 'recientes',
     page: 'cartelera',
+  },
+  muro: {
+    label: 'Muro de pósters',
+    description: 'Los pósters de los shows, en movimiento, con los datos de la temporada. Salen solos de la cartelera.',
+    sectionKey: 'home_muro',
+    anchor: 'temporada',
+    page: 'cartelera',
+  },
+  sistema: {
+    label: 'El sistema',
+    description: 'Cómo corre un show por dentro, con pantallas de ejemplo. Habla a promotores y artistas.',
+    sectionKey: 'home_sistema',
+    anchor: 'sistema',
+    page: 'inicio',
+  },
+  recintos: {
+    label: 'Recintos',
+    description: 'Dónde se presenta Arta: dirección, cómo llegar y su siguiente show.',
+    sectionKey: 'home_recintos',
+    anchor: 'recintos',
+    page: 'contacto',
   },
   historias: {
     label: 'Historias',
@@ -294,7 +318,7 @@ export const BLOCK_META: Record<BlockType, BlockMeta> = {
 
 /** El orden de arranque de Inicio. Toda sección base vive aquí; se oculta, no se borra. */
 export const DEFAULT_LAYOUT: LayoutBlock[] = [
-  ...(['frase', 'cartelera', 'servicios', 'proceso', 'historias', 'galeria', 'noticias', 'recientes', 'aliados', 'contacto'] as BlockType[]).map(
+  ...(['frase', 'cartelera', 'muro', 'servicios', 'sistema', 'proceso', 'recintos', 'historias', 'galeria', 'noticias', 'recientes', 'aliados', 'contacto'] as BlockType[]).map(
     (type) => ({ id: type as string, type, visible: true }),
   ),
   // Ya están completas en su página: se pueden poner, pero Inicio dice mejor una idea por pantalla.
@@ -378,6 +402,23 @@ export const DEFAULT_CONTENT: Record<string, Record<string, unknown>> = {
   },
   home_recientes: {
     headline: 'Noches recientes.',
+  },
+  home_muro: {
+    headline: 'Temporada 2026.',
+    lead: 'Conciertos, giras y experiencias con la firma de Arta.',
+  },
+  home_sistema: {
+    eyebrow: 'Para promotores y artistas',
+    headline: 'Lo complicado es nuestro.',
+    lead: 'Cada fecha corre en nuestra propia plataforma: formatos, órdenes de compra, corrida, campaña y equipo, en un solo lugar y en vivo. Tú ves una pantalla clara; nosotros nos encargamos del resto.',
+  },
+  home_recintos: {
+    headline: 'En los escenarios de Puebla.',
+    venues: [
+      { name: 'Auditorio GNP Seguros', address: 'Av. Unidad Deportiva 2202, Parque Industrial 2000, Puebla', match: 'gnp' },
+      { name: 'Auditorio Arema Explanada', address: 'Calle Ignacio Allende 512, Santiago Momoxpan, Cholula', match: 'arema' },
+      { name: 'Sala Forum', address: 'Av. Maximino A. Camacho 1224, Santiago Xicotenco, San Andrés Cholula', match: 'forum' },
+    ],
   },
   home_cartelera: {
     eyebrow: 'Cartelera',
@@ -560,6 +601,9 @@ export const SECTION_LABELS: Record<string, string> = {
   home_frase: 'La frase de Inicio',
   home_proceso: 'Cómo trabajamos en Inicio',
   home_recientes: 'Noches recientes en Inicio',
+  home_muro: 'Muro de pósters en Inicio',
+  home_sistema: 'El sistema en Inicio',
+  home_recintos: 'Recintos en Inicio',
   home_cartelera: 'Textos de la página',
   home_historias: 'Textos de la página',
   home_about: 'Textos y fotos de la página',
@@ -599,6 +643,31 @@ export const SECTION_FIELDS: Record<string, Field[]> = {
   ],
   home_proceso: [{ key: 'headline', label: 'Titular', type: 'text', hint: 'Los pasos y sus fotos son los de arriba, en «Pasos».' }],
   home_recientes: [{ key: 'headline', label: 'Titular', type: 'text', hint: 'Los shows salen solos: los que ya pasaron en la cartelera.' }],
+  home_muro: [
+    { key: 'headline', label: 'Titular', type: 'text', hint: 'Los pósters y los datos salen solos de la cartelera.' },
+    { key: 'lead', label: 'Texto', type: 'textarea', rows: 2 },
+  ],
+  home_sistema: [
+    EYEBROW,
+    HEADLINE,
+    { key: 'lead', label: 'Texto', type: 'textarea', rows: 3, hint: 'Las pantallas son de ejemplo y no cambian.' },
+  ],
+  home_recintos: [
+    { key: 'headline', label: 'Titular', type: 'text' },
+    {
+      key: 'venues',
+      label: 'Recintos',
+      type: 'list',
+      itemLabel: 'Recinto',
+      addLabel: 'Agregar recinto',
+      hint: 'Cada uno enseña solo su siguiente show.',
+      fields: [
+        { key: 'name', label: 'Nombre', type: 'text' },
+        { key: 'address', label: 'Dirección del recinto', type: 'text', hint: 'El botón «Cómo llegar» busca esta dirección.' },
+        { key: 'match', label: 'Palabra para reconocer sus shows', type: 'text', advanced: true, hint: 'Vacío = el nombre completo. Ej. gnp' },
+      ],
+    },
+  ],
   home_cartelera: [
     EYEBROW,
     HEADLINE,

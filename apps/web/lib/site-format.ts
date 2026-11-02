@@ -80,6 +80,56 @@ export function countdownLabel(iso?: string | null): string {
   return `Faltan ${days} días`;
 }
 
+/** Para guardar un show en el calendario: Google por liga, Apple y Outlook con un archivo .ics. */
+export function calendarLinks(show: {
+  title: string;
+  eventDate?: string | null;
+  eventTime?: string | null;
+  venue?: string | null;
+  city?: string | null;
+  excerpt?: string | null;
+}) {
+  if (!show.eventDate) return null;
+  const d = new Date(show.eventDate);
+  if (Number.isNaN(d.getTime())) return null;
+  const day = d.toISOString().slice(0, 10).replace(/-/g, '');
+  const time = /^(\d{2}):(\d{2})$/.exec(show.eventTime || '');
+  const where = [show.venue, show.city].filter(Boolean).join(', ');
+  // Sin hora se guarda como evento de todo el día. Con hora, tres horas: lo que suele durar una función.
+  const nextDay = new Date(d.getTime() + 86400000).toISOString().slice(0, 10).replace(/-/g, '');
+  const start = time ? `${day}T${time[1]}${time[2]}00` : day;
+  const end = time ? `${day}T${String(Math.min(Number(time[1]) + 3, 23)).padStart(2, '0')}${time[2]}00` : nextDay;
+  const google = new URLSearchParams({
+    action: 'TEMPLATE',
+    text: show.title,
+    dates: `${start}/${end}`,
+    ctz: 'America/Mexico_City',
+    location: where,
+    details: show.excerpt || '',
+  });
+  const when = time
+    ? [`DTSTART;TZID=America/Mexico_City:${start}`, `DTEND;TZID=America/Mexico_City:${end}`]
+    : [`DTSTART;VALUE=DATE:${start}`, `DTEND;VALUE=DATE:${end}`];
+  const escape = (text: string) => text.replace(/[\\;,]/g, '\\$&').replace(/\n/g, '\\n');
+  const ics = [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//Arta Producciones//Cartelera//ES',
+    'BEGIN:VEVENT',
+    `UID:${day}-${encodeURIComponent(show.title).slice(0, 40)}@artaproducciones.com`,
+    `DTSTAMP:${day}T000000Z`,
+    ...when,
+    `SUMMARY:${escape(show.title)}`,
+    `LOCATION:${escape(where)}`,
+    'END:VEVENT',
+    'END:VCALENDAR',
+  ].join('\r\n');
+  return {
+    google: `https://calendar.google.com/calendar/render?${google.toString()}`,
+    ics: `data:text/calendar;charset=utf-8,${encodeURIComponent(ics)}`,
+  };
+}
+
 /** Enlaces escritos en Studio: lo que no sea web, ruta, ancla, correo o teléfono no se pinta. */
 export function safeHref(href?: string | null): string | null {
   const value = (href || '').trim();

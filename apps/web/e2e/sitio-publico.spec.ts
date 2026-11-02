@@ -84,6 +84,69 @@ test.describe('Sitio público · Inicio', () => {
     await expect(page.locator('.sa-tile', { hasText: 'Los Ecos de Cholula' }).locator('.sa-lights')).toHaveCount(0);
   });
 
+  test('el muro corre con los pósters de los shows y lleva a cada uno', async ({ page }) => {
+    await mockStudio(page, siteState());
+    await page.goto('/site?embed=1');
+
+    const wall = page.locator('#temporada');
+    await expect(wall.locator('.sa-wall__track').first()).toBeVisible();
+    await expect(wall.getByRole('link', { name: 'Los Ecos de Cholula' })).toHaveAttribute('href', '/p/arta/cartelera/los-ecos');
+    // Corre sin saltos porque va repetido, pero se lee y se tabula una sola vez.
+    await expect(wall.locator('a[aria-hidden="true"]').first()).toHaveAttribute('tabindex', '-1');
+    await expect(wall.locator('.sa-wall__stats')).toContainText('shows esta temporada');
+  });
+
+  test('el sistema enseña cómo corre un show y dice que los datos son de ejemplo', async ({ page }) => {
+    await mockStudio(page, siteState());
+    await page.goto('/site?embed=1');
+
+    const system = page.locator('#sistema');
+    await expect(system.getByRole('heading', { name: 'Lo complicado es nuestro.' })).toBeVisible();
+    await expect(system.getByRole('heading', { name: 'Minuto a minuto' })).toBeVisible();
+    await expect(system).toContainText('datos ilustrativos');
+  });
+
+  test('cada recinto dice dónde está, cómo llegar y su siguiente show', async ({ page }) => {
+    const state = siteState();
+    const ecos = state.news.find((n) => n.slug === 'los-ecos');
+    if (ecos) ecos.venue = 'Auditorio GNP Seguros';
+    await mockStudio(page, state);
+    await page.goto('/site?embed=1');
+
+    const venues = page.locator('#recintos li');
+    await expect(venues).toHaveCount(3);
+    const gnp = venues.filter({ hasText: 'Auditorio GNP Seguros' });
+    await expect(gnp.getByRole('link', { name: /Los Ecos de Cholula/ })).toHaveAttribute('href', '/p/arta/cartelera/los-ecos');
+    await expect(gnp.getByRole('link', { name: 'Cómo llegar' })).toHaveAttribute('href', /Unidad%20Deportiva|Unidad\+Deportiva/);
+    // Un recinto sin shows no inventa uno.
+    await expect(venues.filter({ hasText: 'Sala Forum' }).locator('.sa-venues__next')).toHaveCount(0);
+  });
+
+  test('un show se puede guardar en el calendario y compartir', async ({ page }) => {
+    await mockStudio(page, siteState());
+    await page.goto('/site?embed=1&pagina=cartelera&slug=los-ecos');
+
+    const google = page.getByRole('link', { name: 'Agregar a Google Calendar' });
+    await expect(google).toHaveAttribute('href', /calendar\.google\.com.*Los\+Ecos.*America%2FMexico_City/);
+    const ics = page.getByRole('link', { name: 'Apple u Outlook' });
+    await expect(ics).toHaveAttribute('href', /^data:text\/calendar/);
+    await expect(ics).toHaveAttribute('download', 'Los Ecos de Cholula.ics');
+    await expect(page.getByRole('button', { name: 'Compartir' })).toBeVisible();
+  });
+
+  test('un show que ya pasó no ofrece boletos ni calendario', async ({ page }) => {
+    const state = siteState();
+    const ecos = state.news.find((n) => n.slug === 'los-ecos');
+    if (ecos) ecos.eventDate = new Date(Date.now() - 5 * 86400000).toISOString();
+    await mockStudio(page, state);
+    await page.goto('/site?embed=1&pagina=cartelera&slug=los-ecos');
+
+    await expect(page.locator('h1')).toHaveText('Los Ecos de Cholula');
+    await expect(page.locator('.sa-facts')).toContainText('Ya se presentó');
+    await expect(page.getByRole('link', { name: 'Comprar boletos' })).toHaveCount(0);
+    await expect(page.getByRole('link', { name: 'Agregar a Google Calendar' })).toHaveCount(0);
+  });
+
   test('las fotos de la portada se turnan y se pueden pausar', async ({ page }) => {
     await mockStudio(page, siteState());
     await page.goto('/site?embed=1');

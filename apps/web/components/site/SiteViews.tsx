@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { ContactForm } from '@/components/site/ContactForm';
 import { Galeria } from '@/components/site/Galeria';
 import { Historias } from '@/components/site/Historias';
+import { ShowActions } from '@/components/site/ShowActions';
 import {
   AlliesGrid,
   CtaBand,
@@ -23,7 +24,9 @@ import { sectionContent, siteSettings, type PublicSiteContent, type PublicSiteDa
 import { pageHref, pageMeta, serviceHref, type PageKey } from '@/lib/site-blocks';
 import {
   SHOW_STATUS_LABEL,
+  calendarLinks,
   countdownLabel,
+  daysUntil,
   externalProps,
   paragraphs,
   publishedLabel,
@@ -149,6 +152,9 @@ export function ShowView({ data, preview, show, others }: ViewProps & { show: Pu
   const tickets = ticketHref(show);
   const countdown = countdownLabel(show.eventDate);
   const where = [show.venue, show.city].filter(Boolean).join(', ');
+  const days = daysUntil(show.eventDate);
+  const isPast = days !== null && days < 0;
+  const calendar = isPast || status === 'cancelado' ? null : calendarLinks(show);
   return (
     <SitePage data={data} active="cartelera" preview={preview}>
       <main id="contenido">
@@ -189,19 +195,27 @@ export function ShowView({ data, preview, show, others }: ViewProps & { show: Pu
                   </dd>
                 </div>
               ) : null}
-              <div>
-                <dt>Boletos</dt>
-                <dd>
-                  <span className={`sa-status sa-status--${status}`}>{SHOW_STATUS_LABEL[status]}</span>
-                  {countdown && status !== 'cancelado' ? <span className="sa-facts__note">{countdown}</span> : null}
-                </dd>
-              </div>
+              {isPast ? (
+                <div>
+                  <dt>Estado</dt>
+                  <dd>Ya se presentó</dd>
+                </div>
+              ) : (
+                <div>
+                  <dt>Boletos</dt>
+                  <dd>
+                    <span className={`sa-status sa-status--${status}`}>{SHOW_STATUS_LABEL[status]}</span>
+                    {countdown && status !== 'cancelado' ? <span className="sa-facts__note">{countdown}</span> : null}
+                  </dd>
+                </div>
+              )}
             </dl>
-            {tickets ? (
+            {tickets && !isPast ? (
               <a className="sa-btn sa-btn--large" href={tickets} {...externalProps(tickets)}>
                 {show.ctaLabel || 'Comprar boletos'}
               </a>
             ) : null}
+            <ShowActions title={show.title} calendar={calendar} />
             <div className="sa-prose">
               {paragraphs(show.body).map((text, i) => (
                 <p key={i}>{text}</p>
