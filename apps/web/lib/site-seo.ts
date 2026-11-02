@@ -23,8 +23,7 @@ export const SITE_KEYWORDS = [
   'producción de eventos',
   'conciertos Puebla',
   'productora de shows',
-  'Auditorio Arema',
-  'Explanada Puebla',
+  'conciertos México',
   'producción escénica',
   'eventos en vivo',
   'productora musical México',
@@ -59,10 +58,8 @@ export function contactFromSettings(settings?: PublicSiteContent) {
   };
 }
 
-export const VENUE_NAME = 'Auditorio Arema Explanada';
-/** Texto de ubicación visible en `#ubicacion`. */
-export const VENUE_ADDRESS =
-  process.env.NEXT_PUBLIC_VENUE_ADDRESS?.trim() || 'Auditorio Arema Explanada, Puebla, Puebla, México';
+/** La oficina de Arta: lo que enseña `#ubicacion` mientras Studio no diga otra cosa. */
+export const VENUE_ADDRESS = process.env.NEXT_PUBLIC_VENUE_ADDRESS?.trim() || 'Calle Tlaxco 720, Col. La Paz, 72160 Puebla, Pue.';
 
 /** Imagen para compartir (1200×630, papel y tinta) generada desde `brand/arta-logo-ink.png`. */
 export const OG_IMAGE = {
@@ -242,7 +239,6 @@ export function buildPublicMetadata(opts: BuildMetadataOpts): Metadata {
 const ORG_ID = () => `${siteOrigin()}/#organization`;
 const WEBSITE_ID = () => `${siteOrigin()}/#website`;
 const LOGO_ID = () => `${siteOrigin()}/#logo`;
-const VENUE_ID = () => `${siteOrigin()}/#auditorio-arema-explanada`;
 
 type Crumb = { name: string; path: string };
 
@@ -306,30 +302,6 @@ export function websiteNode() {
     description: SITE_DESCRIPTION,
     publisher: { '@id': ORG_ID() },
     inLanguage: 'es-MX',
-  };
-}
-
-/**
- * Auditorio Arema Explanada tal como lo muestra `#ubicacion`: nombre y ciudad. Coordenadas solo si el
- * build las trae configuradas (las de respaldo del mapa no son la ubicación real del recinto).
- */
-export function venueNode() {
-  const lat = Number(process.env.NEXT_PUBLIC_VENUE_LAT);
-  const lng = Number(process.env.NEXT_PUBLIC_VENUE_LNG);
-  const hasGeo = Boolean(process.env.NEXT_PUBLIC_VENUE_LAT && process.env.NEXT_PUBLIC_VENUE_LNG) &&
-    Number.isFinite(lat) && Number.isFinite(lng);
-  return {
-    '@type': 'EventVenue',
-    '@id': VENUE_ID(),
-    name: VENUE_NAME,
-    address: {
-      '@type': 'PostalAddress',
-      ...(process.env.NEXT_PUBLIC_VENUE_ADDRESS?.trim() ? { streetAddress: VENUE_ADDRESS } : {}),
-      addressLocality: CONTACT.city,
-      addressRegion: CONTACT.state,
-      addressCountry: 'MX',
-    },
-    ...(hasGeo ? { geo: { '@type': 'GeoCoordinates', latitude: lat, longitude: lng } } : {}),
   };
 }
 
@@ -494,7 +466,7 @@ export function showEventNode(show: PublicNewsPost | PublicSiteNewsItem) {
     eventAttendanceMode: 'https://schema.org/OfflineEventAttendanceMode',
     location: {
       '@type': 'Place',
-      name: show.venue || VENUE_NAME,
+      name: show.venue || show.city || CONTACT.city,
       address: {
         '@type': 'PostalAddress',
         addressLocality: show.city || CONTACT.city,
@@ -523,9 +495,7 @@ export function homePageGraphJsonLd(data?: PublicSiteData) {
       webPageNode({
         path: HOME_PATH,
         name: `${SITE_NAME} · ${SITE_TAGLINE}`,
-        mentions: [{ '@id': VENUE_ID() }],
       }),
-      venueNode(),
       ...(has('servicios') ? serviceNodes(servicesOf({ pages })) : []),
       ...(has('cartelera') ? (data?.shows ?? []).map(showEventNode) : []),
     ],

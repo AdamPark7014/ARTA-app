@@ -98,7 +98,7 @@ const LEGACY_PAGES: Record<string, unknown> = {
     body:
       'Somos la productora detrás de la experiencia: producción técnica, hospitality, artes, boletera, campaña y cierre financiero. Operamos con el mismo rigor en cada concierto.',
     location:
-      'Base operativa en Puebla y venue aliado Auditorio Arema Explanada. Producción integral de conciertos y eventos en la región.',
+      'Oficina en Puebla y shows en distintos recintos y ciudades del país. Producción integral de conciertos y eventos en la región.',
     stats: [
       { label: 'Shows', text: 'Producción integral de conciertos' },
       { label: 'Puebla', text: 'Base operativa y venues aliados' },

@@ -105,11 +105,11 @@ test.describe('Studio · quien publica', () => {
     await mockStudio(page, state);
     await open(page);
 
-    await page.getByRole('button', { name: 'Subir Próximos shows', exact: true }).click();
+    await page.getByRole('button', { name: 'Subir Quiénes somos', exact: true }).click();
     await expect(page.locator('.st-pending')).toContainText('El orden del sitio');
     const saved = lastCall(state, '/studio/pages');
-    expect(saved?.body.contentJson.blocks.slice(0, 2).map((b: { id: string }) => b.id)).toEqual(['cartelera', 'frase']);
-    await expect(previewFrame(page).locator('main > section').first()).toHaveId('cartelera');
+    expect(saved?.body.contentJson.blocks.slice(0, 2).map((b: { id: string }) => b.id)).toEqual(['frase', 'cartelera']);
+    await expect(previewFrame(page).locator('main > section').first()).toHaveId('frase');
 
     await page.getByRole('button', { name: 'Quitar de Inicio Noticias' }).click();
     await expect(page.locator('.st-home__row', { hasText: 'Noticias' })).toContainText('Quitada de Inicio');

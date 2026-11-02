@@ -15,7 +15,6 @@ export type BlockType =
   | 'proceso'
   | 'recientes'
   | 'muro'
-  | 'sistema'
   | 'recintos'
   | 'historias'
   | 'nosotros'
@@ -77,7 +76,7 @@ export const SITE_PAGES: SitePageMeta[] = [
     path: '',
     label: 'Inicio',
     description: 'La primera página: qué es Arta, sus fotos, lo que viene y un resumen que lleva a todo lo demás.',
-    sections: [HERO_KEY, 'home_frase', 'home_sistema'],
+    sections: [HERO_KEY, 'home_frase'],
     collections: ['slides'],
   },
   {
@@ -141,7 +140,7 @@ export const SITE_PAGES: SitePageMeta[] = [
     key: 'contacto',
     path: '/contacto',
     label: 'Contacto',
-    description: 'Formulario, datos para escribirle a Arta, dirección y mapa.',
+    description: 'Formulario, cómo escribirle a Arta, su oficina y el mapa.',
     sections: ['home_cta', 'home_ubicacion', 'home_recintos'],
     collections: [],
   },
@@ -193,8 +192,8 @@ type BlockMeta = {
 
 export const BLOCK_META: Record<BlockType, BlockMeta> = {
   frase: {
-    label: 'Frase',
-    description: 'Lo que hace Arta, en una frase grande que se enciende al bajar.',
+    label: 'Quiénes somos',
+    description: 'Dos líneas que dicen qué es Arta, con liga a Nosotros.',
     sectionKey: 'home_frase',
     anchor: 'frase',
     page: 'inicio',
@@ -208,14 +207,14 @@ export const BLOCK_META: Record<BlockType, BlockMeta> = {
   },
   proceso: {
     label: 'Cómo trabajamos',
-    description: 'Los pasos de Nosotros, con una foto que cambia al bajar.',
+    description: 'Los pasos de Nosotros, con una foto que cambia al bajar. Ya salen en Nosotros; en Inicio es opcional.',
     sectionKey: 'home_proceso',
     anchor: 'como-trabajamos',
     page: 'nosotros',
   },
   recientes: {
     label: 'Noches recientes',
-    description: 'Los últimos shows que ya pasaron: salen solos de la cartelera. Sin shows anteriores no sale.',
+    description: 'Los últimos shows que ya pasaron: salen solos de la cartelera. El muro ya los enseña; aquí es opcional.',
     sectionKey: 'home_recientes',
     anchor: 'recientes',
     page: 'cartelera',
@@ -226,13 +225,6 @@ export const BLOCK_META: Record<BlockType, BlockMeta> = {
     sectionKey: 'home_muro',
     anchor: 'temporada',
     page: 'cartelera',
-  },
-  sistema: {
-    label: 'El sistema',
-    description: 'Cómo corre un show por dentro, con pantallas de ejemplo. Habla a promotores y artistas.',
-    sectionKey: 'home_sistema',
-    anchor: 'sistema',
-    page: 'inicio',
   },
   recintos: {
     label: 'Recintos',
@@ -292,7 +284,7 @@ export const BLOCK_META: Record<BlockType, BlockMeta> = {
   },
   ubicacion: {
     label: 'Ubicación',
-    description: 'Dirección y mapa. Ya están en Contacto; aquí es opcional.',
+    description: 'La oficina de Arta: dirección, teléfono, redes y mapa.',
     sectionKey: 'home_ubicacion',
     anchor: 'ubicacion',
     page: 'contacto',
@@ -318,11 +310,12 @@ export const BLOCK_META: Record<BlockType, BlockMeta> = {
 
 /** El orden de arranque de Inicio. Toda sección base vive aquí; se oculta, no se borra. */
 export const DEFAULT_LAYOUT: LayoutBlock[] = [
-  ...(['frase', 'cartelera', 'muro', 'servicios', 'sistema', 'proceso', 'recintos', 'historias', 'galeria', 'noticias', 'recientes', 'aliados', 'contacto'] as BlockType[]).map(
+  // Lo que le importa a quien llega: qué viene, quién es Arta, qué ha hecho, qué ofrece, dónde y cómo hablarle.
+  ...(['cartelera', 'frase', 'muro', 'servicios', 'recintos', 'historias', 'galeria', 'noticias', 'aliados', 'ubicacion', 'contacto'] as BlockType[]).map(
     (type) => ({ id: type as string, type, visible: true }),
   ),
-  // Ya están completas en su página: se pueden poner, pero Inicio dice mejor una idea por pantalla.
-  ...(['nosotros', 'faq', 'ubicacion'] as BlockType[]).map((type) => ({ id: type as string, type, visible: false })),
+  // Ya están completas en su página: se pueden poner, pero Inicio se lee mejor sin repetir.
+  ...(['nosotros', 'proceso', 'recientes', 'faq'] as BlockType[]).map((type) => ({ id: type as string, type, visible: false })),
 ];
 
 export function sectionKeyOf(block: Pick<LayoutBlock, 'id' | 'type'>): string {
@@ -395,7 +388,9 @@ export const DEFAULT_CONTENT: Record<string, Record<string, unknown>> = {
     showCount: '1',
   },
   home_frase: {
-    text: 'Cuando se apagan las luces y suena la primera nota, nadie piensa en el rider, los permisos, los camerinos ni las cuentas. De eso nos encargamos nosotros.',
+    eyebrow: 'Quiénes somos',
+    headline: 'Arta Producciones.',
+    text: 'Traemos conciertos, giras y espectáculos a Puebla y a otras ciudades de México. Nos encargamos de todo lo que pasa arriba y abajo del escenario, para que tú solo llegues y lo vivas.',
   },
   home_proceso: {
     headline: 'Del rider al último aplauso.',
@@ -404,13 +399,8 @@ export const DEFAULT_CONTENT: Record<string, Record<string, unknown>> = {
     headline: 'Noches recientes.',
   },
   home_muro: {
-    headline: 'Temporada 2026.',
-    lead: 'Conciertos, giras y experiencias con la firma de Arta.',
-  },
-  home_sistema: {
-    eyebrow: 'Para promotores y artistas',
-    headline: 'Lo complicado es nuestro.',
-    lead: 'Cada fecha corre en nuestra propia plataforma: formatos, órdenes de compra, corrida, campaña y equipo, en un solo lugar y en vivo. Tú ves una pantalla clara; nosotros nos encargamos del resto.',
+    headline: 'Los shows de Arta.',
+    lead: 'Conciertos, giras y experiencias, en Puebla y en otras ciudades de México.',
   },
   home_recintos: {
     headline: 'En los escenarios de Puebla.',
@@ -483,10 +473,10 @@ export const DEFAULT_CONTENT: Record<string, Record<string, unknown>> = {
       },
       {
         title: 'Cierre',
-        tagline: 'El show termina cuando las cuentas cuadran.',
-        body: 'Cuentas claras, proveedores liquidados y un reporte de cada fecha.',
-        detail: 'El show termina cuando las cuentas cuadran. Llevamos el control del dinero de cada fecha y lo entregamos en orden.',
-        includes: 'Corrida financiera de la fecha\nÓrdenes de compra y anticipos a proveedores\nEntregas y autorizaciones firmadas\nReporte de cierre del show',
+        tagline: 'Cuentas claras en cada fecha.',
+        body: 'Proveedores al corriente y un reporte de cada show.',
+        detail: 'Llevamos el control de cada fecha y lo entregamos en orden, para que el promotor y el artista sepan cómo salió.',
+        includes: 'Control de ingresos y gastos de la fecha\nPago a proveedores\nEntrega al promotor y al artista\nReporte final del show',
         imageUrl: '/uploads/seed-news-2.jpg',
       },
     ] as ServiceTile[],
@@ -522,7 +512,7 @@ export const DEFAULT_CONTENT: Record<string, Record<string, unknown>> = {
       },
       {
         question: '¿Dónde trabajan?',
-        answer: 'Nuestra base está en Puebla, México, y producimos shows en toda la región. Nuestro recinto aliado es el Auditorio Arema Explanada.',
+        answer: 'Nuestra oficina está en Puebla, México, y producimos shows en distintos recintos y ciudades del país.',
       },
       {
         question: '¿Cómo llevo un show con ustedes?',
@@ -535,10 +525,11 @@ export const DEFAULT_CONTENT: Record<string, Record<string, unknown>> = {
     ],
   },
   home_ubicacion: {
-    eyebrow: 'Ubicación',
+    eyebrow: 'Oficina',
     headline: 'Dónde encontrarnos',
-    lead: 'Nuestra base está en Puebla, con el Auditorio Arema Explanada como recinto aliado.',
-    address: 'Auditorio Arema Explanada, Puebla, Puebla, México',
+    lead: 'Nuestra oficina está en Puebla.',
+    address: 'Calle Tlaxco 720, Col. La Paz, 72160 Puebla, Pue.',
+    mapPoint: '19.0521398,-98.221639',
   },
   home_cta: {
     eyebrow: 'Contacto',
@@ -598,11 +589,10 @@ const TONE_OPTIONS: FieldOption[] = [
 /** Nombre de cada bloque de textos dentro del editor de su página. */
 export const SECTION_LABELS: Record<string, string> = {
   [HERO_KEY]: 'Textos de la portada',
-  home_frase: 'La frase de Inicio',
+  home_frase: 'Quiénes somos en Inicio',
   home_proceso: 'Cómo trabajamos en Inicio',
   home_recientes: 'Noches recientes en Inicio',
   home_muro: 'Muro de pósters en Inicio',
-  home_sistema: 'El sistema en Inicio',
   home_recintos: 'Recintos en Inicio',
   home_cartelera: 'Textos de la página',
   home_historias: 'Textos de la página',
@@ -639,18 +629,15 @@ export const SECTION_FIELDS: Record<string, Field[]> = {
     { key: 'ticker', label: 'Cinta debajo de la portada', type: 'textarea', rows: 3, hint: 'Una frase por renglón. Vacío = sin cinta.' },
   ],
   home_frase: [
-    { key: 'text', label: 'Frase', type: 'textarea', rows: 4, hint: 'Se enciende palabra por palabra al bajar. Mejor corta: una o dos oraciones.' },
+    { key: 'eyebrow', label: 'Etiqueta', type: 'text' },
+    { key: 'headline', label: 'Titular', type: 'text' },
+    { key: 'text', label: 'Texto', type: 'textarea', rows: 3, hint: 'Qué es Arta, en dos líneas: lo primero que lee quien no la conoce.' },
   ],
   home_proceso: [{ key: 'headline', label: 'Titular', type: 'text', hint: 'Los pasos y sus fotos son los de arriba, en «Pasos».' }],
   home_recientes: [{ key: 'headline', label: 'Titular', type: 'text', hint: 'Los shows salen solos: los que ya pasaron en la cartelera.' }],
   home_muro: [
     { key: 'headline', label: 'Titular', type: 'text', hint: 'Los pósters y los datos salen solos de la cartelera.' },
     { key: 'lead', label: 'Texto', type: 'textarea', rows: 2 },
-  ],
-  home_sistema: [
-    EYEBROW,
-    HEADLINE,
-    { key: 'lead', label: 'Texto', type: 'textarea', rows: 3, hint: 'Las pantallas son de ejemplo y no cambian.' },
   ],
   home_recintos: [
     { key: 'headline', label: 'Titular', type: 'text' },

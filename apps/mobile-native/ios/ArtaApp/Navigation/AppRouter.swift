@@ -243,7 +243,7 @@ final class AppRouter: ObservableObject {
         switch route {
         case .task: return .tareas
         case .event, .approvals: return .inicio
-        case .web, .blockedUsers, .notificationPreferences: return .mas
+        case .web, .blockedUsers, .notificationPreferences, .cartelera: return .mas
         case .chat: return .chats
         }
     }

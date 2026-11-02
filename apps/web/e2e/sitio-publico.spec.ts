@@ -96,14 +96,16 @@ test.describe('Sitio público · Inicio', () => {
     await expect(wall.locator('.sa-wall__stats')).toContainText('shows esta temporada');
   });
 
-  test('el sistema enseña cómo corre un show y dice que los datos son de ejemplo', async ({ page }) => {
+  test('Inicio habla de los shows y de la empresa, no de registros internos', async ({ page }) => {
     await mockStudio(page, siteState());
     await page.goto('/site?embed=1');
 
-    const system = page.locator('#sistema');
-    await expect(system.getByRole('heading', { name: 'Lo complicado es nuestro.' })).toBeVisible();
-    await expect(system.getByRole('heading', { name: 'Minuto a minuto' })).toBeVisible();
-    await expect(system).toContainText('datos ilustrativos');
+    await expect(page.locator('#sistema')).toHaveCount(0);
+    for (const interno of ['Corrida financiera', 'Órdenes de compra', 'Minuto a minuto', 'datos ilustrativos']) {
+      await expect(page.locator('main')).not.toContainText(interno);
+    }
+    // Lo primero después de la portada es lo que viene.
+    await expect(page.locator('main > section').first()).toHaveId('cartelera');
   });
 
   test('cada recinto dice dónde está, cómo llegar y su siguiente show', async ({ page }) => {
@@ -171,20 +173,43 @@ test.describe('Sitio público · Inicio', () => {
     await expect(page.locator('.sa-ribbon')).toHaveCount(0);
   });
 
-  test('la frase se lee completa y se enciende al bajar', async ({ page }) => {
+  test('quiénes somos se lee a tamaño normal y lleva a Nosotros', async ({ page }) => {
     await mockStudio(page, siteState());
     await page.goto('/site?embed=1');
 
-    const line = page.locator('#frase .sa-say__text');
-    await expect(line).toContainText('De eso nos encargamos nosotros.');
-    await line.scrollIntoViewIfNeeded();
-    await page.evaluate(() => window.scrollBy(0, window.innerHeight));
-    await expect(line.locator('span.is-on').first()).toBeVisible();
+    const about = page.locator('#frase');
+    await expect(about.getByRole('heading', { name: 'Arta Producciones.' })).toBeVisible();
+    await expect(about.getByRole('link', { name: 'Conoce a Arta' })).toHaveAttribute('href', '/p/arta/nosotros');
+    const size = await about.locator('.sa-say__text').evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
+    expect(size).toBeLessThan(24);
+  });
+
+  test('la oficina de Arta sale con su dirección, sus datos y un mapa a color', async ({ page }) => {
+    const state = siteState();
+    state.pages.push({
+      id: 'ajustes',
+      sectionKey: 'site_ajustes',
+      published: true,
+      contentJson: { phone: '+52 222 111 2233', instagram: 'https://www.instagram.com/arta_producciones/' },
+    });
+    await mockStudio(page, state);
+    await page.goto('/site?embed=1');
+
+    const place = page.locator('#ubicacion');
+    await expect(place).toContainText('Calle Tlaxco 720');
+    await expect(place.getByRole('link', { name: '+52 222 111 2233' })).toHaveAttribute('href', 'tel:+522221112233');
+    await expect(place.getByRole('link', { name: 'Instagram' })).toHaveAttribute('href', /arta_producciones/);
+    await expect(place.getByRole('link', { name: 'Cómo llegar' })).toHaveAttribute('href', /Tlaxco/);
+    const filter = await place.locator('.sa-map iframe').evaluate((el) => getComputedStyle(el).filter);
+    expect(filter).toBe('none');
   });
 
   test('cómo trabajamos cambia la foto con el paso que se está leyendo', async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 800 });
-    await mockStudio(page, siteState());
+    const state = siteState();
+    // Ya no sale por omisión: Studio la puede poner.
+    state.pages.push({ id: 'lay', sectionKey: 'site_layout', published: true, contentJson: { blocks: [{ id: 'proceso', type: 'proceso', visible: true }] } });
+    await mockStudio(page, state);
     await page.goto('/site?embed=1');
 
     const steps = page.locator('.sa-proc__steps > li');

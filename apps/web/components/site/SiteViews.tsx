@@ -568,15 +568,9 @@ export function ContactoView({ data, preview }: ViewProps) {
               {contact.phone ? (
                 <li>
                   <span>Teléfono</span>
-                  <a href={`tel:${contact.phone.replace(/\s/g, '')}`}>{contact.phone}</a>
+                  <a href={`tel:${contact.phone.replace(/[^\d+]/g, '')}`}>{contact.phone}</a>
                 </li>
               ) : null}
-              <li>
-                <span>Ciudad</span>
-                <b>
-                  {contact.city}, {contact.state}
-                </b>
-              </li>
               {socials.length ? (
                 <li>
                   <span>Redes</span>

@@ -46,7 +46,7 @@ export function SiteFooter({ data, links }: SiteFooterProps) {
         <div className="sa-footer__col sa-footer__col--wide">
           <h2>Contacto</h2>
           <a href={`mailto:${contact.email}`}>{contact.email}</a>
-          {contact.phone ? <a href={`tel:${contact.phone.replace(/\s/g, '')}`}>{contact.phone}</a> : null}
+          {contact.phone ? <a href={`tel:${contact.phone.replace(/[^\d+]/g, '')}`}>{contact.phone}</a> : null}
           <span>
             {contact.city}, {contact.state}
           </span>

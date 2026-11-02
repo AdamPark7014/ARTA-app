@@ -16,7 +16,7 @@ test.describe('Sitio público SSR', () => {
 
     await page.goto('/p/arta');
     await expect(page.locator('h1')).toContainText(/experiencia|Show/i);
-    await expect(page.locator('main')).toContainText('De eso nos encargamos nosotros.');
+    await expect(page.locator('main')).toContainText('Traemos conciertos, giras y espectáculos');
     await expect(page.getByRole('heading', { name: 'Lo que el público ve y escucha.' })).toBeVisible();
     // Sin noticias ni shows no enseña huecos ni ligas inventadas.
     await expect(page.locator('#noticias')).toHaveCount(0);

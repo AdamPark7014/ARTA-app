@@ -2,8 +2,6 @@ import Link from 'next/link';
 import type { CSSProperties, ReactNode } from 'react';
 import { Galeria } from '@/components/site/Galeria';
 import { Historias } from '@/components/site/Historias';
-import { LitLine } from '@/components/site/LitLine';
-import { SystemShowcase } from '@/components/site/SystemShowcase';
 import { ProcessScroll } from '@/components/site/ProcessScroll';
 import { VenueMap, directionsUrl } from '@/components/site/VenueMap';
 import {
@@ -29,7 +27,7 @@ import {
   ticketHref,
 } from '@/lib/site-format';
 import { heroPhotoUrls, itemsOf, newsHref, posterShows, servicesOf, showHref, type Service } from '@/lib/site-model';
-import { VENUE_ADDRESS, contactFromSettings } from '@/lib/site-seo';
+import { VENUE_ADDRESS, contactFromSettings, socialProfiles } from '@/lib/site-seo';
 
 type Tone = 'papel' | 'blanco' | 'tinta';
 
@@ -317,10 +315,13 @@ function Muro({ block, content, shows, past }: { block: LayoutBlock; content: Pu
   const half = Math.ceil(posters.length / 2);
   const all = [...shows, ...past];
   const venues = new Set(all.map((show) => show.venue?.trim().toLowerCase()).filter(Boolean));
+  // Cholula y San Andrés son la misma zona que Puebla: contarlas aparte inflaría el dato.
+  const cities = new Set(all.map((show) => show.city?.trim().toLowerCase().replace(/.*cholula.*/, 'puebla')).filter(Boolean));
   const nextDays = daysUntil(shows[0]?.eventDate);
   const stats = [
     { value: String(all.length), label: all.length === 1 ? 'show esta temporada' : 'shows esta temporada' },
     { value: String(venues.size), label: venues.size === 1 ? 'escenario' : 'escenarios' },
+    ...(cities.size > 1 ? [{ value: String(cities.size), label: 'ciudades' }] : []),
     ...(nextDays !== null && nextDays >= 0 ? [{ value: String(nextDays), label: nextDays === 1 ? 'día para el próximo show' : 'días para el próximo show' }] : []),
   ];
   return (
@@ -347,26 +348,6 @@ function Muro({ block, content, shows, past }: { block: LayoutBlock; content: Pu
       ) : (
         <PreviewEmpty>Aquí corren los pósters de los shows. Súbelos en Cartelera.</PreviewEmpty>
       )}
-    </Section>
-  );
-}
-
-function Sistema({ block, content }: { block: LayoutBlock; content: PublicSiteContent }) {
-  return (
-    <Section block={block} tone="tinta" className="sa-system">
-      <span className="sa-system__mesh" aria-hidden="true">
-        <i />
-        <i />
-        <i />
-      </span>
-      <header className="sa-system__head" data-reveal>
-        {content.eyebrow ? <p className="sa-eyebrow">{content.eyebrow}</p> : null}
-        <h2 id={`${anchorOf(block)}-t`} className="sa-title sa-title--xl">
-          {content.headline}
-        </h2>
-        {content.lead ? <p className="sa-system__lead">{content.lead}</p> : null}
-      </header>
-      <SystemShowcase />
     </Section>
   );
 }
@@ -412,10 +393,20 @@ function Recintos({ block, content, shows }: { block: LayoutBlock; content: Publ
   );
 }
 
+/** Quiénes somos: un titular y dos líneas a tamaño de lectura, no un cartel. */
 function Frase({ block, content }: { block: LayoutBlock; content: PublicSiteContent }) {
   return (
     <Section block={block} tone="papel" className="sa-say">
-      <LitLine id={`${anchorOf(block)}-t`} text={content.text || ''} />
+      <div className="sa-say__copy" data-reveal>
+        {content.eyebrow ? <p className="sa-eyebrow">{content.eyebrow}</p> : null}
+        <h2 id={`${anchorOf(block)}-t`} className="sa-say__title">
+          {content.headline || 'Arta Producciones.'}
+        </h2>
+        <p className="sa-say__text">{content.text}</p>
+        <Link className="sa-arrow" href={pageHref('nosotros')}>
+          Conoce a Arta
+        </Link>
+      </div>
     </Section>
   );
 }
@@ -562,8 +553,7 @@ function ServiceTileBento({ service, index, full }: { service: Service; index: n
   const turn = index % 4;
   const photo = turn % 2 === 0 ? service.imageUrl : undefined;
   const words = (service.tagline || '').split(/(?<=\.)\s+/).filter(Boolean);
-  const ledger = !photo && turn === 3 ? service.includesList.slice(0, 4) : [];
-  const stacked = !photo && !ledger.length && words.length > 1;
+  const stacked = !photo && words.length > 1;
   const span = full ? 'full' : turn === 0 || turn === 3 ? 'big' : 'small';
   return (
     <li className={`sa-bt sa-bt--${span} ${photo ? 'sa-bt--photo' : ''}`.trim()} data-reveal>
@@ -584,16 +574,8 @@ function ServiceTileBento({ service, index, full }: { service: Service; index: n
         ) : (
           <h3>{service.tagline || service.title}</h3>
         )}
-        {ledger.length ? (
-          <ul className="sa-bt__ledger">
-            {ledger.map((line) => (
-              <li key={line}>{line}</li>
-            ))}
-          </ul>
-        ) : (
-          <p className="sa-bt__foot">{service.body}</p>
-        )}
-        {ledger.length ? null : <span className="sa-bt__plus" aria-hidden="true" />}
+        <p className="sa-bt__foot">{service.body}</p>
+        <span className="sa-bt__plus" aria-hidden="true" />
       </Link>
     </li>
   );
@@ -754,8 +736,23 @@ function Faq({ block, content }: { block: LayoutBlock; content: PublicSiteConten
   );
 }
 
-export function PlaceSection({ content, titleId, id, as: Tag = 'h2' }: { content: PublicSiteContent; titleId: string; id?: string; as?: 'h2' }) {
+export function PlaceSection({
+  content,
+  settings,
+  titleId,
+  id,
+  as: Tag = 'h2',
+}: {
+  content: PublicSiteContent;
+  settings?: PublicSiteContent;
+  titleId: string;
+  id?: string;
+  as?: 'h2';
+}) {
   const address = content.address || VENUE_ADDRESS;
+  // Contacto ya dice correo, teléfono y redes arriba: ahí solo va la dirección.
+  const contact = settings ? contactFromSettings(settings) : null;
+  const socials = settings ? socialProfiles(settings) : [];
   return (
     <section id={id} className="sa-sec sa-sec--papel sa-place" aria-labelledby={titleId}>
       <div className="sa-place__copy" data-reveal>
@@ -764,13 +761,48 @@ export function PlaceSection({ content, titleId, id, as: Tag = 'h2' }: { content
           {content.headline}
         </Tag>
         {content.lead ? <p className="sa-lead">{content.lead}</p> : null}
-        <address>{address}</address>
+        <dl className="sa-place__ways">
+          <div>
+            <dt>Dirección</dt>
+            <dd>
+              <address>{address}</address>
+            </dd>
+          </div>
+          {contact?.phone ? (
+            <div>
+              <dt>Teléfono</dt>
+              <dd>
+                <a href={`tel:${contact.phone.replace(/[^\d+]/g, '')}`}>{contact.phone}</a>
+              </dd>
+            </div>
+          ) : null}
+          {contact ? (
+            <div>
+              <dt>Correo</dt>
+              <dd>
+                <a href={`mailto:${contact.email}`}>{contact.email}</a>
+              </dd>
+            </div>
+          ) : null}
+          {socials.length ? (
+            <div>
+              <dt>Redes</dt>
+              <dd className="sa-place__socials">
+                {socials.map((p) => (
+                  <a key={p.url} href={p.url} target="_blank" rel="noopener noreferrer me">
+                    {p.label}
+                  </a>
+                ))}
+              </dd>
+            </div>
+          ) : null}
+        </dl>
         <a className="sa-btn" href={directionsUrl(address)} target="_blank" rel="noopener noreferrer">
           Cómo llegar
         </a>
       </div>
       <div data-reveal>
-        <VenueMap address={address} />
+        <VenueMap address={address} point={content.mapPoint} />
       </div>
     </section>
   );
@@ -878,8 +910,6 @@ export function SiteBlock({ block, data, past = [] }: { block: LayoutBlock; data
       return <Recientes block={block} content={content} past={past} />;
     case 'muro':
       return <Muro block={block} content={content} shows={data.shows} past={past} />;
-    case 'sistema':
-      return <Sistema block={block} content={content} />;
     case 'recintos':
       return <Recintos block={block} content={content} shows={data.shows} />;
     case 'historias':
@@ -897,7 +927,7 @@ export function SiteBlock({ block, data, past = [] }: { block: LayoutBlock; data
     case 'faq':
       return <Faq block={block} content={content} />;
     case 'ubicacion':
-      return <PlaceSection id={anchorOf(block)} titleId={`${anchorOf(block)}-t`} content={sectionContent(data, key, { address: VENUE_ADDRESS })} />;
+      return <PlaceSection id={anchorOf(block)} titleId={`${anchorOf(block)}-t`} settings={siteSettings(data)} content={sectionContent(data, key, { address: VENUE_ADDRESS })} />;
     case 'contacto':
       return <CtaBand data={data} id={anchorOf(block)} block={block.id} />;
     case 'texto':

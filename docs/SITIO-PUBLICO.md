@@ -19,15 +19,17 @@ Una idea por pantalla y nada que no diga algo. En orden:
 | Franja del próximo show | `data.shows[0]`; se apaga con `home_hero.showCount = 0` |
 | Portada: titular, texto y dos ligas | `home_hero`. La segunda liga es para quien trae un show, no para quien viene a verlo |
 | El logo como ventana al show, que se abre al bajar hasta llenar la pantalla (`HomeHero`) | `HeroSlide`: si hay varias se turnan, con botón de pausa. Ya no llevan texto. Sin JavaScript o con «reducir movimiento» se queda en la primera imagen |
-| La frase que se enciende (`LitLine`) | `home_frase` |
 | Mosaico de shows (`ShowTile`) | La cartelera. Con póster, el arte se asoma abajo y le da el color a la tarjeta; sin póster, un escenario a oscuras con reflectores (`StageLights`), para no fingir una foto que no es de ese show |
-| Mosaico de servicios | `home_modulos.tiles`: se turnan foto y texto grande. `tagline` es su frase; se parte en renglones en cada punto |
-| Cómo trabajamos (`ProcessScroll`) | Los pasos de `home_about`, cada uno con su foto; el titular, de `home_proceso` |
+| Quiénes somos | `home_frase`: etiqueta, titular y dos líneas a tamaño de lectura, con liga a Nosotros |
 | Muro de pósters, con los datos de la temporada | Los pósters de los shows, próximos y pasados (`home_muro`). Datos calculados de la cartelera, nunca escritos a mano. Con menos de 5 pósters no sale |
-| El sistema (`SystemShowcase`) | `home_sistema`. Pantallas de ejemplo con datos inventados, y el pie lo dice. Habla a promotores y artistas |
+| Mosaico de servicios | `home_modulos.tiles`: se turnan foto y texto grande. `tagline` es su frase; se parte en renglones en cada punto |
 | Recintos | `home_recintos`: dirección, cómo llegar y su siguiente show, que reconoce por una palabra (`match`) |
-| Noches recientes | Los shows que ya pasaron (`/studio/public/shows`); el titular, de `home_recientes` |
+| Oficina | `home_ubicacion`: dirección y mapa a color, más teléfono, correo y redes de «Datos del sitio» |
 | Invitación a escribir | `home_cta`; la foto es su `pageImage` |
+
+**Inicio habla al público:** qué viene, quién es Arta, qué ha hecho, qué ofrece, dónde y cómo hablarle. Adam (02-11): «se debe mostrar como la empresa de los eventos e info, pero no registros internos» aunque sean de ejemplo. Nada de órdenes de compra, corridas ni minutos a minuto. «Cómo trabajamos» y «Noches recientes» quedan ocultas por omisión: se pueden poner desde Studio.
+
+**Un show es de Arta si su póster o su ficha lo dicen:** el logo de Arta entre los créditos, arriba o abajo. Nunca por la boletera ni por el recinto. Hay shows en Arema y en eticket que no son de Arta, y hay de Arta fuera de Puebla.
 
 **Sin contenido no hay hueco:** Próximos shows, Noticias, Noches recientes, Historias, Galería y Aliados no salen si están vacías.
 Sin shows, el botón de la portada ya no lleva a una cartelera vacía: abre «Traer un show a Puebla» y «Lo que hacemos».
@@ -115,7 +117,7 @@ pide nada a Google Fonts.
 Marca en `public/brand/`: `arta-logo.svg`, `arta-wordmark.svg` (solo las letras) y `arta-motivo.svg`, la «a» girada del pie
 corporativo (`arta-footer.png`). Vectorizados de esos PNG: si diseño entrega los originales, se reemplazan sin tocar código.
 Las fotos van a color con `--photo` (`saturate(.9) contrast(1.04)`): un ajuste discreto para que ninguna pelee con la tinta.
-Los pósters quedan tal cual porque son el arte del show. Solo van en un tono los logos de aliados y el mapa.
+Los pósters quedan tal cual porque son el arte del show. Solo van en un tono los logos de aliados. El mapa va a color (Adam, 02-11).
 
 Las fotos se reducen en el navegador antes de subir (`lib/studio-upload.ts`, 2400 px): `next.config.js` tiene
 `images.unoptimized`, así que el sitio las sirve tal cual. HEIC se rechaza con una explicación porque Chrome no lo abre.

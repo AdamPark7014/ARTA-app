@@ -28,7 +28,7 @@ export async function GET() {
 - Name: ${SITE_NAME}
 - Alternate: ARTA
 - Location: Puebla, Puebla, México
-- Venue ally: Auditorio Arema Explanada
+- Office: Calle Tlaxco 720, Col. La Paz, 72160 Puebla, Mexico
 - Contact: ${CONTACT_EMAIL}
 - Language: es-MX
 
