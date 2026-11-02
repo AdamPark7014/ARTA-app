@@ -34,7 +34,11 @@ def captura(nombre):
 
 def pantalla():
     shell('uiautomator', 'dump', '/sdcard/ui.xml', check=False)
-    return ET.fromstring(adb('exec-out', 'cat', '/sdcard/ui.xml'))
+    # Mientras la app no dibuja su primer cuadro, el volcado sale vacío o con un error.
+    try:
+        return ET.fromstring(adb('exec-out', 'cat', '/sdcard/ui.xml', check=False))
+    except ET.ParseError:
+        return ET.Element('vacio')
 
 
 def buscar(condicion):

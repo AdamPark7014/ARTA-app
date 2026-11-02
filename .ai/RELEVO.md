@@ -1,25 +1,37 @@
 # RELEVO
 
 - **Último turno:** claude-code
-- **Fecha:** 2026-11-01
+- **Fecha:** 2026-11-02
 - **Rama:** main
   (Adam es el único programador).
-- **Producción:** `762fe20` desplegado desde `main` el 2026-11-01 (`bash deploy/update.sh` en `/var/www/arta-app`, log
-  `/root/arta-deploy-20261102-G.log`; respaldo automático en `/root/arta-backups/`). Disco al 79 %: al 90 % se cae la BD.
+- **Producción:** `390dfb7` desplegado desde `main` el 2026-11-02 (`bash deploy/update.sh` en `/var/www/arta-app`, log
+  `/root/arta-deploy-20261102-B.log`; respaldo automático en `/root/arta-backups/`). Disco al 73 %: al 90 % se cae la BD. Cada despliegue suma caché de
+  compilación: `docker builder prune -af --filter until=2h` liberó 8 GB; correrlo si pasa de 85 %.
 
-## Falta que Adam elija: rediseño de Inicio (muestras, el sitio no cambió)
+## Turno claude-code (2026-11-02): Inicio nuevo, shows reales y cartelera en las apps
 
-Adam, viendo `762fe20`: «el modelo de la página principal sigue feo, poco premium y profesional, no se ve nivel Apple, la página no me dice nada».
+Adam, viendo `762fe20`: «el modelo de la página principal sigue feo, poco premium y profesional, no se ve nivel Apple, la página no me dice nada»; luego «me sigue
+gustando pero no encantando», «métele más imágenes, más cosas, busca publicidad de esos eventos, un punch más fuerte, nivel Apple o Stripe: súper complejo en backend,
+súper amigable en UI» y «continúa mejorando todo el sistema, incluyendo cómo mapea todo esto la app móvil nativa». **Guía: `docs/SITIO-PUBLICO.md`.**
 
-Dos muestras navegables en `apps/web/.next-maqueta/inicio.html`, ignorada por git porque trae shows sin confirmar (servidor `arta-maqueta` de
-`C:\dev\.claude\launch.json`, puerto 4188): **A «Escenario»**, oscura, y **B «Cartelera»**, clara, al estilo del inicio de apple.com. No se construye hasta que elija.
+**Sitio (`3d32426`, `390dfb7`, en producción):** la portada abre con el logo de Arta como ventana al concierto y se abre al bajar hasta llenar la pantalla (`HomeHero`). Una
+idea por pantalla: frase, próximos shows, muro de pósters, servicios, «Lo complicado es nuestro» (pantallas de ejemplo, y el pie lo dice), cómo trabajamos, recintos, noches
+recientes e invitación. Letra Inter Tight e Inter (solo el sitio; el panel sigue con Nunito). Sin contenido no hay hueco. Todo sigue editable en Studio.
 
-- **Por qué «no dice nada»:** `/p/arta` lee la cartelera de `NewsPost` (plantilla `evento`), no de `Event`, así que dice «Estamos armando la próxima temporada» con
-  Soy Luna (05-11), Earth, Wind & Fire (10-12) y Finde (20-02-2027) en el panel. Capturarlos en Studio solo con su confirmación.
-- **Al construir:** conservar el catálogo de bloques y Studio, donde los practicantes editan todo. La letra de la muestra es Inter Tight e Inter:
-  `outfit-latin.woff2` solo trae pesos 800 y 900.
-- **Sin arte real:** el único archivo de un show (evento de Earth, Wind & Fire, `100X200.jpg`) es el pendón de Tecate Comuna, 28-nov en Foro Cholula; parece subido al evento
-  equivocado. Las fotos de la muestra son de archivo; los pósters y fotos reales los tiene que mandar Adam.
+**Shows reales, publicados directo en la base el 02-11 (11 filas `NewsPost`, plantilla `evento`, se editan en Studio):** Soy Luna (04-11, eticket), Earth, Wind & Fire Experience by
+Al McKay (10-12, arema), Finde (19-02-2027, arema) y, ya pasados, Circo Siniestro, las 5 casas de Pasaje Siniestro, Calle 24 y Lucero. Los 11 pósters llevan el logo de Arta en los
+créditos; están en el volumen de uploads (`/uploads/site/`), no en el repo.
+- **Regla de Adam:** «no todos los eventos de arema son nuestros y no todos los eventos los hacemos con arema». Un show es de Arta si su póster lo dice o Adam lo confirma; nunca por la boletera.
+- **Soy Luna es de Golden Peak en colaboración con Arta:** no escribir «producido por Arta».
+- `Event.startsAt` está en UTC: el `::date` daba 5-nov para Soy Luna, que es 4-nov. El archivo de `EventFile` del evento de Earth, Wind & Fire es el pendón de Tecate Comuna: subido a otro evento.
+- **Sin publicar:** Yuri & Lucero (13-02-2027, GNP, eticket 36241): no está en el panel y no se distingue el logo de Arta. Omar Camacho y Andrés Parra: sin póster.
+
+**Apps (`32524a5`, sin subir a tiendas):** la entrada abre con el logo como ventana; cartelera nativa desde la entrada (sin cuenta), desde Más y en Inicio de Arta; detalle con boletos, calendario,
+compartir y cómo llegar. Reglas iguales a `site-format.ts`. Demo con shows ficticios en `demo/fixtures`. iOS 1.0.1 (15) y Android 1.0.3 (6) siguen en revisión sin esto: va en la siguiente versión.
+
+**Verificado:** CI verde en `390dfb7` (API con base real y web). Android 168 pruebas. Producción revisada con capturas en escritorio y teléfono, 0 errores en logs.
+
+**No verificado:** las fotos de portada y de los servicios siguen siendo de archivo, no de shows de Arta. Precios de los shows escritos en su texto: pueden cambiar.
 
 ## Turno claude-code (2026-11-01, noche): ubicación de 10 a 18 h y apps a tiendas
 
