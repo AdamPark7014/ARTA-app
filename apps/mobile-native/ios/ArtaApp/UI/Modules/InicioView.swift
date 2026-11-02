@@ -55,8 +55,15 @@ struct InicioView: View {
         profile?.canAuthorizePO == true || profile?.isDirection == true || taskApprovals > 0 || advanceApprovals > 0
     }
 
+    /// Mismo candado que la pestaña del evento (`canSeeModule`), en el negocio activo.
     private var seesPurchaseOrders: Bool {
-        profile?.can("po.authorize") == true || profile?.can("po.mark_paid") == true
+        profile?.sees(.po, in: activeEntity.current.rawValue) == true
+    }
+
+    /// Calendario de shows: también el practicante, en solo lectura. Sin perfil todavía, a la vista.
+    private var seesCalendar: Bool {
+        guard let profile else { return true }
+        return Rbac.canSeeEventCalendar(profile.entities ?? [], profile.role, activeEntity.current.rawValue)
     }
 
     private var upcoming: [ArtaEvent] { Self.nextSevenDays(activeEvents) }
@@ -596,18 +603,22 @@ struct InicioView: View {
     }
 
     private var shortcutItems: [Shortcut] {
-        var items: [Shortcut] = [
-            Shortcut(id: "inicio-new-task", title: "Nueva tarea", icon: "plus", primary: true) { showNewTask = true },
-            Shortcut(id: "inicio-my-tasks", title: "Mis tareas", icon: "checklist") { router.select(.tareas) },
-        ]
+        var items: [Shortcut] = []
+        // El API responde 403 a quien no crea tareas (carpetas, practicante, contenido y catering).
+        if profile?.canCreateTasks != false {
+            items.append(Shortcut(id: "inicio-new-task", title: "Nueva tarea", icon: "plus", primary: true) { showNewTask = true })
+        }
+        items.append(Shortcut(id: "inicio-my-tasks", title: "Mis tareas", icon: "checklist") { router.select(.tareas) })
         if showsApprovals {
             items.append(Shortcut(id: "inicio-approvals", title: "Aprobaciones", icon: "checkmark.seal", badge: totalApprovals) {
                 router.open(AppRoute.approvals)
             })
         }
-        items.append(Shortcut(id: "inicio-calendar", title: "Calendario", icon: "calendar") {
-            router.open(AppRoute.web(path: "/calendar", title: "Calendario"))
-        })
+        if seesCalendar {
+            items.append(Shortcut(id: "inicio-calendar", title: "Calendario", icon: "calendar") {
+                router.open(AppRoute.web(path: "/calendar", title: "Calendario"))
+            })
+        }
         if seesPurchaseOrders {
             items.append(Shortcut(id: "inicio-purchase-orders", title: "Órdenes de compra", icon: "doc.text") {
                 router.open(AppRoute.web(path: "/purchase-orders", title: "Órdenes de compra"))

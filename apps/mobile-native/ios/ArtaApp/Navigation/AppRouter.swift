@@ -22,8 +22,10 @@ enum PanelLink {
     static let nativeEventTabs: Set<String> = ["overview", "tasks"]
 
     /// Avisos que piden una decisión (mismo criterio que `notification-push-meta.ts`).
+    /// `po.to_pay` y `po.to_transfer` no van aquí a propósito: su destino es la orden (`/purchase-orders?po=<id>`, vista
+    /// web), donde contabilidad paga y sube el comprobante; Aprobaciones solo enseña lo que se autoriza.
     private static let approvalTypes: Set<String> = [
-        "po.requested", "po.updated", "po.aging", "po.to_pay",
+        "po.requested", "po.updated", "po.aging",
         "task.submitted", "checklist.submitted", "checklist.signature_needed",
         "checklist.returned", "checklist.signature_backlog",
         "advance.requested", "advance.to_pay",

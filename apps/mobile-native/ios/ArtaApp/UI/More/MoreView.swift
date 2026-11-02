@@ -22,7 +22,8 @@ struct MoreView: View {
     }
 
     private var sections: [WebModuleSection] {
-        WebModule.visible(for: access, entity: WebModule.appEntity)
+        // Campañas y Corridas solo en Arta: manda el negocio en el que se está trabajando.
+        WebModule.visible(for: access, entity: activeEntity.current.rawValue)
     }
 
     var body: some View {
@@ -273,8 +274,8 @@ struct WebModuleSection: Identifiable {
 }
 
 /// Un módulo del menú lateral de la web. Catálogo y reglas copiados de
-/// `apps/web/lib/access-matrix.ts` (`NAV_ITEMS`, `canSeeNavItem`, `visibleNavItems`)
-/// y `packages/rbac/src/roles.ts`; si cambian allá, cambian aquí.
+/// `apps/web/lib/access-matrix.ts` (`NAV_ITEMS`, `canSeeNavItem`, `visibleNavItems`);
+/// los permisos, de `Data/Rbac.swift`. Si cambian allá, cambian aquí.
 struct WebModule: Identifiable, Hashable {
     let path: String
     let label: String
@@ -284,15 +285,11 @@ struct WebModule: Identifiable, Hashable {
     var roles: [String] = []
     var entities: [String] = []
     var requiresEventOps = false
+    var requiresCalendar = false
 
     var id: String { path }
 
     static let portfolioGroup = "Vistas de portafolio"
-
-    /// Panel de esta app: arta.* = ARTA, auditorio.* = EXPLANADA (como `entityFromHost`).
-    static var appEntity: String {
-        (ApiConfig.origin.host ?? "").lowercased().hasPrefix("auditorio.") ? "EXPLANADA" : "ARTA"
-    }
 
     private static let direction = ["dir_general", "dir_adjunta", "super_admin"]
     private static let admins = ["dir_general", "super_admin"]
@@ -308,14 +305,16 @@ struct WebModule: Identifiable, Hashable {
         WebModule(path: "/events?scope=past", label: "Eventos pasados", icon: "clock.arrow.circlepath", group: "Eventos",
                   requiresEventOps: true),
         WebModule(path: "/calendar", label: "Calendario", icon: "calendar", group: "Eventos",
-                  requiresEventOps: true),
+                  requiresCalendar: true),
 
+        WebModule(path: "/finanzas", label: "Finanzas", icon: "chart.line.uptrend.xyaxis", group: "Control",
+                  permissions: ["finanzas.view", "everything"]),
         WebModule(path: "/purchase-orders", label: "Órdenes de compra", icon: "doc.text", group: "Control",
-                  permissions: ["po.authorize", "po.mark_paid", "everything"], requiresEventOps: true),
+                  permissions: ["po.view", "po.edit", "po.authorize", "po.mark_paid", "everything"], requiresEventOps: true),
         WebModule(path: "/campaigns", label: "Campañas", icon: "megaphone", group: "Control",
-                  permissions: ["campaign.view", "campaign.edit", "everything"], requiresEventOps: true),
+                  permissions: ["campaign.view", "campaign.edit", "everything"], entities: ["ARTA"], requiresEventOps: true),
         WebModule(path: "/ticketing", label: "Boletera", icon: "ticket", group: "Control",
-                  permissions: ["ticketing.edit", "everything"], requiresEventOps: true),
+                  permissions: ["ticketing.view", "ticketing.edit", "everything"], requiresEventOps: true),
 
         WebModule(path: "/studio", label: "Studio web", icon: "paintbrush", group: "Marca",
                   permissions: ["studio.edit", "everything"], entities: ["ARTA"]),
@@ -323,7 +322,7 @@ struct WebModule: Identifiable, Hashable {
                   entities: ["ARTA"]),
 
         WebModule(path: "/users", label: "Usuarios", icon: "person.2", group: "Admin",
-                  permissions: adminPerms, roles: admins),
+                  permissions: ["users.manage", "users.create"], roles: admins),
         WebModule(path: "/settings", label: "Configuración", icon: "gearshape", group: "Admin",
                   permissions: adminPerms, roles: direction),
         WebModule(path: "/organizations", label: "Organizaciones", icon: "building.2", group: "Admin",
@@ -340,8 +339,12 @@ struct WebModule: Identifiable, Hashable {
                   permissions: ["checklist.edit", "everything"], requiresEventOps: true),
         WebModule(path: "/folders", label: "Carpetas generales", icon: "folder", group: portfolioGroup,
                   permissions: ["folders.edit", "checklist.edit", "everything"]),
-        WebModule(path: "/finance", label: "Finanzas", icon: "chart.line.uptrend.xyaxis", group: portfolioGroup,
-                  permissions: ["finance.view", "finance.edit", "everything"], requiresEventOps: true),
+        WebModule(path: "/testigos", label: "Testigos de publicidad", icon: "photo.on.rectangle", group: portfolioGroup,
+                  permissions: ["testigos.edit", "everything"]),
+        WebModule(path: "/studio/practicantes", label: "Perfiles de practicante", icon: "person.badge.plus", group: portfolioGroup,
+                  permissions: ["practicantes.manage", "everything"]),
+        WebModule(path: "/finance", label: "Corridas", icon: "tablecells", group: portfolioGroup,
+                  permissions: ["corrida.view", "everything"], entities: ["ARTA"], requiresEventOps: true),
         WebModule(path: "/advances", label: "Anticipos", icon: "banknote", group: portfolioGroup,
                   permissions: ["checklist.edit", "finance.view", "finance.edit", "everything"], requiresEventOps: true),
         WebModule(path: "/hospitality", label: "Hospedaje", icon: "bed.double", group: portfolioGroup,
@@ -364,24 +367,6 @@ struct WebModule: Identifiable, Hashable {
                   permissions: ["vendor.pin", "everything"], requiresEventOps: true),
     ]
 
-    /// `ROLE_PERMISSIONS` de `@arta/rbac` (dir_adjunta tiene todo menos `users.manage`).
-    private static let rolePermissions: [String: Set<String>] = [
-        "super_admin": ["everything"],
-        "dir_general": ["everything"],
-        "gerente_arta": [
-            "finance.edit", "finance.view", "campaign.edit", "campaign.view", "po.authorize", "po.mark_paid",
-            "event.create", "event.close", "checklist.edit", "studio.edit", "ticketing.edit", "folders.edit", "vendor.pin",
-        ],
-        "dir_auditorio": [
-            "finance.view", "campaign.view", "po.authorize", "po.mark_paid", "event.create", "event.close",
-            "checklist.edit", "studio.edit", "ticketing.edit", "folders.edit", "vendor.pin",
-        ],
-        "logistica": ["campaign.edit", "campaign.view", "checklist.edit", "event.create", "ticketing.edit", "finance.view", "folders.edit"],
-        "convenios": ["checklist.edit", "finance.view", "campaign.view", "folders.edit"],
-        "enlace_gobierno": ["checklist.edit", "finance.view", "po.mark_paid", "event.create", "folders.edit"],
-        "solo_carpetas": [],
-    ]
-
     private static let roleLabels: [String: String] = [
         "super_admin": "Administración de plataforma",
         "dir_general": "Dirección general",
@@ -392,10 +377,22 @@ struct WebModule: Identifiable, Hashable {
         "convenios": "Convenios y patrocinios",
         "enlace_gobierno": "Enlace gobierno y pagos",
         "solo_carpetas": "Solo carpetas",
+        "contabilidad": "Contabilidad y comercial",
+        "practicante": "Practicante (sitio y testigos)",
+        "compras": "Compras",
+        "produccion": "Producción",
+        "contenido": "Contenido e imágenes",
+        "catering": "Catering",
     ]
 
     /// Roles que trabajan sobre carpetas: «Carpetas generales» vuelve al menú.
     private static let folderCentricRoles: Set<String> = ["convenios", "enlace_gobierno", "solo_carpetas"]
+
+    /// `ROLE_SURFACED`: vistas de portafolio que para un rol son su trabajo diario y salen a «Control».
+    private static let roleSurfaced: [String: Set<String>] = [
+        "contabilidad": ["/advances"],
+        "practicante": ["/testigos"],
+    ]
 
     static func roleLabel(_ roleKey: String) -> String {
         if let known = roleLabels[roleKey] { return known }
@@ -406,11 +403,19 @@ struct WebModule: Identifiable, Hashable {
 
     /// Módulos visibles agrupados en el orden del menú web (`visibleNavItems`).
     static func visible(for access: WebAccess, entity: String) -> [WebModuleSection] {
-        let needsFolders = !canAccessEventOps(access.roleKey, entity: entity) || folderCentricRoles.contains(access.roleKey)
+        // El practicante no trabaja con carpetas generales: su menú es Studio, testigos y calendario.
+        let needsFolders = access.roleKey != "practicante"
+            && (!canAccessEventOps(access.roleKey, entity: entity) || folderCentricRoles.contains(access.roleKey))
+        let surfaced = roleSurfaced[access.roleKey] ?? []
         var order: [String] = []
         var groups: [String: [WebModule]] = [:]
         for module in catalog where canSee(module, access: access, entity: entity) {
-            let group = module.path == "/folders" && needsFolders ? "Documentos" : module.group
+            var group = module.group
+            if module.path == "/folders" && needsFolders {
+                group = "Documentos"
+            } else if surfaced.contains(module.path) {
+                group = "Control"
+            }
             if groups[group] == nil { order.append(group) }
             groups[group, default: []].append(module)
         }
@@ -421,28 +426,24 @@ struct WebModule: Identifiable, Hashable {
         let role = access.roleKey
         let isTop = role == "super_admin" || role == "dir_general"
         if !module.entities.isEmpty && !module.entities.contains(entity) { return false }
+        if module.path == "/folders" && !Rbac.canSeeGeneralFolders(role) { return false }
         if module.requiresEventOps && !canAccessEventOps(role, entity: entity) { return false }
+        if module.requiresCalendar && !Rbac.canSeeEventCalendar([entity], role, entity) { return false }
         if !module.roles.isEmpty && !module.roles.contains(role) && !isTop { return false }
         return hasAny(module.permissions, access: access)
     }
 
+    /// `canAccessEventOps` de access-matrix: el menú solo mira el rol en esta entidad.
     private static func canAccessEventOps(_ role: String, entity: String) -> Bool {
-        if role == "super_admin" || role == "dir_general" { return true }
-        if role == "solo_carpetas" { return false }
-        if role == "dir_auditorio" && entity == "ARTA" { return false }
-        return true
+        Rbac.canAccessEventOps([entity], role, entity)
     }
 
+    /// `userHasPermission` de access-matrix.
     private static func hasAny(_ needed: [String], access: WebAccess) -> Bool {
         if needed.isEmpty { return true }
         let role = access.roleKey
         if role == "super_admin" || role == "dir_general" { return true }
         if access.permissions.contains("everything") { return true }
-        let fromRole = rolePermissions[role] ?? []
-        return needed.contains { permission in
-            if role == "dir_adjunta" && permission != "users.manage" { return true }
-            if fromRole.contains("everything") || fromRole.contains(permission) { return true }
-            return access.permissions.contains(permission)
-        }
+        return needed.contains { Rbac.hasPermission(role, access.permissions, $0) }
     }
 }

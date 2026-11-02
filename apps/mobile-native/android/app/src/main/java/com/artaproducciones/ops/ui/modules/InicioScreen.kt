@@ -397,7 +397,7 @@ private fun QuickActions(p: ModulesPerms, approvals: ApprovalsData?, onNewTask: 
         if (p.canCreateTasks) add(Shortcut("Nueva tarea", Icons.Default.Add, primary = true, onClick = onNewTask))
         add(Shortcut("Mis tareas", Icons.AutoMirrored.Outlined.FormatListBulleted) { nav.openWeb("/tasks", "Tareas") })
         if (p.approvesMoney || pending > 0) add(Shortcut("Aprobaciones", Icons.Outlined.FactCheck, badge = pending) { nav.openApprovals() })
-        if (p.opsEntity != null) add(Shortcut("Calendario", Icons.Outlined.CalendarMonth) { nav.openWeb("/calendar", "Calendario") })
+        if (p.canSeeCalendar) add(Shortcut("Calendario", Icons.Outlined.CalendarMonth) { nav.openWeb("/calendar", "Calendario") })
         if (p.canPo) add(Shortcut("Órdenes de compra", Icons.Outlined.ReceiptLong) { nav.openWeb("/purchase-orders", "Órdenes de compra") })
         if (p.canSeeFinance) add(Shortcut("Anticipos", Icons.Outlined.Payments) { nav.openWeb("/advances", "Anticipos") })
     }

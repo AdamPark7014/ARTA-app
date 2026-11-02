@@ -122,7 +122,34 @@ data class EventChecklistRef(
 
 data class EventTemplateRef(val key: String? = null, val name: String? = null)
 
-data class EventPoRef(val id: String, val status: String = "", val amount: String? = null)
+data class EventPoRef(
+    val id: String,
+    val status: String = "",
+    val amount: String? = null,
+    val vendorName: String? = null,
+    val paymentMethod: String? = null,
+    val createdAt: String? = null,
+    /** Forma de pago ADENDUM: a quién, a qué cuenta y su archivo. Faltan en el API viejo. */
+    val adendumPerson: String? = null,
+    val adendumAccount: String? = null,
+    val adendumFileUrl: String? = null,
+    val adendumFileName: String? = null,
+)
+
+/** Fila de `GET /testigos/event/:eventId` (`PublicityProof`): la prueba de que un anuncio salió. */
+data class WitnessDto(
+    val id: String,
+    val medium: String = "OTRO",
+    val title: String = "",
+    val note: String? = null,
+    val link: String? = null,
+    val fileUrl: String? = null,
+    val fileName: String? = null,
+    val mimeType: String? = null,
+    val publishedAt: String? = null,
+    val isPublic: Boolean = false,
+    val createdBy: PersonRef? = null,
+)
 
 data class IdRef(val id: String)
 
@@ -148,6 +175,8 @@ data class EventDetailDto(
     val files: List<IdRef> = emptyList(),
     val sponsors: List<IdRef> = emptyList(),
     val ticketingSetups: List<IdRef> = emptyList(),
+    /** Liga de la boletera en línea (solo `https://`). Falta en el API viejo. */
+    val boleteraUrl: String? = null,
 )
 
 data class CalendarNoteDto(
@@ -219,6 +248,11 @@ data class PoDetailDto(
     val authorizedBy: NameRef? = null,
     val lines: List<PoLineDto> = emptyList(),
     val proofs: List<PoProofDto> = emptyList(),
+    /** Forma de pago ADENDUM: a quién, a qué cuenta y su archivo. Faltan en el API viejo. */
+    val adendumPerson: String? = null,
+    val adendumAccount: String? = null,
+    val adendumFileUrl: String? = null,
+    val adendumFileName: String? = null,
 )
 
 data class PoWindowDto(
@@ -310,6 +344,10 @@ interface ArtaModulesApi {
 
     @GET("events/{id}")
     suspend fun event(@Path("id") id: String): EventDetailDto
+
+    /** Testigos de publicidad (solo lectura: subirlos es del panel web). 404 = API aún sin la ruta. */
+    @GET("testigos/event/{eventId}")
+    suspend fun eventWitnesses(@Path("eventId") eventId: String): List<WitnessDto>
 
     @GET("calendar/notes")
     suspend fun calendarNotes(

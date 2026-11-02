@@ -83,6 +83,7 @@ object NoticeKinds {
         "advance.requested",
         "po.requested",
         "po.updated",
+        "po.to_transfer",
         "task.submitted",
         "checklist.submitted",
         "checklist.signature_needed",

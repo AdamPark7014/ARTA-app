@@ -64,13 +64,16 @@ struct TasksView: View {
             .searchable(text: $query, prompt: "Buscar tarea, persona, evento…")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        Haptics.tap()
-                        showCreate = true
-                    } label: {
-                        Image(systemName: "plus")
+                    // El API responde 403 a quien no crea tareas (carpetas, practicante, contenido y catering).
+                    if profile?.canCreateTasks != false {
+                        Button {
+                            Haptics.tap()
+                            showCreate = true
+                        } label: {
+                            Image(systemName: "plus")
+                        }
+                        .accessibilityLabel("Nueva tarea")
                     }
-                    .accessibilityLabel("Nueva tarea")
                 }
             }
             .sheet(isPresented: $showCreate) {

@@ -221,6 +221,7 @@ sealed interface DeepLink {
             }
         }
 
+        /** `po.to_pay` y `po.to_transfer` no entran: su destino es la orden, en la vista web. */
         private fun isPendingApproval(type: String?): Boolean {
             val t = type?.trim()?.lowercase().orEmpty()
             return t == "po.requested" || t == "advance.to_pay" || t.endsWith(".review") || t.endsWith(".requested")

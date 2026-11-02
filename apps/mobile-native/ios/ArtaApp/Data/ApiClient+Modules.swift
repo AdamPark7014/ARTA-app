@@ -99,6 +99,9 @@ extension ApiClient {
 
     func event(_ id: String) async throws -> ArtaEventDetail { try await get("events/\(id)") }
 
+    /// Testigos de publicidad del evento (solo lectura: subirlos es del panel web). 404 = API aún sin la ruta.
+    func eventWitnesses(_ eventId: String) async throws -> [EventWitness] { try await get("testigos/event/\(eventId)") }
+
     /// Abre (o crea) el canal de chat del evento y devuelve su id.
     func openEventChannel(_ eventId: String) async throws -> String {
         let channel = try await send("POST", "chat/event/\(eventId)", as: EventChannelRef.self)

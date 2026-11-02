@@ -474,6 +474,7 @@ enum MDate {
     private static let longDay = formatter("EEEE d 'de' MMMM")
     private static let monthYear = formatter("LLLL yyyy")
     private static let stamp = formatter("d MMM yyyy, HH:mm")
+    private static let dayMonthYear = formatter("d MMM yyyy")
 
     /// `AAAA-MM-DD` en la zona del teléfono (días del calendario, fechas de vencimiento).
     private static let ymd: DateFormatter = {
@@ -563,6 +564,12 @@ enum MDate {
     static func stampText(_ iso: String?) -> String {
         guard let date = parseDate(iso) else { return "" }
         return stamp.string(from: date)
+    }
+
+    /// Solo el día: «12 sept 2026». Una fecha guardada como medianoche UTC no se corre un día.
+    static func dayText(_ iso: String?) -> String {
+        guard let day = dueDay(iso) else { return "" }
+        return dayMonthYear.string(from: day).replacingOccurrences(of: ".", with: "")
     }
 
     static func todayTitle() -> String { capitalized(longDay.string(from: Date())) }
@@ -735,6 +742,7 @@ enum POInfo {
         case "CHEQUE": return "Cheque"
         case "TARJETA": return "Tarjeta"
         case "OTRO": return "Otro"
+        case "ADENDUM": return "Adendum"
         default: return "Transferencia"
         }
     }

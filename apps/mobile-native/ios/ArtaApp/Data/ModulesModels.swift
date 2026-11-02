@@ -49,44 +49,26 @@ struct ModulesMeResponse: Codable {
 extension ModulesProfile {
     var role: String { roleKey ?? "" }
 
+    /// Lo que piden las reglas de `Data/Rbac.swift`.
+    var access: AccessUser { AccessUser(roleKey: role, entities: entities, permissions: permissions) }
+
     /// `isDirectionRole` del API: aprueba cualquier entrega y reabre.
-    var isDirection: Bool { ["super_admin", "dir_general", "dir_adjunta"].contains(role) }
+    var isDirection: Bool { Rbac.isDirectionRole(role) }
 
-    /// Mismo criterio que `hasPermission` (`apps/api/src/common/rbac/roles.ts`).
-    func can(_ permission: String) -> Bool {
-        if role == "super_admin" || role == "dir_general" { return true }
-        if role == "dir_adjunta" && permission != "users.manage" { return true }
-        let fromRole = Self.rolePermissions[role] ?? []
-        if fromRole.contains("everything") || fromRole.contains(permission) { return true }
-        return (permissions ?? []).contains(permission)
-    }
+    /// `hasPermission` (`Data/Rbac.swift`).
+    func can(_ permission: String) -> Bool { Rbac.hasPermission(role, permissions, permission) }
 
-    private static let rolePermissions: [String: [String]] = [
-        "gerente_arta": [
-            "finance.edit", "finance.view", "campaign.edit", "campaign.view", "po.authorize", "po.mark_paid",
-            "event.create", "event.close", "checklist.edit", "studio.edit", "ticketing.edit", "folders.edit", "vendor.pin",
-        ],
-        "dir_auditorio": [
-            "finance.view", "campaign.view", "po.authorize", "po.mark_paid", "event.create", "event.close",
-            "checklist.edit", "studio.edit", "ticketing.edit", "folders.edit", "vendor.pin",
-        ],
-        "logistica": ["campaign.edit", "campaign.view", "checklist.edit", "event.create", "ticketing.edit", "finance.view", "folders.edit"],
-        "convenios": ["checklist.edit", "finance.view", "campaign.view", "folders.edit"],
-        "enlace_gobierno": ["checklist.edit", "finance.view", "po.mark_paid", "event.create", "folders.edit"],
-    ]
-
-    /// `eventOpsEntities`: solo carpetas no opera eventos; Auditorio no opera Arta.
-    var eventEntities: [String] {
-        guard role != "solo_carpetas" else { return [] }
-        return (entities ?? []).filter { !(role == "dir_auditorio" && $0 == "ARTA") }
-    }
+    /// `canSeeModule`: ¿ve este módulo en este negocio?
+    func sees(_ module: EventModule, in entity: String) -> Bool { Rbac.canSeeModule(access, entity, module) }
 
     /// La entidad activa (`ActiveEntity`) si la persona opera eventos en ella; `nil` si no.
     /// La app ya no junta las dos entidades: todo se pide de la activa.
     var activeEventEntity: String? {
         let active = EntityContext.entity.rawValue
-        return eventEntities.contains(active) ? active : nil
+        return Rbac.canAccessEventOps(entities ?? [], role, active) ? active : nil
     }
+
+    var canCreateTasks: Bool { Rbac.canCreateTasks(role) }
 
     /// Ve «Todas las tareas» (`GET tasks/workload`).
     var seesTeamTasks: Bool {
@@ -312,6 +294,15 @@ struct EventPurchaseOrderRef: Codable, Equatable, Identifiable {
     var amount: FlexDouble?
     var vendorName: String?
     var rubro: String?
+    var paymentMethod: String?
+    var createdAt: String?
+    /// Forma de pago ADENDUM: a quién, a qué cuenta y su archivo. Faltan en el API viejo.
+    var adendumPerson: String?
+    var adendumAccount: String?
+    var adendumFileUrl: String?
+    var adendumFileName: String?
+
+    var isAdendum: Bool { paymentMethod == "ADENDUM" }
 }
 
 struct EventFileRef: Codable, Equatable, Identifiable {
@@ -342,8 +333,47 @@ struct ArtaEventDetail: Codable, Equatable, Identifiable {
     var purchaseOrders: [EventPurchaseOrderRef]?
     var tasks: [ArtaTask]?
     var files: [EventFileRef]?
+    /// Liga de la boletera en línea (solo `https://`). Falta en el API viejo.
+    var boleteraUrl: String?
 
     var isClosed: Bool { status == "CLOSED" || status == "CANCELLED" }
+}
+
+/// Fila de `GET testigos/event/:eventId` (`PublicityProof`): la prueba de que un anuncio salió.
+struct EventWitness: Codable, Equatable, Identifiable {
+    let id: String
+    var medium: String?
+    var title: String?
+    var note: String?
+    var link: String?
+    var fileUrl: String?
+    var fileName: String?
+    var mimeType: String?
+    var publishedAt: String?
+    var isPublic: Bool?
+    var createdBy: NameRef?
+
+    /// Medios del API (`TESTIGO_MEDIA`).
+    private static let mediumLabels: [String: String] = [
+        "ESPECTACULAR": "Espectaculares",
+        "PENDON": "Pendones",
+        "PRENSA": "Prensa",
+        "RADIO": "Radio",
+        "TV": "Televisión",
+        "REDES": "Redes sociales",
+        "WEB": "Web",
+        "OTRO": "Otros",
+    ]
+
+    var mediumLabel: String {
+        guard let medium else { return "Otros" }
+        return Self.mediumLabels[medium] ?? medium
+    }
+
+    var isImage: Bool {
+        guard let fileUrl, !fileUrl.isEmpty else { return false }
+        return (mimeType ?? "").hasPrefix("image/")
+    }
 }
 
 /// `POST chat/event/:eventId` devuelve el canal completo; aquí solo hace falta el id.
@@ -444,6 +474,11 @@ struct PurchaseOrderDetail: Codable, Equatable, Identifiable {
     var authorizedBy: NameRef?
     var lines: [PurchaseOrderLine]?
     var proofs: [PurchaseOrderProof]?
+    /// Forma de pago ADENDUM: a quién, a qué cuenta y su archivo. Faltan en el API viejo.
+    var adendumPerson: String?
+    var adendumAccount: String?
+    var adendumFileUrl: String?
+    var adendumFileName: String?
 
     var isPending: Bool { status == "PENDING_AUTH" }
     var isEventClosed: Bool { event?.status == "CLOSED" || event?.status == "CANCELLED" }

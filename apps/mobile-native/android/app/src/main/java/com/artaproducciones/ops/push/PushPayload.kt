@@ -56,8 +56,15 @@ data class PushPayload(
     /** Pide una decisión (autorizar o revisar): lleva la acción «Abrir» a aprobaciones. */
     val isApproval: Boolean get() = isApprovalType(type)
 
-    /** «Abrir» lleva a Aprobaciones solo si ahí se decide: los formatos se revisan en su propia pantalla. */
-    val opensApprovals: Boolean get() = isApproval && !type.trim().lowercase().startsWith("checklist.")
+    /**
+     * «Abrir» lleva a Aprobaciones solo si ahí se decide: los formatos se revisan en su propia pantalla y
+     * `po.to_transfer` abre la orden (`/purchase-orders?po=<id>`), igual que `po.to_pay`.
+     */
+    val opensApprovals: Boolean
+        get() {
+            val t = type.trim().lowercase()
+            return isApproval && !t.startsWith("checklist.") && t != "po.to_transfer"
+        }
 
     /**
      * Qué identifica a este aviso para descartar la re-entrega de FCM. En un aviso de proceso cuenta
@@ -75,7 +82,7 @@ data class PushPayload(
 
     companion object {
         private val APPROVAL_TYPES = setOf(
-            "po.requested", "task.submitted", "checklist.submitted", "advance.requested", "advance.to_pay",
+            "po.requested", "po.to_transfer", "task.submitted", "checklist.submitted", "advance.requested", "advance.to_pay",
         )
 
         /** Mismo criterio que `notification-push-meta.ts` del API. */

@@ -206,5 +206,10 @@ class PushPayloadTest {
         val checklist = PushPayload.from(mapOf("type" to "checklist.submitted"))
         assertTrue(checklist.isApproval)
         assertFalse(checklist.opensApprovals)
+        // Una transferencia por hacer pide «Abrir» y abre la orden, igual que `po.to_pay`.
+        val transfer = PushPayload.from(mapOf("type" to "po.to_transfer", "url" to "/purchase-orders?po=p1"))
+        assertTrue(transfer.isApproval)
+        assertFalse(transfer.opensApprovals)
+        assertFalse(PushPayload.from(mapOf("type" to "po.to_pay")).opensApprovals)
     }
 }

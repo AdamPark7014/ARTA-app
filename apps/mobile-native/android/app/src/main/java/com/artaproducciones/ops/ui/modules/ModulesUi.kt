@@ -69,8 +69,11 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.artaproducciones.ops.data.AccessUser
 import com.artaproducciones.ops.data.ActiveEntity
+import com.artaproducciones.ops.data.EventModule
 import com.artaproducciones.ops.data.NoticeFeed
+import com.artaproducciones.ops.data.Rbac
 import com.artaproducciones.ops.data.api.ChannelSummary
 import com.artaproducciones.ops.data.api.ChatAttachment
 import com.artaproducciones.ops.data.api.EventDetailDto
@@ -103,51 +106,29 @@ import java.util.Locale
 
 internal val ES_MX: Locale = Locale("es", "MX")
 
-// ─── Permisos: espejo de apps/api/src/common/rbac/roles.ts ──────────────────
-
-private val ROLE_PERMISSIONS: Map<String, Set<String>> = mapOf(
-    "gerente_arta" to setOf(
-        "finance.edit", "finance.view", "campaign.edit", "campaign.view", "po.authorize", "po.mark_paid",
-        "event.create", "event.close", "checklist.edit", "studio.edit", "ticketing.edit", "folders.edit", "vendor.pin",
-    ),
-    "dir_auditorio" to setOf(
-        "finance.view", "campaign.view", "po.authorize", "po.mark_paid", "event.create", "event.close",
-        "checklist.edit", "studio.edit", "ticketing.edit", "folders.edit", "vendor.pin",
-    ),
-    "logistica" to setOf(
-        "campaign.edit", "campaign.view", "checklist.edit", "event.create", "ticketing.edit", "finance.view", "folders.edit",
-    ),
-    "convenios" to setOf("checklist.edit", "finance.view", "campaign.view", "folders.edit"),
-    "enlace_gobierno" to setOf("checklist.edit", "finance.view", "po.mark_paid", "event.create", "folders.edit"),
-    "solo_carpetas" to emptySet(),
-)
+// ─── Permisos: la tabla y las reglas viven en data/Rbac.kt (espejo de @arta/rbac) ─
 
 /** Quienes ven «Todas las tareas» (`GET /tasks/workload`). */
 private val TEAM_ROLES = setOf("super_admin", "dir_general", "dir_adjunta", "gerente_arta", "dir_auditorio", "convenios")
-private val DIRECTION_ROLES = setOf("super_admin", "dir_general", "dir_adjunta")
 
 class ModulesPerms(val me: ModulesMe) {
     val role: String = me.roleKey.orEmpty()
 
-    fun has(permission: String): Boolean {
-        if (role == "super_admin" || role == "dir_general") return true
-        if (role == "dir_adjunta" && permission != "users.manage") return true
-        if ("everything" in me.permissions) return true
-        return permission in ROLE_PERMISSIONS[role].orEmpty() || permission in me.permissions
-    }
+    /** Lo que piden las reglas de [Rbac]. */
+    val access = AccessUser(role, me.entities, me.permissions)
+
+    fun has(permission: String): Boolean = Rbac.hasPermission(role, me.permissions, permission)
 
     fun hasAny(vararg permissions: String) = permissions.any { has(it) }
 
-    val isDirection: Boolean get() = role in DIRECTION_ROLES
+    val isDirection: Boolean get() = Rbac.isDirectionRole(role)
     val canSeeTeamTasks: Boolean get() = role in TEAM_ROLES
-    val canCreateTasks: Boolean get() = role != "solo_carpetas"
+    val canCreateTasks: Boolean get() = Rbac.canCreateTasks(role)
 
-    fun canAccessEventOps(entity: String?): Boolean {
-        if (entity == null) return false
-        val entityOk = role == "super_admin" || role == "dir_general" || entity in me.entities
-        if (!entityOk || role == "solo_carpetas") return false
-        return !(role == "dir_auditorio" && entity == "ARTA")
-    }
+    fun canAccessEventOps(entity: String?): Boolean = entity != null && Rbac.canAccessEventOps(me.entities, role, entity)
+
+    /** `canSeeModule`: ¿ve este módulo en este negocio? */
+    fun canSeeModule(entity: String?, module: EventModule): Boolean = entity != null && Rbac.canSeeModule(access, entity, module)
 
     /**
      * La entidad activa, si el rol opera eventos en ella (eventos, OC, calendario). Null = en esta
@@ -170,10 +151,12 @@ class ModulesPerms(val me: ModulesMe) {
     fun canReviewTask(t: TaskDto): Boolean = t.createdById == me.id || isDirection
 
     val canSeeFinance: Boolean get() = hasAny("finance.view", "finance.edit")
-    val canSeeCampaign: Boolean get() = hasAny("campaign.view", "campaign.edit")
-    val canChecklistEdit: Boolean get() = has("checklist.edit")
-    val canTicketing: Boolean get() = has("ticketing.edit")
-    val canPo: Boolean get() = hasAny("checklist.edit", "po.authorize", "po.mark_paid")
+
+    /** Órdenes de compra en el negocio activo: mismo candado que la pestaña del evento. */
+    val canPo: Boolean get() = canSeeModule(opsEntity, EventModule.PO)
+
+    /** Calendario de shows del negocio activo: quien opera eventos y, en solo lectura, el practicante. */
+    val canSeeCalendar: Boolean get() = ActiveEntity.param?.let { Rbac.canSeeEventCalendar(me.entities, role, it) } == true
 
     /** El rol aprueba algo además de sus propias tareas pedidas. */
     val approvesMoney: Boolean get() = canAuthorizePo || canMarkPaid
@@ -368,6 +351,7 @@ fun poPaymentLabel(method: String?): String = when (method) {
     "CHEQUE" -> "Cheque"
     "TARJETA" -> "Tarjeta"
     "OTRO" -> "Otro"
+    "ADENDUM" -> "Adendum"
     else -> "Transferencia"
 }
 
@@ -394,6 +378,22 @@ fun poStatusColor(status: String): Color = when (status) {
     "REJECTED", "CANCELLED" -> ArtaColors.Danger
     else -> ArtaColors.Muted
 }
+
+// ─── Testigos de publicidad ─────────────────────────────────────────────────
+
+/** Medios del API (`TESTIGO_MEDIA`). */
+private val WITNESS_MEDIUM_LABELS = mapOf(
+    "ESPECTACULAR" to "Espectaculares",
+    "PENDON" to "Pendones",
+    "PRENSA" to "Prensa",
+    "RADIO" to "Radio",
+    "TV" to "Televisión",
+    "REDES" to "Redes sociales",
+    "WEB" to "Web",
+    "OTRO" to "Otros",
+)
+
+fun witnessMediumLabel(medium: String): String = WITNESS_MEDIUM_LABELS[medium] ?: medium
 
 // ─── Utilidades de plataforma ───────────────────────────────────────────────
 

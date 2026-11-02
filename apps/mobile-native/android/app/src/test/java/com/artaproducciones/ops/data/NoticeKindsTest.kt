@@ -26,6 +26,7 @@ class NoticeKindsTest {
     fun channelsMatchTheWeb() {
         assertEquals(NoticeChannel.CHAT, NoticeKinds.channelOf("chat.mention"))
         assertEquals(NoticeChannel.APPROVALS, NoticeKinds.channelOf("po.requested"))
+        assertEquals(NoticeChannel.APPROVALS, NoticeKinds.channelOf("po.to_transfer"))
         assertEquals(NoticeChannel.APPROVALS, NoticeKinds.channelOf("checklist.submitted"))
         assertEquals(NoticeChannel.APPROVALS, NoticeKinds.channelOf("anything.review"))
         assertEquals(NoticeChannel.APPROVALS, NoticeKinds.channelOf("campaign.created"))
@@ -42,7 +43,7 @@ class NoticeKindsTest {
 
     @Test
     fun onlyWhatWaitsForTheReaderNeedsAction() {
-        listOf("chat.mention", "po.requested", "task.rejected", "advance.to_pay", "checklist.returned", "x.review").forEach {
+        listOf("chat.mention", "po.requested", "po.to_transfer", "task.rejected", "advance.to_pay", "checklist.returned", "x.review").forEach {
             assertTrue(it, NoticeKinds.needsAction(it))
         }
         listOf("chat.message", "task.completed", "file.uploaded", "advance.paid", "", null).forEach {

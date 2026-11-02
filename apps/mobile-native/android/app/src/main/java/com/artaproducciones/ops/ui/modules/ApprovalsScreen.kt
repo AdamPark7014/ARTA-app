@@ -665,7 +665,7 @@ private fun PoSheet(
             val status = d?.status ?: row.status
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    d?.vendorName ?: row.vendorName ?: "Sin proveedor",
+                    d?.vendorName ?: row.vendorName ?: d?.adendumPerson ?: "Sin proveedor",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.weight(1f),
@@ -690,6 +690,23 @@ private fun PoSheet(
                     (d.createdBy?.fullName ?: row.createdBy)?.takeIf { it.isNotBlank() }?.let { InfoLine("Solicitó", it) }
                     d.createdAt?.let { InfoLine("Pedida", stampLabel(it)) }
                     InfoLine("Forma de pago", poPaymentLabel(d.paymentMethod))
+                    if (d.paymentMethod == "ADENDUM") {
+                        d.adendumPerson?.takeIf { it.isNotBlank() }?.let { InfoLine("Persona", it) }
+                        d.adendumAccount?.takeIf { it.isNotBlank() }?.let { InfoLine("Cuenta", it) }
+                        InfoLine("Monto", money(d.amount?.toDoubleOrNull() ?: row.amount))
+                        d.adendumFileUrl?.takeIf { it.isNotBlank() }?.let { file ->
+                            Row(
+                                Modifier.fillMaxWidth().clickable(role = Role.Button, onClickLabel = "Abrir el archivo del adendum") {
+                                    openRemoteFile(context, scope, file, d.adendumFileName)
+                                }.heightIn(min = 48.dp).padding(vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Icon(Icons.Default.AttachFile, contentDescription = null, tint = ArtaColors.Gold)
+                                Spacer(Modifier.width(8.dp))
+                                Text(d.adendumFileName?.takeIf { it.isNotBlank() } ?: "Ver archivo", modifier = Modifier.weight(1f), maxLines = 2, overflow = TextOverflow.Ellipsis)
+                            }
+                        }
+                    }
                     InfoLine("Beneficiario", if (d.payeeType == "OTRO") "Otro" else "Proveedor")
                     InfoLine("IVA", if (d.withIva == true) "Sí (16 %)" else "No")
                     d.authorizedBy?.let { InfoLine("Autorizó", it.fullName + (d.authorizedAt?.let { a -> " · ${stampLabel(a)}" } ?: "")) }

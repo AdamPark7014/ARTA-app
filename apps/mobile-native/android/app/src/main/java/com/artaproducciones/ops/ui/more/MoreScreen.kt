@@ -23,6 +23,7 @@ import androidx.compose.material.icons.automirrored.outlined.Logout
 import androidx.compose.material.icons.automirrored.outlined.OpenInNew
 import androidx.compose.material.icons.outlined.AccountBalance
 import androidx.compose.material.icons.outlined.AddCircleOutline
+import androidx.compose.material.icons.outlined.Badge
 import androidx.compose.material.icons.outlined.Block
 import androidx.compose.material.icons.outlined.Brush
 import androidx.compose.material.icons.outlined.Build
@@ -47,6 +48,7 @@ import androidx.compose.material.icons.outlined.Mic
 import androidx.compose.material.icons.outlined.NotificationsActive
 import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.PersonRemove
+import androidx.compose.material.icons.outlined.PhotoLibrary
 import androidx.compose.material.icons.outlined.PrivacyTip
 import androidx.compose.material.icons.outlined.Public
 import androidx.compose.material.icons.outlined.Receipt
@@ -57,6 +59,7 @@ import androidx.compose.material.icons.outlined.Security
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Summarize
 import androidx.compose.material.icons.outlined.SupportAgent
+import androidx.compose.material.icons.outlined.TableChart
 import androidx.compose.material.icons.outlined.Webhook
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
@@ -85,6 +88,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.artaproducciones.ops.BuildConfig
 import com.artaproducciones.ops.data.ActiveEntity
+import com.artaproducciones.ops.data.Rbac
 import com.artaproducciones.ops.data.Session
 import com.artaproducciones.ops.data.api.ApiClient
 import com.artaproducciones.ops.data.api.UserDto
@@ -127,9 +131,9 @@ data class WebModule(
 )
 
 /**
- * Espejo de `apps/web/lib/access-matrix.ts` (`NAV_ITEMS` + `visibleNavItems`) y de
- * `@arta/rbac` (`ROLE_PERMISSIONS`, `hasPermission`, `canAccessEventOps`). Si cambia
- * el menú lateral de la web, cambia aquí: la regla es «mismo menú, mismos permisos».
+ * Espejo de `apps/web/lib/access-matrix.ts` (`NAV_ITEMS` + `canSeeNavItem` + `visibleNavItems`); los
+ * permisos salen de `data/Rbac.kt`. Si cambia el menú lateral de la web, cambia aquí: la regla es
+ * «mismo menú, mismos permisos».
  */
 object WebModules {
     private const val HIDDEN_GROUP = "Vistas de portafolio"
@@ -141,27 +145,10 @@ object WebModules {
 
     private val FOLDER_CENTRIC_ROLES = setOf("convenios", "enlace_gobierno", "solo_carpetas")
 
-    private val ALL_PERMISSIONS = listOf(
-        "finance.view", "finance.edit", "campaign.view", "campaign.edit", "po.authorize", "po.mark_paid",
-        "event.create", "event.close", "checklist.edit", "studio.edit", "ticketing.edit", "folders.edit", "vendor.pin",
-    )
-
-    private val ROLE_PERMISSIONS: Map<String, List<String>> = mapOf(
-        "super_admin" to listOf("everything"),
-        "dir_general" to listOf("everything", "users.manage") + ALL_PERMISSIONS,
-        "dir_adjunta" to ALL_PERMISSIONS,
-        "gerente_arta" to listOf(
-            "finance.edit", "finance.view", "campaign.edit", "campaign.view", "po.authorize", "po.mark_paid",
-            "event.create", "event.close", "checklist.edit", "studio.edit", "ticketing.edit", "folders.edit", "vendor.pin",
-        ),
-        "dir_auditorio" to listOf(
-            "finance.view", "campaign.view", "po.authorize", "po.mark_paid", "event.create", "event.close",
-            "checklist.edit", "studio.edit", "ticketing.edit", "folders.edit", "vendor.pin",
-        ),
-        "logistica" to listOf("campaign.edit", "campaign.view", "checklist.edit", "event.create", "ticketing.edit", "finance.view", "folders.edit"),
-        "convenios" to listOf("checklist.edit", "finance.view", "campaign.view", "folders.edit"),
-        "enlace_gobierno" to listOf("checklist.edit", "finance.view", "po.mark_paid", "event.create", "folders.edit"),
-        "solo_carpetas" to emptyList(),
+    /** `ROLE_SURFACED`: vistas de portafolio que para un rol son su trabajo diario y salen a «Control». */
+    private val ROLE_SURFACED = mapOf(
+        "contabilidad" to setOf("/advances"),
+        "practicante" to setOf("/testigos"),
     )
 
     private val ROLE_DEFAULT_ENTITIES: Map<String, List<String>> = mapOf(
@@ -179,10 +166,17 @@ object WebModules {
         "convenios" to "Convenios y patrocinios",
         "enlace_gobierno" to "Enlace gobierno y pagos",
         "solo_carpetas" to "Solo carpetas",
+        "contabilidad" to "Contabilidad y comercial",
+        "practicante" to "Practicante (sitio y testigos)",
+        "compras" to "Compras",
+        "produccion" to "Producción",
+        "contenido" to "Contenido e imágenes",
+        "catering" to "Catering",
     )
 
     private val EVERYONE_BUT_FOLDERS = listOf(
         "super_admin", "dir_general", "dir_adjunta", "gerente_arta", "dir_auditorio", "logistica", "convenios", "enlace_gobierno",
+        "contabilidad", "compras", "produccion",
     )
     private val ADMINS = listOf("dir_general", "super_admin")
     private val DIRECTION = listOf("dir_general", "dir_adjunta", "super_admin")
@@ -198,6 +192,7 @@ object WebModules {
         val roles: List<String> = emptyList(),
         val entities: List<String> = emptyList(),
         val requiresEventOps: Boolean = false,
+        val requiresCalendar: Boolean = false,
         val hidden: Boolean = false,
     ) {
         val path: String get() = if (query != null) "$href?$query" else href
@@ -209,12 +204,15 @@ object WebModules {
         Rule("/events/new", "Crear evento", "Eventos", Icons.Outlined.AddCircleOutline, permissions = listOf("event.create", "everything"), requiresEventOps = true),
         Rule("/events", "Eventos actuales", "Eventos", Icons.Outlined.Event, query = "scope=active", requiresEventOps = true),
         Rule("/events", "Eventos pasados", "Eventos", Icons.Outlined.History, query = "scope=past", requiresEventOps = true),
-        Rule("/calendar", "Calendario", "Eventos", Icons.Outlined.CalendarMonth, requiresEventOps = true),
+        Rule("/calendar", "Calendario", "Eventos", Icons.Outlined.CalendarMonth, requiresCalendar = true),
         Rule("/tasks", "Tareas", "Eventos", Icons.Outlined.Checklist, roles = EVERYONE_BUT_FOLDERS),
-        Rule("/purchase-orders", "Órdenes de compra", "Control", Icons.Outlined.Receipt, permissions = listOf("po.authorize", "po.mark_paid", "everything"), requiresEventOps = true),
+        Rule("/finanzas", "Finanzas", "Control", Icons.Outlined.AccountBalance, permissions = listOf("finanzas.view", "everything")),
+        Rule("/purchase-orders", "Órdenes de compra", "Control", Icons.Outlined.Receipt, permissions = listOf("po.view", "po.edit", "po.authorize", "po.mark_paid", "everything"), requiresEventOps = true),
         Rule("/studio", "Studio web", "Marca", Icons.Outlined.Brush, permissions = listOf("studio.edit", "everything"), entities = listOf(ARTA)),
         Rule("/site", "Ver sitio Arta", "Marca", Icons.Outlined.Public, entities = listOf(ARTA)),
-        Rule("/users", "Usuarios", "Admin", Icons.Outlined.Group, permissions = listOf("users.manage", "everything"), roles = ADMINS),
+        Rule("/testigos", "Testigos de publicidad", HIDDEN_GROUP, Icons.Outlined.PhotoLibrary, permissions = listOf("testigos.edit", "everything"), hidden = true),
+        Rule("/studio/practicantes", "Perfiles de practicante", HIDDEN_GROUP, Icons.Outlined.Badge, permissions = listOf("practicantes.manage", "everything"), hidden = true),
+        Rule("/users", "Usuarios", "Admin", Icons.Outlined.Group, permissions = listOf("users.manage", "users.create"), roles = ADMINS),
         Rule("/settings", "Configuración", "Admin", Icons.Outlined.Settings, permissions = listOf("users.manage", "everything"), roles = DIRECTION),
         Rule("/organizations", "Organizaciones", "Admin", Icons.Outlined.Business, permissions = listOf("users.manage", "everything"), roles = ADMINS),
         Rule("/security", "Seguridad", "Admin", Icons.Outlined.Security),
@@ -223,9 +221,9 @@ object WebModules {
         Rule("/digests", "Resúmenes", "Admin", Icons.Outlined.Summarize, permissions = listOf("users.manage", "everything"), roles = DIRECTION),
         Rule("/checklists", "Plantillas", HIDDEN_GROUP, Icons.Outlined.Checklist, permissions = listOf("checklist.edit", "everything"), requiresEventOps = true, hidden = true),
         Rule("/folders", "Carpetas generales", HIDDEN_GROUP, Icons.Outlined.Folder, permissions = listOf("folders.edit", "checklist.edit", "everything"), hidden = true),
-        Rule("/finance", "Finanzas", HIDDEN_GROUP, Icons.Outlined.AccountBalance, permissions = listOf("finance.view", "finance.edit", "everything"), requiresEventOps = true, hidden = true),
-        Rule("/campaigns", "Campañas", "Control", Icons.Outlined.Campaign, permissions = listOf("campaign.view", "campaign.edit", "everything"), requiresEventOps = true),
-        Rule("/ticketing", "Boletera", "Control", Icons.Outlined.ConfirmationNumber, permissions = listOf("ticketing.edit", "everything"), requiresEventOps = true),
+        Rule("/finance", "Corridas", HIDDEN_GROUP, Icons.Outlined.TableChart, permissions = listOf("corrida.view", "everything"), entities = listOf(ARTA), requiresEventOps = true, hidden = true),
+        Rule("/campaigns", "Campañas", "Control", Icons.Outlined.Campaign, permissions = listOf("campaign.view", "campaign.edit", "everything"), entities = listOf(ARTA), requiresEventOps = true),
+        Rule("/ticketing", "Boletera", "Control", Icons.Outlined.ConfirmationNumber, permissions = listOf("ticketing.view", "ticketing.edit", "everything"), requiresEventOps = true),
         Rule("/advances", "Anticipos", HIDDEN_GROUP, Icons.Outlined.RequestQuote, permissions = listOf("checklist.edit", "finance.view", "finance.edit", "everything"), requiresEventOps = true, hidden = true),
         Rule("/hospitality", "Hospedaje", HIDDEN_GROUP, Icons.Outlined.Hotel, permissions = OPS, requiresEventOps = true, hidden = true),
         Rule("/transport", "Transportación", HIDDEN_GROUP, Icons.Outlined.DirectionsBus, permissions = OPS, requiresEventOps = true, hidden = true),
@@ -261,43 +259,39 @@ object WebModules {
         return if (isTop(role) || hostEntity in entities) hostEntity else entities.firstOrNull() ?: ARTA
     }
 
-    private fun hasPermission(role: String, extra: List<String>, needed: String): Boolean {
-        if (isTop(role)) return true
-        if (role == "dir_adjunta" && needed != "users.manage") return true
-        val fromRole = ROLE_PERMISSIONS[role].orEmpty()
-        return "everything" in fromRole || needed in fromRole || needed in extra
-    }
-
     private fun userHasPermission(role: String, extra: List<String>, needed: List<String>): Boolean {
         if (needed.isEmpty() || isTop(role) || "everything" in extra) return true
-        return needed.any { hasPermission(role, extra, it) }
+        return needed.any { Rbac.hasPermission(role, extra, it) }
     }
 
-    private fun canAccessEventOps(role: String, entity: String): Boolean {
-        if (isTop(role)) return true
-        if (role == "solo_carpetas") return false
-        return !(role == "dir_auditorio" && entity == ARTA)
-    }
+    /** `canAccessEventOps` de access-matrix: el menú solo mira el rol en esta entidad. */
+    private fun canAccessEventOps(role: String, entity: String): Boolean = Rbac.canAccessEventOps(listOf(entity), role, entity)
 
     private fun canSee(role: String, extra: List<String>, rule: Rule, entity: String): Boolean {
         if (rule.entities.isNotEmpty() && entity !in rule.entities) return false
+        if (rule.href == "/folders" && !Rbac.canSeeGeneralFolders(role)) return false
         if (rule.requiresEventOps && !canAccessEventOps(role, entity)) return false
+        if (rule.requiresCalendar && !Rbac.canSeeEventCalendar(listOf(entity), role, entity)) return false
         if (rule.roles.isNotEmpty() && role !in rule.roles && !isTop(role)) return false
         return userHasPermission(role, extra, rule.permissions)
     }
 
-    /** Módulos que la barra lateral web le muestra a [user], sin los que ya son pestaña nativa. */
-    fun visibleFor(user: UserDto): List<WebModule> {
+    /**
+     * Módulos que la barra lateral web le muestra a [user] en [entity] (el negocio activo), sin los que
+     * ya son pestaña nativa.
+     */
+    fun visibleFor(user: UserDto, entity: String): List<WebModule> {
         val role = user.roleKey.orEmpty()
-        val entity = entityFor(user)
-        val needsFolders = !canAccessEventOps(role, entity) || role in FOLDER_CENTRIC_ROLES
+        val surfaced = ROLE_SURFACED[role].orEmpty()
+        // El practicante no trabaja con carpetas generales: su menú es Studio, testigos y calendario.
+        val needsFolders = role != "practicante" && (!canAccessEventOps(role, entity) || role in FOLDER_CENTRIC_ROLES)
         return RULES
             .filter { it.href !in NATIVE_TABS && canSee(role, user.permissions, it, entity) }
             .map { rule ->
-                if (needsFolders && rule.href == "/folders") {
-                    WebModule(rule.path, rule.label, "Documentos", rule.icon, hidden = false)
-                } else {
-                    WebModule(rule.path, rule.label, rule.group, rule.icon, rule.hidden)
+                when {
+                    needsFolders && rule.href == "/folders" -> WebModule(rule.path, rule.label, "Documentos", rule.icon, hidden = false)
+                    rule.href in surfaced -> WebModule(rule.path, rule.label, "Control", rule.icon, hidden = false)
+                    else -> WebModule(rule.path, rule.label, rule.group, rule.icon, rule.hidden)
                 }
             }
     }
@@ -309,7 +303,9 @@ fun MoreScreen(user: UserDto, nav: ModuleNav) {
     val context = LocalContext.current
     val haptics = LocalHapticFeedback.current
     val scope = rememberCoroutineScope()
-    val modules = remember(user) { WebModules.visibleFor(user) }
+    // Campañas y Corridas solo en Arta: manda el negocio en el que se está trabajando.
+    val entity = ActiveEntity.current.key
+    val modules = remember(user, entity) { WebModules.visibleFor(user, entity) }
     val visibleGroups = remember(modules) { modules.filter { !it.hidden }.groupBy { it.group }.toList() }
     val hiddenModules = remember(modules) { modules.filter { it.hidden } }
     var showMore by rememberSaveable { mutableStateOf(false) }

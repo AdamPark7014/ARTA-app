@@ -601,6 +601,7 @@ struct PurchaseOrderSheet: View {
     /// Qué decisión va en camino: el botón que la mandó enseña la carga.
     @State private var deciding: String?
     @State private var openingProofId: String?
+    @State private var openingAdendum = false
 
     private var hasAmount: Bool { (detail?.amount ?? row.amount) != nil }
     private var amountText: String { Money.mxn(detail?.amount?.value ?? row.amount?.value) }
@@ -665,7 +666,7 @@ struct PurchaseOrderSheet: View {
                                 StatusPill(text: withIva ? "Con IVA" : "Sin IVA")
                             }
                         }
-                        Text(po.vendorName?.isEmpty == false ? (po.vendorName ?? "") : "Sin proveedor")
+                        Text(payeeName(po))
                             .font(.headline)
                             .foregroundStyle(ArtaColor.text)
                         Text(POInfo.rubroLabel(po.rubro))
@@ -711,6 +712,10 @@ struct PurchaseOrderSheet: View {
                             FactRow(label: "Autorizó", value: by)
                         }
                     }
+                }
+
+                if po.paymentMethod == "ADENDUM" {
+                    adendumCard(po)
                 }
 
                 if let description = po.description, !description.isEmpty {
@@ -835,6 +840,70 @@ struct PurchaseOrderSheet: View {
             }
             .padding(.horizontal, ArtaLayout.gutter)
             .padding(.vertical, ArtaSpace.l)
+        }
+    }
+
+    private func payeeName(_ po: PurchaseOrderDetail) -> String {
+        if let vendor = po.vendorName, !vendor.isEmpty { return vendor }
+        if let person = po.adendumPerson, !person.isEmpty { return person }
+        return "Sin proveedor"
+    }
+
+    /// Forma de pago ADENDUM: a quién, a qué cuenta, cuánto y su archivo. Solo lectura.
+    private func adendumCard(_ po: PurchaseOrderDetail) -> some View {
+        ModuleCard(title: "Adendum") {
+            VStack(alignment: .leading, spacing: ArtaSpace.s) {
+                if let person = po.adendumPerson?.moduleTrimmed, !person.isEmpty {
+                    FactRow(label: "Persona", value: person)
+                }
+                if let account = po.adendumAccount?.moduleTrimmed, !account.isEmpty {
+                    FactRow(label: "Cuenta", value: account)
+                }
+                FactRow(label: "Monto", value: amountText)
+                if let file = po.adendumFileUrl, !file.isEmpty {
+                    Button {
+                        openAdendumFile(file, name: po.adendumFileName)
+                    } label: {
+                        HStack(spacing: ArtaSpace.m) {
+                            Image(systemName: "doc.text.magnifyingglass")
+                                .foregroundStyle(ArtaColor.accent)
+                                .frame(width: 24)
+                            Text(adendumFileLabel(po.adendumFileName))
+                                .font(.subheadline)
+                                .foregroundStyle(ArtaColor.text)
+                                .lineLimit(2)
+                            Spacer(minLength: ArtaSpace.s)
+                            if openingAdendum {
+                                ProgressView().controlSize(.small).tint(ArtaColor.tertiary)
+                            } else {
+                                Image(systemName: "eye").foregroundStyle(ArtaColor.tertiary)
+                            }
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(ArtaPressStyle(scale: 0.99))
+                    .disabled(openingAdendum)
+                    .padding(.top, ArtaSpace.xs)
+                }
+            }
+        }
+    }
+
+    private func adendumFileLabel(_ name: String?) -> String {
+        guard let name = name?.moduleTrimmed, !name.isEmpty else { return "Ver archivo" }
+        return name
+    }
+
+    private func openAdendumFile(_ path: String, name: String?) {
+        Haptics.tap()
+        openingAdendum = true
+        Task {
+            do {
+                previewURL = try await ModuleFiles.download(path, name: name)
+            } catch {
+                if !error.isModuleCancellation { actionError = error.userMessage }
+            }
+            openingAdendum = false
         }
     }
 
