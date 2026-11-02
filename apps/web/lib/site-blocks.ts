@@ -750,7 +750,8 @@ export const SECTION_FIELDS: Record<string, Field[]> = {
     EYEBROW,
     HEADLINE,
     LEAD,
-    { key: 'address', label: 'Dirección', type: 'text', hint: 'El mapa busca esta dirección. Revísalo en la vista previa.' },
+    { key: 'address', label: 'Dirección', type: 'text', hint: 'El botón «Cómo llegar» busca esta dirección.' },
+    { key: 'mapPoint', label: 'Punto en el mapa', type: 'text', hint: 'Latitud y longitud, como 19.0521,-98.2216. Si cambias la dirección, cámbialo también; vacío, el mapa busca la dirección.' },
   ],
   home_cta: [
     EYEBROW,

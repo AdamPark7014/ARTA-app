@@ -49,6 +49,8 @@ export type PublicSiteContent = {
   /** Texto de ubicación de la versión anterior del sitio. */
   location?: string;
   address?: string;
+  /** Latitud y longitud: el mapa clava ese punto en vez de buscar la dirección. */
+  mapPoint?: string;
   emptyTitle?: string;
   emptyText?: string;
   showCount?: string;
