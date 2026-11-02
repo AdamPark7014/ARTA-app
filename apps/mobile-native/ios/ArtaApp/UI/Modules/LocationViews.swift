@@ -73,7 +73,7 @@ struct LocationConsentSheet: View {
             .padding(.top, ArtaSpace.xxl)
             .padding(.bottom, ArtaSpace.l)
         }
-        .presentationDetents([.large])
+        .presentationDetents([.fraction(0.62), .large])
         .presentationDragIndicator(.visible)
         .presentationBackground(ArtaColor.bgElev)
         .accessibilityIdentifier("location-sheet")
