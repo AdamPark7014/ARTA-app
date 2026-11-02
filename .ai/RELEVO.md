@@ -107,8 +107,9 @@ sin `studio.publish` se dejan borradores y se mandan a revisión.
 - Subir un video de verdad (se probó con foto). El mapa de Google se simuló en las capturas.
 - Con contenido real: los pósters y fotos de prueba eran ficticios y el sitio en producción solo tiene las fotos de semilla.
 
+**Confirmado por Adam (01-11):** «Historias» son tipo Instagram (foto o video vertical con visor), no casos de éxito.
+
 **Decisiones a confirmar con Adam:**
-- «Historias» se interpretó como historias tipo Instagram (foto o video vertical con visor), no como casos de éxito.
 - El formulario de contacto arma el correo en la app de quien escribe (`mailto:`) y ofrece WhatsApp: no hay SMTP en producción.
 - Los practicantes no publican salvo que su perfil lo permita.
 
