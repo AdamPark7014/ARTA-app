@@ -4,8 +4,8 @@
 - **Fecha:** 2026-11-02
 - **Rama:** main
   (Adam es el único programador).
-- **Producción:** `b7d30c1` desplegado desde `main` el 2026-11-02 (`bash deploy/update.sh` en `/var/www/arta-app`, log
-  `/root/arta-deploy-20261102-E.log`; respaldo automático en `/root/arta-backups/`). Disco al 73 %: **un despliegue lo subió a 90 %, donde se cae la BD.** Antes de cada
+- **Producción:** `cd7aed1` desplegado desde `main` el 2026-11-02 (`bash deploy/update.sh` en `/var/www/arta-app`, log
+  `/root/arta-deploy-20261102-G.log`; respaldo automático en `/root/arta-backups/`). Disco al 73 %: **un despliegue lo subió a 90 %, donde se cae la BD.** Antes de cada
   despliegue, `docker builder prune -af`.
 
 ## Turno claude-code (2026-11-02, tarde): rediseño de 360 grados del sitio y lo real de Arta
@@ -22,9 +22,24 @@ Adam: «génerale un rediseño de 360 grados», «se debe mostrar como la empres
 
 **Google Business:** la pestaña de Chrome quedó con nombre y categoría puestos, sin dar «Siguiente»: eso acepta los Términos y le toca a Adam decirlo.
 
-**Verificado:** 98 pruebas de web en local; CI verde en `e7957ad`; producción con capturas, sin imágenes rotas y 0 errores en logs. **No verificado:** dirección y teléfono solo por el brochure de 2022 (Maps muestra ahí una agencia de Mercado Libre); Web Safari falló en `e7957ad` y falta ver cuáles; las skills de diseño no están activas: Adam tiene que dar clic en la tarjeta.
+**Panel (`fef3ec9`, `cd7aed1`, en producción):** mismo lenguaje del sitio, sin mover ninguna pantalla. Menú lateral de noche con logo blanco, Inter Tight e Inter en lugar de Nunito, títulos y cifras con peso 600, sin mayúsculas forzadas en etiquetas, tablas y estados, y la entrada con una foto real. Va en `styles/_noche.scss` y en los tokens de `globals.scss`; lo que se imprime conserva su formato. Spec en `docs/diseno/SISTEMA-VISUAL.md`.
 
-**Sigue:** rediseño del panel (variables en `globals.scss`, menú de noche, Inter) y de las apps.
+**Apps (`b54aa7f` y el commit de este cierre, sin subir a tiendas):** Android con Inter e Inter Tight; iOS con SF Pro, sin el diseño redondeado; mismas etiquetas y pesos; cartelera en dos columnas con el póster entero. iOS 1.0.1 (15) y Android 1.0.3 (6) siguen en revisión sin nada de esto: la cartelera y el rediseño van en iOS 1.0.2 (16) y Android 1.0.4 (7). **Adam decide cuándo se suben.**
+
+**Verificado:** web 98 pruebas del sitio y 118 del panel en local; auditoría de cortes de 12 pantallas sin problemas en escritorio y solo títulos largos con su `title` en celular; CI verde en `fef3ec9` y `b54aa7f`; Android compila, sus pruebas pasan y sus capturas se revisaron; iOS compila y sus capturas se revisaron; producción sin imágenes rotas y 0 errores en logs.
+
+**No verificado:**
+- Dirección y teléfono solo por el brochure de 2022: Maps muestra ahí una agencia de Mercado Libre.
+- El panel con sesión real: se revisó con datos de prueba, no con la cuenta de Arta.
+- El Auditorio solo se revisó por pruebas, no a ojo.
+- CI y Safari de `cd7aed1` siguen corriendo.
+
+**Pendiente de Adam:**
+- **Google Business:** decir «acepta» para que siga. La pestaña de Chrome quedó con nombre y categoría, sin dar «Siguiente»: eso acepta los Términos.
+- **Skills de diseño:** no están activas. Se activan con un clic en la tarjeta; hasta entonces el rediseño usó el criterio propio.
+- Fotos de la oficina y del equipo. Confirmar dirección, teléfono y que `contacto@artaproducciones.com` recibe.
+
+**Sigue:** las pantallas del panel una por una, si hace falta más que el lenguaje común: tablero de Inicio, evento y formatos son los candidatos.
 
 ## Turno claude-code (2026-11-02): Inicio nuevo, shows reales y cartelera en las apps
 

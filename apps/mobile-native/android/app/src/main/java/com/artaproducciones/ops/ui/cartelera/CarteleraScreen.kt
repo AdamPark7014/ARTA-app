@@ -90,10 +90,10 @@ private fun posterUrl(path: String?): String? = path?.let { ApiClient.resolveUrl
 
 /** Póster de un show. Sin póster, la marca sobre tinta: nunca un hueco. */
 @Composable
-private fun ShowPoster(show: PublicShowDto, modifier: Modifier = Modifier) {
+private fun ShowPoster(show: PublicShowDto, modifier: Modifier = Modifier, scale: ContentScale = ContentScale.FillWidth) {
     val url = posterUrl(show.coverUrl)
     if (url != null) {
-        AsyncImage(model = url, contentDescription = "Póster de ${show.title}", modifier = modifier, contentScale = ContentScale.FillWidth)
+        AsyncImage(model = url, contentDescription = "Póster de ${show.title}", modifier = modifier, contentScale = scale)
     } else {
         Box(
             modifier
@@ -245,7 +245,7 @@ private fun ShowTile(show: PublicShowDto, onOpen: () -> Unit) {
                     modifier = Modifier.matchParentSize().blur(24.dp),
                 )
             }
-            ShowPoster(show, Modifier.fillMaxWidth())
+            ShowPoster(show, Modifier.matchParentSize(), ContentScale.Fit)
         }
         Text(
             listOfNotNull(CarteleraRules.dayMonth(show), CarteleraRules.timeLabel(show)).joinToString(" · "),
