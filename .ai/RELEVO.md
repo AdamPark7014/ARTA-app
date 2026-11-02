@@ -4,8 +4,8 @@
 - **Fecha:** 2026-11-02
 - **Rama:** main
   (Adam es el único programador).
-- **Producción:** `cd7aed1` desplegado desde `main` el 2026-11-02 (`bash deploy/update.sh` en `/var/www/arta-app`, log
-  `/root/arta-deploy-20261102-G.log`; respaldo automático en `/root/arta-backups/`). Disco al 73 %: **un despliegue lo subió a 90 %, donde se cae la BD.** Antes de cada
+- **Producción:** `568b16e` desplegado desde `main` el 2026-11-02 (`bash deploy/update.sh` en `/var/www/arta-app`, log
+  `/root/arta-deploy-20261102-H.log`; respaldo automático en `/root/arta-backups/`). Disco al 73 %: **un despliegue lo subió a 90 %, donde se cae la BD.** Antes de cada
   despliegue, `docker builder prune -af`.
 
 ## Turno claude-code (2026-11-02, tarde): rediseño de 360 grados del sitio y lo real de Arta
