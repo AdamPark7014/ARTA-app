@@ -4,14 +4,65 @@
 - **Fecha:** 2026-11-01
 - **Rama:** main
   (Adam es el único programador).
-- **Producción:** `34e4ace` desplegado desde `main` el 2026-11-01 (`bash deploy/update.sh` en `/var/www/arta-app`, log
-  `/root/arta-deploy-20261101-*.log`; respaldo automático en `/root/arta-backups/`). Disco al 84 %: al 90 % se cae la BD.
+- **Producción:** `ceb81f9` desplegado desde `main` el 2026-11-01 (`bash deploy/update.sh` en `/var/www/arta-app`, log
+  `/root/arta-deploy-20261101-R.log`; respaldo automático en `/root/arta-backups/`). Disco al 81 %: al 90 % se cae la BD.
+
+## Turno claude-code (2026-11-01, noche): roles del cliente, adendum, testigos y Finanzas
+
+Adam pasó la matriz real por persona. **Guía: `docs/ROLES-Y-PERMISOS.md`.** Reglas en `packages/rbac/src/roles.ts` con copia
+idéntica en `apps/api/src/common/rbac/roles.ts`, y en `Rbac.swift` y `Rbac.kt`: cada cambio va a los cuatro. El API manda:
+`events/event-visibility.ts` quita del evento lo que la persona no ve, y el mismo candado cubre archivos por id.
+
+**En producción y aplicado a las personas** con `apps/api/scripts/roles-clientes-2026-11.ts`: Chacho y Arturo `dir_general`, Leida y
+Sol `dir_adjunta` solo Arta, Juan Pablo `compras`, Williams `produccion`, Rodrigo `dir_auditorio`, Monse y Kika `contenido`, Paula
+`contabilidad`, Iliana `catering` (nueva). Se cerraron sus sesiones: **todos vuelven a entrar una vez.** A Paula se le reseteó la
+contraseña (la que tenía era aleatoria y nadie la sabía). Accesos en `Documents\ARTA-credenciales-2026-11-01.xlsx`, fuera del repo.
+
+**Hecho:** pestañas del evento en el orden del cliente; Auditorio sin corrida, campaña ni convenios; solo Juan Pablo crea OC, ni
+dirección (`hasPermission` excluye `po.edit`); forma de pago Adendum con persona, cuenta y archivo, y su pestaña; al autorizar una
+transferencia o adendum, aviso `po.to_transfer` a contabilidad, y al quedar pagada, aviso a quien autorizó; boletera embebida en
+Resumen (`Event.boleteraUrl`); Testigos de publicidad (`/testigos/*`, pestaña y pantalla del practicante, PDF final); perfiles de
+practicante por temporada en `/studio/practicantes` (vencen con `accessExpiresAt`, que también saca a quien tenga la sesión
+abierta); `/finanzas` para Paula, Chacho y Arturo; plantillas BARRA y MERCH; Usuarios con tarjetas de rol y vista previa
+(`lib/role-access.ts`, sale de las mismas funciones que aplica el servidor).
+
+**Botón de generar corrida:** el API respondía `skipped` si había cualquier archivo de corrida y la pantalla decía «generada». Ahora
+solo un Excel lo bloquea, con error, y si solo hay PDF aparece «Generar en Excel». El de Leida y Sol es «Subir»; generar y modificar
+son de dirección. Probado en el contenedor (plantilla, Excel y PDF), **no con el clic de Adam: confirmar con él cuál era su caso.**
+
+**Trampas:**
+- `CUSTOM` lo comparten la Distribución de Pendones en Excel y las plantillas propias: para aprobar usa `formatRuleKey(template)`.
+- `userHasPermission` del panel deja pasar a `dir_general` en todo; para `po.edit` usa el `hasPermission` de `@arta/rbac`.
+- `isPublic` en multipart: `enableImplicitConversion` vuelve «false» en true. Por eso el `@Transform` y el panel solo lo manda si es verdadero.
+- Las pruebas con base real (`apps/api/test/*.e2e-spec.ts`) no corren en local con Docker apagado. Descubrieron la regla de `CUSTOM` y una
+  prueba del acuse que venía roja desde `d2097d2`: tras tocar roles, **mira la CI antes de desplegar.**
+- Compilación incremental de Android tras cambios grandes: cientos de `Unresolved reference` en archivos tocados. Es la caché; `--rerun` lo arregla.
+- El seed corre en cada arranque. No pisa roles y, desde `5abee55`, tampoco Studio.
+
+**Interpretaciones que Adam debe confirmar:** «arte general, show y pendones» = Evento General, Artes de shows y Pendones (+Excel), y basta
+uno de Chacho o Arturo; formatos de Auditorio los aprueban Rodrigo, Chacho o Arturo; OC en solo lectura para Leida y Sol, sin acceso Williams
+y Rodrigo; «checklists generales» de Monse y Kika = Evento General y Checklist Auditorio; Iliana en los dos negocios con correo supuesto
+`iliana@artaproducciones.com`; practicante publica por omisión y se quita por perfil; Paula conserva editar campaña, convenios y boletera
+de la junta 23-10.
+
+**Verificado:** API 1129 de 1131 (un PDF por tiempo con la máquina cargada, pasa solo; 1 omitida ajena) y 55 con base real en CI; web 218 en
+Chromium y Safari de CI; capturas 1536 y 390 sin cortes ni encimados; migraciones `20261102000000` y `20261102010000` aplicadas, columnas
+consultadas en la base, 0 errores en `docker logs`; `/p/arta` en vivo sin Google Fonts; `HeroSlide` no cambia al reiniciar la API; Android 133
+pruebas; iOS compila.
+
+**No verificado:** ninguna pantalla con sesión real en producción por rol (solo pruebas con API de mentira); publicar desde `/studio` y
+verlo en `/p/arta` (revalidación con cookie real); un push real de `po.to_transfer`; `/uploads/*` se sirve estático, quien ya tenga la URL de
+una corrida la abre; apps: en iOS la fila de módulos del evento no salió en captura (solo por debajo de la barra al bajar), Android sin
+emulador. Formatos y crear OC en las apps siguen abriendo la web.
+
+**Tiendas:** Android `Documents\ARTA-builds\arta-1.0.2-5.aab`, **lo sube Adam a mano** a Prueba interna (pesa más que los 10 MB que deja
+el navegador). iOS TestFlight 1.0.1 (14), corrida 41370494979.
 
 ## Turno claude-code (2026-11-01, noche): sitio público nuevo y Studio con la maqueta completa
 
 Adam: «un paquete de la página web más complejo y más acorde a Arta Producciones, a los colores y a todo, mucho más
 profesional» y «la maqueta total en Studio web para que los practicantes puedan subir, quitar, bajar y poner historias,
-noticias, todo». Sesión aparte de la de roles y permisos. **No se ha desplegado:** lo coordina la sesión principal.
+noticias, todo». Sesión aparte de la de roles y permisos. Desplegado con los roles en `ceb81f9`.
 Guía: `docs/SITIO-PUBLICO.md`.
 
 **Sitio** (`styles/sitio.scss`, clases `sa-`, tinta y papel, sin dorado; Outfit y Nunito locales, ya no pide Google Fonts en

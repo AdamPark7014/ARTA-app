@@ -68,7 +68,7 @@ con la categoría de APNs. Una app vieja ignora todo eso y sigue abriendo la lig
 |---|---|---|---|
 | Te toca una tarea | `task.assigned`, `task.reassigned`, `task.rejected`, `task.reopened`, `task.due_soon`, `task.overdue`, `chat.ref.task` | `task.deliver`, `open` | `ARTA_TASK` |
 | Te entregaron una tarea | `task.submitted` | `task.approve`, `open` | `ARTA_TASK_REVIEW` |
-| Dinero o firma | `po.requested`, `po.updated`, `advance.requested`, `checklist.submitted`, `checklist.signature_needed`, `checklist.returned`, `po.aging`… | `review` | `ARTA_APPROVAL` |
+| Dinero o firma | `po.requested`, `po.updated`, `po.to_transfer`, `advance.requested`, `checklist.submitted`, `checklist.signature_needed`, `checklist.returned`, `po.aging`… | `review` | `ARTA_APPROVAL` |
 | Te mencionaron | `chat.mention` | `reply`, `open` | `ARTA_CHAT` |
 | Mencionaron algo tuyo | `chat.ref.task_requested`, `chat.ref.po`, `chat.ref.format`, `chat.ref.doc`, `chat.ref.advance` | `open` | `ARTA_CHAT`/`ARTA_EVENT` |
 | Solo para enterarse | los demás con liga | `open` | `ARTA_EVENT` |
