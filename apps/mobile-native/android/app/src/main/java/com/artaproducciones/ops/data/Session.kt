@@ -10,6 +10,7 @@ import com.artaproducciones.ops.data.api.WebSessionBridge
 import com.artaproducciones.ops.data.api.userMessage
 import com.artaproducciones.ops.data.realtime.RealtimeClient
 import com.artaproducciones.ops.demo.DemoMode
+import com.artaproducciones.ops.location.LocationTracker
 import com.artaproducciones.ops.push.ArtaPushRenderer
 import com.artaproducciones.ops.push.PushRegistration
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -98,6 +99,7 @@ object Session {
     fun exitDemo() {
         if (!DemoMode.isActive) return
         ActiveEntity.reset()
+        LocationTracker.onDemoExit()
         _state.value = State.SignedOut
         DemoMode.deactivate()
     }
@@ -132,6 +134,7 @@ object Session {
         // Modo demo: la sesión ficticia vive solo en memoria; no pisa la guardada ni abre socket/push.
         if (DemoMode.isActive) {
             _state.value = State.SignedIn(user)
+            LocationTracker.onDemoEntered()
             return
         }
         app.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
@@ -150,14 +153,19 @@ object Session {
         _state.value = State.SignedIn(user)
         RealtimeClient.connect()
         PushRegistration.registerAsync(app)
+        LocationTracker.onSignedIn(app, user)
     }
 
-    suspend fun logout() {
+    /** [sessionRejected]: no lo pidió la persona, el API ya la rechazó (la vista web lo detecta con un 401). */
+    suspend fun logout(sessionRejected: Boolean = false) {
         // Modo demo: nada que dar de baja en el servidor; solo apagar el demo.
         if (DemoMode.isActive) {
             exitDemo()
             return
         }
+        // Se detiene todo y se vacía la cola de esta persona, antes de cualquier espera de red. Con la
+        // sesión rechazada la cola se queda, como en `expire`: se manda si vuelve a entrar la misma persona.
+        if (!sessionRejected) LocationTracker.onLogout(app)
         // Primero la baja del token: después ya no hay cookie para autorizarla.
         withTimeoutOrNull(5_000) { PushRegistration.unregister(app) }
         withTimeoutOrNull(5_000) { runCatching { ApiClient.api.logout() } }
@@ -178,6 +186,7 @@ object Session {
         // La entidad elegida queda guardada por usuario; solo se vuelve al dorado de la pantalla de entrada.
         ActiveEntity.reset()
         RealtimeClient.disconnect()
+        LocationTracker.onSessionEnded(app)
         ApiClient.cookies.clear()
         WebSessionBridge.clear()
         ArtaPushRenderer.clearAll(app)

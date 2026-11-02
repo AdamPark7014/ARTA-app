@@ -33,6 +33,8 @@ import FirebaseMessaging
 ///   local invita a abrir la tarea.
 /// - Silenciosos (`silent=1`: `chat.read`, `notification.read`): quitan los avisos
 ///   de lo que ya se leyó en otro dispositivo y ajustan el globo del ícono.
+/// - `location.reminder` (docs/UBICACION.md): iOS no mide con la app cerrada, así que el servidor
+///   recuerda abrirla. Tocarlo abre Inicio y mide; con la app abierta no se enseña y mide de una vez.
 /// - El resumen de grupo en español va en `categorySummaryFormat`; `summaryArgument`
 ///   no se usa porque iOS lo ignora desde la versión 15.
 final class PushManager: NSObject, UNUserNotificationCenterDelegate {
@@ -289,6 +291,12 @@ final class PushManager: NSObject, UNUserNotificationCenterDelegate {
             completionHandler([])
             return
         }
+        // Recordatorio de ubicación con la app abierta: no hace falta el aviso, se mide ya.
+        if Self.text(info, "type") == NoticeKinds.locationReminder {
+            Task { @MainActor in LocationTracker.shared.reminderOpened() }
+            completionHandler([])
+            return
+        }
         // Mensajes y menciones traen `channel_id` (las menciones con kind=event).
         if let channel = Self.text(info, "channel_id"),
            ActiveConversation.shared.isOpen(channel) {
@@ -365,6 +373,7 @@ final class PushManager: NSObject, UNUserNotificationCenterDelegate {
                 type: Self.text(info, "type")
             )
             let entity = Self.text(info, "entity").flatMap(ArtaEntity.init(rawValue:))
+            let isLocationReminder = Self.text(info, "type") == NoticeKinds.locationReminder
             Task { @MainActor in
                 // Antes de navegar: cambiar de entidad limpia las pilas abiertas.
                 if let entity { ActiveEntity.shared.focus(on: entity) }
@@ -372,6 +381,11 @@ final class PushManager: NSObject, UNUserNotificationCenterDelegate {
                     AppRouter.shared.follow(target, fromLink: true)
                 } else {
                     AppRouter.shared.select(.avisos)
+                }
+                // Abre Inicio en su raíz y mide.
+                if isLocationReminder {
+                    AppRouter.shared.inicioPath = []
+                    LocationTracker.shared.reminderOpened()
                 }
                 completionHandler()
             }

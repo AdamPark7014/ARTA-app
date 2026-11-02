@@ -9,6 +9,7 @@ import coil.ImageLoaderFactory
 import com.artaproducciones.ops.data.Session
 import com.artaproducciones.ops.data.api.ApiClient
 import com.artaproducciones.ops.data.realtime.RealtimeClient
+import com.artaproducciones.ops.location.LocationTracker
 import com.artaproducciones.ops.push.ArtaNotifications
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -30,10 +31,13 @@ class ArtaApplication : Application(), ImageLoaderFactory {
         ProcessLifecycleOwner.get().lifecycle.addObserver(object : DefaultLifecycleObserver {
             override fun onStart(owner: LifecycleOwner) {
                 if (ApiClient.hasSession()) RealtimeClient.connect()
+                // Con la app a la vista Android deja arrancar el servicio de ubicación.
+                LocationTracker.onForeground(this@ArtaApplication)
             }
 
             override fun onStop(owner: LifecycleOwner) {
                 RealtimeClient.disconnect()
+                LocationTracker.onBackground()
             }
         })
     }

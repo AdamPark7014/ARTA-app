@@ -82,6 +82,16 @@ object Rbac {
     fun isDirectionRole(roleKey: String?): Boolean =
         roleKey == "super_admin" || roleKey == "dir_general" || roleKey == "dir_adjunta"
 
+    // ─── Ubicación en las apps, de 10:00 a 18:00 (docs/UBICACION.md) ─────────
+
+    /** A Chacho y a Arturo no se les mide; `super_admin` es la cuenta de plataforma. */
+    val LOCATION_EXEMPT_ROLES: Set<String> = setOf("dir_general", "super_admin")
+
+    fun isLocationTracked(roleKey: String?): Boolean = !roleKey.isNullOrEmpty() && roleKey !in LOCATION_EXEMPT_ROLES
+
+    /** Es dato sensible: la ven solo ellos, y no se abre con permisos extra. */
+    fun canSeeTeamLocation(roleKey: String?): Boolean = roleKey == "dir_general" || roleKey == "super_admin"
+
     // ─── Entidades y operación de eventos ───────────────────────────────────
 
     fun canAccessEntity(userEntities: List<String>, roleKey: String, entity: String): Boolean {

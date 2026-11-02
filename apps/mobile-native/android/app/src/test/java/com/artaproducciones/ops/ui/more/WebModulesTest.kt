@@ -92,6 +92,18 @@ class WebModulesTest {
     }
 
     @Test
+    fun onlyChachoAndArturoSeeTheTeamLocation() {
+        assertTrue("/ubicacion" in paths("dir_general"))
+        assertTrue("/ubicacion" in paths("super_admin"))
+        assertTrue("/ubicacion" in paths("dir_general", "EXPLANADA"))
+        assertEquals("Ubicación del equipo", menu("dir_general").first { it.path == "/ubicacion" }.label)
+        assertFalse("/ubicacion" in paths("dir_adjunta"))
+        assertFalse("/ubicacion" in paths("compras"))
+        // Ni con permisos extra: es dato sensible.
+        assertFalse("/ubicacion" in paths("dir_adjunta", extra = listOf("everything")))
+    }
+
+    @Test
     fun accountingSeesAdvancesInTheMenu() {
         val advances = menu("contabilidad").first { it.path == "/advances" }
         assertFalse(advances.hidden)

@@ -157,6 +157,7 @@ final class ReviewVideoUITests: XCTestCase {
         fueraDelLogin = true
 
         responderPermisoDeAvisos()
+        responderHojaDeUbicacion()
         recorrerInicio()
         recorrerAprobaciones()
         recorrerTareas()
@@ -180,6 +181,7 @@ final class ReviewVideoUITests: XCTestCase {
         }
         fueraDelLogin = true
         responderPermisoDeAvisos()
+        responderHojaDeUbicacion()
         guard irAPestana(.chats) else { return omitir("diagnóstico: sin pestaña Chats") }
         asegurarRaiz(.chats)
         esperarSinCarga(10)
@@ -303,6 +305,20 @@ final class ReviewVideoUITests: XCTestCase {
         }
         // Toque neutro en la barra de estado: si quedó una alerta, dispara el monitor.
         app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.02)).tap()
+        pausa(1.0)
+    }
+
+    /// La cuenta de revisión es de las que se miden (docs/UBICACION.md): sale la hoja de ubicación. Se deja ver
+    /// y se contesta «Ahora no»: la app sigue igual, y sin eso tapa todo lo demás del recorrido.
+    private func responderHojaDeUbicacion() {
+        let ahoraNo = porId("location-later")
+        guard ahoraNo.waitForExistence(timeout: 4) else {
+            anotar("No apareció la hoja de ubicación (ya aceptada o API sin la ruta)")
+            return
+        }
+        pausa(2.5)
+        tocar(ahoraNo)
+        anotar("Hoja de ubicación: «Ahora no»")
         pausa(1.0)
     }
 

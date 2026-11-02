@@ -74,6 +74,7 @@ final class Session: ObservableObject {
             return .signedOut
         }
         ActiveEntity.shared.configure(user: user)
+        LocationTracker.shared.startDemo()
         return .signedIn(user)
     }
 
@@ -113,15 +114,20 @@ final class Session: ObservableObject {
         state = .signedIn(user)
         RealtimeClient.shared.connect()
         Task { await PushManager.shared.requestPermissionAndRegister() }
+        LocationTracker.shared.signedIn(user)
     }
 
-    func logout() async {
+    /// `sessionRejected`: no lo pidió la persona, el API ya la rechazó (la vista web lo detecta con un 401).
+    func logout(sessionRejected: Bool = false) async {
         // Modo demo: nada que dar de baja en el servidor; solo apagar el demo y limpiar.
         if DemoMode.isActive {
             DemoMode.deactivate()
             clearLocal()
             return
         }
+        // Se detiene todo y se vacía la cola de esta persona, antes de cualquier espera de red. Con la
+        // sesión rechazada la cola se queda, como en `expire`: se manda si vuelve a entrar la misma persona.
+        if !sessionRejected { LocationTracker.shared.stop(clearQueue: true) }
         // Primero la baja del token: después ya no hay cookie para autorizarla.
         await withTimeout(seconds: 5) { await PushManager.shared.unregister() }
         await withTimeout(seconds: 5) { try? await ApiClient.shared.logout() }
@@ -136,6 +142,8 @@ final class Session: ObservableObject {
 
     private func clearLocal() {
         RealtimeClient.shared.disconnect()
+        // Un 401 también pasa por aquí: lo que quedó en la cola se manda si vuelve a entrar la misma persona.
+        LocationTracker.shared.stop(clearQueue: false)
         ApiClient.shared.clearCookies()
         Task { await WebSession.clearCookies() }
         PushManager.shared.clearDelivered()

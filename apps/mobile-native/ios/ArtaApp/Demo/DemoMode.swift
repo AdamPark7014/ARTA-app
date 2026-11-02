@@ -17,6 +17,7 @@ import Foundation
 ///    por `apps/mobile-native/demo/grabar-fixtures.mjs` (organización ficticia);
 ///    lo que no es del API (fotos de `/uploads`, otros hosts) responde 404;
 ///  - no se abre el socket, no se pide permiso de avisos ni se registra push;
+///  - la hoja y el permiso de ubicación se pueden ver, pero no se mide ni se manda nada (`LocationTracker`);
 ///  - las secciones que abren el panel web enseñan un aviso (`DemoWebUnavailableView`).
 enum DemoMode {
     static let argumentKey = "ArtaDemo"
@@ -33,6 +34,10 @@ enum DemoMode {
         let raw = (ProcessInfo.processInfo.environment[DemoMode.environmentKey] ?? "").lowercased()
         return ["1", "yes", "true", "on"].contains(raw)
     }()
+
+    /// `-ArtaDemoUbicacion YES`: solo para la captura de la hoja de ubicación. Con `-ArtaDemo YES` a secas la
+    /// hoja no sale, para no tapar las demás capturas; desde el botón de la entrada sí sale (Apple la puede ver).
+    static let locationSheetRequested = UserDefaults.standard.bool(forKey: "ArtaDemoUbicacion")
 
     /// Seguro de leer desde cualquier hilo (`DemoURLProtocol.canInit` corre en los de URLSession).
     static var isActive: Bool {

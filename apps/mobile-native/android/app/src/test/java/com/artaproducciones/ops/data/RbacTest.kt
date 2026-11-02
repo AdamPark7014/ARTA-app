@@ -212,4 +212,29 @@ class RbacTest {
         val covering = ModulesPerms(ModulesMe(id = "u2", roleKey = "dir_general", permissions = listOf("po.edit")))
         assertTrue(covering.has("po.edit"))
     }
+
+    // ─── Ubicación (docs/UBICACION.md) ──────────────────────────────────────
+
+    @Test
+    fun everyoneIsTrackedButChachoArturoAndPlatform() {
+        assertFalse(Rbac.isLocationTracked(chacho.roleKey))
+        assertFalse(Rbac.isLocationTracked("super_admin"))
+        assertFalse(Rbac.isLocationTracked(null))
+        assertFalse(Rbac.isLocationTracked(""))
+        Rbac.ROLE_PERMISSIONS.keys.filter { it !in Rbac.LOCATION_EXEMPT_ROLES }.forEach { role ->
+            assertTrue(role, Rbac.isLocationTracked(role))
+        }
+        assertTrue(Rbac.isLocationTracked(leida.roleKey))
+        assertTrue(Rbac.isLocationTracked(juanPablo.roleKey))
+    }
+
+    @Test
+    fun onlyChachoArturoAndPlatformSeeTheTeam() {
+        assertTrue(Rbac.canSeeTeamLocation(chacho.roleKey))
+        assertTrue(Rbac.canSeeTeamLocation("super_admin"))
+        assertFalse(Rbac.canSeeTeamLocation(null))
+        Rbac.ROLE_PERMISSIONS.keys.filter { it !in Rbac.LOCATION_EXEMPT_ROLES }.forEach { role ->
+            assertFalse(role, Rbac.canSeeTeamLocation(role))
+        }
+    }
 }

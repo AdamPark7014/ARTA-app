@@ -185,6 +185,7 @@ fun InicioScreen(user: UserDto, nav: ModuleNav) {
             contentPadding = PaddingValues(bottom = 32.dp),
         ) {
             item(key = "header") { Header(user, today, entity) }
+            item(key = "location") { LocationNotice() }
             when {
                 !hasContent && d?.firstError != null -> item(key = "error") { ErrorState(d.firstError, onRetry = { tick++ }, modifier = Modifier.animateItem()) }
                 !hasContent || p == null || d == null -> item(key = "skeleton") { Box(Modifier.animateItem()) { InicioSkeleton() } }

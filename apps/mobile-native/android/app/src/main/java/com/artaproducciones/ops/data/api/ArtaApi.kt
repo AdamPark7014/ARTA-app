@@ -40,6 +40,15 @@ data class LoginResponse(
 data class MeResponse(val user: UserDto)
 data class OkResponse(val ok: Boolean = true)
 
+// ─── Ubicación (docs/UBICACION.md) ───────────────────────────────────────────
+
+data class LocationStatusDto(val tracked: Boolean = false, val consentAt: String? = null)
+data class LocationConsentDto(val consentAt: String? = null)
+data class LocationStateBody(val state: String)
+data class LocationPointBody(val lat: Double, val lng: Double, val accuracyM: Double? = null, val capturedAt: String)
+data class LocationPointsBody(val platform: String = "android", val points: List<LocationPointBody>)
+data class LocationPointsResultDto(val saved: Int = 0, val ignored: Int = 0)
+
 // ─── Chat ────────────────────────────────────────────────────────────────────
 
 data class ChatPeer(val id: String, val fullName: String, val title: String? = null)
@@ -504,4 +513,21 @@ interface ArtaApi {
 
     @HTTP(method = "DELETE", path = "devices/push", hasBody = true)
     suspend fun removePush(@Body body: RemovePushBody): Any
+
+    // Ubicación del equipo (docs/UBICACION.md).
+
+    /** Si a esta persona se le mide y si ya aceptó. */
+    @GET("ubicacion/estado")
+    suspend fun locationStatus(): LocationStatusDto
+
+    /** 403 si es exenta. */
+    @POST("ubicacion/consentimiento")
+    suspend fun locationConsent(): LocationConsentDto
+
+    @POST("ubicacion/estado")
+    suspend fun locationState(@Body body: LocationStateBody): OkResponse
+
+    /** Máximo 50. `capturedAt` es la hora del teléfono al medir. */
+    @POST("ubicacion/puntos")
+    suspend fun locationPoints(@Body body: LocationPointsBody): LocationPointsResultDto
 }

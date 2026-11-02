@@ -44,6 +44,7 @@ import androidx.compose.material.icons.outlined.Group
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Hotel
 import androidx.compose.material.icons.outlined.Key
+import androidx.compose.material.icons.outlined.LocationOn
 import androidx.compose.material.icons.outlined.Mic
 import androidx.compose.material.icons.outlined.NotificationsActive
 import androidx.compose.material.icons.outlined.Palette
@@ -201,6 +202,7 @@ object WebModules {
     private val RULES = listOf(
         Rule("/dashboard", "Inicio", "Inicio", Icons.Outlined.Event),
         Rule("/chat", "Chat", "Inicio", Icons.Outlined.Event),
+        Rule("/ubicacion", "Ubicación del equipo", "Equipo", Icons.Outlined.LocationOn, roles = ADMINS),
         Rule("/events/new", "Crear evento", "Eventos", Icons.Outlined.AddCircleOutline, permissions = listOf("event.create", "everything"), requiresEventOps = true),
         Rule("/events", "Eventos actuales", "Eventos", Icons.Outlined.Event, query = "scope=active", requiresEventOps = true),
         Rule("/events", "Eventos pasados", "Eventos", Icons.Outlined.History, query = "scope=past", requiresEventOps = true),
@@ -270,6 +272,7 @@ object WebModules {
     private fun canSee(role: String, extra: List<String>, rule: Rule, entity: String): Boolean {
         if (rule.entities.isNotEmpty() && entity !in rule.entities) return false
         if (rule.href == "/folders" && !Rbac.canSeeGeneralFolders(role)) return false
+        if (rule.href == "/ubicacion" && !Rbac.canSeeTeamLocation(role)) return false
         if (rule.requiresEventOps && !canAccessEventOps(role, entity)) return false
         if (rule.requiresCalendar && !Rbac.canSeeEventCalendar(listOf(entity), role, entity)) return false
         if (rule.roles.isNotEmpty() && role !in rule.roles && !isTop(role)) return false

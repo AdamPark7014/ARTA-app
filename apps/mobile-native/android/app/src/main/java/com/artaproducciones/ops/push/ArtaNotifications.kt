@@ -24,6 +24,9 @@ object ArtaNotifications {
     const val CHANNEL_DOCUMENTS = "arta_documents"
     const val CHANNEL_GENERAL = "arta_general"
 
+    /** Aviso fijo mientras se registra la ubicación. No es de avisos: no suena ni lo manda el API. */
+    const val CHANNEL_LOCATION = "arta_ubicacion"
+
     private const val GROUP = "arta"
 
     /** Tinta de marca: acento de notificaciones y luz LED (Android aclara el tono si el panel es oscuro). */
@@ -62,6 +65,7 @@ object ArtaNotifications {
         CHANNEL_FINANCE -> "Finanzas"
         CHANNEL_EVENTS -> "Eventos"
         CHANNEL_DOCUMENTS -> "Documentos"
+        CHANNEL_LOCATION -> "Ubicación"
         else -> "General"
     }
 
@@ -90,6 +94,29 @@ object ArtaNotifications {
             } catch (e: Exception) {
                 Log.w("ArtaNotifications", "No se pudieron crear los canales: ${e.message}")
             }
+        }
+    }
+
+    /**
+     * Discreto: sin sonido, sin vibrar y sin globo. Se crea hasta que hace falta: a quien no se le mide
+     * (Chacho, Arturo) ni le aparece en los ajustes del teléfono.
+     */
+    fun ensureLocationChannel(context: Context) {
+        try {
+            val nm = context.applicationContext.getSystemService(NotificationManager::class.java) ?: return
+            nm.createNotificationChannelGroup(NotificationChannelGroup(GROUP, "ARTA"))
+            nm.createNotificationChannel(
+                NotificationChannel(CHANNEL_LOCATION, label(CHANNEL_LOCATION), NotificationManager.IMPORTANCE_LOW).apply {
+                    description = "Aviso fijo mientras ARTA registra tu ubicación"
+                    group = GROUP
+                    enableVibration(false)
+                    enableLights(false)
+                    setShowBadge(false)
+                    setSound(null, null)
+                },
+            )
+        } catch (e: Exception) {
+            Log.w("ArtaNotifications", "No se pudo crear el canal de ubicación: ${e.message}")
         }
     }
 

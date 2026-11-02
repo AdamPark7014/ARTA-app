@@ -156,7 +156,7 @@ fun ArtaWebScreen(
             val result = runCatching { ApiClient.api.me() }
             val failure = result.exceptionOrNull()
             when {
-                failure is HttpException && failure.code() == 401 -> Session.logout()
+                failure is HttpException && failure.code() == 401 -> Session.logout(sessionRejected = true)
                 result.isSuccess && fromLogin && !host.retriedWithCookies -> {
                     host.retriedWithCookies = true
                     WebSessionBridge.copyNativeToWeb()

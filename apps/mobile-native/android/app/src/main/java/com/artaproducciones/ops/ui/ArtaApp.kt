@@ -95,6 +95,7 @@ import com.artaproducciones.ops.ui.modules.ApprovalsScreen
 import com.artaproducciones.ops.ui.modules.EventDetailScreen
 import com.artaproducciones.ops.ui.modules.EventsScreen
 import com.artaproducciones.ops.ui.modules.InicioScreen
+import com.artaproducciones.ops.ui.modules.LocationConsentHost
 import com.artaproducciones.ops.ui.modules.ModuleNav
 import com.artaproducciones.ops.ui.modules.ModulesStore
 import com.artaproducciones.ops.ui.modules.TaskDetailScreen
@@ -242,7 +243,11 @@ fun ArtaApp(pendingLink: StateFlow<DeepLink?>, onLinkConsumed: () -> Unit) {
                 LaunchedEffect(Unit) { ModulesStore.clear() }
                 LoginScreen()
             }
-            is Session.State.SignedIn -> DemoFrame { SignedInNav(s.user, pendingLink, onLinkConsumed) }
+            is Session.State.SignedIn -> {
+                DemoFrame { SignedInNav(s.user, pendingLink, onLinkConsumed) }
+                // Encima de todo y sin bloquear nada: ubicación del equipo (docs/UBICACION.md).
+                LocationConsentHost()
+            }
         }
     }
 }

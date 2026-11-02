@@ -80,7 +80,9 @@ la app*. Coincide con `apps/mobile-native/ios/Resources/PrivacyInfo.xcprivacy`.
 | Contenido del usuario | Correos electrónicos o mensajes de texto (chat), Fotos o videos, Datos de audio (notas de voz), Otro contenido del usuario (documentos adjuntos) |
 | Identificadores | ID de usuario, ID del dispositivo (token de notificaciones) |
 
-**No** se recopila: ubicación, salud, finanzas, contactos, historial de navegación/búsqueda, compras, datos de
+| Ubicación | Ubicación precisa: vinculada, sin rastreo, funcionalidad de la app (`docs/UBICACION.md`, desde la versión 1.0.1) |
+
+**No** se recopila: salud, finanzas, contactos, historial de navegación/búsqueda, compras, datos de
 uso ni diagnósticos (no hay analítica ni reporte de fallos).
 
 ## 7. Versión 1.0.0

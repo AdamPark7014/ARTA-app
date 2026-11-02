@@ -30,6 +30,9 @@ Socket.IO en `/api/socket.io` con la misma cookie y push por FCM.
   - Leer en un dispositivo quita los avisos de esa conversación en los demás
     (push silencioso `chat.read`).
   - Al cerrar sesión se da de baja el token del teléfono.
+- **Ubicación del equipo** de 10:00 a 18:00, hora de Puebla, con consentimiento y a todos
+  menos a dirección general (`docs/UBICACION.md`). Android mide con servicio de primer plano,
+  alarma y push de datos (`location/`); iOS, solo con la app abierta (`Data/LocationTracker.swift`).
 
 ## Firebase (proyecto `arta-app-fde07`, creado el 04-10-2026)
 

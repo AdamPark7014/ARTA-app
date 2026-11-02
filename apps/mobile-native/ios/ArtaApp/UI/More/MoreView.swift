@@ -298,6 +298,9 @@ struct WebModule: Identifiable, Hashable {
 
     /// Inicio, Chat y Tareas no están: son pestañas nativas.
     static let catalog: [WebModule] = [
+        WebModule(path: "/ubicacion", label: "Ubicación del equipo", icon: "location", group: "Equipo",
+                  roles: admins),
+
         WebModule(path: "/events/new", label: "Crear evento", icon: "plus.circle", group: "Eventos",
                   permissions: ["event.create", "everything"], requiresEventOps: true),
         WebModule(path: "/events?scope=active", label: "Eventos actuales", icon: "calendar.badge.clock", group: "Eventos",
@@ -427,6 +430,7 @@ struct WebModule: Identifiable, Hashable {
         let isTop = role == "super_admin" || role == "dir_general"
         if !module.entities.isEmpty && !module.entities.contains(entity) { return false }
         if module.path == "/folders" && !Rbac.canSeeGeneralFolders(role) { return false }
+        if module.path == "/ubicacion" && !Rbac.canSeeTeamLocation(role) { return false }
         if module.requiresEventOps && !canAccessEventOps(role, entity: entity) { return false }
         if module.requiresCalendar && !Rbac.canSeeEventCalendar([entity], role, entity) { return false }
         if !module.roles.isEmpty && !module.roles.contains(role) && !isTop { return false }

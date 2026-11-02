@@ -50,6 +50,8 @@
     <string>Tus fotos y videos se usan solo cuando eliges uno para mandarlo en el chat o subirlo al panel.</string>
     <key>NSPhotoLibraryAddUsageDescription</key>
     <string>Para guardar en tu carrete las fotos y videos que te mandan en el chat.</string>
+    <key>NSLocationWhenInUseUsageDescription</key>
+    <string>ARTA registra tu ubicación cada media hora, de 10:00 a 18:00 (hora de Puebla), para coordinar al equipo. Solo la ve dirección general.</string>
     <key>NSUserActivityTypes</key>
     <array>
         <string>INSendMessageIntent</string>

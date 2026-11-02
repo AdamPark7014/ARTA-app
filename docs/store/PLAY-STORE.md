@@ -92,7 +92,10 @@ Ninguno se procesa «de forma temporal». Métodos de cuenta: «Mi aplicación n
 cuenta» + «Sí, inician sesión con cuentas creadas fuera de la app → En el trabajo o mediante cuentas de empresa».
 URL de eliminación de datos: la misma de eliminar cuenta.
 
-**No** se recopila: ubicación, información financiera, salud, contactos, calendario, actividad en la app con fines
+**Ubicación** (desde 1.0.2, `docs/UBICACION.md`): precisa y aproximada, recopiladas, no compartidas, opcionales, para
+funciones de la app, se borran a los 90 días.
+
+**No** se recopila: información financiera, salud, contactos, calendario, actividad en la app con fines
 de analítica, historial web, registros de fallos ni diagnósticos.
 
 Estado al 04-10-2026: todo capturado y **guardado como borrador**; Play no deja enviarlo hasta que «Contenido y
@@ -101,8 +104,17 @@ contraseña de la cuenta de revisión (la escribe Adam).
 
 ### 5.6 Declaraciones que no aplican
 Funciones financieras: «Mi app no ofrece funciones financieras» (los anticipos son control interno de gastos del
-equipo, no un servicio financiero). Salud: no. App gubernamental: no. Noticias: no. Servicio en primer plano: no.
-Permisos sensibles: solo `RECORD_AUDIO` (notas de voz) y `POST_NOTIFICATIONS`.
+equipo, no un servicio financiero). Salud: no. App gubernamental: no. Noticias: no.
+Permisos sensibles: `RECORD_AUDIO` (notas de voz), `POST_NOTIFICATIONS` y ubicación.
+
+### 5.7 Servicio en primer plano: `location` (desde 1.0.2)
+Play Console → Contenido de la app → **Permisos de servicio en primer plano**: tipo `location`.
+Función principal: registrar la ubicación del personal de la organización durante su horario de trabajo.
+Descripción: «ARTA es la herramienta de trabajo del equipo de producción de eventos. Con la aceptación de cada persona,
+registra su ubicación cada media hora de 10:00 a 18:00 para coordinar al equipo durante montajes y eventos. El servicio
+muestra una notificación fija mientras corre y se detiene solo a las 18:00.»
+Video: súbelo a YouTube como «no listado» y pega el enlace: Play no acepta el archivo. Tiene que enseñar la hoja de
+consentimiento, el permiso, la notificación fija y que se detiene. No lleva `ACCESS_BACKGROUND_LOCATION`.
 
 ## 6. Eliminación de cuenta
 URL: https://artaproducciones.com/legal/eliminar-cuenta (pública, sin iniciar sesión). En la app: Más →

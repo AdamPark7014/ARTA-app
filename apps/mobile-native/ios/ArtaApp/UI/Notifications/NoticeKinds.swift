@@ -76,6 +76,10 @@ enum NoticeGroup: String, CaseIterable {
 }
 
 enum NoticeKinds {
+    /// Recordatorio de ubicación (docs/UBICACION.md): lo manda el servidor directo al teléfono. Lleva a Inicio
+    /// y ahí se mide; no pide ninguna decisión, así que nunca abre Aprobaciones ni entra a «Por atender».
+    static let locationReminder = "location.reminder"
+
     fileprivate static let approvalTypes: Set<String> = [
         "advance.requested",
         "po.requested",
@@ -111,7 +115,11 @@ enum NoticeKinds {
     /// Ícono propio del tipo; `nil` = el de su categoría. El acuse de visto lleva un ojo y, como no
     /// pide nada, va en contorno y no entra a `needsAction`.
     static func symbol(_ type: String?) -> String? {
-        (type ?? "").lowercased() == "notice.seen" ? "eye" : nil
+        switch (type ?? "").lowercased() {
+        case "notice.seen": return "eye"
+        case locationReminder: return "location"
+        default: return nil
+        }
     }
 
     private static let dayMonth: DateFormatter = formatter("d MMM")

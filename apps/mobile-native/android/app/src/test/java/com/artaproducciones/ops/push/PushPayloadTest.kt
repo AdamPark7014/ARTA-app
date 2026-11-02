@@ -212,4 +212,27 @@ class PushPayloadTest {
         assertFalse(transfer.opensApprovals)
         assertFalse(PushPayload.from(mapOf("type" to "po.to_pay")).opensApprovals)
     }
+
+    @Test
+    fun theLocationPingNeverPaintsANotice() {
+        // Tal como lo manda `sendLocationPing` del API.
+        val p = PushPayload.from(mapOf("type" to "location.ping", "kind" to "event", "silent" to "1"))
+        assertTrue(p.isLocationPing)
+        assertTrue(p.silent)
+        assertFalse(p.paintsNotice)
+        assertFalse(p.isApproval)
+        assertFalse(p.opensApprovals)
+        // FCM no lo descarta como repetido: cada latido pide un punto.
+        assertNull(p.dedupeKey)
+        // Aunque un servidor viejo no mande `silent`.
+        assertFalse(PushPayload.from(mapOf("type" to "location.ping")).paintsNotice)
+    }
+
+    @Test
+    fun otherSilentPushesDoNotPaintAndNormalOnesDo() {
+        assertFalse(PushPayload.from(mapOf("type" to "chat.read", "silent" to "1")).paintsNotice)
+        val notice = PushPayload.from(mapOf("type" to "po.requested", "title" to "OC"))
+        assertTrue(notice.paintsNotice)
+        assertFalse(notice.isLocationPing)
+    }
 }

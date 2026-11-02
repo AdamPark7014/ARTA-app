@@ -29,8 +29,12 @@ struct ArtaApp: App {
                 .onChange(of: scenePhase) { _, phase in
                     guard session.currentUser != nil else { return }
                     switch phase {
-                    case .active: RealtimeClient.shared.connect()
-                    case .background: RealtimeClient.shared.pause()
+                    case .active:
+                        RealtimeClient.shared.connect()
+                        LocationTracker.shared.appBecameActive()
+                    case .background:
+                        RealtimeClient.shared.pause()
+                        LocationTracker.shared.appEnteredBackground()
                     default: break
                     }
                 }

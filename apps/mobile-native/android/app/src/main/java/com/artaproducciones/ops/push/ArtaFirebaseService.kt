@@ -2,6 +2,7 @@ package com.artaproducciones.ops.push
 
 import android.util.Log
 import com.artaproducciones.ops.data.api.ApiClient
+import com.artaproducciones.ops.location.LocationTracker
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 
@@ -27,7 +28,13 @@ class ArtaFirebaseService : FirebaseMessagingService() {
                 if (data["title"].isNullOrBlank()) n.title?.let { data["title"] = it }
                 if (data["body"].isNullOrBlank()) n.body?.let { data["body"] = it }
             }
-            ArtaPushRenderer.render(applicationContext, PushPayload.from(data, message.sentTime))
+            val payload = PushPayload.from(data, message.sentTime)
+            // El servidor lleva 35 min sin un punto: se mide y no se muestra nada.
+            if (payload.isLocationPing) {
+                LocationTracker.onPing(applicationContext)
+                return
+            }
+            ArtaPushRenderer.render(applicationContext, payload)
         } catch (e: Exception) {
             Log.w("ArtaFirebaseService", "Push no mostrado: ${e.message}", e)
         }

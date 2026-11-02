@@ -86,6 +86,21 @@ enum Rbac {
         roleKey == "super_admin" || roleKey == "dir_general" || roleKey == "dir_adjunta"
     }
 
+    // MARK: Ubicación en las apps, de 10:00 a 18:00 (docs/UBICACION.md)
+
+    /// A Chacho y a Arturo no se les mide; `super_admin` es la cuenta de plataforma.
+    static let LOCATION_EXEMPT_ROLES: [String] = ["dir_general", "super_admin"]
+
+    static func isLocationTracked(_ roleKey: String?) -> Bool {
+        guard let roleKey, !roleKey.isEmpty else { return false }
+        return !LOCATION_EXEMPT_ROLES.contains(roleKey)
+    }
+
+    /// Es dato sensible: la ven solo ellos, y no se abre con permisos extra.
+    static func canSeeTeamLocation(_ roleKey: String?) -> Bool {
+        roleKey == "dir_general" || roleKey == "super_admin"
+    }
+
     // MARK: Entidades y operación de eventos
 
     static func canAccessEntity(_ userEntities: [String], _ roleKey: String, _ entity: String) -> Bool {

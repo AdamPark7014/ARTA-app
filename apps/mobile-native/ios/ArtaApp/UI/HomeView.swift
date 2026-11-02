@@ -9,6 +9,7 @@ struct SignedInView: View {
     let user: UserDto
     @EnvironmentObject private var activeEntity: ActiveEntity
     @EnvironmentObject private var router: AppRouter
+    @ObservedObject private var location = LocationTracker.shared
 
     /// Dentro de una conversación la pastilla taparía la barra para escribir, justo arriba de las pestañas.
     private var showsDemoBanner: Bool {
@@ -45,6 +46,10 @@ struct SignedInView: View {
             .animation(.easeOut(duration: 0.18), value: showsDemoBanner)
             // Se queda sobre las pestañas aunque suba el teclado (buscador).
             .ignoresSafeArea(.keyboard, edges: .bottom)
+        }
+        // Ubicación del equipo (docs/UBICACION.md): explica antes del diálogo del sistema y no bloquea nada.
+        .sheet(isPresented: $location.showsConsent, onDismiss: { location.consentClosed() }) {
+            LocationConsentSheet()
         }
     }
 }

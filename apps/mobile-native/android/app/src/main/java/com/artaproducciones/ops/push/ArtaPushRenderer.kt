@@ -121,7 +121,7 @@ object ArtaPushRenderer {
         val app = context.applicationContext
         try {
             if (!firstTime(payload)) return
-            if (payload.silent) {
+            if (!payload.paintsNotice) {
                 when (payload.type) {
                     "chat.read" -> dismissChat(app, payload.threadId)
                     "notification.read" -> dismissEvents(app, payload.notificationId)

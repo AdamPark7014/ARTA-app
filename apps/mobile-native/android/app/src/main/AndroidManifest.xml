@@ -7,10 +7,25 @@
     <uses-permission android:name="android.permission.VIBRATE" />
     <!-- Notas de voz del chat (se pide al primer uso). -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <!--
+      Ubicación del equipo, de 10:00 a 18:00 (docs/UBICACION.md): solo con consentimiento, y mientras
+      corre hay una notificación fija que lo dice. Sin ACCESS_BACKGROUND_LOCATION a propósito (Play pide
+      declaración y video): el servicio de primer plano arranca con la app a la vista y conserva el
+      acceso con la pantalla apagada. WAKE_LOCK: la alarma despierta el teléfono solo unos segundos y la
+      lectura y el envío tardan más.
+    -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
 
     <!-- La cámara se usa por intent del sistema: no hace falta permiso ni que exista. -->
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <uses-feature android:name="android.hardware.microphone" android:required="false" />
+    <!-- El permiso de ubicación haría que Play oculte la app en teléfonos sin GPS. -->
+    <uses-feature android:name="android.hardware.location" android:required="false" />
+    <uses-feature android:name="android.hardware.location.gps" android:required="false" />
 
     <queries>
         <intent>
@@ -60,6 +75,18 @@
         <!-- Responder y «Marcar como leído» desde la notificación, sin abrir la app. -->
         <receiver
             android:name=".push.NotificationActionReceiver"
+            android:exported="false" />
+
+        <!-- Ubicación del equipo: corre de 10:00 a 18:00, en primer plano y con su notificación. -->
+        <service
+            android:name=".location.LocationService"
+            android:exported="false"
+            android:stopWithTask="false"
+            android:foregroundServiceType="location" />
+
+        <!-- Alarma de cada 30 min, de las 18:00 y de las 10:00. -->
+        <receiver
+            android:name=".location.LocationAlarmReceiver"
             android:exported="false" />
 
         <provider

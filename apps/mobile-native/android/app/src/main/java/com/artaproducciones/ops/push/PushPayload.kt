@@ -8,7 +8,8 @@ import com.artaproducciones.ops.data.BizEntity
  *
  * - `kind=chat`: mensaje de chat; se apila por conversación (`thread_id`).
  * - `silent=1`: no se muestra nada; p. ej. `chat.read` quita el aviso de una
- *   conversación que ya se leyó en otro dispositivo.
+ *   conversación que ya se leyó en otro dispositivo, y `location.ping` pide un punto
+ *   de ubicación (docs/UBICACION.md).
  * - `passive=1`: entra a la bandeja sin sonar ni encender la pantalla (solo para enterarse, o una
  *   tarjeta de ráfaga que se actualiza en su lugar).
  * - lo demás: evento (orden de compra, formato, tarea, mención…).
@@ -47,6 +48,12 @@ data class PushPayload(
 
     val isChat: Boolean get() = kind == Kind.CHAT
 
+    /** El servidor pide un punto de ubicación: lo atiende `ArtaFirebaseService`, nunca el canal de avisos. */
+    val isLocationPing: Boolean get() = type.equals(LOCATION_PING, ignoreCase = true)
+
+    /** ¿Se pinta una notificación? Lo silencioso solo hace su trabajo. */
+    val paintsNotice: Boolean get() = !silent
+
     /** Botones del aviso. Vacío: los de siempre. */
     val buttons: List<PushButton> get() = PushButton.forActions(actions, targetKind, targetId)
 
@@ -81,6 +88,8 @@ data class PushPayload(
         }
 
     companion object {
+        const val LOCATION_PING = "location.ping"
+
         private val APPROVAL_TYPES = setOf(
             "po.requested", "po.to_transfer", "task.submitted", "checklist.submitted", "advance.requested", "advance.to_pay",
         )
@@ -116,7 +125,8 @@ data class PushPayload(
                 messageId = v("message_id"),
                 badge = v("badge").toIntOrNull(),
                 sentAtMillis = parseIso(v("sent_at")) ?: fallbackSentAt.takeIf { it > 0L } ?: System.currentTimeMillis(),
-                silent = v("silent") == "1",
+                // El latido de ubicación nunca se ve, aunque un servidor viejo no mande `silent`.
+                silent = v("silent") == "1" || v("type").equals(LOCATION_PING, ignoreCase = true),
                 entity = BizEntity.of(v("entity")),
                 passive = v("passive") == "1",
                 actions = v("actions").split(',').map { it.trim() }.filter { it.isNotEmpty() },

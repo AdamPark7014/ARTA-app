@@ -33,6 +33,8 @@ enum PanelLink {
 
     /// Push o campana: con `channel_id` es de una conversación (mensajes y menciones).
     static func target(channelId: String?, messageId: String?, url: String?, type: String?) -> PanelTarget? {
+        // El recordatorio de ubicación siempre lleva a Inicio, traiga la liga que traiga.
+        if (type ?? "").lowercased() == NoticeKinds.locationReminder { return .tab(.inicio) }
         if let channelId, !channelId.isEmpty {
             return .screen(.chat(channelId: channelId, messageId: messageId))
         }

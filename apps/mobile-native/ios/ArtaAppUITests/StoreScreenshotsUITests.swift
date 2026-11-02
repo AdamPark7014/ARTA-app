@@ -28,9 +28,15 @@ import XCTest
 ///   approval-order-<id>                                             (ApprovalsView)
 ///   inicio-entity-chip  entity-notice                               (ActiveEntity)
 ///   notice-filter-<filtro>  notice-row-<id>  notice-prefs           (NotificationsView)
+///   event-module-<clave>                                            (EventDetailView)
+///   location-accept  location-later  location-privacy               (LocationConsentSheet)
 ///
 /// Revisión de Avisos (a `debug/`): `arta-20-avisos-por-atender`, `arta-21/22-avisos-preferencias`,
 /// `arta-23-avisos-enviados`, `auditorio-11-avisos-preferencias` y `auditorio-12-avisos-enviados`.
+///
+/// Revisión de lo demás (a `debug/`): `arta-24-evento-arriba` (la ficha con la fila de módulos sobre la barra
+/// de pestañas, que en `06-eventos` queda tapada) y `arta-25-hoja-ubicacion` (relanzando con
+/// `-ArtaDemoUbicacion YES`: con `-ArtaDemo YES` a secas la hoja no sale, para no tapar ninguna captura).
 ///
 /// Todo es TOLERANTE: si una pantalla no aparece se anota como omitida, se adjunta el
 /// árbol de accesibilidad (`dbg-*`) y el test sigue con las demás. Solo falla si la
@@ -211,8 +217,9 @@ final class StoreScreenshotsUITests: XCTestCase {
         adjuntarResumen()
         XCTAssertFalse(capturadas.isEmpty, "No se pudo hacer ni una sola captura")
 
-        // 10. Relanzando la app: letra grande (Dynamic Type XXL) y la pantalla de entrada.
+        // 10. Relanzando la app: letra grande (Dynamic Type XXL), la hoja de ubicación y la pantalla de entrada.
         recorrerLetraGrande()
+        capturarHojaDeUbicacion()
         capturarLogin()
         adjuntarResumen()
     }
@@ -287,6 +294,8 @@ final class StoreScreenshotsUITests: XCTestCase {
             asegurarRaiz(.inicio, titulo: "Inicio")
             if abrir([porPrefijo("inicio-event-")], desde: "Inicio") {
                 pausa(1.5)
+                subirFilaDeModulos()
+                revisar("arta-24-evento-arriba")
                 deslizarArriba(4)
                 revisar("arta-15-evento-abajo")
                 for _ in 0..<4 { app.swipeDown(); pausa(0.4) }
@@ -381,6 +390,56 @@ final class StoreScreenshotsUITests: XCTestCase {
         if irAPestana(.avisos) {
             pausa(1.2)
             revisar("xxl-05-avisos")
+        }
+    }
+
+    /// La hoja de ubicación se pide aparte: con `-ArtaDemo YES` a secas no sale. No se acepta: el demo no mide,
+    /// pero un diálogo del sistema no aporta nada a la captura.
+    private func capturarHojaDeUbicacion() {
+        app.terminate()
+        app.launchArguments = [
+            "-ArtaDemo", "YES",
+            "-ArtaDemoUbicacion", "YES",
+            "-AppleLanguages", "(es-MX)",
+            "-AppleLocale", "es_MX"
+        ]
+        app.launch()
+        guard buscar([porId("location-accept")], timeout: 40) != nil else {
+            omitir("hoja de ubicación: no apareció con -ArtaDemoUbicacion YES")
+            adjuntarJerarquia("dbg-sin-hoja-ubicacion")
+            return
+        }
+        pausa(1.0)
+        revisar("arta-25-hoja-ubicacion")
+        // «Ahora no» la cierra y la app sigue: Apple exige que no se bloquee (5.1.1).
+        tocarSiExiste([porId("location-later")], timeout: 3)
+        pausa(1.0)
+        if porId("location-accept").exists {
+            omitir("hoja de ubicación: «Ahora no» no la cerró")
+            adjuntarJerarquia("dbg-hoja-ubicacion-abierta")
+        }
+    }
+
+    /// Arrastre lento desde abajo hasta que la fila de módulos del evento quede sobre la barra de pestañas.
+    /// Sin inercia (`withVelocity`): un `swipeUp` se pasa de largo y la fila se va por arriba.
+    private func subirFilaDeModulos() {
+        let fila = porId("event-module-overview")
+        guard buscar([fila], timeout: 6) != nil else {
+            omitir("evento: no apareció la fila de módulos")
+            adjuntarJerarquia("dbg-sin-fila-modulos")
+            return
+        }
+        let barra = app.tabBars.firstMatch
+        for _ in 0..<4 {
+            let tope = barra.exists ? barra.frame.minY : app.frame.height
+            // Una fila y un poco del contenido de abajo a la vista.
+            let sobra = fila.frame.midY - (tope - 130)
+            if sobra <= 0 { return }
+            let origen = app.coordinate(withNormalizedOffset: .zero)
+            let desde = origen.withOffset(CGVector(dx: app.frame.width * 0.5, dy: tope - 20))
+            let hasta = origen.withOffset(CGVector(dx: app.frame.width * 0.5, dy: tope - 20 - min(sobra + 10, tope * 0.7)))
+            desde.press(forDuration: 0.05, thenDragTo: hasta, withVelocity: .slow, thenHoldForDuration: 0.2)
+            pausa(0.6)
         }
     }
 

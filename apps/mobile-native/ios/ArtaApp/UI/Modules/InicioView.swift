@@ -10,6 +10,7 @@ struct InicioView: View {
 
     @EnvironmentObject private var router: AppRouter
     @EnvironmentObject private var activeEntity: ActiveEntity
+    @ObservedObject private var location = LocationTracker.shared
     @State private var profile: ModulesProfile?
     @State private var myTasks: [ArtaTask] = []
     /// Eventos activos de la entidad (la semana y el próximo show salen de aquí).
@@ -107,6 +108,9 @@ struct InicioView: View {
                 header
                     .padding(.bottom, ArtaSpace.s)
                 greeting
+                if let problem = location.problem {
+                    LocationNoticeRow(problem: problem)
+                }
                 if let refreshError {
                     InlineErrorRow(message: refreshError) {
                         Task { await load() }

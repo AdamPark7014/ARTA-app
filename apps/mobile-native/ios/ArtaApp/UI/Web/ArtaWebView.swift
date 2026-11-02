@@ -494,7 +494,7 @@ final class WebViewModel: NSObject, ObservableObject {
                     await load(path: lastPanelPath)
                 }
             } catch let error as ApiError where error.isUnauthorized {
-                if Session.shared.currentUser != nil { await Session.shared.logout() }
+                if Session.shared.currentUser != nil { await Session.shared.logout(sessionRejected: true) }
             } catch {
                 isLoading = false
                 failure = error.userMessage
