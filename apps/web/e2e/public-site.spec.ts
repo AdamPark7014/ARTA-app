@@ -23,7 +23,8 @@ test.describe('Sitio público SSR', () => {
   test('la letra es propia: el sitio no le pide nada a Google Fonts', async ({ page }) => {
     const external: string[] = [];
     page.on('request', (r) => {
-      if (/fonts\.(googleapis|gstatic)\.com/.test(r.url())) external.push(r.url());
+      // El mapa de la ubicación es un iframe de Google y trae su propia letra: eso no cuenta.
+      if (r.frame() === page.mainFrame() && /fonts\.(googleapis|gstatic)\.com/.test(r.url())) external.push(r.url());
     });
     await page.goto('/p/arta');
     await expect(page.locator('h1')).toBeVisible();
