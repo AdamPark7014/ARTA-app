@@ -161,3 +161,33 @@
 .ph__eyebrow::first-letter {
   text-transform: uppercase;
 }
+
+/* ── La entrada: de noche, con un show de verdad detrás ──────────────────── */
+
+.lg--arta .lg-brand {
+  background:
+    linear-gradient(180deg, rgba(12, 12, 13, 0.62), rgba(12, 12, 13, 0.28) 32%, rgba(12, 12, 13, 0.74) 60%, rgba(12, 12, 13, 0.94)),
+    url('/brand/login-show.jpg') center / cover,
+    #0c0c0d;
+  color: #f7f6f3;
+  border-right: 0;
+}
+
+.lg--arta .lg-brand__glow {
+  display: none;
+}
+
+.lg--arta .lg-brand__text,
+.lg--arta .lg-brand__links a {
+  color: rgba(247, 246, 243, 0.82);
+}
+
+.lg--arta .lg-brand__links a:hover,
+.lg--arta .lg-brand__links a:focus-visible {
+  color: #f7f6f3;
+}
+
+.lg-brand__tagline {
+  font-weight: 600;
+  letter-spacing: -0.03em;
+}

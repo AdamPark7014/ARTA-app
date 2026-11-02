@@ -129,7 +129,7 @@ function LoginForm() {
             </div>
           ) : (
             <Image
-              src="/brand/arta-logo-ink.png"
+              src="/brand/arta-logo.png"
               alt="arta producciones — La experiencia del Show"
               width={176}
               height={96}
