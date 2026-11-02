@@ -1,32 +1,40 @@
 'use client';
 
-import { askConfirm } from '@/components/ui/AskDialog';
-import { useEffect, useMemo, useState } from 'react';
-import Link from 'next/link';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import '@/styles/studio.scss';
 import { AppShell } from '@/components/app-shell/AppShell';
-import { EmptyState } from '@/components/ui/EmptyState';
-import { LoadingBlock, LoadingKpis } from '@/components/ui/LoadingBlock';
-import {
-  ActionLink,
-  FieldCheck,
-  FilterBar,
-  FlashMessage,
-  FormGrid,
-  PageHeader,
-} from '@/components/ui/PageChrome';
+import { CollectionEditor } from '@/components/studio/CollectionEditor';
+import { COLLECTIONS, type CollectionConfig, type StudioRow } from '@/components/studio/collections';
+import type { FormValues } from '@/components/studio/FieldsForm';
+import { PreviewPane, type PreviewHandle } from '@/components/studio/PreviewPane';
+import { SectionEditor } from '@/components/studio/SectionEditor';
+import { StudioOutline, type OutlineCount } from '@/components/studio/StudioOutline';
+import { askConfirm } from '@/components/ui/AskDialog';
+import { LoadingBlock } from '@/components/ui/LoadingBlock';
+import { ActionLink, FlashMessage, PageHeader } from '@/components/ui/PageChrome';
 import { canPublishStudio, type RoleKey } from '@arta/rbac';
 import { api } from '@/lib/api';
-import { useUser } from '@/lib/user-context';
 import {
-  NEWS_TEMPLATES,
-  eventDateLabel,
-  missingForNews,
-  newsTemplate,
-  slugify,
-  type NewsDraft,
-  type NewsTemplateKey,
-} from '@/lib/studio-templates';
+  BLOCK_COLLECTION,
+  BLOCK_META,
+  CUSTOM_DEFAULTS,
+  CUSTOM_FIELDS,
+  DEFAULT_CONTENT,
+  HERO_KEY,
+  LAYOUT_KEY,
+  SECTION_FIELDS,
+  SETTINGS_KEY,
+  anchorOf,
+  resolveLayout,
+  sectionKeyOf,
+  type BlockType,
+  type CollectionKey,
+  type Field,
+  type LayoutBlock,
+} from '@/lib/site-blocks';
+import { uniqueSlug } from '@/lib/studio-templates';
+import { useUser } from '@/lib/user-context';
 
 type Page = {
   id: string;
@@ -36,195 +44,80 @@ type Page = {
   published: boolean;
 };
 
-type Slide = {
-  id: string;
-  title?: string | null;
-  subtitle?: string | null;
-  imageUrl: string;
-  ctaLabel?: string | null;
-  ctaHref?: string | null;
-  sortOrder: number;
-  active: boolean;
-};
-
-type News = {
-  id: string;
-  slug: string;
-  title: string;
-  excerpt?: string | null;
-  body?: string | null;
-  coverUrl?: string | null;
-  published: boolean;
-  template?: string | null;
-  eventDate?: string | null;
-  ctaLabel?: string | null;
-  ctaHref?: string | null;
-  /** El practicante la mandó a revisión (junta 23-10-2026). */
-  reviewRequestedAt?: string | null;
-};
-
 /**
- * Propuesta de un practicante sobre una sección del inicio: fila aparte, nunca publicada (la API
- * la guarda así; ver studio.controller.ts · PROPOSAL_SUFFIX).
+ * Borrador de una sección: fila aparte, nunca publicada (la API la guarda así; ver
+ * studio.controller.ts · PROPOSAL_SUFFIX). Practicantes y quien publica escriben ahí.
  */
 const PROPOSAL_SUFFIX = '__propuesta';
 const isProposal = (p: Page) => p.sectionKey.endsWith(PROPOSAL_SUFFIX);
 
-type NewsForm = NewsDraft & { published: boolean };
+type Notice = { variant: 'success' | 'error' | 'warn' | 'info'; text: string };
 
-const EMPTY_NEWS: NewsForm = {
-  slug: '',
-  title: '',
-  excerpt: '',
-  body: '',
-  coverUrl: '',
-  published: true,
-  template: '',
-  eventDate: '',
-  ctaLabel: '',
-  ctaHref: '',
+/** Avisos viejos llegan con `?tab=`; los nuevos, con el nombre del contenido. */
+const TAB_TO_BLOCK: Record<string, string> = {
+  carousel: 'portada',
+  sections: 'portada',
+  news: 'noticias',
+  shows: 'cartelera',
+  historia: 'historias',
+  foto: 'galeria',
+  aliado: 'aliados',
 };
 
-/** La noticia guardada, de vuelta al formulario (fecha del show como AAAA-MM-DD). */
-function newsToForm(n: News): NewsForm {
-  return {
-    slug: n.slug,
-    title: n.title,
-    excerpt: n.excerpt || '',
-    body: n.body || '',
-    coverUrl: n.coverUrl || '',
-    published: n.published,
-    template: (newsTemplate(n.template)?.key ?? '') as NewsTemplateKey | '',
-    eventDate: n.eventDate ? n.eventDate.slice(0, 10) : '',
-    ctaLabel: n.ctaLabel || '',
-    ctaHref: n.ctaHref || '',
-  };
-}
-
-type Tab = 'sections' | 'carousel' | 'news';
-
-const SECTION_META: Record<string, string> = {
-  home_hero: 'Hero (textos)',
-  home_about: 'Nosotros',
-  home_modulos: 'Módulos',
-  home_cta: 'Contacto',
-};
-
-const STUDIO_TABS: Array<{ key: Tab; label: string }> = [
-  { key: 'carousel', label: 'Carrusel' },
-  { key: 'news', label: 'Noticias' },
-  { key: 'sections', label: 'Secciones' },
+const LINK_SUGGESTIONS = [
+  { value: '#cartelera', label: 'Cartelera' },
+  { value: '#historias', label: 'Historias' },
+  { value: '#nosotros', label: 'Nosotros' },
+  { value: '#modulos', label: 'Lo que hacemos' },
+  { value: '#noticias', label: 'Noticias' },
+  { value: '#galeria', label: 'Galería' },
+  { value: '#contacto', label: 'Contacto' },
 ];
 
-function msgVariant(msg: string): 'success' | 'error' | 'warn' | 'info' {
-  const m = msg.toLowerCase();
-  if (m.includes('error')) return 'error';
-  if (m.includes('borrador') || m.includes('agrega una imagen')) return 'warn';
-  if (
-    m.includes('guardad') ||
-    m.includes('publicad') ||
-    m.includes('agregad') ||
-    m.includes('subid')
-  ) {
-    return 'success';
-  }
-  return 'info';
+function errorText(e: unknown) {
+  return e instanceof Error ? e.message : 'Algo falló. Inténtalo de nuevo.';
+}
+
+function rowsDraftCount(config: CollectionConfig, rows: StudioRow[]): OutlineCount {
+  return { total: rows.length, drafts: rows.filter((r) => !config.view(r).live).length };
 }
 
 export default function StudioPage() {
   const { entity, setEntity, user } = useUser();
   const router = useRouter();
-  const [tab, setTab] = useState<Tab>('carousel');
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState<Notice | null>(null);
   const [pages, setPages] = useState<Page[]>([]);
-  const [slides, setSlides] = useState<Slide[]>([]);
-  const [news, setNews] = useState<News[]>([]);
-  const [sectionKey, setSectionKey] = useState('home_hero');
-  const [draft, setDraft] = useState<Record<string, string>>({});
-  const [published, setPublished] = useState(true);
-  const [msg, setMsg] = useState('');
-  const [slideForm, setSlideForm] = useState({
-    title: '',
-    subtitle: '',
-    imageUrl: '',
-    ctaLabel: 'Ver más',
-    ctaHref: '#modulos',
-  });
-  const [newsForm, setNewsForm] = useState<NewsForm>(EMPTY_NEWS);
-  /** Noticia que se está editando en el formulario (null = nueva). */
-  const [editingNewsId, setEditingNewsId] = useState<string | null>(null);
-  const [uploading, setUploading] = useState(false);
-  const [editSlideId, setEditSlideId] = useState<string | null>(null);
-  const [editSlideDraft, setEditSlideDraft] = useState({
-    title: '',
-    subtitle: '',
-    imageUrl: '',
-    ctaLabel: '',
-    ctaHref: '',
-  });
-  const [tileDraft, setTileDraft] = useState<Array<{ title: string; body: string }>>([]);
-  const [aboutStatsDraft, setAboutStatsDraft] = useState<Array<{ label: string; text: string }>>([]);
-  const [aboutLocation, setAboutLocation] = useState('');
+  const [slides, setSlides] = useState<StudioRow[]>([]);
+  const [news, setNews] = useState<StudioRow[]>([]);
+  const [items, setItems] = useState<StudioRow[]>([]);
+  const [selected, setSelected] = useState('portada');
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const preview = useRef<PreviewHandle | null>(null);
 
   /**
-   * Junta 23-10-2026: el practicante deja borradores (noticias, slides inactivos y propuestas de
-   * sección) y dirección publica. La API aplica la misma regla (`canPublishStudio`).
+   * Junta 23-10-2026: el practicante deja borradores y dirección publica, salvo que su perfil le dé
+   * `studio.publish`. La API aplica la misma regla (`canPublishStudio`).
    */
   const canPublish = !!user && canPublishStudio(user.roleKey as RoleKey, user.permissions || []);
-  const sectionPages = useMemo(() => pages.filter((p) => !isProposal(p)), [pages]);
-  const proposals = useMemo(
-    () => new Map(pages.filter(isProposal).map((p) => [p.sectionKey.slice(0, -PROPOSAL_SUFFIX.length), p])),
-    [pages],
-  );
-  const inReview = news.filter((n) => !n.published && n.reviewRequestedAt).length;
-
-  const draftsCount = useMemo(
-    () =>
-      sectionPages.filter((p) => !p.published).length +
-      proposals.size +
-      news.filter((n) => !n.published).length +
-      slides.filter((s) => !s.active).length,
-    [sectionPages, proposals, news, slides],
-  );
-
-  const tabCounts: Record<Tab, number> = useMemo(
-    () => ({ carousel: slides.length, news: news.length, sections: sectionPages.length }),
-    [slides.length, news.length, sectionPages.length],
-  );
-
-  // Los avisos de «Enviar a revisión» llegan con ?tab=news|carousel|sections.
-  useEffect(() => {
-    const wanted = new URLSearchParams(window.location.search).get('tab');
-    if (wanted === 'news' || wanted === 'carousel' || wanted === 'sections') setTab(wanted);
-  }, []);
-
-  async function uploadAsset(file: File): Promise<string> {
-    const fd = new FormData();
-    fd.append('file', file);
-    fd.append('kind', 'image');
-    const res = await api<{ url: string }>('/uploads', { method: 'POST', body: fd });
-    return res.url;
-  }
-
-  async function load() {
-    const [p, s, n] = await Promise.all([
-      api<Page[]>('/studio/pages'),
-      api<Slide[]>('/studio/slides'),
-      api<News[]>('/studio/news?all=1'),
-    ]);
-    setPages(p);
-    setSlides(s);
-    setNews(n);
-    // El editor se llena en el efecto de abajo (sección o, para el practicante, su propuesta).
-    const real = p.filter((x) => !isProposal(x));
-    const current = real.find((x) => x.sectionKey === sectionKey) || real[0];
-    if (current) setSectionKey(current.sectionKey);
-  }
 
   useEffect(() => {
     if (entity !== 'ARTA') setEntity('ARTA');
   }, [entity, setEntity]);
+
+  const load = useCallback(async () => {
+    const [p, s, n, i] = await Promise.all([
+      api<Page[]>('/studio/pages'),
+      api<StudioRow[]>('/studio/slides'),
+      api<StudioRow[]>('/studio/news?all=1'),
+      api<StudioRow[]>('/studio/items'),
+    ]);
+    setPages(p);
+    setSlides(s);
+    setNews(n);
+    setItems(i);
+  }, []);
 
   useEffect(() => {
     if (!user) return;
@@ -234,1232 +127,547 @@ export default function StudioPage() {
     }
     setLoading(true);
     load()
-      .catch(console.error)
+      .catch((e) => setNotice({ variant: 'error', text: errorText(e) }))
       .finally(() => setLoading(false));
+    const params = new URLSearchParams(window.location.search);
+    const wanted = params.get('bloque') || TAB_TO_BLOCK[params.get('tab') || ''];
+    if (wanted) setSelected(wanted);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
-  /** Llena el editor con una sección (o una propuesta de practicante). */
-  function fillSectionDraft(page: Page) {
-    const c = page.contentJson || {};
-    setDraft({
-      brand: String(c.brand || ''),
-      brandSub: String(c.brandSub || ''),
-      headline: String(c.headline || ''),
-      sub: String(c.sub || c.lead || ''),
-      body: String(c.body || ''),
-      cta: String(c.cta || ''),
-      ctaHref: String(c.ctaHref || ''),
-      lead: String(c.lead || ''),
-    });
-    if (sectionKey === 'home_modulos') {
-      const tiles = (page.contentJson as { tiles?: Array<{ title: string; body: string }> })?.tiles;
-      setTileDraft(
-        tiles?.length
-          ? tiles.map((t) => ({ title: t.title, body: t.body }))
-          : [
-              { title: 'Producción', body: 'Riders, plantas de luz, stage hands y minuto a minuto.' },
-              { title: 'Hospitality', body: 'Hospedaje, transporte, catering y camerinos.' },
-            ],
-      );
+  const live = useMemo(() => new Map(pages.filter((p) => !isProposal(p)).map((p) => [p.sectionKey, p])), [pages]);
+  const proposals = useMemo(
+    () => new Map(pages.filter(isProposal).map((p) => [p.sectionKey.slice(0, -PROPOSAL_SUFFIX.length), p])),
+    [pages],
+  );
+
+  const blocks = useMemo(
+    () => resolveLayout((proposals.get(LAYOUT_KEY) ?? live.get(LAYOUT_KEY))?.contentJson),
+    [proposals, live],
+  );
+
+  const rowsOf = useCallback(
+    (key: CollectionKey): StudioRow[] => {
+      if (key === 'slides') return slides;
+      if (key === 'shows') {
+        return news
+          .filter((n) => n.template === 'evento')
+          .sort((a, b) => String(a.eventDate || '9').localeCompare(String(b.eventDate || '9')));
+      }
+      if (key === 'news') return news.filter((n) => n.template !== 'evento');
+      return items.filter((i) => i.kind === key);
+    },
+    [slides, news, items],
+  );
+
+  const labelOf = useCallback(
+    (block: LayoutBlock) => {
+      if (!BLOCK_META[block.type].custom) return BLOCK_META[block.type].label;
+      const saved = (proposals.get(sectionKeyOf(block)) ?? live.get(sectionKeyOf(block)))?.contentJson?.headline;
+      return typeof saved === 'string' && saved.trim() ? saved : BLOCK_META[block.type].label;
+    },
+    [proposals, live],
+  );
+
+  const counts = useMemo(() => {
+    const out: Record<string, OutlineCount | undefined> = { portada: rowsDraftCount(COLLECTIONS.slides, slides) };
+    for (const block of blocks) {
+      const key = BLOCK_COLLECTION[block.type];
+      if (key) out[block.id] = rowsDraftCount(COLLECTIONS[key], rowsOf(key));
     }
-    if (sectionKey === 'home_about') {
-      const c = page.contentJson as {
-        stats?: Array<{ label: string; text: string }>;
-        location?: string;
-      };
-      setAboutLocation(String(c.location || ''));
-      setAboutStatsDraft(
-        c.stats?.length
-          ? c.stats.map((s) => ({ label: s.label, text: s.text }))
-          : [
-              { label: 'Shows', text: 'Producción integral de conciertos' },
-              { label: 'Puebla', text: 'Base operativa y venues aliados' },
-              { label: 'Experiencia', text: 'Del rider al cierre del evento' },
-            ],
-      );
+    return out;
+  }, [blocks, rowsOf, slides]);
+
+  const blockDrafts = useMemo(() => {
+    const out = new Set<string>();
+    if (proposals.has(SETTINGS_KEY)) out.add('ajustes');
+    for (const block of blocks) if (proposals.has(sectionKeyOf(block))) out.add(block.id);
+    return out;
+  }, [blocks, proposals]);
+
+  /** Lo que espera publicarse o revisarse: lo enseña la barra de arriba. */
+  const pendingSections = useMemo(() => {
+    const names = new Map<string, string>();
+    for (const key of proposals.keys()) {
+      if (key === LAYOUT_KEY) names.set(key, 'El orden de la página');
+      else if (key === HERO_KEY) names.set(key, 'Portada');
+      else if (key === SETTINGS_KEY) names.set(key, 'Datos del sitio');
+      else {
+        const block = blocks.find((b) => sectionKeyOf(b) === key);
+        names.set(key, block ? labelOf(block) : proposals.get(key)?.title || key);
+      }
+    }
+    return names;
+  }, [proposals, blocks, labelOf]);
+
+  const inReview = useMemo(() => {
+    const out: Array<{ id: string; title: string; block: string }> = [];
+    for (const n of news) {
+      if (!n.published && n.reviewRequestedAt) {
+        out.push({ id: n.id, title: n.title, block: n.template === 'evento' ? 'cartelera' : 'noticias' });
+      }
+    }
+    const blockOf: Record<string, string> = { historia: 'historias', foto: 'galeria', aliado: 'aliados' };
+    for (const i of items) {
+      if (!i.active && i.reviewRequestedAt) out.push({ id: i.id, title: i.title || 'Sin título', block: blockOf[i.kind] });
+    }
+    return out;
+  }, [news, items]);
+
+  function say(variant: Notice['variant'], text: string) {
+    setNotice({ variant, text });
+  }
+
+  /** Lo publicado se ve de inmediato en vez de esperar la caché del sitio. */
+  async function refreshPublicSite() {
+    await fetch('/p/arta/revalidar', { method: 'POST' }).catch(() => undefined);
+  }
+
+  async function run(work: () => Promise<void>) {
+    setBusy(true);
+    try {
+      await work();
+      return true;
+    } catch (e) {
+      say('error', errorText(e));
+      await load().catch(() => undefined);
+      return false;
+    } finally {
+      setBusy(false);
+      preview.current?.post({ type: 'reload' });
     }
   }
 
-  useEffect(() => {
-    const real = pages.find((p) => p.sectionKey === sectionKey);
-    // El practicante sigue editando su propuesta si ya tiene una; dirección ve la sección publicada.
-    const page = (!canPublish && proposals.get(sectionKey)) || real || proposals.get(sectionKey);
-    if (!page) return;
-    fillSectionDraft(page);
-    if (real) setPublished(real.published);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sectionKey, pages, canPublish]);
+  function scrollPreviewTo(id: string) {
+    if (id === 'ajustes' || id === 'portada') {
+      preview.current?.post({ type: 'scrollTo', anchor: id === 'ajustes' ? 'contacto' : 'portada' });
+      return;
+    }
+    const target = blocks.find((b) => b.id === id);
+    if (target) preview.current?.post({ type: 'scrollTo', anchor: anchorOf(target) });
+  }
 
-  async function saveSection() {
-    setMsg('');
-    setSaving(true);
-    try {
+  function selectBlock(id: string) {
+    setSelected(id);
+    scrollPreviewTo(id);
+    // En el teléfono el editor queda debajo de la lista: que se vea qué se abrió.
+    if (window.matchMedia('(max-width: 820px)').matches) {
+      requestAnimationFrame(() => document.querySelector('.st-editor')?.scrollIntoView({ block: 'start' }));
+    }
+  }
+
+  // La vista previa abre donde se está editando.
+  const scrollPreviewToSelected = () => scrollPreviewTo(selected);
+
+  // ─── Maqueta ───────────────────────────────────────────────────────────────
+
+  async function saveLayout(next: LayoutBlock[]) {
+    preview.current?.post({ type: 'layout', blocks: next });
+    await run(async () => {
       await api('/studio/pages', {
         method: 'PUT',
-        body: JSON.stringify({
-          sectionKey,
-          title: SECTION_META[sectionKey] || sectionKey,
-          // El practicante no manda `published`: la API guarda su versión como propuesta.
-          ...(canPublish ? { published } : {}),
-          contentJson: {
-            brand: draft.brand,
-            brandSub: draft.brandSub,
-            headline: draft.headline,
-            sub: draft.sub,
-            lead: draft.lead || draft.sub,
-            body: draft.body,
-            cta: draft.cta,
-            ctaHref: draft.ctaHref || '#contacto',
-            ...(sectionKey === 'home_modulos'
-              ? { tiles: tileDraft.filter((t) => t.title.trim()) }
-              : {}),
-            ...(sectionKey === 'home_about'
-              ? {
-                  stats: aboutStatsDraft.filter((s) => s.label.trim()),
-                  location: aboutLocation,
-                }
-              : {}),
-          },
-        }),
+        body: JSON.stringify({ sectionKey: LAYOUT_KEY, title: 'Maqueta', draft: true, contentJson: { blocks: next } }),
       });
-      setMsg(
-        !canPublish
-          ? 'Propuesta guardada: la sección publicada no cambia hasta que dirección la revise'
-          : published
-            ? 'Sección publicada'
-            : 'Borrador guardado',
-      );
       await load();
-    } catch (e) {
-      setMsg(e instanceof Error ? e.message : 'Error');
-    } finally {
-      setSaving(false);
-    }
+    });
   }
 
-  async function addSlide() {
-    if (!slideForm.imageUrl) {
-      setMsg('Agrega una imagen antes de publicar el slide');
-      return;
-    }
-    setSaving(true);
-    try {
-      await api('/studio/slides', {
-        method: 'POST',
-        body: JSON.stringify({ ...slideForm, sortOrder: slides.length, active: canPublish }),
-      });
-      setSlideForm({ title: '', subtitle: '', imageUrl: '', ctaLabel: 'Ver más', ctaHref: '#modulos' });
-      setMsg(canPublish ? 'Slide agregado al carrusel' : 'Slide guardado como borrador: mándalo a revisión cuando esté listo');
-      await load();
-    } catch (e) {
-      setMsg(e instanceof Error ? e.message : 'Error');
-    } finally {
-      setSaving(false);
-    }
+  function moveBlock(index: number, delta: number) {
+    const next = [...blocks];
+    const [block] = next.splice(index, 1);
+    next.splice(index + delta, 0, block);
+    void saveLayout(next);
   }
 
-  async function saveSlide(s: Slide, patch: Partial<Slide>) {
-    setSaving(true);
-    try {
-      await api(`/studio/slides/${s.id}`, {
-        method: 'PUT',
-        body: JSON.stringify({
-          title: patch.title ?? s.title,
-          subtitle: patch.subtitle ?? s.subtitle,
-          imageUrl: patch.imageUrl ?? s.imageUrl,
-          ctaLabel: patch.ctaLabel ?? s.ctaLabel,
-          ctaHref: patch.ctaHref ?? s.ctaHref,
-          sortOrder: s.sortOrder,
-          active: patch.active ?? s.active,
-        }),
-      });
-      setMsg('Slide actualizado');
-      setEditSlideId(null);
-      await load();
-    } catch (e) {
-      setMsg(e instanceof Error ? e.message : 'Error');
-    } finally {
-      setSaving(false);
-    }
+  function toggleBlock(block: LayoutBlock) {
+    void saveLayout(blocks.map((b) => (b.id === block.id ? { ...b, visible: !b.visible } : b)));
   }
 
-  async function replaceSlideImage(s: Slide, file: File) {
-    setUploading(true);
-    try {
-      const url = await uploadAsset(file);
-      await saveSlide(s, { imageUrl: url });
-      if (editSlideId === s.id) {
-        setEditSlideDraft((d) => ({ ...d, imageUrl: url }));
+  function addBlock(type: BlockType) {
+    const id = Math.random().toString(36).slice(2, 10);
+    const at = blocks.findIndex((b) => b.id === selected);
+    const next = [...blocks];
+    next.splice(at >= 0 ? at + 1 : next.length, 0, { id, type, visible: true });
+    setSelected(id);
+    void saveLayout(next);
+  }
+
+  async function removeBlock(block: LayoutBlock) {
+    const yes = await askConfirm({
+      title: `¿Borrar «${labelOf(block)}»?`,
+      body: 'Sale de la maqueta y, al publicar, se borra su contenido.',
+      confirmLabel: 'Borrar sección',
+      danger: true,
+    });
+    if (!yes) return;
+    if (selected === block.id) setSelected('portada');
+    void saveLayout(blocks.filter((b) => b.id !== block.id));
+  }
+
+  async function publishDrafts() {
+    const ok = await run(async () => {
+      await api('/studio/pages/publish', { method: 'POST', body: JSON.stringify({}) });
+      await load();
+      await refreshPublicSite();
+    });
+    if (ok) say('success', 'Publicado. Ya se ve en el sitio.');
+  }
+
+  async function sendDraftsToReview() {
+    const ok = await run(async () => {
+      for (const key of proposals.keys()) {
+        await api('/studio/review', { method: 'POST', body: JSON.stringify({ kind: 'section', id: key }) });
       }
-      setMsg('Imagen reemplazada');
-    } catch (e) {
-      setMsg(e instanceof Error ? e.message : 'Error upload');
-    } finally {
-      setUploading(false);
-    }
-  }
-
-  function startEditSlide(s: Slide) {
-    setEditSlideId(s.id);
-    setEditSlideDraft({
-      title: s.title || '',
-      subtitle: s.subtitle || '',
-      imageUrl: s.imageUrl,
-      ctaLabel: s.ctaLabel || '',
-      ctaHref: s.ctaHref || '',
+      await load();
     });
+    if (ok) say('success', 'Enviado a revisión: dirección ya recibió el aviso.');
   }
 
-  async function toggleSlide(s: Slide) {
-    await api(`/studio/slides/${s.id}`, {
-      method: 'PUT',
-      body: JSON.stringify({
-        title: s.title,
-        subtitle: s.subtitle,
-        imageUrl: s.imageUrl,
-        ctaLabel: s.ctaLabel,
-        ctaHref: s.ctaHref,
-        sortOrder: s.sortOrder,
-        active: !s.active,
-      }),
+  async function discardDraft(sectionKey: string, label: string) {
+    const yes = await askConfirm({
+      title: `¿Descartar el borrador de «${label}»?`,
+      body: 'Lo publicado se queda como está.',
+      confirmLabel: 'Descartar',
+      danger: true,
     });
-    await load();
+    if (!yes) return;
+    const ok = await run(async () => {
+      await api(`/studio/pages/${sectionKey}/proposal`, { method: 'DELETE' });
+      await load();
+    });
+    if (ok) say('info', 'Borrador descartado');
   }
 
-  async function removeSlide(id: string) {
-    await api(`/studio/slides/${id}`, { method: 'DELETE' });
-    await load();
-  }
+  // ─── Secciones ─────────────────────────────────────────────────────────────
 
-  /** Elegir plantilla: deja el texto guía y el botón sugerido sin pisar lo ya escrito. */
-  function pickTemplate(key: NewsTemplateKey | '') {
-    const tpl = newsTemplate(key);
-    setNewsForm((f) => ({
-      ...f,
-      template: key,
-      body: f.body.trim() || !tpl ? f.body : tpl.bodyStarter,
-      ctaLabel: f.ctaLabel.trim() || !tpl ? f.ctaLabel : tpl.cta.label,
-      ctaHref: f.ctaHref.trim() || !tpl ? f.ctaHref : tpl.cta.href,
-    }));
-  }
-
-  function resetNewsForm() {
-    setNewsForm({ ...EMPTY_NEWS, published: canPublish });
-    setEditingNewsId(null);
-  }
-
-  function editNews(n: News) {
-    setEditingNewsId(n.id);
-    setNewsForm(newsToForm(n));
-    setTab('news');
-  }
-
-  const publishNews = canPublish && newsForm.published;
-  const newsMissing = missingForNews(newsForm);
-  const activeTemplate = newsTemplate(newsForm.template);
-
-  async function addNews() {
-    if (!newsForm.title || !newsForm.slug) {
-      setMsg('Error: la noticia necesita título y slug');
-      return;
+  async function saveSection(sectionKey: string, title: string, values: FormValues, publish: boolean) {
+    const contentJson = cleanContent(values);
+    const ok = await run(async () => {
+      await api('/studio/pages', {
+        method: 'PUT',
+        body: JSON.stringify(
+          publish ? { sectionKey, title, contentJson, published: true } : { sectionKey, title, contentJson, draft: true },
+        ),
+      });
+      await load();
+      if (publish) await refreshPublicSite();
+    });
+    if (ok) {
+      say(
+        'success',
+        publish ? 'Publicado. Ya se ve en el sitio.' : canPublish ? 'Borrador guardado.' : 'Borrador guardado. Cuando esté listo, mándalo a revisión.',
+      );
     }
-    if (publishNews && newsMissing.length) {
-      setMsg(`Error: para publicar falta ${newsMissing.join(', ')}`);
-      return;
+    return ok;
+  }
+
+  async function requestSectionReview(sectionKey: string) {
+    const ok = await run(async () => {
+      await api('/studio/review', { method: 'POST', body: JSON.stringify({ kind: 'section', id: sectionKey }) });
+      await load();
+    });
+    if (ok) say('success', 'Enviado a revisión: dirección ya recibió el aviso.');
+  }
+
+  // ─── Contenido (portada, shows, noticias, historias, galería, aliados) ─────
+
+  async function saveRow(config: CollectionConfig, values: FormValues, id: string | null, publish: boolean | undefined) {
+    const payload: Record<string, unknown> = { ...config.toPayload(values) };
+    if (config.liveField === 'published' && !payload.slug) {
+      const taken = news.filter((n) => n.id !== id).map((n) => String(n.slug));
+      payload.slug = uniqueSlug(String(payload.title), taken);
     }
-    setSaving(true);
-    try {
-      const payload = {
-        slug: newsForm.slug,
-        title: newsForm.title,
-        excerpt: newsForm.excerpt,
-        body: newsForm.body,
-        coverUrl: newsForm.coverUrl,
-        published: publishNews,
-        template: newsForm.template || null,
-        eventDate: newsForm.eventDate || null,
-        ctaLabel: newsForm.ctaLabel || null,
-        ctaHref: newsForm.ctaHref || null,
-      };
-      await api(editingNewsId ? `/studio/news/${editingNewsId}` : '/studio/news', {
-        method: editingNewsId ? 'PUT' : 'POST',
+    if (publish !== undefined) payload[config.liveField] = publish;
+    else if (id) payload[config.liveField] = true;
+    if (!id && config.key === 'slides') {
+      payload.sortOrder = Math.min(0, ...slides.map((s) => Number(s.sortOrder) || 0)) - 1;
+    }
+    const ok = await run(async () => {
+      await api(id ? `${config.endpoint}/${id}` : config.endpoint, {
+        method: id ? 'PUT' : 'POST',
         body: JSON.stringify(payload),
       });
-      resetNewsForm();
-      setMsg(
-        publishNews
-          ? 'Noticia publicada'
-          : canPublish
-            ? 'Borrador de noticia guardado'
-            : 'Borrador de noticia guardado: mándalo a revisión cuando esté listo',
-      );
       await load();
-    } catch (e) {
-      setMsg(e instanceof Error ? e.message : 'Error');
-    } finally {
-      setSaving(false);
+      if (publish !== false) await refreshPublicSite();
+    });
+    if (ok) {
+      say(
+        'success',
+        publish === false
+          ? canPublish
+            ? 'Borrador guardado: revísalo en la vista previa.'
+            : 'Borrador guardado. Revísalo en la vista previa y mándalo a revisión.'
+          : 'Publicado. Ya se ve en el sitio.',
+      );
     }
+    return ok;
   }
 
-  /** «Enviar a revisión» (practicante): le avisa a quien publica. */
-  async function requestReview(kind: 'news' | 'slide' | 'section', id: string) {
-    setSaving(true);
-    try {
+  async function setRowLive(config: CollectionConfig, row: StudioRow, value: boolean) {
+    const body =
+      config.key === 'slides'
+        ? {
+            imageUrl: row.imageUrl,
+            title: row.title,
+            subtitle: row.subtitle,
+            ctaLabel: row.ctaLabel,
+            ctaHref: row.ctaHref,
+            sortOrder: row.sortOrder,
+            active: value,
+          }
+        : config.liveField === 'published'
+          ? { slug: row.slug, title: row.title, published: value }
+          : { active: value };
+    const ok = await run(async () => {
+      await api(`${config.endpoint}/${row.id}`, { method: 'PUT', body: JSON.stringify(body) });
+      await load();
+      await refreshPublicSite();
+    });
+    if (ok) say('success', value ? 'Publicado. Ya se ve en el sitio.' : 'Lo quitamos del sitio: quedó como borrador.');
+  }
+
+  async function removeRow(config: CollectionConfig, row: StudioRow) {
+    const ok = await run(async () => {
+      await api(`${config.endpoint}/${row.id}`, { method: 'DELETE' });
+      await load();
+      await refreshPublicSite();
+    });
+    if (ok) say('info', 'Quitado.');
+  }
+
+  async function moveRows(config: CollectionConfig, ids: string[]) {
+    const order = new Map(ids.map((id, i) => [id, i]));
+    const sorted = (rows: StudioRow[]) => [...rows].sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
+    if (config.key === 'slides') setSlides(sorted);
+    else if (config.key === 'news') {
+      // La lista del API incluye los shows; el orden solo acomoda las noticias.
+      setNews((all) => [...sorted(all.filter((n) => n.template !== 'evento')), ...all.filter((n) => n.template === 'evento')]);
+    } else {
+      setItems((all) => [...sorted(all.filter((i) => i.kind === config.key)), ...all.filter((i) => i.kind !== config.key)]);
+    }
+    const allIds = config.key === 'news' ? [...ids, ...news.filter((n) => n.template === 'evento').map((n) => n.id)] : ids;
+    await run(async () => {
+      await api('/studio/reorder', {
+        method: 'POST',
+        body: JSON.stringify({ kind: config.key === 'slides' ? 'slide' : config.key === 'news' ? 'news' : config.key, ids: allIds }),
+      });
+      await load();
+      await refreshPublicSite();
+    });
+  }
+
+  async function reviewRow(config: CollectionConfig, row: StudioRow) {
+    const ok = await run(async () => {
       const res = await api<{ notified: number }>('/studio/review', {
         method: 'POST',
-        body: JSON.stringify({ kind, id }),
+        body: JSON.stringify({ kind: config.reviewKind, id: row.id }),
       });
-      setMsg(
+      await load();
+      say(
+        'success',
         res.notified
-          ? `Enviado a revisión: avisamos a ${res.notified} persona${res.notified === 1 ? '' : 's'} de dirección`
-          : 'Enviado a revisión',
+          ? `Enviado a revisión: avisamos a ${res.notified} persona${res.notified === 1 ? '' : 's'} de dirección.`
+          : 'Enviado a revisión.',
       );
-      await load();
-    } catch (e) {
-      setMsg(e instanceof Error ? e.message : 'Error');
-    } finally {
-      setSaving(false);
-    }
+    });
+    return ok;
   }
 
-  async function discardProposal(key: string) {
-    if (!(await askConfirm({ title: '¿Descartar la propuesta del practicante?', body: 'Solo la de esta sección.', confirmLabel: 'Descartar', danger: true }))) return;
-    try {
-      await api(`/studio/pages/${key}/proposal`, { method: 'DELETE' });
-      setMsg('Propuesta descartada');
-      await load();
-    } catch (e) {
-      setMsg(e instanceof Error ? e.message : 'Error');
-    }
-  }
+  // ─── Pantalla ──────────────────────────────────────────────────────────────
 
-  async function toggleNews(n: News) {
-    try {
-      await api(`/studio/news/${n.id}`, {
-        method: 'PUT',
-        body: JSON.stringify({
-          slug: n.slug,
-          title: n.title,
-          excerpt: n.excerpt,
-          body: n.body,
-          coverUrl: n.coverUrl,
-          published: !n.published,
-        }),
-      });
-      setMsg(n.published ? 'Noticia regresada a borrador' : 'Noticia publicada');
-      await load();
-    } catch (e) {
-      // P. ej. un «Evento destacado» sin fecha del show no se publica.
-      setMsg(e instanceof Error ? e.message : 'Error');
-    }
-  }
+  const block = blocks.find((b) => b.id === selected);
+  const isPortada = selected === 'portada' || (!block && selected !== 'ajustes');
+  const isSettings = selected === 'ajustes';
+  const sectionKey = isSettings ? SETTINGS_KEY : isPortada ? HERO_KEY : sectionKeyOf(block as LayoutBlock);
+  const blockType = block?.type;
+  const collectionKey: CollectionKey | undefined = isPortada ? 'slides' : blockType ? BLOCK_COLLECTION[blockType] : undefined;
+  const fields: Field[] = (blockType && CUSTOM_FIELDS[blockType]) || SECTION_FIELDS[sectionKey] || [];
+  const title = isSettings ? 'Datos del sitio' : isPortada ? 'Portada' : labelOf(block as LayoutBlock);
+  const description = isSettings
+    ? 'Lo que sale en el pie y en contacto: correo, teléfono, WhatsApp, redes y lema.'
+    : isPortada
+      ? 'Lo primero que se ve: los próximos shows y tus fotos, a pantalla completa.'
+      : BLOCK_META[(block as LayoutBlock).type].description;
 
-  async function removeNews(id: string) {
-    await api(`/studio/news/${id}`, { method: 'DELETE' });
-    await load();
-  }
+  const draftRow = proposals.get(sectionKey);
+  const savedContent = (draftRow ?? live.get(sectionKey))?.contentJson;
+  const initial = useMemo<FormValues>(
+    () => ({
+      ...(DEFAULT_CONTENT[sectionKey] ?? (blockType ? CUSTOM_DEFAULTS[blockType] : undefined) ?? {}),
+      ...savedContent,
+    }),
+    [sectionKey, blockType, savedContent],
+  );
 
-  const previewHeadline = draft.headline || 'Titular del sitio';
-  const previewBody = draft.body || draft.sub || 'Texto de apoyo editable en Studio.';
-  const previewCta = draft.cta || 'Botón';
+  const pendingNames = [...pendingSections.values()];
+
+  const sectionEditor = (
+    <SectionEditor
+      key={sectionKey}
+      fields={fields}
+      initial={initial}
+      hasDraft={!!draftRow}
+      canPublish={canPublish}
+      busy={busy}
+      linkOptions={LINK_SUGGESTIONS}
+      onLive={(values) => preview.current?.post({ type: 'section', sectionKey, contentJson: values })}
+      onSave={(values, publish) => saveSection(sectionKey, title, values, publish)}
+      onDiscard={() => discardDraft(sectionKey, title)}
+      onReview={() => requestSectionReview(sectionKey)}
+      onError={(text) => say('error', text)}
+    />
+  );
 
   return (
     <AppShell title="Studio · Sitio Arta">
-      <div className="stack page-workspace">
+      <div className="stack page-workspace st-page">
         <PageHeader
           title="Studio"
           description={
             canPublish
-              ? 'Carrusel, noticias y secciones del sitio público de Arta. Guarda como borrador o publica.'
-              : 'Carrusel, noticias y secciones del sitio de Arta. Lo tuyo queda como borrador: mándalo a revisión y dirección lo publica.'
+              ? 'Todo lo que se ve en artaproducciones.com se edita aquí.'
+              : 'Todo lo que se ve en artaproducciones.com se edita aquí. Lo tuyo queda como borrador y dirección lo publica.'
           }
         >
-          <Link className="btn" href="/p/arta" target="_blank" rel="noopener noreferrer">
-            Ver sitio live
-          </Link>
-          <ActionLink href="/site" variant="ghost">
+          {user?.roleKey !== 'practicante' ? (
+            <ActionLink href="/studio/practicantes" variant="ghost">
+              Perfiles de practicante
+            </ActionLink>
+          ) : null}
+          <a className="btn ghost" href="/p/arta" target="_blank" rel="noopener noreferrer">
+            Ver sitio
+          </a>
+          <button className="btn ghost st-preview-toggle" type="button" onClick={() => setPreviewOpen(true)}>
             Vista previa
-          </ActionLink>
+          </button>
         </PageHeader>
 
         {loading ? (
-          <>
-            <LoadingKpis count={4} />
-            <LoadingBlock rows={5} label="Cargando Studio…" />
-          </>
+          <LoadingBlock rows={6} label="Cargando Studio…" />
         ) : (
           <>
-            <div className="grid-cards kpi-grid-dense">
-              <div className="kpi">
-                <div className="label">Secciones</div>
-                <div className="value">{sectionPages.length}</div>
-                <div className="kpi-sub muted">{sectionPages.filter((p) => p.published).length} publicadas</div>
+            {pendingNames.length ? (
+              <div className="st-pending" role="status">
+                <div>
+                  <strong>{canPublish ? 'Cambios sin publicar' : 'Tus borradores'}</strong>
+                  <span>{pendingNames.join(' · ')}</span>
+                </div>
+                {canPublish ? (
+                  <div className="st-pending__actions">
+                    {proposals.has(LAYOUT_KEY) ? (
+                      <button className="btn ghost btn-sm" type="button" disabled={busy} onClick={() => void discardDraft(LAYOUT_KEY, 'el orden de la página')}>
+                        Descartar orden
+                      </button>
+                    ) : null}
+                    <button className="btn btn-sm" type="button" disabled={busy} onClick={() => void publishDrafts()}>
+                      Publicar todo
+                    </button>
+                  </div>
+                ) : (
+                  <button className="btn btn-sm" type="button" disabled={busy} onClick={() => void sendDraftsToReview()}>
+                    Enviar a revisión
+                  </button>
+                )}
               </div>
-              <div className="kpi">
-                <div className="label">Slides</div>
-                <div className="value">{slides.length}</div>
-                <div className="kpi-sub muted">{slides.filter((s) => s.active).length} activos</div>
-              </div>
-              <div className="kpi">
-                <div className="label">Noticias</div>
-                <div className="value">{news.length}</div>
-                <div className="kpi-sub muted">{news.filter((n) => n.published).length} publicadas</div>
-              </div>
-              <div className={`kpi ${draftsCount ? 'kpi--danger' : ''}`}>
-                <div className="label">Borradores</div>
-                <div className="value">{draftsCount}</div>
-                <div className="kpi-sub muted">
-                  {inReview || proposals.size
-                    ? `${inReview + proposals.size} en revisión · incluye slides inactivos`
-                    : 'Incluye slides inactivos'}
+            ) : null}
+            {canPublish && inReview.length ? (
+              <div className="st-pending st-pending--review" role="status">
+                <div>
+                  <strong>Por revisar</strong>
+                  <span>Mandado por practicantes</span>
+                </div>
+                <div className="st-pending__actions">
+                  {inReview.slice(0, 4).map((r) => (
+                    <button key={r.id} className="btn ghost btn-sm" type="button" onClick={() => selectBlock(r.block)}>
+                      {r.title}
+                    </button>
+                  ))}
                 </div>
               </div>
-            </div>
+            ) : null}
 
-            <FilterBar
-              meta={
-                draftsCount
-                  ? `${draftsCount} elemento${draftsCount === 1 ? '' : 's'} en borrador`
-                  : 'Todo publicado'
-              }
-            >
-              <nav className="tab-bar" aria-label="Studio">
-                {STUDIO_TABS.map(({ key, label }) => (
-                  <button
-                    key={key}
-                    type="button"
-                    className={`tab-bar__btn ${tab === key ? 'is-active' : ''}`}
-                    onClick={() => setTab(key)}
-                  >
-                    {label}
-                    <span className="tab-bar__count">{tabCounts[key]}</span>
-                  </button>
-                ))}
-              </nav>
-            </FilterBar>
-
-            {msg ? (
-              <FlashMessage variant={msgVariant(msg)} onDismiss={() => setMsg('')}>
-                {msg}
+            {notice ? (
+              <FlashMessage variant={notice.variant} onDismiss={() => setNotice(null)}>
+                {notice.text}
               </FlashMessage>
             ) : null}
 
-            {tab === 'carousel' && (
-              <div className="dash-split">
-                <div className="panel">
-                  <div className="panel-head">
-                    <h2>Nuevo slide</h2>
-                  </div>
-                  <div className="panel-body">
-                    <div className="form">
-                      <label>
-                        URL de imagen (pantalla completa)
-                        <input
-                          value={slideForm.imageUrl}
-                          onChange={(e) => setSlideForm({ ...slideForm, imageUrl: e.target.value })}
-                          placeholder="https://… o sube abajo"
-                        />
-                      </label>
-                      {slideForm.imageUrl ? (
-                        <img
-                          className="studio-preview__thumb"
-                          src={slideForm.imageUrl}
-                          alt="Vista previa del slide"
-                        />
-                      ) : null}
-                      <label className="btn ghost">
-                        {uploading ? 'Subiendo…' : 'Subir imagen'}
-                        <input
-                          type="file"
-                          hidden
-                          accept="image/*"
-                          onChange={async (e) => {
-                            const f = e.target.files?.[0];
-                            if (!f) return;
-                            setUploading(true);
-                            try {
-                              const url = await uploadAsset(f);
-                              setSlideForm((s) => ({ ...s, imageUrl: url }));
-                              setMsg('Imagen subida');
-                            } catch (err) {
-                              setMsg(err instanceof Error ? err.message : 'Error upload');
-                            } finally {
-                              setUploading(false);
-                            }
-                          }}
-                        />
-                      </label>
-                      <FormGrid>
-                        <label>
-                          Título
-                          <input
-                            value={slideForm.title}
-                            onChange={(e) => setSlideForm({ ...slideForm, title: e.target.value })}
-                          />
-                        </label>
-                        <label>
-                          Subtítulo
-                          <input
-                            value={slideForm.subtitle}
-                            onChange={(e) => setSlideForm({ ...slideForm, subtitle: e.target.value })}
-                          />
-                        </label>
-                      </FormGrid>
-                      <FormGrid>
-                        <label>
-                          Botón
-                          <input
-                            value={slideForm.ctaLabel}
-                            onChange={(e) => setSlideForm({ ...slideForm, ctaLabel: e.target.value })}
-                          />
-                        </label>
-                        <label>
-                          Enlace del botón
-                          <input
-                            value={slideForm.ctaHref}
-                            onChange={(e) => setSlideForm({ ...slideForm, ctaHref: e.target.value })}
-                          />
-                        </label>
-                      </FormGrid>
-                      <button className="btn" type="button" disabled={saving} onClick={addSlide}>
-                        {saving ? 'Guardando…' : canPublish ? 'Agregar al carrusel' : 'Guardar como borrador'}
-                      </button>
-                    </div>
-                  </div>
-                </div>
+            <div className="st-grid">
+              <StudioOutline
+                blocks={blocks}
+                selected={isPortada ? 'portada' : selected}
+                counts={counts}
+                drafts={blockDrafts}
+                labelOf={labelOf}
+                busy={busy}
+                onSelect={selectBlock}
+                onMove={moveBlock}
+                onToggle={toggleBlock}
+                onRemove={(b) => void removeBlock(b)}
+                onAdd={addBlock}
+              />
 
-                <div className="panel">
-                  <div className="panel-head">
-                    <h2>Carrusel · {slides.length}</h2>
-                  </div>
-                  <div className="panel-body">
-                    {!slides.length ? (
-                      <EmptyState
-                        title="Carrusel vacío"
-                        description="Sube una imagen a pantalla completa y define título + botón."
-                        steps={['Sube o pega URL', 'Título / subtítulo', 'Agregar al carrusel']}
-                      />
-                    ) : (
-                      <div className="studio-slide-grid">
-                        {slides.map((s) => {
-                          const editing = editSlideId === s.id;
-                          // Un slide activo está en el sitio: el practicante no lo cambia.
-                          const locked = !canPublish && s.active;
-                          return (
-                          <div className={`studio-slide-card ${s.active ? '' : 'is-off'}`} key={s.id}>
-                            <div className="studio-slide-card__media">
-                              <img src={s.imageUrl} alt={s.title || 'Slide del carrusel'} />
-                              <div className="studio-slide-card__media-actions">
-                                {locked ? null : (
-                                  <label className="btn ghost btn-sm">
-                                    {uploading ? 'Subiendo…' : 'Cambiar imagen'}
-                                    <input
-                                      type="file"
-                                      hidden
-                                      accept="image/*"
-                                      onChange={(e) => {
-                                        const f = e.target.files?.[0];
-                                        if (f) void replaceSlideImage(s, f);
-                                        e.target.value = '';
-                                      }}
-                                    />
-                                  </label>
-                                )}
-                                {!editing && !locked ? (
-                                  <button
-                                    className="btn ghost btn-sm"
-                                    type="button"
-                                    onClick={() => startEditSlide(s)}
-                                  >
-                                    Editar
-                                  </button>
-                                ) : null}
-                              </div>
-                            </div>
-                            <div className="studio-slide-card__body">
-                              {editing ? (
-                                <div className="form studio-slide-card__edit">
-                                  <FormGrid>
-                                    <label>
-                                      Título
-                                      <input
-                                        value={editSlideDraft.title}
-                                        onChange={(e) =>
-                                          setEditSlideDraft({ ...editSlideDraft, title: e.target.value })
-                                        }
-                                      />
-                                    </label>
-                                    <label>
-                                      Subtítulo
-                                      <input
-                                        value={editSlideDraft.subtitle}
-                                        onChange={(e) =>
-                                          setEditSlideDraft({ ...editSlideDraft, subtitle: e.target.value })
-                                        }
-                                      />
-                                    </label>
-                                  </FormGrid>
-                                  <FormGrid>
-                                    <label>
-                                      Botón
-                                      <input
-                                        value={editSlideDraft.ctaLabel}
-                                        onChange={(e) =>
-                                          setEditSlideDraft({ ...editSlideDraft, ctaLabel: e.target.value })
-                                        }
-                                      />
-                                    </label>
-                                    <label>
-                                      Enlace del botón
-                                      <input
-                                        value={editSlideDraft.ctaHref}
-                                        onChange={(e) =>
-                                          setEditSlideDraft({ ...editSlideDraft, ctaHref: e.target.value })
-                                        }
-                                      />
-                                    </label>
-                                  </FormGrid>
-                                  <label>
-                                    URL de imagen
-                                    <input
-                                      value={editSlideDraft.imageUrl}
-                                      onChange={(e) =>
-                                        setEditSlideDraft({ ...editSlideDraft, imageUrl: e.target.value })
-                                      }
-                                    />
-                                  </label>
-                                  <div className="form-actions">
-                                    <button
-                                      className="btn"
-                                      type="button"
-                                      disabled={saving || !editSlideDraft.imageUrl}
-                                      onClick={() =>
-                                        saveSlide(s, {
-                                          title: editSlideDraft.title,
-                                          subtitle: editSlideDraft.subtitle,
-                                          imageUrl: editSlideDraft.imageUrl,
-                                          ctaLabel: editSlideDraft.ctaLabel,
-                                          ctaHref: editSlideDraft.ctaHref,
-                                        })
-                                      }
-                                    >
-                                      {saving ? 'Guardando…' : 'Guardar cambios'}
-                                    </button>
-                                    <button
-                                      className="btn ghost"
-                                      type="button"
-                                      onClick={() => setEditSlideId(null)}
-                                    >
-                                      Cancelar
-                                    </button>
-                                  </div>
-                                </div>
-                              ) : (
-                                <>
-                                  <div className="row">
-                                    <strong>{s.title || 'Sin título'}</strong>
-                                    <span className={`badge ${s.active ? 'ok' : 'warn'}`}>
-                                      {s.active ? 'Activo' : 'Borrador'}
-                                    </span>
-                                  </div>
-                                  <div className="kpi-sub muted">{s.subtitle || '—'}</div>
-                                  <div className="kpi-sub muted">
-                                    {s.ctaLabel || 'Botón'} → {s.ctaHref || '#'}
-                                  </div>
-                                  <div className="row row--tight">
-                                    {canPublish ? (
-                                      <button className="btn ghost btn-sm" type="button" onClick={() => toggleSlide(s)}>
-                                        {s.active ? 'Desactivar' : 'Activar'}
-                                      </button>
-                                    ) : !s.active ? (
-                                      <button
-                                        className="btn ghost btn-sm"
-                                        type="button"
-                                        disabled={saving}
-                                        onClick={() => void requestReview('slide', s.id)}
-                                      >
-                                        Enviar a revisión
-                                      </button>
-                                    ) : null}
-                                    {locked ? null : (
-                                      <button
-                                        className="btn ghost btn-sm btn-danger"
-                                        type="button"
-                                        onClick={() => removeSlide(s.id)}
-                                      >
-                                        Eliminar
-                                      </button>
-                                    )}
-                                  </div>
-                                </>
-                              )}
-                            </div>
-                          </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
+              <section className="st-editor" aria-labelledby="st-editor-title">
+                <header className="st-editor__head">
+                  <h2 id="st-editor-title">{title}</h2>
+                  <p>{description}</p>
+                  {block && !block.visible ? (
+                    <p className="st-banner">
+                      <strong>Esta sección está quitada del sitio.</strong> Tócala en «Poner» para que vuelva a salir.
+                    </p>
+                  ) : null}
+                </header>
 
-            {tab === 'news' && (
-              <div className="dash-split">
-                <div className="panel">
-                  <div className="panel-head">
-                    <h2>{editingNewsId ? 'Editar noticia' : 'Nueva noticia'}</h2>
-                    {editingNewsId ? (
-                      <button className="btn ghost btn-sm" type="button" onClick={resetNewsForm}>
-                        Nueva en blanco
-                      </button>
-                    ) : null}
-                  </div>
-                  <div className="panel-body">
-                    <div className="form">
-                      {/* Junta 23-10-2026: plantillas de página para las publicaciones de redes. */}
-                      <div className="stack">
-                        <div className="label">Plantilla</div>
-                        <div className="row row--tight" role="radiogroup" aria-label="Plantilla de la publicación">
-                          {[...NEWS_TEMPLATES, null].map((tpl) => {
-                            const key = tpl?.key ?? '';
-                            const active = newsForm.template === key;
-                            return (
-                              <button
-                                key={key || 'libre'}
-                                type="button"
-                                role="radio"
-                                aria-checked={active}
-                                className={`btn btn-sm ${active ? '' : 'ghost'}`}
-                                onClick={() => pickTemplate(key)}
-                                title={tpl?.description ?? 'Sin guía: título, texto y portada'}
-                              >
-                                {tpl?.label ?? 'Libre'}
-                              </button>
-                            );
-                          })}
-                        </div>
-                        {activeTemplate ? <p className="kpi-sub muted">{activeTemplate.description}</p> : null}
-                      </div>
-                      <FormGrid>
-                        <label>
-                          Título
-                          <input
-                            value={newsForm.title}
-                            placeholder={activeTemplate?.hints.title}
-                            onChange={(e) =>
-                              setNewsForm({
-                                ...newsForm,
-                                title: e.target.value,
-                                slug: newsForm.slug || slugify(e.target.value),
-                              })
-                            }
-                          />
-                        </label>
-                        <label>
-                          Slug
-                          <input
-                            value={newsForm.slug}
-                            onChange={(e) => setNewsForm({ ...newsForm, slug: e.target.value })}
-                          />
-                        </label>
-                      </FormGrid>
-                      {activeTemplate?.requiresEventDate ? (
-                        <label>
-                          Fecha del show
-                          <input
-                            type="date"
-                            value={newsForm.eventDate}
-                            onChange={(e) => setNewsForm({ ...newsForm, eventDate: e.target.value })}
-                          />
-                        </label>
-                      ) : null}
-                      <label>
-                        {activeTemplate ? 'Entrada (se ve en la tarjeta y al compartir)' : 'Extracto'}
-                        <textarea
-                          rows={2}
-                          placeholder={activeTemplate?.hints.excerpt}
-                          value={newsForm.excerpt}
-                          onChange={(e) => setNewsForm({ ...newsForm, excerpt: e.target.value })}
-                        />
-                      </label>
-                      <label>
-                        Cuerpo
-                        <textarea
-                          rows={activeTemplate ? 7 : 5}
-                          placeholder={activeTemplate?.hints.body}
-                          value={newsForm.body}
-                          onChange={(e) => setNewsForm({ ...newsForm, body: e.target.value })}
-                        />
-                      </label>
-                      <label>
-                        Cover URL
-                        <input
-                          value={newsForm.coverUrl}
-                          onChange={(e) => setNewsForm({ ...newsForm, coverUrl: e.target.value })}
-                        />
-                      </label>
-                      <label className="btn ghost">
-                        {uploading ? 'Subiendo…' : 'Subir cover'}
-                        <input
-                          type="file"
-                          hidden
-                          accept="image/*"
-                          onChange={async (e) => {
-                            const f = e.target.files?.[0];
-                            if (!f) return;
-                            setUploading(true);
-                            try {
-                              const url = await uploadAsset(f);
-                              setNewsForm((n) => ({ ...n, coverUrl: url }));
-                              setMsg('Cover subido');
-                            } catch (err) {
-                              setMsg(err instanceof Error ? err.message : 'Error upload');
-                            } finally {
-                              setUploading(false);
-                            }
-                          }}
-                        />
-                      </label>
-                      <FormGrid>
-                        <label>
-                          Botón (opcional)
-                          <input
-                            value={newsForm.ctaLabel}
-                            placeholder={activeTemplate?.cta.label || 'Ej. Comprar boletos'}
-                            onChange={(e) => setNewsForm({ ...newsForm, ctaLabel: e.target.value })}
-                          />
-                        </label>
-                        <label>
-                          Enlace del botón
-                          <input
-                            value={newsForm.ctaHref}
-                            placeholder="https://… o #contacto"
-                            onChange={(e) => setNewsForm({ ...newsForm, ctaHref: e.target.value })}
-                          />
-                        </label>
-                      </FormGrid>
-                      {newsForm.title || newsForm.coverUrl ? (
-                        <div className="studio-preview__stage" aria-label="Vista previa de la publicación">
-                          {newsForm.coverUrl ? (
-                            <img className="studio-preview__thumb" src={newsForm.coverUrl} alt="Portada" />
-                          ) : null}
-                          {newsForm.eventDate ? (
-                            <div className="kpi-sub muted">{eventDateLabel(newsForm.eventDate)}</div>
-                          ) : null}
-                          <h3 className="studio-preview__headline">{newsForm.title || 'Título'}</h3>
-                          {newsForm.excerpt ? <p className="studio-preview__body">{newsForm.excerpt}</p> : null}
-                          {newsForm.ctaLabel ? <span className="studio-preview__cta">{newsForm.ctaLabel}</span> : null}
-                        </div>
-                      ) : null}
-                      {newsMissing.length && (newsForm.title || newsForm.template) ? (
-                        <p className="kpi-sub muted">Para publicar falta: {newsMissing.join(', ')}.</p>
-                      ) : null}
-                      {canPublish ? (
-                        <FieldCheck
-                          checked={newsForm.published}
-                          onChange={(checked) => setNewsForm({ ...newsForm, published: checked })}
-                          label={editingNewsId ? 'Publicada en el sitio' : 'Publicar al crear'}
-                        />
-                      ) : null}
-                      <button className="btn" type="button" disabled={saving} onClick={addNews}>
-                        {saving ? 'Guardando…' : publishNews ? 'Publicar noticia' : 'Guardar borrador'}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="panel">
-                  <div className="panel-head">
-                    <h2>Directorio · {news.length}</h2>
-                  </div>
-                  <div className="panel-body">
-                    {!news.length ? (
-                      <EmptyState
-                        title="Sin noticias"
-                        description="Crea la primera nota para el sitio público."
-                      />
-                    ) : (
-                      <div className="table-wrap">
-                        <table className="table table-sticky">
-                          <thead>
-                            <tr>
-                              <th>Título</th>
-                              <th>Slug</th>
-                              <th>Estado</th>
-                              <th></th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {news.map((n) => (
-                              <tr key={n.id}>
-                                <td>
-                                  <strong>{n.title}</strong>
-                                  {n.excerpt ? (
-                                    <div className="kpi-sub muted">
-                                      {n.excerpt.slice(0, 80)}
-                                      {n.excerpt.length > 80 ? '…' : ''}
-                                    </div>
-                                  ) : null}
-                                </td>
-                                <td className="muted">{n.slug}</td>
-                                <td>
-                                  <span className={`badge ${n.published ? 'ok' : 'warn'}`}>
-                                    {n.published ? 'Publicada' : n.reviewRequestedAt ? 'En revisión' : 'Borrador'}
-                                  </span>
-                                  {newsTemplate(n.template) ? (
-                                    <div className="kpi-sub muted">{newsTemplate(n.template)?.label}</div>
-                                  ) : null}
-                                </td>
-                                <td>
-                                  <div className="row">
-                                    {canPublish || !n.published ? (
-                                      <button className="btn ghost" type="button" onClick={() => editNews(n)}>
-                                        Editar
-                                      </button>
-                                    ) : null}
-                                    {canPublish ? (
-                                      <button className="btn ghost" type="button" onClick={() => toggleNews(n)}>
-                                        {n.published ? 'Despublicar' : 'Publicar'}
-                                      </button>
-                                    ) : !n.published && !n.reviewRequestedAt ? (
-                                      <button
-                                        className="btn ghost"
-                                        type="button"
-                                        disabled={saving}
-                                        onClick={() => void requestReview('news', n.id)}
-                                      >
-                                        Enviar a revisión
-                                      </button>
-                                    ) : null}
-                                    {n.published ? (
-                                      <Link className="btn ghost" href={`/p/arta/noticias/${n.slug}`} target="_blank">
-                                        Ver
-                                      </Link>
-                                    ) : null}
-                                    {canPublish || !n.published ? (
-                                      <button className="btn ghost" type="button" onClick={() => removeNews(n.id)}>
-                                        Eliminar
-                                      </button>
-                                    ) : null}
-                                  </div>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {tab === 'sections' && (
-              <div className="stack">
-                <FilterBar
-                  meta={
-                    proposals.has(sectionKey) ? (
-                      <span className="badge warn">Propuesta en revisión</span>
-                    ) : (
-                      <span className={`badge ${published ? 'ok' : 'warn'}`}>
-                        {published ? 'Publicado' : 'Borrador'}
-                      </span>
-                    )
-                  }
-                >
-                  <nav className="tab-bar" aria-label="Secciones del home">
-                    {Object.keys(SECTION_META).map((key) => {
-                      const page = pages.find((p) => p.sectionKey === key);
-                      return (
-                        <button
-                          key={key}
-                          type="button"
-                          className={`tab-bar__btn ${sectionKey === key ? 'is-active' : ''}`}
-                          onClick={() => setSectionKey(key)}
-                        >
-                          {SECTION_META[key]}
-                          {proposals.has(key) ? (
-                            <span className="tab-bar__count">propuesta</span>
-                          ) : page ? (
-                            <span className="tab-bar__count">{page.published ? 'on' : 'off'}</span>
-                          ) : null}
-                        </button>
-                      );
-                    })}
-                  </nav>
-                </FilterBar>
-
-                {canPublish && proposals.has(sectionKey) ? (
-                  <FlashMessage variant="warn">
-                    Un practicante propuso cambios a esta sección.{' '}
-                    <button
-                      className="btn ghost btn-sm"
-                      type="button"
-                      onClick={() => {
-                        const proposal = proposals.get(sectionKey);
-                        if (proposal) fillSectionDraft(proposal);
-                        setMsg('Propuesta cargada en el editor: revísala y guarda para publicarla');
-                      }}
-                    >
-                      Cargar propuesta
-                    </button>{' '}
-                    <button className="btn ghost btn-sm btn-danger" type="button" onClick={() => void discardProposal(sectionKey)}>
-                      Descartar
-                    </button>
-                  </FlashMessage>
-                ) : null}
-                {!canPublish ? (
-                  <FlashMessage variant="info">
-                    Tus cambios se guardan como propuesta: la sección del sitio no cambia hasta que dirección la revise.
-                    {proposals.has(sectionKey) ? (
-                      <>
-                        {' '}
-                        <button
-                          className="btn ghost btn-sm"
-                          type="button"
-                          disabled={saving}
-                          onClick={() => void requestReview('section', sectionKey)}
-                        >
-                          Enviar a revisión
-                        </button>
-                      </>
-                    ) : null}
-                  </FlashMessage>
+                {collectionKey ? (
+                  <CollectionEditor
+                    config={COLLECTIONS[collectionKey]}
+                    rows={rowsOf(collectionKey)}
+                    canPublish={canPublish}
+                    busy={busy}
+                    linkOptions={LINK_SUGGESTIONS}
+                    onSave={(values, id, publish) => saveRow(COLLECTIONS[collectionKey], values, id, publish)}
+                    onSetLive={(row, value) => setRowLive(COLLECTIONS[collectionKey], row, value)}
+                    onRemove={(row) => removeRow(COLLECTIONS[collectionKey], row)}
+                    onMove={(ids) => moveRows(COLLECTIONS[collectionKey], ids)}
+                    onReview={async (row) => {
+                      await reviewRow(COLLECTIONS[collectionKey], row);
+                    }}
+                    onError={(text) => say('error', text)}
+                  />
                 ) : null}
 
-                <div className="studio-split">
-                  <div className="panel">
-                    <div className="panel-head">
-                      <h2>Editor · {SECTION_META[sectionKey]}</h2>
-                    </div>
-                    <div className="panel-body">
-                      <div className="form">
-                        {sectionKey === 'home_hero' ? (
-                          <FormGrid>
-                            <label>
-                              Marca
-                              <input
-                                value={draft.brand || ''}
-                                onChange={(e) => setDraft({ ...draft, brand: e.target.value })}
-                              />
-                            </label>
-                            <label>
-                              Submarca
-                              <input
-                                value={draft.brandSub || ''}
-                                onChange={(e) => setDraft({ ...draft, brandSub: e.target.value })}
-                              />
-                            </label>
-                          </FormGrid>
-                        ) : null}
-                        <label>
-                          Titular
-                          <input
-                            value={draft.headline || ''}
-                            onChange={(e) => setDraft({ ...draft, headline: e.target.value })}
-                          />
-                        </label>
-                        <label>
-                          Texto
-                          <textarea
-                            rows={5}
-                            value={draft.body || draft.sub || ''}
-                            onChange={(e) =>
-                              setDraft({
-                                ...draft,
-                                body: e.target.value,
-                                sub: e.target.value,
-                                lead: e.target.value,
-                              })
-                            }
-                          />
-                        </label>
-                        <FormGrid>
-                          <label>
-                            Botón
-                            <input
-                              value={draft.cta || ''}
-                              onChange={(e) => setDraft({ ...draft, cta: e.target.value })}
-                            />
-                          </label>
-                          <label>
-                            Enlace del botón
-                            <input
-                              value={draft.ctaHref || ''}
-                              onChange={(e) => setDraft({ ...draft, ctaHref: e.target.value })}
-                            />
-                          </label>
-                        </FormGrid>
-                        {sectionKey === 'home_modulos' ? (
-                          <div className="stack" style={{ marginTop: '1rem' }}>
-                            <div className="label">Tiles del home (módulos)</div>
-                            {tileDraft.map((tile, idx) => (
-                              <div key={idx} className="panel" style={{ padding: '0.75rem' }}>
-                                <FormGrid>
-                                  <label>
-                                    Título
-                                    <input
-                                      value={tile.title}
-                                      onChange={(e) => {
-                                        const next = [...tileDraft];
-                                        next[idx] = { ...tile, title: e.target.value };
-                                        setTileDraft(next);
-                                      }}
-                                    />
-                                  </label>
-                                  <label>
-                                    &nbsp;
-                                    <button
-                                      className="btn ghost btn-sm btn-danger"
-                                      type="button"
-                                      onClick={() => setTileDraft(tileDraft.filter((_, i) => i !== idx))}
-                                    >
-                                      Quitar
-                                    </button>
-                                  </label>
-                                </FormGrid>
-                                <label>
-                                  Texto
-                                  <textarea
-                                    rows={2}
-                                    value={tile.body}
-                                    onChange={(e) => {
-                                      const next = [...tileDraft];
-                                      next[idx] = { ...tile, body: e.target.value };
-                                      setTileDraft(next);
-                                    }}
-                                  />
-                                </label>
-                              </div>
-                            ))}
-                            <button
-                              className="btn ghost btn-sm"
-                              type="button"
-                              onClick={() =>
-                                setTileDraft([...tileDraft, { title: '', body: '' }])
-                              }
-                            >
-                              + Agregar tile
-                            </button>
-                          </div>
-                        ) : null}
-                        {sectionKey === 'home_about' ? (
-                          <div className="stack" style={{ marginTop: '1rem' }}>
-                            <label>
-                              Ubicación (texto visible)
-                              <textarea
-                                rows={3}
-                                value={aboutLocation}
-                                onChange={(e) => setAboutLocation(e.target.value)}
-                                placeholder="Base operativa en Puebla…"
-                              />
-                            </label>
-                            <p className="muted kpi-sub">
-                              Coordenadas del mapa: env{' '}
-                              <code>NEXT_PUBLIC_VENUE_LAT</code> / <code>NEXT_PUBLIC_VENUE_LNG</code> /{' '}
-                              <code>NEXT_PUBLIC_VENUE_ADDRESS</code>.
-                            </p>
-                            <div className="label">Stats (Nosotros)</div>
-                            {aboutStatsDraft.map((stat, idx) => (
-                              <div key={idx} className="panel" style={{ padding: '0.75rem' }}>
-                                <FormGrid>
-                                  <label>
-                                    Etiqueta
-                                    <input
-                                      value={stat.label}
-                                      onChange={(e) => {
-                                        const next = [...aboutStatsDraft];
-                                        next[idx] = { ...stat, label: e.target.value };
-                                        setAboutStatsDraft(next);
-                                      }}
-                                    />
-                                  </label>
-                                  <label>
-                                    &nbsp;
-                                    <button
-                                      className="btn ghost btn-sm btn-danger"
-                                      type="button"
-                                      onClick={() =>
-                                        setAboutStatsDraft(aboutStatsDraft.filter((_, i) => i !== idx))
-                                      }
-                                    >
-                                      Quitar
-                                    </button>
-                                  </label>
-                                </FormGrid>
-                                <label>
-                                  Texto
-                                  <input
-                                    value={stat.text}
-                                    onChange={(e) => {
-                                      const next = [...aboutStatsDraft];
-                                      next[idx] = { ...stat, text: e.target.value };
-                                      setAboutStatsDraft(next);
-                                    }}
-                                  />
-                                </label>
-                              </div>
-                            ))}
-                            <button
-                              className="btn ghost btn-sm"
-                              type="button"
-                              onClick={() =>
-                                setAboutStatsDraft([...aboutStatsDraft, { label: '', text: '' }])
-                              }
-                            >
-                              + Agregar stat
-                            </button>
-                          </div>
-                        ) : null}
-                        {canPublish ? (
-                          <FieldCheck
-                            checked={published}
-                            onChange={setPublished}
-                            label="Publicado en sitio live"
-                          />
-                        ) : null}
-                        <button className="btn" type="button" disabled={saving} onClick={saveSection}>
-                          {saving
-                            ? 'Guardando…'
-                            : !canPublish
-                              ? 'Guardar propuesta'
-                              : published
-                                ? 'Guardar y publicar'
-                                : 'Guardar borrador'}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
+                {fields.length ? (
+                  collectionKey ? (
+                    <details className="st-texts">
+                      <summary>Textos de la sección</summary>
+                      {sectionEditor}
+                    </details>
+                  ) : (
+                    sectionEditor
+                  )
+                ) : null}
+              </section>
 
-                  <div className="panel studio-preview">
-                    <div className="panel-head">
-                      <h2>Vista previa</h2>
-                      <span className="kpi-sub muted">No publicado hasta guardar</span>
-                    </div>
-                    <div className="panel-body">
-                      <div className="studio-preview__stage">
-                        {draft.brand ? (
-                          <div className="studio-preview__brand">
-                            {draft.brand}
-                            {draft.brandSub ? <span>{draft.brandSub}</span> : null}
-                          </div>
-                        ) : null}
-                        <h3 className="studio-preview__headline">{previewHeadline}</h3>
-                        <p className="studio-preview__body">{previewBody}</p>
-                        {previewCta ? (
-                          <span className="studio-preview__cta">{previewCta}</span>
-                        ) : null}
-                      </div>
-                    </div>
-                  </div>
-                </div>
+              <div className={`st-preview-slot ${previewOpen ? 'is-open' : ''}`.trim()}>
+                <PreviewPane ref={preview} onClose={() => setPreviewOpen(false)} onReady={scrollPreviewToSelected} />
               </div>
-            )}
+            </div>
           </>
         )}
       </div>
     </AppShell>
   );
+}
+
+/** Las filas vacías de una lista no se guardan. */
+function cleanContent(values: FormValues): FormValues {
+  const out: FormValues = {};
+  for (const [key, value] of Object.entries(values)) {
+    if (Array.isArray(value)) {
+      out[key] = value.filter((row) => Object.values((row || {}) as object).some((v) => String(v ?? '').trim()));
+    } else {
+      out[key] = value;
+    }
+  }
+  return out;
 }

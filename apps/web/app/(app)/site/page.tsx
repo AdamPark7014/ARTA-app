@@ -1,22 +1,33 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import '@/styles/sitio.scss';
 import { PublicSite } from '@/components/site/PublicSite';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { LoadingBlock } from '@/components/ui/LoadingBlock';
-import { ActionLink, PageHeader } from '@/components/ui/PageChrome';
 import { useUser } from '@/lib/user-context';
 
-/** Preview autenticado del sitio Arta */
+/**
+ * Vista previa del sitio con lo que aún no se publica. La usa Studio dentro de un marco
+ * (`?embed=1`) y también se puede abrir sola, a pantalla completa, para revisarla en el teléfono.
+ */
 export default function SitePreviewPage() {
   const { user, entity, setEntity, loading } = useUser();
+  const [params, setParams] = useState<URLSearchParams | null>(null);
+
+  useEffect(() => {
+    setParams(new URLSearchParams(window.location.search));
+  }, []);
 
   useEffect(() => {
     if (entity !== 'ARTA') setEntity('ARTA');
   }, [entity, setEntity]);
 
-  if (loading) {
+  const embed = params?.get('embed') === '1';
+  const mode = useMemo(() => (params?.get('modo') === 'publicado' ? 'publicado' : 'borradores'), [params]);
+
+  if (loading || !params) {
     return (
       <div className="auth-page">
         <div className="auth-card">
@@ -30,15 +41,9 @@ export default function SitePreviewPage() {
     return (
       <main className="auth-page">
         <div className="auth-card">
-          <p className="eyebrow">arta · sitio público</p>
-          <h1>Sitio corporativo Arta</h1>
-          <p className="lead">
-            Vista previa autenticada del sitio. Inicia sesión para ver el banner de edición o abre
-            el sitio live directamente.
-          </p>
           <EmptyState
             title="Sesión requerida"
-            description="La vista previa con barra de Studio requiere acceso al panel Arta."
+            description="La vista previa enseña lo que aún no se publica: entra con tu cuenta."
             actionHref="/login?next=/site"
             actionLabel="Iniciar sesión"
           >
@@ -52,21 +57,16 @@ export default function SitePreviewPage() {
   }
 
   return (
-    <div>
-      <div className="site-preview-bar">
-        <PageHeader description="Vista previa del sitio público; los cambios se hacen en Studio.">
-          <ActionLink href="/studio" variant="ghost">
-            Studio
-          </ActionLink>
-          <Link className="btn" href="/p/arta" target="_blank" rel="noopener noreferrer">
-            Abrir sitio en vivo
-          </Link>
-          <ActionLink href="/dashboard" variant="ghost">
-            Panel
-          </ActionLink>
-        </PageHeader>
-      </div>
-      <PublicSite />
-    </div>
+    <>
+      {embed ? null : (
+        <div className="sa-previewbar">
+          <span>
+            <strong>Vista previa.</strong> {mode === 'publicado' ? 'Así está publicado.' : 'Incluye lo que aún no se publica.'}
+          </span>
+          <Link href="/studio">Volver a Studio</Link>
+        </div>
+      )}
+      <PublicSite mode={mode} embed={embed} />
+    </>
   );
 }

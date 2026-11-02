@@ -1,6 +1,8 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: 'standalone',
+  // Otra carpeta de build para probar sin pisar el `.next` de otra sesión en este mismo checkout.
+  ...(process.env.NEXT_DIST_DIR ? { distDir: process.env.NEXT_DIST_DIR } : {}),
   reactStrictMode: true,
   transpilePackages: ['@arta/rbac'],
   images: {

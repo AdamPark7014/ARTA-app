@@ -75,6 +75,15 @@ export type NewsDraft = {
   ctaHref: string;
 };
 
+/** Una dirección libre para una publicación nueva: `concierto`, `concierto-2`… */
+export function uniqueSlug(title: string, taken: string[]): string {
+  const base = slugify(title) || 'publicacion';
+  if (!taken.includes(base)) return base;
+  let n = 2;
+  while (taken.includes(`${base}-${n}`)) n += 1;
+  return `${base}-${n}`;
+}
+
 /** Mismo criterio que la API (isSafeCtaHref): web, ruta del sitio, ancla, correo o teléfono. */
 export function isSafeCtaHref(href: string): boolean {
   const value = href.trim();

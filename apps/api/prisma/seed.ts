@@ -11,6 +11,7 @@ import {
   storedFormatVersion,
 } from '../src/checklists/format-catalog';
 import { NEW_TEAM_MEMBERS } from './new-team-members';
+import { seedStudioContent } from './seed-studio';
 
 const prisma = new PrismaClient();
 
@@ -28,53 +29,6 @@ function ensureSeedAsset(fileName: string): string {
   return `/uploads/${fileName}`;
 }
 
-const SEED_SLIDES = [
-  {
-    title: 'La experiencia del Show',
-    subtitle: 'Producción integral de conciertos y eventos en Puebla',
-    file: 'seed-hero-1.jpg',
-    ctaLabel: 'Ver operación',
-    ctaHref: '#modulos',
-    sortOrder: 0,
-  },
-  {
-    title: 'Escenario, luz y público',
-    subtitle: 'Checklists, boletera, campaña y cierre en un solo flujo',
-    file: 'seed-hero-2.jpg',
-    ctaLabel: 'Conoce Arta',
-    ctaHref: '#nosotros',
-    sortOrder: 1,
-  },
-  {
-    title: 'Cada detalle cuenta',
-    subtitle: 'Hospitality, producción técnica y firmas digitales',
-    file: 'seed-hero-3.jpg',
-    ctaLabel: 'Noticias',
-    ctaHref: '#noticias',
-    sortOrder: 2,
-  },
-];
-
-const SEED_NEWS = [
-  {
-    slug: 'temporada-puebla',
-    title: 'Nueva temporada de shows en Puebla',
-    excerpt: 'Producción, artes y boletera alineadas de punta a punta.',
-    file: 'seed-news-1.jpg',
-  },
-  {
-    slug: 'checklists-digitales',
-    title: 'Checklists digitales con firma',
-    excerpt: 'Entregado y autorizado quedan registrados en PDF por evento.',
-    file: 'seed-news-2.jpg',
-  },
-  {
-    slug: 'experiencia-show',
-    title: 'La experiencia del Show',
-    excerpt: 'Montaje, corrida y cierre con el sello Arta en cada venue.',
-    file: 'seed-news-3.jpg',
-  },
-];
 
 type Schema = {
   sections: Array<{
@@ -432,60 +386,6 @@ function passwordFor(alias: string, randomUnlessEnv = false) {
   return 'ArtaDevLocal-1';
 }
 
-const STUDIO_CONTENT: Array<{ sectionKey: string; title: string; contentJson: Record<string, unknown> }> = [
-  {
-    sectionKey: 'home_hero',
-    title: 'Hero',
-    contentJson: {
-      brand: 'arta',
-      brandSub: 'PRODUCCIONES',
-      headline: 'La experiencia del Show',
-      sub: 'Producción integral de conciertos y eventos: checklists, campaña, boletera, corrida financiera y cierre con firmas digitales.',
-      cta: 'Ver operación',
-      ctaHref: '#modulos',
-    },
-  },
-  {
-    sectionKey: 'home_about',
-    title: 'Nosotros',
-    contentJson: {
-      headline: 'Producimos el show completo',
-      body:
-        'Somos la productora detrás de la experiencia: producción técnica, hospitality, artes, boletera, campaña y cierre financiero. Operamos con el mismo rigor en cada concierto.',
-      location:
-        'Base operativa en Puebla y venue aliado Auditorio Arema Explanada. Producción integral de conciertos y eventos en la región.',
-      stats: [
-        { label: 'Shows', text: 'Producción integral de conciertos' },
-        { label: 'Puebla', text: 'Base operativa y venues aliados' },
-        { label: 'Experiencia', text: 'Del rider al cierre del evento' },
-      ],
-    },
-  },
-  {
-    sectionKey: 'home_modulos',
-    title: 'Módulos',
-    contentJson: {
-      headline: 'Todo el flujo del evento',
-      lead: 'Formatos editables, PDF por checklist, órdenes de compra y Studio web.',
-      tiles: [
-        { title: 'Producción', body: 'Riders, plantas de luz, stage hands y minuto a minuto.' },
-        { title: 'Hospitality', body: 'Hospedaje, transporte, catering y camerinos.' },
-        { title: 'Comercial', body: 'Boletera, patrocinios, artes y campaña autorizada.' },
-        { title: 'Cierre', body: 'Corrida financiera, anticipos y firmas entregado / autorizado.' },
-      ],
-    },
-  },
-  {
-    sectionKey: 'home_cta',
-    title: 'CTA',
-    contentJson: {
-      headline: 'Hablemos de tu próximo show',
-      body: 'Cuéntanos tu fecha, venue y alcance. Te respondemos con una propuesta de producción.',
-      cta: 'Escribir a Arta',
-      ctaHref: 'mailto:contacto@artaproducciones.com',
-    },
-  },
-];
 
 /**
  * Cuentas cuyo correo cambió (viejo → nuevo). Todos los usuarios son del equipo de Arta, también los que
@@ -638,63 +538,7 @@ async function main() {
 
   await prisma.pageContent.deleteMany({ where: { entity: 'EXPLANADA' } });
   await prisma.heroSlide.deleteMany({ where: { entity: 'EXPLANADA' } });
-  for (const page of STUDIO_CONTENT) {
-    await prisma.pageContent.upsert({
-      where: { entity_sectionKey: { entity: 'ARTA', sectionKey: page.sectionKey } },
-      create: {
-        entity: 'ARTA',
-        sectionKey: page.sectionKey,
-        title: page.title,
-        published: true,
-        contentJson: page.contentJson as Prisma.InputJsonValue,
-      },
-      update: {
-        title: page.title,
-        published: true,
-        contentJson: page.contentJson as Prisma.InputJsonValue,
-      },
-    });
-  }
-  await prisma.heroSlide.deleteMany({ where: { entity: 'ARTA' } });
-  for (const s of SEED_SLIDES) {
-    const imageUrl = ensureSeedAsset(s.file);
-    await prisma.heroSlide.create({
-      data: {
-        entity: 'ARTA',
-        title: s.title,
-        subtitle: s.subtitle,
-        imageUrl,
-        ctaLabel: s.ctaLabel,
-        ctaHref: s.ctaHref,
-        sortOrder: s.sortOrder,
-        active: true,
-      },
-    });
-  }
-
-  for (const n of SEED_NEWS) {
-    const coverUrl = ensureSeedAsset(n.file);
-    await prisma.newsPost.upsert({
-      where: { entity_slug: { entity: 'ARTA', slug: n.slug } },
-      create: {
-        entity: 'ARTA',
-        slug: n.slug,
-        title: n.title,
-        excerpt: n.excerpt,
-        coverUrl,
-        published: true,
-        publishedAt: new Date(),
-      },
-      update: {
-        title: n.title,
-        excerpt: n.excerpt,
-        coverUrl,
-        published: true,
-        publishedAt: new Date(),
-      },
-    });
-  }
-  console.log('  ✓ Studio pages + slides + news Arta (assets en uploads)');
+  await seedStudioContent(prisma, ensureSeedAsset);
 
   await seedDemoPortfolio();
 

@@ -1,108 +1,87 @@
 'use client';
 
-import Image from 'next/image';
-import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
-import { panelLoginUrl } from '@/lib/domains';
+
+export type SiteNavLink = { label: string; href: string };
 
 type SiteHeaderProps = {
-  /** `home` = full marketing nav; `article` = compact nav for news detail */
-  mode?: 'home' | 'article';
+  nav: SiteNavLink[];
+  homeHref?: string;
+  contactHref: string;
+  /** Páginas sin portada oscura: el encabezado arranca sólido, sobre papel. */
+  solid?: boolean;
 };
 
-export function SiteHeader({ mode = 'home' }: SiteHeaderProps) {
-  const [scrolled, setScrolled] = useState(mode === 'article');
+/** La marca: el SVG va como máscara para que tome el color del encabezado sin cargar dos archivos. */
+export function SiteLogo({ className = '' }: { className?: string }) {
+  return <span className={`sa-logo ${className}`.trim()} role="img" aria-label="Arta Producciones" />;
+}
+
+export function SiteHeader({ nav, homeHref = '/p/arta', contactHref, solid = false }: SiteHeaderProps) {
+  const [scrolled, setScrolled] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const closeMenu = useCallback(() => setMenuOpen(false), []);
-  const panelLogin = panelLoginUrl('ARTA');
 
   useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 24 || mode === 'article');
+    const onScroll = () => setScrolled(window.scrollY > 24);
     onScroll();
     window.addEventListener('scroll', onScroll, { passive: true });
     return () => window.removeEventListener('scroll', onScroll);
-  }, [mode]);
+  }, []);
 
   useEffect(() => {
     if (!menuOpen) return;
-    document.body.classList.add('site-nav-open');
+    document.body.classList.add('sa-lock');
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') closeMenu();
     };
     window.addEventListener('keydown', onKey);
     return () => {
-      document.body.classList.remove('site-nav-open');
+      document.body.classList.remove('sa-lock');
       window.removeEventListener('keydown', onKey);
     };
   }, [menuOpen, closeMenu]);
 
-  const homeHref = '/p/arta';
-  const newsHref = `${homeHref}#noticias`;
+  const light = (solid || scrolled) && !menuOpen;
 
   return (
-    <>
-      {menuOpen ? (
-        <button
-          type="button"
-          className="site-nav-backdrop"
-          aria-label="Cerrar menú"
-          onClick={closeMenu}
-        />
-      ) : null}
-      <header
-        className={`site-nav ${scrolled ? 'is-scrolled' : ''} ${menuOpen ? 'site-nav--open' : ''}`}
+    <header className={`sa-nav ${light ? 'is-light' : ''} ${menuOpen ? 'is-open' : ''}`.trim()}>
+      <a href={homeHref || '#'} className="sa-nav__brand" onClick={closeMenu} aria-label="Arta Producciones, inicio">
+        <SiteLogo />
+      </a>
+      <nav className="sa-nav__links" aria-label="Principal">
+        {nav.map((link) => (
+          <a key={link.href} href={link.href}>
+            {link.label}
+          </a>
+        ))}
+        <a className="sa-btn sa-btn--nav" href={contactHref}>
+          Contacto
+        </a>
+      </nav>
+      <button
+        type="button"
+        className="sa-nav__toggle"
+        aria-expanded={menuOpen}
+        aria-controls="sa-menu"
+        aria-label={menuOpen ? 'Cerrar menú' : 'Abrir menú'}
+        onClick={() => setMenuOpen((v) => !v)}
       >
-        <Link href={homeHref} className="site-brand" onClick={closeMenu}>
-          <Image
-            src="/brand/arta-logo.png"
-            alt="Arta Producciones"
-            width={140}
-            height={78}
-            className="site-logo-img"
-            priority
-          />
-        </Link>
-        <button
-          type="button"
-          className="site-nav-toggle"
-          aria-expanded={menuOpen}
-          aria-controls="site-primary-nav"
-          onClick={() => setMenuOpen((v) => !v)}
-        >
-          <span />
-          <span />
-          <span />
-          <span className="sr-only">Menú</span>
-        </button>
-        <nav id="site-primary-nav" className={`site-nav-links ${menuOpen ? 'is-open' : ''}`}>
-          {mode === 'article' ? (
-            <Link href={newsHref} onClick={closeMenu}>
-              ← Noticias
-            </Link>
-          ) : null}
-          <a href={`${homeHref}#nosotros`} onClick={closeMenu}>
-            Nosotros
-          </a>
-          <a href={`${homeHref}#modulos`} onClick={closeMenu}>
-            Operación
-          </a>
-          <a href={newsHref} onClick={closeMenu}>
-            Noticias
-          </a>
-          <a href={`${homeHref}#faq`} onClick={closeMenu}>
-            FAQ
-          </a>
-          <a href={`${homeHref}#ubicacion`} onClick={closeMenu}>
-            Ubicación
-          </a>
-          <a href={`${homeHref}#contacto`} className="btn ghost btn-sm" onClick={closeMenu}>
+        <span />
+        <span />
+      </button>
+      <div id="sa-menu" className="sa-menu" hidden={!menuOpen}>
+        <nav aria-label="Menú">
+          {nav.map((link) => (
+            <a key={link.href} href={link.href} onClick={closeMenu}>
+              {link.label}
+            </a>
+          ))}
+          <a href={contactHref} onClick={closeMenu}>
             Contacto
           </a>
-          <a href={panelLogin} className="btn btn-sm site-nav-panel" rel="nofollow">
-            Acceso equipo
-          </a>
         </nav>
-      </header>
-    </>
+      </div>
+    </header>
   );
 }

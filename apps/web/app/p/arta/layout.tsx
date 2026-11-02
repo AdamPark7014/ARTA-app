@@ -1,14 +1,15 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
+import '@/styles/sitio.scss';
 import { HOME_PATH, SITE_NAME, buildPublicMetadata } from '@/lib/site-seo';
 
 const googleVerification = process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION?.trim();
 const bingVerification = process.env.NEXT_PUBLIC_BING_SITE_VERIFICATION?.trim();
 
 const baseMeta = buildPublicMetadata({
-  title: `${SITE_NAME} · Producción de conciertos y eventos en Puebla`,
+  title: `${SITE_NAME} · Producción de conciertos y espectáculos en Puebla`,
   absoluteTitle: true,
   description:
-    'Productora de conciertos y eventos en Puebla: producción técnica, hospitality, boletera, campaña y cierre. Venue aliado: Auditorio Arema Explanada.',
+    'Productora de conciertos y espectáculos en Puebla: cartelera de shows, producción técnica, hospitalidad, boletaje y campaña. La experiencia del Show.',
   path: HOME_PATH,
 });
 
@@ -33,6 +34,9 @@ export const metadata: Metadata = {
     },
   },
 };
+
+/** Safari tiñe su barra con esto: el sitio abre sobre tinta. */
+export const viewport: Viewport = { themeColor: '#0c0c0d' };
 
 export default function PublicArtaLayout({ children }: { children: React.ReactNode }) {
   return children;

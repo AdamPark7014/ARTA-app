@@ -1,261 +1,58 @@
-import Image from 'next/image';
-import Link from 'next/link';
 import { HeroCarousel } from '@/components/site/HeroCarousel';
+import { SiteBlock } from '@/components/site/SiteBlocks';
+import { SiteFooter } from '@/components/site/SiteFooter';
 import { SiteHeader } from '@/components/site/SiteHeader';
-import { VenueMap } from '@/components/site/VenueMap';
-import { panelLoginUrl } from '@/lib/domains';
-import {
-  FALLBACK_MODULE_TILES,
-  FALLBACK_SLIDES,
-  type PublicSiteData,
-} from '@/lib/public-site-data';
-import { CONTACT, PUBLIC_FAQ, VENUE_ADDRESS, socialProfiles } from '@/lib/site-seo';
+import { SiteMotion } from '@/components/site/SiteMotion';
+import { heroContent, type PublicSiteData } from '@/lib/public-site-data';
+import { BLOCK_META, anchorOf } from '@/lib/site-blocks';
+import { HOME_HREF, buildHeroSlides, buildNav, visibleBlocks } from '@/lib/site-model';
 
 type PublicSiteContentProps = {
   data: PublicSiteData;
+  /** Vista previa de Studio: se enseñan borradores y las ligas de sección no salen de la página. */
+  preview?: boolean;
 };
 
-/** Shared markup for public site (SSR and preview). */
-export function PublicSiteContent({ data }: PublicSiteContentProps) {
-  const { pages, slides, news } = data;
-  const hero = pages.find((p) => p.sectionKey === 'home_hero')?.contentJson;
-  const mods = pages.find((p) => p.sectionKey === 'home_modulos')?.contentJson;
-  const about = pages.find((p) => p.sectionKey === 'home_about')?.contentJson;
-  const cta = pages.find((p) => p.sectionKey === 'home_cta')?.contentJson;
-
-  const panelLogin = panelLoginUrl('ARTA');
-  const newsItems = news;
-  const carouselSlides = slides.length ? slides : FALLBACK_SLIDES;
-  // Los mismos perfiles que declara el JSON-LD (`sameAs`): si no se ven aquí, no se publican allá.
-  const socials = socialProfiles();
+/** La página completa, para el sitio (servidor) y para la vista previa (cliente). */
+export function PublicSiteContent({ data, preview = false }: PublicSiteContentProps) {
+  const blocks = visibleBlocks(data, preview);
+  const homeHref = preview ? '' : HOME_HREF;
+  const nav = buildNav(blocks, homeHref);
+  const hero = heroContent(data);
+  const contact = blocks.find((b) => b.type === 'contacto');
+  const contactHref = contact ? `${homeHref}#${anchorOf(contact)}` : `mailto:contacto@artaproducciones.com`;
+  const ticker = (hero.ticker || '')
+    .split('\n')
+    .map((t) => t.trim())
+    .filter(Boolean);
+  const slides = buildHeroSlides(data);
+  const markImage = slides.find((s) => s.kind === 'foto' && s.imageUrl)?.imageUrl;
 
   return (
-    <div className="site site-arta">
-      <SiteHeader />
-      <HeroCarousel slides={carouselSlides} hero={hero} />
-
-      <section className="site-section" id="nosotros">
-        <div className="about-grid">
-          <div>
-            <span className="badge arta">arta PRODUCCIONES</span>
-            <h2>{about?.headline || 'Producimos el show completo'}</h2>
-            <p className="lead">
-              {about?.body ||
-                about?.lead ||
-                'Somos la productora detrás de la experiencia: producción técnica, hospitality, artes, boletera, campaña y cierre financiero. Operamos con el mismo rigor en cada concierto.'}
-            </p>
-            <div className="stat-row">
-              {(
-                about?.stats?.filter((s) => s.label?.trim()) || [
-                  { label: 'Shows', text: 'Producción integral de conciertos' },
-                  { label: 'Puebla', text: 'Base operativa y venues aliados' },
-                  { label: 'Experiencia', text: 'Del rider al cierre del evento' },
-                ]
-              ).map((s) => (
-                <div key={s.label}>
-                  <strong>{s.label}</strong>
-                  <span>{s.text}</span>
-                </div>
+    <div className="sa" data-preview={preview ? 'on' : undefined}>
+      <a className="sa-skip" href="#contenido">
+        Saltar al contenido
+      </a>
+      <SiteHeader nav={nav} homeHref={homeHref} contactHref={contactHref} />
+      <HeroCarousel slides={slides} tone={hero.tone} />
+      {ticker.length ? (
+        <div className="sa-ticker" aria-label={ticker.join('. ')}>
+          {[0, 1, 2, 3].map((copy) => (
+            <div className="sa-ticker__run" key={copy} aria-hidden="true">
+              {ticker.map((line) => (
+                <span key={line}>{line}</span>
               ))}
-            </div>
-          </div>
-          <div
-            className="about-visual"
-            style={{
-              backgroundImage: 'url(/uploads/seed-hero-2.jpg)',
-            }}
-            role="img"
-            aria-label="Producción de eventos en vivo"
-          />
-        </div>
-      </section>
-
-      <section className="site-section" id="modulos">
-        <h2>{mods?.headline || 'Todo el flujo del evento'}</h2>
-        <p className="lead">
-          {mods?.lead ||
-            'Desde el rider hasta el cierre: formatos editables, firmas digitales y control financiero.'}
-        </p>
-        <div className="site-grid">
-          {(mods?.tiles?.length ? mods.tiles : FALLBACK_MODULE_TILES).map((t) => (
-            <div className="site-tile" key={t.title}>
-              <h3>{t.title}</h3>
-              <p>{t.body}</p>
             </div>
           ))}
         </div>
-      </section>
-
-      <section className="site-section" id="noticias">
-        <div className="section-head-row">
-          <div>
-            <h2>Noticias</h2>
-            <p className="muted">Lo último de Arta Producciones</p>
-          </div>
-          <a className="btn ghost btn-sm section-head-row__cta" href="#contacto">
-            ¿Tienes un show? Escríbenos
-          </a>
-        </div>
-        {newsItems.length ? (
-          <div className="news-grid">
-            {newsItems.map((n) => (
-              <Link href={`/p/arta/noticias/${n.slug}`} className="news-card" key={n.id}>
-                <div className="news-cover">
-                  {/* eslint-disable-next-line @next/next/no-img-element -- CMS URLs dinámicas */}
-                  <img
-                    src={n.coverUrl || FALLBACK_SLIDES[0].imageUrl}
-                    alt={n.title}
-                    loading="lazy"
-                  />
-                </div>
-                <div className="news-body">
-                  {n.eventDate ? (
-                    // «Evento destacado» (junta 23-10-2026): la tarjeta lleva la fecha del show.
-                    <time className="muted" dateTime={n.eventDate}>
-                      Evento ·{' '}
-                      {new Date(n.eventDate).toLocaleDateString('es-MX', {
-                        day: 'numeric',
-                        month: 'long',
-                        year: 'numeric',
-                        timeZone: 'UTC',
-                      })}
-                    </time>
-                  ) : (
-                    <time className="muted" dateTime={n.publishedAt || undefined}>
-                      {n.publishedAt
-                        ? new Date(n.publishedAt).toLocaleDateString('es-MX', {
-                            day: 'numeric',
-                            month: 'long',
-                            year: 'numeric',
-                          })
-                        : ''}
-                    </time>
-                  )}
-                  <h3>{n.title}</h3>
-                  <p>{n.excerpt}</p>
-                </div>
-              </Link>
-            ))}
-          </div>
-        ) : (
-          <p className="muted lead">Pronto publicaremos novedades de la temporada.</p>
+      ) : null}
+      <main id="contenido">
+        {blocks.map((block) =>
+          BLOCK_META[block.type] ? <SiteBlock key={block.id} block={block} data={data} /> : null,
         )}
-      </section>
-
-      <section className="site-section" id="faq">
-        <h2>Preguntas frecuentes</h2>
-        <p className="lead">Respuestas claras sobre producción, operación y contacto.</p>
-        <div className="site-faq">
-          {PUBLIC_FAQ.map((item) => (
-            <details className="site-faq__item" key={item.question}>
-              <summary>{item.question}</summary>
-              <p>{item.answer}</p>
-            </details>
-          ))}
-        </div>
-      </section>
-
-      <section className="site-section" id="ubicacion">
-        <h2>Ubicación</h2>
-        <p className="lead">
-          {about?.location ||
-            'Base operativa en Puebla y venue aliado Auditorio Arema Explanada. Producción integral de conciertos y eventos en la región.'}
-        </p>
-        <address className="lead" style={{ fontStyle: 'normal' }}>
-          {VENUE_ADDRESS}
-        </address>
-        <VenueMap title="arta PRODUCCIONES · Puebla" address={VENUE_ADDRESS} />
-      </section>
-
-      <section className="site-section site-cta-band" id="contacto">
-        <div>
-          <h2>
-            {cta?.headline && !/equipo|panel|studio/i.test(cta.headline)
-              ? cta.headline
-              : 'Hablemos de tu próximo show'}
-          </h2>
-          <p className="lead">
-            {cta?.body && !/panel|studio|editable/i.test(cta.body)
-              ? cta.body
-              : 'Cuéntanos tu fecha, venue y alcance. Te respondemos con una propuesta de producción.'}
-          </p>
-          <div className="row">
-            <a className="btn" href={`mailto:${CONTACT.email}`}>
-              Escribir a Arta
-            </a>
-            {CONTACT.phone ? (
-              <a className="btn ghost" href={`tel:${CONTACT.phone.replace(/\s/g, '')}`}>
-                {CONTACT.phone}
-              </a>
-            ) : (
-              <a className="btn ghost" href={`mailto:${CONTACT.email}`}>
-                {CONTACT.email}
-              </a>
-            )}
-          </div>
-        </div>
-        <div className="site-contact-card">
-          <div className="label">Contacto</div>
-          {CONTACT.phone ? <strong>{CONTACT.phone}</strong> : <strong>{CONTACT.email}</strong>}
-          {CONTACT.phone ? <span>{CONTACT.email}</span> : null}
-          <span>
-            {CONTACT.city}, {CONTACT.state}
-          </span>
-        </div>
-      </section>
-
-      <footer className="site-footer-pro">
-        <div className="site-footer-brand">
-          <Image src="/brand/arta-logo.png" alt="Arta Producciones" width={120} height={67} />
-          <p>“La experiencia del Show”</p>
-        </div>
-        <div className="site-footer-cols">
-          <div>
-            <div className="label">Sitio</div>
-            <Link href="/p/arta">Inicio</Link>
-            <a href="#noticias">Noticias</a>
-            <a href="#contacto">Contacto</a>
-          </div>
-          <div>
-            <div className="label">Secciones</div>
-            <a href="#nosotros">Nosotros</a>
-            <a href="#modulos">Operación</a>
-            <a href="#faq">FAQ</a>
-            <a href="#ubicacion">Mapa</a>
-          </div>
-          <div>
-            <div className="label">Equipo</div>
-            <a href={panelLogin} rel="nofollow">
-              Acceso al panel
-            </a>
-            <a href={panelLoginUrl('EXPLANADA')} rel="nofollow">
-              Panel Auditorio
-            </a>
-          </div>
-          <div>
-            <div className="label">Contacto</div>
-            <span>{CONTACT.email}</span>
-            {CONTACT.phone ? <span>{CONTACT.phone}</span> : null}
-            <span>
-              {CONTACT.city}, {CONTACT.state}
-            </span>
-          </div>
-          {socials.length ? (
-            <div>
-              <div className="label">Redes</div>
-              {socials.map((p) => (
-                <a key={p.url} href={p.url} target="_blank" rel="noopener noreferrer me">
-                  {p.label}
-                </a>
-              ))}
-            </div>
-          ) : null}
-        </div>
-        <div className="site-footer-bottom">
-          <span>© {new Date().getFullYear()} arta PRODUCCIONES</span>
-          <span>Producción integral de eventos</span>
-        </div>
-      </footer>
+      </main>
+      <SiteFooter data={data} nav={nav} markImage={markImage} />
+      <SiteMotion />
     </div>
   );
 }

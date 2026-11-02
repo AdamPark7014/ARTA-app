@@ -1,5 +1,7 @@
 import type { Metadata } from 'next';
+import { redirect } from 'next/navigation';
 import { JsonLd } from '@/components/seo/JsonLd';
+import { fetchPublicSiteData } from '@/lib/public-site-data';
 import {
   HOME_PATH,
   buildPublicMetadata,
@@ -46,12 +48,14 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 }
 
 export default async function NewsDetailPage({ params }: Props) {
-  const post = await fetchPublicNews(params.slug);
+  const [post, data] = await Promise.all([fetchPublicNews(params.slug), fetchPublicSiteData('ARTA')]);
+  // Un show publicado antes de la cartelera conserva su liga vieja: la dirección buena es esta.
+  if (post?.template === 'evento') redirect(`${HOME_PATH}/cartelera/${post.slug}`);
 
   return (
     <>
       {post ? <JsonLd data={newsArticleGraphJsonLd(post)} /> : null}
-      <NewsArticleView post={post} />
+      <NewsArticleView post={post} data={data} />
     </>
   );
 }

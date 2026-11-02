@@ -875,6 +875,8 @@ model HeroSlide {
   ctaHref   String?
   sortOrder Int       @default(0)
   active    Boolean   @default(true)
+  /// Encuadre de la foto en la portada: arriba | centro | abajo (Studio). Null = centro.
+  focus     String?
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 }
@@ -898,11 +900,44 @@ model NewsPost {
   ctaHref           String?
   /// El practicante la mandó a revisión; se limpia cuando dirección la publica o la regresa.
   reviewRequestedAt DateTime?
+  /// Orden manual en la lista de noticias (menor = antes; empate = la más reciente).
+  sortOrder         Int       @default(0)
+  /// Cartelera (plantilla «Evento destacado»): recinto, ciudad, hora y estado de la venta.
+  venue             String?
+  city              String?
+  eventTime         String?
+  /// venta | pronto | agotado | pospuesto | cancelado. Null = a la venta si hay enlace.
+  showStatus        String?
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
   @@unique([entity, slug])
   @@index([entity, published])
+}
+
+/// Contenido suelto del sitio público que se administra desde Studio: historias, fotos de la
+/// galería y logos de aliados. `active` = publicado; el practicante solo deja borradores.
+model SiteItem {
+  id                String    @id @default(cuid())
+  entity            EntityKey @default(ARTA)
+  /// historia | foto | aliado
+  kind              String
+  title             String?
+  caption           String?
+  mediaUrl          String
+  /// image | video
+  mediaType         String    @default("image")
+  /// arriba | centro | abajo. Null = centro.
+  focus             String?
+  linkLabel         String?
+  linkHref          String?
+  sortOrder         Int       @default(0)
+  active            Boolean   @default(false)
+  reviewRequestedAt DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@index([entity, kind, sortOrder])
 }
 
 // ─── Carpetas generales (ACL ligero) ─────────────────────────────────────────

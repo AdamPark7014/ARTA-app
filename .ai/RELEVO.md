@@ -7,6 +7,71 @@
 - **Producción:** `34e4ace` desplegado desde `main` el 2026-11-01 (`bash deploy/update.sh` en `/var/www/arta-app`, log
   `/root/arta-deploy-20261101-*.log`; respaldo automático en `/root/arta-backups/`). Disco al 84 %: al 90 % se cae la BD.
 
+## Turno claude-code (2026-11-01, noche): sitio público nuevo y Studio con la maqueta completa
+
+Adam: «un paquete de la página web más complejo y más acorde a Arta Producciones, a los colores y a todo, mucho más
+profesional» y «la maqueta total en Studio web para que los practicantes puedan subir, quitar, bajar y poner historias,
+noticias, todo». Sesión aparte de la de roles y permisos. **No se ha desplegado:** lo coordina la sesión principal.
+Guía: `docs/SITIO-PUBLICO.md`.
+
+**Sitio** (`styles/sitio.scss`, clases `sa-`, tinta y papel, sin dorado; Outfit y Nunito locales, ya no pide Google Fonts en
+`/p/arta`): portada con los próximos shows y sus pósters, cartelera, historias con visor a pantalla completa, nosotros,
+servicios, noticias, galería con ampliación, aliados, preguntas, ubicación y contacto. Páginas nuevas: `/p/arta/cartelera`,
+`/p/arta/cartelera/[slug]` (JSON-LD `Event`) y `/p/arta/noticias`. Marca vectorizada en `public/brand/`, incluida la «a»
+girada de `arta-footer.png`, que es el motivo de todo el sitio.
+
+**Studio:** maqueta a la izquierda (Subir, Bajar, Quitar, Poner, sección nueva), editor al centro y vista previa real a la
+derecha, con computadora o teléfono, con borradores o como está publicado; enseña lo que se escribe antes de guardar. Botón
+«Perfiles de practicante» a `/studio/practicantes`, que no ve el rol practicante. La regla sigue siendo `canPublishStudio`:
+sin `studio.publish` se dejan borradores y se mandan a revisión.
+
+**API:** modelo `SiteItem`, columnas nuevas en `HeroSlide` y `NewsPost`, migración `20261102000000_sitio_maqueta_studio`
+(aditiva e idempotente). Rutas: `GET preview`, `items`, `POST reorder`, `POST pages/publish`, `GET public/shows`.
+
+**Errores de fondo que salieron y ya no están:**
+- **La semilla borraba Studio en cada despliegue:** reescribía secciones, borraba los slides y republicaba las notas.
+  `prisma/seed-studio.ts` solo siembra una base vacía. **Al primer arranque cambia una vez:** el texto de relleno que siga
+  idéntico pasa al copy nuevo y las tres notas de relleno (`temporada-puebla`, `checklists-digitales`, `experiencia-show`)
+  quedan en borrador. No se borra nada; lo editado se respeta. Noticias arranca vacía hasta que publiquen.
+- **Guardar una sección no guardaba:** `contentJson` no tenía decorador y el `whitelist` lo tiraba, contestando 200.
+- **Lo publicado tardaba hasta una hora en verse:** caché de 3600 s. Ahora 30 s, y Studio refresca al publicar
+  (`POST /p/arta/revalidar`, solo con sesión de Studio).
+- Corregir una noticia publicada le cambiaba la fecha; un slug repetido daba 500; el botón de un slide aceptaba `javascript:`.
+
+**Verificado:**
+- API: `studio.maqueta.spec.ts` (24), specs de Studio existentes y `schema-migrations.spec.ts` en verde;
+  `test/studio-sitio.e2e-spec.ts` (5) contra Postgres real, con filtros de cartelera y semilla.
+- Stack real (API + base aparte + `next dev`): 20 comprobaciones de practicante a público, con foto subida, revisión, 403 al
+  publicar por API, publicación que se ve sin esperar caché, orden, JSON-LD, sitemap y feed.
+- Web: Chromium 218 de 219 contra un build de producción con el API apagado; `real-stack-files` necesita API y corre en CI.
+  Nuevas: `e2e/sitio-publico.spec.ts` (12), `e2e/studio-maqueta.spec.ts` (18) y dos en `public-site.spec.ts`. Después de ese
+  build solo cambió un separador de la cartelera (`·` con espacio duro), revisado con tipos.
+- Capturas revisadas a 1536 y 390 con `playwright.audit.config.ts` (`e2e/audit/sitio.audit.ts`, 22 vistas), sin scroll lateral
+  ni errores de página. Lo que marca y no es falla: contraste 1:1 en ligas (el subrayado es un gradiente), cinta y riel que
+  cortan a propósito, menú abierto tapando la página.
+
+**No verificado:**
+- **Safari real.** WebKit no corre desde la app de escritorio en Windows (`playwright.config.ts`); lo cubre `web-safari.yml`
+  al subir. Se cuidó `svh`/`dvh`, áreas seguras, 16 px en campos, `playsInline` y `-webkit-mask`, pero nadie lo ha visto en un
+  iPhone: el visor de historias y el video son lo primero que hay que probar.
+- Subir un video de verdad (se probó con foto). El mapa de Google se simuló en las capturas.
+- Con contenido real: los pósters y fotos de prueba eran ficticios y el sitio en producción solo tiene las fotos de semilla.
+
+**Decisiones a confirmar con Adam:**
+- «Historias» se interpretó como historias tipo Instagram (foto o video vertical con visor), no como casos de éxito.
+- El formulario de contacto arma el correo en la app de quien escribe (`mailto:`) y ofrece WhatsApp: no hay SMTP en producción.
+- Los practicantes no publican salvo que su perfil lo permita.
+
+**Al desplegar (sesión principal):** la migración corre sola en el arranque. Después, `SELECT count(*) FROM "SiteItem"`,
+`docker logs arta-api | grep Studio` (debe decir «contenido respetado» y cuántos textos de relleno retiró) y abrir `/p/arta`.
+Datos del sitio: correo, teléfono y redes se llenan en Studio, ya no hace falta recompilar.
+
+**Quedó sin limpiar:** las clases `.site-*` y `.studio-*` viejas siguen en `globals.scss`, ya sin uso (no se tocó ese archivo
+para no chocar con la otra sesión). `next.config.js` acepta `NEXT_DIST_DIR` para compilar sin pisar el `.next` de otra sesión;
+ojo, Next reescribe `tsconfig.json` al usarlo: no commitear ese cambio.
+
+**Siguiente:** desplegar, cargar la primera cartelera real y probar en un iPhone.
+
 ## Turno claude-code (2026-11-01, tarde): chat con referencias y otra pasada premium
 
 Adam: «en el chat algo mucho más pro tipo Slack… poder arrobar tareas, personas, actividades, eventos; mejora tareas,

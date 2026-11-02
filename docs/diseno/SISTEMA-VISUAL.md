@@ -169,3 +169,14 @@ agregó vive en `apps/web/styles/_premium.scss` (última palabra de la cascada) 
   sus controles aparecen al pasar por ellas (con el dedo siguen a la vista). Tablero: una columna por estado.
 - **Teléfono**: lo que se abre (buscador, avisos) ocupa la pantalla; un módulo del evento deja un renglón de cabecera; la
   cabecera del chat enseña el nombre y lo demás va en «Más».
+
+## Sitio público (01-11-2026)
+
+El sitio de Arta dejó el dorado: es tinta y papel como el panel, con más escala. Estilos propios en
+`apps/web/styles/sitio.scss`; guía completa en `docs/SITIO-PUBLICO.md`.
+
+- **Titulares:** Outfit 800/900 con tracking cerrado, la letra de la marca. **Texto:** Nunito. Las dos locales.
+- **Motivo:** la «a» girada del pie corporativo (`public/brand/arta-motivo.svg`), en la portada, el menú del teléfono y contacto.
+- **Pie:** las letras «arta» a todo lo ancho con una foto del show asomándose (`arta-wordmark.svg`).
+- **Fotos:** portada y galería en blanco y negro con CSS (la galería se ve a color al ampliar); pósters e historias, a color.
+- **Foto de Nosotros:** recorte en arco, el de las letras de la marca.

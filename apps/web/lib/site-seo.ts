@@ -1,10 +1,16 @@
 import type { Metadata } from 'next';
 import { ROOT_DOMAIN } from '@/lib/domains';
 import {
-  FALLBACK_MODULE_TILES,
+  SITE_CACHE,
+  sectionContent,
+  siteSettings,
+  type PublicSiteContent,
   type PublicSiteData,
+  type PublicSiteFaq,
+  type PublicSiteNewsItem,
   type PublicSiteTile,
 } from '@/lib/public-site-data';
+import { BLOCK_META, DEFAULT_CONTENT, LAYOUT_KEY, resolveLayout } from '@/lib/site-blocks';
 
 export const SITE_NAME = 'Arta Producciones';
 export const SITE_TAGLINE = 'La experiencia del Show';
@@ -38,6 +44,20 @@ export const CONTACT = {
   state: process.env.NEXT_PUBLIC_STATE?.trim() || 'Puebla',
 };
 export const CONTACT_EMAIL = CONTACT.email;
+
+/**
+ * Lo que dice «Datos del sitio» en Studio manda; lo que no se haya llenado cae a las variables del
+ * build. El pie, la sección de contacto y el JSON-LD salen de aquí, así que siempre coinciden.
+ */
+export function contactFromSettings(settings?: PublicSiteContent) {
+  return {
+    email: settings?.email?.trim() || CONTACT.email,
+    phone: settings?.phone?.trim() || CONTACT.phone,
+    whatsapp: settings?.whatsapp?.trim() || '',
+    city: settings?.city?.trim() || CONTACT.city,
+    state: CONTACT.state,
+  };
+}
 
 export const VENUE_NAME = 'Auditorio Arema Explanada';
 /** Texto de ubicación visible en `#ubicacion`. */
@@ -86,12 +106,17 @@ export type PublicNewsPost = {
   eventDate?: string | null;
   ctaLabel?: string | null;
   ctaHref?: string | null;
+  venue?: string | null;
+  city?: string | null;
+  eventTime?: string | null;
+  showStatus?: string | null;
+  sortOrder?: number | null;
 };
 
 export async function fetchPublicNews(slug: string): Promise<PublicNewsPost | null> {
   try {
     const res = await fetch(`${apiBase()}/studio/public/news/${encodeURIComponent(slug)}`, {
-      next: { revalidate: 3600 },
+      next: SITE_CACHE,
     });
     if (!res.ok) return null;
     return (await res.json()) as PublicNewsPost;
@@ -101,16 +126,17 @@ export async function fetchPublicNews(slug: string): Promise<PublicNewsPost | nu
 }
 
 /**
- * Redes sociales de Arta. Solo las configuradas en el build, y el pie del sitio las muestra todas:
- * `sameAs` nunca lleva un perfil que el visitante no pueda ver (ni uno inventado).
+ * Redes sociales de Arta: las de «Datos del sitio» en Studio y, si no, las del build. El pie del
+ * sitio las muestra todas: `sameAs` nunca lleva un perfil que el visitante no pueda ver (ni uno inventado).
  */
-export function socialProfiles(): Array<{ label: string; url: string }> {
+export function socialProfiles(settings?: PublicSiteContent): Array<{ label: string; url: string }> {
   const candidates: Array<[string, string | undefined]> = [
-    ['Instagram', process.env.NEXT_PUBLIC_SOCIAL_INSTAGRAM],
-    ['Facebook', process.env.NEXT_PUBLIC_SOCIAL_FACEBOOK],
-    ['YouTube', process.env.NEXT_PUBLIC_SOCIAL_YOUTUBE],
-    ['TikTok', process.env.NEXT_PUBLIC_SOCIAL_TIKTOK],
-    ['X', process.env.NEXT_PUBLIC_SOCIAL_TWITTER],
+    ['Instagram', settings?.instagram || process.env.NEXT_PUBLIC_SOCIAL_INSTAGRAM],
+    ['Facebook', settings?.facebook || process.env.NEXT_PUBLIC_SOCIAL_FACEBOOK],
+    ['TikTok', settings?.tiktok || process.env.NEXT_PUBLIC_SOCIAL_TIKTOK],
+    ['YouTube', settings?.youtube || process.env.NEXT_PUBLIC_SOCIAL_YOUTUBE],
+    ['Spotify', settings?.spotify],
+    ['X', settings?.x || process.env.NEXT_PUBLIC_SOCIAL_TWITTER],
   ];
   return candidates
     .map(([label, url]) => ({ label, url: url?.trim() || '' }))
@@ -224,9 +250,10 @@ type Crumb = { name: string; path: string };
  * Arta como organización y negocio local de producción de eventos (`EventPlanner` es un
  * `LocalBusiness`). Dirección solo a nivel ciudad: es lo que el sitio publica.
  */
-export function organizationNode() {
+export function organizationNode(settings?: PublicSiteContent) {
   const logoUrl = absoluteUrl(LOGO_IMAGE.url);
-  const sameAs = socialProfiles().map((p) => p.url);
+  const sameAs = socialProfiles(settings).map((p) => p.url);
+  const contact = contactFromSettings(settings);
   return {
     '@type': ['Organization', 'EventPlanner'],
     '@id': ORG_ID(),
@@ -245,12 +272,12 @@ export function organizationNode() {
     },
     image: absoluteUrl(OG_IMAGE.url),
     description: SITE_DESCRIPTION,
-    email: CONTACT.email,
-    ...(CONTACT.phone ? { telephone: CONTACT.phone } : {}),
+    email: contact.email,
+    ...(contact.phone ? { telephone: contact.phone } : {}),
     address: {
       '@type': 'PostalAddress',
-      addressLocality: CONTACT.city,
-      addressRegion: CONTACT.state,
+      addressLocality: contact.city,
+      addressRegion: contact.state,
       addressCountry: 'MX',
     },
     areaServed: [
@@ -260,8 +287,8 @@ export function organizationNode() {
     contactPoint: {
       '@type': 'ContactPoint',
       contactType: 'sales',
-      email: CONTACT.email,
-      ...(CONTACT.phone ? { telephone: CONTACT.phone } : {}),
+      email: contact.email,
+      ...(contact.phone ? { telephone: contact.phone } : {}),
       areaServed: 'MX',
       availableLanguage: ['es'],
     },
@@ -346,30 +373,10 @@ export function webPageNode({ path, name, description, crumbs, mentions, type = 
   };
 }
 
-/** Preguntas visibles en `/p/arta#faq` (la sección las pinta de aquí mismo). */
-export const PUBLIC_FAQ: Array<{ question: string; answer: string }> = [
-  {
-    question: '¿Qué hace Arta Producciones?',
-    answer:
-      'Producción integral de conciertos y eventos: checklists operativos, hospitality, campaña, boletera, corrida financiera y cierre con firmas digitales.',
-  },
-  {
-    question: '¿Dónde opera Arta?',
-    answer:
-      'Base operativa en Puebla, Puebla (México), con venue aliado Auditorio Arema Explanada y shows en la región.',
-  },
-  {
-    question: '¿Qué incluye la operación del evento?',
-    answer:
-      'Producción técnica, hospitality, comercial (boletera y patrocinios), artes/campaña autorizada y cierre financiero con órdenes de compra y anticipos.',
-  },
-  {
-    question: '¿Cómo contacto a Arta para un show?',
-    answer: `Escríbenos a ${CONTACT.email} con fecha, venue y alcance. Respondemos con una propuesta de producción.`,
-  },
-];
+/** Preguntas de arranque; las que el visitante ve (y las del JSON-LD) son las de Studio. */
+export const PUBLIC_FAQ = DEFAULT_CONTENT.home_faq.faqs as PublicSiteFaq[];
 
-export function faqPageNode() {
+export function faqPageNode(faqs: PublicSiteFaq[] = PUBLIC_FAQ) {
   const home = absoluteUrl(HOME_PATH);
   return {
     '@type': 'FAQPage',
@@ -377,7 +384,7 @@ export function faqPageNode() {
     url: `${home}#faq`,
     isPartOf: { '@id': WEBSITE_ID() },
     inLanguage: 'es-MX',
-    mainEntity: PUBLIC_FAQ.map((item) => ({
+    mainEntity: faqs.map((item) => ({
       '@type': 'Question',
       name: item.question,
       acceptedAnswer: { '@type': 'Answer', text: item.answer },
@@ -414,14 +421,63 @@ export function serviceNodes(tiles: PublicSiteTile[]) {
     }));
 }
 
+const EVENT_STATUS: Record<string, string> = {
+  cancelado: 'https://schema.org/EventCancelled',
+  pospuesto: 'https://schema.org/EventPostponed',
+};
+
+const OFFER_AVAILABILITY: Record<string, string> = {
+  venta: 'https://schema.org/InStock',
+  agotado: 'https://schema.org/SoldOut',
+  pronto: 'https://schema.org/PreOrder',
+};
+
+/** Un show de la cartelera como evento: Google los enseña con su fecha en los resultados. */
+export function showEventNode(show: PublicNewsPost | PublicSiteNewsItem) {
+  const url = absoluteUrl(`${HOME_PATH}/cartelera/${show.slug}`);
+  const image = absoluteMediaUrl(show.coverUrl);
+  const time = show.eventTime && show.eventDate ? `${show.eventDate.slice(0, 10)}T${show.eventTime}:00-06:00` : show.eventDate?.slice(0, 10);
+  const status = show.showStatus || (show.ctaHref ? 'venta' : 'pronto');
+  return {
+    '@type': 'Event',
+    '@id': `${url}#evento`,
+    name: show.title,
+    url,
+    ...(time ? { startDate: time } : {}),
+    ...(show.excerpt ? { description: show.excerpt } : {}),
+    ...(image ? { image: [image] } : {}),
+    eventStatus: EVENT_STATUS[status] || 'https://schema.org/EventScheduled',
+    eventAttendanceMode: 'https://schema.org/OfflineEventAttendanceMode',
+    location: {
+      '@type': 'Place',
+      name: show.venue || VENUE_NAME,
+      address: {
+        '@type': 'PostalAddress',
+        addressLocality: show.city || CONTACT.city,
+        addressRegion: CONTACT.state,
+        addressCountry: 'MX',
+      },
+    },
+    organizer: { '@id': ORG_ID() },
+    ...(show.ctaHref && /^https?:/i.test(show.ctaHref) && OFFER_AVAILABILITY[status]
+      ? { offers: { '@type': 'Offer', url: show.ctaHref, availability: OFFER_AVAILABILITY[status] } }
+      : {}),
+  };
+}
+
 /** `@graph` de la portada con lo que la página realmente muestra (Studio). */
-export function homePageGraphJsonLd(data?: Pick<PublicSiteData, 'pages'>) {
-  const mods = data?.pages.find((p) => p.sectionKey === 'home_modulos')?.contentJson;
-  const tiles = mods?.tiles?.length ? mods.tiles : FALLBACK_MODULE_TILES;
+export function homePageGraphJsonLd(data?: PublicSiteData) {
+  const pages = data?.pages ?? [];
+  const blocks = resolveLayout(pages.find((p) => p.sectionKey === LAYOUT_KEY)?.contentJson).filter((b) => b.visible);
+  const contentOf = (key: string) => sectionContent({ pages }, key);
+  const has = (type: keyof typeof BLOCK_META) => blocks.some((b) => b.type === type);
+  const settings = siteSettings({ pages });
+  const tiles = contentOf('home_modulos').tiles ?? [];
+  const faqs = contentOf('home_faq').faqs?.filter((f) => f.question?.trim()) ?? [];
   return {
     '@context': 'https://schema.org',
     '@graph': [
-      organizationNode(),
+      organizationNode(settings),
       websiteNode(),
       webPageNode({
         path: HOME_PATH,
@@ -429,8 +485,9 @@ export function homePageGraphJsonLd(data?: Pick<PublicSiteData, 'pages'>) {
         mentions: [{ '@id': VENUE_ID() }],
       }),
       venueNode(),
-      faqPageNode(),
-      ...serviceNodes(tiles),
+      ...(has('faq') && faqs.length ? [faqPageNode(faqs)] : []),
+      ...(has('servicios') ? serviceNodes(tiles) : []),
+      ...(has('cartelera') ? (data?.shows ?? []).map(showEventNode) : []),
     ],
   };
 }
@@ -468,15 +525,36 @@ export function newsArticleGraphJsonLd(post: PublicNewsPost) {
         description: post.excerpt || undefined,
         crumbs: [
           { name: 'Inicio', path: HOME_PATH },
-          { name: 'Noticias', path: `${HOME_PATH}#noticias` },
+          { name: 'Noticias', path: `${HOME_PATH}/noticias` },
           { name: post.title, path },
         ],
       }),
       breadcrumbNode(url, [
         { name: 'Inicio', path: HOME_PATH },
-        { name: 'Noticias', path: `${HOME_PATH}#noticias` },
+        { name: 'Noticias', path: `${HOME_PATH}/noticias` },
         { name: post.title, path },
       ]),
+    ],
+  };
+}
+
+/** `@graph` de un show: el evento, su página y las migas desde la cartelera. */
+export function showGraphJsonLd(show: PublicNewsPost) {
+  const path = `${HOME_PATH}/cartelera/${show.slug}`;
+  const url = absoluteUrl(path);
+  const crumbs: Crumb[] = [
+    { name: 'Inicio', path: HOME_PATH },
+    { name: 'Cartelera', path: `${HOME_PATH}/cartelera` },
+    { name: show.title, path },
+  ];
+  return {
+    '@context': 'https://schema.org',
+    '@graph': [
+      organizationNode(),
+      websiteNode(),
+      showEventNode(show),
+      webPageNode({ path, name: show.title, description: show.excerpt || undefined, crumbs }),
+      breadcrumbNode(url, crumbs),
     ],
   };
 }

@@ -1,12 +1,13 @@
 import type { MetadataRoute } from 'next';
 import { LEGAL_UPDATED } from '@/app/legal/legal-data';
 import { ROOT_DOMAIN } from '@/lib/domains';
-import { fetchPublicSiteData } from '@/lib/public-site-data';
+import { SITE_CACHE, fetchPublicShows, fetchPublicSiteData } from '@/lib/public-site-data';
 
 type NewsIndexRow = {
   slug: string;
   publishedAt?: string | null;
   updatedAt?: string | null;
+  template?: string | null;
 };
 
 function apiBase(): string {
@@ -20,9 +21,7 @@ export function publicSiteBaseUrl(): string {
 /** Solo noticias reales publicadas — nunca slugs inventados. */
 export async function fetchPublishedNewsSlugs(): Promise<NewsIndexRow[]> {
   try {
-    const res = await fetch(`${apiBase()}/studio/public/news-index`, {
-      next: { revalidate: 3600 },
-    });
+    const res = await fetch(`${apiBase()}/studio/public/news-index`, { next: SITE_CACHE });
     if (!res.ok) return [];
     const rows = (await res.json()) as NewsIndexRow[];
     return Array.isArray(rows) ? rows.filter((r) => r?.slug) : [];
@@ -58,7 +57,11 @@ function legalUpdated(): Date | undefined {
  */
 export async function buildPublicSitemap(): Promise<MetadataRoute.Sitemap> {
   const base = publicSiteBaseUrl();
-  const [site, news] = await Promise.all([fetchPublicSiteData('ARTA'), fetchPublishedNewsSlugs()]);
+  const [site, news, shows] = await Promise.all([
+    fetchPublicSiteData('ARTA'),
+    fetchPublishedNewsSlugs(),
+    fetchPublicShows(),
+  ]);
 
   const homeModified = latest([
     ...site.pages.map((p) => p.updatedAt),
@@ -75,9 +78,22 @@ export async function buildPublicSitemap(): Promise<MetadataRoute.Sitemap> {
       changeFrequency: 'weekly',
       priority: 1,
     },
+    { url: `${base}/p/arta/cartelera`, ...withDate(homeModified), changeFrequency: 'weekly', priority: 0.9 },
+    { url: `${base}/p/arta/noticias`, ...withDate(homeModified), changeFrequency: 'weekly', priority: 0.7 },
   ];
 
+  for (const show of [...shows.upcoming, ...shows.past]) {
+    entries.push({
+      url: `${base}/p/arta/cartelera/${show.slug}`,
+      ...withDate(toDate(show.updatedAt) || toDate(show.publishedAt)),
+      changeFrequency: 'weekly',
+      priority: 0.8,
+    });
+  }
+
   for (const row of news) {
+    // Los shows ya entraron arriba con su dirección de cartelera.
+    if (row.template === 'evento') continue;
     entries.push({
       url: `${base}/p/arta/noticias/${row.slug}`,
       ...withDate(toDate(row.updatedAt) || toDate(row.publishedAt)),

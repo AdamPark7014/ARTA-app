@@ -51,12 +51,12 @@ const outfit = localFont({
 });
 
 /**
- * El sitio público y el portal de proveedores usan Fraunces e Inter; el panel va en
- * Nunito y no las necesita. Solo se piden en esas rutas: antes salían de una hoja de
- * Google que frenaba el primer pintado de todo el panel.
+ * Las páginas legales y el portal de proveedores usan Fraunces e Inter; el panel y el
+ * sitio de Arta van en Nunito y Outfit (viven en el repo) y no las necesitan. Solo se
+ * piden en esas rutas: antes salían de una hoja de Google que frenaba el primer pintado.
  */
 const PUBLIC_FONTS_SCRIPT =
-  "try{if(/^\\/(p|legal|contratar|v)(\\/|$)/.test(location.pathname)){var l=document.createElement('link');l.rel='stylesheet';l.href='https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,650&family=Inter:wght@400;500;600;700&display=swap';document.head.appendChild(l);}}catch(e){}";
+  "try{if(/^\\/(legal|contratar|v)(\\/|$)/.test(location.pathname)){var l=document.createElement('link');l.rel='stylesheet';l.href='https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,650&family=Inter:wght@400;500;600;700&display=swap';document.head.appendChild(l);}}catch(e){}";
 
 /**
  * Respaldo del «modo app» del lado cliente: `(app)/layout` lo decide en el

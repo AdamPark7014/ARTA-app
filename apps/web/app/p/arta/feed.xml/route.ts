@@ -1,7 +1,7 @@
 import { fetchPublicNewsList } from '@/lib/public-site-data';
 import { SITE_NAME, absoluteMediaUrl, siteOrigin } from '@/lib/site-seo';
 
-export const revalidate = 3600;
+export const revalidate = 300;
 
 function escapeXml(text: string): string {
   return text
@@ -30,7 +30,7 @@ export async function GET() {
   const base = siteOrigin();
   const items = posts
     .map((post) => {
-      const link = `${base}/p/arta/noticias/${post.slug}`;
+      const link = `${base}/p/arta/${post.template === 'evento' ? 'cartelera' : 'noticias'}/${post.slug}`;
       const pub = post.publishedAt ? new Date(post.publishedAt).toUTCString() : new Date().toUTCString();
       const desc = escapeXml(post.excerpt?.trim() || post.title);
       return `<item>
