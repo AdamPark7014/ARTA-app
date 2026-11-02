@@ -1,0 +1,83 @@
+# Qué tan fluida va la portada real en el motor de Safari, en Mac y en Linux, y qué efecto la frena.
+# Se corre a mano: gh workflow run medir-safari.yml --ref main
+name: Medir Safari
+
+on:
+  workflow_dispatch:
+
+jobs:
+  medir:
+    name: Medir · ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest]
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Medir
+        run: |
+          mkdir medir && cd medir
+          npm init -y >/dev/null
+          npm install --no-audit --no-fund playwright@1.62.1
+          npx playwright install ${{ matrix.os == 'ubuntu-latest' && '--with-deps' || '' }} webkit
+          cat > medir.cjs <<'JS'
+          const { webkit, devices } = require('playwright');
+
+          const SITIO = 'https://artaproducciones.com/p/arta';
+          const VARIANTES = {
+            'tal cual': '',
+            'sin filter': '*,*::before,*::after{filter:none!important}',
+            'sin backdrop-filter': '*,*::before,*::after{backdrop-filter:none!important;-webkit-backdrop-filter:none!important}',
+            'sin mask-image': '*,*::before,*::after{mask-image:none!important;-webkit-mask-image:none!important}',
+            'sin animaciones': '*,*::before,*::after{animation:none!important;transition:none!important}',
+          };
+
+          // Cuadros por segundo, el peor cuadro y cuánto se atrasa un temporizador de 3 s.
+          const mide = (page) =>
+            page.evaluate(() => new Promise((resolve) => {
+              const inicio = performance.now();
+              let cuadros = 0;
+              let peor = 0;
+              let antes = inicio;
+              let tarde = null;
+              setTimeout(() => { tarde = Math.round(performance.now() - inicio - 3000); }, 3000);
+              const paso = (ahora) => {
+                cuadros += 1;
+                peor = Math.max(peor, ahora - antes);
+                antes = ahora;
+                if (ahora - inicio < 6000 || tarde === null) requestAnimationFrame(paso);
+                else resolve({ fps: +(cuadros / ((ahora - inicio) / 1000)).toFixed(1), peorCuadroMs: Math.round(peor), temporizadorTardeMs: tarde });
+              };
+              requestAnimationFrame(paso);
+            }));
+
+          (async () => {
+            const browser = await webkit.launch();
+            for (const [nombre, device] of [['escritorio', devices['Desktop Safari']], ['iPhone', devices['iPhone 15']]]) {
+              for (const [variante, css] of Object.entries(VARIANTES)) {
+                const ctx = await browser.newContext({ ...device });
+                const page = await ctx.newPage();
+                const t0 = Date.now();
+                await page.goto(SITIO, { waitUntil: 'load', timeout: 120000 });
+                const carga = Date.now() - t0;
+                if (css) await page.addStyleTag({ content: css });
+                await page.waitForTimeout(3000);
+                const arriba = await mide(page);
+                let enmedio = '';
+                if (!css) {
+                  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight * 0.45));
+                  await page.waitForTimeout(1500);
+                  enmedio = ` · a media página ${JSON.stringify(await mide(page))}`;
+                }
+                console.log(`${nombre} · ${variante} · carga ${carga} ms · portada ${JSON.stringify(arriba)}${enmedio}`);
+                await ctx.close();
+              }
+            }
+            await browser.close();
+          })().catch((e) => { console.error(e); process.exit(1); });
+          JS
+          node medir.cjs
