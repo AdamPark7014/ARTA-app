@@ -21,7 +21,7 @@ gh run download <id> -R AdamPark7014/ARTA-app -n comparacion
 | `Suite · webkit-iphone` | La misma suite con `devices['iPhone 15']`: 393 px, toque, `isMobile`, motor de Safari. |
 | `Suite · chromium` / `chromium-iphone` | Las mismas dos, con el motor de Chrome: la línea base. |
 | `Cortes · webkit` / `chromium` | El recorrido de «cortes» (`e2e/audit`) en ARTA y Auditorio a 1536×864 y 390×844. |
-| `macOS · WebKit` | Prueba corta (Safari, iPhone, login, shell, móvil, tareas) en macOS: WebKit con las bibliotecas de Mac. |
+| `macOS · WebKit` | Prueba corta (Safari, iPhone, login, shell, móvil, tareas) y las fotos de la portada en macOS: WebKit con las bibliotecas de Mac. |
 | `Comparar` | **El veredicto.** Falla solo si una prueba pasa en Chromium y falla en WebKit: eso es un fallo de Safari. |
 
 Las suites no tumban el flujo por sí solas: hay pruebas viejas que fallan en los dos motores (ver §5) y eso

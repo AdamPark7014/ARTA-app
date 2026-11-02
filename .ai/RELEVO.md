@@ -33,6 +33,7 @@ Adam: «génerale un rediseño de 360 grados», «se debe mostrar como la empres
 - El panel con sesión real: se revisó con datos de prueba, no con la cuenta de Arta.
 - El Auditorio solo se revisó por pruebas, no a ojo.
 - Web Safari falló en `cd7aed1` por la prueba del botón de pausa, porque el clic llegaba tarde en el CI. Se endureció la prueba y la tarjeta de show dejó de ocultar «Ver detalles» con `display: none`. CI y Safari ya salieron verdes en `47d1cdb`.
+- Web Safari falló en `568b16e` en «las fotos de la portada se turnan», solo en Safari de escritorio sobre Linux: foto-2 no llegó en 10 s, dos veces seguidas. La traza descarta reinicios: un solo pedido de datos, botón de pausa visible y sin errores. Chromium sin tarjeta gráfica mide 45 a 60 cuadros por segundo en la portada real. Lo que queda es el temporizador tarde en ese WebKit con tres pruebas a la vez, sin probar. La prueba sigue exigiendo el cambio con reloj real, con 30 s de margen, y corre también en el Safari de Mac.
 - El último commit cambia prueba y una regla de CSS sin efecto visual: no se desplegó, producción sigue en `cd7aed1`.
 
 **Pendiente de Adam:**

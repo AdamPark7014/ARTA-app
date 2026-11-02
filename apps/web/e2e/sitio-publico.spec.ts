@@ -169,12 +169,15 @@ test.describe('Sitio público · Inicio', () => {
   });
 
   test('las fotos de la portada se turnan y se pueden pausar', async ({ page }) => {
+    test.slow();
     await mockStudio(page, siteState());
     await page.goto('/site?embed=1');
 
     const current = page.locator('.sa-hero__photo.is-on');
     await expect(current).toHaveAttribute('src', '/uploads/foto-1.jpg');
-    await expect(current).toHaveAttribute('src', '/uploads/foto-2.jpg', { timeout: 10_000 });
+    // Cambia sola cada 7 s, con el reloj de verdad. En el CI, WebKit en Linux con tres pruebas a la vez
+    // a veces no llega en 10 s. También se corre aparte en el Safari de Mac (web-safari.yml).
+    await expect(current).toHaveAttribute('src', '/uploads/foto-2.jpg', { timeout: 30_000 });
 
     await page.getByRole('button', { name: 'Pausar las fotos de la portada' }).click();
     await expect(page.getByRole('button', { name: 'Reproducir las fotos de la portada' })).toBeVisible();

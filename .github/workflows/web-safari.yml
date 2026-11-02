@@ -210,13 +210,33 @@ jobs:
           --trace=retain-on-failure
           --reporter=list,html
 
+      # Las fotos de la portada cambian con un temporizador: aquí se comprueba en el Safari de Mac,
+      # con su propia salida para no borrar las trazas del paso anterior.
+      - name: Playwright · webkit (fotos de la portada)
+        if: ${{ !cancelled() }}
+        working-directory: apps/web
+        env:
+          PLAYWRIGHT_HTML_OUTPUT_DIR: playwright-report-macos-portada
+          PLAYWRIGHT_HTML_OPEN: never
+        run: >-
+          npx playwright test
+          e2e/sitio-publico.spec.ts
+          -g "las fotos de la portada se turnan"
+          --project=webkit
+          --workers=1 --retries=1
+          --output=e2e/.output-portada
+          --trace=retain-on-failure
+          --reporter=list,html
+
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}
         with:
           name: report-macos
           path: |
             apps/web/playwright-report-macos
+            apps/web/playwright-report-macos-portada
             apps/web/e2e/.output
+            apps/web/e2e/.output-portada
           retention-days: 14
           if-no-files-found: ignore
 
