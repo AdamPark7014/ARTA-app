@@ -4,14 +4,45 @@
 - **Fecha:** 2026-11-01
 - **Rama:** main
   (Adam es el único programador).
-- **Producción:** `ceb81f9` desplegado desde `main` el 2026-11-01 (`bash deploy/update.sh` en `/var/www/arta-app`, log
-  `/root/arta-deploy-20261101-R.log`; respaldo automático en `/root/arta-backups/`). Disco al 81 %: al 90 % se cae la BD.
+- **Producción:** `762fe20` desplegado desde `main` el 2026-11-01 (`bash deploy/update.sh` en `/var/www/arta-app`, log
+  `/root/arta-deploy-20261102-G.log`; respaldo automático en `/root/arta-backups/`). Disco al 79 %: al 90 % se cae la BD.
+
+## Turno claude-code (2026-11-01, noche): ubicación de 10 a 18 h y apps a tiendas
+
+Adam: «incluir geolocalización de todos excepto chacho y arturo de 10 am a 6 pm en las apps móviles» y «las apps súbelas a sus tiendas
+y envíalas a actualización». **Guía: `docs/UBICACION.md`.**
+
+**Ubicación:** API `apps/api/src/ubicacion/` (el servidor manda: fuera del horario no guarda, a un exento le da 403), `/ubicacion` en el panel solo
+para `dir_general` y `super_admin`, abrir un recorrido queda en auditoría, los puntos se borran a los 90 días. Android mide con la app cerrada (servicio
+de primer plano, alarma, push de datos); **iOS solo con la app abierta** y un recordatorio por hora: Apple rechazó el modo de fondo en NEXARA por 2.5.4 y
+ARTA es pública. Medirlo con la app cerrada en iPhone pide distribuirla por Apple Business Manager: es decisión de Adam. La app nunca se bloquea por
+esto: «Ahora no» deja usar todo y dirección ve «No ha aceptado».
+
+**Revisión de lo pedido:** se entró a producción como cada persona (sesión de 5 minutos, solo GET, borrada al terminar) y la matriz responde como debe en
+Arta y Auditorio. Salieron dos huecos, ya cerrados: «para el sitio» en Testigos no llegaba a ningún lado (ahora la foto cae como borrador en la
+galería de Studio) y el Auditorio todavía listaba y generaba corrida por API.
+
+**Tiendas:**
+- **Android 1.0.3 (6): enviado a revisión de Google** el 01-11, a Producción con lanzamiento completo. Seguridad de los datos con ubicación y declaración
+  de servicio en primer plano. El video es `https://artaproducciones.com/uploads/legal/arta-ubicacion-android.mp4` (no versionado, vive en el volumen de
+  `uploads`: no borrarlo mientras Play revisa); lo graba `.github/workflows/android-video-ubicacion.yml` en un emulador.
+- **El AAB pasa de los 10 MB de `file_upload`:** se parte con `split -b 8m`, cada parte va a un `<input>` temporal y en la página se arma un `File` y se le
+  da al input de Play con `DataTransfer`. Así ya no depende de Adam.
+- **iOS 1.0.1 (15): lista en App Store Connect, falta enviar.** `Etiqueta de privacidad` no tiene API pública (404/401 con la llave): hay que declarar
+  Ubicación precisa (vinculada, sin rastreo, funcionalidad) en la sesión de Chrome de Adam, que venció. Luego: `submit` del script de la API de ASC
+  (`POST reviewSubmissions`, `reviewSubmissionItems`, `PATCH submitted: true`).
+
+**Verificado:** API con base real y web en CI verdes; Android 161 pruebas; iOS compila y capturas revisadas (hoja de ubicación, evento con fila de módulos);
+video de Android revisado cuadro por cuadro: hoja, permiso, notificación fija con la app cerrada y que se quita al salir.
+
+**No verificado:** un punto real saliendo de un teléfono a producción; el push `location.ping` y el recordatorio de iOS en teléfono de verdad; Android matando el
+servicio en marcas agresivas. El recorrido con mapa real en `/ubicacion`: las pruebas no cargan teselas.
 
 ## Turno claude-code (2026-11-01, noche): el sitio público ya es un sitio de páginas, con fotos a color
 
 Adam vio `/p/arta#noticias` y pidió: «las fotos de la pagina web a color porfa pero colores que combinen con la uiux del sitio» y
-«no quiero una landing page dale un desarrollo profesional a la pagina». Sesión aparte de la de geolocalización. **No se ha
-desplegado:** lo despliega la sesión principal junto con lo suyo, antes de subir las apps a tiendas. Guía: `docs/SITIO-PUBLICO.md`.
+«no quiero una landing page dale un desarrollo profesional a la pagina». Sesión aparte de la de geolocalización. Desplegado con
+ella en `762fe20` y revisado en vivo. Guía: `docs/SITIO-PUBLICO.md`.
 
 **Hecho:**
 - **Fotos a color** con un ajuste discreto (`--photo` en `styles/sitio.scss`) y velos laterales para que el texto se lea. Solo logos
@@ -40,8 +71,7 @@ del menú, página quitada con 404 y de vuelta, servicio editado que se ve en su
 **Avisos de la auditoría que no son errores:** el contraste 1.00:1 en menú y `.sa-link` es el subrayado (`linear-gradient(currentColor…)`),
 que el auditor toma como fondo. **`real-stack-files.spec.ts` falla aquí** porque pide una API en el puerto 4000; no toca el sitio.
 
-**No verificado:** Safari real (WebKit bloqueado en Windows desde la app; lo cubre `web-safari.yml`). Con los datos de producción, porque
-no se ha desplegado.
+**No verificado:** Safari real (WebKit bloqueado en Windows desde la app; lo cubre `web-safari.yml`).
 
 **A medias / lo que Adam debe saber:** producción sigue sin shows, noticias ni historias reales: la portada mejora en cuanto suban
 contenido. Las fotos son de archivo hasta que manden las suyas. `llms.txt` lista las rutas fijas aunque una página esté quitada.
