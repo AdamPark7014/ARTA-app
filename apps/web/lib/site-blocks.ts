@@ -15,6 +15,7 @@ export type BlockType =
   | 'proceso'
   | 'recientes'
   | 'muro'
+  | 'trayectoria'
   | 'recintos'
   | 'historias'
   | 'nosotros'
@@ -76,7 +77,7 @@ export const SITE_PAGES: SitePageMeta[] = [
     path: '',
     label: 'Inicio',
     description: 'La primera página: qué es Arta, sus fotos, lo que viene y un resumen que lleva a todo lo demás.',
-    sections: [HERO_KEY, 'home_frase'],
+    sections: [HERO_KEY, 'home_frase', 'home_trayectoria'],
     collections: ['slides'],
   },
   {
@@ -219,6 +220,13 @@ export const BLOCK_META: Record<BlockType, BlockMeta> = {
     anchor: 'recientes',
     page: 'cartelera',
   },
+  trayectoria: {
+    label: 'Trayectoria',
+    description: 'Los artistas que han pasado por los escenarios de Arta, con fotos de la galería.',
+    sectionKey: 'home_trayectoria',
+    anchor: 'trayectoria',
+    page: 'inicio',
+  },
   muro: {
     label: 'Muro de pósters',
     description: 'Los pósters de los shows que ya pasaron, en movimiento. Salen solos de la cartelera.',
@@ -311,11 +319,11 @@ export const BLOCK_META: Record<BlockType, BlockMeta> = {
 /** El orden de arranque de Inicio. Toda sección base vive aquí; se oculta, no se borra. */
 export const DEFAULT_LAYOUT: LayoutBlock[] = [
   // Lo que le importa a quien llega: qué viene, quién es Arta, qué ha hecho, qué ofrece, dónde y cómo hablarle.
-  ...(['cartelera', 'frase', 'servicios', 'muro', 'recintos', 'historias', 'galeria', 'noticias', 'aliados', 'ubicacion', 'contacto'] as BlockType[]).map(
+  ...(['cartelera', 'frase', 'trayectoria', 'servicios', 'recintos', 'historias', 'noticias', 'aliados', 'ubicacion', 'contacto'] as BlockType[]).map(
     (type) => ({ id: type as string, type, visible: true }),
   ),
   // Ya están completas en su página: se pueden poner, pero Inicio se lee mejor sin repetir.
-  ...(['nosotros', 'proceso', 'recientes', 'faq'] as BlockType[]).map((type) => ({ id: type as string, type, visible: false })),
+  ...(['nosotros', 'proceso', 'recientes', 'muro', 'galeria', 'faq'] as BlockType[]).map((type) => ({ id: type as string, type, visible: false })),
 ];
 
 export function sectionKeyOf(block: Pick<LayoutBlock, 'id' | 'type'>): string {
@@ -390,10 +398,19 @@ export const DEFAULT_CONTENT: Record<string, Record<string, unknown>> = {
   home_frase: {
     eyebrow: 'Quiénes somos',
     headline: 'Hacemos que los shows pasen.',
-    text: 'Traemos conciertos, giras y espectáculos a Puebla y a otras ciudades de México. Nos encargamos de todo lo que pasa arriba y abajo del escenario, para que tú solo llegues y lo vivas.',
+    text: 'Somos una empresa nacional de entretenimiento. Planeamos, diseñamos y operamos conciertos, giras, festivales y eventos en toda la República, y nos encargamos de todo lo que pasa arriba y abajo del escenario, para que tú solo llegues y lo vivas.',
+    stats: [
+      { label: '18+', text: 'años en la industria del espectáculo' },
+      { label: '100+', text: 'conciertos producidos' },
+      { label: '30 mil', text: 'asistentes de capacidad de operación' },
+    ],
   },
   home_proceso: {
     headline: 'Del rider al último aplauso.',
+  },
+  home_trayectoria: {
+    headline: 'Han pasado por nuestros escenarios.',
+    names: 'Luis Miguel\nSting\nRod Stewart\nRicky Martin\nMaluma\nVicente Fernández\nJulio Iglesias\nAlejandro Fernández\nMarco Antonio Solís\nRicardo Arjona\nGloria Gaynor\nCarín León\nGrupo Frontera\nJunior H\nSebastián Yatra\nMelendi\nIntocable\nPepe Aguilar\nBanda El Recodo\nPlacebo\nSteve Aoki\nLos Bunkers\nPanteón Rococó\nJaguares\nYuri\nMijares\nEmmanuel\nLupita D’Alessio\nDaniela Romo\nAlejandra Guzmán\nTimbiriche\nOV7\nKabah\nRío Roma\nSin Bandera\nCristian Castro\nHumbe\nCamila\nCaloncho\nManuel Medrano\nArmando Manzanero\nEnjambre\nDivisión Minúscula\nDrake Bell',
   },
   home_recientes: {
     headline: 'Noches recientes.',
@@ -422,13 +439,12 @@ export const DEFAULT_CONTENT: Record<string, Record<string, unknown>> = {
     headline: 'Detrás del show',
     lead: 'Montajes, ensayos y lo que pasa cuando se apagan las luces.',
     emptyText: 'Pronto compartiremos lo que pasa detrás del escenario.',
-    pageImage: '/uploads/seed-hero-3.jpg',
   },
   home_about: {
     eyebrow: 'Nosotros',
     headline: 'Producimos el show completo',
-    summary: 'Somos la productora detrás de lo que pasa arriba y abajo del escenario: una sola mano de principio a fin, con el mismo cuidado en cada fecha.',
-    body: 'Somos la productora detrás de lo que pasa arriba y abajo del escenario. Montaje, audio e iluminación, hospitalidad para los artistas, boletaje, campaña y cierre: una sola mano de principio a fin, con el mismo cuidado en cada fecha.\n\nDesde Puebla acompañamos a cada artista y a cada promotor desde que llega el rider hasta que se cierran las cuentas, para que el público solo tenga que llegar y vivirlo.',
+    summary: 'Somos una empresa nacional de entretenimiento con más de 18 años en la industria del espectáculo: una sola mano de principio a fin, con el mismo cuidado en cada fecha.',
+    body: 'Somos una empresa nacional de entretenimiento con más de 18 años de experiencia en la industria del espectáculo. Nos especializamos en la planeación estratégica, el diseño, la operación y la gestión integral de eventos: conciertos, presentaciones musicales, espectáculos deportivos, ferias y festivales, congresos, obras de teatro y eventos culturales y de gobierno, con capacidad de operación para más de 30 mil asistentes.\n\nDecidimos según el concepto, el objetivo y las necesidades de cada evento, para darle las mejores oportunidades de éxito. Somos una herramienta eficaz en la producción, la ejecución y la mercadotecnia para artistas, productores, anunciantes y gobiernos.',
     imageUrl: '/uploads/seed-hero-2.jpg',
     pageImage: '/uploads/seed-hero-1.jpg',
     stats: [],
@@ -485,14 +501,12 @@ export const DEFAULT_CONTENT: Record<string, Record<string, unknown>> = {
     headline: 'Noticias',
     lead: 'Lo que está pasando en Arta Producciones.',
     emptyText: 'Pronto publicaremos novedades de la temporada.',
-    pageImage: '/uploads/seed-hero-2.jpg',
   },
   home_galeria: {
     eyebrow: 'Galería',
     headline: 'Así se vive',
     lead: 'Noches que ya pasaron y se quedaron con nosotros.',
     emptyText: 'Pronto subiremos las fotos de los últimos shows.',
-    pageImage: '/uploads/seed-hero-1.jpg',
   },
   home_aliados: {
     eyebrow: 'Aliados',
@@ -588,6 +602,7 @@ const TONE_OPTIONS: FieldOption[] = [
 export const SECTION_LABELS: Record<string, string> = {
   [HERO_KEY]: 'Textos de la portada',
   home_frase: 'Quiénes somos en Inicio',
+  home_trayectoria: 'Trayectoria en Inicio',
   home_proceso: 'Cómo trabajamos en Inicio',
   home_recientes: 'Noches recientes en Inicio',
   home_muro: 'Muro de pósters en Inicio',
@@ -630,6 +645,22 @@ export const SECTION_FIELDS: Record<string, Field[]> = {
     { key: 'eyebrow', label: 'Etiqueta', type: 'text' },
     { key: 'headline', label: 'Titular', type: 'text' },
     { key: 'text', label: 'Texto', type: 'textarea', rows: 3, hint: 'Qué es Arta, en dos líneas: lo primero que lee quien no la conoce.' },
+    {
+      key: 'stats',
+      label: 'Cifras',
+      type: 'list',
+      itemLabel: 'Cifra',
+      addLabel: 'Agregar cifra',
+      hint: 'Los shows de la temporada se cuentan solos y salen al final.',
+      fields: [
+        { key: 'label', label: 'Número', type: 'text' },
+        { key: 'text', label: 'Qué cuenta', type: 'text' },
+      ],
+    },
+  ],
+  home_trayectoria: [
+    { key: 'headline', label: 'Titular', type: 'text', hint: 'Las fotos salen solas de la Galería.' },
+    { key: 'names', label: 'Artistas', type: 'textarea', rows: 8, hint: 'Uno por renglón. Solo los que Arta haya producido de verdad.' },
   ],
   home_proceso: [{ key: 'headline', label: 'Titular', type: 'text', hint: 'Los pasos y sus fotos son los de arriba, en «Pasos».' }],
   home_recientes: [{ key: 'headline', label: 'Titular', type: 'text', hint: 'Los shows salen solos: los que ya pasaron en la cartelera.' }],

@@ -19,16 +19,18 @@ Una idea por pantalla y nada que no diga algo. En orden:
 | Portada (`HomeHero`) | `home_hero`: titular, texto y dos ligas. Detrás, los pósters reales en tres columnas que corren; con menos de 5 pósters, las fotos de `HeroSlide`. Se pausa, y se queda quieta con «reducir movimiento» |
 | Tarjeta del próximo show | `data.shows[0]`, dentro de la portada; se apaga con `home_hero.showCount = 0` |
 | Próximos shows (`ShowTile`) | La cartelera, hasta 8. El póster va entero, sin recortar, sobre su propio color. Sin póster, un escenario a oscuras con reflectores (`StageLights`) |
-| Quiénes somos | `home_frase`: etiqueta, titular y dos líneas a tamaño de lectura, con liga a Nosotros. Los datos (shows, escenarios, ciudades) salen de la cartelera, nunca a mano |
+| Quiénes somos | `home_frase`: etiqueta, titular y dos líneas a tamaño de lectura, con liga a Nosotros. Las cifras (`stats`) salen del brochure de Arta y se editan en Studio; los shows de la temporada se cuentan solos |
+| Trayectoria | `home_trayectoria`: titular y artistas, uno por renglón; las fotos corren solas desde la Galería (`SiteItem` tipo `foto`) |
 | Servicios | `home_modulos.tiles`: cuatro tarjetas altas iguales, con su foto y su `tagline` |
-| Muro de pósters | Los shows que ya pasaron (`home_muro`), en una fila que corre. Si son menos de 5, entran también los próximos |
 | Recintos | `home_recintos`: dirección, cómo llegar y su siguiente show, que reconoce por una palabra (`match`) |
 | Oficina | `home_ubicacion`: dirección y mapa a color, más teléfono, correo y redes de «Datos del sitio» |
 | Invitación a escribir | `home_cta`; la foto es su `pageImage` |
 
-**El ritmo es noche y día:** portada y próximos shows de noche, porque los pósters lucen sobre negro; quiénes somos y servicios de día; el muro de noche; recintos y oficina de día; la invitación y el pie de noche. Las páginas abren de noche, como la portada.
+**El ritmo es noche y día:** portada y próximos shows de noche, porque los pósters lucen sobre negro; quiénes somos de día; la trayectoria de noche; servicios, recintos y oficina de día; la invitación y el pie de noche. Las páginas abren de noche, como la portada.
 
-**Inicio habla al público:** qué viene, quién es Arta, qué ha hecho, qué ofrece, dónde y cómo hablarle. Adam (02-11): «se debe mostrar como la empresa de los eventos e info, pero no registros internos» aunque sean de ejemplo. Nada de órdenes de compra, corridas ni minutos a minuto. «Cómo trabajamos» y «Noches recientes» quedan ocultas por omisión: se pueden poner desde Studio.
+**Lo real de Arta sale de su sitio oficial anterior y de su brochure de 2022** (`artaproductions.com`, `Brochure_Arta.pdf`): 18+ años, 100+ conciertos, capacidad de 30 mil asistentes, la lista de artistas y las 28 fotos de la galería, en `/uploads/site/galeria/`. Las fotos de archivo (`seed-*`) ya no se ven en producción.
+
+**Inicio habla al público:** qué viene, quién es Arta, qué ha hecho, qué ofrece, dónde y cómo hablarle. Adam (02-11): «se debe mostrar como la empresa de los eventos e info, pero no registros internos» aunque sean de ejemplo. Nada de órdenes de compra, corridas ni minutos a minuto. «Cómo trabajamos», «Noches recientes», el muro de pósters y la galería quedan ocultos en Inicio por omisión: se pueden poner desde Studio.
 
 **Un show es de Arta si su póster o su ficha lo dicen:** el logo de Arta entre los créditos, arriba o abajo. Nunca por la boletera ni por el recinto. Hay shows en Arema y en eticket que no son de Arta, y hay de Arta fuera de Puebla.
 

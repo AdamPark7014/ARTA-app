@@ -51,6 +51,8 @@ export type PublicSiteContent = {
   address?: string;
   /** Latitud y longitud: el mapa clava ese punto en vez de buscar la dirección. */
   mapPoint?: string;
+  /** Artistas de la trayectoria, uno por renglón. */
+  names?: string;
   emptyTitle?: string;
   emptyText?: string;
   showCount?: string;

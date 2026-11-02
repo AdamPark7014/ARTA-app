@@ -751,6 +751,7 @@ body.sa-lock {
 .sa-say__stats dd {
   order: -1;
   min-width: 1.5em;
+  white-space: nowrap;
   font-family: var(--display);
   font-weight: 600;
   font-size: clamp(2.6rem, 4.6vw, 4.25rem);
@@ -1007,8 +1008,62 @@ body.sa-lock {
   color: var(--on-ink-2);
 }
 
+/* Trayectoria: las fotos de sus shows corriendo y, debajo, quién ha pasado por sus escenarios. */
+.sa-sec.sa-track {
+  padding-inline: 0;
+  overflow: hidden;
+}
+
+.sa-track .sa-rowhead,
+.sa-track__names {
+  padding-inline: var(--gutter);
+}
+
+.sa-track figure {
+  position: relative;
+  flex: 0 0 auto;
+  margin: 0;
+  overflow: hidden;
+  border-radius: 16px;
+}
+
+.sa-track figure img {
+  display: block;
+  width: auto;
+  height: clamp(240px, 27vw, 420px);
+  filter: var(--photo);
+}
+
+.sa-track figcaption {
+  position: absolute;
+  inset: auto 0 0;
+  padding: 32px 16px 12px;
+  background: linear-gradient(180deg, transparent, rgba(12, 12, 13, 0.72));
+  font-size: 14.5px;
+  font-weight: 500;
+}
+
+.sa-track__names {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 0;
+  max-width: 1400px;
+  margin-top: clamp(36px, 4.6vw, 68px);
+  font-family: var(--display);
+  font-size: clamp(1.45rem, 2.9vw, 2.75rem);
+  font-weight: 600;
+  line-height: 1.22;
+  letter-spacing: -0.024em;
+}
+
+.sa-track__names li:not(:last-child)::after {
+  content: '·';
+  margin-inline: 0.34em;
+  color: var(--on-ink-3);
+}
+
 /* Muro de pósters: lo que ya pasó, corriendo. */
-.sa-wall {
+.sa-sec.sa-wall {
   padding-inline: 0;
   overflow: hidden;
 }

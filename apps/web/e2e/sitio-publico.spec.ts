@@ -83,8 +83,22 @@ test.describe('Sitio público · Inicio', () => {
     await expect(page.locator('.sa-tile', { hasText: 'Los Ecos de Cholula' }).locator('.sa-lights')).toHaveCount(0);
   });
 
-  test('el muro corre con los pósters de los shows y lleva a cada uno', async ({ page }) => {
+  test('la trayectoria enseña las fotos de los shows y quién ha pasado por sus escenarios', async ({ page }) => {
     await mockStudio(page, siteState());
+    await page.goto('/site?embed=1');
+
+    const track = page.locator('#trayectoria');
+    await expect(track.getByRole('heading', { name: 'Han pasado por nuestros escenarios.' })).toBeVisible();
+    await expect(track.locator('.sa-track__names')).toContainText('Luis Miguel');
+    // Corre sin saltos porque va repetida; quien usa lector de pantalla la oye una vez.
+    await expect(track.locator('figure[aria-hidden="true"]').first()).toBeAttached();
+  });
+
+  test('el muro corre con los pósters de los shows y lleva a cada uno', async ({ page }) => {
+    const state = siteState();
+    // Ya no sale por omisión: Studio lo puede poner.
+    state.pages.push({ id: 'lay', sectionKey: 'site_layout', published: true, contentJson: { blocks: [{ id: 'muro', type: 'muro', visible: true }, { id: 'frase', type: 'frase', visible: true }] } });
+    await mockStudio(page, state);
     await page.goto('/site?embed=1');
 
     const wall = page.locator('#temporada');
@@ -237,7 +251,7 @@ test.describe('Sitio público · Inicio', () => {
     await expect(page.getByRole('link', { name: 'Ver todos los servicios' })).toHaveAttribute('href', '/p/arta/servicios');
     await expect(page.getByRole('link', { name: 'Ver todas las noticias' })).toHaveAttribute('href', '/p/arta/noticias');
     await expect(page.getByRole('link', { name: 'Ver todas las historias' })).toHaveAttribute('href', '/p/arta/historias');
-    await expect(page.getByRole('link', { name: 'Ver toda la galería' })).toHaveAttribute('href', '/p/arta/galeria');
+    await expect(page.getByRole('link', { name: 'Ver la galería' })).toHaveAttribute('href', '/p/arta/galeria');
   });
 
   test('las preguntas no salen en Inicio salvo que se pongan desde Studio', async ({ page }) => {
@@ -346,7 +360,7 @@ test.describe('Sitio público · Inicio', () => {
 
   test('la galería abre la foto en grande', async ({ page }) => {
     await mockStudio(page, siteState());
-    await page.goto('/site?embed=1');
+    await page.goto('/site?embed=1&pagina=galeria');
 
     await page.getByRole('button', { name: 'Ampliar foto: Festival' }).click();
     await expect(page.getByRole('dialog', { name: 'Festival' })).toBeVisible();

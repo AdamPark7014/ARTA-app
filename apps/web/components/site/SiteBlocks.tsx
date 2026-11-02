@@ -26,7 +26,7 @@ import {
   showTimeLabel,
   ticketHref,
 } from '@/lib/site-format';
-import { MIN_WALL_POSTERS, heroPhotoUrls, itemsOf, newsHref, posterShows, servicesOf, showHref, type Service } from '@/lib/site-model';
+import { MIN_WALL_POSTERS, heroPhotoUrls, isPageOff, itemsOf, newsHref, posterShows, servicesOf, showHref, type Service } from '@/lib/site-model';
 import { VENUE_ADDRESS, contactFromSettings, socialProfiles } from '@/lib/site-seo';
 
 type Tone = 'papel' | 'blanco' | 'tinta';
@@ -380,23 +380,13 @@ function Recintos({ block, content, shows }: { block: LayoutBlock; content: Publ
   );
 }
 
-/** Lo que se puede contar sin escribirlo a mano: sale de la cartelera y nunca se queda viejo. */
-function seasonStats(shows: PublicSiteNewsItem[], past: PublicSiteNewsItem[]) {
-  const all = [...shows, ...past];
-  if (!all.length) return [];
-  const venues = new Set(all.map((show) => show.venue?.trim().toLowerCase()).filter(Boolean));
-  // Cholula y San Andrés son la misma zona que Puebla: contarlas aparte inflaría el dato.
-  const cities = new Set(all.map((show) => show.city?.trim().toLowerCase().replace(/.*cholula.*/, 'puebla')).filter(Boolean));
-  return [
-    { value: all.length, label: all.length === 1 ? 'show esta temporada' : 'shows esta temporada' },
-    { value: venues.size, label: venues.size === 1 ? 'escenario' : 'escenarios' },
-    { value: cities.size, label: cities.size === 1 ? 'ciudad' : 'ciudades' },
-  ].filter((stat) => stat.value > 0);
-}
-
-/** Quiénes somos: un titular, dos líneas a tamaño de lectura y los datos de la temporada. */
+/** Quiénes somos: un titular, dos líneas a tamaño de lectura y sus cifras. Los shows de la temporada se cuentan solos. */
 function Frase({ block, content, shows, past }: { block: LayoutBlock; content: PublicSiteContent; shows: PublicSiteNewsItem[]; past: PublicSiteNewsItem[] }) {
-  const stats = seasonStats(shows, past);
+  const season = shows.length + past.length;
+  const stats = [
+    ...(content.stats ?? []).filter((stat) => stat.label?.trim()).map((stat) => ({ value: stat.label, label: stat.text })),
+    ...(season ? [{ value: String(season), label: season === 1 ? 'show esta temporada' : 'shows esta temporada' }] : []),
+  ];
   return (
     <Section block={block} tone="papel" className="sa-say">
       <div className="sa-say__copy" data-reveal>
@@ -418,6 +408,51 @@ function Frase({ block, content, shows, past }: { block: LayoutBlock; content: P
             </div>
           ))}
         </dl>
+      ) : null}
+    </Section>
+  );
+}
+
+/** Quién ha pasado por sus escenarios: las fotos de la galería corriendo y los nombres, en grande. */
+function Trayectoria({ block, content, photos, gallery }: { block: LayoutBlock; content: PublicSiteContent; photos: PublicSiteItem[]; gallery: boolean }) {
+  const names = (content.names || '')
+    .split('\n')
+    .map((name) => name.trim())
+    .filter(Boolean);
+  const list = photos.filter((photo) => photo.mediaType !== 'video').slice(0, 14);
+  return (
+    <Section block={block} tone="tinta" className="sa-track">
+      <header className="sa-rowhead" data-reveal>
+        <h2 id={`${anchorOf(block)}-t`} className="sa-title">
+          {content.headline}
+        </h2>
+        {list.length && gallery ? (
+          <Link className="sa-arrow" href={pageHref('galeria')}>
+            Ver la galería
+          </Link>
+        ) : null}
+      </header>
+      {list.length ? (
+        <div className="sa-wall__row">
+          <div className="sa-wall__track">
+            {[0, 1, 2].map((copy) =>
+              list.map((photo) => (
+                <figure key={`${copy}-${photo.id}`} aria-hidden={copy ? true : undefined}>
+                  {/* eslint-disable-next-line @next/next/no-img-element -- foto dinámica de Studio */}
+                  <img src={photo.mediaUrl} alt={copy ? '' : photo.title || ''} loading="lazy" decoding="async" />
+                  {photo.title ? <figcaption>{photo.title}</figcaption> : null}
+                </figure>
+              )),
+            )}
+          </div>
+        </div>
+      ) : null}
+      {names.length ? (
+        <ul className="sa-track__names" data-reveal>
+          {names.map((name) => (
+            <li key={name}>{name}</li>
+          ))}
+        </ul>
       ) : null}
     </Section>
   );
@@ -905,6 +940,8 @@ export function SiteBlock({ block, data, past = [] }: { block: LayoutBlock; data
       return <Proceso block={block} content={content} data={data} />;
     case 'recientes':
       return <Recientes block={block} content={content} past={past} />;
+    case 'trayectoria':
+      return <Trayectoria block={block} content={content} photos={itemsOf(data, 'foto')} gallery={!isPageOff(data, 'galeria')} />;
     case 'muro':
       return <Muro block={block} content={content} shows={data.shows} past={past} />;
     case 'recintos':
