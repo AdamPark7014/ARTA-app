@@ -8,7 +8,7 @@ Solo hay datos que ya son públicos. Las constancias y los comprobantes no van e
 **Creado el 02-11-2026** en la cuenta de Adam, id `17016989438206637428`, y **sin verificar**: nadie lo ve hasta que se verifique.
 
 - **Hecho:** nombre, categoría principal y una adicional (Agencia de espectáculos), descripción, teléfono, sitio, Instagram, Facebook, cuatro zonas de servicio, sin dirección pública, 10 servicios, logo, portada y 10 fotos.
-- **Falta:** verificar (`business.google.com/verify/l/17016989438206637428`), que pide primero la dirección postal, y TikTok. Las publicaciones se pueden agregar después de verificar.
+- **Falta:** el video de verificación, que tiene que grabar alguien de Arta en la oficina (guion abajo), y TikTok. Las publicaciones se pueden agregar después de verificar.
 - **Para editar:** `https://www.google.com/local/business/4135616651570994165/editprofile/info?hl=es`; ahí los clics y las capturas sí funcionan, a diferencia del recuadro dentro de la búsqueda. Fotos: `.../promote/photos/add?hl=es`, de una en una: al subir 10 juntas Google rechazó una.
 
 ## Lo que falta confirmar
@@ -93,19 +93,24 @@ Soy Luna es del 4 de noviembre, de Golden Peak en colaboración con Arta: si se 
 
 ## La verificación
 
-Google decide el método y solo lo puede hacer quien tenga acceso a Arta. No se puede preparar por adelantado ni hacer sin Arta.
+**Dirección postal capturada** (no se publica): Calle Tlaxco 720, La Paz, 72160 Heroica Puebla de Zaragoza, Puebla. Adam la confirmó el 02-11-2026.
 
-**Si pide video** (lo más común), una sola toma, sin cortes:
-1. El exterior de la oficina: la calle, el número y el letrero.
-2. La entrada, y que se abra con llave o acceso de quien graba.
-3. Adentro: equipo, materiales o documentos de shows con la marca de Arta.
+**Google solo ofrece video.** No hay código por teléfono ni por correo. Se sube desde `business.google.com/verify/l/17016989438206637428`, con la cuenta de Adam.
 
-**Si pide documentos** para una apelación, tienen que ser reales y a nombre de la empresa. Los guarda Arta en `C:\dev\secrets\arta-google-perfil\`, nunca en este repo:
-- Constancia de Situación Fiscal.
-- Comprobante de domicilio, de luz, teléfono o agua.
-- Contrato o factura de un show.
+**Guion: una sola toma continua, sin cortes, de 30 segundos a 1 minuto.** Sin editar y sin música:
 
-**Si pide código por teléfono, SMS o correo:** llega al dato de la ficha. Por eso hay que confirmar el teléfono antes de pedirlo.
+1. **Los alrededores (10 s).** Afuera de la oficina: la placa de la calle Tlaxco, el número 720 y los negocios vecinos. Tiene que coincidir con la zona de servicio, que incluye Puebla.
+2. **El nombre de la empresa (10 s).** Sin cortar, enfocar «Arta Producciones» impreso en una tarjeta de presentación, una licencia o un vehículo. Tiene que decir ese nombre exacto.
+3. **Que la administras (20 s).** Sin cortar, entrar y enseñar equipo de la empresa, o abrir un vehículo de Arta, o abrir el sistema de la empresa. Sirve el panel de ARTA con sesión iniciada en un teléfono o computadora, enseñando los eventos.
+
+**Antes de grabar:**
+- Conseguir algo impreso con el nombre exacto. Sin eso, el paso 2 no se puede cumplir, y es lo que más suele fallar.
+- Grabar de día, con buena señal, y sin que se vea la contraseña ni datos de clientes en la pantalla.
+- Confirmar que Arta sigue en esa dirección: Maps muestra ahí una agencia de Mercado Libre, y el video tiene que coincidir.
+
+Google revisa en unos días y avisa por correo a ad.pozo.ont@gmail.com.
+
+**Si la rechaza o pide documentos**, tienen que ser reales y a nombre de la empresa. Los guarda Arta en `C:\dev\secrets\arta-google-perfil\`, nunca en este repo: Constancia de Situación Fiscal, comprobante de domicilio, contrato o factura de un show.
 
 ## Lo que aprendimos con NEXARA
 

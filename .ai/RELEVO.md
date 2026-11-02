@@ -36,7 +36,7 @@ Adam: «génerale un rediseño de 360 grados», «se debe mostrar como la empres
 - El último commit cambia prueba y una regla de CSS sin efecto visual: no se desplegó, producción sigue en `cd7aed1`.
 
 **Pendiente de Adam:**
-- **Google Business:** perfil creado y completo, id `17016989438206637428`, sin verificar. La verificación pide la dirección postal: Adam tiene que confirmarla (Calle Tlaxco 720 u otra). El código o el video le tocan a Arta. Detalle en `docs/GOOGLE-BUSINESS.md`.
+- **Google Business:** perfil creado y completo, id `17016989438206637428`, con la dirección postal que Adam confirmó. Falta el video de verificación, único método que ofrece Google: una toma continua en la oficina con alrededores, el nombre impreso y equipo. Lo graba alguien de Arta; guion en `docs/GOOGLE-BUSINESS.md`. Hasta entonces nadie ve el perfil.
 - Fotos de la oficina y del equipo. Confirmar dirección, teléfono y que `contacto@artaproducciones.com` recibe.
 
 **Skills de diseño:** activas desde esta tarde. Se pasaron crítica, accesibilidad y sistema de diseño: hallazgos en `docs/diseno/AUDITORIA-2026-11.md`, los de teléfono, movimiento y lector de pantalla ya corregidos.
