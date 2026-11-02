@@ -35,9 +35,15 @@ export function EventFinancePanel({
   event,
   closed,
   canEdit,
+  canUpload,
   onChanged,
   flash,
-}: EventPanelProps & { canEdit: boolean }) {
+}: EventPanelProps & {
+  /** Modificar y generar: Chacho y Arturo. */
+  canEdit: boolean;
+  /** Subir la que hicieron fuera: también Leida y Sol, que no la modifican. */
+  canUpload: boolean;
+}) {
   const [busy, setBusy] = useState(false);
   const [open, setOpen] = useState(true);
   const slot = (event.slots || []).find((s) => s.kind === 'CORRIDA') || null;
@@ -51,6 +57,13 @@ export function EventFinancePanel({
   const corrida = files.find(isSheet) || files[0] || null;
   const older = files.filter((f) => f.id !== corrida?.id);
   const editable = canEdit && !closed;
+  const uploadable = canUpload && !closed;
+
+  const generate = () =>
+    run(
+      () => api(`/finance/event/${event.id}/generate`, { method: 'POST', body: '{}' }).then(() => undefined),
+      'Corrida generada desde el machote',
+    );
 
   async function run(fn: () => Promise<void>, ok: string) {
     setBusy(true);
@@ -110,12 +123,12 @@ export function EventFinancePanel({
         title="Corrida"
         sub={
           <>
-            {editable ? 'Una sola corrida por evento. Se edita aquí, como Excel, y sale en PDF.' : 'Una sola corrida por evento.'}{' '}
+            {editable ? 'Una sola corrida por evento. Se edita aquí, como Excel, y sale en PDF.' : uploadable && !corrida ? 'Sube el Excel o PDF de la corrida. Modificarla es de dirección.' : 'Una sola corrida por evento.'}{' '}
             {slot ? <Pill tone={replaced ? 'warn' : 'ok'}>{replaced ? 'Reemplazada por externo' : 'Interna'}</Pill> : null}
           </>
         }
       >
-        {!closed && !replaced ? (
+        {editable && !replaced ? (
           <label className="btn ghost btn-sm module-upload" aria-disabled={busy}>
             Reemplazar por externo
             <input
@@ -148,7 +161,7 @@ export function EventFinancePanel({
             />
           </label>
         ) : null}
-        {!closed && replaced ? (
+        {editable && replaced ? (
           <button
             className="btn ghost btn-sm"
             type="button"
@@ -180,28 +193,18 @@ export function EventFinancePanel({
             text={
               editable && !replaced
                 ? 'Genera una corrida desde el machote estándar o sube el Excel existente.'
-                : 'Cuando finanzas la suba, aparecerá aquí.'
+                : uploadable && !replaced
+                  ? 'Sube el Excel o PDF de la corrida.'
+                  : 'Cuando la suban, aparecerá aquí.'
             }
           >
             {editable && !replaced ? (
-              <>
-                <button
-                  className="btn btn-sm"
-                  type="button"
-                  disabled={busy}
-                  onClick={() =>
-                    run(
-                      () => api(`/finance/event/${event.id}/generate`, { method: 'POST', body: '{}' }).then(() => undefined),
-                      'Corrida generada',
-                    )
-                  }
-                >
-                  Generar corrida
-                </button>
-                <span className="sx-gap" />
-                {uploadButton('Subir corrida', false)}
-              </>
+              <button className="btn btn-sm" type="button" disabled={busy} onClick={generate}>
+                Generar corrida
+              </button>
             ) : null}
+            {editable && uploadable && !replaced ? <span className="sx-gap" /> : null}
+            {uploadable && !replaced ? uploadButton('Subir corrida', !editable) : null}
           </EmptyLite>
         </div>
       ) : (
@@ -219,6 +222,11 @@ export function EventFinancePanel({
             <a className="btn-quiet" href={corrida.url} download={corrida.fileName}>
               Descargar
             </a>
+            {editable && !replaced && !isSheet(corrida) ? (
+              <button className="btn btn-sm" type="button" disabled={busy} onClick={generate}>
+                Generar en Excel
+              </button>
+            ) : null}
             {editable && !replaced ? uploadButton('Reemplazar', false) : null}
           </FileRow>
 

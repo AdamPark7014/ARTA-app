@@ -6,14 +6,16 @@ import type { Tab } from './event-detail.types';
 
 export const TAB_LABELS: Record<Tab, string> = {
   overview: 'Resumen',
-  checklists: 'Formatos',
-  ocs: 'Órdenes de compra',
   finance: 'Corrida',
   campaign: 'Campaña',
+  checklists: 'Formatos',
+  ocs: 'Órdenes de compra',
+  sponsors: 'Convenios',
   ticketing: 'Boletera',
   tasks: 'Tareas',
-  sponsors: 'Convenios',
   files: 'Documentos',
+  adendum: 'Adendum',
+  testigos: 'Testigos',
 };
 
 const VALID_TABS = new Set<string>(Object.keys(TAB_LABELS));

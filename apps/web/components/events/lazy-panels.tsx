@@ -61,3 +61,13 @@ export const EventFilesPanel = dynamic(
   () => import('./EventFilesPanel').then((m) => m.EventFilesPanel),
   { loading: () => <Cargando que="los documentos" /> },
 );
+
+export const EventAdendumPanel = dynamic(
+  () => import('./EventAdendumPanel').then((m) => m.EventAdendumPanel),
+  { loading: () => <Cargando que="los adendums" /> },
+);
+
+export const EventWitnessPanel = dynamic(
+  () => import('./EventWitnessPanel').then((m) => m.EventWitnessPanel),
+  { loading: () => <Cargando que="los testigos de publicidad" /> },
+);

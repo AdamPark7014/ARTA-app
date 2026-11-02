@@ -62,7 +62,7 @@ export default function FinancePage() {
       .finally(() => setLoading(false));
   }, [entity]);
 
-  const canEdit = !!user && userHasPermission(user.roleKey, user.permissions, ['finance.edit', 'everything']);
+  const canEdit = !!user && userHasPermission(user.roleKey, user.permissions, ['corrida.edit', 'everything']);
 
   const rows = useMemo(() => {
     let list = data?.ranking || [];

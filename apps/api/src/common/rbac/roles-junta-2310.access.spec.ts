@@ -8,6 +8,7 @@ import { CalendarController } from '../../calendar/calendar.controller';
 import { FoldersController } from '../../folders/folders.controller';
 import { TasksController } from '../../tasks/tasks.controller';
 import { UsersController } from '../../users/users.controller';
+import { PracticantesController } from '../../practicantes/practicantes.controller';
 import { ChatService, type ChatUser } from '../../chat/chat.service';
 import { CampaignsController } from '../../campaigns/campaigns.controller';
 import { NEW_TEAM_MEMBERS } from '../../../prisma/new-team-members';
@@ -17,9 +18,9 @@ import * as path from 'path';
 /**
  * Junta 23-10-2026: los dos roles nuevos, probados contra los controladores reales.
  *
- *  - `contabilidad` (Paula Farfán): paga OC y anticipos, sube comprobantes, lleva corrida, campaña,
- *    convenios y boletera. NO autoriza OC ni anticipos, no edita formatos ni el evento, no toca
- *    usuarios y no entra sola a los canales de chat de los eventos.
+ *  - `contabilidad` (Paula Farfán): paga OC y anticipos, sube comprobantes, lleva campaña, convenios y
+ *    boletera. Desde el 01-11-2026 no ve ni edita la corrida. NO autoriza OC ni anticipos, no edita
+ *    formatos ni el evento, no toca usuarios y no entra sola a los canales de chat de los eventos.
  *  - `practicante` (practicantes de Montse): Studio y calendario en solo lectura; nada más.
  */
 const ORG = 'org_arta_internal';
@@ -99,7 +100,7 @@ describe('contabilidad · órdenes de compra', () => {
     expect(updated).toBeNull();
   });
 
-  it('no crea, edita ni borra OC (eso es de quien edita formatos)', async () => {
+  it('no crea, edita ni borra OC (eso es de compras)', async () => {
     await expect(
       controller.create({ user: paula } as never, { eventId: 'ev-1', rubro: 'audio', amount: 10 } as never),
     ).rejects.toBeInstanceOf(ForbiddenException);
@@ -163,9 +164,19 @@ describe('contabilidad · anticipos y corrida', () => {
     controller = new FinanceController(prisma as never, revisions as never, { notifyMany: async () => [], notifyEventTeam: async () => [] } as never);
   });
 
-  it('ve la corrida y los anticipos del evento', async () => {
-    await expect(controller.list({ user: paula } as never, 'ev-1')).resolves.toHaveLength(1);
+  it('ve los anticipos del evento; la corrida, no (01-11-2026)', async () => {
     await expect(controller.advances({ user: paula } as never, 'ev-1')).resolves.toHaveLength(2);
+    await expect(controller.list({ user: paula } as never, 'ev-1')).rejects.toThrow('La corrida no está a tu alcance');
+    await expect(controller.revisionHistory({ user: paula } as never, 'run-1')).rejects.toThrow(
+      'La corrida no está a tu alcance',
+    );
+  });
+
+  it('la corrida la ven dirección general, Leida y Sol', async () => {
+    const chacho = { ...paula, id: 'u-chacho', roleKey: 'dir_general' };
+    const leida = { ...paula, id: 'u-leida', roleKey: 'dir_adjunta', entities: ['ARTA'] };
+    await expect(controller.list({ user: chacho } as never, 'ev-1')).resolves.toHaveLength(1);
+    await expect(controller.list({ user: leida } as never, 'ev-1')).resolves.toHaveLength(1);
   });
 
   it('no aprueba ni rechaza anticipos', async () => {
@@ -192,14 +203,33 @@ describe('contabilidad · anticipos y corrida', () => {
     expect(rows.map((r: any) => r.id)).toEqual(['adv-a']);
   });
 
-  it('edita la corrida, pero no la reabre (eso es de dirección)', async () => {
+  it('no edita la corrida ni la reabre (eso es de dirección general)', async () => {
     await expect(
       controller.unlock({ user: paula } as never, 'run-1', { reason: 'ajuste' } as never),
     ).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(controller.update({ user: paula } as never, 'run-1', { title: 'Corrida Concierto' })).rejects.toThrow(
+      'La corrida solo la modifican Chacho o Arturo',
+    );
+    expect(runUpdated).toBeNull();
+  });
+
+  it('Leida y Sol ven la corrida, pero tampoco la modifican ni la reabren', async () => {
+    const sol = { ...paula, id: 'u-sol', roleKey: 'dir_adjunta', entities: ['ARTA'] };
+    await expect(controller.update({ user: sol } as never, 'run-1', { title: 'Corrida Concierto' })).rejects.toThrow(
+      'La corrida solo la modifican Chacho o Arturo',
+    );
+    await expect(
+      controller.unlock({ user: sol } as never, 'run-1', { reason: 'ajuste de cierre' } as never),
+    ).rejects.toThrow('Solo dirección general puede quitar el sello de una corrida');
+    expect(runUpdated).toBeNull();
+  });
+
+  it('dirección general es quien la modifica', async () => {
     // El formato espejo de la corrida no es lo que se prueba aquí.
     jest.spyOn(controller as any, 'syncCorridaChecklist').mockResolvedValue(undefined);
-    await controller.update({ user: paula } as never, 'run-1', { title: 'Corrida Concierto' });
-    expect(runUpdated).toMatchObject({ title: 'Corrida Concierto', lastEditedById: 'u-paula' });
+    const arturo = { ...paula, id: 'u-arturo', roleKey: 'dir_general' };
+    await controller.update({ user: arturo } as never, 'run-1', { title: 'Corrida Concierto' });
+    expect(runUpdated).toMatchObject({ title: 'Corrida Concierto', lastEditedById: 'u-arturo' });
   });
 });
 
@@ -248,16 +278,27 @@ describe('contabilidad · campaña, convenios, evento y documentos', () => {
     expect(prisma.event.update).not.toHaveBeenCalled();
   });
 
-  it('reemplaza corrida, campaña o boletera por un documento externo; un formato no', () => {
-    expect(canReplaceSlot(paula, 'CORRIDA')).toBe(true);
+  it('reemplaza campaña o boletera por un documento externo; corrida, formato y OC no', () => {
     expect(canReplaceSlot(paula, 'CAMPAIGN')).toBe(true);
     expect(canReplaceSlot(paula, 'BOLETERA')).toBe(true);
+    expect(canReplaceSlot(paula, 'CORRIDA')).toBe(false);
     expect(canReplaceSlot(paula, 'CHECKLIST')).toBe(false);
     expect(canReplaceSlot(paula, 'PENDONES')).toBe(false);
     expect(canReplaceSlot(paula, 'OC')).toBe(false);
-    // Los roles operativos siguen reemplazando todo (traen checklist.edit).
+    // Los roles operativos siguen reemplazando lo suyo (traen checklist.edit)...
     expect(canReplaceSlot({ roleKey: 'convenios', permissions: [] }, 'CAMPAIGN')).toBe(true);
     expect(canReplaceSlot({ roleKey: 'logistica', permissions: [] }, 'CHECKLIST')).toBe(true);
+    // ...pero la corrida y la OC ya no se reemplazan por poder editar formatos.
+    for (const roleKey of ['convenios', 'logistica', 'enlace_gobierno', 'produccion']) {
+      expect(canReplaceSlot({ roleKey, permissions: [] }, 'CORRIDA')).toBe(false);
+      expect(canReplaceSlot({ roleKey, permissions: [] }, 'OC')).toBe(false);
+    }
+    // La corrida, quien la modifica: Leida y Sol la suben, reemplazarla ya sería modificarla. La OC, compras.
+    expect(canReplaceSlot({ roleKey: 'dir_adjunta', permissions: [] }, 'CORRIDA')).toBe(false);
+    expect(canReplaceSlot({ roleKey: 'dir_general', permissions: [] }, 'CORRIDA')).toBe(true);
+    expect(canReplaceSlot({ roleKey: 'compras', permissions: [] }, 'OC')).toBe(true);
+    expect(canReplaceSlot({ roleKey: 'dir_general', permissions: [] }, 'OC')).toBe(false);
+    expect(canReplaceSlot({ roleKey: 'dir_general', permissions: ['po.edit'] }, 'OC')).toBe(true);
   });
 
   it('el endpoint de reemplazo rechaza un formato antes de tocar nada', async () => {
@@ -435,8 +476,15 @@ describe('practicante · nada fuera del sitio', () => {
   });
 });
 
-describe('Montse (dir_adjunta) da de alta practicantes', () => {
-  const montse = { id: 'u-monse', roleKey: 'dir_adjunta', entities: BOTH, permissions: [] as string[], organizationId: ORG };
+/**
+ * Hasta el 01-11-2026 dirección adjunta daba de alta gente. Ahora los usuarios y los perfiles de
+ * practicante son de dirección general; `users.create` queda solo como permiso extra.
+ */
+describe('Altas de usuarios y practicantes: dirección general', () => {
+  const leida = { id: 'u-leida', roleKey: 'dir_adjunta', entities: ['ARTA'], permissions: [] as string[], organizationId: ORG };
+  const chacho = { id: 'u-chacho', roleKey: 'dir_general', entities: BOTH, permissions: [] as string[], organizationId: ORG };
+  /** Quien solo trae el extra `users.create`: da de alta, pero dentro de sus límites. */
+  const soloAltas = { ...leida, id: 'u-altas', permissions: ['users.create'] };
 
   function users() {
     const created: Array<Record<string, any>> = [];
@@ -452,12 +500,41 @@ describe('Montse (dir_adjunta) da de alta practicantes', () => {
       organization: { findUnique: async () => ({ id: ORG, active: true, plan: 'OPS' }) },
       orgInvite: { count: async () => 0 },
     };
-    return { controller: new UsersController(prisma as never), created };
+    return { controller: new UsersController(prisma as never), created, prisma };
   }
 
-  it('el rol practicante sale en su lista de roles', () => {
+  it('dirección adjunta ya no ve usuarios, roles ni el catálogo de permisos', async () => {
     const { controller } = users();
-    const keys = controller.roles({ user: montse } as never).map((r: any) => r.key);
+    expect(() => controller.roles({ user: leida } as never)).toThrow('No puedes dar de alta usuarios');
+    expect(() => controller.permissionsCatalog({ user: leida } as never)).toThrow('No puedes dar de alta usuarios');
+    await expect(controller.list({ user: leida } as never)).rejects.toThrow('No puedes dar de alta usuarios');
+  });
+
+  it('dirección adjunta ya no da de alta a nadie', async () => {
+    const { controller, created, prisma } = users();
+    await expect(
+      controller.create({ user: leida } as never, {
+        email: 'practicante1@artaproducciones.com',
+        fullName: 'Practicante Uno',
+        roleKey: 'practicante',
+        entities: ['ARTA'] as never,
+        password: 'Una-clave-larga-1',
+      }),
+    ).rejects.toThrow('No puedes dar de alta usuarios');
+    expect(prisma.user.create).not.toHaveBeenCalled();
+    expect(created).toEqual([]);
+  });
+
+  it('dirección general ve todos los roles, menos el de plataforma', () => {
+    const { controller } = users();
+    const keys = controller.roles({ user: chacho } as never).map((r: any) => r.key);
+    expect(keys).toEqual(expect.arrayContaining(['practicante', 'contabilidad', 'compras', 'dir_general']));
+    expect(keys).not.toContain('super_admin');
+  });
+
+  it('el rol practicante sale en la lista de quien solo da de alta, sin dirección general ni plataforma', () => {
+    const { controller } = users();
+    const keys = controller.roles({ user: soloAltas } as never).map((r: any) => r.key);
     expect(keys).toEqual(expect.arrayContaining(['practicante', 'contabilidad']));
     expect(keys).not.toContain('dir_general');
     expect(keys).not.toContain('super_admin');
@@ -465,7 +542,7 @@ describe('Montse (dir_adjunta) da de alta practicantes', () => {
 
   it('crea un practicante en Arta; los permisos extra solo del catálogo asignable', async () => {
     const { controller, created } = users();
-    await controller.create({ user: montse } as never, {
+    await controller.create({ user: chacho } as never, {
       email: 'practicante1@artaproducciones.com',
       fullName: 'Practicante Uno',
       roleKey: 'practicante',
@@ -489,18 +566,70 @@ describe('Montse (dir_adjunta) da de alta practicantes', () => {
     ).rejects.toBeInstanceOf(ForbiddenException);
   });
 
-  it('dirección adjunta solo da entidades que ella tiene', async () => {
-    const { controller } = users();
-    const soloArta = { ...montse, entities: ['ARTA'] };
+  it('quien solo da de alta solo da entidades que tiene', async () => {
+    const { controller, created } = users();
     await expect(
-      controller.create({ user: soloArta } as never, {
+      controller.create({ user: soloAltas } as never, {
         email: 'y@artaproducciones.com',
         fullName: 'Y',
         roleKey: 'practicante',
         entities: ['EXPLANADA'] as never,
         password: 'Una-clave-larga-1',
       }),
-    ).rejects.toBeInstanceOf(ForbiddenException);
+    ).rejects.toThrow('Solo puedes dar acceso a tus entidades');
+    expect(created).toEqual([]);
+  });
+
+  it('quien solo da de alta no reparte dirección general', async () => {
+    const { controller, created } = users();
+    await expect(
+      controller.create({ user: soloAltas } as never, {
+        email: 'z@artaproducciones.com',
+        fullName: 'Z',
+        roleKey: 'dir_general',
+        entities: ['ARTA'] as never,
+        password: 'Una-clave-larga-1',
+      }),
+    ).rejects.toThrow('Solo dirección general da ese rol');
+    expect(created).toEqual([]);
+  });
+
+  describe('perfiles de practicante por temporada', () => {
+    function perfiles() {
+      const create = jest.fn(async ({ data }: any) => ({ id: 'u-new', sessions: [], ...data }));
+      const prisma = {
+        user: { findUnique: jest.fn(async () => null), create },
+        auditLog: { create: jest.fn(async ({ data }: any) => data) },
+      };
+      return { controller: new PracticantesController(prisma as never), create };
+    }
+    const dto = { fullName: 'Practicante Uno', expiresAt: '2099-12-31' };
+
+    it('dirección adjunta no los genera', async () => {
+      const { controller, create } = perfiles();
+      await expect(controller.create({ user: leida } as never, dto)).rejects.toThrow(
+        'Los perfiles de practicante los generan Chacho o Arturo',
+      );
+      expect(create).not.toHaveBeenCalled();
+    });
+
+    it('dirección general los genera, y publicar viaja como permiso extra del perfil', async () => {
+      const { controller, create } = perfiles();
+      const con = await controller.create({ user: chacho } as never, dto);
+      expect(create.mock.calls[0][0].data).toMatchObject({
+        roleKey: 'practicante',
+        permissions: ['studio.publish'],
+        entities: ['ARTA', 'EXPLANADA'],
+      });
+      expect(con.canPublish).toBe(true);
+    });
+
+    it('sin ese permiso, el perfil solo deja borradores', async () => {
+      const { controller, create } = perfiles();
+      const sin = await controller.create({ user: chacho } as never, { ...dto, canPublish: false });
+      expect(create.mock.calls[0][0].data.permissions).toEqual([]);
+      expect(sin.canPublish).toBe(false);
+    });
   });
 });
 

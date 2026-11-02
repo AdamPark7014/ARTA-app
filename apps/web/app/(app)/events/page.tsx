@@ -9,6 +9,7 @@ import { LoadingBlock } from '@/components/ui/LoadingBlock';
 import { FieldSearch, PageHeader } from '@/components/ui/PageChrome';
 import { api } from '@/lib/api';
 import { canAccessEventOps, userHasPermission } from '@/lib/access-matrix';
+import { canEditEventInfo } from '@arta/rbac';
 import { useUser } from '@/lib/user-context';
 
 type EventRow = {
@@ -103,6 +104,7 @@ function EventsPageInner() {
   const canCreate =
     !!user &&
     canAccessEventOps(user.roleKey, entity) &&
+    canEditEventInfo(user, entity) &&
     userHasPermission(user.roleKey, user.permissions, ['event.create', 'everything']);
 
   useEffect(() => {

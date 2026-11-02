@@ -7,7 +7,7 @@ import { mockAuthenticatedApi, mockApi, seedSession, TEST_USER } from './support
  *
  * Junta 2026-08-28: el menú deja de desglosar cada check. Solo lista Dashboard,
  * las cuatro entradas de eventos y la administración; las vistas de portafolio
- * (Finanzas, Campañas, Plantillas…) solo aparecen al buscar.
+ * (Corridas, Plantillas…) solo aparecen al buscar. Finanzas sí va arriba (01-11-2026).
  */
 test.describe('App shell', () => {
   // El evento de prueba es del 20-09-2026: con el reloj real ya sería pasado.
@@ -38,8 +38,10 @@ test.describe('App shell', () => {
     await expect(nav.getByRole('link', { name: 'Eventos actuales' })).toBeVisible();
     await expect(nav.getByRole('link', { name: 'Eventos pasados' })).toBeVisible();
     await expect(nav.getByRole('link', { name: 'Tareas' })).toBeVisible();
+    // Finanzas va arriba, junto a Inicio.
+    await expect(nav.getByRole('link', { name: 'Finanzas' })).toBeVisible();
     // Las herramientas transversales quedan fuera del menú por defecto.
-    await expect(nav.getByRole('link', { name: 'Finanzas' })).toHaveCount(0);
+    await expect(nav.getByRole('link', { name: 'Corridas' })).toHaveCount(0);
     await expect(nav.getByRole('link', { name: 'Plantillas' })).toHaveCount(0);
 
     await expect(page.getByRole('heading', { name: /^Buen(os|as) (días|tardes|noches), Ana$/ })).toBeVisible();
@@ -58,10 +60,10 @@ test.describe('App shell', () => {
     const nav = page.getByRole('navigation', { name: 'Módulos del panel' });
     await expect(nav.getByRole('link', { name: 'Eventos actuales' })).toBeVisible();
 
-    await page.getByLabel('Buscar en ARTA').fill('finanz');
+    await page.getByLabel('Buscar en ARTA').fill('corrida');
 
     const results = page.getByRole('listbox', { name: 'Resultados' });
-    await expect(results.getByRole('option', { name: /Finanzas/ })).toBeVisible();
+    await expect(results.getByRole('option', { name: /Corridas/ })).toBeVisible();
     // El menú no se mueve mientras se busca.
     await expect(nav.getByRole('link', { name: 'Eventos actuales' })).toBeVisible();
 
@@ -120,11 +122,11 @@ test.describe('App shell', () => {
     await page.goto('/dashboard');
 
     const nav = page.getByRole('navigation', { name: 'Módulos del panel' });
-    await expect(nav.getByRole('link', { name: 'Finanzas' })).toHaveCount(0);
+    await expect(nav.getByRole('link', { name: 'Corridas' })).toHaveCount(0);
 
     await nav.getByRole('button', { name: /Más herramientas/ }).click();
 
-    await expect(nav.getByRole('link', { name: 'Finanzas' })).toBeVisible();
+    await expect(nav.getByRole('link', { name: 'Corridas' })).toBeVisible();
     await expect(nav.getByRole('link', { name: 'Plantillas' })).toBeVisible();
   });
 

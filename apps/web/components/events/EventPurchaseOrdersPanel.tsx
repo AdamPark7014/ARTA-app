@@ -77,6 +77,10 @@ type PoDraft = {
   paymentMethod: string;
   /** Legado: nota de «Forma de pago: …» de órdenes en OTRO. */
   paymentOther: string;
+  adendumPerson: string;
+  adendumAccount: string;
+  adendumFileUrl: string;
+  adendumFileName: string;
   withIva: boolean;
   /** Observaciones. */
   description: string;
@@ -99,6 +103,10 @@ function emptyDraft(): PoDraft {
     rubroOther: '',
     paymentMethod: 'TRANSFERENCIA',
     paymentOther: '',
+    adendumPerson: '',
+    adendumAccount: '',
+    adendumFileUrl: '',
+    adendumFileName: '',
     withIva: false,
     description: '',
     lines: [newLine()],
@@ -115,6 +123,10 @@ function draftFromPo(po: Po): PoDraft {
     rubroOther: rubro.other,
     paymentMethod: po.paymentMethod || 'TRANSFERENCIA',
     paymentOther: desc.paymentOther,
+    adendumPerson: po.adendumPerson || '',
+    adendumAccount: po.adendumAccount || '',
+    adendumFileUrl: po.adendumFileUrl || '',
+    adendumFileName: po.adendumFileName || '',
     withIva: !!po.withIva,
     description: desc.description,
     lines: po.lines?.length
@@ -138,6 +150,14 @@ function draftPayload(d: PoDraft) {
     payeeType: d.payeeType,
     withIva: d.withIva,
     paymentMethod: d.paymentMethod,
+    ...(d.paymentMethod === 'ADENDUM'
+      ? {
+          adendumPerson: d.adendumPerson.trim(),
+          adendumAccount: d.adendumAccount.trim(),
+          adendumFileUrl: d.adendumFileUrl,
+          adendumFileName: d.adendumFileName,
+        }
+      : {}),
     description: joinPoDescription(d.paymentMethod, d.paymentOther, d.description) ?? '',
     // Las partidas sin descripción no se guardan.
     lines: d.lines
@@ -192,13 +212,16 @@ type PoFormProps = {
   initial: PoDraft;
   /** Datos automáticos del machote: fecha, solicitante, evento. */
   facts: Array<[string, string]>;
+  eventId: string;
   busy: boolean;
   onCancel: () => void;
   onSubmit: (draft: PoDraft) => void | Promise<void>;
 };
 
-function PoForm({ mode, initial, facts, busy, onCancel, onSubmit }: PoFormProps) {
+function PoForm({ mode, initial, facts, eventId, busy, onCancel, onSubmit }: PoFormProps) {
   const [d, setD] = useState<PoDraft>(initial);
+  const [uploadingAdendum, setUploadingAdendum] = useState(false);
+  const [adendumError, setAdendumError] = useState('');
   const uid = useId();
   const listId = `${uid}-conceptos`;
 
@@ -245,7 +268,26 @@ function PoForm({ mode, initial, facts, busy, onCancel, onSubmit }: PoFormProps)
       ? 'Falta cantidad o precio'
       : !rubro
         ? 'Escribe el rubro'
-        : '';
+        : d.paymentMethod === 'ADENDUM' && (!d.adendumPerson.trim() || !d.adendumAccount.trim())
+          ? 'Falta la persona o la cuenta del adendum'
+          : '';
+
+  async function uploadAdendum(file: File) {
+    setUploadingAdendum(true);
+    setAdendumError('');
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      fd.append('eventId', eventId);
+      fd.append('module', 'oc');
+      const up = await api<{ url: string; fileName: string }>('/uploads', { method: 'POST', body: fd });
+      patch({ adendumFileUrl: up.url, adendumFileName: up.fileName || file.name });
+    } catch (e) {
+      setAdendumError(e instanceof Error ? e.message : 'No se pudo subir el archivo');
+    } finally {
+      setUploadingAdendum(false);
+    }
+  }
 
   function submit(e: FormEvent) {
     e.preventDefault();
@@ -443,6 +485,54 @@ function PoForm({ mode, initial, facts, busy, onCancel, onSubmit }: PoFormProps)
               : 'En esta forma de pago no se pide comprobante.'}
           </p>
         </div>
+        {d.paymentMethod === 'ADENDUM' ? (
+          <div className="oc-adendum">
+            <label className="fx-field">
+              <span>Persona</span>
+              <input
+                value={d.adendumPerson}
+                onChange={(e) => patch({ adendumPerson: e.target.value })}
+                placeholder="Nombre de quien recibe"
+                maxLength={160}
+              />
+            </label>
+            <label className="fx-field">
+              <span>Cuenta</span>
+              <input
+                value={d.adendumAccount}
+                onChange={(e) => patch({ adendumAccount: e.target.value })}
+                placeholder="Cuenta o CLABE"
+                maxLength={80}
+              />
+            </label>
+            <div className="fx-field">
+              <span>Imagen o PDF</span>
+              <div className="oc-adendum__file">
+                <label className="btn ghost btn-sm module-upload" aria-disabled={uploadingAdendum}>
+                  {uploadingAdendum ? 'Subiendo…' : d.adendumFileUrl ? 'Cambiar' : 'Subir archivo'}
+                  <input
+                    type="file"
+                    hidden
+                    disabled={uploadingAdendum}
+                    accept="image/*,.pdf"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      e.target.value = '';
+                      if (f) void uploadAdendum(f);
+                    }}
+                  />
+                </label>
+                {d.adendumFileUrl ? (
+                  <a className="btn-quiet" href={d.adendumFileUrl} target="_blank" rel="noreferrer">
+                    {d.adendumFileName || 'Ver archivo'}
+                  </a>
+                ) : null}
+              </div>
+              {adendumError ? <p className="fx-problem" role="alert">{adendumError}</p> : null}
+            </div>
+            <p className="fx-hint">El monto del adendum es el total de esta orden.</p>
+          </div>
+        ) : null}
         <button
           type="button"
           role="switch"
@@ -596,6 +686,35 @@ export function PoDetail({
           <span>Observaciones</span>
           {description}
         </p>
+      ) : null}
+
+      {method === 'ADENDUM' ? (
+        <dl className="ev-facts oc-adendum-facts">
+          <div>
+            <dt>Persona</dt>
+            <dd>{po.adendumPerson || '—'}</dd>
+          </div>
+          <div>
+            <dt>Cuenta</dt>
+            <dd>{po.adendumAccount || '—'}</dd>
+          </div>
+          <div>
+            <dt>Monto</dt>
+            <dd>{mxn(t.total)}</dd>
+          </div>
+          <div>
+            <dt>Archivo</dt>
+            <dd>
+              {po.adendumFileUrl ? (
+                <a href={po.adendumFileUrl} target="_blank" rel="noreferrer">
+                  {po.adendumFileName || 'Ver archivo'}
+                </a>
+              ) : (
+                '—'
+              )}
+            </dd>
+          </div>
+        </dl>
       ) : null}
 
       <p className="oc-trail">
@@ -886,6 +1005,7 @@ export function EventPurchaseOrdersPanel({
                 ['Solicitante', currentUserName],
                 ['Evento', event.name],
               ]}
+              eventId={event.id}
               busy={busy === 'create'}
               onCancel={() => setCreating(false)}
               onSubmit={createPo}
@@ -1026,6 +1146,7 @@ export function EventPurchaseOrdersPanel({
                                 ]}
                                 busy={rowBusy}
                                 onCancel={() => setEditingId(null)}
+                                eventId={event.id}
                                 onSubmit={(d) => saveEdit(po, d)}
                               />
                             ) : (

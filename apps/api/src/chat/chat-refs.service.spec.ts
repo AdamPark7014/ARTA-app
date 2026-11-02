@@ -6,6 +6,12 @@ const event = { id: 'e1', name: 'Noche de Boleros', entity: 'ARTA', organization
 
 const production: RefViewer = { id: 'u1', roleKey: 'produccion', organizationId: ORG, entities: ['ARTA'], fullName: 'Ana Ruiz' };
 const auditorio: RefViewer = { id: 'u9', roleKey: 'produccion', organizationId: ORG, entities: ['EXPLANADA'], fullName: 'Rita Paz' };
+/**
+ * Las OC ya no las ve producción (01-11-2026). Las pruebas de OC van con compras en los dos negocios:
+ * así lo que detiene a `buyerAuditorio` es la entidad, no que su rol no vea OC en ningún lado.
+ */
+const buyer: RefViewer = { id: 'u1', roleKey: 'compras', organizationId: ORG, entities: ['ARTA'], fullName: 'Ana Ruiz' };
+const buyerAuditorio: RefViewer = { id: 'u9', roleKey: 'compras', organizationId: ORG, entities: ['EXPLANADA'], fullName: 'Rita Paz' };
 
 function taskRow(over: Record<string, unknown> = {}) {
   return {
@@ -84,9 +90,9 @@ describe('chat-refs: entrada del cliente', () => {
 });
 
 describe('ChatRefsService.cards: lo que cada quien puede ver', () => {
-  it('quien opera el evento ve estado, monto y liga de la OC', async () => {
+  it('quien opera el evento y ve OC ve estado, monto y liga de la OC', async () => {
     const { service } = setup({ pos: [poRow()] });
-    const c = (await service.cards(production, [{ kind: 'po', id: 'cmpo00abc123' }])).get('po:cmpo00abc123')!;
+    const c = (await service.cards(buyer, [{ kind: 'po', id: 'cmpo00abc123' }])).get('po:cmpo00abc123')!;
     expect(c).toMatchObject({
       canOpen: true,
       label: 'OC ABC123',
@@ -96,10 +102,45 @@ describe('ChatRefsService.cards: lo que cada quien puede ver', () => {
     });
   });
 
+  it('quien opera el evento pero no ve OC (Williams) solo ve la etiqueta', async () => {
+    const { service } = setup({ pos: [poRow()] });
+    const c = (await service.cards(production, [{ kind: 'po', id: 'cmpo00abc123' }])).get('po:cmpo00abc123')!;
+    expect(c).toMatchObject({ canOpen: false, resolved: true, amount: null, statusLabel: null, href: null });
+  });
+
   it('el otro negocio no ve ni monto ni estado: solo la etiqueta', async () => {
     const { service } = setup({ pos: [poRow()] });
-    const c = (await service.cards(auditorio, [{ kind: 'po', id: 'cmpo00abc123' }])).get('po:cmpo00abc123')!;
+    const c = (await service.cards(buyerAuditorio, [{ kind: 'po', id: 'cmpo00abc123' }])).get('po:cmpo00abc123')!;
     expect(c).toMatchObject({ canOpen: false, resolved: true, amount: null, statusLabel: null, href: null });
+  });
+
+  it('un formato solo lo abre quien lo ve: Iliana, catering sí y Evento General no', async () => {
+    const format = (key: string) => ({
+      id: `f-${key}`,
+      title: key,
+      progressPct: 10,
+      status: 'DRAFT',
+      eventId: 'e1',
+      template: { key },
+      event,
+    });
+    const iliana: RefViewer = { id: 'u7', roleKey: 'catering', organizationId: ORG, entities: ['ARTA', 'EXPLANADA'] };
+    const { service } = setup({ formats: [format('CATERING'), format('EVENTO_GENERAL')] });
+    const cards = await service.cards(iliana, [
+      { kind: 'format', id: 'f-CATERING' },
+      { kind: 'format', id: 'f-EVENTO_GENERAL' },
+    ]);
+    expect(cards.get('format:f-CATERING')).toMatchObject({ canOpen: true, statusLabel: 'Borrador' });
+    expect(cards.get('format:f-EVENTO_GENERAL')).toMatchObject({ canOpen: false, statusLabel: null, href: null });
+  });
+
+  it('un documento no lo abre Monse: los documentos del evento no le tocan', async () => {
+    const doc = { id: 'd1', title: 'Contrato', status: 'DRAFT', version: 2, eventId: 'e1', createdById: 'u3', event };
+    const monse: RefViewer = { id: 'u8', roleKey: 'contenido', organizationId: ORG, entities: ['ARTA', 'EXPLANADA'] };
+    const locked = await setup({ docs: [doc] }).service.cards(monse, [{ kind: 'doc', id: 'd1' }]);
+    expect(locked.get('doc:d1')).toMatchObject({ canOpen: false, statusLabel: null, href: null });
+    const open = await setup({ docs: [doc] }).service.cards(buyer, [{ kind: 'doc', id: 'd1' }]);
+    expect(open.get('doc:d1')).toMatchObject({ canOpen: true, statusLabel: 'Borrador' });
   });
 
   it('un anticipo solo lo abre quien lo pidió o quien ve finanzas', async () => {
@@ -198,13 +239,17 @@ describe('ChatRefsService.hydrate y forPost', () => {
 
   it('un mensaje no puede ligar lo que su autor no abre', async () => {
     const { service } = setup({ pos: [poRow()], tasks: [taskRow()] });
-    const refs = await service.forPost(auditorio, [
+    const refs = await service.forPost(buyerAuditorio, [
       { kind: 'po', id: 'cmpo00abc123' },
       { kind: 'task', id: 'no-existe' },
     ]);
     expect(refs).toEqual([]);
     const mine = await setup({ tasks: [taskRow()] }).service.forPost(production, [{ kind: 'task', id: 't1' }]);
     expect(mine).toEqual([{ kind: 'task', targetId: 't1', label: 'Cotizar luces' }]);
+    // La misma OC sí la liga quien la ve en su negocio; Williams, no.
+    const po = await setup({ pos: [poRow()] }).service.forPost(buyer, [{ kind: 'po', id: 'cmpo00abc123' }]);
+    expect(po).toEqual([{ kind: 'po', targetId: 'cmpo00abc123', label: 'OC ABC123' }]);
+    expect(await setup({ pos: [poRow()] }).service.forPost(production, [{ kind: 'po', id: 'cmpo00abc123' }])).toEqual([]);
   });
 });
 
@@ -384,7 +429,8 @@ describe('ChatRefsService.backlinks y touched', () => {
 
   it('no enseña menciones de algo que no puedo abrir', async () => {
     const { service } = setup({ pos: [poRow()] });
-    await expect(service.backlinks(auditorio, 'po', 'cmpo00abc123')).rejects.toThrow('No encontrado');
+    await expect(service.backlinks(buyerAuditorio, 'po', 'cmpo00abc123')).rejects.toThrow('No encontrado');
+    await expect(service.backlinks(production, 'po', 'cmpo00abc123')).rejects.toThrow('No encontrado');
   });
 
   it('avisa una vez a cada conversación que la menciona', async () => {

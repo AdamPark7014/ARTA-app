@@ -7,7 +7,7 @@ import { EmptyLite } from '@/components/ui/Lite';
 import { LoadingBlock } from '@/components/ui/LoadingBlock';
 import { FieldSearch, PageHeader } from '@/components/ui/PageChrome';
 import { api } from '@/lib/api';
-import { userHasPermission } from '@/lib/access-matrix';
+import { canEditTicketing } from '@arta/rbac';
 import { boleteraDateLabel } from '@/lib/boletera';
 import {
   boleteraSheet,
@@ -39,10 +39,7 @@ function startTime(e: EventRow): number {
 
 export default function TicketingPage() {
   const { entity, user } = useUser();
-  const canEdit = userHasPermission(user?.roleKey || '', user?.permissions || [], [
-    'ticketing.edit',
-    'everything',
-  ]);
+  const canEdit = !!user && canEditTicketing(user, entity);
   const [events, setEvents] = useState<EventRow[]>([]);
   const [setups, setSetups] = useState<SetupRow[]>([]);
   const [loading, setLoading] = useState(true);

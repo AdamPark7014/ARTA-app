@@ -26,7 +26,20 @@ import { createHash, randomUUID } from 'crypto';
 import { DocType } from '@prisma/client';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { canAccessEventOps, hasPermission, isDirectionRole, PERMISSIONS, type EntityKey, type RoleKey } from '../common/rbac/roles';
+import { canSeeEventFile } from '../events/event-visibility';
+import {
+  canEditCampaign,
+  canEditEventInfo,
+  canEditFormat,
+  canAddFormatImages,
+  canAccessEventOps,
+  hasPermission,
+  isDirectionRole,
+  PERMISSIONS,
+  type EntityKey,
+  type Permission,
+  type RoleKey,
+} from '../common/rbac/roles';
 import {
   MEDIA_MULTER_OPTIONS,
   MULTER_OPTIONS,
@@ -196,15 +209,59 @@ export class UploadsController {
    * acceso operativo al evento: el Excel de la corrida lo podían pisar o
    * borrar roles que únicamente tienen `finance.view`.
    */
-  private assertFileEditPermission(user: AuthUser, module?: string | null) {
-    const needed =
-      module === 'finance'
-        ? PERMISSIONS.FINANCE_EDIT
-        : module === 'campaign'
-          ? PERMISSIONS.CAMPAIGN_EDIT
-          : PERMISSIONS.CHECKLIST_EDIT;
-    if (!hasPermission(user.roleKey as RoleKey, user.permissions, needed)) {
-      throw new ForbiddenException('Sin permiso para modificar los archivos de esta sección');
+  private async assertFileEditPermission(
+    user: AuthUser,
+    file: { module?: string | null; checklistId?: string | null; event?: { entity: string } | null },
+  ) {
+    const entity = file.event?.entity ?? '';
+    const can = (needed: Permission) => hasPermission(user.roleKey as RoleKey, user.permissions, needed);
+    let allowed: boolean;
+    if (file.checklistId) {
+      const format = await this.prisma.checklistInstance.findUnique({
+        where: { id: file.checklistId },
+        select: { template: { select: { key: true } } },
+      });
+      allowed = canEditFormat(user, entity, format?.template?.key ?? '');
+    } else if (file.module === 'finance') {
+      allowed = can(PERMISSIONS.CORRIDA_EDIT);
+    } else if (file.module === 'campaign') {
+      allowed = canEditCampaign(user, entity);
+    } else if (file.module === 'sponsors') {
+      allowed = can(PERMISSIONS.CONVENIOS_EDIT);
+    } else if (file.module === 'oc') {
+      allowed = can(PERMISSIONS.PO_EDIT) || can(PERMISSIONS.PO_MARK_PAID);
+    } else {
+      allowed = canEditEventInfo(user, entity);
+    }
+    if (!allowed) throw new ForbiddenException('Sin permiso para modificar los archivos de esta sección');
+  }
+
+  /** Subir a una sección pide poder editarla, no solo ver el evento (docs/ROLES-Y-PERMISOS.md). */
+  private assertSectionUpload(user: AuthUser, entity: string, module?: string, kind?: string) {
+    const can = (needed: Permission) => hasPermission(user.roleKey as RoleKey, user.permissions, needed);
+    let allowed: boolean;
+    if (module === 'campaign') allowed = canEditCampaign(user, entity);
+    else if (module === 'sponsors') allowed = can(PERMISSIONS.CONVENIOS_EDIT);
+    else if (module === 'oc') allowed = can(PERMISSIONS.PO_EDIT) || can(PERMISSIONS.PO_MARK_PAID);
+    else if (module === 'finance') allowed = true; // Ya lo revisó CORRIDA_UPLOAD arriba.
+    // El comprobante de un anticipo sube sin sección: lo sube quien lo pide o lo paga.
+    else if (kind === 'proof') allowed = can(PERMISSIONS.ADVANCE_REQUEST) || can(PERMISSIONS.PO_MARK_PAID);
+    else allowed = canEditEventInfo(user, entity);
+    if (!allowed) throw new ForbiddenException('Esta sección del evento no te toca');
+  }
+
+  /** Lo que no se lista tampoco se abre por id: la corrida es lo más delicado. */
+  private assertFileRead(
+    user: AuthUser,
+    file: {
+      module?: string | null;
+      checklistId?: string | null;
+      event?: { entity: string } | null;
+      checklist?: { template?: { key: string } | null } | null;
+    },
+  ) {
+    if (file.event && !canSeeEventFile(user, file.event.entity, file)) {
+      throw new ForbiddenException('Este archivo no está a tu alcance');
     }
   }
 
@@ -290,13 +347,30 @@ export class UploadsController {
       return { id: null, url, fileName: file.originalname, mimeType: mime, kind, sizeBytes: file.size };
     }
 
+    // Subir a una sección pide el permiso de esa sección: la corrida la suben Leida, Sol y dirección.
+    if (
+      body.module === 'finance' &&
+      !hasPermission(req.user.roleKey as RoleKey, req.user.permissions, PERMISSIONS.CORRIDA_UPLOAD) &&
+      !hasPermission(req.user.roleKey as RoleKey, req.user.permissions, PERMISSIONS.CORRIDA_EDIT)
+    ) {
+      throw new ForbiddenException('La corrida solo la suben Leida, Sol, Chacho o Arturo');
+    }
+
     let eventId = body.eventId;
-    if (body.checklistId && !eventId) {
+    if (body.checklistId) {
       const cl = await this.prisma.checklistInstance.findUnique({
         where: { id: body.checklistId },
-        include: { event: true },
+        include: { event: true, template: { select: { key: true } } },
       });
       if (!cl) throw new NotFoundException('Checklist no encontrado');
+      // Monse y Kika suben imágenes a los formatos generales; lo demás, quien edita ese formato.
+      const key = cl.template?.key ?? '';
+      if (!canAddFormatImages(req.user, cl.event.entity, key)) {
+        throw new ForbiddenException('Este formato no te toca');
+      }
+      if (!canEditFormat(req.user, cl.event.entity, key) && !mime.startsWith('image/')) {
+        throw new BadRequestException('En este formato solo puedes subir imágenes');
+      }
       if (
         !canAccessEventOps(
           req.user.entities as EntityKey[],
@@ -312,6 +386,7 @@ export class UploadsController {
     } else if (eventId) {
       const event = await this.assertEventOps(req.user, eventId);
       assertEventNotClosed(event.status);
+      this.assertSectionUpload(req.user, event.entity, body.module, body.kind);
     }
 
     const inspection = this.inspectIfWorkbook(file.path, file.originalname);
@@ -386,7 +461,7 @@ export class UploadsController {
       if (current.event.status === 'CLOSED' || current.event.status === 'CANCELLED') {
         throw new ForbiddenException('Evento cerrado — los archivos quedan en solo lectura');
       }
-      this.assertFileEditPermission(req.user, current.module);
+      await this.assertFileEditPermission(req.user, current);
       // Candado post-subida: tras quedar registrado como EventFile subido por una persona,
       // solo Dirección puede seguir modificándolo.
       if (current.createdById && !isDirectionRole(req.user.roleKey)) {
@@ -473,7 +548,7 @@ export class UploadsController {
       }
       assertSameTenant(req.user, current.event.organizationId);
       assertEventNotClosed(current.event.status);
-      this.assertFileEditPermission(req.user, current.module);
+      await this.assertFileEditPermission(req.user, current);
       if (current.createdById && !isDirectionRole(req.user.roleKey)) {
         throw new ForbiddenException('Solo dirección puede editar archivos ya subidos');
       }
@@ -528,9 +603,10 @@ export class UploadsController {
   async fileRevisions(@Req() req: { user: AuthUser }, @Param('id') id: string) {
     const file = await this.prisma.eventFile.findUnique({
       where: { id },
-      include: { event: true },
+      include: { event: true, checklist: { select: { template: { select: { key: true } } } } },
     });
     if (!file) throw new NotFoundException('Archivo no encontrado');
+    this.assertFileRead(req.user, file);
     if (file.event) {
       if (
         !canAccessEventOps(
@@ -563,9 +639,10 @@ export class UploadsController {
   async sheetLayout(@Req() req: { user: AuthUser }, @Param('id') id: string) {
     const file = await this.prisma.eventFile.findUnique({
       where: { id },
-      include: { event: true },
+      include: { event: true, checklist: { select: { template: { select: { key: true } } } } },
     });
     if (!file) throw new NotFoundException('Archivo no encontrado');
+    this.assertFileRead(req.user, file);
     if (!file.eventId || !file.event) {
       throw new BadRequestException('Solo aplica a un Excel ligado a un evento');
     }
@@ -630,12 +707,14 @@ export class UploadsController {
       include: {
         event: true,
         updatedBy: { select: { fullName: true } },
+        checklist: { select: { template: { select: { key: true } } } },
       },
     });
     if (!current) throw new NotFoundException('Archivo no encontrado');
     if (!current.eventId || !current.event) {
       throw new BadRequestException('Solo se exporta Excel ligado a un evento');
     }
+    this.assertFileRead(req.user, current);
     if (
       !canAccessEventOps(
         req.user.entities as EntityKey[],
@@ -803,7 +882,7 @@ export class UploadsController {
       }
       assertSameTenant(req.user, file.event.organizationId);
       assertEventNotClosed(file.event.status);
-      this.assertFileEditPermission(req.user, file.module);
+      await this.assertFileEditPermission(req.user, file);
       // Borrado solo por Dirección cuando el archivo fue subido por una persona.
       if (file.createdById && !isDirectionRole(req.user.roleKey)) {
         throw new ForbiddenException('Solo dirección puede eliminar archivos ya subidos');
@@ -846,8 +925,16 @@ export class UploadsController {
   async listDeleted(@Req() req: { user: AuthUser }, @Param('eventId') eventId: string) {
     const event = await this.assertEventOps(req.user, eventId);
     assertSameTenant(req.user, event.organizationId);
+    if (!canEditEventInfo(req.user, event.entity)) return [];
     return this.prisma.eventFile.findMany({
-      where: { eventId, deletedAt: { not: null } },
+      where: {
+        eventId,
+        deletedAt: { not: null },
+        // Mismo candado que los archivos vivos: la papelera no enseña la corrida.
+        ...(hasPermission(req.user.roleKey as RoleKey, req.user.permissions, PERMISSIONS.CORRIDA_VIEW)
+          ? {}
+          : { NOT: { module: 'finance' } }),
+      },
       orderBy: { deletedAt: 'desc' },
       select: {
         id: true,
@@ -885,7 +972,7 @@ export class UploadsController {
       }
       assertSameTenant(req.user, file.event.organizationId);
       assertEventNotClosed(file.event.status);
-      this.assertFileEditPermission(req.user, file.module);
+      await this.assertFileEditPermission(req.user, file);
     } else {
       this.assertOrphanFileEdit(req.user);
     }

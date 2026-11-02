@@ -27,7 +27,15 @@ import {
 import { Type } from 'class-transformer';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { hasPermission, canAccessEventOps, isDirectionRole, PERMISSIONS, type EntityKey, type RoleKey } from '../common/rbac/roles';
+import {
+  canSeeModule,
+  hasPermission,
+  canAccessEventOps,
+  isDirectionRole,
+  PERMISSIONS,
+  type EntityKey,
+  type RoleKey,
+} from '../common/rbac/roles';
 import { assertSameTenant, tenantIdOf } from '../common/tenant';
 import { assertEventNotClosed } from '../common/event-guards';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -56,6 +64,35 @@ export type PoPayeeType = (typeof PO_PAYEE_TYPES)[number];
 /** IVA que se suma al subtotal cuando la orden lo lleva. */
 export const PO_IVA_RATE = 0.16;
 
+type AdendumFields = {
+  adendumPerson?: string | null;
+  adendumAccount?: string | null;
+  adendumFileUrl?: string | null;
+  adendumFileName?: string | null;
+};
+
+/** Los datos del adendum, limpios; en otra forma de pago no se guardan. */
+function adendumData(method: string | null | undefined, body: AdendumFields) {
+  if (method !== 'ADENDUM') {
+    return { adendumPerson: null, adendumAccount: null, adendumFileUrl: null, adendumFileName: null };
+  }
+  const person = body.adendumPerson?.trim();
+  const account = body.adendumAccount?.trim();
+  if (!person || !account) {
+    throw new BadRequestException('El adendum necesita el nombre de la persona y su cuenta');
+  }
+  const fileUrl = body.adendumFileUrl?.trim() || null;
+  if (fileUrl && !/^\/uploads\/[\w./-]+$/.test(fileUrl)) {
+    throw new BadRequestException('Archivo del adendum no válido');
+  }
+  return {
+    adendumPerson: person.slice(0, 160),
+    adendumAccount: account.slice(0, 80),
+    adendumFileUrl: fileUrl,
+    adendumFileName: body.adendumFileName?.trim().slice(0, 200) || null,
+  };
+}
+
 function round2(n: number) {
   return Math.round((n + Number.EPSILON) * 100) / 100;
 }
@@ -75,6 +112,10 @@ class CreatePoDto {
   @IsOptional() @IsIn(PO_PAYEE_TYPES as unknown as string[]) payeeType?: PoPayeeType;
   @IsOptional() @IsBoolean() withIva?: boolean;
   @IsOptional() @IsNumber() amount?: number;
+  @IsOptional() @IsString() adendumPerson?: string;
+  @IsOptional() @IsString() adendumAccount?: string;
+  @IsOptional() @IsString() adendumFileUrl?: string;
+  @IsOptional() @IsString() adendumFileName?: string;
   @IsOptional()
   @IsArray()
   @ValidateNested({ each: true })
@@ -210,20 +251,48 @@ export class PurchaseOrdersController {
         where: { active: true, ...(organizationId ? { organizationId } : {}) },
         select: { id: true, roleKey: true, entities: true, permissions: true },
       });
-      const toPay = poNotice('to_pay', input);
+      // Transferencia o adendum: le toca a contabilidad pagar y subir el comprobante (01-11-2026).
+      // Dirección también puede pagar, pero no le suena cada OC que acaba de autorizar.
+      const wired = order.paymentMethod === 'TRANSFERENCIA' || order.paymentMethod === 'ADENDUM';
+      // Si contabilidad no lleva este negocio, el aviso sigue a quien puede pagar: que no se pierda.
+      const accounting = people.filter(
+        (p) =>
+          p.roleKey === 'contabilidad' &&
+          p.id !== actor.id &&
+          canAccessEventOps(p.entities as EntityKey[], p.roleKey as RoleKey, entity),
+      );
+      const toPay = poNotice(wired ? 'to_transfer' : 'to_pay', input);
       for (const p of people) {
         const role = p.roleKey as RoleKey;
         if (p.id === actor.id || p.id === order.createdById) continue;
         if (!hasPermission(role, p.permissions, PERMISSIONS.PO_MARK_PAID)) continue;
         if (!canAccessEventOps(p.entities as EntityKey[], role, entity)) continue;
+        if (wired && accounting.length && role !== 'contabilidad') continue;
         items.push({
           userId: p.id,
           organizationId,
           actorId: actor.id,
-          type: 'po.to_pay',
+          type: wired ? 'po.to_transfer' : 'po.to_pay',
           title: toPay.title,
           body: toPay.body,
-          linkUrl,
+          linkUrl: `/purchase-orders?po=${order.id}`,
+          entity,
+        });
+      }
+    }
+    // Ya quedó pagada: quien la hizo (arriba) y quienes la autorizan se enteran.
+    if (status === 'PAID') {
+      const paid = poNotice('paid', input);
+      for (const p of await this.authorizersOf(event)) {
+        if (p.id === actor.id || p.id === order.createdById) continue;
+        items.push({
+          userId: p.id,
+          organizationId,
+          actorId: actor.id,
+          type: 'po.paid',
+          title: paid.title,
+          body: paid.body,
+          linkUrl: `/purchase-orders?po=${order.id}`,
           entity,
         });
       }
@@ -335,6 +404,15 @@ export class PurchaseOrdersController {
     return event;
   }
 
+  /** Las OC las ven Juan Pablo, quien las autoriza, quien las paga, y Leida y Sol en Arta. */
+  private async assertPoView(user: { entities: string[]; roleKey: string; permissions?: string[] | null; organizationId?: string | null }, eventId: string) {
+    const event = await this.assertEventOps(user, eventId);
+    if (!canSeeModule(user, event.entity, 'po')) {
+      throw new ForbiddenException('Las órdenes de compra no están a tu alcance');
+    }
+    return event;
+  }
+
   private async assertEventOpsOpen(
     user: { entities: string[]; roleKey: string; organizationId?: string | null },
     eventId: string,
@@ -405,7 +483,7 @@ export class PurchaseOrdersController {
     @Req() req: { user: { entities: string[]; roleKey: string } },
     @Param('eventId') eventId: string,
   ) {
-    const event = await this.assertEventOps(req.user, eventId);
+    const event = await this.assertPoView(req.user, eventId);
     const [orders, win] = await Promise.all([
       this.prisma.purchaseOrder.findMany({
         where: { eventId },
@@ -436,7 +514,7 @@ export class PurchaseOrdersController {
       },
     });
     if (!order) throw new NotFoundException('OC no encontrada');
-    const event = await this.assertEventOps(req.user, order.eventId);
+    const event = await this.assertPoView(req.user, order.eventId);
     return withPoState(order, await this.stateWindow(event.organizationId), order.event.status);
   }
 
@@ -459,10 +537,10 @@ export class PurchaseOrdersController {
       !hasPermission(
         req.user.roleKey as RoleKey,
         req.user.permissions || [],
-        PERMISSIONS.CHECKLIST_EDIT,
+        PERMISSIONS.PO_EDIT,
       )
     ) {
-      throw new ForbiddenException('Sin permiso para crear órdenes de compra');
+      throw new ForbiddenException('Las órdenes de compra las hace Juan Pablo');
     }
     const event = await this.assertEventOpsOpen(req.user, dto.eventId);
     // Sin ventana de captura: la orden se crea el día que sea (revisión 11-09-2026).
@@ -486,6 +564,7 @@ export class PurchaseOrdersController {
         vendorName: dto.vendorName,
         description: dto.description,
         paymentMethod: dto.paymentMethod || 'TRANSFERENCIA',
+        ...adendumData(dto.paymentMethod, dto),
         payeeType,
         withIva,
         amount,
@@ -523,16 +602,20 @@ export class PurchaseOrdersController {
       payeeType?: PoPayeeType;
       withIva?: boolean;
       lines?: PoLineDto[];
+      adendumPerson?: string;
+      adendumAccount?: string;
+      adendumFileUrl?: string;
+      adendumFileName?: string;
     },
   ) {
     if (
       !hasPermission(
         req.user.roleKey as RoleKey,
         req.user.permissions,
-        PERMISSIONS.CHECKLIST_EDIT,
+        PERMISSIONS.PO_EDIT,
       )
     ) {
-      throw new ForbiddenException('Sin permiso para editar órdenes de compra');
+      throw new ForbiddenException('Las órdenes de compra las edita Juan Pablo');
     }
     const order = await this.prisma.purchaseOrder.findUnique({
       where: { id },
@@ -555,6 +638,14 @@ export class PurchaseOrdersController {
       vendorName: body.vendorName,
       description: body.description,
       paymentMethod: body.paymentMethod,
+      ...(body.paymentMethod !== undefined || body.adendumPerson !== undefined || body.adendumAccount !== undefined
+        ? adendumData(body.paymentMethod ?? order.paymentMethod, {
+            adendumPerson: body.adendumPerson ?? order.adendumPerson,
+            adendumAccount: body.adendumAccount ?? order.adendumAccount,
+            adendumFileUrl: body.adendumFileUrl ?? order.adendumFileUrl,
+            adendumFileName: body.adendumFileName ?? order.adendumFileName,
+          })
+        : {}),
       ...(payeeType ? { payeeType } : {}),
       ...(typeof body.withIva === 'boolean' ? { withIva } : {}),
     };
@@ -639,6 +730,12 @@ export class PurchaseOrdersController {
     }
     assertSameTenant(req.user, order.event.organizationId);
     assertEventNotClosed(order.event.status);
+    if (
+      !hasPermission(req.user.roleKey as RoleKey, (req.user as { permissions?: string[] }).permissions, PERMISSIONS.PO_MARK_PAID) &&
+      !hasPermission(req.user.roleKey as RoleKey, (req.user as { permissions?: string[] }).permissions, PERMISSIONS.PO_EDIT)
+    ) {
+      throw new ForbiddenException('El comprobante lo sube quien paga');
+    }
     if (order.paymentMethod === 'EFECTIVO') {
       throw new BadRequestException(
         'Esta OC es en efectivo: no se adjuntan comprobantes',
@@ -843,15 +940,11 @@ export class PurchaseOrdersController {
     },
     @Param('id') id: string,
   ) {
-    // Crear y editar piden `CHECKLIST_EDIT`; borrar no pedía más que acceso al
-    // evento. Hoy ningún rol se cuela por ahí —todos traen `checklist.edit`—
-    // pero la asimetría es una trampa puesta para el primer rol de solo
-    // consulta que alguien dé de alta.
     if (
       !hasPermission(
         req.user.roleKey as RoleKey,
         req.user.permissions,
-        PERMISSIONS.CHECKLIST_EDIT,
+        PERMISSIONS.PO_EDIT,
       )
     ) {
       throw new ForbiddenException('Sin permiso para eliminar órdenes de compra');
@@ -921,7 +1014,7 @@ export class PurchaseOrdersController {
       },
     });
     if (!order) throw new NotFoundException('OC no encontrada');
-    await this.assertEventOps(req.user, order.eventId);
+    await this.assertPoView(req.user, order.eventId);
     assertEventNotClosed(order.event.status);
 
     const src = body?.variant === 'variant2' ? 'format-oc-variant.xlsx' : 'format-oc.xlsx';

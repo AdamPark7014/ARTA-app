@@ -44,6 +44,8 @@ enum PoPaymentMethod {
   TARJETA
   OTRO
   CHEQUE
+  /// Pago a una persona: nombre, cuenta e identificación (01-11-2026).
+  ADENDUM
 }
 
 enum TaskStatus {
@@ -89,6 +91,9 @@ enum ChecklistTemplateKey {
   CUSTOM
   // Formatos del Auditorio (11-10-2026); MANTENIMIENTO también es del Auditorio.
   CHECKLIST_AUDITORIO
+  // Lobby del Auditorio: inventario y ventas (Juan Pablo, 01-11-2026)
+  BARRA
+  MERCH
   LIMPIEZA
   COMPROMISO_HORARIOS
   // Seguridad del Auditorio (junta 23-10-2026).
@@ -166,6 +171,11 @@ model OrgMembership {
 
 // ─── Usuarios / RBAC ─────────────────────────────────────────────────────────
 model User {
+  /// Perfil por temporada (practicantes): pasada esta fecha ya no entra. Se puede renovar.
+  accessExpiresAt DateTime?
+  /// Etiqueta de la temporada: «Primavera 2027».
+  accessLabel     String?
+  publicityProofs PublicityProof[] @relation("PublicityProofAuthor")
   id               String        @id @default(cuid())
   email            String        @unique
   passwordHash     String
@@ -272,6 +282,8 @@ model Event {
   schedule       String?
   /// Número de funciones del show.
   functions      Int?
+  /// Liga de la boletera externa: se enseña embebida en el resumen si la página lo permite.
+  boleteraUrl    String?
   createdById    String?
   createdBy      User?         @relation("EventCreator", fields: [createdById], references: [id])
   createdAt      DateTime      @default(now())
@@ -288,6 +300,7 @@ model Event {
   vendorPins      VendorPin[]
   documents       EventDocument[]
   docRevisions    DocRevision[]
+  publicityProofs PublicityProof[]
   slots           EventDocumentSlot[]
 
   @@index([organizationId, entity])
@@ -468,6 +481,11 @@ model PurchaseOrder {
   payeeType      String          @default("PROVEEDOR")
   /// Si el total lleva IVA (16 %) encima del subtotal de partidas.
   withIva        Boolean         @default(false)
+  /// Forma de pago ADENDUM: a quién, a qué cuenta y su identificación (imagen o PDF).
+  adendumPerson   String?
+  adendumAccount  String?
+  adendumFileUrl  String?
+  adendumFileName String?
   createdById    String?
   createdBy      User?           @relation("PoCreator", fields: [createdById], references: [id])
   authorizedById String?
@@ -662,6 +680,33 @@ model TaskAssignment {
   @@index([eventId])
   @@index([createdById, status])
   @@index([organizationId, entity])
+}
+
+/// Testigo de publicidad: la prueba de que algo salió (foto del espectacular, nota, post, spot).
+/// Los suben los practicantes y se junta en un archivo final por evento.
+model PublicityProof {
+  id          String    @id @default(cuid())
+  eventId     String
+  event       Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  /// ESPECTACULAR | PENDON | PRENSA | RADIO | TV | REDES | WEB | OTRO
+  medium      String    @default("OTRO")
+  title       String
+  note        String?
+  fileUrl     String?
+  fileName    String?
+  mimeType    String?
+  sizeBytes   Int?
+  link        String?
+  /// Cuándo salió, no cuándo se subió.
+  publishedAt DateTime?
+  /// Se puede enseñar en la página del show.
+  isPublic    Boolean   @default(false)
+  createdById String?
+  createdBy   User?     @relation("PublicityProofAuthor", fields: [createdById], references: [id])
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @default(now()) @updatedAt
+
+  @@index([eventId, createdAt])
 }
 
 /// Una tarea puede ser de 1 o más personas (correcciones 30-09-2026).

@@ -178,6 +178,7 @@ const PAYMENT_WORDS: Record<string, string> = {
   EFECTIVO: 'efectivo',
   TRANSFERENCIA: 'transferencia',
   CHEQUE: 'cheque',
+  ADENDUM: 'adendum',
   TARJETA: 'tarjeta',
   OTRO: 'otro medio',
 };
@@ -210,7 +211,8 @@ export type PoNoticeKind =
   | 'cancelled'
   | 'reverted'
   | 'reverted_draft'
-  | 'proof';
+  | 'proof'
+  | 'to_transfer';
 
 export type PoNoticeInput = {
   actor?: string | null;
@@ -272,6 +274,12 @@ export function poNotice(kind: PoNoticeKind, input: PoNoticeInput): Notice {
         cash
           ? `Falta pagarla en efectivo${when ? ` ${when}` : ''}.`
           : `Falta el comprobante de ${method} y pagarla${when ? ` ${when}` : ''}.`,
+      );
+    case 'to_transfer':
+      return notice(
+        `${actor} autorizó la ${ref}: falta ${order.paymentMethod === 'ADENDUM' ? 'el adendum' : 'la transferencia'}`,
+        facts(vendor, total, event.name),
+        `Haz el pago y sube el comprobante${when ? ` ${when}` : ''}.`,
       );
     case 'to_pay': {
       const proofs = order.proofCount ?? 0;

@@ -39,6 +39,10 @@ import {
   DOC_STATUS_LABEL,
 } from '../common/doc-guards';
 import {
+  canApproveFormat,
+  canEditFormat,
+  canSeeFormat,
+  TOP_APPROVAL_FORMATS,
   canAccessEventOps,
   hasPermission,
   isDirectionRole,
@@ -93,6 +97,13 @@ export class ChecklistsController {
       )
     ) {
       throw new ForbiddenException('Sin permiso para editar checklists');
+    }
+  }
+
+  /** Cada quien edita solo los formatos que le tocan (docs/ROLES-Y-PERMISOS.md). */
+  private assertFormatEdit(user: AuthUser, doc: { event: { entity: string }; template?: { key: string } | null }) {
+    if (!canEditFormat(user, doc.event.entity, doc.template?.key ?? '')) {
+      throw new ForbiddenException('Este formato no te toca editarlo');
     }
   }
 
@@ -453,7 +464,7 @@ export class ChecklistsController {
     const event = await this.prisma.event.findUnique({ where: { id: eventId } });
     if (!event) throw new BadRequestException('Evento no encontrado');
     this.assertEventAccess(req.user, event);
-    return this.prisma.checklistInstance.findMany({
+    const rows = await this.prisma.checklistInstance.findMany({
       where: { eventId, AND: [VISIBLE_CHECKLIST_WHERE] },
       include: {
         template: true,
@@ -463,6 +474,7 @@ export class ChecklistsController {
       },
       orderBy: { title: 'asc' },
     });
+    return rows.filter((r) => canSeeFormat(req.user, event.entity, r.template?.key ?? ''));
   }
 
   @Get(':id')
@@ -486,6 +498,9 @@ export class ChecklistsController {
     });
     if (!item) throw new BadRequestException('Checklist no encontrado');
     this.assertEventAccess(req.user, item.event);
+    if (!canSeeFormat(req.user, item.event.entity, item.template?.key ?? '')) {
+      throw new ForbiddenException('Este formato no está a tu alcance');
+    }
     return item;
   }
 
@@ -512,11 +527,16 @@ export class ChecklistsController {
   ) {
     const existing = await this.prisma.checklistInstance.findUnique({
       where: { id },
-      include: { event: true, lastEditedBy: { select: { fullName: true } } },
+      include: {
+        event: true,
+        template: { select: { key: true } },
+        lastEditedBy: { select: { fullName: true } },
+      },
     });
     if (!existing) throw new BadRequestException('Checklist no encontrado');
     this.assertEventAccess(req.user, existing.event);
     this.assertChecklistEdit(req.user);
+    this.assertFormatEdit(req.user, existing);
     // Oráculo único: estado del documento + estado del evento, en un solo sitio.
     assertDocWritable(existing, existing.event);
 
@@ -616,7 +636,7 @@ export class ChecklistsController {
   async revisionHistory(@Req() req: { user: AuthUser }, @Param('id') id: string) {
     const item = await this.prisma.checklistInstance.findUnique({
       where: { id },
-      include: { event: true },
+      include: { event: true, template: { select: { key: true } } },
     });
     if (!item) throw new BadRequestException('Checklist no encontrado');
     this.assertEventAccess(req.user, item.event);
@@ -638,7 +658,7 @@ export class ChecklistsController {
 
     const existing = await this.prisma.checklistInstance.findUnique({
       where: { id },
-      include: { event: true },
+      include: { event: true, template: { select: { key: true } } },
     });
     if (!existing) throw new BadRequestException('Checklist no encontrado');
     this.assertEventAccess(req.user, existing.event);
@@ -647,15 +667,16 @@ export class ChecklistsController {
 
     // Autorizar: gerencia en Arta / dirección del Auditorio / dirección general
     if (body.kind === 'AUTORIZADO') {
-      const role = req.user.roleKey;
       const entity = existing.event.entity;
-      const allowed =
-        isDirectionRole(role) ||
-        (role === 'gerente_arta' && entity === 'ARTA') ||
-        (role === 'dir_auditorio' && entity === 'EXPLANADA');
-      if (!allowed) {
-        throw new ForbiddenException('No puedes firmar como Autorizado en esta entidad');
+      if (!canApproveFormat(req.user, entity, existing.template?.key ?? '')) {
+        throw new ForbiddenException(
+          TOP_APPROVAL_FORMATS.includes(existing.template?.key ?? '')
+            ? 'Este formato lo autorizan Chacho o Arturo'
+            : 'No puedes firmar como Autorizado en esta entidad',
+        );
       }
+    } else {
+      this.assertFormatEdit(req.user, existing);
     }
 
     const signerName = body.signerName?.trim() || req.user.fullName;
@@ -741,13 +762,14 @@ export class ChecklistsController {
   async forcePdf(@Req() req: { user: AuthUser }, @Param('id') id: string) {
     const existing = await this.prisma.checklistInstance.findUnique({
       where: { id },
-      include: { event: true },
+      include: { event: true, template: { select: { key: true } } },
     });
     if (!existing) throw new BadRequestException('Checklist no encontrado');
     this.assertEventAccess(req.user, existing.event);
     // Regenerar el PDF reescribe el archivo del formato: no es una lectura.
     // Antes bastaba con poder ver el evento.
     this.assertChecklistEdit(req.user);
+    this.assertFormatEdit(req.user, existing);
     assertEventNotClosed(existing.event.status);
     // `regenerateForEvent` ya protege los formatos firmados; esta puerta no lo
     // hacía, así que se podía reimprimir un documento ya autorizado.
@@ -779,12 +801,23 @@ export class ChecklistsController {
 
     const existing = await this.prisma.checklistInstance.findUnique({
       where: { id },
-      include: { event: true },
+      include: { event: true, template: { select: { key: true } } },
     });
     if (!existing) throw new BadRequestException('Checklist no encontrado');
     this.assertEventAccess(req.user, existing.event);
     this.assertChecklistEdit(req.user);
     assertEventNotClosed(existing.event.status);
+    if (to === DocStatus.APPROVED || to === DocStatus.SEALED || existing.status === DocStatus.SEALED) {
+      if (!canApproveFormat(req.user, existing.event.entity, existing.template?.key ?? '')) {
+        throw new ForbiddenException(
+          TOP_APPROVAL_FORMATS.includes(existing.template?.key ?? '')
+            ? 'Evento General, Artes y Pendones los aprueban Chacho o Arturo'
+            : 'Este formato no te toca aprobarlo',
+        );
+      }
+    } else {
+      this.assertFormatEdit(req.user, existing);
+    }
 
     const from = existing.status;
     assertTransitionAllowed(from, to);
@@ -857,6 +890,7 @@ export class ChecklistsController {
       eventId: string;
       submittedById: string | null;
       event: { name: string; entity: string; organizationId: string | null };
+      template?: { key: string } | null;
     },
     from: DocStatus,
     to: DocStatus,
@@ -865,6 +899,7 @@ export class ChecklistsController {
     if (!this.notifications) return;
     const organizationId = doc.event.organizationId ?? null;
     const entity = doc.event.entity as EntityKey;
+    const formatKey = doc.template?.key ?? '';
     const linkUrl = `/events/${doc.eventId}?tab=checklists&checklist=${doc.id}`;
     const text = (kind: ChecklistNoticeKind) => checklistNotice(kind, { actor: actor.fullName, doc, event: doc.event });
 
@@ -875,16 +910,7 @@ export class ChecklistsController {
       });
       const approvers = people.filter((p) => {
         if (p.id === actor.id) return false;
-        const role = p.roleKey as RoleKey;
-        try {
-          assertCanTransition(role, DocStatus.APPROVED);
-        } catch {
-          return false;
-        }
-        if (!canAccessEventOps(p.entities as EntityKey[], role, entity)) return false;
-        if (role === 'gerente_arta' && entity !== 'ARTA') return false;
-        if (role === 'dir_auditorio' && entity !== 'EXPLANADA') return false;
-        return true;
+        return canApproveFormat(p, entity, formatKey);
       });
       await this.notifications.notifyMany(
         approvers.map((p) => ({
@@ -973,11 +999,12 @@ export class ChecklistsController {
   ) {
     const existing = await this.prisma.checklistInstance.findUnique({
       where: { id },
-      include: { event: true },
+      include: { event: true, template: { select: { key: true } } },
     });
     if (!existing) throw new BadRequestException('Checklist no encontrado');
     this.assertEventAccess(req.user, existing.event);
     this.assertChecklistEdit(req.user);
+    this.assertFormatEdit(req.user, existing);
     assertDocWritable(existing, existing.event);
 
     const version = await this.prisma.checklistVersion.findUnique({ where: { id: versionId } });
@@ -1047,6 +1074,9 @@ export class ChecklistsController {
       where: { id: body.templateId },
     });
     if (!template) throw new BadRequestException('Plantilla no encontrada');
+    if (!canEditFormat(req.user, event.entity, template.key)) {
+      throw new ForbiddenException('Este formato no te toca generarlo');
+    }
     // Si la plantilla es de Excel, se copia el .xlsx al evento como EventFile editable.
     if ((template as any).excelTemplateUrl) {
       const srcUrl = (template as any).excelTemplateUrl as string;

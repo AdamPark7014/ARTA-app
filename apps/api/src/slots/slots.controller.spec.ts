@@ -64,9 +64,17 @@ describe('SlotsController (replacement auto-cancel)', () => {
 
   it('enforces file type rules', async () => {
     const { controller, files } = setup();
-    const req = { user: user('gerente_arta') } as any;
+    // Reemplazar la corrida es modificarla: dirección general (01-11-2026).
+    const req = { user: user('dir_general') } as any;
     files.push({ id: 'f-doc', eventId: 'ev1', fileName: 'X.docx' });
     await expect(controller.replace(req, 'ev1', { kind: 'CORRIDA', fileId: 'f-doc' })).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('la gerencia no reemplaza la corrida, con el archivo que sea', async () => {
+    const { controller, slots } = setup();
+    const req = { user: user('gerente_arta') } as any;
+    await expect(controller.replace(req, 'ev1', { kind: 'CORRIDA', fileId: 'f-cor' })).rejects.toBeInstanceOf(ForbiddenException);
+    expect(slots).toEqual([]);
   });
 });
 

@@ -6,6 +6,8 @@
 import {
   ROLE_PERMISSIONS,
   hasPermission,
+  canEditEventInfo,
+  canSeeGeneralFolders,
   canAccessEventOps as rbacCanAccessEventOps,
   canSeeEventCalendar as rbacCanSeeEventCalendar,
   type EntityKey as RbacEntity,
@@ -25,7 +27,11 @@ export type RoleKey =
   | 'enlace_gobierno'
   | 'solo_carpetas'
   | 'contabilidad'
-  | 'practicante';
+  | 'practicante'
+  | 'compras'
+  | 'produccion'
+  | 'contenido'
+  | 'catering';
 
 export type NavItem = {
   href: string;
@@ -76,6 +82,14 @@ export const NAV_ITEMS: NavItem[] = [
   // «Operación» y «Equipo»; Control, Marca y Admin siguen con su propio grupo.
   // Solo cambia la etiqueta del grupo: permisos, roles y entidades quedan igual.
   { href: '/dashboard', label: 'Inicio', group: 'Operación', exact: true },
+  // 01-11-2026: arriba, junto a Inicio. Lo ven Paula, Chacho y Arturo.
+  {
+    href: '/finanzas',
+    label: 'Finanzas',
+    permissions: ['finanzas.view', 'everything'],
+    group: 'Operación',
+    keywords: 'contabilidad pagos transferencias comprobantes adendum',
+  },
   // Junta 11-09-2026: «crear un chat interno entre todos y personal».
   { href: '/chat', label: 'Chat', group: 'Equipo', keywords: 'mensajes equipo conversacion personal' },
 
@@ -119,7 +133,7 @@ export const NAV_ITEMS: NavItem[] = [
     group: 'Operación',
     // Junta 11-09-2026: «solo carpetas generales» no ve tareas. Junta 23-10-2026: contabilidad sí
     // (le piden pagos por tarea); el practicante no.
-    roles: ['super_admin', 'dir_general', 'dir_adjunta', 'gerente_arta', 'dir_auditorio', 'logistica', 'convenios', 'enlace_gobierno', 'contabilidad'],
+    roles: ['super_admin', 'dir_general', 'dir_adjunta', 'gerente_arta', 'dir_auditorio', 'logistica', 'convenios', 'enlace_gobierno', 'contabilidad', 'compras', 'produccion'],
     keywords: 'pendientes apoyo asignar workload',
   },
 
@@ -130,7 +144,7 @@ export const NAV_ITEMS: NavItem[] = [
   {
     href: '/purchase-orders',
     label: 'Órdenes de compra',
-    permissions: ['po.authorize', 'po.mark_paid', 'everything'],
+    permissions: ['po.view', 'po.edit', 'po.authorize', 'po.mark_paid', 'everything'],
     group: 'Control',
     requiresEventOps: true,
     keywords: 'oc procurement compras ventana',
@@ -145,6 +159,22 @@ export const NAV_ITEMS: NavItem[] = [
     entities: ['ARTA'],
   },
   {
+    href: '/testigos',
+    label: 'Testigos de publicidad',
+    permissions: ['testigos.edit', 'everything'],
+    group: 'Marca',
+    hidden: true,
+    keywords: 'evidencia publicidad espectacular pendon prensa',
+  },
+  {
+    href: '/studio/practicantes',
+    label: 'Perfiles de practicante',
+    permissions: ['practicantes.manage', 'everything'],
+    group: 'Marca',
+    hidden: true,
+    keywords: 'temporada generar perfil acceso',
+  },
+  {
     href: '/site',
     label: 'Ver sitio Arta',
     group: 'Marca',
@@ -155,10 +185,9 @@ export const NAV_ITEMS: NavItem[] = [
   {
     href: '/users',
     label: 'Usuarios',
-    // 11-10-2026: dirección adjunta entra a dar de alta gente nueva (`users.create`); editar,
-    // cambiar rol o dar de baja a alguien que ya existe sigue siendo `users.manage`.
+    // 01-11-2026: solo Chacho y Arturo meten y cambian usuarios.
     permissions: ['users.manage', 'users.create'],
-    roles: ['dir_general', 'dir_adjunta', 'super_admin'],
+    roles: ['dir_general', 'super_admin'],
     group: 'Admin',
     keywords: 'equipo alta personas integrantes',
   },
@@ -227,8 +256,10 @@ export const NAV_ITEMS: NavItem[] = [
   },
   {
     href: '/finance',
-    label: 'Finanzas',
-    permissions: ['finance.view', 'finance.edit', 'everything'],
+    label: 'Corridas',
+    permissions: ['corrida.view', 'everything'],
+    // El Auditorio no lleva corrida (01-11-2026).
+    entities: ['ARTA'],
     group: HIDDEN_NAV_GROUP,
     requiresEventOps: true,
     hidden: true,
@@ -238,6 +269,8 @@ export const NAV_ITEMS: NavItem[] = [
     href: '/campaigns',
     label: 'Campañas',
     permissions: ['campaign.view', 'campaign.edit', 'everything'],
+    // El Auditorio no lleva campaña (01-11-2026).
+    entities: ['ARTA'],
     // Junta 11-09-2026: campaña con calendario propio — vuelve al menú.
     group: 'Control',
     requiresEventOps: true,
@@ -246,7 +279,7 @@ export const NAV_ITEMS: NavItem[] = [
   {
     href: '/ticketing',
     label: 'Boletera',
-    permissions: ['ticketing.edit', 'everything'],
+    permissions: ['ticketing.view', 'ticketing.edit', 'everything'],
     // Junta 11-09-2026: «crear una sección para Boletera».
     group: 'Control',
     requiresEventOps: true,
@@ -401,10 +434,11 @@ const FOLDER_CENTRIC_ROLES: RoleKey[] = ['convenios', 'enlace_gobierno', 'solo_c
 
 /**
  * Vistas de portafolio que para un rol son su trabajo diario y salen del buscador al menú.
- * Contabilidad (junta 23-10-2026): la corrida de todos los eventos y los anticipos por pagar.
+ * Contabilidad: los anticipos por pagar. Practicante: los testigos de publicidad.
  */
 const ROLE_SURFACED: Partial<Record<RoleKey, string[]>> = {
-  contabilidad: ['/finance', '/advances'],
+  contabilidad: ['/advances'],
+  practicante: ['/testigos'],
 };
 
 /**
@@ -424,7 +458,9 @@ export function visibleNavItems(
 ): NavItem[] {
   const surfaced = ROLE_SURFACED[user.roleKey as RoleKey] ?? [];
   const items = NAV_ITEMS.filter((item) => canSeeNavItem(user, item, entity)).map((item) =>
-    surfaced.includes(item.href) ? { ...item, hidden: false, group: 'Control' } : item,
+    surfaced.includes(item.href)
+      ? { ...item, hidden: false, group: item.group === HIDDEN_NAV_GROUP ? 'Control' : item.group }
+      : item,
   );
   // El practicante no trabaja con carpetas generales: su menú es Studio y calendario.
   const needsFolders =
@@ -481,6 +517,8 @@ export function canSeeNavItem(
   entity: EntityKey,
 ): boolean {
   if (item.entities?.length && !item.entities.includes(entity)) return false;
+  if (item.href === '/folders' && !canSeeGeneralFolders(user.roleKey)) return false;
+  if (item.href === '/events/new' && !canEditEventInfo(user, entity)) return false;
   if (item.requiresEventOps && !canAccessEventOps(user.roleKey, entity)) return false;
   if (item.requiresCalendar && !canSeeCalendar(user.roleKey, entity)) return false;
   if (item.roles?.length && !item.roles.includes(user.roleKey as RoleKey)) {
@@ -492,16 +530,20 @@ export function canSeeNavItem(
 /** Alcance operacional por rol (texto UI) */
 export const ROLE_SCOPE: Record<string, string> = {
   super_admin: 'Acceso total de sistemas',
-  dir_general: 'Acceso total Arta + Auditorio · usuarios · cierre · corrida',
-  dir_adjunta: 'Acceso total en sus entidades · cierre · corrida · da de alta usuarios nuevos',
-  gerente_arta: 'Todo Arta · campaña · corrida · autoriza OC Arta · Studio',
-  dir_auditorio: 'Todo Auditorio · en Arta solo carpetas generales · autoriza OC Auditorio',
+  dir_general: 'Todo Arta y Auditorio · autoriza OC · usuarios · corrida · Finanzas',
+  dir_adjunta: 'Todo Arta · aprueba formatos salvo Evento General, Artes y Pendones · sube la corrida',
+  gerente_arta: 'Todo Arta · aprueba formatos salvo Evento General, Artes y Pendones · sube la corrida',
+  dir_auditorio: 'Todo Auditorio menos OC · en Arta: transporte, hospedaje y catering',
   logistica: 'Eventos ambos · campaña · boletera · checklists · carpetas',
   convenios: 'Carpetas · patrocinios · checklists',
   enlace_gobierno: 'Carpetas · pagos · marcar OC pagado',
   solo_carpetas: 'Solo carpetas generales · Arta y Auditorio',
-  contabilidad: 'Pagos de OC y anticipos · corrida · campañas · convenios · boletera',
-  practicante: 'Studio (borradores, publica dirección) · calendario de shows',
+  contabilidad: 'Arta y Auditorio sin corrida · Finanzas · pagos de OC y anticipos · comprobantes',
+  practicante: 'Por temporada: Studio · testigos de publicidad · calendario de shows',
+  compras: 'Hace las OC · ve todo sin corrida · barra y merch',
+  produccion: 'Edita todo Auditorio · en Arta: campaña, producción, transporte y hospedaje',
+  contenido: 'Sube imágenes a los formatos generales · ve la campaña',
+  catering: 'Ve la información general · edita solo catering',
 };
 
 /** Expuesto para pantallas de gobierno */

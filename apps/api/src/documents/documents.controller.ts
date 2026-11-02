@@ -28,6 +28,7 @@ import { assertSameTenant } from '../common/tenant';
 import { assertEventNotClosed } from '../common/event-guards';
 import {
   canAccessEventOps,
+  canEditEventInfo,
   hasPermission,
   isDirectionRole,
   PERMISSIONS,
@@ -218,6 +219,13 @@ export class DocumentsController {
     }
   }
 
+  /** Dentro del evento manda el negocio: Juan Pablo e Iliana ven documentos, no los editan. */
+  private assertDocEditIn(user: AuthUser, entity: string) {
+    if (!canEditEventInfo(user, entity)) {
+      throw new ForbiddenException('Sin permiso para editar documentos');
+    }
+  }
+
   private async load(user: AuthUser, id: string) {
     const doc = await this.prisma.eventDocument.findUnique({
       where: { id },
@@ -258,6 +266,7 @@ export class DocumentsController {
   async create(@Req() req: { user: AuthUser }, @Body() dto: CreateDocumentDto) {
     this.assertDocEdit(req.user);
     const event = await this.assertEvent(req.user, dto.eventId);
+    this.assertDocEditIn(req.user, event.entity);
     this.assertOpen(event.status);
     // Reabrir edición desde un PDF existente (pdf→documento) solo lo hace Dirección.
     if (dto.sourceFileId && !isDirectionRole(req.user.roleKey)) {
@@ -309,6 +318,12 @@ export class DocumentsController {
       throw new BadRequestException('eventId requerido');
     }
     const event = await this.assertEvent(req.user, body.eventId);
+    try {
+      this.assertDocEditIn(req.user, event.entity);
+    } catch (e) {
+      discardUpload(file.path);
+      throw e;
+    }
     this.assertOpen(event.status);
     if (!/\.docx$/i.test(file.originalname)) {
       discardUpload(file.path);
@@ -366,6 +381,7 @@ export class DocumentsController {
   ) {
     this.assertDocEdit(req.user);
     const doc = await this.load(req.user, id);
+    this.assertDocEditIn(req.user, doc.event.entity);
     this.assertOpen(doc.event.status);
 
     const data: Prisma.EventDocumentUpdateInput = {
@@ -474,6 +490,7 @@ export class DocumentsController {
   async remove(@Req() req: { user: AuthUser }, @Param('id') id: string) {
     this.assertDocEdit(req.user);
     const doc = await this.load(req.user, id);
+    this.assertDocEditIn(req.user, doc.event.entity);
     this.assertOpen(doc.event.status);
     await this.prisma.eventDocument.delete({ where: { id } });
     this.tellTeam(req.user, doc.event, 'document.deleted', 'eliminó un documento', doc.title);

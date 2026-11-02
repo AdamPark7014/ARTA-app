@@ -14,9 +14,20 @@ import { api, isRevisionConflict, type RevisionConflict } from '@/lib/api';
 import { ConflictNotice } from '@/components/ui/ConflictNotice';
 import { useUser } from '@/lib/user-context';
 import { userHasPermission } from '@/lib/access-matrix';
+import {
+  canEditCampaign,
+  canEditEventInfo,
+  canEditTestigos,
+  canEditTicketing,
+  canSeeModule,
+  hasPermission,
+  type EventModule,
+  type RoleKey as RbacRoleKey,
+} from '@arta/rbac';
 import { REVIEW_APPROVER_ROLES } from '@/lib/review-flow';
 import { EventOverviewPanel } from '@/components/events/EventOverviewPanel';
 import {
+  EventAdendumPanel,
   EventCampaignPanel,
   EventChecklistsPanel,
   EventFilesPanel,
@@ -25,6 +36,7 @@ import {
   EventSponsorsPanel,
   EventTasksPanel,
   EventTicketingPanel,
+  EventWitnessPanel,
 } from '@/components/events/lazy-panels';
 import {
   CHECKLIST_FILE_MODULE,
@@ -91,20 +103,26 @@ function EventDetailInner() {
   const closed = event?.status === 'CLOSED' || event?.status === 'CANCELLED';
   const role = user?.roleKey || '';
   const has = (perms: string[]) => userHasPermission(role, user?.permissions || [], [...perms, 'everything']);
-  const canClose = has(['event.close']);
-  const canFinance = has(['finance.edit']);
-  const canSeeFinance = has(['finance.view', 'finance.edit']);
-  const canCampaign = has(['campaign.edit']);
-  const canSeeCampaign = has(['campaign.view', 'campaign.edit']);
-  const canTicketing = has(['ticketing.edit']);
+  // Qué ve y qué edita cada quien, por negocio (01-11-2026, docs/ROLES-Y-PERMISOS.md).
+  const entity = event?.entity ?? '';
+  const see = (module: EventModule) => !!user && canSeeModule(user, entity, module);
+  const canEditEvent = !!user && canEditEventInfo(user, entity);
+  const canClose = has(['event.close']) && canEditEvent;
+  const canFinance = has(['corrida.edit']);
+  const canUploadFinance = has(['corrida.upload', 'corrida.edit']);
+  const canSeeFinance = see('corrida');
+  const canCampaign = !!user && canEditCampaign(user, entity);
+  const canSeeCampaign = see('campaign');
+  const canTicketing = !!user && canEditTicketing(user, entity);
+  const canSeeTicketing = see('ticketing');
+  const canSeeSponsors = see('convenios');
+  // Hacer OC es de Juan Pablo aunque dirección «pueda todo»: por eso no pasa por `has`.
+  const canMakePo = hasPermission(role as RbacRoleKey, user?.permissions || [], 'po.edit');
   const canVendorPin = has(['vendor.pin']);
   const canAuthorize = has(['po.authorize']);
   const canMarkPaid = has(['po.mark_paid']);
-  const canChecklistEdit = has(['checklist.edit']);
-  // Junta 23-10-2026: contabilidad (finance.edit) también edita convenios, pero no los datos del show.
-  const canSponsorEdit = has(['checklist.edit', 'finance.edit']);
-  const canEditEvent = has(['checklist.edit', 'event.create']);
-  const canPo = has(['checklist.edit', 'po.authorize', 'po.mark_paid']);
+  const canSponsorEdit = has(['convenios.edit']);
+  const canPo = see('po');
   const canApproveCampaign = REVIEW_APPROVER_ROLES.has(role);
   const canReopen = role === 'dir_general' || role === 'dir_adjunta' || role === 'super_admin';
   const canDeleteEvent = canReopen;
@@ -185,14 +203,8 @@ function EventDetailInner() {
     if (!event) return [];
     const concepts = event.campaign?.dataJson?.concepts?.length || 0;
     const convenios = event.campaign?.dataJson?.convenios?.length || 0;
+    // Orden del cliente (01-11-2026): Resumen, Corrida, Campaña, Formatos, OC; lo demás como estaba.
     const all: Array<{ key: Tab; label: string; count: number; show: boolean }> = [
-      { key: 'checklists', label: 'Formatos', count: event.checklists.length, show: true },
-      {
-        key: 'ocs',
-        label: 'Órdenes de compra',
-        count: event.purchaseOrders.filter((p) => p.status === 'PENDING_AUTH' || p.status === 'AUTHORIZED').length,
-        show: canPo,
-      },
       {
         key: 'finance',
         label: 'Corrida',
@@ -200,15 +212,37 @@ function EventDetailInner() {
         show: canSeeFinance,
       },
       { key: 'campaign', label: 'Campaña', count: concepts, show: canSeeCampaign },
-      { key: 'sponsors', label: 'Convenios', count: convenios + (event.sponsors?.length || 0), show: canChecklistEdit || canSeeCampaign },
-      { key: 'ticketing', label: 'Boletera', count: event.ticketingSetups?.length || 0, show: canTicketing },
-      { key: 'tasks', label: 'Tareas', count: (event.tasks || []).filter((t) => t.status !== 'DONE').length, show: true },
-      { key: 'files', label: 'Documentos', count: event.files.length, show: true },
+      { key: 'checklists', label: 'Formatos', count: event.checklists.length, show: true },
+      {
+        key: 'ocs',
+        label: 'Órdenes de compra',
+        count: event.purchaseOrders.filter((p) => p.status === 'PENDING_AUTH' || p.status === 'AUTHORIZED').length,
+        show: canPo,
+      },
+      { key: 'sponsors', label: 'Convenios', count: convenios + (event.sponsors?.length || 0), show: canSeeSponsors },
+      { key: 'ticketing', label: 'Boletera', count: event.ticketingSetups?.length || 0, show: canSeeTicketing },
+      { key: 'tasks', label: 'Tareas', count: (event.tasks || []).filter((t) => t.status !== 'DONE').length, show: see('tasks') },
+      { key: 'files', label: 'Documentos', count: event.files.length, show: see('documents') },
+      {
+        key: 'adendum',
+        label: 'Adendum',
+        count: event.purchaseOrders.filter((p) => p.paymentMethod === 'ADENDUM').length,
+        show: see('adendum'),
+      },
+      { key: 'testigos', label: 'Testigos', count: 0, show: see('testigos') },
     ];
     return all.filter((m) => m.show).map(({ key, label, count }) => ({ key, label, count }));
-  }, [event, canPo, canSeeFinance, canSeeCampaign, canChecklistEdit, canTicketing]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [event, user, canPo, canSeeFinance, canSeeCampaign, canSeeSponsors, canSeeTicketing]);
 
   const visibleTabs = useMemo(() => new Set<Tab>(modules.map((m) => m.key)), [modules]);
+
+  // Una liga vieja a una pestaña que aquí no existe (corrida en Auditorio) cae en Resumen.
+  useEffect(() => {
+    // Sin `user` todavía no hay pestañas que comparar: el evento puede llegar antes que la sesión.
+    if (event && user && tab !== 'overview' && !visibleTabs.has(tab)) selectTab('overview');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [event?.id, user, tab, visibleTabs]);
 
   /**
    * Refleja en la lista lateral lo que cambió del formato abierto, sin volver
@@ -671,7 +705,8 @@ function EventDetailInner() {
           <EventChecklistsPanel
             event={event}
             activeChecklist={activeChecklist}
-            closed={closed || !canChecklistEdit}
+            closed={closed}
+            access={user ?? { roleKey: role }}
             saving={saving}
             userFullName={user?.fullName || ''}
             revision={checklistRevision}
@@ -694,14 +729,14 @@ function EventDetailInner() {
         {tab === 'ocs' && canPo && (
           <EventPurchaseOrdersPanel
             {...panel}
-            canCreate={canChecklistEdit}
+            canCreate={canMakePo}
             canAuthorize={canAuthorize}
             canMarkPaid={canMarkPaid}
             currentUserName={user?.fullName || ''}
           />
         )}
 
-        {tab === 'finance' && canSeeFinance && <EventFinancePanel {...panel} canEdit={canFinance} />}
+        {tab === 'finance' && canSeeFinance && <EventFinancePanel {...panel} canEdit={canFinance} canUpload={canUploadFinance} />}
 
         {tab === 'campaign' && canSeeCampaign && (
           <EventCampaignPanel
@@ -709,11 +744,11 @@ function EventDetailInner() {
             canEdit={canCampaign}
             canApprove={canApproveCampaign}
             canMarkPaid={canMarkPaid}
-            onCreatePo={canPo && canChecklistEdit ? () => selectModule('ocs') : undefined}
+            onCreatePo={canMakePo ? () => selectModule('ocs') : undefined}
           />
         )}
 
-        {tab === 'sponsors' && (
+        {tab === 'sponsors' && canSeeSponsors && (
           <EventSponsorsPanel
             {...panel}
             canEdit={canSponsorEdit}
@@ -723,9 +758,9 @@ function EventDetailInner() {
           />
         )}
 
-        {tab === 'ticketing' && canTicketing && <EventTicketingPanel {...panel} canEdit={canTicketing} />}
+        {tab === 'ticketing' && canSeeTicketing && <EventTicketingPanel {...panel} canEdit={canTicketing} />}
 
-        {tab === 'tasks' && (
+        {tab === 'tasks' && see('tasks') && (
           <EventTasksPanel
             focusTaskId={searchParams.get('task')}
             focusDo={searchParams.get('do')}
@@ -762,10 +797,23 @@ function EventDetailInner() {
           />
         )}
 
-        {tab === 'files' && (
+        {tab === 'adendum' && see('adendum') && (
+          <EventAdendumPanel {...panel} canCreate={canMakePo} onCreate={() => selectModule('ocs')} />
+        )}
+
+        {tab === 'testigos' && see('testigos') && (
+          <EventWitnessPanel
+            eventId={event.id}
+            closed={closed}
+            canEdit={!!user && canEditTestigos(user, event.entity)}
+            flash={flash}
+          />
+        )}
+
+        {tab === 'files' && see('documents') && (
           <EventFilesPanel
             eventId={id}
-            closed={closed || !canChecklistEdit}
+            closed={closed || !canEditEvent}
             files={event.files}
             checklists={event.checklists.map((c) => ({ id: c.id, title: c.title }))}
             previewFile={previewFile}

@@ -259,6 +259,11 @@ export type Po = {
   status: string;
   /** EFECTIVO | TRANSFERENCIA | CHEQUE | TARJETA | OTRO — efectivo no pide comprobante. */
   paymentMethod?: string | null;
+  /** Forma de pago ADENDUM: a quién, a qué cuenta y su imagen o PDF. El monto es el total de la orden. */
+  adendumPerson?: string | null;
+  adendumAccount?: string | null;
+  adendumFileUrl?: string | null;
+  adendumFileName?: string | null;
   /** Machote: PROVEEDOR u OTRO. */
   payeeType?: string | null;
   /** El total lleva IVA encima del subtotal de partidas. */
@@ -468,6 +473,8 @@ export type EventDetail = {
   startsAt?: string | null;
   /** El API ya lo devolvía y lo aceptaba; el panel nunca lo miró. */
   endsAt?: string | null;
+  /** Liga de la boletera externa; en Resumen se enseña embebida si la página lo permite. */
+  boleteraUrl?: string | null;
   notes?: string | null;
   /** Junta 11-09-2026: descripción, horario y funciones del show. */
   description?: string | null;
@@ -511,7 +518,9 @@ export type Tab =
   | 'ticketing'
   | 'tasks'
   | 'sponsors'
-  | 'files';
+  | 'files'
+  | 'adendum'
+  | 'testigos';
 
 /**
  * Lo que todo panel autónomo del evento recibe.

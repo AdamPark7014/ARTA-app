@@ -71,8 +71,7 @@ export function canApproveAdvance(p: Person, entity: string): boolean {
 export function canPayAdvance(p: Person, entity: string): boolean {
   const role = p.roleKey as RoleKey;
   if (
-    !hasPermission(role, p.permissions, PERMISSIONS.PO_MARK_PAID) &&
-    !hasPermission(role, p.permissions, PERMISSIONS.FINANCE_EDIT)
+    !hasPermission(role, p.permissions, PERMISSIONS.PO_MARK_PAID)
   ) {
     return false;
   }
@@ -107,7 +106,7 @@ export class FinanceController {
       });
       const editors = people
         .filter((p) => p.id !== user.id)
-        .filter((p) => hasPermission(p.roleKey as RoleKey, p.permissions, PERMISSIONS.FINANCE_EDIT))
+        .filter((p) => hasPermission(p.roleKey as RoleKey, p.permissions, PERMISSIONS.CORRIDA_VIEW))
         .filter((p) => canAccessEventOps(p.entities as EntityKey[], p.roleKey as RoleKey, event.entity as EntityKey))
         .map((p) => p.id);
       const input = {
@@ -134,6 +133,13 @@ export class FinanceController {
       throw new ForbiddenException();
     }
     return event;
+  }
+
+  /** La corrida solo la ven Chacho, Arturo, Leida y Sol. */
+  private assertCorridaView(user: AuthUser) {
+    if (!hasPermission(user.roleKey as RoleKey, user.permissions, PERMISSIONS.CORRIDA_VIEW)) {
+      throw new ForbiddenException('La corrida no está a tu alcance');
+    }
   }
 
   private assertFinanceView(user: AuthUser) {
@@ -344,7 +350,7 @@ export class FinanceController {
 
   @Get('event/:eventId')
   async list(@Req() req: { user: AuthUser }, @Param('eventId') eventId: string) {
-    this.assertFinanceView(req.user);
+    this.assertCorridaView(req.user);
     await this.assertEventOps(req.user, eventId);
     return this.prisma.financeRun.findMany({ where: { eventId } });
   }
@@ -357,9 +363,7 @@ export class FinanceController {
   ) {
     const role = req.user.roleKey as RoleKey;
     if (
-      (!hasPermission(role, req.user.permissions, PERMISSIONS.FINANCE_EDIT) &&
-        !hasPermission(role, req.user.permissions, PERMISSIONS.FINANCE_VIEW)) ||
-      !hasPermission(role, req.user.permissions, PERMISSIONS.CHECKLIST_EDIT)
+      !hasPermission(role, req.user.permissions, PERMISSIONS.ADVANCE_REQUEST)
     ) {
       throw new ForbiddenException('Sin permiso para solicitar anticipos');
     }
@@ -611,10 +615,8 @@ export class FinanceController {
     @Body() body: { dataJson?: object; title?: string; locked?: boolean },
   ) {
     const role = req.user.roleKey as RoleKey;
-    if (!hasPermission(role, req.user.permissions, PERMISSIONS.FINANCE_EDIT)) {
-      throw new ForbiddenException(
-        'Solo gerencia de Arta y dirección general pueden editar corrida financiera',
-      );
+    if (!hasPermission(role, req.user.permissions, PERMISSIONS.CORRIDA_EDIT)) {
+      throw new ForbiddenException('La corrida solo la modifican Chacho o Arturo');
     }
     const existing = await this.prisma.financeRun.findUnique({
       where: { id },
@@ -642,7 +644,7 @@ export class FinanceController {
           'Corrida sellada — quita el sello primero (solo dirección) y vuelve a intentarlo',
         );
       }
-      if (wantsUnlock && !isDirectionRole(role)) {
+      if (wantsUnlock && !hasPermission(role, req.user.permissions, PERMISSIONS.CORRIDA_EDIT)) {
         throw new ForbiddenException('Solo dirección general puede quitar el sello de una corrida');
       }
     }
@@ -724,7 +726,7 @@ export class FinanceController {
     @Body() body: { reason?: string },
   ) {
     const role = req.user.roleKey as RoleKey;
-    if (!isDirectionRole(role)) {
+    if (!hasPermission(role, req.user.permissions, PERMISSIONS.CORRIDA_EDIT)) {
       throw new ForbiddenException('Solo dirección general puede quitar el sello de una corrida');
     }
     const reason = (body.reason || '').trim();
@@ -788,7 +790,7 @@ export class FinanceController {
   /** Historial de la corrida, con el diff de renglones. */
   @Get(':id/revisions')
   async revisionHistory(@Req() req: { user: AuthUser }, @Param('id') id: string) {
-    this.assertFinanceView(req.user);
+    this.assertCorridaView(req.user);
     const run = await this.prisma.financeRun.findUnique({ where: { id } });
     if (!run) throw new NotFoundException('Corrida no encontrada');
     await this.assertEventOps(req.user, run.eventId);

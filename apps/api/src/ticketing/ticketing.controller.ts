@@ -20,6 +20,8 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { assertSameTenant, tenantIdOf } from '../common/tenant';
 import { assertEventNotClosed } from '../common/event-guards';
 import {
+  canEditTicketing,
+  canSeeModule,
   canAccessEventOps,
   eventOpsEntities,
   hasPermission,
@@ -150,6 +152,11 @@ export class TicketingController {
     }
   }
 
+  /** Williams la edita en Auditorio y solo la ve en Arta. */
+  private assertEditIn(user: AuthUser, entity: string) {
+    if (!canEditTicketing(user, entity)) throw new ForbiddenException();
+  }
+
   @Get()
   async list(@Req() req: { user: AuthUser }) {
     const allowed = eventOpsEntities(req.user.entities as EntityKey[], req.user.roleKey as RoleKey);
@@ -189,7 +196,7 @@ export class TicketingController {
     const event = await this.prisma.event.findUnique({ where: { id: eventId } });
     if (!event) throw new NotFoundException();
     assertSameTenant(req.user, event.organizationId);
-    if (!canAccessEventOps(req.user.entities as EntityKey[], req.user.roleKey as RoleKey, event.entity as EntityKey)) {
+    if (!canSeeModule(req.user, event.entity, 'ticketing')) {
       throw new ForbiddenException();
     }
     return this.prisma.ticketingSetup.findMany({
@@ -208,6 +215,7 @@ export class TicketingController {
     const event = await this.prisma.event.findUnique({ where: { id: eventId } });
     if (!event) throw new NotFoundException();
     assertSameTenant(req.user, event.organizationId);
+    this.assertEditIn(req.user, event.entity);
     if (!canAccessEventOps(req.user.entities as EntityKey[], req.user.roleKey as RoleKey, event.entity as EntityKey)) {
       throw new ForbiddenException();
     }
@@ -268,6 +276,7 @@ export class TicketingController {
     });
     if (!existing) throw new NotFoundException();
     assertSameTenant(req.user, existing.event.organizationId);
+    this.assertEditIn(req.user, existing.event.entity);
     if (
       !canAccessEventOps(
         req.user.entities as EntityKey[],
@@ -329,6 +338,7 @@ export class TicketingController {
     });
     if (!existing) throw new NotFoundException();
     assertSameTenant(req.user, existing.event.organizationId);
+    this.assertEditIn(req.user, existing.event.entity);
     if (
       !canAccessEventOps(
         req.user.entities as EntityKey[],
@@ -354,6 +364,7 @@ export class TicketingController {
     });
     if (!setup) throw new NotFoundException();
     assertSameTenant(req.user, setup.event.organizationId);
+    this.assertEditIn(req.user, setup.event.entity);
     if (
       !canAccessEventOps(
         req.user.entities as EntityKey[],

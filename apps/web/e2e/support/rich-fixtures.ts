@@ -3023,6 +3023,183 @@ for (const c of CHANNELS) {
 const folderStubs: ApiStubs = {};
 for (const f of FOLDERS) folderStubs[`/folders/${f.id}`] = folderDetail(f.id);
 
+/* ── roles del cliente 01-11-2026: adendum, testigos, Finanzas y practicantes ───────────────── */
+
+const DAY = (days: number) => new Date(Date.now() + days * 86_400_000).toISOString();
+
+const ADENDUM_PO = {
+  id: 'po-rich-adendum',
+  rubro: 'produccion',
+  vendorName: 'Sofía Méndez Arriaga',
+  description: 'Adendum por funciones extra',
+  amount: 48000,
+  status: 'AUTHORIZED',
+  paymentMethod: 'ADENDUM',
+  adendumPerson: 'Sofía Méndez Arriaga',
+  adendumAccount: '012180001234567890',
+  adendumFileUrl: '/uploads/adendum-sofia.pdf',
+  adendumFileName: 'Adendum Sofía Méndez.pdf',
+  lines: [{ id: 'l-ad', concept: 'Adendum por funciones extra', qty: 1, unitPrice: 48000, total: 48000 }],
+  proofs: [],
+  createdAt: DAY(-3),
+  authorizedAt: DAY(-1),
+  createdBy: { fullName: 'Juan Pablo Ramírez' },
+  authorizedBy: { fullName: 'Arturo Taja' },
+};
+
+const WITNESSES = [
+  {
+    id: 'wit-1',
+    medium: 'ESPECTACULAR',
+    title: 'Espectacular Vía Atlixcáyotl, frente a Angelópolis, cara norte',
+    note: 'Proveedor Vallas del Centro, del 1 al 20 de noviembre.',
+    link: null,
+    fileUrl: '/uploads/testigo-1.png',
+    fileName: 'espectacular.png',
+    mimeType: 'image/png',
+    publishedAt: DAY(-5),
+    isPublic: true,
+    createdAt: DAY(-5),
+    createdBy: { id: 'u1', fullName: 'Valeria Ruiz' },
+  },
+  {
+    id: 'wit-2',
+    medium: 'REDES',
+    title: 'Publicación de Instagram con el video del anuncio',
+    note: null,
+    link: 'https://instagram.com/p/abc',
+    fileUrl: null,
+    fileName: null,
+    mimeType: null,
+    publishedAt: DAY(-2),
+    isPublic: false,
+    createdAt: DAY(-2),
+    createdBy: { id: 'u1', fullName: 'Valeria Ruiz' },
+  },
+  {
+    id: 'wit-3',
+    medium: 'PRENSA',
+    title: 'Nota en El Sol de Puebla',
+    note: 'Sección de espectáculos, página 4.',
+    link: null,
+    fileUrl: '/uploads/testigo-3.pdf',
+    fileName: 'nota-el-sol.pdf',
+    mimeType: 'application/pdf',
+    publishedAt: DAY(-1),
+    isPublic: false,
+    createdAt: DAY(-1),
+    createdBy: { id: 'u2', fullName: 'Monse' },
+  },
+];
+
+const finanzasOrder = (over: Record<string, unknown>) => ({
+  id: 'po-rich-1',
+  rubro: 'audio',
+  vendorName: 'Audio Profesional del Centro',
+  amount: 186000,
+  currency: 'MXN',
+  status: 'AUTHORIZED',
+  paymentMethod: 'TRANSFERENCIA',
+  paymentLabel: 'Transferencia',
+  authorizedAt: DAY(-1),
+  paidAt: null,
+  createdAt: DAY(-4),
+  requestedBy: 'Juan Pablo Ramírez',
+  event: { id: EVT1_ID, name: EVT1_DETAIL.name, entity: 'ARTA', startsAt: EVT1_DETAIL.startsAt },
+  proofs: [],
+  needsProof: true,
+  adendum: null,
+  ...over,
+});
+
+const ADENDUM_ROW = {
+  id: 'po-rich-adendum',
+  vendorName: 'Sofía Méndez Arriaga',
+  amount: 48000,
+  paymentMethod: 'ADENDUM',
+  paymentLabel: 'Adendum',
+  adendum: { person: 'Sofía Méndez Arriaga', account: '012180001234567890', fileUrl: '/uploads/a.pdf', fileName: 'Adendum Sofía Méndez.pdf' },
+};
+
+const FINANZAS = {
+  period: { from: DAY(-20), to: DAY(0) },
+  kpis: {
+    toPay: { amount: 234000, count: 2 },
+    transfers: { count: 2 },
+    paid: { amount: 92500, count: 2 },
+    pendingAuth: { amount: 61000, count: 1 },
+    advancesToPay: { amount: 15000, count: 1 },
+    missingProof: { count: 1 },
+  },
+  toPay: [finanzasOrder({}), finanzasOrder(ADENDUM_ROW)],
+  paid: [
+    finanzasOrder({
+      id: 'po-rich-p1',
+      vendorName: 'Hotel Casona',
+      amount: 52500,
+      status: 'PAID',
+      paidAt: DAY(-3),
+      needsProof: false,
+      proofs: [{ id: 'pr1', fileUrl: '/uploads/pr1.pdf', label: 'Transferencia' }],
+    }),
+    finanzasOrder({ id: 'po-rich-p2', vendorName: 'Transportes Ejecutivos', amount: 40000, status: 'PAID', paidAt: DAY(-6) }),
+  ],
+  adendums: [finanzasOrder(ADENDUM_ROW)],
+  advances: [
+    {
+      id: 'adv-1',
+      label: 'Anticipo de hospedaje',
+      amount: 15000,
+      status: 'APPROVED',
+      entity: 'ARTA',
+      event: { id: EVT1_ID, name: EVT1_DETAIL.name },
+      requestedBy: 'Williams Taja',
+      paidAt: null,
+      proofUrl: null,
+    },
+  ],
+  byEvent: [{ id: EVT1_ID, name: EVT1_DETAIL.name, entity: 'ARTA', startsAt: EVT1_DETAIL.startsAt, toPay: 234000, paid: 92500 }],
+};
+
+const PRACTICANTES = [
+  {
+    id: 'pr-1',
+    email: 'valeria.ruiz@practicantes.artaproducciones.com',
+    fullName: 'Valeria Ruiz',
+    active: true,
+    accessExpiresAt: DAY(60),
+    accessLabel: 'Otoño 2026',
+    createdAt: DAY(-30),
+    canPublish: true,
+    lastSeenAt: DAY(-1),
+    expired: false,
+  },
+  {
+    id: 'pr-2',
+    email: 'diego.lara@practicantes.artaproducciones.com',
+    fullName: 'Diego Lara Hernández',
+    active: true,
+    accessExpiresAt: DAY(-4),
+    accessLabel: 'Verano 2026',
+    createdAt: DAY(-120),
+    canPublish: false,
+    lastSeenAt: DAY(-10),
+    expired: true,
+  },
+  {
+    id: 'pr-3',
+    email: 'renata@practicantes.artaproducciones.com',
+    fullName: 'Renata Flores',
+    active: false,
+    accessExpiresAt: DAY(10),
+    accessLabel: null,
+    createdAt: DAY(-60),
+    canPublish: true,
+    lastSeenAt: null,
+    expired: false,
+  },
+];
+
 export const RICH_STUBS: ApiStubs = {
   '/auth/me': { user: RICH_USER },
 
@@ -3032,7 +3209,17 @@ export const RICH_STUBS: ApiStubs = {
   '/calendar/notes': CALENDAR_NOTES,
 
   // Hub del evento rico (todas las pestañas)
-  [`/events/${EVT1_ID}`]: EVT1_DETAIL,
+  [`/events/${EVT1_ID}`]: {
+    ...EVT1_DETAIL,
+    boleteraUrl: 'https://boletos.example.com/noche-de-bandas',
+    purchaseOrders: [...EVT1_DETAIL.purchaseOrders, ADENDUM_PO],
+  },
+  [`/testigos/event/${EVT1_ID}`]: WITNESSES,
+  '/testigos/events': [
+    { id: EVT1_ID, name: EVT1_DETAIL.name, entity: 'ARTA', status: 'ACTIVE', startsAt: EVT1_DETAIL.startsAt, count: WITNESSES.length },
+  ],
+  '/finanzas/resumen': FINANZAS,
+  '/practicantes': PRACTICANTES,
   [`/documents/event/${EVT1_ID}`]: EVT1_DOCUMENTS,
   [`/vendor/event/${EVT1_ID}`]: [
     { id: 'pin-rich-1', label: 'Audio Profesional del Centro — ingenieros de sala y monitores', scopes: ['files', 'checklists'], active: true, expiresAt: at(1, 23, 59) },
@@ -3216,6 +3403,11 @@ export const RICH_ROUTES: Array<{ name: string; path: string; note?: string }> =
   { name: 'chat-event', path: '/chat?channel=ch-rich-evt1', note: 'Canal del evento con nombre larguísimo (sin mensajes: estado vacío).' },
   { name: 'folders', path: '/folders', note: '6 carpetas; clic en la primera tarjeta para ver 6 archivos de nombre largo.' },
   { name: 'calendar', path: '/calendar', note: 'Mes actual con los shows y 5 notas (dos hoy).' },
+  { name: 'finanzas', path: '/finanzas', note: 'Por pagar con transferencia y adendum, pagado, anticipos.' },
+  { name: 'event-adendum', path: `${E1}?tab=adendum`, note: 'Un adendum autorizado con persona, cuenta y archivo.' },
+  { name: 'event-testigos', path: `${E1}?tab=testigos`, note: 'Tres testigos: foto, liga y PDF.' },
+  { name: 'testigos', path: '/testigos', note: 'Pantalla del practicante.' },
+  { name: 'practicantes', path: '/studio/practicantes', note: 'Activo, vencido y desactivado.' },
   { name: 'users', path: '/users', note: '10 personas con nombres/correos/puestos largos, riesgos, 2 invitaciones.' },
   { name: 'settings', path: '/settings', note: 'Días de cobro de OC (stub por defecto de mock-api).' },
   { name: 'checklists', path: '/checklists', note: '8 plantillas, una inactiva, nombres largos.' },

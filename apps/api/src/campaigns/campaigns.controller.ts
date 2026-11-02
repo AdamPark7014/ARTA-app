@@ -18,6 +18,7 @@ import { assertEventNotClosed } from '../common/event-guards';
 import { NotificationsService } from '../notifications/notifications.service';
 import { campaignNotice } from '../notifications/notification-text';
 import {
+  canSeeModule,
   canAccessEventOps,
   eventOpsEntities,
   hasPermission,
@@ -163,6 +164,10 @@ export class CampaignsController {
       throw new ForbiddenException();
     }
     assertSameTenant(user, event.organizationId);
+    // El Auditorio no lleva campaña, y Rodrigo, Iliana y los practicantes no la ven.
+    if (!canSeeModule(user, event.entity, 'campaign')) {
+      throw new ForbiddenException('La campaña no está a tu alcance');
+    }
     return event;
   }
 

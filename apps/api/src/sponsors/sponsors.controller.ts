@@ -19,6 +19,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { assertSameTenant } from '../common/tenant';
 import { assertEventNotClosed } from '../common/event-guards';
 import {
+  canSeeModule,
   canAccessEventOps,
   canEditSponsors,
   type EntityKey,
@@ -125,7 +126,7 @@ export class SponsorsController {
   async list(@Req() req: { user: AuthUser }, @Param('eventId') eventId: string) {
     const event = await this.prisma.event.findUnique({ where: { id: eventId } });
     if (!event) throw new NotFoundException();
-    if (!canAccessEventOps(req.user.entities as EntityKey[], req.user.roleKey as RoleKey, event.entity as EntityKey)) {
+    if (!canSeeModule(req.user, event.entity, 'convenios')) {
       throw new ForbiddenException();
     }
     assertSameTenant(req.user, event.organizationId);

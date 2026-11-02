@@ -44,10 +44,21 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
 
     const session = await this.prisma.userSession.findFirst({
       where: { tokenHash: sha256Hex(payload.jti) },
-      select: { id: true, revokedAt: true, expiresAt: true, lastSeenAt: true },
+      select: {
+        id: true,
+        revokedAt: true,
+        expiresAt: true,
+        lastSeenAt: true,
+        user: { select: { accessExpiresAt: true } },
+      },
     });
     if (!session || session.revokedAt || session.expiresAt < new Date()) {
       throw new UnauthorizedException('Sesión revocada o expirada');
+    }
+    // Perfil por temporada: al vencer sale aunque tenga la sesión abierta.
+    const until = session.user?.accessExpiresAt;
+    if (until && until.getTime() < Date.now()) {
+      throw new UnauthorizedException('Tu acceso venció');
     }
 
     if (Date.now() - session.lastSeenAt.getTime() > LAST_SEEN_TOUCH_MS) {

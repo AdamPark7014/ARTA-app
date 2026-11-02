@@ -3,6 +3,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { canAccessEventOps, isDirectionRole, type EntityKey, type RoleKey } from '../common/rbac/roles';
 import { assertSameTenant } from '../common/tenant';
+import { canSeeEventFile } from '../events/event-visibility';
 import type { Response } from 'express';
 import { join } from 'path';
 import { existsSync, readFileSync } from 'fs';
@@ -26,12 +27,13 @@ export class FileInlineController {
   async inline(@Req() req: { user: AuthUser }, @Res() res: Response, @Param('id') id: string) {
     const file = await this.prisma.eventFile.findUnique({
       where: { id },
-      include: { event: true },
+      include: { event: true, checklist: { select: { template: { select: { key: true } } } } },
     });
     if (!file) throw new NotFoundException('Archivo no encontrado');
     if (file.event) {
       if (
-        !canAccessEventOps(req.user.entities as EntityKey[], req.user.roleKey as RoleKey, file.event.entity as EntityKey)
+        !canAccessEventOps(req.user.entities as EntityKey[], req.user.roleKey as RoleKey, file.event.entity as EntityKey) ||
+        !canSeeEventFile(req.user, file.event.entity, file)
       ) {
         res.status(403).send('Sin acceso a este evento');
         return;

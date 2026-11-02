@@ -10,6 +10,7 @@ import {
 import { ChecklistTemplateKey, EntityKey } from '@prisma/client';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import {
+  canSeeModule,
   canAccessEventOps,
   eventOpsEntities,
   hasPermission,
@@ -50,15 +51,15 @@ export class AnalyticsController {
   @Get('overview')
   async overview(@Req() req: { user: AuthUser }, @Query('entity') entity?: EntityKey) {
     const ent = this.resolveEntity(req.user, entity);
-    return this.analytics.overview(ent, tenantIdOf(req.user));
+    const data = await this.analytics.overview(ent, tenantIdOf(req.user));
+    if (canSeeModule(req.user, ent, 'po')) return data;
+    // Los montos de OC no salen de aquí para quien no las ve.
+    return { ...data, poStates: [], kpis: { ...data.kpis, poPipelineAmount: 0 } };
   }
 
   @Get('finance')
   async finance(@Req() req: { user: AuthUser }, @Query('entity') entity?: EntityKey) {
-    if (
-      !hasPermission(req.user.roleKey as RoleKey, req.user.permissions, PERMISSIONS.FINANCE_VIEW) &&
-      !hasPermission(req.user.roleKey as RoleKey, req.user.permissions, PERMISSIONS.FINANCE_EDIT)
-    ) {
+    if (!hasPermission(req.user.roleKey as RoleKey, req.user.permissions, PERMISSIONS.CORRIDA_VIEW)) {
       throw new ForbiddenException('Sin permiso para ver analytics de finanzas');
     }
     const ent = this.resolveEntity(req.user, entity);
@@ -68,6 +69,9 @@ export class AnalyticsController {
   @Get('purchase-orders')
   async purchaseOrders(@Req() req: { user: AuthUser }, @Query('entity') entity?: EntityKey) {
     const ent = this.resolveEntity(req.user, entity);
+    if (!canSeeModule(req.user, ent, 'po')) {
+      throw new ForbiddenException('Las órdenes de compra no están a tu alcance');
+    }
     return this.analytics.purchaseOrders(ent, tenantIdOf(req.user));
   }
 

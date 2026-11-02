@@ -33,7 +33,9 @@ const ARTA_KEYS = [
 const AUDITORIO_V4_KEYS = ['CHECKLIST_AUDITORIO', 'COMPROMISO_HORARIOS', 'LIMPIEZA', 'MANTENIMIENTO'];
 /** Seguridad del Auditorio, junta 23-10-2026 (v5). */
 const SEGURIDAD_KEYS = ['RECORRIDO_SEGURIDAD', 'SEGURIDAD_INTERNA', 'SEGURIDAD_PROMOTOR'];
-const AUDITORIO_KEYS = [...AUDITORIO_V4_KEYS, ...SEGURIDAD_KEYS].sort();
+/** Lobby del Auditorio: barra y merch, los lleva compras (01-11-2026). */
+const LOBBY_KEYS = ['BARRA', 'MERCH'];
+const AUDITORIO_KEYS = [...AUDITORIO_V4_KEYS, ...SEGURIDAD_KEYS, ...LOBBY_KEYS].sort();
 
 /** El ítem `id` del formato `key` (falla si no existe). */
 function itemOf(key: string, id: string): FormatItem {
@@ -54,7 +56,7 @@ const STABLE_IDS: Record<string, string[]> = {
 };
 
 describe('format-catalog', () => {
-  it('trae los ocho formatos de Arta y los siete del Auditorio, con versión y firmas al final', () => {
+  it('trae los ocho formatos de Arta y los nueve del Auditorio, con versión y firmas al final', () => {
     expect(STANDARD_FORMATS.map((f) => f.key).sort()).toEqual([...ARTA_KEYS, ...AUDITORIO_KEYS].sort());
     for (const f of STANDARD_FORMATS) {
       expect(storedFormatVersion(f.schema)).toBeGreaterThanOrEqual(3);
@@ -77,6 +79,8 @@ describe('format-catalog', () => {
     for (const key of ARTA_KEYS) expect(storedFormatVersion(standardFormat(key)!.schema)).toBe(3);
     for (const key of AUDITORIO_V4_KEYS) expect(storedFormatVersion(standardFormat(key)!.schema)).toBe(4);
     for (const key of SEGURIDAD_KEYS) expect(storedFormatVersion(standardFormat(key)!.schema)).toBe(5);
+    // Barra y merch nacen en la versión de los formatos del Auditorio: no suben a nadie más.
+    for (const key of LOBBY_KEYS) expect(storedFormatVersion(standardFormat(key)!.schema)).toBe(4);
     expect(STANDARD_FORMAT_VERSION).toBe(5);
   });
 
@@ -331,6 +335,52 @@ describe('format-catalog', () => {
     // El texto fijo no se captura ni cuenta: evento, fecha y productor vienen del evento → 3 de 7.
     expect(walkFormat(f.schema).some(({ item }) => item.type === 'paragraph')).toBe(false);
     expect(calcProgress(bindFormatToEvent(f.schema, event))).toBe(43);
+  });
+
+  /* ── Lobby del Auditorio (cliente, 01-11-2026) ─────────────────────────── */
+
+  it('Barra: encabezado desde el evento, inventario con sus columnas y ventas con corte de caja', () => {
+    const f = standardFormat('BARRA')!;
+    expect(f.entities).toEqual(['EXPLANADA']);
+    expect(f.schema.sections.map((s) => s.id)).toEqual([HEADER_SECTION_ID, 'inventario', 'ventas', SIGNATURES_SECTION_ID]);
+    expect(labelsOf('BARRA', HEADER_SECTION_ID)).toEqual([
+      'Evento',
+      'Fecha',
+      'Showtime',
+      'Encargado de barra',
+      'Abre barra',
+      'Cierra barra',
+    ]);
+    expect(itemOf('BARRA', 'productos').columns!.map((c) => c.label)).toEqual(['Producto', 'Inicial', 'Surtido', 'Final', 'Precio']);
+    expect(labelsOf('BARRA', 'ventas')).toEqual(['Efectivo', 'Tarjeta', 'Cortesías', 'Mermas', 'Corte de caja', 'Observaciones']);
+    expect(itemOf('BARRA', 'corte').type).toBe('attachment');
+    expect(itemOf('BARRA', 'observaciones').optional).toBe(true);
+
+    const header = bindFormatToEvent(f.schema, event).sections[0].items;
+    expect(header.find((i) => i.id === 'evento')!.value).toBe('SHOW EXPLANADA');
+    expect(header.find((i) => i.id === 'showtime')!.value).toBe('20:00');
+  });
+
+  it('Merch: operador, porcentaje del Auditorio, inventario por talla y comisión', () => {
+    const f = standardFormat('MERCH')!;
+    expect(f.entities).toEqual(['EXPLANADA']);
+    expect(f.schema.sections.map((s) => s.id)).toEqual([HEADER_SECTION_ID, 'inventario', 'ventas', SIGNATURES_SECTION_ID]);
+    expect(labelsOf('MERCH', HEADER_SECTION_ID)).toEqual([
+      'Evento',
+      'Fecha',
+      'Showtime',
+      'Operador',
+      'Contacto merch del talento',
+      'Porcentaje a cobrar (%)',
+    ]);
+    expect(itemOf('MERCH', 'porcentaje').type).toBe('number');
+    expect(itemOf('MERCH', 'productos').columns!.map((c) => c.label)).toEqual(['Producto', 'Talla', 'Inicial', 'Final', 'Precio']);
+    expect(labelsOf('MERCH', 'ventas')).toEqual(['Venta total', 'Comisión del Auditorio', 'Corte de venta', 'Observaciones']);
+    expect(itemOf('MERCH', 'corte').type).toBe('attachment');
+    expect(itemOf('MERCH', 'observaciones').optional).toBe(true);
+
+    const header = bindFormatToEvent(f.schema, event).sections[0].items;
+    expect(header.find((i) => i.id === 'evento')!.value).toBe('SHOW EXPLANADA');
   });
 
   /* ── Seguridad del Auditorio (junta con el cliente, 23-10-2026) ───────── */

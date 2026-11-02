@@ -20,9 +20,9 @@ import { fullDateTime, shortDate, shortDateTime } from '@/lib/format';
 import { useUser } from '@/lib/user-context';
 import { userHasPermission } from '@/lib/access-matrix';
 import { panelLoginUrl } from '@/lib/domains';
+import { RoleAccessPreview, RolePicker } from '@/components/users/RolePicker';
 import {
   ROLE_DEFAULT_ENTITIES,
-  ROLE_HINTS,
   ROLE_PERMISSIONS,
   roleLabel,
   type RoleKey,
@@ -295,12 +295,6 @@ export default function UsersPage() {
     }
     return list;
   }, [users, riskFilter, roleFilter, q, showInactive]);
-
-  const selectedRole = roles.find((r) => r.key === form.roleKey);
-  const roleHint =
-    selectedRole?.hint ||
-    ROLE_HINTS[form.roleKey as RoleKey] ||
-    '';
 
   function applyRole(roleKey: string) {
     const meta = roles.find((r) => r.key === roleKey);
@@ -749,22 +743,12 @@ export default function UsersPage() {
                   />
                 </label>
 
-                <label>
-                  Rol
-                  <FieldSelect
-                    value={form.roleKey}
-                    onChange={applyRole}
-                    label="Rol del usuario"
-                    options={roles
-                      .filter((r) => canManage || !MANAGER_ONLY_ROLES.has(r.key))
-                      .map((r) => ({ value: r.key, label: r.label }))}
-                  />
-                </label>
-                {roleHint ? (
-                  <p className="muted kpi-sub" style={{ margin: '-0.35rem 0 0.5rem' }}>
-                    {roleHint}
-                  </p>
-                ) : null}
+                <div className="label">¿Qué hace en el equipo?</div>
+                <RolePicker
+                  roles={roles.filter((r) => canManage || !MANAGER_ONLY_ROLES.has(r.key))}
+                  value={form.roleKey}
+                  onChange={applyRole}
+                />
 
                 <div className="label">Acceso a</div>
                 <div className="row">
@@ -777,6 +761,8 @@ export default function UsersPage() {
                     />
                   ))}
                 </div>
+
+                <RoleAccessPreview roleKey={form.roleKey} entities={form.entities} permissions={form.permissions} />
 
                 {!inviteMode ? (
                   <label>
@@ -1156,27 +1142,27 @@ Contraseña: ${creds.password}`}</pre>
                       onChange={(e) => setEdit({ ...edit, title: e.target.value })}
                     />
                   </label>
-                  <label>
-                    Rol
-                    <FieldSelect
-                      value={edit.roleKey}
-                      onChange={(v) => {
-                        const meta = roles.find((r) => r.key === v);
-                        const defaults =
-                          meta?.defaultEntities ||
-                          ROLE_DEFAULT_ENTITIES[v as RoleKey] ||
-                          edit.entities;
-                        setEdit({
-                          ...edit,
-                          roleKey: v,
-                          entities: [...defaults],
-                        });
-                      }}
-                      label="Rol"
-                      options={roles.map((r) => ({ value: r.key, label: r.label }))}
-                    />
-                  </label>
                 </FormGrid>
+
+                <div className="label" style={{ marginTop: '0.75rem' }}>
+                  Rol
+                </div>
+                <RolePicker
+                  roles={roles}
+                  value={edit.roleKey}
+                  onChange={(v) => {
+                    const meta = roles.find((r) => r.key === v);
+                    const defaults =
+                      meta?.defaultEntities ||
+                      ROLE_DEFAULT_ENTITIES[v as RoleKey] ||
+                      edit.entities;
+                    setEdit({
+                      ...edit,
+                      roleKey: v,
+                      entities: [...defaults],
+                    });
+                  }}
+                />
 
                 <div className="label" style={{ marginTop: '0.75rem' }}>
                   Entidades
@@ -1198,6 +1184,8 @@ Contraseña: ${creds.password}`}</pre>
                     />
                   ))}
                 </div>
+
+                <RoleAccessPreview roleKey={edit.roleKey} entities={edit.entities} permissions={edit.permissions} />
 
                 <FieldCheck
                   checked={edit.active}

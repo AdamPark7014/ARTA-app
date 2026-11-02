@@ -17,6 +17,10 @@ import { PurchaseOrdersController } from './purchase-orders.controller';
  *
  * 3. **Revisión 11-09-2026:** la OC se crea cualquier día; el pago solo se
  *    registra en días de cobro (lunes, miércoles y viernes por defecto).
+ *
+ * 4. **Cliente, 01-11-2026:** la hace y la edita compras, la autoriza dirección
+ *    general y la paga contabilidad. El comprobante lo sube quien paga o quien
+ *    la hizo.
  */
 describe('PurchaseOrdersController · comprobante, días de cobro y auditoría', () => {
   type Audit = { action: string; resourceId?: string | null; metaJson?: Record<string, unknown> };
@@ -32,6 +36,8 @@ describe('PurchaseOrdersController · comprobante, días de cobro y auditoría',
   let order: Record<string, unknown>;
   let settingsJson: Record<string, unknown>;
   let controller: PurchaseOrdersController;
+  let prisma: Record<string, unknown>;
+  const notifications = { notify: async () => null, notifyMany: async () => [], notifyUsers: async () => [] };
 
   const ORG = 'org-arta';
 
@@ -68,13 +74,14 @@ describe('PurchaseOrdersController · comprobante, días de cobro y auditoría',
     created = null;
     settingsJson = {};
     order = makeOrder();
-    const prisma = {
+    prisma = {
       purchaseOrder: {
         create: async ({ data }: { data: Record<string, unknown> }) => {
           created = data;
           return { id: 'po-new', proofs: [], lines: [], ...data };
         },
         findUnique: async () => order,
+        findMany: async () => [order],
         update: async ({ data }: { data: Record<string, unknown> }) => {
           updated = data;
           return { ...order, ...data };
@@ -96,7 +103,6 @@ describe('PurchaseOrdersController · comprobante, días de cobro y auditoría',
       user: { findMany: async () => [] },
     };
     // Los avisos no son lo que se prueba aquí: se aceptan y no hacen nada.
-    const notifications = { notify: async () => null, notifyMany: async () => [], notifyUsers: async () => [] };
     controller = new PurchaseOrdersController(prisma as never, notifications as never);
   });
 
@@ -115,32 +121,32 @@ describe('PurchaseOrdersController · comprobante, días de cobro y auditoría',
 
   describe('la regla del comprobante', () => {
     it('transferencia sin comprobante NO se puede marcar pagada', async () => {
-      await expect(pay('gerente_arta')).rejects.toThrow(BadRequestException);
+      await expect(pay('contabilidad')).rejects.toThrow(BadRequestException);
       expect(updated).toBeNull();
     });
 
     it('cheque sin comprobante tampoco', async () => {
       order = makeOrder({ paymentMethod: 'CHEQUE' });
-      await expect(pay('gerente_arta')).rejects.toThrow(BadRequestException);
+      await expect(pay('contabilidad')).rejects.toThrow(BadRequestException);
       expect(updated).toBeNull();
     });
 
     it('transferencia con comprobante sí se paga', async () => {
       order = makeOrder({ proofs: [{ id: 'pf-0' }] });
-      await pay('gerente_arta');
+      await pay('contabilidad');
       expect(updated).toMatchObject({ status: 'PAID', paymentMethod: 'TRANSFERENCIA' });
     });
 
     it('en efectivo se paga sin comprobante — que es justo lo que se pidió', async () => {
       order = makeOrder({ paymentMethod: 'EFECTIVO' });
-      await pay('gerente_arta');
+      await pay('contabilidad');
       expect(updated).toMatchObject({ status: 'PAID', paymentMethod: 'EFECTIVO' });
     });
 
     it('en efectivo tampoco se adjuntan comprobantes', async () => {
       order = makeOrder({ paymentMethod: 'EFECTIVO' });
       await expect(
-        controller.addProof({ user: user('gerente_arta') } as never, 'po-1', {
+        controller.addProof({ user: user('contabilidad') } as never, 'po-1', {
           fileUrl: '/uploads/x.pdf',
         }),
       ).rejects.toThrow(BadRequestException);
@@ -151,8 +157,8 @@ describe('PurchaseOrdersController · comprobante, días de cobro y auditoría',
     it('un martes no se registra el pago, y el mensaje dice qué días sí', async () => {
       jest.setSystemTime(TUESDAY);
       order = makeOrder({ paymentMethod: 'EFECTIVO' });
-      await expect(pay('gerente_arta')).rejects.toThrow(ForbiddenException);
-      await expect(pay('gerente_arta')).rejects.toThrow(
+      await expect(pay('contabilidad')).rejects.toThrow(ForbiddenException);
+      await expect(pay('contabilidad')).rejects.toThrow(
         'Los pagos se registran solo los lunes, miércoles y viernes. Hoy no es día de cobro.',
       );
       expect(updated).toBeNull();
@@ -161,7 +167,7 @@ describe('PurchaseOrdersController · comprobante, días de cobro y auditoría',
 
     it('fuera de día, falta de comprobante se avisa primero: es lo que sí se puede resolver hoy', async () => {
       jest.setSystemTime(TUESDAY);
-      await expect(pay('gerente_arta')).rejects.toThrow(BadRequestException);
+      await expect(pay('contabilidad')).rejects.toThrow(BadRequestException);
     });
 
     it('dirección sí registra el pago fuera de día de cobro', async () => {
@@ -175,14 +181,14 @@ describe('PurchaseOrdersController · comprobante, días de cobro y auditoría',
       jest.setSystemTime(TUESDAY);
       settingsJson = { poWindow: { kind: 'payDays', enabled: false } };
       order = makeOrder({ paymentMethod: 'EFECTIVO' });
-      await pay('gerente_arta');
+      await pay('contabilidad');
       expect(updated).toMatchObject({ status: 'PAID' });
     });
 
     it('autorizar no depende del día', async () => {
       jest.setSystemTime(TUESDAY);
       order = makeOrder({ status: 'PENDING_AUTH' });
-      await controller.setStatus({ user: user('gerente_arta') } as never, 'po-1', {
+      await controller.setStatus({ user: user('dir_general') } as never, 'po-1', {
         status: 'AUTHORIZED' as never,
       });
       expect(updated).toMatchObject({ status: 'AUTHORIZED' });
@@ -190,7 +196,7 @@ describe('PurchaseOrdersController · comprobante, días de cobro y auditoría',
 
     it('crear una orden tampoco: se crea el día que sea', async () => {
       jest.setSystemTime(TUESDAY);
-      await controller.create({ user: user('gerente_arta') } as never, {
+      await controller.create({ user: user('compras') } as never, {
         eventId: 'ev-1',
         rubro: 'audio',
         lines: [{ concept: 'Audio', qty: 1, unitPrice: 5000 }],
@@ -202,7 +208,7 @@ describe('PurchaseOrdersController · comprobante, días de cobro y auditoría',
   describe('todo movimiento de dinero deja rastro', () => {
     it('autorizar queda registrado con monto y proveedor', async () => {
       order = makeOrder({ status: 'PENDING_AUTH' });
-      await controller.setStatus({ user: user('gerente_arta') } as never, 'po-1', {
+      await controller.setStatus({ user: user('dir_general') } as never, 'po-1', {
         status: 'AUTHORIZED' as never,
       });
       expect(find('po.authorize')?.metaJson).toMatchObject({
@@ -214,13 +220,13 @@ describe('PurchaseOrdersController · comprobante, días de cobro y auditoría',
 
     it('pagar queda registrado con cuántos comprobantes había', async () => {
       order = makeOrder({ proofs: [{ id: 'pf-0' }] });
-      await pay('gerente_arta');
+      await pay('contabilidad');
       expect(find('po.pay')?.metaJson).toMatchObject({ amount: 18000, proofCount: 1 });
     });
 
     it('rechazar queda registrado con el estado del que viene', async () => {
       order = makeOrder({ status: 'PENDING_AUTH' });
-      await controller.setStatus({ user: user('gerente_arta') } as never, 'po-1', {
+      await controller.setStatus({ user: user('dir_general') } as never, 'po-1', {
         status: 'REJECTED' as never,
       });
       expect(find('po.status')?.metaJson).toMatchObject({
@@ -230,7 +236,7 @@ describe('PurchaseOrdersController · comprobante, días de cobro y auditoría',
     });
 
     it('adjuntar un comprobante queda registrado', async () => {
-      await controller.addProof({ user: user('gerente_arta') } as never, 'po-1', {
+      await controller.addProof({ user: user('contabilidad') } as never, 'po-1', {
         fileUrl: '/uploads/transferencia.pdf',
       });
       expect(find('po.proof.add')?.metaJson).toMatchObject({
@@ -241,12 +247,12 @@ describe('PurchaseOrdersController · comprobante, días de cobro y auditoría',
 
   describe('cambiar a efectivo al pagar no pasa callado', () => {
     it('deja pagar sin comprobante, porque el pago sí fue en efectivo', async () => {
-      await pay('gerente_arta', 'EFECTIVO');
+      await pay('contabilidad', 'EFECTIVO');
       expect(updated).toMatchObject({ status: 'PAID', paymentMethod: 'EFECTIVO' });
     });
 
     it('pero deja su propia línea de auditoría, señalando que se saltó el comprobante', async () => {
-      await pay('gerente_arta', 'EFECTIVO');
+      await pay('contabilidad', 'EFECTIVO');
       expect(actions()).toContain('po.payment_method.cash_at_payment');
       expect(find('po.payment_method.cash_at_payment')?.metaJson).toMatchObject({
         from: 'TRANSFERENCIA',
@@ -258,20 +264,20 @@ describe('PurchaseOrdersController · comprobante, días de cobro y auditoría',
 
     it('si ya había comprobante no hay nada que señalar', async () => {
       order = makeOrder({ proofs: [{ id: 'pf-0' }] });
-      await pay('gerente_arta', 'EFECTIVO');
+      await pay('contabilidad', 'EFECTIVO');
       expect(actions()).not.toContain('po.payment_method.cash_at_payment');
     });
 
     it('una OC que ya era en efectivo tampoco levanta la bandera', async () => {
       order = makeOrder({ paymentMethod: 'EFECTIVO' });
-      await pay('gerente_arta', 'EFECTIVO');
+      await pay('contabilidad', 'EFECTIVO');
       expect(actions()).not.toContain('po.payment_method.cash_at_payment');
     });
   });
 
   describe('una OC tiene que valer algo', () => {
     const create = (lines: Array<{ concept: string; qty: number; unitPrice: number }>) =>
-      controller.create({ user: user('dir_general') } as never, {
+      controller.create({ user: user('compras') } as never, {
         eventId: 'ev-1',
         rubro: 'audio',
         lines,
@@ -285,7 +291,7 @@ describe('PurchaseOrdersController · comprobante, días de cobro y auditoría',
 
     it('el formulario vacío tampoco cuela', async () => {
       await expect(
-        controller.create({ user: user('dir_general') } as never, {
+        controller.create({ user: user('compras') } as never, {
           eventId: 'ev-1',
           rubro: 'audio',
         } as never),
@@ -300,7 +306,7 @@ describe('PurchaseOrdersController · comprobante, días de cobro y auditoría',
 
   describe('machote: IVA y beneficiario', () => {
     const createWith = (extra: Record<string, unknown>) =>
-      controller.create({ user: user('dir_general') } as never, {
+      controller.create({ user: user('compras') } as never, {
         eventId: 'ev-1',
         rubro: 'audio',
         lines: [{ concept: 'Audio', qty: 2, unitPrice: 9000 }],
@@ -334,7 +340,7 @@ describe('PurchaseOrdersController · comprobante, días de cobro y auditoría',
         status: 'PENDING_AUTH',
         lines: [{ id: 'l1', concept: 'Audio', qty: '2', unitPrice: '9000', total: '18000' }],
       });
-      await controller.update({ user: user('gerente_arta') } as never, 'po-1', { withIva: true });
+      await controller.update({ user: user('compras') } as never, 'po-1', { withIva: true });
       expect(updated).toMatchObject({ amount: 20880, withIva: true });
       expect(find('po.update')?.metaJson).toMatchObject({
         withIvaFrom: false,
@@ -345,13 +351,13 @@ describe('PurchaseOrdersController · comprobante, días de cobro y auditoría',
 
     it('quitar el IVA a una orden vieja sin partidas vuelve al subtotal', async () => {
       order = makeOrder({ status: 'PENDING_AUTH', amount: 11600, withIva: true, lines: [] });
-      await controller.update({ user: user('gerente_arta') } as never, 'po-1', { withIva: false });
+      await controller.update({ user: user('compras') } as never, 'po-1', { withIva: false });
       expect(updated).toMatchObject({ amount: 10000, withIva: false });
     });
 
     it('reemplazar partidas en una orden con IVA respeta el IVA', async () => {
       order = makeOrder({ status: 'PENDING_AUTH', withIva: true, lines: [] });
-      await controller.update({ user: user('gerente_arta') } as never, 'po-1', {
+      await controller.update({ user: user('compras') } as never, 'po-1', {
         lines: [{ concept: 'Luces', qty: 1, unitPrice: 1000 }],
         payeeType: 'OTRO',
       });
@@ -372,6 +378,11 @@ describe('PurchaseOrdersController · comprobante, días de cobro y auditoría',
           status: 'AUTHORIZED' as never,
         }),
       ).rejects.toThrow(ForbiddenException);
+      expect(updated).toBeNull();
+
+      order = makeOrder({ proofs: [{ id: 'pf-0' }] });
+      await pay('enlace_gobierno');
+      expect(updated).toMatchObject({ status: 'PAID' });
     });
 
     it('logística no cambia el estatus de una OC', async () => {
@@ -383,20 +394,167 @@ describe('PurchaseOrdersController · comprobante, días de cobro y auditoría',
       ).rejects.toThrow(ForbiddenException);
     });
 
+    const auditorio = { id: 'ev-1', entity: 'EXPLANADA', status: 'ACTIVE', organizationId: ORG };
+    const both = ['ARTA', 'EXPLANADA'];
+    const poBody = { eventId: 'ev-1', rubro: 'audio', lines: [{ concept: 'Audio', qty: 1, unitPrice: 5000 }] };
+
+    // 01-11-2026: la gerencia ya no autoriza; la barrera de entidad queda para quien traiga el permiso extra.
+    it('la gerencia de Arta no autoriza OC, ni de Arta ni del Auditorio', async () => {
+      for (const event of [makeOrder().event, auditorio]) {
+        order = makeOrder({ status: 'PENDING_AUTH', event });
+        await expect(
+          controller.setStatus({ user: user('gerente_arta', both) } as never, 'po-1', {
+            status: 'AUTHORIZED' as never,
+          }),
+        ).rejects.toThrow('No puedes autorizar OC');
+      }
+      expect(updated).toBeNull();
+    });
+
     // Con acceso a las dos entidades la barrera de entidad no salta, y se llega
     // a la regla propia de Arta: la gerencia firma lo suyo, no lo del Auditorio.
-    it('la gerencia de Arta no autoriza OC del Auditorio', async () => {
-      order = makeOrder({
-        status: 'PENDING_AUTH',
-        event: { id: 'ev-1', entity: 'EXPLANADA', status: 'ACTIVE', organizationId: ORG },
-      });
+    it('con el permiso extra, la gerencia de Arta firma lo de Arta, no lo del Auditorio', async () => {
+      const gerencia = { ...user('gerente_arta', both), permissions: ['po.authorize'] };
+      order = makeOrder({ status: 'PENDING_AUTH', event: auditorio });
       await expect(
-        controller.setStatus(
-          { user: user('gerente_arta', ['ARTA', 'EXPLANADA']) } as never,
-          'po-1',
-          { status: 'AUTHORIZED' as never },
-        ),
+        controller.setStatus({ user: gerencia } as never, 'po-1', { status: 'AUTHORIZED' as never }),
       ).rejects.toThrow(/solo autoriza OC de Arta/);
+      expect(updated).toBeNull();
+
+      order = makeOrder({ status: 'PENDING_AUTH' });
+      await controller.setStatus({ user: gerencia } as never, 'po-1', { status: 'AUTHORIZED' as never });
+      expect(updated).toMatchObject({ status: 'AUTHORIZED', authorizedById: 'u-gerente_arta' });
     });
+
+    it('con el permiso extra, Rodrigo firma lo del Auditorio, no lo de Arta', async () => {
+      const rodrigo = { ...user('dir_auditorio', both), permissions: ['po.authorize'] };
+      order = makeOrder({ status: 'PENDING_AUTH' });
+      await expect(
+        controller.setStatus({ user: rodrigo } as never, 'po-1', { status: 'AUTHORIZED' as never }),
+      ).rejects.toThrow(/solo autoriza OC del Auditorio/);
+      expect(updated).toBeNull();
+
+      order = makeOrder({ status: 'PENDING_AUTH', event: auditorio });
+      await controller.setStatus({ user: rodrigo } as never, 'po-1', { status: 'AUTHORIZED' as never });
+      expect(updated).toMatchObject({ status: 'AUTHORIZED', authorizedById: 'u-dir_auditorio' });
+    });
+
+    it.each(['dir_general', 'dir_adjunta', 'gerente_arta', 'dir_auditorio', 'produccion', 'logistica', 'convenios', 'enlace_gobierno', 'contabilidad'])(
+      'hacer, editar y borrar OC es de compras: %s no puede',
+      async (role) => {
+        order = makeOrder({ status: 'PENDING_AUTH' });
+        const actor = { user: user(role, both) } as never;
+        await expect(controller.create(actor, poBody as never)).rejects.toThrow(ForbiddenException);
+        await expect(controller.update(actor, 'po-1', { rubro: 'otro' })).rejects.toThrow(ForbiddenException);
+        await expect(controller.remove(actor, 'po-1')).rejects.toThrow(ForbiddenException);
+        expect(created).toBeNull();
+        expect(updated).toBeNull();
+        expect(actions()).toEqual([]);
+      },
+    );
+
+    it('compras hace, edita y borra', async () => {
+      order = makeOrder({ status: 'PENDING_AUTH' });
+      const actor = { user: user('compras') } as never;
+      await controller.create(actor, poBody as never);
+      await controller.update(actor, 'po-1', { rubro: 'otro' });
+      await controller.remove(actor, 'po-1');
+      expect(created).toMatchObject({ rubro: 'audio', status: 'PENDING_AUTH', createdById: 'u-compras' });
+      expect(updated).toMatchObject({ rubro: 'otro' });
+      expect(actions()).toEqual(['po.create', 'po.update', 'po.delete']);
+    });
+
+    it('dirección general hace OC solo con el permiso extra', async () => {
+      const chacho = { ...user('dir_general'), permissions: ['po.edit'] };
+      await controller.create({ user: chacho } as never, poBody as never);
+      expect(created).toMatchObject({ amount: 5000, createdById: 'u-dir_general' });
+    });
+
+    it.each(['dir_adjunta', 'gerente_arta', 'compras', 'contabilidad', 'produccion', 'logistica', 'convenios', 'enlace_gobierno'])(
+      'autorizar y rechazar es de dirección general: %s no puede',
+      async (role) => {
+        order = makeOrder({ status: 'PENDING_AUTH' });
+        for (const status of ['AUTHORIZED', 'REJECTED']) {
+          await expect(
+            controller.setStatus({ user: user(role) } as never, 'po-1', { status: status as never }),
+          ).rejects.toThrow(ForbiddenException);
+        }
+        expect(updated).toBeNull();
+      },
+    );
+
+    it.each(['logistica', 'convenios', 'enlace_gobierno'])('%s autoriza solo con el permiso extra', async (role) => {
+      order = makeOrder({ status: 'PENDING_AUTH' });
+      const conExtra = { ...user(role), permissions: ['po.authorize'] };
+      await controller.setStatus({ user: conExtra } as never, 'po-1', { status: 'AUTHORIZED' as never });
+      expect(updated).toMatchObject({ status: 'AUTHORIZED' });
+    });
+
+    it.each(['dir_adjunta', 'gerente_arta', 'compras', 'produccion', 'logistica', 'convenios'])(
+      'marcar pagada no es de %s',
+      async (role) => {
+        order = makeOrder({ proofs: [{ id: 'pf-0' }] });
+        await expect(pay(role)).rejects.toThrow('No puedes marcar pagado');
+        expect(updated).toBeNull();
+      },
+    );
+
+    it.each(['contabilidad', 'compras', 'dir_general', 'enlace_gobierno'])(
+      'el comprobante lo sube quien tiene po.mark_paid o po.edit: %s sí',
+      async (role) => {
+        await controller.addProof({ user: user(role) } as never, 'po-1', { fileUrl: '/uploads/transferencia.pdf' });
+        expect(find('po.proof.add')?.metaJson).toMatchObject({ fileUrl: '/uploads/transferencia.pdf' });
+      },
+    );
+
+    it.each(['dir_adjunta', 'gerente_arta', 'produccion', 'logistica', 'convenios'])(
+      'el comprobante lo sube quien tiene po.mark_paid o po.edit: %s no',
+      async (role) => {
+        await expect(
+          controller.addProof({ user: user(role) } as never, 'po-1', { fileUrl: '/uploads/transferencia.pdf' }),
+        ).rejects.toThrow('El comprobante lo sube quien paga');
+        expect(actions()).toEqual([]);
+      },
+    );
+
+    it.each(['compras', 'contabilidad', 'dir_general', 'dir_adjunta', 'gerente_arta', 'enlace_gobierno'])(
+      'las OC del evento las ve %s',
+      async (role) => {
+        await expect(controller.list({ user: user(role) } as never, 'ev-1')).resolves.toHaveLength(1);
+      },
+    );
+
+    it.each(['produccion', 'contenido', 'catering', 'logistica', 'convenios'])('%s no ve las OC', async (role) => {
+      await expect(controller.list({ user: user(role, both) } as never, 'ev-1')).rejects.toThrow(
+        'Las órdenes de compra no están a tu alcance',
+      );
+    });
+
+    it('Rodrigo no ve OC en ninguno de los dos negocios', async () => {
+      await expect(controller.list({ user: user('dir_auditorio', both) } as never, 'ev-1')).rejects.toThrow(
+        'Las órdenes de compra no están a tu alcance',
+      );
+      order = makeOrder({ event: auditorio });
+      await expect(controller.list({ user: user('dir_auditorio', both) } as never, 'ev-1')).rejects.toThrow(
+        'Las órdenes de compra no están a tu alcance',
+      );
+    });
+
+    it.each(['produccion', 'contenido', 'catering', 'dir_auditorio', 'logistica'])(
+      'quien no ve OC tampoco la exporta a Excel o PDF: %s',
+      async (role) => {
+        const buildFromTemplate = jest.fn().mockRejectedValue(new Error('generó el machote de la OC'));
+        const exporting = new PurchaseOrdersController(
+          prisma as never,
+          notifications as never,
+          { buildFromTemplate } as never,
+          {} as never,
+        );
+        await expect(exporting.exportExcelPdf({ user: user(role, both) } as never, 'po-1')).rejects.toThrow(
+          ForbiddenException,
+        );
+        expect(buildFromTemplate).not.toHaveBeenCalled();
+      },
+    );
   });
 });

@@ -7,6 +7,7 @@ import { EmptyLite } from '@/components/ui/Lite';
 import { FlashMessage, PageHeader } from '@/components/ui/PageChrome';
 import { api } from '@/lib/api';
 import { canAccessEventOps, userHasPermission, visibleNavItems } from '@/lib/access-matrix';
+import { canEditEventInfo, canSeeModule } from '@arta/rbac';
 import { mxn } from '@/lib/price-list';
 import { useUser } from '@/lib/user-context';
 import { moneyKpi } from '@/lib/format';
@@ -207,8 +208,9 @@ export default function DashboardPage() {
   const role = user?.roleKey || '';
   const perms = user?.permissions || [];
   const eventOps = canAccessEventOps(role, entity);
-  const canCreate = eventOps && userHasPermission(role, perms, ['event.create', 'everything']);
-  const canSeePo = userHasPermission(role, perms, ['po.authorize', 'po.mark_paid', 'everything']);
+  const canCreate =
+    eventOps && !!user && canEditEventInfo(user, entity) && userHasPermission(role, perms, ['event.create', 'everything']);
+  const canSeePo = !!user && canSeeModule(user, entity, 'po');
   const canAuthorizePo = userHasPermission(role, perms, ['po.authorize', 'everything']);
   const canPayPo = userHasPermission(role, perms, ['po.mark_paid', 'everything']);
   const canSeeTasks = useMemo(

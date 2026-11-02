@@ -4,6 +4,8 @@ import { PrismaService } from '../common/prisma/prisma.service';
 import { tenantIdOf } from '../common/tenant';
 import { canSeeEntity, entityScope } from '../common/entity-scope';
 import {
+  canSeeModule,
+  canSeeFormat,
   canAccessEventOps,
   canJoinEventChannels,
   eventOpsEntities,
@@ -121,6 +123,7 @@ const FORMAT_SELECT = {
   eventId: true,
   lastEditedById: true,
   deliveredById: true,
+  template: { select: { key: true } },
   event: eventBrief,
 } as const;
 
@@ -285,17 +288,31 @@ export class ChatRefsService {
       );
     }
     for (const p of pos) {
-      put('po', p.id, canSeeEvent(viewer, p.event) ? this.poCard(p) : this.lockedCard('po', p.id, poRef(p.id)));
+      put(
+        'po',
+        p.id,
+        p.event && canSeeEvent(viewer, p.event) && canSeeModule(viewer, p.event.entity, 'po')
+          ? this.poCard(p)
+          : this.lockedCard('po', p.id, poRef(p.id)),
+      );
     }
     for (const f of formats) {
       put(
         'format',
         f.id,
-        canSeeEvent(viewer, f.event) ? this.formatCard(f) : this.lockedCard('format', f.id, refLabel(f.title, 'Formato')),
+        f.event && canSeeEvent(viewer, f.event) && canSeeFormat(viewer, f.event.entity, f.template?.key ?? '')
+          ? this.formatCard(f)
+          : this.lockedCard('format', f.id, refLabel(f.title, 'Formato')),
       );
     }
     for (const d of docs) {
-      put('doc', d.id, canSeeEvent(viewer, d.event) ? this.docCard(d) : this.lockedCard('doc', d.id, refLabel(d.title, 'Documento')));
+      put(
+        'doc',
+        d.id,
+        d.event && canSeeEvent(viewer, d.event) && canSeeModule(viewer, d.event.entity, 'documents')
+          ? this.docCard(d)
+          : this.lockedCard('doc', d.id, refLabel(d.title, 'Documento')),
+      );
     }
     for (const a of advances) {
       const event = a.eventId ? advanceEventOf.get(a.eventId) : null;

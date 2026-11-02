@@ -104,6 +104,9 @@ export class AuthService {
       this.registerUnknownFail(normalized);
       throw new UnauthorizedException('Credenciales inválidas');
     }
+    if (user.accessExpiresAt && user.accessExpiresAt.getTime() < Date.now()) {
+      throw new UnauthorizedException('Tu acceso venció. Pide que lo renueven.');
+    }
 
     if (user.lockedUntil && user.lockedUntil.getTime() > Date.now()) {
       throw new UnauthorizedException('Demasiados intentos. Espera unos minutos.');

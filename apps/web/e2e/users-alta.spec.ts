@@ -4,9 +4,10 @@ import type { Route } from '@playwright/test';
 import { mockAuthenticatedApi, seedSession, TEST_USER } from './support/mock-api';
 
 /**
- * ARTA y Auditorio (docs/entidades-arta-auditorio.md, 11-10-2026): dirección adjunta da de alta
- * gente nueva (`users.create`) pero no edita, cambia de rol ni da de baja a nadie que ya exista
- * (`users.manage`, solo dirección general). Solo reparte las entidades que ella tiene.
+ * Desde 01-11-2026 (docs/ROLES-Y-PERMISOS.md) solo Chacho y Arturo manejan usuarios: dirección adjunta
+ * ya no los trae por su rol. Si dirección le da `users.create` como permiso extra a alguien, esa persona
+ * da de alta gente nueva pero no edita, cambia de rol ni da de baja a nadie que ya exista
+ * (`users.manage`), y solo reparte las entidades que ella tiene.
  */
 const ADJUNTA = {
   ...TEST_USER,
@@ -16,6 +17,7 @@ const ADJUNTA = {
   entities: ['ARTA'] as Array<'ARTA' | 'EXPLANADA'>,
   permissions: [],
 };
+const CON_PERMISO_DE_ALTA = { ...ADJUNTA, permissions: ['users.create'] };
 
 const TEAM = [
   {
@@ -47,13 +49,13 @@ const ROLES = [
   { key: 'logistica', label: 'Logística', defaultEntities: ['ARTA', 'EXPLANADA'] },
 ];
 
-test.describe('Usuarios · alta por dirección adjunta', () => {
+test.describe('Usuarios · alta con permiso extra', () => {
   test('da de alta en sus entidades sin poder editar a nadie', async ({ page, baseURL }) => {
     const posted: Array<Record<string, unknown>> = [];
 
     await seedSession(page, baseURL!);
     await mockAuthenticatedApi(page, {
-      '/auth/me': { user: ADJUNTA },
+      '/auth/me': { user: CON_PERMISO_DE_ALTA },
       '/users': (route: Route) => {
         if (route.request().method() === 'POST') {
           const body = JSON.parse(route.request().postData() || '{}');
@@ -101,13 +103,14 @@ test.describe('Usuarios · alta por dirección adjunta', () => {
     });
   });
 
-  test('dirección adjunta ve Usuarios en el menú', async ({ page, baseURL }) => {
+  test('dirección adjunta ya no ve Usuarios en el menú', async ({ page, baseURL }) => {
     await seedSession(page, baseURL!);
     await mockAuthenticatedApi(page, { '/auth/me': { user: ADJUNTA } });
 
     await page.goto('/dashboard');
 
     const nav = page.getByRole('navigation', { name: 'Módulos del panel' });
-    await expect(nav.getByRole('link', { name: 'Usuarios' })).toHaveCount(1);
+    await expect(nav.getByRole('link', { name: 'Inicio' })).toBeVisible();
+    await expect(nav.getByRole('link', { name: 'Usuarios' })).toHaveCount(0);
   });
 });

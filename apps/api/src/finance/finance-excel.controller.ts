@@ -1,4 +1,4 @@
-import { Body, Controller, ForbiddenException, Param, Post, Req, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, ForbiddenException, Param, Post, Req, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { assertEventNotClosed } from '../common/event-guards';
@@ -31,8 +31,8 @@ export class FinanceExcelController {
       throw new ForbiddenException('La corrida fue reemplazada por un documento externo');
     }
     const role = req.user.roleKey as RoleKey;
-    if (!hasPermission(role, req.user.permissions || [], PERMISSIONS.FINANCE_EDIT)) {
-      throw new ForbiddenException('Sin permiso para editar finanzas');
+    if (!hasPermission(role, req.user.permissions || [], PERMISSIONS.CORRIDA_EDIT)) {
+      throw new ForbiddenException('La corrida la generan Chacho o Arturo');
     }
     const event = await this.prisma.event.findUnique({ where: { id: eventId } });
     if (!event) throw new ForbiddenException('Evento no encontrado');
@@ -41,9 +41,12 @@ export class FinanceExcelController {
     }
     assertEventNotClosed(event.status);
 
-    // No sobrescribir si ya hay corrida
-    const existing = await this.prisma.eventFile.findFirst({ where: { eventId, module: 'finance', deletedAt: null } });
-    if (existing) return { skipped: true, reason: 'existing' };
+    // Un PDF subido (un presupuesto, por ejemplo) no es la corrida: el machote se genera igual.
+    // Antes respondía `skipped` y el panel decía «Corrida generada» sin haber hecho nada.
+    const existing = await this.prisma.eventFile.findFirst({
+      where: { eventId, module: 'finance', kind: 'excel', deletedAt: null },
+    });
+    if (existing) throw new BadRequestException('Este evento ya tiene su corrida en Excel');
 
     const srcPath = join(uploadRoot, 'format-corrida.xlsx');
     const svc = this.financeExcel || new FinanceExcelService();

@@ -2,6 +2,7 @@
 
 import { RefBacklinks } from '@/components/chat/RefCard';
 import { useEffect, useMemo, useState } from 'react';
+import { BoleteraEmbed } from '@/components/events/BoleteraEmbed';
 import { ChecklistPicker } from '@/components/events/ChecklistPicker';
 import { EventVendorPins } from '@/components/events/EventVendorPins';
 import {
@@ -224,6 +225,14 @@ export function EventOverviewPanel({
               )}
             </div>
           </section>
+
+          <BoleteraEmbed
+            eventId={event.id}
+            url={event.boleteraUrl}
+            canEdit={!closed && !!canEdit}
+            onChanged={onChanged}
+            flash={flash}
+          />
 
           {canVendorPin ? (
             <section className="surface ev-pins">

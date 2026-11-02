@@ -4,6 +4,9 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../common/prisma/prisma.service';
 import {
   canAccessEventOps,
+  canEditCampaign,
+  canEditFormat,
+  canEditTicketing,
   hasPermission,
   isDirectionRole,
   PERMISSIONS,
@@ -24,13 +27,16 @@ type AuthUser = { id: string; roleKey: string; permissions: string[]; entities: 
  */
 const SLOT_SECTION_PERMISSION: Record<string, Permission | undefined> = {
   CAMPAIGN: PERMISSIONS.CAMPAIGN_EDIT,
-  CORRIDA: PERMISSIONS.FINANCE_EDIT,
+  CORRIDA: PERMISSIONS.CORRIDA_UPLOAD,
   BOLETERA: PERMISSIONS.TICKETING_EDIT,
 };
 
 export function canReplaceSlot(user: { roleKey: string; permissions?: string[] }, kind: string): boolean {
   const role = user.roleKey as RoleKey;
   const perms = user.permissions || [];
+  // La corrida y la OC no se reemplazan por poder editar formatos.
+  if (kind === 'CORRIDA') return hasPermission(role, perms, PERMISSIONS.CORRIDA_EDIT);
+  if (kind === 'OC') return hasPermission(role, perms, PERMISSIONS.PO_EDIT);
   if (hasPermission(role, perms, PERMISSIONS.CHECKLIST_EDIT)) return true;
   const section = SLOT_SECTION_PERMISSION[kind];
   return !!section && hasPermission(role, perms, section);
@@ -84,6 +90,28 @@ export class SlotsController {
     return event;
   }
 
+  /** `checklist.edit` es grueso: aquí se mira si este documento, en este negocio, le toca. */
+  private async assertSlotInEvent(
+    user: AuthUser,
+    entity: string,
+    body: { kind: string; checklistTemplateId?: string | null },
+  ) {
+    let allowed = true;
+    if (body.kind === 'CAMPAIGN') allowed = canEditCampaign(user, entity);
+    else if (body.kind === 'BOLETERA') allowed = canEditTicketing(user, entity);
+    else if (body.kind === 'PENDONES') allowed = canEditFormat(user, entity, 'PENDONES');
+    else if (body.kind === 'CHECKLIST') {
+      const template = body.checklistTemplateId
+        ? await this.prisma.checklistTemplate.findUnique({
+            where: { id: body.checklistTemplateId },
+            select: { key: true },
+          })
+        : null;
+      allowed = canEditFormat(user, entity, template?.key ?? '');
+    }
+    if (!allowed) throw new ForbiddenException('Sin permiso para reemplazar este documento');
+  }
+
   @Get('event/:eventId')
   async byEvent(@Req() req: { user: AuthUser }, @Param('eventId') eventId: string) {
     const event = await this.assertEvent(req.user, eventId);
@@ -112,6 +140,7 @@ export class SlotsController {
       throw new ForbiddenException('Sin permiso para reemplazar este documento');
     }
     const event = await this.assertEvent(req.user, eventId);
+    await this.assertSlotInEvent(req.user, event.entity, body);
     const file = await this.prisma.eventFile.findUnique({ where: { id: body.fileId } });
     if (!file || file.eventId !== event.id) throw new BadRequestException('Archivo no encontrado en el evento');
     const ext = extname(file.fileName).toLowerCase();

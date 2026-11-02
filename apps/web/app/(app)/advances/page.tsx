@@ -98,11 +98,9 @@ function AdvancesPageInner() {
 
   const roleKey = user?.roleKey || '';
   const perms = user?.permissions || [];
-  const canRequest =
-    userHasPermission(roleKey, perms, ['finance.view', 'finance.edit']) &&
-    userHasPermission(roleKey, perms, ['checklist.edit']);
+  const canRequest = userHasPermission(roleKey, perms, ['advance.request']);
   const canApprove = userHasPermission(roleKey, perms, ['po.authorize']);
-  const canPay = userHasPermission(roleKey, perms, ['po.mark_paid', 'finance.edit']);
+  const canPay = userHasPermission(roleKey, perms, ['po.mark_paid']);
 
   const [events, setEvents] = useState<EventOpt[]>([]);
   const [pending, setPending] = useState<Advance[] | null>(null);

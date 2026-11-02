@@ -16,6 +16,14 @@ export const ROLES = {
   CONTABILIDAD: 'contabilidad',
   /** Junta 23-10-2026 · practicantes de Montse: sitio público (Studio) y calendario, nada más. */
   PRACTICANTE: 'practicante',
+  /** 01-11-2026 · Juan Pablo: el único que hace órdenes de compra; ve todo menos la corrida. */
+  COMPRAS: 'compras',
+  /** 01-11-2026 · Williams: edita todo el Auditorio; en Arta, campaña, producción, transporte y hospedaje. */
+  PRODUCCION: 'produccion',
+  /** 01-11-2026 · Monse y Kika: suben imágenes a los formatos generales y ven la campaña. */
+  CONTENIDO: 'contenido',
+  /** 01-11-2026 · Iliana: ve la información general y edita solo catering. */
+  CATERING: 'catering',
 } as const;
 
 export type RoleKey = (typeof ROLES)[keyof typeof ROLES];
@@ -34,7 +42,11 @@ export const ROLE_LABELS: Record<RoleKey, string> = {
   enlace_gobierno: 'Enlace gobierno y pagos',
   solo_carpetas: 'Solo carpetas',
   contabilidad: 'Contabilidad y comercial',
-  practicante: 'Practicante (sitio y redes)',
+  practicante: 'Practicante (sitio y testigos)',
+  compras: 'Compras',
+  produccion: 'Producción',
+  contenido: 'Contenido e imágenes',
+  catering: 'Catering',
 };
 
 /** Nombre del rol para pantalla: una clave desconocida se lee como texto, nunca como `cosa_cosa`. */
@@ -49,19 +61,22 @@ export function roleLabel(roleKey: string | null | undefined): string {
 /** Texto corto para que dirección elija rol sin adivinar. */
 export const ROLE_HINTS: Record<RoleKey, string> = {
   super_admin: 'Plataforma completa (solo Nexara).',
-  dir_general: 'Arturo / José Luis — todo el panel, Arta y Auditorio, y gestión de usuarios.',
+  dir_general: 'Chacho y Arturo: todo el sistema, autorizan OC, aprueban y son los únicos que manejan usuarios.',
   dir_adjunta:
-    'Opera todo en sus entidades (Arta, Auditorio o ambas). Da de alta gente nueva, pero no edita ni da de baja a usuarios existentes.',
-  gerente_arta: 'Todo Arta: operación, finanzas y campaña.',
-  dir_auditorio: 'Operación del Auditorio / Explanada.',
+    'Leida y Sol: ven todo Arta, generan y aprueban formatos salvo Evento General, Artes y Pendones. La corrida la suben, no la modifican.',
+  gerente_arta: 'Igual que Leida y Sol: todo Arta sin modificar la corrida.',
+  dir_auditorio: 'Rodrigo: todo el Auditorio menos OC; en Arta, formatos de transporte, hospedaje y catering.',
   logistica: 'Producción, checklists, campaña, boletera.',
   convenios: 'Patrocinios y convenios; ve tareas de todos.',
-  enlace_gobierno: 'Pagos gobierno, marcar OC pagadas.',
+  enlace_gobierno: 'Formatos y marcar OC pagadas.',
   solo_carpetas: 'Ve las carpetas generales de sus entidades; no edita.',
   contabilidad:
-    'Paga OC y anticipos (sube comprobantes y facturas), corrida, campañas, convenios y boletera. No autoriza OC ni toca usuarios ni formatos.',
-  practicante:
-    'Edita el sitio público en Studio como borrador (dirección publica) y ve el calendario de shows. Nada más.',
+    'Paula: ve Arta y Auditorio sin la corrida, entra a Finanzas, paga OC y anticipos y sube comprobantes. Le llega cada transferencia.',
+  practicante: 'Por temporada: edita el sitio en Studio y sube testigos de publicidad. Nada más.',
+  compras: 'Juan Pablo: ve todo sin la corrida y sin editar; es el único que hace OC y lleva barra y merch.',
+  produccion: 'Williams: en Auditorio ve y edita todo; en Arta ve todo y edita campaña, producción, transporte y hospedaje.',
+  contenido: 'Monse y Kika: suben imágenes a los formatos generales y ven la campaña, sin editar.',
+  catering: 'Iliana: ve la información general y edita solo catering.',
 };
 
 export const PERMISSION_LABELS: Record<string, string> = {
@@ -71,6 +86,18 @@ export const PERMISSION_LABELS: Record<string, string> = {
   'campaign.edit': 'Editar campaña',
   'po.authorize': 'Autorizar órdenes de compra',
   'po.mark_paid': 'Marcar OC como pagada',
+  'po.view': 'Ver órdenes de compra',
+  'po.edit': 'Hacer y editar órdenes de compra',
+  'corrida.view': 'Ver la corrida financiera',
+  'corrida.upload': 'Subir la corrida financiera',
+  'corrida.edit': 'Modificar la corrida financiera',
+  'finanzas.view': 'Entrar a Finanzas',
+  'convenios.view': 'Ver convenios',
+  'convenios.edit': 'Editar convenios',
+  'ticketing.view': 'Ver boletera',
+  'testigos.edit': 'Subir testigos de publicidad',
+  'advance.request': 'Solicitar anticipos',
+  'practicantes.manage': 'Generar perfiles de practicante',
   'event.create': 'Crear eventos',
   'event.close': 'Cerrar eventos',
   'checklist.edit': 'Editar checklists',
@@ -87,7 +114,8 @@ export const PERMISSION_LABELS: Record<string, string> = {
 export const ROLE_DEFAULT_ENTITIES: Record<RoleKey, EntityKey[]> = {
   super_admin: ['ARTA', 'EXPLANADA'],
   dir_general: ['ARTA', 'EXPLANADA'],
-  dir_adjunta: ['ARTA', 'EXPLANADA'],
+  // Leida y Sol ven solo Arta (01-11-2026).
+  dir_adjunta: ['ARTA'],
   gerente_arta: ['ARTA'],
   dir_auditorio: ['EXPLANADA', 'ARTA'],
   logistica: ['ARTA', 'EXPLANADA'],
@@ -96,7 +124,11 @@ export const ROLE_DEFAULT_ENTITIES: Record<RoleKey, EntityKey[]> = {
   solo_carpetas: ['ARTA', 'EXPLANADA'],
   contabilidad: ['ARTA', 'EXPLANADA'],
   // El sitio público es solo de Arta (Studio).
-  practicante: ['ARTA'],
+  practicante: ['ARTA', 'EXPLANADA'],
+  compras: ['ARTA', 'EXPLANADA'],
+  produccion: ['ARTA', 'EXPLANADA'],
+  contenido: ['ARTA', 'EXPLANADA'],
+  catering: ['ARTA', 'EXPLANADA'],
 };
 
 export const PERMISSIONS = {
@@ -122,6 +154,21 @@ export const PERMISSIONS = {
   TICKETING_EDIT: 'ticketing.edit',
   FOLDERS_EDIT: 'folders.edit',
   VENDOR_PIN: 'vendor.pin',
+  /** Ver las OC. Hacerlas y editarlas es `po.edit`: solo compras (Juan Pablo, 01-11-2026). */
+  PO_VIEW: 'po.view',
+  PO_EDIT: 'po.edit',
+  /** La corrida solo la ven Chacho, Arturo, Leida y Sol. Leida y Sol suben; solo dirección modifica. */
+  CORRIDA_VIEW: 'corrida.view',
+  CORRIDA_UPLOAD: 'corrida.upload',
+  CORRIDA_EDIT: 'corrida.edit',
+  /** Módulo Finanzas: Paula, Chacho y Arturo. */
+  FINANZAS_VIEW: 'finanzas.view',
+  CONVENIOS_VIEW: 'convenios.view',
+  CONVENIOS_EDIT: 'convenios.edit',
+  TICKETING_VIEW: 'ticketing.view',
+  TESTIGOS_EDIT: 'testigos.edit',
+  ADVANCE_REQUEST: 'advance.request',
+  PRACTICANTES_MANAGE: 'practicantes.manage',
   EVERYTHING: 'everything',
 } as const;
 
@@ -142,124 +189,152 @@ export const ASSIGNABLE_PERMISSIONS: Permission[] = [
   PERMISSIONS.TICKETING_EDIT,
   PERMISSIONS.FOLDERS_EDIT,
   PERMISSIONS.VENDOR_PIN,
+  PERMISSIONS.PO_VIEW,
+  PERMISSIONS.PO_EDIT,
+  PERMISSIONS.CORRIDA_VIEW,
+  PERMISSIONS.CORRIDA_UPLOAD,
+  PERMISSIONS.CORRIDA_EDIT,
+  PERMISSIONS.FINANZAS_VIEW,
+  PERMISSIONS.CONVENIOS_VIEW,
+  PERMISSIONS.CONVENIOS_EDIT,
+  PERMISSIONS.TICKETING_VIEW,
+  PERMISSIONS.TESTIGOS_EDIT,
+  PERMISSIONS.ADVANCE_REQUEST,
+  PERMISSIONS.PRACTICANTES_MANAGE,
+];
+
+/** Lo que tiene Leida y Sol (`dir_adjunta`) y la gerencia de Arta: todo Arta, sin modificar corrida ni tocar OC. */
+const ARTA_MANAGEMENT: Permission[] = [
+  PERMISSIONS.FINANCE_VIEW,
+  PERMISSIONS.CORRIDA_VIEW,
+  PERMISSIONS.CORRIDA_UPLOAD,
+  PERMISSIONS.PO_VIEW,
+  PERMISSIONS.CAMPAIGN_VIEW,
+  PERMISSIONS.CAMPAIGN_EDIT,
+  PERMISSIONS.CONVENIOS_VIEW,
+  PERMISSIONS.CONVENIOS_EDIT,
+  PERMISSIONS.TICKETING_VIEW,
+  PERMISSIONS.TICKETING_EDIT,
+  PERMISSIONS.EVENT_CREATE,
+  PERMISSIONS.EVENT_CLOSE,
+  PERMISSIONS.CHECKLIST_EDIT,
+  PERMISSIONS.STUDIO_EDIT,
+  PERMISSIONS.STUDIO_PUBLISH,
+  PERMISSIONS.FOLDERS_EDIT,
+  PERMISSIONS.VENDOR_PIN,
+  PERMISSIONS.TESTIGOS_EDIT,
+  PERMISSIONS.ADVANCE_REQUEST,
 ];
 
 export const ROLE_PERMISSIONS: Record<RoleKey, Permission[]> = {
   super_admin: [PERMISSIONS.EVERYTHING],
-  dir_general: [
-    PERMISSIONS.EVERYTHING,
-    PERMISSIONS.USERS_MANAGE,
-    PERMISSIONS.USERS_CREATE,
-    PERMISSIONS.FINANCE_EDIT,
-    PERMISSIONS.CAMPAIGN_EDIT,
-    PERMISSIONS.PO_AUTHORIZE,
-    PERMISSIONS.PO_MARK_PAID,
-    PERMISSIONS.EVENT_CREATE,
-    PERMISSIONS.EVENT_CLOSE,
-    PERMISSIONS.CHECKLIST_EDIT,
-    PERMISSIONS.STUDIO_EDIT,
-    PERMISSIONS.STUDIO_PUBLISH,
-    PERMISSIONS.TICKETING_EDIT,
-    PERMISSIONS.FOLDERS_EDIT,
-    PERMISSIONS.VENDOR_PIN,
-  ],
-  /**
-   * 16-09-2026 · Leida y Sol: «los mismos permisos de Arturo y José Luis
-   * excepto gestión de usuarios». La tabla no lleva `EVERYTHING` porque eso
-   * incluye `users.manage`; `hasPermission` le concede todo lo demás.
-   * 11-10-2026 · sí da de alta gente nueva (`users.create`), sin tocar a los que ya existen.
-   */
-  dir_adjunta: [...ASSIGNABLE_PERMISSIONS, PERMISSIONS.USERS_CREATE],
-  gerente_arta: [
-    PERMISSIONS.FINANCE_EDIT,
-    PERMISSIONS.FINANCE_VIEW,
-    PERMISSIONS.CAMPAIGN_EDIT,
-    PERMISSIONS.CAMPAIGN_VIEW,
-    PERMISSIONS.PO_AUTHORIZE,
-    PERMISSIONS.PO_MARK_PAID,
-    PERMISSIONS.EVENT_CREATE,
-    PERMISSIONS.EVENT_CLOSE,
-    PERMISSIONS.CHECKLIST_EDIT,
-    PERMISSIONS.STUDIO_EDIT,
-    PERMISSIONS.STUDIO_PUBLISH,
-    PERMISSIONS.TICKETING_EDIT,
-    PERMISSIONS.FOLDERS_EDIT,
-    PERMISSIONS.VENDOR_PIN,
-  ],
+  /** Chacho y Arturo. Todo, menos hacer OC: eso es de Juan Pablo (`hasPermission`). */
+  dir_general: [PERMISSIONS.EVERYTHING, ...ASSIGNABLE_PERMISSIONS, PERMISSIONS.USERS_MANAGE, PERMISSIONS.USERS_CREATE],
+  /** Leida y Sol (01-11-2026): todo Arta; la corrida la suben, no la modifican; no manejan usuarios. */
+  dir_adjunta: ARTA_MANAGEMENT,
+  gerente_arta: ARTA_MANAGEMENT,
+  /** Rodrigo (01-11-2026): todo el Auditorio menos OC. Lo que puede en Arta lo acota `canEditFormat`. */
   dir_auditorio: [
-    PERMISSIONS.FINANCE_VIEW,
-    PERMISSIONS.CAMPAIGN_VIEW,
-    PERMISSIONS.PO_AUTHORIZE,
-    PERMISSIONS.PO_MARK_PAID,
+    PERMISSIONS.TICKETING_VIEW,
+    PERMISSIONS.TICKETING_EDIT,
     PERMISSIONS.EVENT_CREATE,
     PERMISSIONS.EVENT_CLOSE,
     PERMISSIONS.CHECKLIST_EDIT,
-    PERMISSIONS.STUDIO_EDIT,
-    PERMISSIONS.STUDIO_PUBLISH,
-    PERMISSIONS.TICKETING_EDIT,
     PERMISSIONS.FOLDERS_EDIT,
     PERMISSIONS.VENDOR_PIN,
+    PERMISSIONS.TESTIGOS_EDIT,
+    PERMISSIONS.ADVANCE_REQUEST,
   ],
+  /** Williams (01-11-2026). Qué edita en cada negocio lo acotan `canEditFormat` y `canEditEventInfo`. */
+  produccion: [
+    PERMISSIONS.CAMPAIGN_VIEW,
+    PERMISSIONS.CAMPAIGN_EDIT,
+    PERMISSIONS.CONVENIOS_VIEW,
+    PERMISSIONS.TICKETING_VIEW,
+    PERMISSIONS.TICKETING_EDIT,
+    PERMISSIONS.CHECKLIST_EDIT,
+    PERMISSIONS.EVENT_CREATE,
+    PERMISSIONS.FOLDERS_EDIT,
+    PERMISSIONS.TESTIGOS_EDIT,
+    PERMISSIONS.ADVANCE_REQUEST,
+  ],
+  /** Juan Pablo (01-11-2026): el único que hace OC; ve lo demás sin editar, salvo barra y merch. */
+  compras: [
+    PERMISSIONS.PO_VIEW,
+    PERMISSIONS.PO_EDIT,
+    PERMISSIONS.FINANCE_VIEW,
+    PERMISSIONS.CAMPAIGN_VIEW,
+    PERMISSIONS.CONVENIOS_VIEW,
+    PERMISSIONS.TICKETING_VIEW,
+    PERMISSIONS.CHECKLIST_EDIT,
+    PERMISSIONS.ADVANCE_REQUEST,
+  ],
+  /** Monse y Kika (01-11-2026): imágenes en los formatos generales y ver la campaña. */
+  contenido: [PERMISSIONS.CAMPAIGN_VIEW],
+  /** Iliana (01-11-2026): `canEditFormat` deja solo catering. */
+  catering: [PERMISSIONS.CHECKLIST_EDIT],
   logistica: [
     PERMISSIONS.CAMPAIGN_EDIT,
     PERMISSIONS.CAMPAIGN_VIEW,
     PERMISSIONS.CHECKLIST_EDIT,
     PERMISSIONS.EVENT_CREATE,
+    PERMISSIONS.TICKETING_VIEW,
     PERMISSIONS.TICKETING_EDIT,
-    PERMISSIONS.FINANCE_VIEW,
     PERMISSIONS.FOLDERS_EDIT,
+    PERMISSIONS.ADVANCE_REQUEST,
   ],
   convenios: [
     PERMISSIONS.CHECKLIST_EDIT,
-    PERMISSIONS.FINANCE_VIEW,
     PERMISSIONS.CAMPAIGN_VIEW,
+    PERMISSIONS.CONVENIOS_VIEW,
+    PERMISSIONS.CONVENIOS_EDIT,
     PERMISSIONS.FOLDERS_EDIT,
+    PERMISSIONS.ADVANCE_REQUEST,
   ],
   enlace_gobierno: [
     PERMISSIONS.CHECKLIST_EDIT,
-    PERMISSIONS.FINANCE_VIEW,
+    PERMISSIONS.PO_VIEW,
     PERMISSIONS.PO_MARK_PAID,
     PERMISSIONS.EVENT_CREATE,
     PERMISSIONS.FOLDERS_EDIT,
+    PERMISSIONS.ADVANCE_REQUEST,
   ],
-  /**
-   * Junta 11-09-2026 · «Definir quién puede editar»: Williams y Juan Pablo
-   * entran únicamente a las carpetas generales de Arta y Auditorio, a ver.
-   */
+  /** Junta 11-09-2026: entra únicamente a las carpetas generales, a ver. */
   solo_carpetas: [],
   /**
-   * Junta 23-10-2026 · Paula Farfán: «Auditorio y Arta en temas contables, accesos muy puntuales a
-   * temas comerciales y contables». Paga (OC y anticipos, con comprobante), lleva la corrida, edita
-   * campañas, convenios y boletera. No autoriza OC ni anticipos, no edita formatos ni toca usuarios;
-   * tampoco entra a los canales de chat de los eventos (`canJoinEventChannels`).
+   * Paula Farfán: ve Arta y Auditorio menos la corrida, entra a Finanzas y paga (OC y anticipos, con
+   * comprobante). Junta 23-10-2026: edita campañas, convenios y boletera. No autoriza OC ni toca usuarios.
    */
   contabilidad: [
+    PERMISSIONS.FINANZAS_VIEW,
     PERMISSIONS.FINANCE_VIEW,
-    PERMISSIONS.FINANCE_EDIT,
+    PERMISSIONS.PO_VIEW,
     PERMISSIONS.PO_MARK_PAID,
     PERMISSIONS.CAMPAIGN_VIEW,
     PERMISSIONS.CAMPAIGN_EDIT,
+    PERMISSIONS.CONVENIOS_VIEW,
+    PERMISSIONS.CONVENIOS_EDIT,
+    PERMISSIONS.TICKETING_VIEW,
     PERMISSIONS.TICKETING_EDIT,
   ],
   /**
-   * Junta 23-10-2026 · «Montse redes sociales: acceso para practicantes». Edita el sitio en Studio
-   * como borrador (publica dirección: `canPublishStudio`) y ve el calendario de shows en solo
-   * lectura (`canSeeEventCalendar`). Sin eventos, finanzas, OC, formatos, carpetas ni tareas.
+   * Perfil por temporada que se genera desde Studio (`User.accessExpiresAt`). Edita el sitio y sube
+   * testigos; ve el calendario de shows en solo lectura. Publicar lo da su perfil (`studio.publish`).
    */
-  practicante: [PERMISSIONS.STUDIO_EDIT],
+  practicante: [PERMISSIONS.STUDIO_EDIT, PERMISSIONS.TESTIGOS_EDIT],
 };
 
 export function hasPermission(
   roleKey: RoleKey,
-  extra: string[],
+  extra: string[] | null | undefined,
   needed: Permission,
 ): boolean {
-  if (roleKey === ROLES.SUPER_ADMIN || roleKey === ROLES.DIR_GENERAL) return true;
-  if (roleKey === ROLES.DIR_ADJUNTA && needed !== PERMISSIONS.USERS_MANAGE) return true;
-  const fromRole = ROLE_PERMISSIONS[roleKey] ?? [];
-  if (fromRole.includes(PERMISSIONS.EVERYTHING)) return true;
-  if (fromRole.includes(needed)) return true;
-  return extra.includes(needed);
+  if (roleKey === ROLES.SUPER_ADMIN) return true;
+  // Hacer OC es de compras aunque dirección «pueda todo»: si falta Juan Pablo, Chacho o Arturo
+  // le dan el permiso a alguien (o a sí mismos) en Usuarios.
+  if (roleKey === ROLES.DIR_GENERAL) return needed !== PERMISSIONS.PO_EDIT || (extra ?? []).includes(needed);
+  if ((ROLE_PERMISSIONS[roleKey] ?? []).includes(needed)) return true;
+  return (extra ?? []).includes(needed);
 }
 
 /**
@@ -288,9 +363,8 @@ export function canAccessEventOps(
 ): boolean {
   if (!canAccessEntity(userEntities, roleKey, entity)) return false;
   if (roleKey === ROLES.SOLO_CARPETAS) return false;
-  // El practicante no opera eventos: solo consulta el calendario (`canSeeEventCalendar`).
+  // El practicante no opera eventos: calendario (`canSeeEventCalendar`) y testigos (`canSeeModule`).
   if (roleKey === ROLES.PRACTICANTE) return false;
-  if (roleKey === ROLES.DIR_AUDITORIO && entity === 'ARTA') return false;
   return true;
 }
 
@@ -321,15 +395,9 @@ export function canPublishStudio(roleKey: RoleKey, extra: string[]): boolean {
   return roleKey !== ROLES.PRACTICANTE && hasPermission(roleKey, extra, PERMISSIONS.STUDIO_EDIT);
 }
 
-/**
- * Patrocinios (convenios) de un evento: quien edita formatos, como siempre, o quien lleva el
- * dinero (`finance.edit`: contabilidad registra montos y condiciones de pago).
- */
+/** Patrocinios (convenios) de un evento: dirección, Leida, Sol y contabilidad. */
 export function canEditSponsors(roleKey: RoleKey, extra: string[]): boolean {
-  return (
-    hasPermission(roleKey, extra, PERMISSIONS.CHECKLIST_EDIT) ||
-    hasPermission(roleKey, extra, PERMISSIONS.FINANCE_EDIT)
-  );
+  return hasPermission(roleKey, extra, PERMISSIONS.CONVENIOS_EDIT);
 }
 
 /**
@@ -340,12 +408,183 @@ export function canJoinEventChannels(roleKey: string | null | undefined): boolea
   return roleKey !== ROLES.CONTABILIDAD && roleKey !== ROLES.PRACTICANTE;
 }
 
-/** Carpetas generales: todos los que trabajan en la entidad menos el practicante (solo sitio y calendario). */
+/** Carpetas generales: todos los que trabajan en la entidad menos practicante, contenido y catering. */
 export function canSeeGeneralFolders(roleKey: string | null | undefined): boolean {
-  return roleKey !== ROLES.PRACTICANTE;
+  return roleKey !== ROLES.PRACTICANTE && roleKey !== ROLES.CONTENIDO && roleKey !== ROLES.CATERING;
 }
 
-/** Crear y asignar tareas: no quien solo consulta carpetas ni el practicante. */
+/** Crear y asignar tareas: no quien solo consulta carpetas, el practicante, contenido ni catering. */
 export function canCreateTasks(roleKey: string | null | undefined): boolean {
-  return roleKey !== ROLES.SOLO_CARPETAS && roleKey !== ROLES.PRACTICANTE;
+  return (
+    roleKey !== ROLES.SOLO_CARPETAS &&
+    roleKey !== ROLES.PRACTICANTE &&
+    roleKey !== ROLES.CONTENIDO &&
+    roleKey !== ROLES.CATERING
+  );
+}
+
+// ─── Qué ve y qué edita cada quien (01-11-2026, docs/ROLES-Y-PERMISOS.md) ──────
+
+export type AccessUser = {
+  roleKey: string;
+  entities?: string[] | null;
+  permissions?: string[] | null;
+};
+
+export type EventModule =
+  | 'corrida'
+  | 'campaign'
+  | 'formats'
+  | 'po'
+  | 'convenios'
+  | 'ticketing'
+  | 'tasks'
+  | 'documents'
+  | 'adendum'
+  | 'testigos';
+
+/** El Auditorio no lleva corrida, campaña ni convenios (01-11-2026). */
+export function entityHasModule(entity: EntityKey | string, module: EventModule): boolean {
+  if (entity !== 'EXPLANADA') return true;
+  return module !== 'corrida' && module !== 'campaign' && module !== 'convenios';
+}
+
+function can(user: AccessUser, needed: Permission): boolean {
+  return hasPermission(user.roleKey as RoleKey, user.permissions, needed);
+}
+
+function opsIn(user: AccessUser, entity: EntityKey | string): boolean {
+  return canAccessEventOps((user.entities ?? []) as EntityKey[], user.roleKey as RoleKey, entity as EntityKey);
+}
+
+/** Rodrigo: en Arta solo llega a sus formatos de transporte, hospedaje y catering. */
+function onlyFormatsIn(user: AccessUser, entity: EntityKey | string): boolean {
+  return (user.roleKey === ROLES.DIR_AUDITORIO && entity === 'ARTA') || user.roleKey === ROLES.CATERING;
+}
+
+/** Pestaña del evento: ¿la ve esta persona en este negocio? */
+export function canSeeModule(user: AccessUser, entity: EntityKey | string, module: EventModule): boolean {
+  if (!entityHasModule(entity, module)) return false;
+  if (module === 'testigos') {
+    if (user.roleKey === ROLES.CATERING) return false;
+    if (user.roleKey === ROLES.DIR_AUDITORIO && entity === 'ARTA') return false;
+    if (user.roleKey === ROLES.PRACTICANTE) {
+      return canAccessEntity((user.entities ?? []) as EntityKey[], ROLES.PRACTICANTE, entity as EntityKey);
+    }
+    return opsIn(user, entity);
+  }
+  if (!opsIn(user, entity)) return false;
+  if (module === 'formats') return true;
+  if (onlyFormatsIn(user, entity)) return false;
+  switch (module) {
+    case 'corrida':
+      return can(user, PERMISSIONS.CORRIDA_VIEW);
+    case 'campaign':
+      return can(user, PERMISSIONS.CAMPAIGN_VIEW) || can(user, PERMISSIONS.CAMPAIGN_EDIT);
+    case 'convenios':
+      return can(user, PERMISSIONS.CONVENIOS_VIEW) || can(user, PERMISSIONS.CONVENIOS_EDIT);
+    case 'ticketing':
+      return can(user, PERMISSIONS.TICKETING_VIEW) || can(user, PERMISSIONS.TICKETING_EDIT);
+    case 'po':
+    case 'adendum':
+      return (
+        can(user, PERMISSIONS.PO_VIEW) ||
+        can(user, PERMISSIONS.PO_EDIT) ||
+        can(user, PERMISSIONS.PO_AUTHORIZE) ||
+        can(user, PERMISSIONS.PO_MARK_PAID)
+      );
+    case 'tasks':
+    case 'documents':
+      return user.roleKey !== ROLES.CONTENIDO;
+    default:
+      return false;
+  }
+}
+
+/**
+ * Datos del show. Williams edita los del Auditorio y solo ve los de Arta; Rodrigo, al revés que antes,
+ * solo los del Auditorio. Compras, contabilidad, contenido y catering los ven.
+ */
+export function canEditEventInfo(user: AccessUser, entity: EntityKey | string): boolean {
+  if (!opsIn(user, entity)) return false;
+  const role = user.roleKey;
+  if (role === ROLES.SUPER_ADMIN || role === ROLES.DIR_GENERAL) return true;
+  if (role === ROLES.DIR_ADJUNTA || role === ROLES.GERENTE_ARTA) return entity === 'ARTA';
+  if (role === ROLES.DIR_AUDITORIO || role === ROLES.PRODUCCION) return entity === 'EXPLANADA';
+  if (role === ROLES.LOGISTICA || role === ROLES.CONVENIOS || role === ROLES.ENLACE_GOBIERNO) return true;
+  return false;
+}
+
+/** Boletera: Williams la edita en Auditorio y la ve en Arta. */
+export function canEditTicketing(user: AccessUser, entity: EntityKey | string): boolean {
+  if (!canSeeModule(user, entity, 'ticketing') || !can(user, PERMISSIONS.TICKETING_EDIT)) return false;
+  return !(user.roleKey === ROLES.PRODUCCION && entity === 'ARTA');
+}
+
+/** Campaña: de dirección, gerencia, Williams y contabilidad; solo existe en Arta. */
+export function canEditCampaign(user: AccessUser, entity: EntityKey | string): boolean {
+  return canSeeModule(user, entity, 'campaign') && can(user, PERMISSIONS.CAMPAIGN_EDIT);
+}
+
+/** Testigos de publicidad: Williams solo los ve en Arta; en Auditorio los sube. */
+export function canEditTestigos(user: AccessUser, entity: EntityKey | string): boolean {
+  if (!canSeeModule(user, entity, 'testigos') || !can(user, PERMISSIONS.TESTIGOS_EDIT)) return false;
+  return !(user.roleKey === ROLES.PRODUCCION && entity === 'ARTA');
+}
+
+/**
+ * Evento General, Artes y Pendones los aprueban solo Chacho o Arturo (01-11-2026); los demás de Arta,
+ * también Leida y Sol. `CUSTOM` es Distribución de Pendones en su versión de Excel.
+ */
+export const TOP_APPROVAL_FORMATS = ['EVENTO_GENERAL', 'ARTES_SHOWS', 'PENDONES', 'CUSTOM'];
+/** Formatos generales: donde Monse y Kika suben imágenes. */
+export const GENERAL_FORMATS = ['EVENTO_GENERAL', 'CHECKLIST_AUDITORIO'];
+export const BAR_MERCH_FORMATS = ['BARRA', 'MERCH'];
+const WILLIAMS_ARTA_FORMATS = ['PRODUCCION', 'TRANSPORTACION', 'HOSPEDAJE'];
+const RODRIGO_ARTA_FORMATS = ['TRANSPORTACION', 'HOSPEDAJE', 'CATERING'];
+
+export function canSeeFormat(user: AccessUser, entity: EntityKey | string, key: string): boolean {
+  if (!opsIn(user, entity)) return false;
+  const role = user.roleKey;
+  if (role === ROLES.DIR_AUDITORIO && entity === 'ARTA') return RODRIGO_ARTA_FORMATS.includes(key);
+  if (role === ROLES.CATERING) return key === 'CATERING';
+  if (role === ROLES.CONTENIDO) return GENERAL_FORMATS.includes(key);
+  return true;
+}
+
+export function canEditFormat(user: AccessUser, entity: EntityKey | string, key: string): boolean {
+  if (!canSeeFormat(user, entity, key)) return false;
+  const role = user.roleKey;
+  if (role === ROLES.SUPER_ADMIN || role === ROLES.DIR_GENERAL) return true;
+  if (role === ROLES.DIR_ADJUNTA || role === ROLES.GERENTE_ARTA) return entity === 'ARTA';
+  if (role === ROLES.DIR_AUDITORIO) return true;
+  if (role === ROLES.PRODUCCION) return entity === 'EXPLANADA' || WILLIAMS_ARTA_FORMATS.includes(key);
+  if (role === ROLES.COMPRAS) return BAR_MERCH_FORMATS.includes(key);
+  if (role === ROLES.CATERING) return key === 'CATERING';
+  if (role === ROLES.CONTENIDO || role === ROLES.CONTABILIDAD) return false;
+  return can(user, PERMISSIONS.CHECKLIST_EDIT);
+}
+
+/** Subir imágenes a un formato: quien lo edita, y Monse y Kika en los generales. */
+export function canAddFormatImages(user: AccessUser, entity: EntityKey | string, key: string): boolean {
+  if (canEditFormat(user, entity, key)) return true;
+  return user.roleKey === ROLES.CONTENIDO && canSeeFormat(user, entity, key);
+}
+
+export function canApproveFormat(user: AccessUser, entity: EntityKey | string, key: string): boolean {
+  if (!opsIn(user, entity)) return false;
+  const role = user.roleKey;
+  if (role === ROLES.SUPER_ADMIN || role === ROLES.DIR_GENERAL) return true;
+  if (role === ROLES.DIR_ADJUNTA || role === ROLES.GERENTE_ARTA) {
+    return entity === 'ARTA' && !TOP_APPROVAL_FORMATS.includes(key);
+  }
+  if (role === ROLES.DIR_AUDITORIO) return entity === 'EXPLANADA' && !TOP_APPROVAL_FORMATS.includes(key);
+  return false;
+}
+
+/** Quién puede agregar un formato al evento. */
+export function canCreateFormats(user: AccessUser, entity: EntityKey | string): boolean {
+  if (!opsIn(user, entity)) return false;
+  const role = user.roleKey;
+  return role !== ROLES.CONTENIDO && role !== ROLES.CONTABILIDAD && role !== ROLES.CATERING && can(user, PERMISSIONS.CHECKLIST_EDIT);
 }

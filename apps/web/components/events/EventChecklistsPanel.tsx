@@ -5,7 +5,13 @@ import { FileViewer, PdfEditor } from '@/components/files/lazy';
 import { ExpandBox } from '@/components/ui/ExpandBox';
 import { FormatSheet, FormatSignatures, GrowingText, type SignPermissions } from '@/components/events/FormatSheet';
 import { useEffect, useMemo, useState } from 'react';
-import { isDirectionRole } from '@arta/rbac';
+import {
+  canAddFormatImages,
+  canApproveFormat,
+  canCreateFormats,
+  canEditFormat,
+  type AccessUser,
+} from '@arta/rbac';
 import { createEventFile } from '@/lib/file-save';
 import { EmptyLite, FileRow, SectionHead, Seg } from '@/components/ui/Lite';
 import { SaveStatus } from '@/components/ui/SaveStatus';
@@ -40,6 +46,8 @@ type EventChecklistsPanelProps = {
   event: EventDetail;
   activeChecklist: Checklist | null;
   closed: boolean;
+  /** Quién mira: qué formato edita, aprueba o a cuál solo sube imágenes (docs/ROLES-Y-PERMISOS.md). */
+  access: AccessUser;
   saving: boolean;
   userFullName: string;
   /** Sube cuando el checklist llega del servidor: re-sincroniza el autoguardado. */
@@ -237,6 +245,7 @@ export function EventChecklistsPanel({
   event,
   activeChecklist,
   closed,
+  access,
   saving,
   userFullName,
   revision,
@@ -335,7 +344,13 @@ export function EventChecklistsPanel({
    */
   const status = (activeChecklist?.status || 'DRAFT') as DocStatus;
   const lockedByStatus = status === 'APPROVED' || status === 'SEALED';
-  const readOnly = closed || lockedByStatus;
+  const formatKey = activeChecklist?.template?.key ?? '';
+  const canEditThis = canEditFormat(access, event.entity, formatKey);
+  const canApproveThis = canApproveFormat(access, event.entity, formatKey);
+  /** Evento cerrado o formato que a esta persona no le toca editar. */
+  const locked = closed || !canEditThis;
+  const canAttach = !closed && canAddFormatImages(access, event.entity, formatKey);
+  const readOnly = locked || lockedByStatus;
   const checklistSlot =
     activeChecklist &&
     (event.slots || []).find((s) => s.kind === 'CHECKLIST' && s.checklistTemplateId === (activeChecklist.template?.id || null)) ||
@@ -359,16 +374,13 @@ export function EventChecklistsPanel({
   );
   /** Nombre de cada firma (el Compromiso de horarios firma Producción externa / Auditorio). */
   const sigLabels = useMemo(() => signatureLabels(activeChecklist?.dataJson), [activeChecklist?.dataJson]);
-  /** Misma regla que el API: «Autorizado» lo firma gerencia de la entidad o dirección. */
+  /** Misma regla que el API: «Autorizado» lo firma quien aprueba este formato. */
   const canSign = useMemo<SignPermissions>(
     () => ({
-      delivered: true,
-      authorized:
-        isDirectionRole(roleKey) ||
-        (roleKey === 'gerente_arta' && event.entity === 'ARTA') ||
-        (roleKey === 'dir_auditorio' && event.entity === 'EXPLANADA'),
+      delivered: canEditFormat(access, event.entity, activeChecklist?.template?.key ?? ''),
+      authorized: canApproveFormat(access, event.entity, activeChecklist?.template?.key ?? ''),
     }),
-    [roleKey, event.entity],
+    [access, event.entity, activeChecklist?.template?.key],
   );
 
   const stats = useMemo(() => {
@@ -517,7 +529,7 @@ export function EventChecklistsPanel({
               : undefined
           }
         >
-          {!closed ? (
+          {!closed && canCreateFormats(access, event.entity) ? (
             <button
               className={`btn btn-sm ${adding ? 'ghost' : ''}`}
               type="button"
@@ -648,15 +660,17 @@ export function EventChecklistsPanel({
             {!readOnly ? (
               <SaveStatus status={autosave.status} savedAt={autosave.savedAt} error={autosave.error} />
             ) : null}
-            <button
-              className="btn btn-sm"
-              type="button"
-              disabled={saving || readOnly}
-              onClick={saveNow}
-              title="Ctrl+S · guarda y regenera el PDF"
-            >
-              {saving ? 'Guardando…' : 'Guardar y generar PDF'}
-            </button>
+            {canEditThis ? (
+              <button
+                className="btn btn-sm"
+                type="button"
+                disabled={saving || readOnly}
+                onClick={saveNow}
+                title="Ctrl+S · guarda y regenera el PDF"
+              >
+                {saving ? 'Guardando…' : 'Guardar y generar PDF'}
+              </button>
+            ) : null}
             <details className="ev-more hub-more">
               <summary className="btn ghost btn-sm">Más</summary>
               <div className="ev-more__menu" role="menu">
@@ -672,7 +686,7 @@ export function EventChecklistsPanel({
                 <button type="button" onClick={() => openDrawer('historial')}>
                   Historial de versiones
                 </button>
-                {!closed ? (
+                {!locked ? (
                   replacedByExternal ? (
                     <button
                       type="button"
@@ -728,12 +742,12 @@ export function EventChecklistsPanel({
               {activeChecklist.sealedBy ? ` por ${activeChecklist.sealedBy.fullName}` : ''}
             </span>
           ) : null}
-          {onChangeStatus && !closed ? (
+          {onChangeStatus && !closed && (canEditThis || canApproveThis) ? (
             <span className="hub-doc__status">
-              <DocStatusControl status={status} roleKey={roleKey} busy={saving} onChange={onChangeStatus} />
+              <DocStatusControl status={status} roleKey={roleKey} canApprove={canApproveThis} busy={saving} onChange={onChangeStatus} />
             </span>
           ) : null}
-          {!closed && !hasExtras ? (
+          {!locked && !hasExtras ? (
             <button
               className="btn-quiet"
               type="button"
@@ -761,7 +775,7 @@ export function EventChecklistsPanel({
           <div className="surface__head">
             <h3 className="surface__title">{annotating ? 'Escribiendo sobre el PDF' : 'PDF del formato'}</h3>
             <div className="sx-actions">
-              {activeChecklist.pdfUrl && !closed ? (
+              {activeChecklist.pdfUrl && !locked ? (
                 <button
                   className="btn-quiet"
                   type="button"
@@ -819,13 +833,13 @@ export function EventChecklistsPanel({
           <div className="surface__head">
             <h3 className="surface__title">Adjuntos del formato</h3>
             <div className="sx-actions">
-              {!closed ? (
+              {canAttach ? (
                 <label className="btn-quiet hub-upload">
-                  Subir archivo
+                  {canEditThis ? 'Subir archivo' : 'Subir imagen'}
                   <input
                     type="file"
                     hidden
-                    accept=".pdf,.xlsx,.xls,.csv,image/*"
+                    accept={canEditThis ? '.pdf,.xlsx,.xls,.csv,image/*' : 'image/*'}
                     onChange={(e) => {
                       const f = e.target.files?.[0];
                       e.target.value = '';
@@ -907,7 +921,7 @@ export function EventChecklistsPanel({
               reloadKey={revision}
               emptyHint="Las revisiones se crean al guardar, no con el autoguardado."
             />
-            {(activeChecklist.versions || []).length && !closed ? (
+            {(activeChecklist.versions || []).length && !locked ? (
               <details className="disclose">
                 <summary>Restaurar una versión anterior</summary>
                 <div className="dtable-wrap">

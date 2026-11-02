@@ -5,6 +5,7 @@ export const PO_PAYMENT_METHODS = [
   'CHEQUE',
   'TARJETA',
   'OTRO',
+  'ADENDUM',
 ] as const;
 
 export type PoPaymentMethod = (typeof PO_PAYMENT_METHODS)[number];
@@ -13,7 +14,7 @@ export type PoPaymentMethod = (typeof PO_PAYMENT_METHODS)[number];
  * Las que ofrece el machote del cliente. TARJETA y OTRO quedan para órdenes
  * viejas: se siguen mostrando y conservando, pero ya no se ofrecen.
  */
-export const PO_PAYMENT_CHOICES = ['EFECTIVO', 'TRANSFERENCIA', 'CHEQUE'] as const;
+export const PO_PAYMENT_CHOICES = ['EFECTIVO', 'TRANSFERENCIA', 'CHEQUE', 'ADENDUM'] as const;
 
 export const PO_PAYMENT_LABELS: Record<PoPaymentMethod, string> = {
   EFECTIVO: 'Efectivo',
@@ -21,6 +22,7 @@ export const PO_PAYMENT_LABELS: Record<PoPaymentMethod, string> = {
   CHEQUE: 'Cheque',
   TARJETA: 'Tarjeta',
   OTRO: 'Otro',
+  ADENDUM: 'Adendum',
 };
 
 export function isPoPaymentMethod(v: unknown): v is PoPaymentMethod {

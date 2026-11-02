@@ -1725,6 +1725,7 @@ html[data-entity] .sx-head__sub {
 
   ul {
     display: grid;
+    grid-template-columns: minmax(0, 1fr);
     gap: 0.15rem;
     margin: 0.35rem 0 0;
     padding: 0;
@@ -2757,4 +2758,289 @@ a.sent-row__title:hover {
     flex-direction: column;
     gap: 0.25rem;
   }
+}
+
+/* ── Roles del cliente 01-11-2026: adendum, boletera, testigos, Finanzas y practicantes ───────── */
+.oc-adendum {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 16px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-item);
+  background: var(--fill-soft);
+}
+.oc-adendum .fx-hint {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+.oc-adendum__file {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+}
+.oc-adendum-facts {
+  margin: 0;
+}
+
+.ev-boletera__frame {
+  display: block;
+  width: 100%;
+  height: clamp(420px, 64vh, 720px);
+  border: 0;
+  border-top: 1px solid var(--line);
+  background: var(--bg-elev);
+  border-radius: 0 0 var(--radius-item) var(--radius-item);
+}
+.ev-boletera__form {
+  display: grid;
+  gap: 12px;
+  max-width: 560px;
+}
+
+.witness-form,
+.practicante-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px 16px;
+  padding: 16px;
+}
+.witness-form__wide,
+.practicante-form__wide {
+  grid-column: 1 / -1;
+}
+.witness-form__file {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+}
+.witness-form__check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.witness-picker {
+  max-width: 480px;
+}
+.witness-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 14px;
+}
+.witness-card {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-item);
+  background: var(--bg-elev);
+}
+.witness-card__media {
+  display: block;
+  aspect-ratio: 16 / 10;
+  overflow: hidden;
+  background: var(--fill-soft);
+}
+.witness-card__media img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.witness-card__media--empty {
+  display: grid;
+  place-items: center;
+  font-size: 13px;
+  color: var(--muted);
+}
+.witness-card__body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px 14px;
+}
+.witness-card__body p {
+  margin: 0;
+}
+.witness-card__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.witness-card__title {
+  margin: 2px 0 0;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+.witness-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin-top: auto;
+  padding-top: 8px;
+}
+
+.fin-range {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px;
+}
+.fx.fin-range {
+  gap: 10px;
+}
+.fin-range .fx-field {
+  width: 150px;
+}
+
+.practicante-access {
+  border-color: var(--line-strong);
+}
+.practicante-access__secret {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+
+@media (max-width: 640px) {
+  .oc-adendum {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .witness-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .fin-range {
+    width: 100%;
+  }
+  .fin-range .fx-field {
+    flex: 1 1 130px;
+    width: auto;
+  }
+}
+
+/* Usuarios: elegir el rol viendo qué hace, y lo que verá antes de guardar. */
+.role-picker {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+.role-picker__title {
+  margin-bottom: 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.role-picker__cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 6px;
+}
+.role-card {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-height: 40px;
+  margin: 0;
+  padding: 7px 11px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-ctl);
+  background: var(--bg-elev);
+  cursor: pointer;
+  transition: border-color 0.12s ease, background-color 0.12s ease;
+}
+.role-card:hover {
+  border-color: var(--line-strong);
+}
+.role-card input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+.role-card:focus-within {
+  outline: 2px solid var(--accent-fill);
+  outline-offset: 2px;
+}
+.role-card.is-on {
+  border-color: var(--accent-fill);
+  box-shadow: inset 0 0 0 1px var(--accent-fill);
+}
+.role-card__name {
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 1.25;
+  color: var(--text);
+}
+.role-card.is-on .role-card__name {
+  font-weight: 600;
+}
+.role-picker__hint {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: var(--text);
+}
+.role-picker__more > summary {
+  font-size: 12.5px;
+  color: var(--muted);
+  cursor: pointer;
+}
+.role-picker__more[open] > summary {
+  margin-bottom: 8px;
+}
+
+.role-preview {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-item);
+  background: var(--fill-soft);
+}
+.role-preview__empty {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.role-preview__title {
+  margin-bottom: 6px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text);
+}
+.role-preview__list {
+  display: grid;
+  gap: 3px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.role-preview__item {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12px;
+  color: var(--text);
+}
+.role-preview__level {
+  flex: 0 1 auto;
+  text-align: right;
+  color: var(--muted);
+}
+.role-preview__item.is-edit .role-preview__level {
+  font-weight: 600;
+  color: var(--text);
+}
+.role-preview__item.is-none {
+  color: var(--muted);
 }

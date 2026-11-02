@@ -41,6 +41,7 @@ const APPROVAL_TYPES = new Set([
   'advance.requested',
   'po.requested',
   'po.updated',
+  'po.to_transfer',
   'task.submitted',
   'checklist.submitted',
   'checklist.signature_needed',

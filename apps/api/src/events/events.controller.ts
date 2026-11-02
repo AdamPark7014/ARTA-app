@@ -1,3 +1,4 @@
+import { redactEventFor } from './event-visibility';
 import {
   BadRequestException,
   Body,
@@ -17,6 +18,7 @@ import { CampaignType, EntityKey, EventStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import {
+  canEditEventInfo,
   canAccessEventOps,
   eventOpsEntities,
   hasPermission,
@@ -60,7 +62,19 @@ class CreateEventDto {
   @IsOptional() @IsInt() @Min(1) functions?: number;
 }
 
+/** Solo ligas web: esta dirección termina dentro de un iframe del panel. */
+function cleanTicketingUrl(raw: string | null | undefined) {
+  const url = raw?.trim();
+  if (!url) return null;
+  if (!/^https:\/\/[^\s]+$/i.test(url)) {
+    throw new BadRequestException('La liga de la boletera debe empezar con https://');
+  }
+  return url.slice(0, 500);
+}
+
 class UpdateEventDto {
+  /** Liga de la boletera externa; se enseña embebida en el resumen si la página lo permite. */
+  @IsOptional() @IsString() boleteraUrl?: string | null;
   @IsOptional() @IsString() name?: string;
   @IsOptional() @IsString() artist?: string;
   @IsOptional() @IsString() promoter?: string;
@@ -139,9 +153,7 @@ export class EventsController {
   private assertEntity(user: AuthUser, entity: EntityKey) {
     if (!canAccessEventOps(user.entities as EK[], user.roleKey as RoleKey, entity as EK)) {
       throw new ForbiddenException(
-        entity === 'ARTA' && user.roleKey === 'dir_auditorio'
-          ? 'En Arta solo tienes carpetas generales (no eventos)'
-          : `Sin acceso a ${entity}`,
+        `Sin acceso a ${entity}`,
       );
     }
   }
@@ -310,11 +322,11 @@ export class EventsController {
     // en orden de sucesión: se devuelven ascendentes, como el resto del API.
     // Cada OC trae `state`: qué le falta (comprobante, día de cobro…), el mismo texto que la torre.
     const payWindow = await payWindowFor(this.prisma, event.organizationId);
-    return {
+    return redactEventFor(req.user, {
       ...event,
       purchaseOrders: event.purchaseOrders.map((o) => withPoState(o, payWindow, event.status)),
       tasks: event.tasks.map((t) => withAssignees({ ...t, activities: [...t.activities].reverse() })),
-    };
+    });
   }
 
   @Post()
@@ -323,6 +335,10 @@ export class EventsController {
       throw new ForbiddenException('Sin permiso para crear eventos');
     }
     this.assertEntity(req.user, dto.entity);
+    // Rodrigo y Williams crean en el Auditorio; en Arta no llevan el evento.
+    if (!canEditEventInfo(req.user, dto.entity)) {
+      throw new ForbiddenException('En este negocio no creas eventos');
+    }
     const organizationId = tenantIdOf(req.user);
     await assertEventSlotAvailable(this.prisma, organizationId);
     const event = await this.prisma.event.create({
@@ -486,7 +502,10 @@ export class EventsController {
     if (!existing) throw new BadRequestException('Evento no encontrado');
     assertSameTenant(req.user, existing.organizationId);
     this.assertEntity(req.user, existing.entity);
-    if (!hasPermission(req.user.roleKey as RoleKey, req.user.permissions, PERMISSIONS.EVENT_CLOSE)) {
+    if (
+      !hasPermission(req.user.roleKey as RoleKey, req.user.permissions, PERMISSIONS.EVENT_CLOSE) ||
+      !canEditEventInfo(req.user, existing.entity)
+    ) {
       throw new ForbiddenException('Sin permiso para cerrar evento');
     }
     const event = await this.prisma.event.update({
@@ -535,7 +554,10 @@ export class EventsController {
     if (!existing) throw new BadRequestException('Evento no encontrado');
     assertSameTenant(req.user, existing.organizationId);
     this.assertEntity(req.user, existing.entity);
-    if (!hasPermission(req.user.roleKey as RoleKey, req.user.permissions, PERMISSIONS.EVENT_CLOSE)) {
+    if (
+      !hasPermission(req.user.roleKey as RoleKey, req.user.permissions, PERMISSIONS.EVENT_CLOSE) ||
+      !canEditEventInfo(req.user, existing.entity)
+    ) {
       throw new ForbiddenException();
     }
     const event = await this.prisma.event.update({
@@ -582,19 +604,14 @@ export class EventsController {
     @Param('id') id: string,
     @Body() dto: UpdateEventDto,
   ) {
-    // Los datos del show son de producción. Todo rol operativo trae `checklist.edit` o `event.create`;
-    // contabilidad (junta 23-10-2026) ve el evento para pagar, pero no lo edita.
-    const role = req.user.roleKey as RoleKey;
-    if (
-      !hasPermission(role, req.user.permissions, PERMISSIONS.CHECKLIST_EDIT) &&
-      !hasPermission(role, req.user.permissions, PERMISSIONS.EVENT_CREATE)
-    ) {
-      throw new ForbiddenException('Sin permiso para editar los datos del evento');
-    }
     const existing = await this.prisma.event.findUnique({ where: { id } });
     if (!existing) throw new BadRequestException('Evento no encontrado');
     assertSameTenant(req.user, existing.organizationId);
     this.assertEntity(req.user, existing.entity);
+    // Los datos del show: dirección, Leida y Sol en Arta, Rodrigo y Williams en Auditorio.
+    if (!canEditEventInfo(req.user, existing.entity)) {
+      throw new ForbiddenException('Sin permiso para editar los datos del evento');
+    }
     this.assertNotClosed(existing.status);
 
     const event = await this.prisma.event.update({
@@ -609,6 +626,7 @@ export class EventsController {
         notes: dto.notes,
         description: dto.description,
         schedule: dto.schedule,
+        ...(dto.boleteraUrl !== undefined ? { boleteraUrl: cleanTicketingUrl(dto.boleteraUrl) } : {}),
         functions: dto.functions === undefined ? undefined : dto.functions,
         startsAt: dto.startsAt ? new Date(dto.startsAt) : undefined,
         // Distinguir «no lo mandes» de «bórralo»: sin esto, una fecha de fin

@@ -30,6 +30,8 @@ const UNSEALERS = new Set(['dir_general', 'dir_adjunta', 'super_admin']);
 type Props = {
   status: DocStatus;
   roleKey: string;
+  /** Regla por formato (`canApproveFormat`); sin ella, la del rol. */
+  canApprove?: boolean;
   disabled?: boolean;
   busy?: boolean;
   onChange: (next: DocStatus, reason?: string) => Promise<void> | void;
@@ -45,12 +47,12 @@ type Props = {
  *   botones que van a dar 403.
  * - Reabrir algo sellado pide motivo por escrito, porque queda en el historial.
  */
-export function DocStatusControl({ status, roleKey, disabled, busy, onChange }: Props) {
+export function DocStatusControl({ status, roleKey, canApprove: canApproveHere, disabled, busy, onChange }: Props) {
   const [reopening, setReopening] = useState(false);
   const [reason, setReason] = useState('');
 
-  const canApprove = APPROVERS.has(roleKey);
-  const canUnseal = UNSEALERS.has(roleKey);
+  const canApprove = canApproveHere ?? APPROVERS.has(roleKey);
+  const canUnseal = canApproveHere ?? UNSEALERS.has(roleKey);
 
   async function go(next: DocStatus, why?: string) {
     await onChange(next, why);

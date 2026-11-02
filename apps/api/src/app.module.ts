@@ -35,6 +35,9 @@ import { JobsModule } from './jobs/jobs.module';
 import { BillingModule } from './billing/billing.module';
 import { HealthModule } from './health/health.module';
 import { ChatModule } from './chat/chat.module';
+import { FinanzasModule } from './finanzas/finanzas.module';
+import { PracticantesModule } from './practicantes/practicantes.module';
+import { TestigosModule } from './testigos/testigos.module';
 import { RealtimeModule } from './realtime/realtime.module';
 import { DevicesModule } from './devices/devices.module';
 import { SlotsController } from './slots/slots.controller';
@@ -79,6 +82,9 @@ import { DirectionService } from './common/rbac/direction.service';
     JobsModule,
     BillingModule,
     ChatModule,
+    FinanzasModule,
+    PracticantesModule,
+    TestigosModule,
   ],
   controllers: [SlotsController, OriginalDownloadController, FileInlineController],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }, DirectionService],

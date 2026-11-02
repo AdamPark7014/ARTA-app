@@ -981,6 +981,108 @@ export const STANDARD_FORMATS: StandardFormat[] = [
     ]),
   },
 
+  // Lobby del Auditorio: inventario y ventas; los lleva compras (01-11-2026).
+  {
+    key: 'BARRA',
+    name: 'Checklist Barra',
+    description: 'Inventario y ventas de la barra del lobby durante el show.',
+    entities: ['EXPLANADA'],
+    schema: auditorio([
+      {
+        id: HEADER_SECTION_ID,
+        title: 'Datos del show',
+        layout: 'header',
+        items: [
+          text('evento', 'Evento', { bind: 'event.name', cols: 6 }),
+          date('fecha', 'Fecha', { bind: 'event.date', cols: 3 }),
+          text('showtime', 'Showtime', { bind: 'event.time', cols: 3, placeholder: '20:00' }),
+          text('encargado', 'Encargado de barra', { cols: 6 }),
+          text('apertura', 'Abre barra', { cols: 3, placeholder: '18:00' }),
+          text('cierre', 'Cierra barra', { cols: 3, placeholder: '23:30' }),
+        ],
+      },
+      {
+        id: 'inventario',
+        title: 'Inventario',
+        items: [
+          table(
+            'productos',
+            'Productos',
+            [
+              col('producto', 'Producto', { width: 3 }),
+              col('inicial', 'Inicial', { type: 'number', width: 1 }),
+              col('surtido', 'Surtido', { type: 'number', width: 1 }),
+              col('final', 'Final', { type: 'number', width: 1 }),
+              col('precio', 'Precio', { type: 'number', width: 1 }),
+            ],
+            { minRows: 8 },
+          ),
+        ],
+      },
+      {
+        id: 'ventas',
+        title: 'Ventas',
+        items: [
+          number('efectivo', 'Efectivo'),
+          number('tarjeta', 'Tarjeta'),
+          number('cortesias', 'Cortesías'),
+          number('mermas', 'Mermas'),
+          attachment('corte', 'Corte de caja'),
+          longtext('observaciones', 'Observaciones', { optional: true }),
+        ],
+      },
+    ]),
+  },
+  {
+    key: 'MERCH',
+    name: 'Checklist Merch',
+    description: 'Inventario y ventas de merch en el lobby, con el porcentaje del Auditorio.',
+    entities: ['EXPLANADA'],
+    schema: auditorio([
+      {
+        id: HEADER_SECTION_ID,
+        title: 'Datos del show',
+        layout: 'header',
+        items: [
+          text('evento', 'Evento', { bind: 'event.name', cols: 6 }),
+          date('fecha', 'Fecha', { bind: 'event.date', cols: 3 }),
+          text('showtime', 'Showtime', { bind: 'event.time', cols: 3, placeholder: '20:00' }),
+          text('operador', 'Operador', { cols: 6 }),
+          text('contacto', 'Contacto merch del talento', { cols: 6 }),
+          { ...number('porcentaje', 'Porcentaje a cobrar (%)'), cols: 12 },
+        ],
+      },
+      {
+        id: 'inventario',
+        title: 'Inventario',
+        items: [
+          table(
+            'productos',
+            'Productos',
+            [
+              col('producto', 'Producto', { width: 3 }),
+              col('talla', 'Talla', { width: 1 }),
+              col('inicial', 'Inicial', { type: 'number', width: 1 }),
+              col('final', 'Final', { type: 'number', width: 1 }),
+              col('precio', 'Precio', { type: 'number', width: 1 }),
+            ],
+            { minRows: 8 },
+          ),
+        ],
+      },
+      {
+        id: 'ventas',
+        title: 'Ventas',
+        items: [
+          number('venta_total', 'Venta total'),
+          number('comision', 'Comisión del Auditorio'),
+          attachment('corte', 'Corte de venta'),
+          longtext('observaciones', 'Observaciones', { optional: true }),
+        ],
+      },
+    ]),
+  },
+
   {
     key: 'LIMPIEZA',
     name: 'Checklist Limpieza',

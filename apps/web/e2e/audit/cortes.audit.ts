@@ -26,6 +26,8 @@ const ONLY = process.env.AUDIT_ONLY ? new RegExp(process.env.AUDIT_ONLY) : null;
 const SHOTS = process.env.AUDIT_SHOTS !== '0';
 const FULL = process.env.AUDIT_FULL === '1';
 const PORT = Number(process.env.E2E_PORT || 3100);
+/** AUDIT_ROLE: recorrer el panel como un rol (compras, contenido…), no como administrador. */
+const AUDIT_USER = process.env.AUDIT_ROLE ? { ...RICH_USER, roleKey: process.env.AUDIT_ROLE, permissions: [] } : RICH_USER;
 
 const VIEWPORTS = [
   { w: 1536, h: 730 },
@@ -261,7 +263,7 @@ for (const entity of ENTITIES) {
             { name: 'arta_session', value: '1', domain: host, path: '/' },
             { name: 'arta_csrf', value: 'e2e-csrf-token', domain: host, path: '/' },
           ]);
-          await mockAuthenticatedApi(page, { ...RICH_STUBS, '/auth/me': { user: RICH_USER } });
+          await mockAuthenticatedApi(page, { ...RICH_STUBS, '/auth/me': { user: AUDIT_USER } });
         } else {
           // Sin sesión: el default de `mockApi` ya responde 401 en `/auth/me`.
           await mockApi(page);

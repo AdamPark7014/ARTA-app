@@ -10,6 +10,8 @@ const TAB_HINTS: Record<Tab, string> = {
   ticketing: 'Configura boletera, zonas, aforo y ventas por zona.',
   tasks: 'Asigna pendientes al equipo con módulo, responsable y fecha.',
   sponsors: 'Patrocinios, aportes y contactos del evento.',
+  adendum: 'Pagos por adendum: persona, cuenta, monto y su imagen o PDF.',
+  testigos: 'La evidencia de cada anuncio del evento; al final se arma un solo archivo.',
   files: 'Documentos del show: escribe actas y cartas aquí, edita el Excel en la hoja y escribe encima del PDF. Todo se guarda en el evento.',
 };
 
