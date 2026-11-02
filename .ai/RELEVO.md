@@ -41,6 +41,8 @@ Adam: «génerale un rediseño de 360 grados», «se debe mostrar como la empres
 
 **Skills de diseño:** activas desde esta tarde. Se pasaron crítica, accesibilidad y sistema de diseño: hallazgos en `docs/diseno/AUDITORIA-2026-11.md`, los de teléfono, movimiento y lector de pantalla ya corregidos.
 
+**Observado tras desplegar `568b16e`:** una carga de Inicio en teléfono salió sin cartelera ni pósters, unos minutos después del despliegue; tres cargas siguientes ya traen las 8 tarjetas. Si la API no contesta, el sitio cachea 30 s la página sin shows. No se investigó más: si se repite, mirar `SITE_CACHE` y no guardar en caché una respuesta fallida.
+
 **Sigue:** variantes chicas de pósters y fotos (la portada baja 2.5 a 4.5 MB); juntar las capas de estilos, según la auditoría; y las pantallas del panel una por una si hace falta más que el lenguaje común.
 
 ## Turno claude-code (2026-11-02): Inicio nuevo, shows reales y cartelera en las apps
