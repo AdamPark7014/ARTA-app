@@ -235,7 +235,7 @@ private fun Header(user: UserDto, today: LocalDate, entity: BizEntity) {
         }
         // El chip de un híbrido ya trae su margen de toque.
         Spacer(Modifier.height(if (ActiveEntity.isHybrid) 12.dp else 22.dp))
-        Text(TODAY_LONG.format(today).uppercase(ES_MX), style = ArtaType.Cap, color = ArtaColors.Tertiary)
+        Text(TODAY_LONG.format(today).replaceFirstChar { it.uppercase(ES_MX) }, style = ArtaType.Cap, color = ArtaColors.Tertiary)
         Spacer(Modifier.height(4.dp))
         Text(
             buildAnnotatedString {
@@ -376,7 +376,7 @@ private fun KpiCard(k: Kpi, modifier: Modifier) {
         contentPadding = PaddingValues(horizontal = 14.dp, vertical = 13.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Text(k.label.uppercase(ES_MX), style = ArtaType.Cap.copy(fontSize = 10.sp, letterSpacing = 1.4.sp), color = ArtaColors.Tertiary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(k.label, style = ArtaType.Cap, color = ArtaColors.Tertiary, maxLines = 1, overflow = TextOverflow.Ellipsis)
         val valueStyle = if (k.silver) ArtaType.Kpi.copy(brush = t.accentBrush) else ArtaType.Kpi.copy(color = ArtaColors.Text)
         Text(k.value, style = valueStyle, maxLines = 1, overflow = TextOverflow.Ellipsis)
         k.detail?.let {

@@ -583,7 +583,7 @@ private fun ProfileHeader(user: UserDto) {
             Text(user.fullName.ifBlank { "ARTA" }, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold, color = ArtaColors.Text)
             val role = WebModules.roleLabel(user.roleKey)
             if (role.isNotBlank()) Text(role, color = ArtaColors.Muted, style = MaterialTheme.typography.bodyMedium)
-            Text(LocalActiveEntity.current.brand.uppercase(Locale.forLanguageTag("es-MX")), color = ArtaColors.Tertiary, style = ArtaType.Cap, modifier = Modifier.padding(top = 4.dp))
+            Text(LocalActiveEntity.current.brand, color = ArtaColors.Tertiary, style = ArtaType.Cap, modifier = Modifier.padding(top = 4.dp))
             user.email?.takeIf { it.isNotBlank() }?.let { Text(it, color = ArtaColors.Tertiary, style = MaterialTheme.typography.bodySmall) }
         }
     }
@@ -593,7 +593,7 @@ private fun ProfileHeader(user: UserDto) {
 @Composable
 private fun SectionLabel(text: String) {
     Text(
-        text.uppercase(Locale.forLanguageTag("es-MX")),
+        text,
         color = ArtaColors.Tertiary,
         style = ArtaType.Cap,
         modifier = Modifier.padding(start = 20.dp, end = 16.dp, top = 24.dp, bottom = 8.dp).semantics { heading() },

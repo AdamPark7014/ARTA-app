@@ -12,66 +12,72 @@ import androidx.compose.ui.unit.sp
 import com.artaproducciones.ops.R
 
 /**
- * Nunito (Google Fonts, SIL OFL 1.1: `assets/licenses/Nunito-OFL.txt`): la letra redondeada y
- * amable de toda la app. Es variable (eje `wght` 200–1000); cada peso es una instancia del mismo
- * archivo, así el APK lleva solo dos fuentes (normal e itálica).
+ * Inter para leer e Inter Tight para titulares y cifras (SIL OFL 1.1: `assets/licenses/Inter-OFL.txt`),
+ * la misma letra del sitio y del panel desde el rediseño del 02-11-2026. Son variables (eje `wght`): cada
+ * peso es una instancia del mismo archivo. La itálica la sintetiza Compose.
  */
 private val WEIGHTS = listOf(300, 400, 500, 600, 700, 800, 900)
 
 @OptIn(ExperimentalTextApi::class)
-val Nunito: FontFamily = FontFamily(
-    WEIGHTS.flatMap { w ->
-        listOf(
-            Font(R.font.nunito, FontWeight(w), FontStyle.Normal, variationSettings = FontVariation.Settings(FontVariation.weight(w))),
-            Font(R.font.nunito_italic, FontWeight(w), FontStyle.Italic, variationSettings = FontVariation.Settings(FontVariation.weight(w))),
-        )
+private fun variable(file: Int): FontFamily = FontFamily(
+    WEIGHTS.map { w ->
+        Font(file, FontWeight(w), FontStyle.Normal, variationSettings = FontVariation.Settings(FontVariation.weight(w)))
     },
 )
 
-/** Cifras tabulares (horas, montos, contadores): Nunito ya las trae del mismo ancho; se pide igual. */
+val Inter: FontFamily = variable(R.font.inter)
+val InterTight: FontFamily = variable(R.font.inter_tight)
+
+/** Cifras tabulares (horas, montos, contadores). */
 const val TABULAR = "tnum"
 
 private val base = Typography()
 
-private fun TextStyle.nunito(weight: FontWeight? = null, spacing: Float? = null) = copy(
-    fontFamily = Nunito,
+private fun TextStyle.inter(weight: FontWeight? = null, spacing: Float? = null) = copy(
+    fontFamily = Inter,
     fontWeight = weight ?: fontWeight,
     letterSpacing = spacing?.sp ?: letterSpacing,
 )
 
+private fun TextStyle.tight(spacing: Float) = copy(
+    fontFamily = InterTight,
+    fontWeight = FontWeight.SemiBold,
+    letterSpacing = spacing.sp,
+)
+
 val ArtaTypography = Typography(
-    displayLarge = base.displayLarge.nunito(FontWeight.Light),
-    displayMedium = base.displayMedium.nunito(FontWeight.Light),
-    displaySmall = base.displaySmall.nunito(FontWeight.Light),
-    headlineLarge = base.headlineLarge.nunito(FontWeight.Light, -0.6f),
-    headlineMedium = base.headlineMedium.nunito(FontWeight.Light, -0.5f),
-    headlineSmall = base.headlineSmall.nunito(FontWeight.Normal, -0.3f),
-    titleLarge = base.titleLarge.nunito(FontWeight.SemiBold, -0.2f),
-    titleMedium = base.titleMedium.nunito(FontWeight.SemiBold, 0f),
-    titleSmall = base.titleSmall.nunito(FontWeight.SemiBold, 0f),
-    bodyLarge = base.bodyLarge.nunito(spacing = 0.1f),
-    bodyMedium = base.bodyMedium.nunito(spacing = 0.1f),
-    bodySmall = base.bodySmall.nunito(spacing = 0.15f),
-    labelLarge = base.labelLarge.nunito(FontWeight.SemiBold, 0.1f),
-    labelMedium = base.labelMedium.nunito(FontWeight.SemiBold, 0.2f),
-    labelSmall = base.labelSmall.nunito(FontWeight.SemiBold, 0.3f),
+    displayLarge = base.displayLarge.tight(-1f),
+    displayMedium = base.displayMedium.tight(-0.9f),
+    displaySmall = base.displaySmall.tight(-0.8f),
+    headlineLarge = base.headlineLarge.tight(-0.7f),
+    headlineMedium = base.headlineMedium.tight(-0.6f),
+    headlineSmall = base.headlineSmall.tight(-0.4f),
+    titleLarge = base.titleLarge.inter(FontWeight.SemiBold, -0.3f),
+    titleMedium = base.titleMedium.inter(FontWeight.SemiBold, -0.1f),
+    titleSmall = base.titleSmall.inter(FontWeight.SemiBold, 0f),
+    bodyLarge = base.bodyLarge.inter(spacing = -0.1f),
+    bodyMedium = base.bodyMedium.inter(spacing = -0.05f),
+    bodySmall = base.bodySmall.inter(spacing = 0f),
+    labelLarge = base.labelLarge.inter(FontWeight.Medium, -0.05f),
+    labelMedium = base.labelMedium.inter(FontWeight.Medium, 0f),
+    labelSmall = base.labelSmall.inter(FontWeight.Medium, 0f),
 )
 
 /** Estilos propios del sistema visual (SISTEMA-VISUAL.md › Tipografía). */
 object ArtaType {
-    /** Etiqueta en MAYÚSCULAS (el texto se pasa ya en mayúsculas). */
-    val Cap = TextStyle(fontFamily = Nunito, fontWeight = FontWeight.SemiBold, fontSize = 11.sp, lineHeight = 14.sp, letterSpacing = 1.6.sp)
+    /** Etiqueta: se lee como frase, sin mayúsculas forzadas. */
+    val Cap = TextStyle(fontFamily = Inter, fontWeight = FontWeight.Medium, fontSize = 12.5.sp, lineHeight = 16.sp)
 
-    /** Saludo y título de pantalla: ligero; el nombre va en SemiBold. */
-    val Greeting = TextStyle(fontFamily = Nunito, fontWeight = FontWeight.Light, fontSize = 28.sp, lineHeight = 34.sp, letterSpacing = (-0.8).sp)
+    /** Saludo y título de pantalla. */
+    val Greeting = TextStyle(fontFamily = InterTight, fontWeight = FontWeight.SemiBold, fontSize = 28.sp, lineHeight = 34.sp, letterSpacing = (-0.7).sp)
 
     /** Título grande de pestaña («Tareas», «Avisos»). */
-    val ScreenTitle = TextStyle(fontFamily = Nunito, fontWeight = FontWeight.Light, fontSize = 30.sp, lineHeight = 36.sp, letterSpacing = (-0.9).sp)
+    val ScreenTitle = TextStyle(fontFamily = InterTight, fontWeight = FontWeight.SemiBold, fontSize = 30.sp, lineHeight = 36.sp, letterSpacing = (-0.8).sp)
 
-    /** Cifra de tarjeta: ligera y tabular. */
+    /** Cifra de tarjeta: con peso y tabular. */
     val Kpi = TextStyle(
-        fontFamily = Nunito,
-        fontWeight = FontWeight.Light,
+        fontFamily = InterTight,
+        fontWeight = FontWeight.SemiBold,
         fontSize = 30.sp,
         lineHeight = 34.sp,
         letterSpacing = (-1).sp,
@@ -79,11 +85,11 @@ object ArtaType {
     )
 
     /** Título de panel. */
-    val PanelTitle = TextStyle(fontFamily = Nunito, fontWeight = FontWeight.SemiBold, fontSize = 15.sp, lineHeight = 20.sp)
+    val PanelTitle = TextStyle(fontFamily = Inter, fontWeight = FontWeight.SemiBold, fontSize = 15.sp, lineHeight = 20.sp, letterSpacing = (-0.2).sp)
 
-    /** Estado (píldora): MAYÚSCULAS 10.5. */
-    val Status = TextStyle(fontFamily = Nunito, fontWeight = FontWeight.SemiBold, fontSize = 10.5.sp, lineHeight = 14.sp, letterSpacing = 0.6.sp)
+    /** Estado (píldora): chico, pero en frase. */
+    val Status = TextStyle(fontFamily = Inter, fontWeight = FontWeight.Medium, fontSize = 11.5.sp, lineHeight = 14.sp)
 
     /** Horas y montos. */
-    val Time = TextStyle(fontFamily = Nunito, fontWeight = FontWeight.Normal, fontSize = 12.sp, lineHeight = 16.sp, fontFeatureSettings = TABULAR)
+    val Time = TextStyle(fontFamily = Inter, fontWeight = FontWeight.Normal, fontSize = 12.sp, lineHeight = 16.sp, fontFeatureSettings = TABULAR)
 }

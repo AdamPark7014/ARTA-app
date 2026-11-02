@@ -383,7 +383,7 @@ private fun SectionHeader(title: String, unread: Int, open: Boolean, onToggle: (
         )
         Spacer(Modifier.width(Space.XS))
         Text(
-            title.uppercase(Locale.forLanguageTag("es-MX")),
+            title,
             color = ArtaColors.Tertiary,
             style = ArtaType.Cap,
             modifier = Modifier.weight(1f).semantics { heading() },

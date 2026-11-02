@@ -487,7 +487,7 @@ fun StatusPill(text: String, tone: Tone, modifier: Modifier = Modifier) {
     val base = modifier.clip(shape)
     val painted = if (tone == Tone.Action) base.background(t.accentBrush) else base.border(1.dp, border, shape)
     Box(painted.padding(horizontal = 8.dp, vertical = 3.dp)) {
-        Text(text.uppercase(ES_MX), color = fg, style = ArtaType.Status, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(text, color = fg, style = ArtaType.Status, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 
@@ -617,7 +617,7 @@ fun BrandMark(entity: BizEntity, modifier: Modifier = Modifier) {
             modifier = modifier.semantics { contentDescription = entity.brand },
             style = TextStyle(
                 brush = Brush.linearGradient(listOf(Color(0xFFFFFFFF), Color(0xFFC7CCD4), Color(0xFF8E95A0))),
-                fontFamily = Nunito,
+                fontFamily = InterTight,
                 fontWeight = FontWeight.ExtraBold,
                 fontSize = 21.sp,
                 letterSpacing = 1.4.sp,

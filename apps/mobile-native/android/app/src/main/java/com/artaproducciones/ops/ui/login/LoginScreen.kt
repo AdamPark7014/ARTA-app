@@ -88,7 +88,7 @@ import com.artaproducciones.ops.ui.theme.ArtaColors
 import com.artaproducciones.ops.ui.theme.ArtaType
 import com.artaproducciones.ops.ui.theme.Button
 import com.artaproducciones.ops.ui.theme.LocalArtaTokens
-import com.artaproducciones.ops.ui.theme.Nunito
+import com.artaproducciones.ops.ui.theme.InterTight
 import com.artaproducciones.ops.ui.theme.OutlinedButton
 import com.artaproducciones.ops.ui.theme.TextButton
 import kotlinx.coroutines.launch
@@ -176,7 +176,7 @@ fun LoginScreen() {
                 Spacer(Modifier.height(16.dp))
                 Text(
                     "La experiencia del Show.",
-                    style = TextStyle(fontFamily = Nunito, fontWeight = FontWeight.SemiBold, fontSize = 20.sp, lineHeight = 26.sp, letterSpacing = (-0.3).sp),
+                    style = TextStyle(fontFamily = InterTight, fontWeight = FontWeight.SemiBold, fontSize = 20.sp, lineHeight = 26.sp, letterSpacing = (-0.3).sp),
                     color = ArtaColors.Muted,
                     textAlign = TextAlign.Center,
                 )
@@ -388,7 +388,7 @@ private fun Heading(title: String, detail: String) {
     Column(Modifier.padding(bottom = 4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(
             title,
-            style = TextStyle(fontFamily = Nunito, fontWeight = FontWeight.SemiBold, fontSize = 22.sp, lineHeight = 28.sp, letterSpacing = (-0.3).sp),
+            style = TextStyle(fontFamily = InterTight, fontWeight = FontWeight.SemiBold, fontSize = 22.sp, lineHeight = 28.sp, letterSpacing = (-0.3).sp),
             color = ArtaColors.Text,
             modifier = Modifier.semantics { heading() },
         )
@@ -400,7 +400,7 @@ private fun Heading(title: String, detail: String) {
 @Composable
 private fun Field(label: String, content: @Composable () -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(label.uppercase(Locale("es", "MX")), style = ArtaType.Cap, color = ArtaColors.Muted)
+        Text(label, style = ArtaType.Cap, color = ArtaColors.Muted)
         content()
     }
 }

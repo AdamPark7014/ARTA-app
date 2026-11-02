@@ -1624,7 +1624,7 @@ private fun MentionSuggestions(
             groups.forEach { group ->
                 item(key = "g:${group.kind}") {
                     Text(
-                        group.title.uppercase(Locale.forLanguageTag("es-MX")),
+                        group.title,
                         style = ArtaType.Cap,
                         color = ArtaColors.Tertiary,
                         modifier = Modifier.padding(start = Space.L, end = Space.L, top = Space.M, bottom = Space.XS),

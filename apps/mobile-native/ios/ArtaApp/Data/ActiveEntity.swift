@@ -205,7 +205,7 @@ struct EntityNoticeBanner: View {
                     Image(systemName: "arrow.left.arrow.right")
                         .font(.system(size: 12, weight: .semibold))
                     Text(notice.text)
-                        .font(.system(size: 14, weight: .semibold, design: .rounded))
+                        .font(.system(size: 14, weight: .semibold))
                         .lineLimit(1)
                 }
                 .foregroundStyle(light ? Color.white : Color(hex: 0x0A0A0B))
@@ -265,7 +265,7 @@ struct EntityChip: View {
                 .fill(light ? Color.white : Color(hex: 0xC7CCD4))
                 .frame(width: 5, height: 5)
             Text(entity.shortName)
-                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                .font(.system(size: 12, weight: .semibold))
             if switchable {
                 Image(systemName: "arrow.left.arrow.right")
                     .font(.system(size: 9, weight: .bold))

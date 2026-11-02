@@ -503,7 +503,7 @@ fun SectionTitle(
         // necesidad) y lo de la derecha queda siempre pegado al borde.
         Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
             Text(
-                text.uppercase(ES_MX),
+                text,
                 style = ArtaType.Cap,
                 color = if (alert) ArtaColors.Danger else ArtaColors.Tertiary,
                 modifier = Modifier.weight(1f, fill = false).semantics { heading() },

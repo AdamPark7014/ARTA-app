@@ -82,7 +82,7 @@ struct StatusPill: View {
 
     var body: some View {
         let shape = ArtaControlShape(squareRadius: 3)
-        Text(text.uppercased(with: Locale(identifier: "es_MX")))
+        Text(text)
             .font(ArtaFont.status)
             .tracking(0.6)
             .foregroundStyle(textColor)

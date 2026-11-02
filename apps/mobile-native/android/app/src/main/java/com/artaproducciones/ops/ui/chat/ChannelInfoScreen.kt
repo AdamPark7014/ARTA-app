@@ -371,7 +371,7 @@ fun ChannelInfoScreen(
 @Composable
 private fun SectionHeader(text: String) {
     Text(
-        text.uppercase(),
+        text,
         color = ArtaColors.Muted,
         style = MaterialTheme.typography.labelMedium,
         fontWeight = FontWeight.SemiBold,

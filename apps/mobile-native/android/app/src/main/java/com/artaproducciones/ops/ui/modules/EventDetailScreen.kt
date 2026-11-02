@@ -496,7 +496,7 @@ private fun Fact(item: FactItem, modifier: Modifier = Modifier) {
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Text(item.label.uppercase(ES_MX), style = ArtaType.Cap, color = ArtaColors.Tertiary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(item.label, style = ArtaType.Cap, color = ArtaColors.Tertiary, maxLines = 1, overflow = TextOverflow.Ellipsis)
         Text(
             item.value,
             style = ArtaType.Kpi.copy(fontSize = if (item.quiet) 22.sp else 26.sp, lineHeight = 30.sp),

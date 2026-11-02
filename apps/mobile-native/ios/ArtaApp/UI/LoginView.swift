@@ -210,7 +210,7 @@ struct LoginView: View {
     private var enrollment: some View {
         VStack(alignment: .leading, spacing: ArtaSpace.l) {
             Image(systemName: "lock.shield")
-                .font(.system(size: 28, weight: .light))
+                .font(.system(size: 28, weight: .semibold))
                 .foregroundStyle(ArtaColor.text)
             heading("Activa la verificación en dos pasos",
                     detail: "Tu organización la exige. Actívala primero en el panel web y luego vuelve a entrar aquí.")

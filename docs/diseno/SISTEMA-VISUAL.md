@@ -2,6 +2,7 @@
 
 > **Rediseño del 02-11-2026** (Adam: «dale un rediseño de 360 grados a todo el sistema»). Cambia sobre lo de abajo, en `styles/_noche.scss` y los tokens de `globals.scss`:
 > menú lateral de noche con el logo blanco; **Inter Tight e Inter** en lugar de Nunito, como el sitio; títulos y cifras con peso 600, no 300; **sin mayúsculas forzadas** en etiquetas, tablas y estados. Lo demás sigue igual: papel, tinta, píldoras y un solo color de acento.
+> **Apps:** Android con Inter e Inter Tight (`res/font`, variables); iOS con SF Pro, sin el diseño redondeado. Mismos pesos y mismas etiquetas en frase. La cartelera va en cuadrícula de dos columnas, con el póster entero sobre su propio color.
 
 Referencia visual exacta: `docs/diseno/propuesta-arta-auditorio.png` y su HTML
 `docs/diseno/propuesta-arta-auditorio.html` (abrirlo en el navegador). Pedido de Adam: blanco, grises y negro

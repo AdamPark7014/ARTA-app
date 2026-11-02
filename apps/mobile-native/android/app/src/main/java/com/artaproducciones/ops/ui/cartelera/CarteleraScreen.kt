@@ -24,7 +24,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -76,7 +79,7 @@ import com.artaproducciones.ops.ui.modules.ErrorState
 import com.artaproducciones.ops.ui.theme.ArtaCard
 import com.artaproducciones.ops.ui.theme.ArtaColors
 import com.artaproducciones.ops.ui.theme.Button
-import com.artaproducciones.ops.ui.theme.Nunito
+import com.artaproducciones.ops.ui.theme.InterTight
 import com.artaproducciones.ops.ui.theme.OutlinedButton
 
 private val PAPER = Color(0xFFF7F6F3)
@@ -158,13 +161,15 @@ fun CarteleraScreen(onBack: () -> Unit) {
         when {
             d == null && failed != null -> ErrorState(failed.orEmpty(), onRetry = { attempt += 1 })
             d == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = ArtaColors.Muted) }
-            else -> LazyColumn(
+            else -> LazyVerticalGrid(
+                columns = GridCells.Fixed(2),
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalArrangement = Arrangement.spacedBy(22.dp),
             ) {
-                item(key = "t") { BigTitle("Lo que viene.") }
+                item(key = "t", span = { GridItemSpan(maxLineSpan) }) { BigTitle("Lo que viene.") }
                 if (d.upcoming.isEmpty()) {
-                    item(key = "vacio") {
+                    item(key = "vacio", span = { GridItemSpan(maxLineSpan) }) {
                         Text(
                             "Estamos armando la próxima temporada. Muy pronto anunciamos fechas.",
                             color = ArtaColors.Muted,
@@ -172,10 +177,10 @@ fun CarteleraScreen(onBack: () -> Unit) {
                         )
                     }
                 }
-                items(d.upcoming, key = { it.id }) { show -> ShowTile(show) { selected = show } }
+                gridItems(d.upcoming, key = { it.id }) { show -> ShowTile(show) { selected = show } }
                 if (d.past.isNotEmpty()) {
-                    item(key = "t2") { Box(Modifier.padding(top = 10.dp)) { BigTitle("La temporada.") } }
-                    item(key = "muro") {
+                    item(key = "t2", span = { GridItemSpan(maxLineSpan) }) { Box(Modifier.padding(top = 10.dp)) { BigTitle("Ya pasaron por aquí.") } }
+                    item(key = "muro", span = { GridItemSpan(maxLineSpan) }) {
                         LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                             items(d.past, key = { it.id }) { show ->
                                 ShowPoster(
@@ -200,7 +205,7 @@ private fun TopRow(title: String, onBack: () -> Unit) {
         IconButton(onClick = onBack) {
             Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Volver", tint = ArtaColors.Text)
         }
-        Text(title, color = ArtaColors.Text, fontFamily = Nunito, fontWeight = FontWeight.SemiBold, fontSize = 17.sp)
+        Text(title, color = ArtaColors.Text, fontFamily = InterTight, fontWeight = FontWeight.SemiBold, fontSize = 17.sp)
     }
 }
 
@@ -209,7 +214,7 @@ private fun BigTitle(text: String) {
     Text(
         text,
         color = ArtaColors.Text,
-        fontFamily = Nunito,
+        fontFamily = InterTight,
         fontWeight = FontWeight.SemiBold,
         fontSize = 32.sp,
         lineHeight = 36.sp,
@@ -220,61 +225,53 @@ private fun BigTitle(text: String) {
 /** La tarjeta de un show: el arte le da el color y se asoma abajo, como en el sitio. */
 @Composable
 private fun ShowTile(show: PublicShowDto, onOpen: () -> Unit) {
-    val shape = RoundedCornerShape(26.dp)
-    Box(
-        Modifier
-            .fillMaxWidth()
-            .height(460.dp)
-            .clip(shape)
-            .background(INK)
-            .clickable(onClick = onOpen),
-    ) {
-        posterUrl(show.coverUrl)?.let { url ->
-            // `blur` solo funciona en Android 12 en adelante; antes queda el póster tenue, también se lee.
-            AsyncImage(
-                model = url,
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                alpha = 0.55f,
-                modifier = Modifier.matchParentSize().blur(40.dp),
-            )
-        }
-        Box(Modifier.matchParentSize().background(Color.Black.copy(alpha = 0.22f)))
-        Column(
-            Modifier.fillMaxWidth().padding(top = 30.dp, start = 20.dp, end = 20.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(6.dp),
+    // El póster va entero, sobre su propio color; abajo, cuándo, qué y dónde. Como en el sitio.
+    Column(Modifier.fillMaxWidth().clickable(onClick = onOpen)) {
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .aspectRatio(0.8f)
+                .clip(RoundedCornerShape(16.dp))
+                .background(INK),
+            contentAlignment = Alignment.Center,
         ) {
+            posterUrl(show.coverUrl)?.let { url ->
+                // `blur` solo funciona en Android 12 en adelante; antes queda el póster tenue, también se lee.
+                AsyncImage(
+                    model = url,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    alpha = 0.55f,
+                    modifier = Modifier.matchParentSize().blur(24.dp),
+                )
+            }
+            ShowPoster(show, Modifier.fillMaxWidth())
+        }
+        Text(
+            listOfNotNull(CarteleraRules.dayMonth(show), CarteleraRules.timeLabel(show)).joinToString(" · "),
+            color = ArtaColors.Muted,
+            style = MaterialTheme.typography.bodySmall,
+            fontWeight = FontWeight.Medium,
+            modifier = Modifier.padding(top = 10.dp),
+        )
+        Text(
+            show.title,
+            color = ArtaColors.Text,
+            fontFamily = InterTight,
+            fontWeight = FontWeight.SemiBold,
+            fontSize = 17.sp,
+            lineHeight = 20.sp,
+            letterSpacing = (-0.2).sp,
+            maxLines = 3,
+            modifier = Modifier.padding(top = 2.dp),
+        )
+        show.venue?.let { venue ->
             Text(
-                listOfNotNull(CarteleraRules.dayMonth(show), show.venue).joinToString(" · "),
-                color = PAPER,
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.Medium,
-                textAlign = TextAlign.Center,
-            )
-            Text(
-                show.title,
-                color = PAPER,
-                fontFamily = Nunito,
-                fontWeight = FontWeight.SemiBold,
-                fontSize = 28.sp,
-                lineHeight = 31.sp,
-                textAlign = TextAlign.Center,
-                maxLines = 3,
-            )
-            Text(
-                listOfNotNull(CarteleraRules.timeLabel(show), CarteleraRules.countdown(show)).joinToString(" · "),
-                color = PAPER,
-                style = MaterialTheme.typography.bodyMedium,
-                textAlign = TextAlign.Center,
-            )
-            ShowPoster(
-                show,
-                Modifier
-                    .padding(top = 12.dp)
-                    .width(196.dp)
-                    .shadow(22.dp, RoundedCornerShape(12.dp))
-                    .clip(RoundedCornerShape(12.dp)),
+                venue,
+                color = ArtaColors.Muted,
+                style = MaterialTheme.typography.bodySmall,
+                maxLines = 2,
+                modifier = Modifier.padding(top = 2.dp),
             )
         }
     }
@@ -379,7 +376,7 @@ fun CarteleraStrip(onOpen: () -> Unit) {
             Text(
                 "En cartelera",
                 color = ArtaColors.Text,
-                fontFamily = Nunito,
+                fontFamily = InterTight,
                 fontWeight = FontWeight.SemiBold,
                 fontSize = 20.sp,
                 modifier = Modifier.weight(1f),

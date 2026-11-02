@@ -162,7 +162,7 @@ struct InicioView: View {
                 .accessibilityLabel("Arta Producciones")
         } else {
             Text("EXPLANADA")
-                .font(.system(size: 19, weight: .heavy, design: .rounded))
+                .font(.system(size: 19, weight: .heavy))
                 .tracking(1.4)
                 .foregroundStyle(ArtaColor.silver)
                 .accessibilityLabel("Auditorio Explanada")
@@ -184,7 +184,7 @@ struct InicioView: View {
     /// «Hola, **José Luis**»: ligero con el nombre en 600.
     private var greetingText: AttributedString {
         var hello = AttributedString(firstName.isEmpty ? "Hola" : "Hola, ")
-        hello.font = ArtaFont.display(greetingSize, weight: .light)
+        hello.font = ArtaFont.display(greetingSize, weight: .semibold)
         guard !firstName.isEmpty else { return hello }
         var name = AttributedString(firstName)
         name.font = ArtaFont.display(greetingSize, weight: .semibold)

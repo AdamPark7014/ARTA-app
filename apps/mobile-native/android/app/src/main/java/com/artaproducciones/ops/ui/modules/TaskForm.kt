@@ -321,7 +321,7 @@ private fun FieldRow(label: String, value: String, enabled: Boolean, onClick: ()
             .heightIn(min = 48.dp)
             .padding(vertical = 4.dp),
     ) {
-        Text(label.uppercase(ES_MX), style = ArtaType.Cap, color = ArtaColors.Tertiary)
+        Text(label, style = ArtaType.Cap, color = ArtaColors.Tertiary)
         Text(value, color = if (enabled) ArtaColors.Gold else ArtaColors.Text)
     }
 }

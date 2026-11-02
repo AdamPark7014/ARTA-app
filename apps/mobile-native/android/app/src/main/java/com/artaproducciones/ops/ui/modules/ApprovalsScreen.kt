@@ -817,7 +817,7 @@ private fun PoSheet(
 /** Etiqueta de sección dentro de una hoja: MAYÚSCULAS espaciadas, como las de las listas. */
 @Composable
 private fun SheetLabel(text: String) {
-    Text(text.uppercase(ES_MX), style = ArtaType.Cap, color = ArtaColors.Tertiary, modifier = Modifier.padding(top = 4.dp))
+    Text(text, style = ArtaType.Cap, color = ArtaColors.Tertiary, modifier = Modifier.padding(top = 4.dp))
 }
 
 /** Fila «etiqueta: valor» como la de iOS: etiqueta en terciario y el valor alineado a la derecha. */

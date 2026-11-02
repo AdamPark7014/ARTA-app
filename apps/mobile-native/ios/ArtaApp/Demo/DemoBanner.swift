@@ -52,7 +52,7 @@ struct DemoWebUnavailableView: View {
     var body: some View {
         VStack(spacing: ArtaSpace.m) {
             Image(systemName: "rectangle.on.rectangle.slash")
-                .font(.system(size: 34, weight: .light))
+                .font(.system(size: 34, weight: .semibold))
                 .foregroundStyle(ArtaColor.muted)
             Text(title ?? "Panel web")
                 .font(ArtaFont.display(20, weight: .semibold))

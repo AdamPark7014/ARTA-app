@@ -460,12 +460,10 @@ struct EventRow: View {
             VStack(spacing: 0) {
                 if let startDate {
                     Text(MDate.shortMonth(startDate))
-                        .font(.system(size: 10, weight: .semibold, design: .rounded))
-                        .tracking(1)
-                        .textCase(.uppercase)
+                        .font(.system(size: 10, weight: .semibold))
                         .foregroundStyle(ArtaColor.tertiary)
                     Text(MDate.dayNumber(startDate))
-                        .font(.system(size: 20, weight: .light, design: .rounded))
+                        .font(.system(size: 20, weight: .semibold))
                         .monospacedDigit()
                         .foregroundStyle(ArtaColor.text)
                 } else {

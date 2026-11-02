@@ -61,17 +61,23 @@ struct CarteleraView: View {
                         .foregroundStyle(ArtaColor.muted)
                 }
 
-                ForEach(upcoming) { show in
-                    NavigationLink(value: show) {
-                        ShowTile(show: show)
+                LazyVGrid(
+                    columns: [GridItem(.flexible(), spacing: ArtaSpace.m, alignment: .top), GridItem(.flexible(), alignment: .top)],
+                    alignment: .leading,
+                    spacing: ArtaSpace.xl
+                ) {
+                    ForEach(upcoming) { show in
+                        NavigationLink(value: show) {
+                            ShowTile(show: show)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("cartelera-show")
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityIdentifier("cartelera-show")
                 }
 
                 if !past.isEmpty {
                     VStack(alignment: .leading, spacing: ArtaSpace.m) {
-                        Text("La temporada.")
+                        Text("Ya pasaron por aquí.")
                             .font(ArtaFont.display(28, weight: .semibold))
                             .tracking(-0.4)
                             .foregroundStyle(ArtaColor.text)
@@ -119,49 +125,44 @@ struct CarteleraView: View {
     }
 }
 
-/// La tarjeta de un show: el arte le da el color y se asoma abajo, como en el sitio.
+/// Un show: su póster entero sobre su propio color y, abajo, cuándo, qué y dónde. Como en el sitio.
 private struct ShowTile: View {
     let show: PublicShow
 
     var body: some View {
-        VStack(spacing: ArtaSpace.s) {
-            Text([CarteleraRules.dayMonth(show), show.venue].compactMap { $0 }.joined(separator: " · "))
-                .font(.subheadline.weight(.medium))
-                .opacity(0.92)
-            Text(show.title)
-                .font(ArtaFont.display(30, weight: .semibold))
-                .tracking(-0.4)
-                .lineLimit(3)
-                .minimumScaleFactor(0.75)
-            Text([CarteleraRules.timeLabel(show), CarteleraRules.countdown(show)].compactMap { $0 }.joined(separator: " · "))
-                .font(.subheadline)
-                .opacity(0.92)
-            ShowPosterImage(path: show.coverUrl)
-                .frame(width: 200)
-                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                .shadow(color: .black.opacity(0.5), radius: 22, y: 12)
-                .padding(.top, ArtaSpace.m)
-                .padding(.bottom, -70)
-        }
-        .multilineTextAlignment(.center)
-        .foregroundStyle(Color(hex: 0xF7F6F3))
-        .padding(.top, ArtaSpace.xxl)
-        .padding(.horizontal, ArtaSpace.l)
-        .frame(maxWidth: .infinity)
-        .background {
+        VStack(alignment: .leading, spacing: 3) {
             ZStack {
                 Color(hex: 0x0C0C0D)
                 if show.coverUrl != nil {
                     ShowPosterImage(path: show.coverUrl)
                         .scaleEffect(2.4)
-                        .blur(radius: 40)
+                        .blur(radius: 24)
                         .saturation(1.3)
                         .opacity(0.62)
                 }
+                ShowPosterImage(path: show.coverUrl)
+            }
+            .aspectRatio(0.8, contentMode: .fit)
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .padding(.bottom, ArtaSpace.s)
+            Text([CarteleraRules.dayMonth(show), CarteleraRules.timeLabel(show)].compactMap { $0 }.joined(separator: " · "))
+                .font(.caption.weight(.medium))
+                .foregroundStyle(ArtaColor.muted)
+            Text(show.title)
+                .font(ArtaFont.display(17))
+                .tracking(-0.2)
+                .foregroundStyle(ArtaColor.text)
+                .lineLimit(3)
+            if let venue = show.venue {
+                Text(venue)
+                    .font(.caption)
+                    .foregroundStyle(ArtaColor.muted)
+                    .lineLimit(2)
             }
         }
-        .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
-        .contentShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
+        .multilineTextAlignment(.leading)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
     }
 }
 

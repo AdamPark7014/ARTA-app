@@ -155,26 +155,26 @@ struct ArtaControlShape: InsettableShape {
     }
 }
 
-// MARK: - Tipografía (SF Pro Rounded: `.fontDesign(.rounded)` en la raíz)
+// MARK: - Tipografía (SF Pro, la de Apple: lo más cercano a la Inter del sitio y del panel)
 
 enum ArtaFont {
-    /// Etiqueta en mayúsculas (10–11 px, 600, tracking 1.6).
-    static let cap = Font.system(size: 10.5, weight: .semibold, design: .rounded)
-    /// Estado («REVISAR», «EN CURSO»): 10.5 como en la web y en Android.
-    static let status = Font.system(size: 10.5, weight: .semibold, design: .rounded)
+    /// Etiqueta: se lee como frase, sin mayúsculas forzadas.
+    static let cap = Font.system(size: 12.5, weight: .medium)
+    /// Estado («Revisar», «En curso»): chico, pero en frase, como en la web y en Android.
+    static let status = Font.system(size: 11.5, weight: .medium)
     /// Título de panel (600).
-    static let panelTitle = Font.system(size: 15, weight: .semibold, design: .rounded)
-    /// Título de pantalla y saludo: ligero, con el nombre en 600.
-    static func display(_ size: CGFloat, weight: Font.Weight = .light) -> Font {
-        .system(size: size, weight: weight, design: .rounded)
+    static let panelTitle = Font.system(size: 15, weight: .semibold)
+    /// Título de pantalla y saludo.
+    static func display(_ size: CGFloat, weight: Font.Weight = .semibold) -> Font {
+        .system(size: size, weight: weight)
     }
-    /// Cifra de tarjeta: ligera y tabular.
+    /// Cifra de tarjeta: con peso y tabular.
     static func figure(_ size: CGFloat) -> Font {
-        .system(size: size, weight: .light, design: .rounded).monospacedDigit()
+        .system(size: size, weight: .semibold).monospacedDigit()
     }
 }
 
-/// Etiqueta «cap»: mayúsculas chicas con espaciado, en terciario.
+/// Etiqueta «cap»: chica y en frase, en terciario.
 struct CapLabel: View {
     let text: String
     var color: Color?
@@ -187,9 +187,8 @@ struct CapLabel: View {
     }
 
     var body: some View {
-        Text(text.uppercased(with: Locale(identifier: "es_MX")))
+        Text(text.prefix(1).uppercased() + text.dropFirst())
             .font(ArtaFont.cap)
-            .tracking(1.5)
             .foregroundStyle(color ?? ArtaColor.tertiary)
             .lineLimit(lines)
             .fixedSize(horizontal: false, vertical: lines > 1)
@@ -228,7 +227,7 @@ struct QuietCount: View {
 
     var body: some View {
         Text(count > 99 ? "99+" : "\(count)")
-            .font(.system(size: 10.5, weight: .semibold, design: .rounded))
+            .font(.system(size: 10.5, weight: .semibold))
             .monospacedDigit()
             .foregroundStyle(ArtaColor.muted)
             .padding(.horizontal, 6)
@@ -356,7 +355,7 @@ private struct ArtaButtonBody: View {
     var body: some View {
         let shape = ArtaControlShape()
         configuration.label
-            .font(.system(textStyle, design: .rounded).weight(.semibold))
+            .font(.system(textStyle).weight(.semibold))
             .foregroundStyle(foreground)
             .lineLimit(1)
             .padding(.horizontal, compact ? 14 : 18)
@@ -415,7 +414,7 @@ struct Avatar: View {
                 Circle().fill(ArtaColor.accentFill)
             }
             Text(channel ? "#" : initials(of: name))
-                .font(.system(size: size * 0.38, weight: .semibold, design: .rounded))
+                .font(.system(size: size * 0.38, weight: .semibold))
                 .foregroundStyle(channel ? ArtaColor.text : ArtaColor.onAccent)
         }
         .frame(width: size, height: size)
@@ -429,7 +428,7 @@ struct CountBadge: View {
 
     var body: some View {
         Text(count > 99 ? "99+" : "\(count)")
-            .font(.system(size: 11, weight: .bold, design: .rounded))
+            .font(.system(size: 11, weight: .bold))
             .monospacedDigit()
             .foregroundStyle(muted ? ArtaColor.muted : ArtaColor.onAccent)
             .padding(.horizontal, 6)

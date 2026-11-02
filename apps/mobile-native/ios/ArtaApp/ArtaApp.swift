@@ -20,7 +20,6 @@ struct ArtaApp: App {
                 .preferredColorScheme(ArtaTheme.colorScheme(for: activeEntity.current))
                 .tint(activeEntity.current.accent)
                 // SF Pro Rounded en toda la app («letras redondeadas amigables»).
-                .fontDesign(.rounded)
                 .buttonBorderShape(activeEntity.current == .arta ? .capsule : .roundedRectangle(radius: 4))
                 .task { await session.restore() }
                 .onOpenURL { url in
