@@ -21,6 +21,7 @@ import androidx.compose.material.icons.automirrored.outlined.FactCheck
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.outlined.Logout
 import androidx.compose.material.icons.automirrored.outlined.OpenInNew
+import androidx.compose.material.icons.outlined.ConfirmationNumber
 import androidx.compose.material.icons.outlined.AccountBalance
 import androidx.compose.material.icons.outlined.AddCircleOutline
 import androidx.compose.material.icons.outlined.Badge
@@ -406,6 +407,14 @@ fun MoreScreen(user: UserDto, nav: ModuleNav) {
                 label = ModerationText.BLOCKED_USERS,
                 supporting = "Personas cuyos mensajes no ves en el chat",
                 onClick = { nav.openBlockedUsers() },
+            )
+        }
+        item(key = "cartelera") {
+            MoreRow(
+                icon = Icons.Outlined.ConfirmationNumber,
+                label = "Cartelera",
+                supporting = "Lo que viene y la temporada",
+                onClick = { nav.openCartelera() },
             )
         }
         item(key = "browser") {

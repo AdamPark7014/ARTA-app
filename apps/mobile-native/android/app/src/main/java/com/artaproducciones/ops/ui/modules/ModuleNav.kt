@@ -11,5 +11,7 @@ interface ModuleNav {
     fun openBlockedUsers()
     /** Qué avisos llegan al teléfono (desde Más y desde la barra de Avisos). */
     fun openNotificationPrefs()
+    /** La cartelera pública de Arta: lo que viene y la temporada. */
+    fun openCartelera()
     fun back()
 }

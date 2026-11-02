@@ -90,6 +90,7 @@ import com.artaproducciones.ops.ui.common.entitySwitchedMessage
 import com.artaproducciones.ops.ui.common.toggleEntity
 import com.artaproducciones.ops.ui.demo.DemoBanner
 import com.artaproducciones.ops.ui.demo.DemoWebUnavailableScreen
+import com.artaproducciones.ops.ui.cartelera.CarteleraScreen
 import com.artaproducciones.ops.ui.login.LoginScreen
 import com.artaproducciones.ops.ui.modules.ApprovalsScreen
 import com.artaproducciones.ops.ui.modules.EventDetailScreen
@@ -121,6 +122,7 @@ import kotlinx.coroutines.flow.drop
 private const val APPROVALS_ROUTE = "approvals?advance={advance}"
 
 /** Más › Usuarios bloqueados (chat). */
+private const val CARTELERA_ROUTE = "cartelera"
 private const val BLOCKED_USERS_ROUTE = "blocked-users"
 
 /** Preferencias de avisos (Más y barra de Avisos). */
@@ -352,6 +354,9 @@ private fun SignedInNav(user: UserDto, pendingLink: StateFlow<DeepLink?>, onLink
             override fun openNotificationPrefs() {
                 nav.navigate(NOTIFICATION_PREFS_ROUTE) { launchSingleTop = true }
             }
+            override fun openCartelera() {
+                nav.navigate(CARTELERA_ROUTE) { launchSingleTop = true }
+            }
             override fun back() {
                 if (nav.previousBackStackEntry != null) nav.popBackStack() else tab = Tab.Inicio
             }
@@ -411,6 +416,7 @@ private fun SignedInNav(user: UserDto, pendingLink: StateFlow<DeepLink?>, onLink
         }
         composable("events") { EventsScreen(nav = moduleNav) }
         composable(BLOCKED_USERS_ROUTE) { BlockedUsersScreen(onBack = { nav.popBackStack() }) }
+        composable(CARTELERA_ROUTE) { CarteleraScreen(onBack = { nav.popBackStack() }) }
         composable(NOTIFICATION_PREFS_ROUTE) { NotificationPrefsScreen(onBack = { nav.popBackStack() }) }
         composable(
             route = "web?path={path}&title={title}",

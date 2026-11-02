@@ -124,6 +124,10 @@ struct InicioView: View {
                 shortcuts
                     .padding(.top, ArtaSpace.xs)
                 eventsCard
+                if EntityContext.entity == .arta {
+                    CarteleraStrip()
+                        .padding(.top, ArtaSpace.s)
+                }
             }
             .padding(.horizontal, ArtaLayout.gutter)
             // La barra de navegación queda vacía (la marca va aquí): el encabezado sube a su altura.

@@ -1,8 +1,17 @@
 package com.artaproducciones.ops.ui.login
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -24,6 +33,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AutoAwesome
+import androidx.compose.material.icons.outlined.ConfirmationNumber
 import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
@@ -42,7 +52,16 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.imageResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.heading
@@ -60,6 +79,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.artaproducciones.ops.R
 import com.artaproducciones.ops.data.Session
+import com.artaproducciones.ops.ui.cartelera.CarteleraScreen
 import com.artaproducciones.ops.ui.common.LegalLinks
 import com.artaproducciones.ops.ui.modules.BusyLabel
 import com.artaproducciones.ops.ui.modules.rememberHaptics
@@ -96,6 +116,13 @@ fun LoginScreen() {
     var busy by remember { mutableStateOf(false) }
     var error by rememberSaveable { mutableStateOf<String?>(null) }
     var enteringDemo by remember { mutableStateOf(false) }
+    var showCartelera by rememberSaveable { mutableStateOf(false) }
+
+    if (showCartelera) {
+        BackHandler { showCartelera = false }
+        CarteleraScreen(onBack = { showCartelera = false })
+        return
+    }
 
     fun apply(result: Session.LoginResult) {
         busy = false
@@ -145,16 +172,11 @@ fun LoginScreen() {
                 Modifier.widthIn(max = 440.dp).fillMaxWidth(),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                Image(
-                    painter = painterResource(R.drawable.arta_logo),
-                    contentDescription = "ARTA",
-                    colorFilter = ColorFilter.tint(t.text),
-                    modifier = Modifier.height(64.dp),
-                )
+                LogoWindow(Modifier.widthIn(max = 300.dp).fillMaxWidth())
                 Spacer(Modifier.height(16.dp))
                 Text(
-                    "La experiencia del Show",
-                    style = TextStyle(fontFamily = Nunito, fontWeight = FontWeight.Light, fontSize = 20.sp, lineHeight = 26.sp, letterSpacing = (-0.3).sp),
+                    "La experiencia del Show.",
+                    style = TextStyle(fontFamily = Nunito, fontWeight = FontWeight.SemiBold, fontSize = 20.sp, lineHeight = 26.sp, letterSpacing = (-0.3).sp),
                     color = ArtaColors.Muted,
                     textAlign = TextAlign.Center,
                 )
@@ -248,6 +270,15 @@ fun LoginScreen() {
                 }
 
                 Spacer(Modifier.height(20.dp))
+                OutlinedButton(
+                    onClick = { showCartelera = true },
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                ) {
+                    Icon(Icons.Outlined.ConfirmationNumber, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Ver la cartelera")
+                }
+                Spacer(Modifier.height(8.dp))
                 DemoEntry(
                     enabled = !busy && !enteringDemo,
                     entering = enteringDemo,
@@ -277,6 +308,38 @@ fun LoginScreen() {
                 LegalLink("Términos") { LegalLinks.open(context, LegalLinks.TERMS) }
             }
         }
+    }
+}
+
+/** El logo es una ventana al show, como en el sitio: el concierto se mueve lento dentro de las letras. */
+@Composable
+private fun LogoWindow(modifier: Modifier = Modifier) {
+    val mask = ImageBitmap.imageResource(R.drawable.arta_wordmark_grande)
+    val zoom by rememberInfiniteTransition(label = "portada").animateFloat(
+        initialValue = 1.08f,
+        targetValue = 1.28f,
+        animationSpec = infiniteRepeatable(tween(16_000, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label = "acercamiento",
+    )
+    Box(
+        modifier
+            .aspectRatio(1200f / 466f)
+            .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+            .drawWithContent {
+                drawContent()
+                drawImage(mask, dstSize = IntSize(size.width.toInt(), size.height.toInt()), blendMode = BlendMode.DstIn)
+            }
+            .semantics { contentDescription = "ARTA" },
+    ) {
+        Image(
+            painter = painterResource(R.drawable.portada_concierto),
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.fillMaxSize().graphicsLayer {
+                scaleX = zoom
+                scaleY = zoom
+            },
+        )
     }
 }
 

@@ -18,6 +18,26 @@ import retrofit2.http.Part
 import retrofit2.http.Path
 import retrofit2.http.Query
 
+// ─── Cartelera pública: la misma del sitio y sin sesión (docs/SITIO-PUBLICO.md) ──────────
+
+data class PublicShowDto(
+    val id: String = "",
+    val slug: String = "",
+    val title: String = "",
+    val excerpt: String? = null,
+    val body: String? = null,
+    val coverUrl: String? = null,
+    val eventDate: String? = null,
+    val eventTime: String? = null,
+    val venue: String? = null,
+    val city: String? = null,
+    val ctaLabel: String? = null,
+    val ctaHref: String? = null,
+    val showStatus: String? = null,
+)
+
+data class PublicShowsDto(val upcoming: List<PublicShowDto> = emptyList(), val past: List<PublicShowDto> = emptyList())
+
 // ─── Sesión con permisos (UserDto del chat no los trae) ─────────────────────
 
 data class ModulesMe(
@@ -289,6 +309,9 @@ data class AdvanceDto(
 typealias JsonBody = Map<String, @JvmSuppressWildcards Any?>
 
 interface ArtaModulesApi {
+    @GET("studio/public/shows")
+    suspend fun publicShows(): PublicShowsDto
+
     @GET("auth/me")
     suspend fun me(): ModulesMeResponse
 

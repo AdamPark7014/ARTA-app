@@ -75,6 +75,16 @@ struct MoreView: View {
 
             // Qué llega al teléfono, horario silencioso, No molestar y el permiso de iOS.
             Section {
+                NavigationLink(value: AppRoute.cartelera) {
+                    rowLabel("Cartelera", systemImage: "ticket")
+                }
+                .accessibilityIdentifier("more-cartelera")
+            } header: {
+                ArtaSectionHeader("Sitio")
+            }
+            .listRowBackground(ArtaColor.bgElev)
+
+            Section {
                 NavigationLink(value: AppRoute.notificationPreferences) {
                     rowLabel("Preferencias de avisos", systemImage: "bell.badge")
                 }

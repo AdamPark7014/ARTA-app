@@ -1,0 +1,51 @@
+{
+  "upcoming": [
+    {
+      "id": "demo-show-1",
+      "slug": "noche-estelar",
+      "title": "Noche Estelar",
+      "excerpt": "Show de ejemplo del modo de muestra.",
+      "body": "Los datos de este modo son ficticios.",
+      "coverUrl": null,
+      "eventDate": "2026-12-12T12:00:00.000Z",
+      "eventTime": "20:30",
+      "venue": "Auditorio de ejemplo",
+      "city": "Puebla",
+      "ctaLabel": null,
+      "ctaHref": null,
+      "showStatus": "pronto"
+    },
+    {
+      "id": "demo-show-2",
+      "slug": "festival-de-ejemplo",
+      "title": "Festival de ejemplo",
+      "excerpt": "Otro show de ejemplo.",
+      "body": "Los datos de este modo son ficticios.",
+      "coverUrl": null,
+      "eventDate": "2027-01-30T12:00:00.000Z",
+      "eventTime": null,
+      "venue": "Explanada de ejemplo",
+      "city": "Puebla",
+      "ctaLabel": null,
+      "ctaHref": null,
+      "showStatus": "pronto"
+    }
+  ],
+  "past": [
+    {
+      "id": "demo-show-3",
+      "slug": "cierre-de-temporada",
+      "title": "Cierre de temporada",
+      "excerpt": "Show pasado de ejemplo.",
+      "body": null,
+      "coverUrl": null,
+      "eventDate": "2026-09-20T12:00:00.000Z",
+      "eventTime": null,
+      "venue": "Foro de ejemplo",
+      "city": "Puebla",
+      "ctaLabel": null,
+      "ctaHref": null,
+      "showStatus": null
+    }
+  ]
+}

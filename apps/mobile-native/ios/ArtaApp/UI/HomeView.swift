@@ -195,6 +195,8 @@ struct HomeView: View {
             BlockedUsersView()
         case .notificationPreferences:
             NotificationPreferencesView()
+        case .cartelera:
+            CarteleraView()
         }
     }
 }

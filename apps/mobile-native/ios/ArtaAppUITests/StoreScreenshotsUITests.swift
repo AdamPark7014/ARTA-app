@@ -452,6 +452,7 @@ final class StoreScreenshotsUITests: XCTestCase {
         if let correo = buscar([porId("login-email")], timeout: 30) {
             pausa(1.0)
             revisar("login-01-entrada")
+            capturarCartelera()
             // Con el teclado arriba: el formulario sube y nada queda tapado.
             if correo.isHittable {
                 correo.tap()
@@ -461,6 +462,31 @@ final class StoreScreenshotsUITests: XCTestCase {
         } else {
             omitir("login: no apareció la pantalla de entrada")
             adjuntarJerarquia("dbg-sin-login")
+        }
+    }
+
+    /// La cartelera sin cuenta: datos reales de producción, con sus pósters.
+    private func capturarCartelera() {
+        guard let boton = buscar([porId("login-cartelera")], timeout: 5), boton.isHittable else {
+            omitir("cartelera: no apareció el botón en la entrada")
+            return
+        }
+        boton.tap()
+        if let tarjeta = buscar([porId("cartelera-show")], timeout: 25) {
+            pausa(4.0)
+            revisar("login-03-cartelera")
+            tarjeta.tap()
+            pausa(4.0)
+            revisar("login-04-show")
+            app.navigationBars.buttons.firstMatch.tap()
+            pausa(1.0)
+        } else {
+            omitir("cartelera: no cargó ningún show")
+            adjuntarJerarquia("dbg-sin-cartelera")
+        }
+        if let cerrar = buscar([porId("cartelera-cerrar")], timeout: 5) {
+            cerrar.tap()
+            pausa(1.0)
         }
     }
 

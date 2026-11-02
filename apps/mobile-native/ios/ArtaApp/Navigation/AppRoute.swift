@@ -12,4 +12,6 @@ enum AppRoute: Hashable {
     case blockedUsers
     /// Qué llega al teléfono: Más › Preferencias de avisos y la barra de Avisos.
     case notificationPreferences
+    /// La cartelera pública de Arta: lo que viene y la temporada.
+    case cartelera
 }

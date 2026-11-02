@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.automirrored.outlined.FormatListBulleted
+import com.artaproducciones.ops.ui.cartelera.CarteleraStrip
 import com.artaproducciones.ops.ui.theme.CountBadge
 import com.artaproducciones.ops.ui.theme.cardSurface
 import com.artaproducciones.ops.ui.theme.fadingEdges
@@ -204,6 +205,7 @@ fun InicioScreen(user: UserDto, nav: ModuleNav) {
                     }
                     todayTasks(d.myTasks, today, nav)
                     if (ops) upcomingEvents(d.events, today, nav)
+                    if (entity == BizEntity.ARTA) item(key = "cartelera") { CarteleraStrip(onOpen = { nav.openCartelera() }) }
                 }
             }
         }

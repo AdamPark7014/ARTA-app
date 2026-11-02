@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// Entrada: sin sesión la app es ARTA (papel y tinta). Marca con «La experiencia del Show»,
-/// una tarjeta con los campos rotulados y la acción principal en el acento; abajo, el aviso de
+/// Entrada: sin sesión la app es ARTA (papel y tinta). El logo es una ventana al show, como en el
+/// sitio, con «La experiencia del Show»; luego una tarjeta con los campos rotulados y la acción principal en el acento; abajo, el aviso de
 /// privacidad y los términos. Todo centrado en la pantalla y desplazable cuando sube el teclado.
 struct LoginView: View {
     @EnvironmentObject private var session: Session
@@ -15,6 +15,9 @@ struct LoginView: View {
     @State private var busy = false
     @State private var error: String?
     @FocusState private var focus: Field?
+    @State private var showCartelera = false
+    @State private var drift = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private enum Field { case email, password, code }
 
@@ -50,8 +53,11 @@ struct LoginView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(ArtaCardBackground(radius: ArtaRadius.card + 4))
 
-                    demoEntry
+                    carteleraEntry
                         .padding(.top, ArtaSpace.l)
+
+                    demoEntry
+                        .padding(.top, ArtaSpace.s)
 
                     Spacer(minLength: ArtaSpace.xxxl)
                     legalLinks
@@ -67,23 +73,43 @@ struct LoginView: View {
             .scrollDismissesKeyboard(.interactively)
         }
         .artaScreenBackground()
+        .fullScreenCover(isPresented: $showCartelera) {
+            NavigationStack {
+                CarteleraView()
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button("Cerrar") { showCartelera = false }
+                                .accessibilityIdentifier("cartelera-cerrar")
+                        }
+                    }
+            }
+        }
     }
 
     // MARK: Marca
 
     private var brand: some View {
         VStack(spacing: ArtaSpace.l) {
-            Image("ArtaLogo")
-                .resizable()
-                .renderingMode(.template)
-                .scaledToFit()
-                .frame(height: 70)
-                .foregroundStyle(ArtaColor.text)
+            // El concierto dentro de las letras, con un movimiento lento que se apaga con «reducir movimiento».
+            Color.clear
+                .aspectRatio(1200 / 466, contentMode: .fit)
+                .overlay {
+                    Image("ConciertoPortada")
+                        .resizable()
+                        .scaledToFill()
+                        .scaleEffect(drift ? 1.28 : 1.08)
+                        .offset(y: drift ? -14 : 8)
+                        .animation(reduceMotion ? nil : .easeInOut(duration: 16).repeatForever(autoreverses: true), value: drift)
+                }
+                .clipped()
+                .mask(Image("ArtaVentana").resizable().scaledToFit())
+                .frame(maxWidth: 300)
+                .onAppear { drift = !reduceMotion }
                 .accessibilityLabel("ARTA")
-            Text("La experiencia del Show")
-                .font(ArtaFont.display(20, weight: .light))
+            Text("La experiencia del Show.")
+                .font(ArtaFont.display(24, weight: .semibold))
                 .tracking(-0.3)
-                .foregroundStyle(ArtaColor.muted)
+                .foregroundStyle(ArtaColor.text)
                 .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity)
@@ -197,6 +223,23 @@ struct LoginView: View {
                 error = nil
             }
         }
+    }
+
+    // MARK: Cartelera
+
+    /// Lo que viene en el escenario, sin cuenta: la misma cartelera del sitio.
+    private var carteleraEntry: some View {
+        Button {
+            Haptics.tap()
+            focus = nil
+            showCartelera = true
+        } label: {
+            Label("Ver la cartelera", systemImage: "ticket")
+                .minimumScaleFactor(0.8)
+                .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(ArtaSecondaryButtonStyle())
+        .accessibilityIdentifier("login-cartelera")
     }
 
     // MARK: Modo demostración
