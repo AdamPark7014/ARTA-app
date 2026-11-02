@@ -7,6 +7,20 @@
 - **Producción:** `762fe20` desplegado desde `main` el 2026-11-01 (`bash deploy/update.sh` en `/var/www/arta-app`, log
   `/root/arta-deploy-20261102-G.log`; respaldo automático en `/root/arta-backups/`). Disco al 79 %: al 90 % se cae la BD.
 
+## Falta que Adam elija: rediseño de Inicio (muestras, el sitio no cambió)
+
+Adam, viendo `762fe20`: «el modelo de la página principal sigue feo, poco premium y profesional, no se ve nivel Apple, la página no me dice nada».
+
+Dos muestras navegables en `apps/web/.next-maqueta/inicio.html`, ignorada por git porque trae shows sin confirmar (servidor `arta-maqueta` de
+`C:\dev\.claude\launch.json`, puerto 4188): **A «Escenario»**, oscura, y **B «Cartelera»**, clara, al estilo del inicio de apple.com. No se construye hasta que elija.
+
+- **Por qué «no dice nada»:** `/p/arta` lee la cartelera de `NewsPost` (plantilla `evento`), no de `Event`, así que dice «Estamos armando la próxima temporada» con
+  Soy Luna (05-11), Earth, Wind & Fire (10-12) y Finde (20-02-2027) en el panel. Capturarlos en Studio solo con su confirmación.
+- **Al construir:** conservar el catálogo de bloques y Studio, donde los practicantes editan todo. La letra de la muestra es Inter Tight e Inter:
+  `outfit-latin.woff2` solo trae pesos 800 y 900.
+- **Sin arte real:** el único archivo de un show (evento de Earth, Wind & Fire, `100X200.jpg`) es el pendón de Tecate Comuna, 28-nov en Foro Cholula; parece subido al evento
+  equivocado. Las fotos de la muestra son de archivo; los pósters y fotos reales los tiene que mandar Adam.
+
 ## Turno claude-code (2026-11-01, noche): ubicación de 10 a 18 h y apps a tiendas
 
 Adam: «incluir geolocalización de todos excepto chacho y arturo de 10 am a 6 pm en las apps móviles» y «las apps súbelas a sus tiendas
@@ -28,9 +42,10 @@ galería de Studio) y el Auditorio todavía listaba y generaba corrida por API.
   `uploads`: no borrarlo mientras Play revisa); lo graba `.github/workflows/android-video-ubicacion.yml` en un emulador.
 - **El AAB pasa de los 10 MB de `file_upload`:** se parte con `split -b 8m`, cada parte va a un `<input>` temporal y en la página se arma un `File` y se le
   da al input de Play con `DataTransfer`. Así ya no depende de Adam.
-- **iOS 1.0.1 (15): lista en App Store Connect, falta enviar.** `Etiqueta de privacidad` no tiene API pública (404/401 con la llave): hay que declarar
-  Ubicación precisa (vinculada, sin rastreo, funcionalidad) en la sesión de Chrome de Adam, que venció. Luego: `submit` del script de la API de ASC
-  (`POST reviewSubmissions`, `reviewSubmissionItems`, `PATCH submitted: true`).
+- **iOS 1.0.1 (15): enviada a revisión de Apple el 01-11** (`WAITING_FOR_REVIEW`, envío `d0906b27`). La etiqueta de privacidad no responde con la llave de la
+  API (404/401); se declaró con `fetch` desde la sesión de Chrome de Adam: `POST /iris/v1/appDataUsages` (`PRECISE_LOCATION`, `APP_FUNCTIONALITY`,
+  `DATA_LINKED_TO_YOU`) y `PATCH /iris/v1/appDataUsagesPublishState/{app}` con `published: true`. Después, `POST reviewSubmissions`, `reviewSubmissionItems` y
+  `PATCH submitted: true` con la llave.
 
 **Verificado:** API con base real y web en CI verdes; Android 161 pruebas; iOS compila y capturas revisadas (hoja de ubicación, evento con fila de módulos);
 video de Android revisado cuadro por cuadro: hoja, permiso, notificación fija con la app cerrada y que se quita al salir.
