@@ -59,6 +59,8 @@ data class LocationUi(
  * falta entonces se lee de las preferencias, no de la sesión.
  */
 object LocationTracker {
+    private var demoApp: Context? = null
+
     private const val TAG = "ArtaUbicacion"
     private const val PREFS = "arta_ubicacion"
     private const val KEY_USER = "user"
@@ -139,6 +141,8 @@ object LocationTracker {
 
     fun onDemoExit() {
         _ui.value = LocationUi()
+        demoApp?.let { stopService(it) }
+        demoApp = null
     }
 
     /** «Cerrar sesión»: se detiene todo y se vacía la cola de esa persona. */
@@ -303,8 +307,12 @@ object LocationTracker {
 
     /** Contestó el diálogo del sistema (cualquier respuesta). */
     fun onPermissionResult(context: Context) {
-        if (DemoMode.isActive) return
         val app = context.applicationContext
+        if (DemoMode.isActive) {
+            // En el demo se ve lo mismo que con cuenta (la notificación fija y que se quita al salir), sin medir.
+            if (DemoMode.enteredFromLogin && hasPermission(app) && startService(app)) demoApp = app
+            return
+        }
         scope.launch { refresh(app) }
     }
 

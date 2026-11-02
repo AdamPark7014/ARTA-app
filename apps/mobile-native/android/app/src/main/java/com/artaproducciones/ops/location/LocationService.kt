@@ -3,6 +3,7 @@ package com.artaproducciones.ops.location
 import android.annotation.SuppressLint
 import android.app.AlarmManager
 import android.app.Notification
+import com.artaproducciones.ops.demo.DemoMode
 import android.app.PendingIntent
 import android.app.Service
 import android.content.BroadcastReceiver
@@ -216,6 +217,8 @@ class LocationService : Service() {
     }
 
     private suspend fun measureOnce() {
+        // El demo solo enseña la notificación: no pide GPS ni manda nada.
+        if (DemoMode.isActive) return
         val app = applicationContext
         if (!LocationTracker.isActive(app)) {
             LocationTracker.stopService(app)
