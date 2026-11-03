@@ -4,8 +4,8 @@
 - **Fecha:** 2026-11-02
 - **Rama:** main
   (Adam es el único programador).
-- **Producción:** `568b16e` desplegado desde `main` el 2026-11-02 (`bash deploy/update.sh` en `/var/www/arta-app`, log
-  `/root/arta-deploy-20261102-H.log`; respaldo automático en `/root/arta-backups/`). Disco al 73 %: **un despliegue lo subió a 90 %, donde se cae la BD.** Antes de cada
+- **Producción:** `b97f436` desplegado desde `main` el 2026-11-02 (`bash deploy/update.sh` en `/var/www/arta-app`, log
+  `/root/arta-deploy-20261102-I.log`; respaldo automático en `/root/arta-backups/`). Disco al 68 %: **un despliegue lo subió a 90 %, donde se cae la BD.** Antes de cada
   despliegue, `docker builder prune -af`.
 
 ## Turno claude-code (2026-11-02, tarde): rediseño de 360 grados del sitio y lo real de Arta
@@ -33,7 +33,9 @@ Adam: «génerale un rediseño de 360 grados», «se debe mostrar como la empres
 - El panel con sesión real: se revisó con datos de prueba, no con la cuenta de Arta.
 - El Auditorio solo se revisó por pruebas, no a ojo.
 - Web Safari falló en `cd7aed1` por la prueba del botón de pausa, porque el clic llegaba tarde en el CI. Se endureció la prueba y la tarjeta de show dejó de ocultar «Ver detalles» con `display: none`. CI y Safari ya salieron verdes en `47d1cdb`.
-- Web Safari falló en `568b16e` y `880c988` por dos pruebas que se agotan solo en WebKit sobre Linux: las fotos de la portada y poner y borrar una sección en Studio. Sus trazas no enseñan errores. La portada real va a 60 cuadros por segundo en WebKit de Mac, también a tamaño iPhone, y a 6 y 19 en Linux; sin animaciones, a 55 y 57 en Linux (`medir-safari.yml`, a mano). Las dos llevan `test.slow()` y exigen lo mismo, y también corren en el job de Mac. Detalle en `docs/SAFARI.md`. No se midió en un iPhone de verdad. **Web Safari quedó en verde en `f92f9fe`:** nada falla solo en WebKit y las dos pasan en Mac. Ojo: la de Studio tardó en Mac 16 s en escritorio y 35 s a tamaño iPhone, contra 4 a 5 s en Chromium; falta medir Studio con sesión iniciada. Siguen 6 pruebas que fallan a tamaño iPhone en los dos motores, sin revisar: dos del chat, una de datos del show y tres del sitio.
+- Web Safari falló en `568b16e` y `880c988` por dos pruebas que se agotan solo en WebKit sobre Linux: las fotos de la portada y poner y borrar una sección en Studio. Sus trazas no enseñan errores. La portada real va a 60 cuadros por segundo en WebKit de Mac, también a tamaño iPhone, y a 6 y 19 en Linux; sin animaciones, a 55 y 57 en Linux (`medir-safari.yml`, a mano). Las dos llevan `test.slow()` y exigen lo mismo, y también corren en el job de Mac. Detalle en `docs/SAFARI.md`. No se midió en un iPhone de verdad. **Web Safari quedó en verde en `f92f9fe`:** nada falla solo en WebKit y las dos pasan en Mac. Ojo: la de Studio tardó en Mac 16 s en escritorio y 35 s a tamaño iPhone, contra 4 a 5 s en Chromium; falta medir Studio con sesión iniciada.
+- Las 6 pruebas que fallaban a tamaño iPhone en los dos motores ya pasan: Web Safari da 0 fallas en `b97f436` (285 en computadora, 283 a tamaño iPhone). Cinco eran viejas: el menú del sitio va en la hamburguesa, las acciones de un mensaje salen al tocarlo y «Ligados» va en el menú `…`. La sexta destapó un error real, ya en producción: dentro de un módulo del evento, «Más» se salía de la pantalla por la derecha y empujaba la página de lado, y «Editar datos» y «Reabrir» no se ofrecían fuera de Resumen. Ahora abre hacia adentro y los trae (`phoneOnly` en `EventHero`). Se comprobó con capturas a tamaño iPhone y con el CSS que sirve producción, no con sesión real ni en un iPhone de verdad.
+- **Falta medir:** Studio en WebKit de Mac, con sesión iniciada.
 - El último commit cambia prueba y una regla de CSS sin efecto visual: no se desplegó, producción sigue en `cd7aed1`.
 
 **Pendiente de Adam:**
