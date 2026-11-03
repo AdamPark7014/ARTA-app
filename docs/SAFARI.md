@@ -21,7 +21,7 @@ gh run download <id> -R AdamPark7014/ARTA-app -n comparacion
 | `Suite · webkit-iphone` | La misma suite con `devices['iPhone 15']`: 393 px, toque, `isMobile`, motor de Safari. |
 | `Suite · chromium` / `chromium-iphone` | Las mismas dos, con el motor de Chrome: la línea base. |
 | `Cortes · webkit` / `chromium` | El recorrido de «cortes» (`e2e/audit`) en ARTA y Auditorio a 1536×864 y 390×844. |
-| `macOS · WebKit` | Prueba corta (Safari, iPhone, login, shell, móvil, tareas) y las fotos de la portada en macOS: WebKit con las bibliotecas de Mac. |
+| `macOS · WebKit` | Prueba corta (Safari, iPhone, login, shell, móvil, tareas), las fotos de la portada y las secciones de Studio en macOS: WebKit con las bibliotecas de Mac. |
 | `Comparar` | **El veredicto.** Falla solo si una prueba pasa en Chromium y falla en WebKit: eso es un fallo de Safari. |
 
 Las suites no tumban el flujo por sí solas: hay pruebas viejas que fallan en los dos motores (ver §5) y eso
@@ -32,6 +32,23 @@ de lo que falló y capturas de `e2e/__mobile__`), `results-<proyecto>` (JSON), `
 capturas), `report-macos`.
 
 El comparador es `apps/web/scripts/compare-pw-results.mjs` (`suite` y `audit`).
+
+### WebKit en Linux no es Safari en velocidad
+
+Cuadros por segundo de la portada real, medidos el 02-11-2026 con `medir-safari.yml`, que se corre a mano:
+
+| | Escritorio | Tamaño iPhone |
+|---|---|---|
+| WebKit en Mac | 60 | 60 |
+| WebKit en Linux | 6 | 19 |
+| WebKit en Linux, sin animaciones | 55 | 57 |
+
+Cada clic de Playwright espera a que la página se pinte, así que en Linux se nota mucho: poner y borrar una sección
+en Studio, con la vista previa animada detrás, pasa de 4 s en Chromium a unos 50 s.
+
+**Si una prueba se agota solo en `webkit` o `webkit-iphone` y la traza no enseña errores,** ponla en el paso de Mac
+antes de buscar un fallo de Safari. Si ahí pasa, dale `test.slow()`, que no cambia lo que se exige. Esta medición
+no sustituye a un iPhone de verdad: en Mac se emula su tamaño.
 
 ### En una máquina
 

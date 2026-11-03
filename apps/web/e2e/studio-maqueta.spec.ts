@@ -122,6 +122,8 @@ test.describe('Studio · quien publica', () => {
   });
 
   test('poner una sección nueva en Inicio y borrarla', async ({ page }) => {
+    // Son diez clics con la vista previa animada detrás: WebKit en Linux tarda de 3 a 9 s en cada uno (docs/SAFARI.md).
+    test.slow();
     const state = siteState();
     await mockStudio(page, state);
     await open(page);

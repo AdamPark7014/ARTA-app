@@ -210,9 +210,9 @@ jobs:
           --trace=retain-on-failure
           --reporter=list,html
 
-      # Las fotos de la portada cambian con un temporizador: aquí se comprueba en el Safari de Mac,
+      # Las que WebKit en Linux hace muy lentas (docs/SAFARI.md): aquí se comprueban en el Safari de Mac,
       # con su propia salida para no borrar las trazas del paso anterior.
-      - name: Playwright · webkit (fotos de la portada)
+      - name: Playwright · webkit + webkit-iphone (fotos de la portada, secciones de Studio)
         if: ${{ !cancelled() }}
         working-directory: apps/web
         env:
@@ -220,9 +220,9 @@ jobs:
           PLAYWRIGHT_HTML_OPEN: never
         run: >-
           npx playwright test
-          e2e/sitio-publico.spec.ts
-          -g "las fotos de la portada se turnan"
-          --project=webkit
+          e2e/sitio-publico.spec.ts e2e/studio-maqueta.spec.ts
+          -g "las fotos de la portada se turnan|poner una sección nueva en Inicio"
+          --project=webkit --project=webkit-iphone
           --workers=1 --retries=1
           --output=e2e/.output-portada
           --trace=retain-on-failure
