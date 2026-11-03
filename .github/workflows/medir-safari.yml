@@ -1,4 +1,4 @@
-# Qué tan fluida va la portada real en el motor de Safari, en Mac y en Linux, y qué efecto la frena.
+# Qué tan fluidos van la portada real y Studio en el motor de Safari, y qué los frena.
 # Se corre a mano: gh workflow run medir-safari.yml --ref main
 name: Medir Safari
 
@@ -6,6 +6,47 @@ on:
   workflow_dispatch:
 
 jobs:
+  studio:
+    name: Studio · macOS
+    runs-on: macos-latest
+    timeout-minutes: 45
+    env:
+      NEXT_PUBLIC_API_URL: http://127.0.0.1:4000
+      NEXT_PUBLIC_ROOT_DOMAIN: artaproducciones.com
+      NEXT_PUBLIC_ARTA_HOST: arta.artaproducciones.com
+      NEXT_PUBLIC_AUDITORIO_HOST: auditorio.artaproducciones.com
+      E2E_WEBKIT: '1'
+      E2E_PREBUILT: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: arta.localhost → 127.0.0.1
+        run: sudo sh -c 'printf "127.0.0.1 arta.localhost auditorio.localhost\n" >> /etc/hosts'
+      - name: Instalar navegadores
+        working-directory: apps/web
+        run: npx playwright install webkit chromium
+      - name: Build
+        working-directory: apps/web
+        run: npm run build || { sleep 20; npm run build; }
+      # Safari y Chromium en la misma máquina. Baja del sitio real solo datos públicos: Node 24 no valida
+      # la cadena de certificados de ese dominio, aunque OpenSSL y curl sí; aquí no se manda nada privado.
+      - name: Medir
+        working-directory: apps/web
+        env:
+          MEDIR_STUDIO: '1'
+          AUDIT_WORKERS: '1'
+          NODE_TLS_REJECT_UNAUTHORIZED: '0'
+        run: >-
+          npx playwright test -c playwright.audit.config.ts
+          e2e/audit/studio-cuadros.audit.ts
+          --project=webkit --project=chromium
+          --reporter=list
+
+
   medir:
     name: Medir · ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
