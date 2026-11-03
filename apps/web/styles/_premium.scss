@@ -2462,6 +2462,20 @@ html[data-entity] select.board-card__move:focus {
   }
 }
 
+/* Con «Más» abierto, su menú queda por encima de las pestañas, que vienen después en la página. */
+.ev-hero:has(.ev-more[open]) {
+  position: relative;
+  z-index: 30;
+}
+
+/* Lo que el encabezado compacto del teléfono esconde, en computadora ya está a la vista. */
+@media (min-width: 641px) {
+  .ev-more--phone,
+  .ev-more__menu .ev-more__phone {
+    display: none;
+  }
+}
+
 /* ── Teléfono: lo importante en el primer pantallazo ──────────────────────── */
 
 @media (max-width: 640px) {
@@ -2536,6 +2550,12 @@ html[data-entity] select.board-card__move:focus {
 
   .ev-hero--dense .ev-hero__actions > .btn {
     display: none;
+  }
+
+  /* «Más» queda en la orilla derecha: su menú abre hacia adentro para no salirse de la pantalla. */
+  .ev-hero--dense .ev-more__menu {
+    right: 0;
+    left: auto;
   }
 
   /* Tareas */

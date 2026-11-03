@@ -94,6 +94,7 @@ test.describe('Datos del show', () => {
   test('«Editar datos» desde otra pestaña lleva al formulario, no a la nada', async ({
     page,
     baseURL,
+    isMobile,
   }) => {
     await seedSession(page, baseURL!);
     await mockAuthenticatedApi(page, {
@@ -103,11 +104,48 @@ test.describe('Datos del show', () => {
     });
     await page.goto('/events/evt-e2e-1?tab=tasks');
 
-    await page.getByRole('button', { name: 'Editar datos' }).first().click();
+    await page.getByLabel('Más acciones').click();
+    if (isMobile) {
+      // El encabezado compacto del teléfono lo lleva en «Más».
+      await expect(page.getByRole('button', { name: 'Editar datos' })).toHaveCount(0);
+      // Cabe completo en la pantalla y no empuja la página de lado.
+      await expect(page.getByRole('menuitem', { name: 'Editar datos' })).toBeInViewport({ ratio: 1 });
+      await expect(page.getByRole('menuitem', { name: 'Eliminar evento' })).toBeInViewport({ ratio: 1 });
+      const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+      expect(overflow).toBeLessThanOrEqual(0);
+      await page.getByRole('menuitem', { name: 'Editar datos' }).click();
+    } else {
+      // En computadora ya está a la vista: no se repite en «Más».
+      await expect(page.getByRole('menuitem', { name: 'Editar datos' })).toHaveCount(0);
+      await page.getByRole('button', { name: 'Editar datos' }).first().click();
+    }
 
     await expect(page.getByLabel('Fecha del evento')).toBeVisible();
     // Resumen es la pestaña por defecto, así que la URL se queda sin `?tab=`.
     await expect(page).not.toHaveURL(/tab=tasks/);
+  });
+
+  test('un evento cerrado se puede reabrir desde otra pestaña', async ({ page, baseURL, isMobile }) => {
+    const posts: string[] = [];
+    await seedSession(page, baseURL!);
+    await mockAuthenticatedApi(page, {
+      '/events/evt-e2e-1': { ...EVENT, status: 'CLOSED' },
+      '/documents/event/evt-e2e-1': [],
+      '/vendor/event/evt-e2e-1': [],
+    });
+    await page.route('**/api/events/evt-e2e-1/reopen', async (route: Route) => {
+      posts.push(route.request().method());
+      await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
+    });
+    await page.goto('/events/evt-e2e-1?tab=tasks');
+
+    if (isMobile) {
+      await page.getByLabel('Más acciones').click();
+      await page.getByRole('menuitem', { name: 'Reabrir' }).click();
+    } else {
+      await page.getByRole('button', { name: 'Reabrir' }).click();
+    }
+    await expect.poll(() => posts).toEqual(['POST']);
   });
 
   test('un último día antes de la fecha no se guarda', async ({ page, baseURL }) => {

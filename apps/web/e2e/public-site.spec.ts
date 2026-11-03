@@ -77,9 +77,11 @@ test.describe('Sitio público SSR', () => {
     await expect(page.getByText('Show no encontrado')).toBeVisible();
   });
 
-  test('el menú lleva a páginas y navegar no recarga todo', async ({ page }) => {
+  test('el menú lleva a páginas y navegar no recarga todo', async ({ page, isMobile }) => {
     await page.goto('/p/arta');
-    await page.locator('.sa-nav__links').getByRole('link', { name: 'Nosotros' }).click();
+    // En el teléfono las ligas van dentro de la hamburguesa.
+    if (isMobile) await page.getByRole('button', { name: 'Abrir menú' }).click();
+    await page.locator(isMobile ? '#sa-menu' : '.sa-nav__links').getByRole('link', { name: 'Nosotros' }).click();
     await expect(page).toHaveURL(/\/p\/arta\/nosotros$/);
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('Producimos el show completo');
     await expect(page.locator('.sa-nav__links a[aria-current="page"]')).toHaveText('Nosotros');

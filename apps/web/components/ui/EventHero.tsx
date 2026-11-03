@@ -15,7 +15,7 @@ type HeroEvent = {
   city?: string | null;
 };
 
-export type HeroMenuItem = { label: string; onClick: () => void; danger?: boolean };
+export type HeroMenuItem = { label: string; onClick: () => void; danger?: boolean; phoneOnly?: boolean };
 
 const STATUS: Record<string, { label: string; tone: string }> = {
   DRAFT: { label: 'Borrador', tone: 'draft' },
@@ -147,7 +147,7 @@ export function EventHero({
         <div className="ev-hero__actions">
           {actions}
           {menu?.length ? (
-            <details className="ev-more">
+            <details className={`ev-more${menu.every((m) => m.phoneOnly) ? ' ev-more--phone' : ''}`}>
               <summary className="btn ghost btn-sm" aria-label="Más acciones">
                 Más
               </summary>
@@ -157,7 +157,7 @@ export function EventHero({
                     key={m.label}
                     type="button"
                     role="menuitem"
-                    className={m.danger ? 'is-danger' : ''}
+                    className={[m.danger ? 'is-danger' : '', m.phoneOnly ? 'ev-more__phone' : ''].filter(Boolean).join(' ')}
                     onClick={(e) => {
                       (e.currentTarget.closest('details') as HTMLDetailsElement | null)?.removeAttribute('open');
                       m.onClick();

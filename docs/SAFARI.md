@@ -189,6 +189,12 @@ eso estos flujos no estaban cubiertos en ningún navegador:
   corrida).
 - `calendar` (encabezado) y `public-site` (2, contenido del sitio público).
 
+Otras 6 que fallaban solo a tamaño iPhone, en los dos motores, se pusieron al día el 02-11-2026. Cinco buscaban lo que
+en el teléfono está en otro lado: el menú del sitio va en la hamburguesa, las acciones de un mensaje salen al tocarlo
+y «Ligados» va en el menú `…`. Ahora usan `isMobile` y recorren esa ruta. La sexta destapó un error real: dentro de un
+módulo del evento, el menú «Más» se salía de la pantalla por la derecha y empujaba la página de lado. Además, «Editar
+datos» y «Reabrir» no se ofrecían fuera de Resumen. Ya abre hacia adentro y los trae.
+
 ## 6. Lo que necesita un Safari de verdad (persona)
 
 Playwright WebKit es el motor de Safari, no Safari: no trae Llavero, ni el bloqueador de ventanas tal cual,

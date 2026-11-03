@@ -307,11 +307,13 @@ test.describe('Chat · referencias', () => {
     await expect(box).toHaveValue('');
   });
 
-  test('«Crear tarea» desde un mensaje trae su texto y responde en su hilo', async ({ page, baseURL }) => {
+  test('«Crear tarea» desde un mensaje trae su texto y responde en su hilo', async ({ page, baseURL, isMobile }) => {
     const { posted, created } = await openChat(page, baseURL, {
       messages: [message({ id: 'm-origen', body: 'Hay que pedir el rider de audio' })],
     });
-    await page.locator('#m-m-origen').hover();
+    // En el teléfono no hay hover: las acciones salen al tocar el mensaje.
+    if (isMobile) await page.locator('#m-m-origen').tap();
+    else await page.locator('#m-m-origen').hover();
     await page.locator('#m-m-origen').getByRole('button', { name: 'Más acciones' }).click();
     await page.getByRole('menuitem', { name: 'Crear tarea' }).click();
     const dialog = page.getByRole('dialog', { name: 'Crear tarea' });
@@ -322,7 +324,7 @@ test.describe('Chat · referencias', () => {
     expect(posted[0].parentId).toBe('m-origen');
   });
 
-  test('el panel «Ligados» junta lo arrobado y lleva al mensaje', async ({ page, baseURL }) => {
+  test('el panel «Ligados» junta lo arrobado y lleva al mensaje', async ({ page, baseURL, isMobile }) => {
     await openChat(page, baseURL, {
       messages: [message({ id: 'm-liga', body: 'hola' })],
       extra: {
@@ -331,7 +333,13 @@ test.describe('Chat · referencias', () => {
         },
       },
     });
-    await page.getByRole('button', { name: /ligados a esta conversación/ }).click();
+    if (isMobile) {
+      // En el teléfono las herramientas del encabezado van en su menú.
+      await page.getByRole('button', { name: 'Más opciones de la conversación' }).click();
+      await page.getByRole('menuitem', { name: 'Ligados' }).click();
+    } else {
+      await page.getByRole('button', { name: /ligados a esta conversación/ }).click();
+    }
     const panel = page.getByRole('complementary', { name: 'Ligados' });
     await expect(panel.getByText('Tareas')).toBeVisible();
     await expect(panel.getByText('Eventos')).toBeVisible();

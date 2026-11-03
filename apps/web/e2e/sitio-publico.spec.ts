@@ -476,11 +476,13 @@ test.describe('Sitio público · páginas', () => {
     );
   });
 
-  test('se navega por el sitio sin salir de la vista previa', async ({ page }) => {
+  test('se navega por el sitio sin salir de la vista previa', async ({ page, isMobile }) => {
     await mockStudio(page, siteState());
     await page.goto('/site?embed=1');
 
-    await page.locator('.sa-nav__links').getByRole('link', { name: 'Servicios' }).click();
+    // En el teléfono las ligas van dentro de la hamburguesa.
+    if (isMobile) await page.getByRole('button', { name: 'Abrir menú' }).click();
+    await page.locator(isMobile ? '#sa-menu' : '.sa-nav__links').getByRole('link', { name: 'Servicios' }).click();
     await expect(page.locator('h1')).toHaveText('Una sola mano. Todo el show.');
 
     await page.getByRole('link', { name: /Producción/ }).first().click();
@@ -564,7 +566,7 @@ test.describe('Sitio público · páginas', () => {
     await expect(page.locator('a[href^="/p/arta/servicios"]')).toHaveCount(0);
   });
 
-  test('Contacto no se quita aunque venga así guardado: todos los botones llevan ahí', async ({ page }) => {
+  test('Contacto no se quita aunque venga así guardado: todos los botones llevan ahí', async ({ page, isMobile }) => {
     const state = siteState();
     state.pages.push({
       id: 'lay',
@@ -574,6 +576,7 @@ test.describe('Sitio público · páginas', () => {
     });
     await mockStudio(page, state);
     await page.goto('/site?embed=1&modo=publicado');
+    if (isMobile) await page.getByRole('button', { name: 'Abrir menú' }).click();
     await expect(page.locator('.sa-nav').getByRole('link', { name: 'Contacto' })).toHaveAttribute('href', '/p/arta/contacto');
   });
 

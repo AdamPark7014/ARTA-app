@@ -620,7 +620,16 @@ function EventDetailInner() {
     return <EventDetailSkeleton />;
   }
 
+  const editMeta = () => {
+    setEditingMeta(true);
+    if (tab !== 'overview') selectTab('overview');
+  };
+  const reopen = () => void eventAction('reopen', 'Evento reabierto');
+
   const menu: HeroMenuItem[] = [
+    // En el teléfono, fuera de Resumen, el encabezado esconde sus botones: aquí siguen a la mano.
+    ...(tab !== 'overview' && !closed && canEditEvent ? [{ label: 'Editar datos', phoneOnly: true, onClick: editMeta }] : []),
+    ...(tab !== 'overview' && closed && canReopen ? [{ label: 'Reabrir', phoneOnly: true, onClick: reopen }] : []),
     ...(!closed && canClose
       ? [
           {
@@ -648,19 +657,12 @@ function EventDetailInner() {
           actions={
             <>
               {!closed && canEditEvent ? (
-                <button
-                  className="btn ghost btn-sm"
-                  type="button"
-                  onClick={() => {
-                    setEditingMeta(true);
-                    if (tab !== 'overview') selectTab('overview');
-                  }}
-                >
+                <button className="btn ghost btn-sm" type="button" onClick={editMeta}>
                   Editar datos
                 </button>
               ) : null}
               {closed && canReopen ? (
-                <button className="btn btn-sm" type="button" onClick={() => void eventAction('reopen', 'Evento reabierto')}>
+                <button className="btn btn-sm" type="button" onClick={reopen}>
                   Reabrir
                 </button>
               ) : null}
