@@ -112,6 +112,7 @@ const delClicAPantalla = (page: Page) =>
 async function deTeclaAPantalla(page: Page) {
   await page.getByRole('button', { name: '+ Poner sección nueva' }).click({ timeout: 15_000 });
   await page.locator('.st-outline__add').getByRole('button', { name: /Texto con foto/ }).click({ timeout: 15_000 });
+  await expect(page.locator('#st-editor-title')).toHaveText('Texto con foto', { timeout: 15_000 });
   const campo = await page.getByLabel('Titular').elementHandle({ timeout: 15_000 });
   if (!campo) return null;
   return campo.evaluate(async (el) => {
