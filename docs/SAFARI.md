@@ -43,12 +43,20 @@ Cuadros por segundo de la portada real, medidos el 02-11-2026 con `medir-safari.
 | WebKit en Linux | 6 | 19 |
 | WebKit en Linux, sin animaciones | 55 | 57 |
 
-Cada clic de Playwright espera a que la página se pinte, así que en Linux se nota mucho: poner y borrar una sección
-en Studio, con la vista previa animada detrás, pasa de 4 s en Chromium a unos 50 s.
+Cada clic de Playwright espera a que la página se pinte, así que en Linux se nota mucho. Poner y borrar una sección
+en Studio, con la vista previa animada detrás, tarda:
+
+| | Escritorio | Tamaño iPhone |
+|---|---|---|
+| Chromium en Linux | 5 s | 4 s |
+| WebKit en Mac | 16 s | 35 s |
+| WebKit en Linux | 31 s | 47 s |
+
+**Studio también va más lento en WebKit de Mac,** y eso sí puede notarlo quien edite el sitio en Safari. Falta medir
+sus cuadros por segundo, que piden sesión iniciada, y probarlo en un iPhone de verdad: en Mac solo se emula su tamaño.
 
 **Si una prueba se agota solo en `webkit` o `webkit-iphone` y la traza no enseña errores,** ponla en el paso de Mac
-antes de buscar un fallo de Safari. Si ahí pasa, dale `test.slow()`, que no cambia lo que se exige. Esta medición
-no sustituye a un iPhone de verdad: en Mac se emula su tamaño.
+antes de buscar un fallo de Safari. Si ahí pasa, dale `test.slow()`, que no cambia lo que se exige.
 
 ### En una máquina
 
