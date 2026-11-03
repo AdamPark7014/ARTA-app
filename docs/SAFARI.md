@@ -43,20 +43,29 @@ Cuadros por segundo de la portada real, medidos el 02-11-2026 con `medir-safari.
 | WebKit en Linux | 6 | 19 |
 | WebKit en Linux, sin animaciones | 55 | 57 |
 
-Cada clic de Playwright espera a que la página se pinte, así que en Linux se nota mucho. Poner y borrar una sección
-en Studio, con la vista previa animada detrás, tarda:
-
-| | Escritorio | Tamaño iPhone |
-|---|---|---|
-| Chromium en Linux | 5 s | 4 s |
-| WebKit en Mac | 16 s | 35 s |
-| WebKit en Linux | 31 s | 47 s |
-
-**Studio también va más lento en WebKit de Mac,** y eso sí puede notarlo quien edite el sitio en Safari. Falta medir
-sus cuadros por segundo, que piden sesión iniciada, y probarlo en un iPhone de verdad: en Mac solo se emula su tamaño.
-
 **Si una prueba se agota solo en `webkit` o `webkit-iphone` y la traza no enseña errores,** ponla en el paso de Mac
 antes de buscar un fallo de Safari. Si ahí pasa, dale `test.slow()`, que no cambia lo que se exige.
+
+### El tiempo de una prueba no es lo que siente una persona
+
+Poner y borrar una sección en Studio tarda 4 a 5 s en Chromium, 16 a 35 s en WebKit de Mac y 31 a 47 s en WebKit de
+Linux. Parecía lentitud de Safari y no lo es: esa prueba fija la pantalla en 1536×864, y en `webkit-iphone` le suma la
+densidad 3x del iPhone, así que pinta muchos más píxeles que un iPhone real. No se midió de dónde salen esos segundos.
+
+Medido desde la pantalla, con la misma Mac y el contenido real en la vista previa (`e2e/audit/studio-cuadros.audit.ts`,
+02-11-2026):
+
+| | Cuadros/s en reposo | Clic a pantalla | Tecla a pantalla | Studio listo |
+|---|---|---|---|---|
+| Chromium, 1536×864 2x | 60 | 29 ms | 28 ms | 0.8 s |
+| WebKit, 1536×864 2x | 59 | 32 ms | 32 ms | 1.7 s |
+| Chromium, tamaño iPhone | 52 | 19 ms | 20 ms | 0.4 s |
+| WebKit, tamaño iPhone | 59 | 65 ms | 66 ms | 1.5 s |
+
+El peor caso fue una tecla de 125 ms a tamaño iPhone. En promedio, todo queda bajo los 100 ms. Lo único que frena de
+forma medible es la vista previa, que **se carga aunque esté cerrada**: en el teléfono baja 25 fotos y 3.3 MB que nadie
+ve, y sin ella el clic en WebKit baja de 65 a 36 ms. Quitar animaciones, filtros o máscaras del marco no cambia gran
+cosa. Es la Mac del CI con el tamaño de un iPhone: un iPhone de verdad, sobre todo uno viejo, sigue sin medirse.
 
 ### En una máquina
 
