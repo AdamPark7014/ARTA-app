@@ -23,9 +23,15 @@ type Org = {
   name: string;
   plan: string;
   active: boolean;
-  settingsJson?: { require2fa?: boolean } | null;
+  settingsJson?: { require2fa?: boolean; riesgo?: Partial<RiskRules> } | null;
   _count?: { users: number; events: number };
 };
+
+type RiskRule = { dias: number; minimo: number };
+type RiskRules = { urgente: RiskRule; revisar: RiskRule };
+
+/** Los mismos de `apps/api/src/common/event-risk.ts`. */
+const DEFAULT_RISK: RiskRules = { urgente: { dias: 7, minimo: 80 }, revisar: { dias: 14, minimo: 60 } };
 
 type MeOrg = Org & { _count?: { users: number; events: number; memberships: number } };
 
@@ -330,6 +336,16 @@ export default function OrganizationsPage() {
                   ) : null}
                 </div>
               </section>
+            ) : null}
+
+            {me && me.id ? (
+              <RiskSettings
+                key={JSON.stringify(me.settingsJson?.riesgo ?? null)}
+                orgId={me.id}
+                saved={me.settingsJson?.riesgo}
+                onSaved={load}
+                onError={setMsg}
+              />
             ) : null}
 
             <div className="panel">
@@ -644,5 +660,100 @@ function UsageMeter({
       ) : null}
       {near ? <span className="usage__warn">Cerca del tope del plan</span> : null}
     </div>
+  );
+}
+
+/**
+ * Cuándo un evento sale en riesgo (Adam, 07-11-2026): solo cerca de la fecha y si el avance no
+ * alcanza. Lejos del evento, o ya cerrado o pasado, no avisa. Lo leen el inicio, Eventos y los avisos.
+ */
+function RiskSettings({
+  orgId,
+  saved,
+  onSaved,
+  onError,
+}: {
+  orgId: string;
+  saved?: Partial<RiskRules> | null;
+  onSaved: () => Promise<void> | void;
+  onError: (msg: string) => void;
+}) {
+  const [rules, setRules] = useState<RiskRules>({
+    urgente: { ...DEFAULT_RISK.urgente, ...(saved?.urgente || {}) },
+    revisar: { ...DEFAULT_RISK.revisar, ...(saved?.revisar || {}) },
+  });
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState(false);
+
+  const set = (level: keyof RiskRules, key: keyof RiskRule, value: string) => {
+    setDone(false);
+    setRules((r) => ({ ...r, [level]: { ...r[level], [key]: Number(value) } }));
+  };
+
+  const save = async (e: FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    try {
+      await api(`/organizations/${orgId}`, { method: 'PATCH', body: JSON.stringify({ riesgo: rules }) });
+      setDone(true);
+      await onSaved();
+    } catch (err) {
+      onError(err instanceof Error ? err.message : 'No se pudieron guardar los umbrales de riesgo');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const row = (level: keyof RiskRules, label: string, hint: string) => (
+    <div className="org-risk__row">
+      <span className="org-risk__level">{label}</span>
+      <label>
+        <span>a</span>
+        <input
+          type="number"
+          min={1}
+          max={90}
+          inputMode="numeric"
+          aria-label={`${label}: días o menos para el evento`}
+          value={rules[level].dias}
+          onChange={(e) => set(level, 'dias', e.target.value)}
+        />
+        <span>días o menos</span>
+      </label>
+      <label>
+        <span>con menos de</span>
+        <input
+          type="number"
+          min={1}
+          max={100}
+          inputMode="numeric"
+          aria-label={`${label}: avance mínimo en porcentaje`}
+          value={rules[level].minimo}
+          onChange={(e) => set(level, 'minimo', e.target.value)}
+        />
+        <span>% de avance</span>
+      </label>
+      <span className="org-risk__hint">{hint}</span>
+    </div>
+  );
+
+  return (
+    <form className="panel org-risk" onSubmit={save}>
+      <div className="panel-head">
+        <h2>Eventos en riesgo</h2>
+      </div>
+      <p className="t-small t-muted">
+        Solo se marca un evento cerca de su fecha y con poco avance. Lejos de la fecha, cerrado o ya pasado, no
+        avisa; al cerrarlo o pasar su fecha, sus formatos cuentan 100 %.
+      </p>
+      {row('urgente', 'En riesgo', 'Urgente: avisa a dirección y a la gerencia.')}
+      {row('revisar', 'Por revisar', 'Un aviso para enterarse, sin urgencia.')}
+      <div className="org-risk__actions">
+        <button className="btn" type="submit" disabled={busy}>
+          {busy ? 'Guardando…' : 'Guardar'}
+        </button>
+        {done ? <span className="t-small t-muted">Guardado.</span> : null}
+      </div>
+    </form>
   );
 }

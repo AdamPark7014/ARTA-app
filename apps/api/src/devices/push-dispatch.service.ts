@@ -28,6 +28,8 @@ export type PushPayload = {
   threadTitle?: string | null;
   channelId?: string | null;
   messageId?: string | null;
+  /** Mensaje raíz del hilo si el aviso es de una respuesta: las apps abren el hilo. */
+  parentId?: string | null;
   /** Número para el globo del ícono (iOS). */
   badge?: number | null;
   /** Sin alerta: sincroniza el teléfono (p. ej. quitar avisos de un chat ya leído). */
@@ -132,6 +134,7 @@ export class PushDispatchService {
       thread_title: payload.threadTitle || '',
       channel_id: payload.channelId || '',
       message_id: payload.messageId || '',
+      parent_id: payload.parentId || '',
       badge: payload.badge != null ? String(payload.badge) : '',
       entity: payload.entity || '',
       actions: (payload.actions ?? []).join(','),

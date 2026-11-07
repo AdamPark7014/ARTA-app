@@ -68,6 +68,21 @@ export function who(fullName: string | null | undefined, fallback = 'Alguien del
 }
 
 /**
+ * «Ana R. agregó el formato «Rider técnico»»: quién, qué hizo y sobre qué, en una línea del
+ * teléfono. El nombre de la cosa se recorta antes que el verbo; el evento va en el cuerpo.
+ */
+export function actionTitle(
+  actor: string | null | undefined,
+  verb: string,
+  item?: string | null,
+  fallback?: string,
+): string {
+  const head = `${who(actor, fallback)} ${verb}`;
+  const name = item ? clip(item, Math.max(16, TITLE_MAX - head.length - 3)) : '';
+  return clip(name ? `${head} «${name}»` : head, TITLE_MAX);
+}
+
+/**
  * Título y cuerpo: «hechos · separados. Lo que se espera.» Si no cabe, se
  * recortan los hechos y la acción se queda entera: es lo que hay que hacer.
  */
@@ -562,8 +577,18 @@ export function eventNotice(
   }
 }
 
-/** Escaneo diario: «En riesgo: Noche de Boleros» + avance de formatos y días que faltan. */
-export function eventRiskNotice(input: { name: string; avg: number; days: number | null }): Notice {
+/**
+ * Escaneo: «En riesgo: Noche de Boleros» (urgente) o «Por revisar: …», con los días que faltan, el
+ * avance y cuántos formatos siguen por debajo de 100 %. Solo sale cerca del evento (`common/event-risk.ts`).
+ */
+export function eventRiskNotice(input: {
+  name: string;
+  avg: number;
+  days: number | null;
+  level?: 'critical' | 'watch';
+  pending?: number;
+  total?: number;
+}): Notice {
   const left =
     input.days == null || input.days < 0
       ? ''
@@ -572,10 +597,14 @@ export function eventRiskNotice(input: { name: string; avg: number; days: number
         : input.days === 1
           ? 'el evento es mañana'
           : `faltan ${input.days} días`;
+  const pending =
+    input.pending && input.total
+      ? `${input.pending} de ${input.total} ${input.total === 1 ? 'formato' : 'formatos'} sin terminar`
+      : '';
   return notice(
-    `En riesgo: ${clip(input.name, 50)}`,
-    facts(`formatos al ${Math.round(input.avg)} %`, left),
-    'Revisa los formatos pendientes.',
+    `${input.level === 'watch' ? 'Por revisar' : 'En riesgo'}: ${clip(input.name, 50)}`,
+    facts(left, `formatos al ${Math.round(input.avg)} %`, pending),
+    input.pending === 1 ? 'Revisa el formato pendiente.' : 'Revisa los formatos pendientes.',
   );
 }
 

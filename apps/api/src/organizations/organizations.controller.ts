@@ -10,7 +10,8 @@ import {
   Req,
   UseGuards,
 } from '@nestjs/common';
-import { IsBoolean, IsEnum, IsOptional, IsString, MinLength } from 'class-validator';
+import { IsBoolean, IsEnum, IsOptional, IsString, MinLength, IsObject } from 'class-validator';
+import { riskRulesOf } from '../common/event-risk';
 import { OrgPlan } from '@prisma/client';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -34,6 +35,8 @@ class PatchOrgDto {
   @IsOptional() @IsEnum(OrgPlan) plan?: OrgPlan;
   /** Enterprise/compliance policy: require every user in the org to enroll 2FA. */
   @IsOptional() @IsBoolean() require2fa?: boolean;
+  /** Cuándo un evento sale en riesgo: `{ urgente: { dias, minimo }, revisar: { dias, minimo } }` (common/event-risk.ts). */
+  @IsOptional() @IsObject() riesgo?: Record<string, unknown>;
 }
 
 @Controller('organizations')
@@ -117,9 +120,14 @@ export class OrganizationsController {
     if (body.plan !== undefined && !isPlatformAdmin(req.user)) {
       throw new ForbiddenException('Solo platform admin puede cambiar el plan');
     }
+    // Cada ajuste toca solo su llave; los umbrales de riesgo se guardan ya validados.
     const settingsJson =
-      body.require2fa !== undefined
-        ? { ...((existing.settingsJson as object) || {}), require2fa: body.require2fa }
+      body.require2fa !== undefined || body.riesgo !== undefined
+        ? {
+            ...((existing.settingsJson as object) || {}),
+            ...(body.require2fa !== undefined ? { require2fa: body.require2fa } : {}),
+            ...(body.riesgo !== undefined ? { riesgo: riskRulesOf({ riesgo: body.riesgo }) } : {}),
+          }
         : undefined;
     return this.prisma.organization.update({
       where: { id },

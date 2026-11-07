@@ -1,12 +1,18 @@
-import { NotificationsService, chatLinkParts } from './notifications.service';
+import { NotificationsService, chatLinkParts, chatMessageUrl } from './notifications.service';
 import { pushMetaFor } from './notification-push-meta';
 
 describe('NotificationsService · push de un aviso que apunta a un mensaje', () => {
-  it('extrae conversación y mensaje solo de /chat?channel=…', () => {
-    expect(chatLinkParts('/chat?channel=c1&msg=m9')).toEqual({ channelId: 'c1', messageId: 'm9' });
-    expect(chatLinkParts('/chat?channel=c1')).toEqual({ channelId: 'c1', messageId: null });
+  it('extrae conversación, mensaje e hilo solo de /chat?channel=…', () => {
+    expect(chatLinkParts('/chat?channel=c1&msg=m9')).toEqual({ channelId: 'c1', messageId: 'm9', parentId: null });
+    expect(chatLinkParts('/chat?channel=c1')).toEqual({ channelId: 'c1', messageId: null, parentId: null });
+    expect(chatLinkParts('/chat?channel=c1&msg=m9&thread=m1')).toEqual({ channelId: 'c1', messageId: 'm9', parentId: 'm1' });
     expect(chatLinkParts('/events/e1?tab=tasks')).toBeNull();
     expect(chatLinkParts(null)).toBeNull();
+  });
+
+  it('la liga de una respuesta en hilo lleva al hilo', () => {
+    expect(chatMessageUrl('c1', { id: 'm9' })).toBe('/chat?channel=c1&msg=m9');
+    expect(chatMessageUrl('c1', { id: 'm9', parentId: 'm1' })).toBe('/chat?channel=c1&msg=m9&thread=m1');
   });
 
   it('manda channelId, messageId y thread chat-<id> para que se apile con la conversación', async () => {

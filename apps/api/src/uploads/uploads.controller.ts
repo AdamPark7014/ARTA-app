@@ -1,4 +1,4 @@
-import { facts, who } from '../notifications/notification-text';
+import { actionTitle, facts, who } from '../notifications/notification-text';
 import {
   Controller,
   Post,
@@ -85,7 +85,14 @@ export class UploadsController {
    * Archivo nuevo, borrado o recuperado: al equipo del evento (canal Documentos).
    * Guardar contenido no avisa: el panel guarda seguido y sería ruido.
    */
-  private async tellTeam(user: AuthUser & { fullName?: string }, eventId: string | null, type: string, verb: string, fileName: string) {
+  private async tellTeam(
+    user: AuthUser & { fullName?: string },
+    eventId: string | null,
+    type: string,
+    verb: string,
+    fileName: string,
+    fileId?: string,
+  ) {
     if (!this.notifications || !eventId) return;
     try {
       const event = await this.prisma.event.findUnique({
@@ -98,9 +105,10 @@ export class UploadsController {
         organizationId: event.organizationId,
         actorId: user.id,
         type,
-        title: `${actor} ${verb}`,
-        body: facts(fileName, event.name),
-        linkUrl: `/events/${event.id}?tab=files`,
+        title: actionTitle(user.fullName, verb, fileName),
+        body: event.name,
+        // Subidas en ráfaga se juntan por liga exacta: esas van a la pestaña; recuperar abre el archivo.
+        linkUrl: fileId ? `/events/${event.id}?tab=files&file=${fileId}` : `/events/${event.id}?tab=files`,
         entity: event.entity,
         // Subir varios seguidos es una sola tarjeta en el teléfono, no una vibración por archivo.
         bundle:
@@ -416,7 +424,7 @@ export class UploadsController {
     await this.recordFileRevision(record, record.event, null, req, 'Archivo subido');
     // Adjuntos dentro de un formato (fotos de un campo) no son archivos nuevos del evento.
     if (!body.checklistId) {
-      void this.tellTeam(req.user, record.eventId, 'file.uploaded', 'subió un archivo', record.fileName);
+      void this.tellTeam(req.user, record.eventId, 'file.uploaded', 'subió', record.fileName);
     }
     return record;
   }
@@ -916,7 +924,7 @@ export class UploadsController {
       },
     });
 
-    void this.tellTeam(req.user, file.eventId, 'file.deleted', 'eliminó un archivo', file.fileName);
+    void this.tellTeam(req.user, file.eventId, 'file.deleted', 'eliminó', file.fileName);
     return { ok: true, restorable: true };
   }
 
@@ -996,7 +1004,7 @@ export class UploadsController {
       },
     });
 
-    void this.tellTeam(req.user, file.eventId, 'file.restored', 'recuperó un archivo borrado', file.fileName);
+    void this.tellTeam(req.user, file.eventId, 'file.restored', 'recuperó', file.fileName, file.id);
     return restored;
   }
 }

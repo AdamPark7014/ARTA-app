@@ -213,10 +213,13 @@ describe('notification-text · eventos, chat y boletera', () => {
     );
   });
 
-  it('evento en riesgo: nombre, avance y días', () => {
-    const n = eventRiskNotice({ name: 'Noche de Boleros', avg: 35, days: 5 });
+  it('evento en riesgo: nivel, días, avance y cuántos formatos faltan', () => {
+    const n = eventRiskNotice({ name: 'Noche de Boleros', avg: 35, days: 5, level: 'critical', pending: 4, total: 9 });
     expect(n.title).toBe('En riesgo: Noche de Boleros');
-    expect(n.body).toBe('formatos al 35 % · faltan 5 días. Revisa los formatos pendientes.');
+    expect(n.body).toBe('faltan 5 días · formatos al 35 % · 4 de 9 formatos sin terminar. Revisa los formatos pendientes.');
+    const watch = eventRiskNotice({ name: 'Finde', avg: 55, days: 12, level: 'watch', pending: 1, total: 6 });
+    expect(watch.title).toBe('Por revisar: Finde');
+    expect(watch.body).toBe('faltan 12 días · formatos al 55 % · 1 de 6 formatos sin terminar. Revisa el formato pendiente.');
   });
 
   it('chat: quién te agregó y a dónde; reporte dice dónde', () => {

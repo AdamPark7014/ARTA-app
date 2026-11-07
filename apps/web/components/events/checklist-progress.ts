@@ -6,6 +6,9 @@
  * haya palomeado todo. El servidor ya GUARDA así `progressPct` (lista de
  * formatos, resumen del evento, analítica y apps lo leen de ahí); esto es para
  * el formato abierto, que cuenta en vivo mientras se captura.
+ *
+ * Desde el 07-11-2026 todo formato de un evento cerrado o pasado cuenta 100 %
+ * (`isEventDone`, espejo del API).
  */
 
 import { isItemDone, isScoringItem, type Checklist, type ChecklistSection } from './event-detail.types';
@@ -35,6 +38,24 @@ export function isChecklistSent(c?: ChecklistSendState | null): boolean {
   );
 }
 
+/** Lo mínimo del evento para saber si ya terminó. */
+export type EventDoneState = { status?: string | null; startsAt?: string | null; endsAt?: string | null };
+
+const pueblaDay = (d: Date) => d.toLocaleDateString('en-CA', { timeZone: 'America/Mexico_City' });
+
+/**
+ * ¿El evento ya terminó? Espejo de `isEventDone` del API: cerrado, o desde el día
+ * siguiente a su última fecha en hora de Puebla. Cancelado no cuenta.
+ */
+export function isEventDone(event?: EventDoneState | null, now = new Date()): boolean {
+  if (!event) return false;
+  if (event.status === 'CLOSED') return true;
+  if (event.status === 'CANCELLED') return false;
+  const last = event.endsAt ?? event.startsAt;
+  if (!last) return false;
+  return pueblaDay(new Date(last)) < pueblaDay(now);
+}
+
 /** Campos que puntúan y cuántos llevan algo (misma cuenta que `captureCount` del API). */
 export function captureCount(sections: ChecklistSection[]): { done: number; total: number } {
   const scoring = sections.filter((s) => s.id !== 'firmas').flatMap((s) => s.items.filter(isScoringItem));
@@ -49,9 +70,10 @@ export function captureCount(sections: ChecklistSection[]): { done: number; tota
 export function checklistProgress(
   c: (ChecklistSendState & { progressPct?: number }) | null | undefined,
   sections: ChecklistSection[],
+  eventDone = false,
 ): { pct: number; done: number; total: number; sent: boolean } {
   const { done, total } = captureCount(sections);
   const sent = isChecklistSent(c);
-  const pct = sent ? 100 : total ? Math.round((done / total) * 100) : c?.progressPct || 0;
+  const pct = sent || eventDone ? 100 : total ? Math.round((done / total) * 100) : c?.progressPct || 0;
   return { pct, done, total, sent };
 }

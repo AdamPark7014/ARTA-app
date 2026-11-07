@@ -12,6 +12,7 @@ import { api } from '@/lib/api';
 import { CHANNEL_LABELS, channelOf, groupNotices, needsAction, type NoticeChannel } from '@/lib/notification-kinds';
 import { useRealtime } from '@/lib/realtime';
 import { useUser } from '@/lib/user-context';
+import { openNoticeLink } from '@/lib/notice-open';
 
 const PAGE = 50;
 
@@ -23,7 +24,7 @@ type Filter = 'all' | 'unread' | 'action' | 'sent' | NoticeChannel;
  */
 export default function NotificationsPage() {
   const router = useRouter();
-  const { entity } = useUser();
+  const { entity, setEntity, user } = useUser();
   const [items, setItems] = useState<Notice[]>([]);
   const [loading, setLoading] = useState(true);
   const [more, setMore] = useState(false);
@@ -91,7 +92,7 @@ export default function NotificationsPage() {
 
   function open(n: Notice) {
     markRead(n);
-    if (n.linkUrl) router.push(n.linkUrl);
+    openNoticeLink(n, { entity, entities: user?.entities, setEntity, push: router.push });
   }
 
   async function markAll() {

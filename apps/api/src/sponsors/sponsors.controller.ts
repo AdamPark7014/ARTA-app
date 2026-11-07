@@ -14,6 +14,7 @@ import {
 } from '@nestjs/common';
 import { IsNumber, IsOptional, IsString } from 'class-validator';
 import { NotificationsService } from '../notifications/notifications.service';
+import { actionTitle } from '../notifications/notification-text';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { assertSameTenant } from '../common/tenant';
@@ -88,8 +89,8 @@ export class SponsorsController {
       organizationId: event.organizationId,
       actorId: user.id,
       type,
-      title: `${user.fullName || 'Alguien del equipo'} ${verb}`,
-      body: `${detail} · ${event.name}`,
+      title: actionTitle(user.fullName, verb, detail),
+      body: event.name,
       linkUrl: `/events/${event.id}?tab=sponsors`,
       entity: event.entity as EntityKey,
     });
@@ -168,7 +169,7 @@ export class SponsorsController {
         createdById: req.user.id,
       },
     });
-    this.tellTeam(req.user, event, 'sponsor.created', 'agregó un patrocinador', created.name);
+    this.tellTeam(req.user, event, 'sponsor.created', 'agregó al patrocinador', created.name);
     return created;
   }
 
@@ -222,8 +223,8 @@ export class SponsorsController {
         req.user,
         existing.event,
         'sponsor.status',
-        'cambió el estatus de un patrocinador',
-        `${updated.name} · ${SPONSOR_STATUS_LABEL[updated.status ?? ''] ?? updated.status}`,
+        `marcó como «${SPONSOR_STATUS_LABEL[updated.status ?? ''] ?? updated.status}» a`,
+        updated.name,
       );
     }
     return updated;
@@ -249,7 +250,7 @@ export class SponsorsController {
     assertSameTenant(req.user, existing.event.organizationId);
     assertEventNotClosed(existing.event.status);
     await this.prisma.sponsor.delete({ where: { id } });
-    this.tellTeam(req.user, existing.event, 'sponsor.deleted', 'eliminó un patrocinador', existing.name);
+    this.tellTeam(req.user, existing.event, 'sponsor.deleted', 'eliminó al patrocinador', existing.name);
     return { ok: true };
   }
 }

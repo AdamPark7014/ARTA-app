@@ -15,7 +15,7 @@ import { DocStatus, DocType, Prisma } from '@prisma/client';
 import { createHash } from 'crypto';
 import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { PrismaService } from '../common/prisma/prisma.service';
-import { calcProgress, formatProgress } from '../common/checklist-progress';
+import { formatProgress } from '../common/checklist-progress';
 import { diffChecklistData } from '../common/doc-diff';
 import { bindFormatToEvent, normalizeFormatData, type FormatData, type FormatItem, type FormatSection } from '../common/format-schema';
 import {
@@ -54,7 +54,7 @@ import {
 import { ChecklistPdfService } from './checklist-pdf.service';
 import { VISIBLE_CHECKLIST_WHERE } from './checklist-visibility';
 import { NotificationsService } from '../notifications/notifications.service';
-import { checklistNotice, type ChecklistNoticeKind } from '../notifications/notification-text';
+import { actionTitle, checklistNotice, type ChecklistNoticeKind } from '../notifications/notification-text';
 import { Optional } from '@nestjs/common';
 
 type AuthUser = {
@@ -554,7 +554,7 @@ export class ChecklistsController {
 
     // Un formato ya mandado (firma de entrega, en revisión…) sigue en 100 %
     // aunque se corrija algo mientras se revisa.
-    const progressPct = formatProgress(body.dataJson, existing);
+    const progressPct = formatProgress(body.dataJson, existing, existing.event);
     const draft = body.draft === true;
     const base = body.baseRevision;
 
@@ -711,10 +711,11 @@ export class ChecklistsController {
      * Firmar es terminar y mandar el formato: desde aquí cuenta 100 % aunque no
      * se haya palomeado todo (cada evento usa solo parte de cada checklist).
      */
-    const progressPct = formatProgress(existing.dataJson, {
-      ...existing,
-      ...(body.kind === 'ENTREGADO' ? { deliveredAt: signedAt } : { authorizedAt: signedAt }),
-    });
+    const progressPct = formatProgress(
+      existing.dataJson,
+      { ...existing, ...(body.kind === 'ENTREGADO' ? { deliveredAt: signedAt } : { authorizedAt: signedAt }) },
+      existing.event,
+    );
 
     if (body.kind === 'ENTREGADO') {
       await this.prisma.checklistInstance.update({
@@ -830,7 +831,7 @@ export class ChecklistsController {
     const now = new Date();
     // Mandar a revisión, aprobar o sellar lo pone en 100 %; volver a borrador
     // sin firma regresa al avance de lo capturado.
-    const progressPct = formatProgress(existing.dataJson, { ...existing, status: to });
+    const progressPct = formatProgress(existing.dataJson, { ...existing, status: to }, existing.event);
     const updated = await this.prisma.checklistInstance.update({
       where: { id },
       data: {
@@ -1014,7 +1015,7 @@ export class ChecklistsController {
     }
 
     const dataJson = version.dataJson as object;
-    const progressPct = formatProgress(dataJson, existing);
+    const progressPct = formatProgress(dataJson, existing, existing.event);
 
     await this.prisma.checklistInstance.update({
       where: { id },
@@ -1050,8 +1051,8 @@ export class ChecklistsController {
         organizationId: existing.event.organizationId,
         actorId: req.user.id,
         type: 'checklist.restored',
-        title: `${req.user.fullName || 'Alguien del equipo'} restauró una versión anterior de un formato`,
-        body: `${existing.title} · ${existing.event.name}`,
+        title: actionTitle(req.user.fullName, 'restauró una versión de', existing.title),
+        body: `${existing.event.name} · regresó a una versión anterior`,
         linkUrl: `/events/${existing.eventId}?tab=checklists&checklist=${id}`,
         entity: existing.event.entity as EntityKey,
       })
@@ -1124,7 +1125,7 @@ export class ChecklistsController {
         templateId: template.id,
         title: body.title || template.name,
         dataJson: dataJson as unknown as Prisma.InputJsonValue,
-        progressPct: calcProgress(dataJson),
+        progressPct: formatProgress(dataJson, null, event),
         lastEditedById: req.user.id,
         lastEditedAt: new Date(),
       },
@@ -1134,8 +1135,8 @@ export class ChecklistsController {
       organizationId: event.organizationId,
       actorId: req.user.id,
       type: 'checklist.created',
-      title: `${req.user.fullName || 'Alguien del equipo'} agregó un formato al evento`,
-      body: `${created.title} · ${event.name}`,
+      title: actionTitle(req.user.fullName, 'agregó el formato', created.title),
+      body: event.name,
       linkUrl: `/events/${event.id}?tab=checklists&checklist=${created.id}`,
       entity: event.entity as EntityKey,
     });

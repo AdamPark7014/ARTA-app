@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 export type CalendarItem = {
   key: string;
@@ -46,17 +46,30 @@ export function MonthCalendar({
   items,
   onDayClick,
   renderDay,
+  focusDay,
 }: {
   items: CalendarItem[];
+  /** «YYYY-MM-DD» que un aviso pidió ver: abre en su mes y lo marca. */
+  focusDay?: string | null;
   /** El día completo (no un chip ni un enlace) se puede tocar — p. ej. para escribir una nota. */
   onDayClick?: (dayKey: string) => void;
   /** Contenido extra bajo los chips del show, por ejemplo notas del equipo. */
   renderDay?: (dayKey: string) => import('react').ReactNode;
 }) {
   const [month, setMonth] = useState(() => {
-    const d = new Date();
+    const d = focusDay && /^\d{4}-\d{2}-\d{2}$/.test(focusDay) ? new Date(`${focusDay}T12:00:00`) : new Date();
     return new Date(d.getFullYear(), d.getMonth(), 1);
   });
+  useEffect(() => {
+    if (!focusDay || !/^\d{4}-\d{2}-\d{2}$/.test(focusDay)) return;
+    const d = new Date(`${focusDay}T12:00:00`);
+    setMonth(new Date(d.getFullYear(), d.getMonth(), 1));
+    const t = window.setTimeout(
+      () => document.querySelector(`[data-day="${focusDay}"]`)?.scrollIntoView({ block: 'center' }),
+      80,
+    );
+    return () => window.clearTimeout(t);
+  }, [focusDay]);
 
   const normalized = useMemo(
     () =>
@@ -136,7 +149,8 @@ export function MonthCalendar({
           return (
             <div
               key={key}
-              className={`mcal__day ${out ? 'is-out' : ''} ${key === todayKey ? 'is-today' : ''} ${onDayClick ? 'is-clickable' : ''}`}
+              data-day={key}
+              className={`mcal__day ${out ? 'is-out' : ''} ${key === todayKey ? 'is-today' : ''} ${key === focusDay ? 'is-focus' : ''} ${onDayClick ? 'is-clickable' : ''}`}
               aria-current={key === todayKey ? 'date' : undefined}
               onClick={onDayClick ? () => onDayClick(key) : undefined}
               role={onDayClick ? 'button' : undefined}

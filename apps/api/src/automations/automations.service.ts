@@ -6,9 +6,13 @@ import { VISIBLE_CHECKLIST_WHERE } from '../checklists/checklist-visibility';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PERMISSIONS } from '../common/rbac/roles';
 import { eventRiskNotice, poAgingNotice, taskNotice } from '../notifications/notification-text';
+import { isEventDone } from '../common/checklist-progress';
+import { eventRisk as riskLevelOf, riskRulesOf } from '../common/event-risk';
+import { completeDoneEvents } from '../checklists/event-progress';
 
-/** OC abierta hace más de 7 días (para el recordatorio diario de quien autoriza). */
+/** OC abierta hace más de 7 días (para el recordatorio semanal de quien autoriza). */
 type AgingPo = {
+  id: string;
   status: string;
   amount: unknown;
   vendorName: string | null;
@@ -18,6 +22,23 @@ type AgingPo = {
 
 /** Una tarea vencida hace más de esto deja de recordarse cada día (ya es ruido, no aviso). */
 const OVERDUE_REMINDER_DAYS = 30;
+
+const DAY_MS = 86_400_000;
+/** Un evento en riesgo avisa una vez por nivel; si sigue igual, no se repite en este tiempo. */
+const RISK_NOTICE_MS = 30 * DAY_MS;
+/** La misma OC vieja se recuerda una vez por semana, no cada mañana durante meses. */
+const AGING_NOTICE_MS = 7 * DAY_MS - 4 * 3600_000;
+
+type RiskyEvent = {
+  id: string;
+  name: string;
+  avg: number;
+  entity: string;
+  days: number | null;
+  level: 'critical' | 'watch';
+  pending: number;
+  total: number;
+};
 
 @Injectable()
 export class AutomationsService implements OnModuleInit {
@@ -84,10 +105,13 @@ export class AutomationsService implements OnModuleInit {
     return sent;
   }
 
-  /** Alertas del escaneo también en la campana de dirección: una vez al día por evento u organización. */
+  /**
+   * Alertas del escaneo en la campana de dirección. El riesgo avisa una vez al entrar en «Por
+   * revisar» y otra si sube a «En riesgo», no cada día; lleva a los formatos pendientes del evento.
+   */
   private async notifyScanAlerts(
     organizationId: string,
-    risky: Array<{ id: string; name: string; avg: number; entity: string; days?: number | null }>,
+    risky: RiskyEvent[],
     agingPos: number | AgingPo[],
     pendingAuth: number,
   ) {
@@ -96,14 +120,18 @@ export class AutomationsService implements OnModuleInit {
     for (const e of risky.slice(0, 20)) {
       const people = await n.whoCan({ organizationId, entity: e.entity as 'ARTA' | 'EXPLANADA' });
       for (const userId of people) {
-        await n.notifyOncePerDay({
-          userId,
-          organizationId,
-          type: 'event.risk',
-          ...eventRiskNotice({ name: e.name, avg: e.avg, days: e.days ?? null }),
-          linkUrl: `/events/${e.id}?tab=checklists`,
-          entity: e.entity as 'ARTA' | 'EXPLANADA',
-        });
+        await n.notifyOnceWithin(
+          {
+            userId,
+            organizationId,
+            type: 'event.risk',
+            ...eventRiskNotice(e),
+            linkUrl: `/events/${e.id}?tab=checklists&ver=pendientes`,
+            entity: e.entity as 'ARTA' | 'EXPLANADA',
+          },
+          RISK_NOTICE_MS,
+          { sameTitle: true },
+        );
       }
     }
     const aging = Array.isArray(agingPos) ? agingPos : [];
@@ -127,15 +155,20 @@ export class AutomationsService implements OnModuleInit {
               : null,
           })
         : poAgingNotice({ unauthorized: { count: agingCount, amount: 0 }, unpaid: { count: 0, amount: 0 } });
+      // Una sola OC: esa. Varias en el mismo paso: la lista filtrada por ese paso.
+      const linkUrl =
+        aging.length === 1
+          ? `/purchase-orders?po=${aging[0].id}`
+          : unauthorized.length === 0 && unpaid.length > 0
+            ? '/purchase-orders?estado=unpaid'
+            : unpaid.length === 0 && unauthorized.length > 0
+              ? '/purchase-orders?estado=unauthorized'
+              : '/purchase-orders';
       for (const userId of await n.whoCan({ organizationId, permission: PERMISSIONS.PO_AUTHORIZE })) {
-        await n.notifyOncePerDay({
-          userId,
-          organizationId,
-          type: 'po.aging',
-          title: text.title,
-          body: text.body,
-          linkUrl: '/purchase-orders',
-        });
+        await n.notifyOnceWithin(
+          { userId, organizationId, type: 'po.aging', title: text.title, body: text.body, linkUrl },
+          AGING_NOTICE_MS,
+        );
       }
     }
     if (pendingAuth > 5) {
@@ -227,14 +260,19 @@ export class AutomationsService implements OnModuleInit {
     const now = new Date();
     const day7 = new Date(now.getTime() - 7 * 86_400_000);
 
-    const [agingRows, events, pendingAuth] = await Promise.all([
+    // Lo que ya terminó (cerrado o con la fecha pasada) cuenta 100 % antes de medir el riesgo.
+    await completeDoneEvents(this.prisma, { organizationId, now }).catch((e) =>
+      this.log.warn(`Formatos de eventos terminados: ${e instanceof Error ? e.message : e}`),
+    );
+
+    const [agingRows, events, pendingAuth, org] = await Promise.all([
       this.prisma.purchaseOrder.findMany({
         where: {
           status: { in: ['PENDING_AUTH', 'AUTHORIZED'] },
           createdAt: { lt: day7 },
           event: { organizationId },
         },
-        select: { status: true, amount: true, vendorName: true, createdAt: true, event: { select: { name: true } } },
+        select: { id: true, status: true, amount: true, vendorName: true, createdAt: true, event: { select: { name: true } } },
       }),
       this.prisma.event.findMany({
         where: { status: { in: ['ACTIVE', 'DRAFT'] }, organizationId },
@@ -242,7 +280,9 @@ export class AutomationsService implements OnModuleInit {
           id: true,
           name: true,
           entity: true,
+          status: true,
           startsAt: true,
+          endsAt: true,
           checklists: { where: VISIBLE_CHECKLIST_WHERE, select: { progressPct: true } },
         },
       }),
@@ -253,20 +293,31 @@ export class AutomationsService implements OnModuleInit {
           event: { organizationId },
         },
       }),
+      this.prisma.organization.findUnique({ where: { id: organizationId }, select: { settingsJson: true } }),
     ]);
 
+    const rules = riskRulesOf(org?.settingsJson);
     let eventRisk = 0;
-    const risky: Array<{ id: string; name: string; avg: number; entity: string; days: number | null }> = [];
+    const risky: RiskyEvent[] = [];
     for (const e of events) {
-      const n = e.checklists.length;
-      const avg = n ? e.checklists.reduce((s, c) => s + c.progressPct, 0) / n : 0;
-      const days = e.startsAt
-        ? Math.round((e.startsAt.getTime() - now.getTime()) / 86_400_000)
-        : null;
-      if (avg < 40 || (days != null && days <= 7 && avg < 70)) {
-        eventRisk += 1;
-        risky.push({ id: e.id, name: e.name, avg: Math.round(avg), entity: e.entity, days });
-      }
+      const total = e.checklists.length;
+      // Sin formatos no hay avance que medir: no se marca en riesgo por eso.
+      if (!total) continue;
+      const avg = e.checklists.reduce((s, c) => s + c.progressPct, 0) / total;
+      const days = e.startsAt ? Math.round((e.startsAt.getTime() - now.getTime()) / DAY_MS) : null;
+      const level = riskLevelOf({ avg, days, done: isEventDone(e, now) }, rules);
+      if (level === 'healthy') continue;
+      eventRisk += 1;
+      risky.push({
+        id: e.id,
+        name: e.name,
+        avg: Math.round(avg),
+        entity: e.entity,
+        days,
+        level,
+        pending: e.checklists.filter((c) => c.progressPct < 100).length,
+        total,
+      });
     }
     const agingPos = agingRows.length;
 

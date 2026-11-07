@@ -29,7 +29,8 @@ import {
 } from '../common/rbac/roles';
 import { ChecklistPdfService } from '../checklists/checklist-pdf.service';
 import { VISIBLE_CHECKLIST_WHERE } from '../checklists/checklist-visibility';
-import { calcProgress } from '../common/checklist-progress';
+import { formatProgress } from '../common/checklist-progress';
+import { completeDoneEvents, recalcEventChecklists } from '../checklists/event-progress';
 import { bindFormatToEvent, normalizeFormatData } from '../common/format-schema';
 import { assertSameTenant, tenantIdOf } from '../common/tenant';
 import { assertEventSlotAvailable } from '../common/plan-limits';
@@ -406,7 +407,7 @@ export class EventsController {
           templateId: t.id,
           title: t.name,
           dataJson: dataJson as unknown as Prisma.InputJsonValue,
-          progressPct: calcProgress(dataJson),
+          progressPct: formatProgress(dataJson, null, event),
           lastEditedById: req.user.id,
           lastEditedAt: new Date(),
         },
@@ -512,6 +513,8 @@ export class EventsController {
       where: { id },
       data: { status: 'CLOSED' },
     });
+    // Concluido, todo cuenta 100 % (Adam, 07-11-2026): resumen, formatos, analítica y apps.
+    await completeDoneEvents(this.prisma, { eventId: id });
     /*
      * Cerrar el evento NO sella la corrida.
      *
@@ -538,6 +541,8 @@ export class EventsController {
       throw new ForbiddenException('Solo dirección puede reabrir');
     }
     const event = await this.prisma.event.update({ where: { id }, data: { status: 'ACTIVE' } });
+    // Cada formato vuelve a su avance real, salvo que la fecha del evento ya haya pasado.
+    await recalcEventChecklists(this.prisma, id);
     // Reabrir el evento devuelve cada documento a SU propio estado; jamás
     // degrada un sellado. Para eso está `POST /finance/:id/unlock`, con motivo.
 
@@ -645,6 +650,14 @@ export class EventsController {
         metaJson: dto as object,
       },
     });
+
+    // Con otra fecha, el evento pudo pasar o volver al futuro: sus formatos se recalculan.
+    if (
+      existing.startsAt?.getTime() !== event.startsAt?.getTime() ||
+      existing.endsAt?.getTime() !== event.endsAt?.getTime()
+    ) {
+      await recalcEventChecklists(this.prisma, id);
+    }
 
     if (event.startsAt && existing.startsAt?.getTime() !== event.startsAt.getTime()) {
       await this.notifyTeam(

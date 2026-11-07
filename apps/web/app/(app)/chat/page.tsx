@@ -225,6 +225,8 @@ function ChatInner() {
   useKeyboardFit('.chat');
   const channelParam = searchParams.get('channel');
   const msgParam = searchParams.get('msg');
+  /** Raíz del hilo cuando el aviso es de una respuesta: se abre ese hilo, no solo la conversación. */
+  const threadParam = searchParams.get('thread');
   const withParam = searchParams.get('with');
   const eventParam = searchParams.get('event');
   const narrow = useNarrow();
@@ -530,7 +532,8 @@ function ChatInner() {
         if (!cancelled) setLoadError(channelId);
         showToast(errorText(e, 'No se pudo abrir la conversación'));
       });
-    const around = msgParam;
+    // Una respuesta no vive en la lista principal: se salta a la raíz de su hilo.
+    const around = threadParam || msgParam;
     if (around) {
       jumpRef.current = around;
       flash(around);
@@ -546,7 +549,7 @@ function ChatInner() {
       cancelled = true;
       leaveChannel(channelId);
     };
-  }, [meId, activeId, msgParam, loadLatest, showToast, flash, reloadKey]);
+  }, [meId, activeId, msgParam, threadParam, loadLatest, showToast, flash, reloadKey]);
 
   const head = detail?.id === activeId ? detail : null;
   const entry = activeId ? store[activeId] : undefined;
@@ -627,6 +630,12 @@ function ChatInner() {
     },
     [showToast],
   );
+
+  // El aviso de una respuesta en hilo (`?thread=`) abre ese hilo al llegar a su conversación.
+  useEffect(() => {
+    if (!threadParam || !activeId || activeId !== channelParam) return;
+    openThread({ id: threadParam, parentId: null } as ChatMessage);
+  }, [threadParam, activeId, channelParam, openThread]);
 
   const openPins = useCallback(() => {
     if (!activeId) return;

@@ -5,6 +5,7 @@ import { FileViewer, PdfEditor } from '@/components/files/lazy';
 import { ExpandBox } from '@/components/ui/ExpandBox';
 import { FormatSheet, FormatSignatures, GrowingText, type SignPermissions } from '@/components/events/FormatSheet';
 import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import {
   canAddFormatImages,
   canApproveFormat,
@@ -24,7 +25,7 @@ import { useAutosave } from '@/lib/use-autosave';
 import { useDirtyGuard } from '@/lib/use-dirty-guard';
 import { useSaveHotkey } from '@/lib/use-save-hotkey';
 import { DocStatusBadge, DocStatusControl } from '@/components/ui/DocStatusControl';
-import { checklistProgress } from '@/components/events/checklist-progress';
+import { checklistProgress, isEventDone } from '@/components/events/checklist-progress';
 import {
   isCheckItem,
   isItemDone,
@@ -264,7 +265,16 @@ export function EventChecklistsPanel({
   onRestoreVersion,
   onFilesChanged,
 }: EventChecklistsPanelProps) {
-  const [bucket, setBucket] = useState<ChecklistBucket | 'all'>('all');
+  const searchParams = useSearchParams();
+  // El aviso de riesgo lleva a los pendientes: `?ver=pendientes` abre «Por completar».
+  const [bucket, setBucket] = useState<ChecklistBucket | 'all'>(() =>
+    searchParams?.get('ver') === 'pendientes' ? 'todo' : 'all',
+  );
+  const verPendientes = searchParams?.get('ver') === 'pendientes';
+  useEffect(() => {
+    if (verPendientes) setBucket('todo');
+  }, [verPendientes]);
+  const eventDone = isEventDone(event);
   const [drawer, setDrawer] = useState<Drawer>(null);
   const [annotating, setAnnotating] = useState(false);
   /**
@@ -514,11 +524,11 @@ export function EventChecklistsPanel({
     const all = event.checklists || [];
     const counts = {
       all: all.length,
-      todo: all.filter((c) => checklistBucket(c) === 'todo').length,
-      review: all.filter((c) => checklistBucket(c) === 'review').length,
-      ready: all.filter((c) => checklistBucket(c) === 'ready').length,
+      todo: all.filter((c) => checklistBucket(c, eventDone) === 'todo').length,
+      review: all.filter((c) => checklistBucket(c, eventDone) === 'review').length,
+      ready: all.filter((c) => checklistBucket(c, eventDone) === 'ready').length,
     };
-    const list = bucket === 'all' ? all : all.filter((c) => checklistBucket(c) === bucket);
+    const list = bucket === 'all' ? all : all.filter((c) => checklistBucket(c, eventDone) === bucket);
 
     return (
       <div className="sx-stack">
@@ -631,7 +641,7 @@ export function EventChecklistsPanel({
    * 100 % aunque no se haya palomeado todo: cada evento usa solo parte de
    * cada checklist. Lo capturado de verdad se enseña al lado.
    */
-  const progress = checklistProgress(activeChecklist, sections);
+  const progress = checklistProgress(activeChecklist, sections, eventDone);
   const progressPct = progress.pct;
 
   return (

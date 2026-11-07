@@ -7,6 +7,7 @@ import { api } from '@/lib/api';
 import { groupNotices, needsAction } from '@/lib/notification-kinds';
 import { useRealtime, useRealtimeStatus } from '@/lib/realtime';
 import { useUser } from '@/lib/user-context';
+import { openNoticeLink } from '@/lib/notice-open';
 import { LiveToasts, type LiveToast } from './LiveToasts';
 import { NoticeRow, reportSeen, type Notice } from './NoticeRow';
 
@@ -82,7 +83,8 @@ function useUnreadSignals(count: number) {
 export function NotificationBell() {
   const router = useRouter();
   const pathname = usePathname();
-  const { entity } = useUser();
+  const { entity, setEntity, user } = useUser();
+  const go = (n: Notice) => openNoticeLink(n, { entity, entities: user?.entities, setEntity, push: router.push });
   const [open, setOpen] = useState(false);
   const [count, setCount] = useState(0);
   const [items, setItems] = useState<Notice[]>([]);
@@ -152,7 +154,7 @@ export function NotificationBell() {
     if (document.hidden) {
       systemNotice(n.title, n.body, `arta-${n.id}`, () => {
         void markRead(n);
-        if (n.linkUrl) router.push(n.linkUrl);
+        go(n);
       });
     } else if (mine && !(pathname === '/chat' && n.type.startsWith('chat.'))) {
       pushToast({
@@ -162,7 +164,7 @@ export function NotificationBell() {
         body: n.body,
         onOpen: () => {
           void markRead(n);
-          if (n.linkUrl) router.push(n.linkUrl);
+          go(n);
         },
       });
     }
@@ -209,18 +211,23 @@ export function NotificationBell() {
     return () => clearInterval(id);
   }, [loadCount]);
 
-  // Se llegó tocando un aviso del sistema o del push: queda leído y la dirección limpia.
+  // Se llegó tocando un aviso del sistema o del push: queda leído, en su unidad y con la dirección limpia.
   useEffect(() => {
     const query = new URLSearchParams(window.location.search);
     const id = query.get('notif');
-    if (!id) return;
+    const unit = query.get('entidad');
+    if (unit && unit !== entity && (user?.entities as string[] | undefined)?.includes(unit)) setEntity(unit as typeof entity);
+    if (unit) query.delete('entidad');
+    if (!id && !unit) return;
     query.delete('notif');
     const rest = query.toString();
     window.history.replaceState(null, '', `${window.location.pathname}${rest ? `?${rest}` : ''}${window.location.hash}`);
+    if (!id) return;
     void api(`/notifications/${encodeURIComponent(id)}/read`, { method: 'PATCH' })
       .catch(() => null)
       .then(loadCount);
-  }, [loadCount]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loadCount, user?.id]);
 
   useEffect(() => {
     if (open) loadItems();
@@ -253,7 +260,7 @@ export function NotificationBell() {
   function openNotification(n: Notice) {
     setOpen(false);
     void markRead(n);
-    if (n.linkUrl) router.push(n.linkUrl);
+    go(n);
   }
 
   async function markAll() {

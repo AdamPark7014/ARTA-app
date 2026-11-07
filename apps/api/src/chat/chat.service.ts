@@ -10,7 +10,7 @@ import { PrismaService } from '../common/prisma/prisma.service';
 import { tenantIdOf } from '../common/tenant';
 import { ALL_ROLES, canJoinEventChannels, isDirectionRole, type EntityKey } from '../common/rbac/roles';
 import { canSeeEntity, ENTITY_KEYS, entityForNew, entityScope, userEntities } from '../common/entity-scope';
-import { NotificationsService } from '../notifications/notifications.service';
+import { chatMessageUrl, NotificationsService } from '../notifications/notifications.service';
 import { shortName } from '../notifications/notification-push-meta';
 import { chatMembershipNotice, chatReportNotice } from '../notifications/notification-text';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
@@ -1103,7 +1103,7 @@ export class ChatService {
     audience = audience.filter((id) => !mentioned.has(id) && !refPlan.has(id));
 
     const author = user.fullName || message.sender.fullName || 'Alguien';
-    const url = `/chat?channel=${channel.id}&msg=${message.id}`;
+    const url = chatMessageUrl(channel.id, message);
     const body = message.parentId ? `Respuesta en hilo: ${preview}` : preview;
 
     await Promise.all(
@@ -1123,6 +1123,7 @@ export class ChatService {
           threadTitle: channelLabel,
           channelId: channel.id,
           messageId: message.id,
+          parentId: message.parentId ?? null,
         }),
       ),
     );
@@ -1285,7 +1286,7 @@ export class ChatService {
         .pushOnly(message.senderId, {
           title: `${shortName(author) || author} reaccionó ${emoji}`,
           body: pushText(message),
-          url: `/chat?channel=${message.channelId}&msg=${messageId}`,
+          url: chatMessageUrl(message.channelId, message),
           type: 'chat.reaction',
           kind: 'event',
           channel: 'chat',
@@ -1660,7 +1661,7 @@ export class ChatService {
       author: message.sender.fullName,
       preview: chatPreview(pushText(message), 100),
     });
-    const messageUrl = `/chat?channel=${channel.id}&msg=${message.id}`;
+    const messageUrl = chatMessageUrl(channel.id, message);
     await this.notifications.notifyMany(
       recipients.map((uid) => ({
         userId: uid,

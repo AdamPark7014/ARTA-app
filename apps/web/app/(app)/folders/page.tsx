@@ -2,7 +2,8 @@
 
 import { askConfirm } from '@/components/ui/AskDialog';
 import { FileViewer, PdfEditor, SheetEditor } from '@/components/files/lazy';
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, Suspense, useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { AppShell } from '@/components/app-shell/AppShell';
 import { EmptyLite, FileRow } from '@/components/ui/Lite';
 import { LoadingBlock } from '@/components/ui/LoadingBlock';
@@ -44,7 +45,22 @@ type FolderDetail = Folder & {
  * abierta se partía la pantalla con la lista; era la herramienta diaria de
  * Williams y Juan Pablo y se veía como un formulario de administración.
  */
+/** `useSearchParams` (el aviso que lleva a un día o a una carpeta) pide Suspense en el build. */
 export default function FoldersPage() {
+  return (
+    <Suspense
+      fallback={
+        <AppShell title="Carpetas">
+          <LoadingBlock rows={6} label="Cargando carpetas…" />
+        </AppShell>
+      }
+    >
+      <FoldersPageInner />
+    </Suspense>
+  );
+}
+
+function FoldersPageInner() {
   const { entity, user } = useUser();
   const [folders, setFolders] = useState<Folder[]>([]);
   const [active, setActive] = useState<FolderDetail | null>(null);
@@ -78,6 +94,13 @@ export default function FoldersPage() {
     setActive(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [entity]);
+
+  // El aviso de una carpeta (`?folder=`) la abre directo.
+  const focusFolder = useSearchParams()?.get('folder') ?? null;
+  useEffect(() => {
+    if (focusFolder) openFolder(focusFolder).catch(() => undefined);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusFolder, entity]);
 
   const filtered = useMemo(() => {
     const n = q.trim().toLowerCase();

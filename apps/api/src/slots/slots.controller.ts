@@ -1,6 +1,7 @@
 import { BadRequestException, Body, Controller, ForbiddenException, Get, Optional, Param, Post, Req, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { NotificationsService } from '../notifications/notifications.service';
+import { actionTitle, facts } from '../notifications/notification-text';
 import { PrismaService } from '../common/prisma/prisma.service';
 import {
   canAccessEventOps,
@@ -72,9 +73,9 @@ export class SlotsController {
       type,
       title:
         type === 'slot.replaced'
-          ? `${user.fullName || 'Alguien del equipo'} reemplazó un documento por uno externo`
-          : `${user.fullName || 'Dirección'} volvió a la versión interna de un documento`,
-      body: `${detail} · ${event.name}`,
+          ? actionTitle(user.fullName, 'subió una versión externa de', detail.split(' · ')[0])
+          : actionTitle(user.fullName, 'volvió a la versión interna de', detail, 'Dirección'),
+      body: type === 'slot.replaced' ? facts(detail.split(' · ').slice(1).join(' · '), event.name) : event.name,
       linkUrl: `/events/${event.id}?tab=files`,
       entity: event.entity as EntityKey,
     });

@@ -1,4 +1,4 @@
-import { facts, who } from '../notifications/notification-text';
+import { actionTitle, facts } from '../notifications/notification-text';
 import {
   BadRequestException,
   Body,
@@ -104,8 +104,9 @@ export class FoldersController {
         organizationId: folder.organizationId,
         actorId: user.id,
         type,
-        title: `${who(user.fullName)} ${verb}`,
-        body: detail ? facts(detail, folder.name) : folder.name,
+        // Con archivo: «subió «contrato.pdf»» y la carpeta abajo; sin archivo, la carpeta en el título.
+        title: detail ? actionTitle(user.fullName, verb, detail) : actionTitle(user.fullName, verb, folder.name),
+        body: detail ? `Carpeta ${folder.name}` : facts(folder.entity === 'EXPLANADA' ? 'Auditorio' : 'Arta'),
         linkUrl: type === 'folder.deleted' ? '/folders' : `/folders?folder=${folder.id}`,
         entity: folder.entity,
       });
@@ -205,7 +206,7 @@ export class FoldersController {
         createdById: req.user.id,
       },
     });
-    void this.tellFolder(req.user, folder, 'folder.created', 'creó una carpeta');
+    void this.tellFolder(req.user, folder, 'folder.created', 'creó la carpeta');
     return folder;
   }
 
@@ -229,7 +230,7 @@ export class FoldersController {
     if (before) {
       const after = await this.folderAudience(updated, req.user.id).catch(() => [] as string[]);
       const gained = after.filter((uid) => !before.includes(uid));
-      if (gained.length) void this.tellFolder(req.user, updated, 'folder.shared', 'te dio acceso a una carpeta', undefined, gained);
+      if (gained.length) void this.tellFolder(req.user, updated, 'folder.shared', 'te dio acceso a la carpeta', undefined, gained);
     }
     return updated;
   }
@@ -243,7 +244,7 @@ export class FoldersController {
     this.assertEntity(req.user, folder.entity);
     const audience = await this.folderAudience(folder, req.user.id).catch(() => [] as string[]);
     await this.prisma.sharedFolder.delete({ where: { id } });
-    void this.tellFolder(req.user, folder, 'folder.deleted', 'eliminó una carpeta', undefined, audience);
+    void this.tellFolder(req.user, folder, 'folder.deleted', 'eliminó la carpeta', undefined, audience);
     return { ok: true };
   }
 
@@ -264,7 +265,7 @@ export class FoldersController {
         uploadedById: req.user.id,
       },
     });
-    void this.tellFolder(req.user, folder, 'folder.file_added', 'subió un archivo a una carpeta', file.fileName);
+    void this.tellFolder(req.user, folder, 'folder.file_added', 'subió', file.fileName);
     return file;
   }
 
@@ -329,7 +330,7 @@ export class FoldersController {
     assertSameTenant(req.user, file.folder.organizationId);
     this.assertEntity(req.user, file.folder.entity);
     await this.prisma.sharedFile.delete({ where: { id: fileId } });
-    void this.tellFolder(req.user, file.folder, 'folder.file_deleted', 'eliminó un archivo de una carpeta', file.fileName);
+    void this.tellFolder(req.user, file.folder, 'folder.file_deleted', 'eliminó', file.fileName);
     return { ok: true };
   }
 }

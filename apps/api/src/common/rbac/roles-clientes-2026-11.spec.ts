@@ -528,6 +528,8 @@ describe('los endpoints cumplen la matriz', () => {
         event: { findUnique: async () => event, update, create, count: async () => 0 },
         organization: { findUnique: async () => ({ id: ORG, active: true, plan: 'OPS' }) },
         checklistTemplate: { findMany: async () => [] },
+        // Cerrar pone sus formatos al 100 % (Adam, 07-11-2026).
+        checklistInstance: { updateMany: async () => ({ count: 0 }), findMany: async () => [], update: async () => ({}) },
         auditLog: { create: async ({ data }: any) => data },
       };
       const notifications = { notifyEventTeam: async () => [], notifyMany: async () => [] };

@@ -84,10 +84,19 @@ El API manda siempre `url` = ruta interna del panel (`linkUrl` de `Notifications
 | `url` | Abre |
 |---|---|
 | `/chat?channel=<id>&msg=<id>` | conversación nativa |
+| `/chat?channel=<id>&msg=<id>&thread=<raíz>` (o push con `parent_id`) | conversación en la raíz y encima el hilo |
 | `/tasks?task=<id>` · `/tasks/<id>` · `/events/<eid>?tab=tasks&task=<id>` | tarea nativa |
 | `/events/<id>` (con o sin `?tab=`) | evento nativo (si `tab` no tiene versión nativa, vista web) |
-| `/advances…` · `/purchase-orders…` con acción pendiente | aprobaciones nativas |
+| `/purchase-orders?po=<id>` con acción pendiente | aprobaciones nativas con el detalle de esa OC abierto |
+| `/advances?advance=<id>` con acción pendiente | aprobaciones nativas con ese anticipo a la vista |
+| `/calendar?date=<día>` | vista web del calendario en ese día |
 | cualquier otra | vista web en esa ruta |
+
+Desde el 07-11-2026 cada aviso lleva al punto exacto: la OC (`?po=` también dentro del evento, `?tab=ocs&po=`),
+el documento (`?tab=files&doc=`), el archivo (`&file=`), el formato (`&checklist=`), los formatos pendientes del
+evento en riesgo (`?tab=checklists&ver=pendientes`), la carpeta (`/folders?folder=`) o el día (`/calendar?date=`).
+Tocar un aviso de la otra unidad (Arta / Auditorio) cambia de unidad antes de abrirlo: el push lleva `entity`, y
+la web recibe `?entidad=` desde el service worker.
 
 Canales Android / categorías iOS por `channel` del push (`notification-push-meta.ts`), **los que ya existen**
 (no renombrar: Android ya tiene `arta_<channel>` instalados en teléfonos):

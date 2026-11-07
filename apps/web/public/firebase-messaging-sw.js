@@ -129,6 +129,7 @@ async function handlePush(data) {
       notificationId: data.notification_id || '',
       targetKind: data.target_kind || '',
       targetId: data.target_id || '',
+      entity: data.entity || '',
     },
   });
 }
@@ -177,6 +178,8 @@ self.addEventListener('notificationclick', (event) => {
     onTask ? targetUrl(`/tasks?task=${encodeURIComponent(info.targetId)}${event.action === 'task.deliver' ? '&do=deliver' : ''}`) : targetUrl(info.url),
   );
   if (info.notificationId) url.searchParams.set('notif', info.notificationId);
+  // La unidad del aviso (Arta / Auditorio): la página cambia a ella al llegar.
+  if (info.entity) url.searchParams.set('entidad', info.entity);
   const href = url.href;
   event.waitUntil(openOrFocus(href));
 });

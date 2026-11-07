@@ -2,7 +2,8 @@
 
 import { askConfirm } from '@/components/ui/AskDialog';
 import Link from 'next/link';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { AppShell } from '@/components/app-shell/AppShell';
 import { PageHeader } from '@/components/ui/PageChrome';
 import { MonthCalendar, type CalendarItem } from '@/components/ui/MonthCalendar';
@@ -46,12 +47,29 @@ function noteTitle(n: NoteRow): string {
  * Junta 23-10-2026: el practicante (sitio y redes) lo consulta en solo lectura para preparar
  * publicaciones: los shows salen de `/calendar/events`, sin abrir el evento y sin notas nuevas.
  */
+/** `useSearchParams` (el aviso que lleva a un día o a una carpeta) pide Suspense en el build. */
 export default function EventsCalendarPage() {
+  return (
+    <Suspense
+      fallback={
+        <AppShell title="Calendario">
+          <LoadingBlock rows={6} label="Cargando calendario…" />
+        </AppShell>
+      }
+    >
+      <EventsCalendarPageInner />
+    </Suspense>
+  );
+}
+
+function EventsCalendarPageInner() {
   const { entity, user } = useUser();
   const [loading, setLoading] = useState(true);
   const [events, setEvents] = useState<EventRow[]>([]);
   const [notes, setNotes] = useState<NoteRow[]>([]);
   const [openDay, setOpenDay] = useState<string | null>(null);
+  /** El aviso de una nota lleva a su día (`?date=YYYY-MM-DD`). */
+  const focusDay = useSearchParams()?.get('date') ?? null;
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
   const [saving, setSaving] = useState(false);
@@ -181,6 +199,7 @@ export default function EventsCalendarPage() {
         ) : (
           <MonthCalendar
             items={items}
+            focusDay={focusDay}
             onDayClick={readOnly ? undefined : (day) => (openDay === day ? closeCompose() : openForDay(day))}
             renderDay={(day) => {
               const dayNotes = notesByDay.get(day) || [];

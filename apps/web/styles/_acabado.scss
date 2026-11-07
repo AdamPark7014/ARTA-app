@@ -638,6 +638,54 @@
   font-weight: 600;
 }
 
+/* Umbrales de riesgo: dos renglones que se leen como una frase («En riesgo a 7 días…»). */
+.org-risk > p {
+  margin: 0 18px 4px;
+}
+
+.org-risk__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  padding: 12px 18px;
+  border-top: 1px solid var(--line);
+}
+
+.org-risk__row label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.shell .org-risk__row input {
+  width: 72px;
+  min-height: 36px;
+  padding: 6px 10px;
+  text-align: right;
+}
+
+.org-risk__level {
+  min-width: 96px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.org-risk__hint {
+  flex: 1 1 200px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.org-risk__actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 18px 16px;
+  border-top: 1px solid var(--line);
+}
+
 .panel-head--sub {
   border-top: 1px solid var(--line);
 }
@@ -1626,6 +1674,11 @@ html[data-entity] .composer input.composer__due:hover:not(:disabled) {
 /* Hoy: el número relleno (tinta / plata) y una línea fina arriba de la celda. */
 .mcal__day.is-today {
   box-shadow: inset 0 2px 0 var(--text);
+}
+
+/* El día del aviso que se tocó: un contorno, distinto de «hoy». */
+.mcal__day.is-focus {
+  box-shadow: inset 0 0 0 2px var(--text);
 }
 
 .mcal__day.is-today .mcal__num {

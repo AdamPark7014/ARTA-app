@@ -1,6 +1,7 @@
 'use client';
 
 import { askConfirm } from '@/components/ui/AskDialog';
+import { useSearchParams } from 'next/navigation';
 import {
   Fragment,
   useEffect,
@@ -792,6 +793,22 @@ export function EventPurchaseOrdersPanel({
 
   /** Chip de estado preciso; se quita al cambiar de sección. */
   const [stateFilter, setStateFilter] = useState<PoStateKey | null>(null);
+
+  // El aviso de una OC (`?po=`) la abre aquí, a la vista, sin filtros que la escondan.
+  const focusPo = useSearchParams()?.get('po') ?? null;
+  useEffect(() => {
+    if (!focusPo || !orders.some((o) => o.id === focusPo)) return;
+    setSection('all');
+    setStateFilter(null);
+    setCreating(false);
+    setEditingId(null);
+    setOpenId(focusPo);
+    const t = window.setTimeout(
+      () => document.getElementById(`po-${focusPo}`)?.scrollIntoView({ block: 'center', behavior: 'smooth' }),
+      80,
+    );
+    return () => window.clearTimeout(t);
+  }, [focusPo, orders]);
   const inSection = orders.filter((po) => poInSection(po.status, section));
   const chips = poStateChips(inSection.map((po) => poStateView(po)));
   const visible = inSection.filter((po) => !stateFilter || poStateView(po).key === stateFilter);
@@ -1071,7 +1088,7 @@ export function EventPurchaseOrdersPanel({
                   const act = primaryAction(po);
                   return (
                     <Fragment key={po.id}>
-                      <tr className={`oc-row ${open ? 'is-open' : ''}`} onClick={() => toggle(po.id)}>
+                      <tr id={`po-${po.id}`} className={`oc-row ${open ? 'is-open' : ''}`} onClick={() => toggle(po.id)}>
                         <td>
                           <button
                             type="button"

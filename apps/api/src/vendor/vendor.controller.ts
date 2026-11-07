@@ -14,6 +14,7 @@ import {
 } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
 import { NotificationsService } from '../notifications/notifications.service';
+import { actionTitle } from '../notifications/notification-text';
 import { Throttle } from '@nestjs/throttler';
 import { IsArray, IsOptional, IsString, MinLength } from 'class-validator';
 import { JwtService } from '@nestjs/jwt';
@@ -287,8 +288,8 @@ export class VendorController {
       organizationId: event.organizationId,
       actorId: req.user.id,
       type: 'vendor.pin_created',
-      title: `${(req.user as { fullName?: string }).fullName || 'Alguien del equipo'} dio acceso al portal de proveedores`,
-      body: `${created.label} · ${event.name}`,
+      title: actionTitle((req.user as { fullName?: string }).fullName, 'dio acceso al portal de proveedores a', created.label),
+      body: event.name,
       linkUrl: `/events/${event.id}`,
       entity: event.entity,
     });

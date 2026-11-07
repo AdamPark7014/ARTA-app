@@ -7,10 +7,11 @@ import type { Checklist } from './event-detail.types';
 /** Grupo del formato para filtrar la lista: falta trabajo, en revisión o listo. */
 export type ChecklistBucket = 'todo' | 'review' | 'ready';
 
-export function checklistBucket(c: Checklist): ChecklistBucket {
+export function checklistBucket(c: Checklist, eventDone = false): ChecklistBucket {
   if (c.status === 'SEALED' || c.status === 'APPROVED' || c.authorizedAt) return 'ready';
   if (c.status === 'REVIEW' || c.deliveredAt) return 'review';
-  return 'todo';
+  // Evento cerrado o pasado: ya no queda nada «por completar» (Adam, 07-11-2026).
+  return eventDone ? 'ready' : 'todo';
 }
 
 /** Una sola píldora por formato: el estado que importa ahora mismo. */

@@ -216,7 +216,8 @@ export class PurchaseOrdersController {
     status: PoStatus,
   ) {
     const organizationId = event.organizationId ?? null;
-    const linkUrl = `/events/${event.id}?tab=ocs`;
+    // Esa OC abierta dentro de su evento: quien la pidió puede no ver la torre de OC.
+    const linkUrl = `/events/${event.id}?tab=ocs&po=${order.id}`;
     const entity = event.entity as EntityKey;
     const kinds: Partial<Record<PoStatus, { type: string; kind: PoNoticeKind }>> = {
       AUTHORIZED: { type: 'po.authorized', kind: 'authorized' },
@@ -771,7 +772,7 @@ export class PurchaseOrdersController {
         type: 'po.proof',
         title: text.title,
         body: text.body,
-        linkUrl: `/events/${order.eventId}?tab=ocs`,
+        linkUrl: `/events/${order.eventId}?tab=ocs&po=${order.id}`,
         entity: order.event.entity as EntityKey,
       });
     }

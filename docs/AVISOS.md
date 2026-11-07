@@ -47,10 +47,37 @@ archivos («Ana R. subió 3 archivos»). Úsalo en todo lo que pueda llegar en s
 
 ## Tocar un aviso
 
-- **Web**: el service worker abre `url?notif=<id>`; `NotificationBell` lo marca leído al llegar y limpia la dirección.
-  Sin liga lleva a `/notifications`.
-- **Apps**: abre la pantalla nativa o la vista web (`PanelLink` / su par de Android) y cambia a la entidad del aviso.
+- **Web**: el service worker abre `url?notif=<id>&entidad=<ARTA|EXPLANADA>`; `NotificationBell` lo marca leído,
+  cambia a la unidad del aviso y limpia la dirección. Sin liga lleva a `/notifications`. Desde la campana o la
+  página de Avisos, `openNoticeLink` cambia de unidad y, si la liga es de la misma página (otra OC, otro formato),
+  navega completo para que la página lea su `?po=` o `?checklist=`.
+- **Apps**: abre la pantalla nativa o la vista web (`PanelLink` / su par de Android) y cambia a la entidad del
+  aviso, también desde la lista de Avisos.
 - Leer en un dispositivo avisa a los demás (push silencioso y socket `notification:read`).
+
+**Cada aviso lleva al punto exacto, nunca a una lista general** (Adam, 07-11-2026). Las ligas que se usan:
+
+| De qué trata | Liga |
+|---|---|
+| Tarea | `/events/<e>?tab=tasks&task=<t>` o `/tasks?task=<t>` |
+| OC (a quien la pidió) | `/events/<e>?tab=ocs&po=<id>`: la abre dentro de su evento |
+| OC (a quien autoriza o paga) | `/purchase-orders?po=<id>` |
+| OC viejas | una sola: esa OC; varias en el mismo paso: `/purchase-orders?estado=unpaid` o `unauthorized` |
+| Formato | `/events/<e>?tab=checklists&checklist=<id>` |
+| Evento en riesgo | `/events/<e>?tab=checklists&ver=pendientes`: abre «Por completar» |
+| Documento / archivo | `/events/<e>?tab=files&doc=<id>` · `&file=<id>` (subidas en ráfaga: la pestaña) |
+| Mensaje / respuesta en hilo | `/chat?channel=<c>&msg=<m>` · `&thread=<raíz>`; el push lleva `parent_id` |
+| Carpeta | `/folders?folder=<id>` |
+| Nota del calendario | `/calendar?date=YYYY-MM-DD`: el mes de ese día, con el día marcado |
+| Anticipo | `/advances?advance=<id>` |
+
+El título dice quién, qué hizo y sobre qué (`actionTitle`: «Ana R. agregó el formato «Rider técnico»»); el evento
+va en el cuerpo.
+
+**Riesgo** (`common/event-risk.ts`): solo cerca del evento y con poco avance. Por omisión «En riesgo» a 7 días o
+menos con menos de 80 %, y «Por revisar» a 14 días o menos con menos de 60 %; cada organización los ajusta en
+Organización. Avisa una vez por nivel, no cada día. Un evento cerrado o con la fecha pasada cuenta 100 % en todos
+sus formatos (`isEventDone`), y el escaneo horario lo aplica a la base.
 
 ## El push, campo por campo
 

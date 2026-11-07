@@ -2,6 +2,7 @@
 
 import { DocEditor, FileViewer, PdfEditor, SheetEditor } from '@/components/files/lazy';
 import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 // Solo el tipo: no arrastra el módulo al bundle.
 import type { EventDocumentRow } from '@/components/files/DocEditor';
 import { pdfToBlocks } from '@/lib/pdf-to-blocks';
@@ -118,6 +119,29 @@ export function EventFilesPanel({
       .then(setDocs)
       .catch(() => setDocs([]));
   }, [eventId]);
+
+  // El aviso de un documento (`?doc=`) o de un archivo (`?file=`) lo abre aquí, a la vista.
+  const params = useSearchParams();
+  const focusDoc = params?.get('doc') ?? null;
+  const focusFile = params?.get('file') ?? null;
+  useEffect(() => {
+    if (!focusDoc) return;
+    const doc = docs.find((d) => d.id === focusDoc);
+    if (!doc) return;
+    setOpenDoc(doc);
+    const t = window.setTimeout(() => document.getElementById(`doc-${doc.id}`)?.scrollIntoView({ block: 'center' }), 80);
+    return () => window.clearTimeout(t);
+  }, [focusDoc, docs]);
+  useEffect(() => {
+    if (!focusFile) return;
+    const file = files.find((f) => f.id === focusFile);
+    if (!file) return;
+    setSection('all');
+    setPreviewFile(file);
+    const t = window.setTimeout(() => document.getElementById(`file-${file.id}`)?.scrollIntoView({ block: 'center' }), 80);
+    return () => window.clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusFile, files]);
 
   async function importDocx(file: File) {
     setBusy('docx');
@@ -259,7 +283,7 @@ export function EventFilesPanel({
           {docs.map((d) => {
             const open = openDoc?.id === d.id;
             return (
-              <div key={d.id} className={`hub-item ${open ? 'is-open' : ''}`}>
+              <div key={d.id} id={`doc-${d.id}`} className={`hub-item ${open ? 'is-open' : ''}`}>
                 <FileRow
                   kind="file"
                   name={d.title}
@@ -314,7 +338,7 @@ export function EventFilesPanel({
               const editable = canEdit && (isSheet(f) || isPdf(f));
               const label = checklistTitle(f.checklistId) || SECTION_LABEL[sectionOf(f)];
               return (
-                <div key={f.id} className={`hub-item ${previewing || isEditing ? 'is-open' : ''}`}>
+                <div key={f.id} id={`file-${f.id}`} className={`hub-item ${previewing || isEditing ? 'is-open' : ''}`}>
                   <FileRow
                     kind={fileKind(f)}
                     name={f.fileName}

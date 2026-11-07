@@ -11,9 +11,11 @@
  * firmas se registran en `DigitalSignature`, no como progreso.
  *
  * Desde el 23-10-2026 un formato terminado y mandado cuenta 100 %
- * (`formatProgress`); `calcProgress` es lo capturado y nada más.
+ * (`formatProgress`); `calcProgress` es lo capturado y nada más. Desde el
+ * 07-11-2026 también cuenta 100 % todo formato de un evento cerrado o pasado.
  */
 
+import type { Prisma } from '@prisma/client';
 import { isFormatItemComplete, type FormatItem } from './format-schema';
 
 export type ChecklistItem = {
@@ -119,16 +121,68 @@ export function isFormatSent(doc: FormatSendState | null | undefined): boolean {
   );
 }
 
+/** Lo que dice si un evento ya terminó; sirve con cualquier `select` del evento. */
+export type EventDoneState = {
+  status?: string | null;
+  startsAt?: Date | string | null;
+  endsAt?: Date | string | null;
+};
+
+const PUEBLA = 'America/Mexico_City';
+/** México dejó el horario de verano en 2022: Puebla va siempre a UTC−6. */
+const PUEBLA_OFFSET = '-06:00';
+
+const pueblaDay = (d: Date) => d.toLocaleDateString('en-CA', { timeZone: PUEBLA });
+
+/** Medianoche de hoy en Puebla: lo que termina antes ya pasó. */
+export function startOfPueblaDay(now = new Date()): Date {
+  return new Date(`${pueblaDay(now)}T00:00:00${PUEBLA_OFFSET}`);
+}
+
+/**
+ * ¿El evento ya terminó? — Adam, 07-11-2026: «en cuanto se concluya marque 100 %
+ * en todos, igual cuando pase la fecha del evento».
+ *
+ * Terminó si se cerró, o desde el día siguiente a su última fecha (`endsAt`, o
+ * `startsAt` si no hay), en hora de Puebla. Cancelado no cuenta: no se hizo.
+ */
+export function isEventDone(event: EventDoneState | null | undefined, now = new Date()): boolean {
+  if (!event) return false;
+  if (event.status === 'CLOSED') return true;
+  if (event.status === 'CANCELLED') return false;
+  const last = event.endsAt ?? event.startsAt;
+  if (!last) return false;
+  return new Date(last).getTime() < startOfPueblaDay(now).getTime();
+}
+
+/** La misma frontera que `isEventDone`, para filtrar en la base. */
+export function eventDoneWhere(now = new Date()): Prisma.EventWhereInput {
+  const cutoff = startOfPueblaDay(now);
+  return {
+    OR: [
+      { status: 'CLOSED' },
+      { status: { not: 'CANCELLED' }, endsAt: { lt: cutoff } },
+      { status: { not: 'CANCELLED' }, endsAt: null, startsAt: { lt: cutoff } },
+    ],
+  };
+}
+
 /**
  * El avance que se GUARDA en `progressPct` y que leen la lista de formatos, el
  * resumen del evento, la analítica («Formatos al día», riesgo), los digests y
  * las apps.
  *
  * No todos los eventos usan todas las casillas de cada checklist: un formato
- * terminado y mandado vale 100 % aunque no se haya palomeado todo. Lo
- * capturado de verdad (`captureCount`) se sigue enseñando aparte en el
- * formato abierto, para que nadie confunda «mandado» con «todo palomeado».
+ * terminado y mandado vale 100 % aunque no se haya palomeado todo, y también
+ * todo formato de un evento que ya terminó (`isEventDone`). Lo capturado de
+ * verdad (`captureCount`) se sigue enseñando aparte en el formato abierto, para
+ * que nadie confunda «mandado» con «todo palomeado».
  */
-export function formatProgress(data: unknown, doc: FormatSendState | null | undefined): number {
-  return isFormatSent(doc) ? 100 : calcProgress(data);
+export function formatProgress(
+  data: unknown,
+  doc: FormatSendState | null | undefined,
+  event?: EventDoneState | null,
+  now = new Date(),
+): number {
+  return isFormatSent(doc) || isEventDone(event, now) ? 100 : calcProgress(data);
 }

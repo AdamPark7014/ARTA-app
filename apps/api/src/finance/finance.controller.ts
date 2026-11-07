@@ -288,7 +288,7 @@ export class FinanceController {
   private async syncCorridaChecklist(eventId: string, data: FinancePayload, locked: boolean) {
     const instance = await this.prisma.checklistInstance.findFirst({
       where: { eventId, template: { key: 'CORRIDA_FINANCIERA' } },
-      include: { template: true },
+      include: { template: true, event: { select: { status: true, startsAt: true, endsAt: true } } },
     });
     if (!instance) return;
 
@@ -336,7 +336,7 @@ export class FinanceController {
 
     // Misma regla que el resto del sistema (una sola implementación): si la
     // corrida ya se mandó o firmó, se queda en 100 %.
-    const progressPct = formatProgress({ sections: nextSections }, instance);
+    const progressPct = formatProgress({ sections: nextSections }, instance, instance.event);
 
     await this.prisma.checklistInstance.update({
       where: { id: instance.id },

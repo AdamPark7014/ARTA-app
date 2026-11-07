@@ -91,7 +91,7 @@ describe('PurchaseOrdersController · avisos', () => {
     });
     const items = notifyMany.mock.calls[0][0];
     expect(items.find((i: any) => i.userId === 'u-pide')).toEqual(
-      expect.objectContaining({ type: 'po.authorized', linkUrl: '/events/ev-1?tab=ocs', actorId: 'u-dir' }),
+      expect.objectContaining({ type: 'po.authorized', linkUrl: '/events/ev-1?tab=ocs&po=po-1', actorId: 'u-dir' }),
     );
     expect(items.find((i: any) => i.userId === 'u-paula')).toEqual(
       expect.objectContaining({ type: 'po.to_transfer', linkUrl: '/purchase-orders?po=po-1', actorId: 'u-dir' }),
@@ -156,7 +156,8 @@ describe('PurchaseOrdersController · avisos', () => {
     });
     const items = notifyMany.mock.calls[0][0];
     expect(sentTo(items, 'po.paid')).toEqual(['u-dir', 'u-dir2', 'u-extra', 'u-pide']);
-    expect(items.find((i: any) => i.userId === 'u-pide').linkUrl).toBe('/events/ev-1?tab=ocs');
+    // Abre esa OC dentro de su evento, no la pestaña en general.
+    expect(items.find((i: any) => i.userId === 'u-pide').linkUrl).toBe('/events/ev-1?tab=ocs&po=po-1');
     expect(items.find((i: any) => i.userId === 'u-dir').linkUrl).toBe('/purchase-orders?po=po-1');
     expect(items.some((i: any) => i.userId === 'u-paula')).toBe(false);
     expect(items.every((i: any) => i.type === 'po.paid')).toBe(true);

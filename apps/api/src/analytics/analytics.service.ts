@@ -3,6 +3,8 @@ import { ChecklistTemplateKey, EntityKey } from '@prisma/client';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { financeTotals } from '../finance/finance-totals';
 import { VISIBLE_CHECKLIST_WHERE } from '../checklists/checklist-visibility';
+import { isEventDone } from '../common/checklist-progress';
+import { eventRisk, riskRulesOf, type RiskRules } from '../common/event-risk';
 import { payWindowFor, poStateCounts, poStateOf, PO_STATE_ORDER, type PoStateKey } from '../purchase-orders/po-state';
 
 function monthKey(d: Date) {
@@ -67,8 +69,17 @@ export class AnalyticsService {
     });
   }
 
+  /** Umbrales de riesgo de la organización (`settingsJson.riesgo`), o los de siempre. */
+  private async riskRules(organizationId: string): Promise<RiskRules> {
+    const org = await this.prisma.organization
+      .findUnique({ where: { id: organizationId }, select: { settingsJson: true } })
+      .catch(() => null);
+    return riskRulesOf(org?.settingsJson);
+  }
+
   async overview(entity: EntityKey, organizationId: string) {
     const now = new Date();
+    const rules = await this.riskRules(organizationId);
     const in14 = new Date(now.getTime() + 14 * 86_400_000);
     const day30 = new Date(now.getTime() - 30 * 86_400_000);
     const day90 = new Date(now.getTime() - 90 * 86_400_000);
@@ -82,6 +93,7 @@ export class AnalyticsService {
           artist: true,
           status: true,
           startsAt: true,
+          endsAt: true,
           createdAt: true,
           updatedAt: true,
         },
@@ -185,9 +197,8 @@ export class AnalyticsService {
         const p = progressByEvent.get(e.id);
         const avg = p?.n ? Math.round(p.sum / p.n) : 0;
         const daysToShow = e.startsAt ? daysBetween(now, e.startsAt) : null;
-        let risk: 'critical' | 'watch' | 'healthy' = 'healthy';
-        if (avg < 40 || (daysToShow !== null && daysToShow <= 7 && avg < 70)) risk = 'critical';
-        else if (avg < 60 || (daysToShow !== null && daysToShow <= 14 && avg < 80)) risk = 'watch';
+        // Solo cerca del evento y con formatos que medir (common/event-risk.ts).
+        const risk = p?.n ? eventRisk({ avg, days: daysToShow, done: isEventDone(e, now) }, rules) : 'healthy';
         return {
           id: e.id,
           name: e.name,
@@ -613,6 +624,7 @@ export class AnalyticsService {
   }
 
   async opsDiscipline(entity: EntityKey, templateKeys: string[], organizationId: string) {
+    const rules = await this.riskRules(organizationId);
     const checklists = await this.prisma.checklistInstance.findMany({
       where: {
         event: { entity, organizationId },
@@ -627,6 +639,7 @@ export class AnalyticsService {
             artist: true,
             status: true,
             startsAt: true,
+            endsAt: true,
             entity: true,
           },
         },
@@ -638,12 +651,7 @@ export class AnalyticsService {
     const now = new Date();
     const rows = checklists.map((c) => {
       const daysToShow = c.event.startsAt ? daysBetween(now, c.event.startsAt) : null;
-      let risk: 'critical' | 'watch' | 'healthy' = 'healthy';
-      if (c.progressPct < 40 || (daysToShow !== null && daysToShow <= 7 && c.progressPct < 70)) {
-        risk = 'critical';
-      } else if (c.progressPct < 65 || (daysToShow !== null && daysToShow <= 14 && c.progressPct < 85)) {
-        risk = 'watch';
-      }
+      const risk = eventRisk({ avg: c.progressPct, days: daysToShow, done: isEventDone(c.event, now) }, rules);
       return {
         checklistId: c.id,
         title: c.title,

@@ -15,6 +15,7 @@ import {
 } from '@nestjs/common';
 import { IsInt, IsOptional, IsString, MaxLength, Min } from 'class-validator';
 import { NotificationsService } from '../notifications/notifications.service';
+import { actionTitle } from '../notifications/notification-text';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { assertSameTenant, tenantIdOf } from '../common/tenant';
@@ -139,8 +140,8 @@ export class TicketingController {
       organizationId: event.organizationId,
       actorId: user.id,
       type,
-      title: `${user.fullName || 'Alguien del equipo'} ${type === 'ticketing.created' ? 'dio de alta la boletera' : 'eliminó la boletera'}`,
-      body: `${boletera} · ${event.name}`,
+      title: actionTitle(user.fullName, type === 'ticketing.created' ? 'dio de alta la boletera' : 'eliminó la boletera', boletera),
+      body: event.name,
       linkUrl: `/events/${event.id}?tab=ticketing`,
       entity: event.entity as EntityKey,
     });

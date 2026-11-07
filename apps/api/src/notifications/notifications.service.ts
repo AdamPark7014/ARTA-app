@@ -148,11 +148,26 @@ export class NotificationsService {
    * enlace, no se repite (sin tabla extra: la campana es el registro).
    */
   async notifyOncePerDay(input: NotifyInput) {
+    return this.notifyOnceWithin(input, ONCE_PER_DAY_MS);
+  }
+
+  /**
+   * Una alerta que no debe repetirse mientras siga igual: el mismo tipo, enlace y título a la misma
+   * persona en `withinMs` no se vuelve a mandar. El título lleva el nivel («Por revisar» / «En
+   * riesgo»), así que subir de nivel sí avisa.
+   */
+  async notifyOnceWithin(input: NotifyInput, withinMs: number, opts: { sameTitle?: boolean } = {}) {
     if (!input.userId) return null;
     try {
-      const since = new Date(Date.now() - ONCE_PER_DAY_MS);
+      const since = new Date(Date.now() - withinMs);
       const existing = await this.prisma.notification.findFirst({
-        where: { userId: input.userId, type: input.type, linkUrl: input.linkUrl ?? null, createdAt: { gte: since } },
+        where: {
+          userId: input.userId,
+          type: input.type,
+          linkUrl: input.linkUrl ?? null,
+          ...(opts.sameTitle ? { title: input.title } : {}),
+          createdAt: { gte: since },
+        },
         select: { id: true },
       });
       if (existing) return null;
@@ -455,6 +470,7 @@ export class NotificationsService {
       threadId: chat ? `chat-${chat.channelId}` : row.linkUrl ? `link:${row.linkUrl.split('?')[0]}` : null,
       channelId: chat?.channelId ?? null,
       messageId: chat?.messageId ?? null,
+      parentId: chat?.parentId ?? null,
       actions,
       category: pushCategoryFor(actions),
       targetKind: target?.kind ?? null,
@@ -463,11 +479,22 @@ export class NotificationsService {
   }
 }
 
-/** `/chat?channel=<id>&msg=<id>` → ids de conversación y mensaje; cualquier otra ruta → null. */
-export function chatLinkParts(linkUrl?: string | null): { channelId: string; messageId: string | null } | null {
+/**
+ * Liga a un mensaje: la conversación y el mensaje, y el hilo si es una respuesta, para que el aviso
+ * abra el hilo y no la conversación general (las respuestas no salen en la lista principal).
+ */
+export function chatMessageUrl(channelId: string, message: { id: string; parentId?: string | null }): string {
+  const base = `/chat?channel=${channelId}&msg=${message.id}`;
+  return message.parentId ? `${base}&thread=${message.parentId}` : base;
+}
+
+/** `/chat?channel=<id>&msg=<id>[&thread=<id>]` → ids de conversación, mensaje e hilo; otra ruta → null. */
+export function chatLinkParts(
+  linkUrl?: string | null,
+): { channelId: string; messageId: string | null; parentId: string | null } | null {
   if (!linkUrl || !linkUrl.startsWith('/chat?')) return null;
   const params = new URLSearchParams(linkUrl.slice('/chat?'.length));
   const channelId = params.get('channel');
   if (!channelId) return null;
-  return { channelId, messageId: params.get('msg') };
+  return { channelId, messageId: params.get('msg'), parentId: params.get('thread') };
 }

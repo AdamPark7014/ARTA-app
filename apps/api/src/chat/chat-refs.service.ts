@@ -14,7 +14,7 @@ import {
   type EntityKey,
   type RoleKey,
 } from '../common/rbac/roles';
-import { NotificationsService } from '../notifications/notifications.service';
+import { chatMessageUrl, NotificationsService } from '../notifications/notifications.service';
 import {
   chatRefNotice,
   dayLabel,
@@ -827,7 +827,7 @@ export class ChatRefsService {
           author: r.message.sender,
           excerpt: chatPreview(r.message.body),
           at: r.createdAt.toISOString(),
-          href: `/chat?channel=${c.id}&msg=${r.message.id}`,
+          href: chatMessageUrl(c.id, r.message),
         };
       });
     return { links };
@@ -1000,7 +1000,7 @@ export class ChatRefsService {
             label: item.label,
             preview: reads ? preview : '',
           }),
-          linkUrl: reads ? `/chat?channel=${channel.id}&msg=${message.id}` : item.link,
+          linkUrl: reads ? chatMessageUrl(channel.id, message) : item.link,
           entity: channel.entity ?? undefined,
           // El aviso abre la conversación, pero se trata de esta cosa: sus botones actúan sobre ella.
           target: targetFromLink(item.link),
