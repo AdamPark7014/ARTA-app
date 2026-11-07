@@ -599,6 +599,8 @@ struct NotificationsView: View {
 
     private func open(_ item: NotificationDto) {
         model.markRead(item)
+        // Un aviso de la otra unidad (Arta / Auditorio) se abre en la suya, como el push.
+        if let entity = item.entity.flatMap(ArtaEntity.init(rawValue:)) { ActiveEntity.shared.focus(on: entity) }
         // Lo que no tiene pantalla nativa se abre en la vista web dentro de la app.
         if let target = PanelLink.target(channelId: nil, messageId: nil, url: item.linkUrl, type: item.type) {
             router.follow(target)

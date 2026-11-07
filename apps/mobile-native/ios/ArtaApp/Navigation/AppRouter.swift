@@ -31,12 +31,16 @@ enum PanelLink {
         "advance.requested", "advance.to_pay",
     ]
 
-    /// Push o campana: con `channel_id` es de una conversación (mensajes y menciones).
-    static func target(channelId: String?, messageId: String?, url: String?, type: String?) -> PanelTarget? {
+    /// Push o campana: con `channel_id` es de una conversación (mensajes y menciones); con
+    /// `parent_id`, de una respuesta en hilo, que abre ese hilo.
+    static func target(
+        channelId: String?, messageId: String?, url: String?, type: String?, parentId: String? = nil
+    ) -> PanelTarget? {
         // El recordatorio de ubicación siempre lleva a Inicio, traiga la liga que traiga.
         if (type ?? "").lowercased() == NoticeKinds.locationReminder { return .tab(.inicio) }
         if let channelId, !channelId.isEmpty {
-            return .screen(.chat(channelId: channelId, messageId: messageId))
+            let thread = parentId.flatMap { $0.isEmpty ? nil : $0 }
+            return .screen(.chat(channelId: channelId, messageId: messageId, parentId: thread))
         }
         guard let url, !url.isEmpty else { return nil }
         return target(path: url, type: type)
@@ -46,7 +50,7 @@ enum PanelLink {
     static func target(path raw: String, type: String? = nil) -> PanelTarget {
         let path = normalize(raw)
         if let native = nativeTarget(path: path) { return native }
-        if isPendingApproval(path: path, type: type) { return .screen(.approvals) }
+        if isPendingApproval(path: path, type: type) { return .screen(.approvals(focus: approvalFocus(path))) }
         return .screen(.web(path: path, title: nil))
     }
 
@@ -64,7 +68,7 @@ enum PanelLink {
         case "chat":
             guard parts.count == 1 else { return nil }
             if let channel = value("channel") {
-                return .screen(.chat(channelId: channel, messageId: value("msg")))
+                return .screen(.chat(channelId: channel, messageId: value("msg"), parentId: value("thread")))
             }
             return .tab(.chats)
         case "tasks":
@@ -129,6 +133,15 @@ enum PanelLink {
         return trimmed.hasPrefix("/") ? trimmed : "/" + trimmed
     }
 
+    /// `/purchase-orders?po=<id>` o `/advances?advance=<id>`: lo que hay que abrir en Aprobaciones.
+    private static func approvalFocus(_ path: String) -> String? {
+        let items = URLComponents(string: path)?.queryItems ?? []
+        for name in ["po", "advance"] {
+            if let v = items.first(where: { $0.name == name })?.value, !v.isEmpty { return v }
+        }
+        return nil
+    }
+
     private static func isPendingApproval(path: String, type: String?) -> Bool {
         guard path.hasPrefix("/advances") || path.hasPrefix("/purchase-orders") else { return false }
         guard let t = type?.lowercased(), !t.isEmpty else { return false }
@@ -172,8 +185,8 @@ final class AppRouter: ObservableObject {
     /// Desde una pantalla: apila en la pestaña actual. La pila de Chats es de
     /// `ChatRoute`, así que desde ahí la ruta se abre en su pestaña natural.
     func open(_ route: AppRoute) {
-        if case let .chat(channelId, messageId) = route {
-            openChat(channelId, messageId: messageId)
+        if case let .chat(channelId, messageId, parentId) = route {
+            openChat(channelId, messageId: messageId, parentId: parentId)
             return
         }
         let target = tab == .chats ? Self.home(for: route) : tab
@@ -183,8 +196,8 @@ final class AppRouter: ObservableObject {
 
     /// Push tocado o `arta://`: pestaña natural de la ruta con la pila limpia.
     func openFromLink(_ route: AppRoute) {
-        if case let .chat(channelId, messageId) = route {
-            openChat(channelId, messageId: messageId)
+        if case let .chat(channelId, messageId, parentId) = route {
+            openChat(channelId, messageId: messageId, parentId: parentId)
             return
         }
         let target = Self.home(for: route)
@@ -218,9 +231,17 @@ final class AppRouter: ObservableObject {
         self.tab = tab
     }
 
-    func openChat(_ channelId: String, messageId: String? = nil) {
+    /// Con `parentId` (aviso de una respuesta) abre la conversación en la raíz y encima el hilo.
+    func openChat(_ channelId: String, messageId: String? = nil, parentId: String? = nil) {
         tab = .chats
-        chatPath = [.conversation(channelId: channelId, focusMessageId: messageId)]
+        if let parentId, !parentId.isEmpty {
+            chatPath = [
+                .conversation(channelId: channelId, focusMessageId: parentId),
+                .thread(channelId: channelId, rootId: parentId),
+            ]
+        } else {
+            chatPath = [.conversation(channelId: channelId, focusMessageId: messageId)]
+        }
     }
 
     func reset() {

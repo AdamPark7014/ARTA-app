@@ -32,6 +32,8 @@ data class PushPayload(
     /** Id del canal de chat (conversación) en el API. */
     val chatChannelId: String,
     val messageId: String,
+    /** Raíz del hilo si el aviso es de una respuesta: tocarlo abre el hilo. */
+    val parentId: String = "",
     val badge: Int?,
     val sentAtMillis: Long,
     val silent: Boolean,
@@ -123,6 +125,7 @@ data class PushPayload(
                 threadTitle = v("thread_title"),
                 chatChannelId = chatChannelId,
                 messageId = v("message_id"),
+                parentId = v("parent_id"),
                 badge = v("badge").toIntOrNull(),
                 sentAtMillis = parseIso(v("sent_at")) ?: fallbackSentAt.takeIf { it > 0L } ?: System.currentTimeMillis(),
                 // El latido de ubicación nunca se ve, aunque un servidor viejo no mande `silent`.

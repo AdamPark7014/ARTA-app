@@ -370,7 +370,8 @@ final class PushManager: NSObject, UNUserNotificationCenterDelegate {
                 channelId: channelId,
                 messageId: Self.text(info, "message_id"),
                 url: Self.text(info, "url"),
-                type: Self.text(info, "type")
+                type: Self.text(info, "type"),
+                parentId: Self.text(info, "parent_id")
             )
             let entity = Self.text(info, "entity").flatMap(ArtaEntity.init(rawValue:))
             let isLocationReminder = Self.text(info, "type") == NoticeKinds.locationReminder

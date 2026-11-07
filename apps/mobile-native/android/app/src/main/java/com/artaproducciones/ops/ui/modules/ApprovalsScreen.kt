@@ -151,13 +151,15 @@ internal suspend fun loadApprovals(p: ModulesPerms): ApprovalsData = coroutineSc
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ApprovalsScreen(nav: ModuleNav, focusAdvanceId: String? = null) {
+fun ApprovalsScreen(nav: ModuleNav, focusAdvanceId: String? = null, focusPoId: String? = null) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val haptics = rememberHaptics()
     var perms by remember { mutableStateOf(ModulesStore.perms) }
     // Con una tarjeta por enfocar (viene de un aviso) se espera lo fresco: la caché diría que ya no está.
-    var data by remember { mutableStateOf(if (focusAdvanceId == null) ModulesStore.approvals else null) }
+    var data by remember {
+        mutableStateOf(if (focusAdvanceId == null && focusPoId == null) ModulesStore.approvals else null)
+    }
     var refreshing by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var tick by remember { mutableIntStateOf(0) }
@@ -255,6 +257,20 @@ fun ApprovalsScreen(nav: ModuleNav, focusAdvanceId: String? = null) {
 
     val p = perms
     val d = data
+
+    // El aviso de una OC abre su detalle en cuanto llega la lista fresca.
+    LaunchedEffect(d != null, focusPoId) {
+        val id = focusPoId ?: return@LaunchedEffect
+        val loaded = data ?: return@LaunchedEffect
+        if (focusHandled) return@LaunchedEffect
+        focusHandled = true
+        val order = loaded.orders.firstOrNull { it.row.id == id }
+        if (order == null) {
+            notify("Esa orden de compra ya no está pendiente de tu parte.")
+            return@LaunchedEffect
+        }
+        openPo = order
+    }
 
     LaunchedEffect(d != null, focusAdvanceId) {
         val id = focusAdvanceId ?: return@LaunchedEffect

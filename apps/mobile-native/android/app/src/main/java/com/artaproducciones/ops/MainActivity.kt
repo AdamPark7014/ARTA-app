@@ -116,12 +116,15 @@ class MainActivity : ComponentActivity() {
         }
         val dismissId = intent.getIntExtra(ArtaPushRenderer.EXTRA_DISMISS_ID, 0)
         if (dismissId != 0) NotificationManagerCompat.from(this).cancel(dismissId)
+        // Antes de navegar: un aviso del Auditorio se abre en el Auditorio (y uno de Arta, en Arta).
+        BizEntity.of(intent.getStringExtra(ArtaPushRenderer.EXTRA_ENTITY))?.let { ActiveEntity.select(it) }
         val link = demoLink ?: DeepLink.from(
             channelId = intent.getStringExtra(ArtaPushRenderer.EXTRA_CHANNEL_ID),
             messageId = intent.getStringExtra(ArtaPushRenderer.EXTRA_MESSAGE_ID),
             url = intent.getStringExtra(ArtaPushRenderer.EXTRA_URL) ?: intent.data?.let(::fromUri),
             type = intent.getStringExtra(ArtaPushRenderer.EXTRA_TYPE),
             forceApprovals = intent.getStringExtra(ArtaPushRenderer.EXTRA_TARGET) == ArtaPushRenderer.TARGET_APPROVALS,
+            parentId = intent.getStringExtra(ArtaPushRenderer.EXTRA_PARENT_ID),
         )
         if (link != null) pendingLink.value = link
     }

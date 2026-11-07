@@ -219,7 +219,7 @@ struct InicioView: View {
             detail: parts.isEmpty ? "Nada pendiente" : parts.joined(separator: " · "),
             id: "inicio-kpi-approvals"
         ) {
-            router.open(AppRoute.approvals)
+            router.open(AppRoute.approvals())
         }
     }
 
@@ -441,7 +441,7 @@ struct InicioView: View {
                 amount: Money.mxn(order.amount?.value),
                 status: "Autorizar",
                 tone: .warn,
-                route: .approvals
+                route: .approvals(focus: order.id)
             ))
         }
         for advance in approvalAdvances {
@@ -452,7 +452,7 @@ struct InicioView: View {
                 amount: Money.mxn(advance.amount?.value),
                 status: advance.isPending ? "Revisar" : "Por pagar",
                 tone: advance.isPending ? .warn : .info,
-                route: .approvals
+                route: .approvals(focus: advance.id)
             ))
         }
         for task in approvalTasks {
@@ -476,7 +476,7 @@ struct InicioView: View {
             title: "Esperan tu visto bueno",
             trailing: "Ver todo",
             trailingId: "inicio-approvals-card",
-            trailingAction: { router.open(AppRoute.approvals) }
+            trailingAction: { router.open(AppRoute.approvals()) }
         ) {
             if items.isEmpty {
                 Text("Nada espera tu visto bueno por ahora.")
@@ -619,7 +619,7 @@ struct InicioView: View {
         items.append(Shortcut(id: "inicio-my-tasks", title: "Mis tareas", icon: "checklist") { router.select(.tareas) })
         if showsApprovals {
             items.append(Shortcut(id: "inicio-approvals", title: "Aprobaciones", icon: "checkmark.seal", badge: totalApprovals) {
-                router.open(AppRoute.approvals)
+                router.open(AppRoute.approvals())
             })
         }
         if seesCalendar {

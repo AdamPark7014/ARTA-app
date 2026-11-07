@@ -5,9 +5,11 @@ import Foundation
 enum AppRoute: Hashable {
     case task(String)
     case event(String)
-    case approvals
+    /// `focus`: la OC o el anticipo del aviso, que se abre al llegar.
+    case approvals(focus: String? = nil)
     case web(path: String, title: String?)
-    case chat(channelId: String, messageId: String?)
+    /// `parentId`: raíz del hilo cuando el aviso es de una respuesta; se abre ese hilo.
+    case chat(channelId: String, messageId: String?, parentId: String? = nil)
     /// Más › Usuarios bloqueados (docs/chat-reportar-bloquear.md).
     case blockedUsers
     /// Qué llega al teléfono: Más › Preferencias de avisos y la barra de Avisos.

@@ -180,8 +180,8 @@ struct HomeView: View {
             TaskDetailView(taskId: taskId)
         case .event(let eventId):
             EventDetailView(eventId: eventId)
-        case .approvals:
-            ApprovalsView()
+        case .approvals(let focus):
+            ApprovalsView(focus: focus)
         case let .web(path, title):
             // En el modo de muestra no hay sesión que compartir con la web.
             if DemoMode.isActive {
@@ -189,8 +189,8 @@ struct HomeView: View {
             } else {
                 ArtaWebView(path: path, title: title)
             }
-        case let .chat(channelId, messageId):
-            ConversationView(channelId: channelId, parentId: nil, focusMessageId: messageId)
+        case let .chat(channelId, messageId, parentId):
+            ConversationView(channelId: channelId, parentId: parentId, focusMessageId: messageId)
         case .blockedUsers:
             BlockedUsersView()
         case .notificationPreferences:

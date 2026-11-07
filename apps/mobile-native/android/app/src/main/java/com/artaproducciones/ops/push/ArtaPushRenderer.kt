@@ -93,6 +93,12 @@ object ArtaPushRenderer {
     const val EXTRA_NOTIFICATION_IDS = "arta_notification_ids"
     /** `type` del aviso (p. ej. `po.requested`): decide si una OC abre aprobaciones o la web. */
     const val EXTRA_TYPE = "arta_type"
+
+    /** Arta o Auditorio: la app cambia a esa unidad antes de abrir el aviso. */
+    const val EXTRA_ENTITY = "arta_entity"
+
+    /** Raíz del hilo de una respuesta. */
+    const val EXTRA_PARENT_ID = "arta_parent_id"
     /** Destino forzado por una acción de la notificación. */
     const val EXTRA_TARGET = "arta_target"
     const val TARGET_APPROVALS = "approvals"
@@ -446,7 +452,12 @@ object ArtaPushRenderer {
             // La misma etiqueta otra vez (una ráfaga) actualiza la tarjeta sin volver a sonar.
             .setOnlyAlertOnce(true)
             .setLargeIcon(initials(p.senderName.ifBlank { ArtaNotifications.label(channelId) }, p.entity))
-            .setContentIntent(contentIntent(app, notificationId, p.url, p.chatChannelId, p.messageId, p.notificationId, p.type))
+            .setContentIntent(
+                contentIntent(
+                    app, notificationId, p.url, p.chatChannelId, p.messageId, p.notificationId, p.type,
+                    entity = p.entity?.key.orEmpty(), parentId = p.parentId,
+                ),
+            )
             .setPublicVersion(publicVersion(app, channelId, "Nuevo aviso", p.entity))
         if (p.passive) builder.setSilent(true).setPriority(NotificationCompat.PRIORITY_LOW)
         if (p.body.isNotBlank()) {
@@ -568,6 +579,7 @@ object ArtaPushRenderer {
             if (p.type.isNotBlank()) putExtra(EXTRA_TYPE, p.type)
             if (p.notificationId.isNotBlank()) putExtra(EXTRA_NOTIFICATION_ID, p.notificationId)
             if (p.opensApprovals) putExtra(EXTRA_TARGET, TARGET_APPROVALS)
+            p.entity?.let { putExtra(EXTRA_ENTITY, it.key) }
             // Las acciones no cancelan solas (autoCancel solo aplica al toque): la app la quita.
             putExtra(EXTRA_DISMISS_ID, notificationId)
         }
@@ -703,6 +715,8 @@ object ArtaPushRenderer {
         notificationId: String,
         type: String = "",
         noticeIds: List<String> = emptyList(),
+        entity: String = "",
+        parentId: String = "",
     ): PendingIntent {
         val intent = Intent(app, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
@@ -712,6 +726,8 @@ object ArtaPushRenderer {
             if (notificationId.isNotBlank()) putExtra(EXTRA_NOTIFICATION_ID, notificationId)
             if (noticeIds.isNotEmpty()) putExtra(EXTRA_NOTIFICATION_IDS, noticeIds.toTypedArray())
             if (type.isNotBlank()) putExtra(EXTRA_TYPE, type)
+            if (entity.isNotBlank()) putExtra(EXTRA_ENTITY, entity)
+            if (parentId.isNotBlank()) putExtra(EXTRA_PARENT_ID, parentId)
         }
         return PendingIntent.getActivity(app, requestCode, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
     }

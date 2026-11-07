@@ -78,6 +78,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import com.artaproducciones.ops.data.ActiveEntity
+import com.artaproducciones.ops.data.BizEntity
 import com.artaproducciones.ops.data.NoticeChannel
 import com.artaproducciones.ops.data.NoticeFeed
 import com.artaproducciones.ops.data.NoticeFilter
@@ -258,6 +259,8 @@ fun NotificationsScreen(
 
     fun open(n: NotificationDto) {
         markRead(n, undoOnFailure = false)
+        // Un aviso de la otra unidad (Arta / Auditorio) se abre en la suya.
+        BizEntity.of(n.entity)?.let { ActiveEntity.select(it) }
         // Lo que no tiene pantalla nativa se abre en la vista web, dentro de la app.
         DeepLink.from(null, null, n.linkUrl, type = n.type)?.let(openLink)
     }

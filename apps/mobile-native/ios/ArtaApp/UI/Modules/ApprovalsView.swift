@@ -11,6 +11,10 @@ struct ApprovalsView: View {
     }
 
     @EnvironmentObject private var router: AppRouter
+    /// La OC o el anticipo del aviso tocado: al cargar se abre o se lleva a la vista.
+    var focus: String? = nil
+    @State private var focusHandled = false
+    @State private var scrollTarget: String?
     @State private var segment: Segment = .pending
     @State private var profile: ModulesProfile?
     @State private var tasks: [ArtaTask] = []
@@ -134,6 +138,7 @@ struct ApprovalsView: View {
                         title: "Nada por aprobar",
                         message: "Cuando alguien entregue una tarea que pediste, haya una orden de compra por autorizar o un anticipo por resolver, aparecerá aquí.")
         } else {
+            ScrollViewReader { proxy in
             ScrollView {
                 VStack(alignment: .leading, spacing: ArtaSpace.xl) {
                     if let refreshError {
@@ -160,12 +165,18 @@ struct ApprovalsView: View {
                     if !advances.isEmpty {
                         CardSection(title: "Anticipos", count: advances.count, items: advances) { advance in
                             advanceRow(advance)
+                                .id("adv-\(advance.id)")
                         }
                     }
                 }
                 .padding(.horizontal, ArtaLayout.gutter)
                 .padding(.top, ArtaSpace.m)
                 .padding(.bottom, ArtaSpace.l)
+            }
+            .onChange(of: scrollTarget) { _, target in
+                guard let target else { return }
+                withAnimation { proxy.scrollTo(target, anchor: .center) }
+            }
             }
             .refreshable { await load() }
             .artaTabBarScrim(glow: false)
@@ -481,12 +492,26 @@ struct ApprovalsView: View {
             loaded = true
             error = nil
             refreshError = nil
+            applyFocus()
         } catch {
             if !error.isModuleCancellation {
                 if loaded { refreshError = error.userMessage } else { self.error = error.userMessage }
             }
         }
         loading = false
+    }
+
+    /// Una sola vez: la OC del aviso abre su detalle; el anticipo se lleva a la vista.
+    private func applyFocus() {
+        guard let focus, !focusHandled else { return }
+        focusHandled = true
+        if let row = orders.first(where: { $0.id == focus }) {
+            segment = row.isPending ? .pending : .history
+            selectedOrder = row
+        } else if advances.contains(where: { $0.id == focus }) {
+            segment = .pending
+            scrollTarget = "adv-\(focus)"
+        }
     }
 
     private func approve(_ task: ArtaTask) async {

@@ -119,7 +119,7 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.drop
 
 /** `navigate("approvals")` sigue valiendo: el argumento es opcional. */
-private const val APPROVALS_ROUTE = "approvals?advance={advance}"
+private const val APPROVALS_ROUTE = "approvals?advance={advance}&po={po}"
 
 /** Más › Usuarios bloqueados (chat). */
 private const val CARTELERA_ROUTE = "cartelera"
@@ -151,12 +151,15 @@ enum class Tab { Inicio, Chats, Tareas, Avisos, Mas }
  * de la vista web). Reglas en `docs/PARIDAD-MOVIL-CONTRATO.md` §4.
  */
 sealed interface DeepLink {
-    data class Chat(val channelId: String, val messageId: String?) : DeepLink
+    /** [parentId]: raíz del hilo cuando el aviso es de una respuesta; se abre ese hilo. */
+    data class Chat(val channelId: String, val messageId: String?, val parentId: String? = null) : DeepLink
     data class Task(val taskId: String) : DeepLink
     data class Event(val eventId: String) : DeepLink
     data object Approvals : DeepLink
     /** Aprobaciones con la tarjeta de ese anticipo enfocada (`/advances?advance=<id>`). */
     data class Advance(val advanceId: String) : DeepLink
+    /** Aprobaciones con el detalle de esa OC abierto (`/purchase-orders?po=<id>`). */
+    data class Po(val poId: String) : DeepLink
     data object Events : DeepLink
     data class Section(val tab: Tab) : DeepLink
 
@@ -176,10 +179,13 @@ sealed interface DeepLink {
             url: String?,
             type: String? = null,
             forceApprovals: Boolean = false,
+            parentId: String? = null,
         ): DeepLink? {
-            if (!channelId.isNullOrBlank()) return Chat(channelId, messageId?.takeIf { it.isNotBlank() })
+            if (!channelId.isNullOrBlank()) {
+                return Chat(channelId, messageId?.takeIf { it.isNotBlank() }, parentId?.takeIf { it.isNotBlank() })
+            }
             val link = url?.takeIf { it.isNotBlank() }?.let { parse(it, type) }
-            if (forceApprovals) return link as? Task ?: link as? Advance ?: Approvals
+            if (forceApprovals) return link as? Task ?: link as? Advance ?: link as? Po ?: Approvals
             return link
         }
 
@@ -201,9 +207,10 @@ sealed interface DeepLink {
             return when (segments.firstOrNull()) {
                 null, "dashboard" -> Section(Tab.Inicio)
                 "notifications" -> if (q("tab") == "enviados") SentNotices else Section(Tab.Avisos)
-                "chat" -> q("channel")?.let { Chat(it, q("msg")) } ?: Section(Tab.Chats)
+                "chat" -> q("channel")?.let { Chat(it, q("msg"), q("thread")) } ?: Section(Tab.Chats)
                 "tasks" -> (segments.getOrNull(1) ?: q("task"))?.let(::Task) ?: Section(Tab.Tareas)
-                "calendar" -> Events
+                // El calendario (con `?date=` del aviso de una nota) vive en la web.
+                "calendar" -> Web(relative)
                 "events" -> {
                     val id = segments.getOrNull(1)
                     when {
@@ -218,7 +225,7 @@ sealed interface DeepLink {
                 "purchase-orders", "advances" -> when {
                     !isPendingApproval(type) -> Web(relative)
                     segments.first() == "advances" -> q("advance")?.let(::Advance) ?: Approvals
-                    else -> Approvals
+                    else -> q("po")?.let(::Po) ?: Approvals
                 }
                 else -> Web(relative)
             }
@@ -227,7 +234,8 @@ sealed interface DeepLink {
         /** `po.to_pay` y `po.to_transfer` no entran: su destino es la orden, en la vista web. */
         private fun isPendingApproval(type: String?): Boolean {
             val t = type?.trim()?.lowercase().orEmpty()
-            return t == "po.requested" || t == "advance.to_pay" || t.endsWith(".review") || t.endsWith(".requested")
+            return t == "po.requested" || t == "po.updated" || t == "advance.to_pay" ||
+                t.endsWith(".review") || t.endsWith(".requested")
         }
     }
 }
@@ -309,11 +317,17 @@ private fun SignedInNav(user: UserDto, pendingLink: StateFlow<DeepLink?>, onLink
 
     fun go(target: DeepLink) {
         when (target) {
-            is DeepLink.Chat -> nav.navigate("chat/${target.channelId}" + (target.messageId?.let { "?msg=$it" } ?: ""))
+            is DeepLink.Chat -> {
+                // Una respuesta en hilo: la conversación en la raíz y encima el hilo.
+                val root = target.parentId
+                nav.navigate("chat/${target.channelId}" + ((root ?: target.messageId)?.let { "?msg=$it" } ?: ""))
+                if (root != null) nav.navigate("thread/${target.channelId}/$root")
+            }
             is DeepLink.Task -> nav.navigate("task/${Uri.encode(target.taskId)}")
             is DeepLink.Event -> nav.navigate("event/${Uri.encode(target.eventId)}")
             DeepLink.Approvals -> nav.navigate("approvals") { launchSingleTop = true }
             is DeepLink.Advance -> nav.navigate("approvals?advance=${Uri.encode(target.advanceId)}")
+            is DeepLink.Po -> nav.navigate("approvals?po=${Uri.encode(target.poId)}")
             DeepLink.Events -> nav.navigate("events") { launchSingleTop = true }
             is DeepLink.Section -> {
                 nav.popBackStack("home", inclusive = false)
@@ -337,6 +351,7 @@ private fun SignedInNav(user: UserDto, pendingLink: StateFlow<DeepLink?>, onLink
             is DeepLink.Event -> entry.destination.route == "event/{id}" && args?.getString("id") == target.eventId
             DeepLink.Approvals -> entry.destination.route == APPROVALS_ROUTE
             is DeepLink.Advance -> entry.destination.route == APPROVALS_ROUTE && args?.getString("advance") == target.advanceId
+            is DeepLink.Po -> entry.destination.route == APPROVALS_ROUTE && args?.getString("po") == target.poId
             DeepLink.Events -> entry.destination.route == "events"
             else -> false
         }
@@ -410,9 +425,16 @@ private fun SignedInNav(user: UserDto, pendingLink: StateFlow<DeepLink?>, onLink
         }
         composable(
             route = APPROVALS_ROUTE,
-            arguments = listOf(navArgument("advance") { type = NavType.StringType; nullable = true; defaultValue = null }),
+            arguments = listOf(
+                navArgument("advance") { type = NavType.StringType; nullable = true; defaultValue = null },
+                navArgument("po") { type = NavType.StringType; nullable = true; defaultValue = null },
+            ),
         ) { entry ->
-            ApprovalsScreen(nav = moduleNav, focusAdvanceId = entry.arguments?.getString("advance"))
+            ApprovalsScreen(
+                nav = moduleNav,
+                focusAdvanceId = entry.arguments?.getString("advance"),
+                focusPoId = entry.arguments?.getString("po"),
+            )
         }
         composable("events") { EventsScreen(nav = moduleNav) }
         composable(BLOCKED_USERS_ROUTE) { BlockedUsersScreen(onBack = { nav.popBackStack() }) }
