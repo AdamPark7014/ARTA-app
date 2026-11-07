@@ -1,12 +1,54 @@
 # RELEVO
 
 - **Último turno:** claude-code
-- **Fecha:** 2026-11-02
+- **Fecha:** 2026-11-07
 - **Rama:** main
   (Adam es el único programador).
-- **Producción:** `b97f436` desplegado desde `main` el 2026-11-02 (`bash deploy/update.sh` en `/var/www/arta-app`, log
-  `/root/arta-deploy-20261102-I.log`; respaldo automático en `/root/arta-backups/`). Disco al 68 %: **un despliegue lo subió a 90 %, donde se cae la BD.** Antes de cada
+- **Producción:** `37981f1` desplegado desde `main` el 2026-11-07 (`bash deploy/update.sh` en `/var/www/arta-app`, log
+  `/root/arta-deploy-20261107-A.log`; respaldo automático en `/root/arta-backups/`). Disco al 68 %: **un despliegue lo subió a 90 %, donde se cae la BD.** Antes de cada
   despliegue, `docker builder prune -af`.
+
+## Turno claude-code (2026-11-07): avisos al punto exacto, riesgo con criterio y apps a tiendas
+
+Adam: «que las notificaciones queden súper específicas y te manden exactamente a la parte de la que habla, no a una
+general»; «haz lo mismo en la web»; «que se pueda concluir un evento y marque 100 % en todos, igual al pasar la fecha»;
+«riesgo solo si falta una o dos semanas y no hay progreso suficiente, parametrizado»; «sube ambas apps a las tiendas».
+**Guía: `docs/AVISOS.md`** (tabla de ligas por tipo, riesgo) y `docs/PARIDAD-MOVIL-CONTRATO.md` §4.
+
+**Avance y riesgo (`54610e1`, en producción):**
+- `isEventDone` (`common/checklist-progress.ts`, espejo en la web): evento cerrado, o desde el día siguiente a su
+  última fecha en hora de Puebla, cuenta 100 % en todos sus formatos. Cerrar lo aplica al momento
+  (`completeDoneEvents`); el escaneo horario lo aplica a lo que ya pasó; reabrir o mover la fecha recalcula
+  (`recalcEventChecklists`). Solo toca formatos visibles: los vacíos de plantillas retiradas siguen ocultos.
+- `common/event-risk.ts`: «En riesgo» a ≤7 días con <80 %, «Por revisar» a ≤14 días con <60 %; sin fecha, lejos,
+  cerrado o pasado, nada. Umbrales por organización en `settingsJson.riesgo` (pantalla Organización). Lo usan el
+  escaneo y la analítica (inicio, Eventos, disciplina por módulo). Antes: <40 % bastaba, a cualquier distancia, y
+  llegaba un aviso diario por evento (1,486 en 45 días).
+- Aviso de riesgo: una vez por nivel (`notifyOnceWithin`, 30 días, mismo título), con días, avance y «N de M
+  formatos sin terminar»; abre `?tab=checklists&ver=pendientes`. OC viejas: semanal, a esa OC o a la lista filtrada.
+
+**Avisos al punto exacto (`54610e1` web/API, `37981f1` apps):** OC al que la pidió → `?tab=ocs&po=` (el panel la
+abre); hilos `&thread=` y `parent_id` en el push; documentos `&doc=`, archivos `&file=`, carpetas `?folder=`, notas
+`/calendar?date=`; títulos con quién, qué y sobre qué (`actionTitle`). Cambio de unidad al tocar un aviso (web con
+`?entidad=` desde el service worker, campana y Avisos; iOS lista; Android push y lista). Liga de la misma página:
+navegación completa (`lib/notice-open.ts`). Apps: OC y anticipo enfocados en Aprobaciones (también desde Inicio en
+iOS), hilo abierto, Android `/calendar` a la web.
+
+**Verificación:** API 1,177 pruebas; web e2e 285 en computadora y 288 a tamaño iPhone (falla solo «Carga real», que
+pide API de verdad y CI excluye), más `e2e/avisos-destino.spec.ts` (6 × 2); Android 168 unitarias y compila; iOS
+compila (archivo de TestFlight). CI, Web Safari y TestFlight en verde en `37981f1`.
+
+**Tiendas:**
+- **iOS 1.0.2 (16): enviada a revisión de Apple** el 07-11 (`WAITING_FOR_REVIEW`, envío `decaf422`), con novedades;
+  la información de revisión (cuenta demo) se copió sola de la 1.0.1. Ya está en TestFlight para «Equipo ARTA».
+  La 1.0.1 (15) estaba publicada.
+- **Android 1.0.4 (7): enviada a revisión de Google** el 07-11, producción con lanzamiento completo, publicación
+  gestionada desactivada (se publica al aprobarse). AAB de 13.4 MB (descarga 5.71 MB) subido en dos partes; copia en
+  `Documents\ARTA-builds\arta-1.0.4-7.aab` y su mapping. La 1.0.3 (6) estaba publicada.
+
+**No verificado:** ningún aviso probado en un teléfono real; el escaneo de las 20:00 UTC del 07-11 debía poner al
+100 % 86 formatos de eventos terminados (revisar con el SQL de `docs/AVISOS.md` o el de este turno). Estudio de
+vista previa diferida y variantes chicas de pósters siguen sin hacer.
 
 ## Turno claude-code (2026-11-02, tarde): rediseño de 360 grados del sitio y lo real de Arta
 
