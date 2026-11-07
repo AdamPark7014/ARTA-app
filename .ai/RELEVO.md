@@ -42,12 +42,15 @@ compila (archivo de TestFlight). CI, Web Safari y TestFlight en verde en `37981f
 - **iOS 1.0.2 (16): enviada a revisión de Apple** el 07-11 (`WAITING_FOR_REVIEW`, envío `decaf422`), con novedades;
   la información de revisión (cuenta demo) se copió sola de la 1.0.1. Ya está en TestFlight para «Equipo ARTA».
   La 1.0.1 (15) estaba publicada.
-- **Android 1.0.4 (7): enviada a revisión de Google** el 07-11, producción con lanzamiento completo, publicación
-  gestionada desactivada (se publica al aprobarse). AAB de 13.4 MB (descarga 5.71 MB) subido en dos partes; copia en
+- **Android 1.0.4 (7): publicada en Google Play** el 07-11 a las 13:42, producción con lanzamiento completo en 178
+  países (Google la aprobó en minutos). AAB de 13.4 MB (descarga 5.71 MB) subido en dos partes; copia en
   `Documents\ARTA-builds\arta-1.0.4-7.aab` y su mapping. La 1.0.3 (6) estaba publicada.
 
-**No verificado:** ningún aviso probado en un teléfono real; el escaneo de las 20:00 UTC del 07-11 debía poner al
-100 % 86 formatos de eventos terminados (revisar con el SQL de `docs/AVISOS.md` o el de este turno). Estudio de
+**Escaneo de las 20:00 UTC del 07-11:** `risk=0` (ningún aviso de riesgo con la regla nueva), OC viejas con liga a esa
+OC o a `?estado=unpaid`, y los formatos de eventos terminados quedaron en 100 % salvo 30 de 3 eventos viejos sin
+`organizationId` (jul–sep), que ninguna lista enseña.
+
+**No verificado:** ningún aviso probado en un teléfono real. Estudio de
 vista previa diferida y variantes chicas de pósters siguen sin hacer.
 
 ## Turno claude-code (2026-11-02, tarde): rediseño de 360 grados del sitio y lo real de Arta
