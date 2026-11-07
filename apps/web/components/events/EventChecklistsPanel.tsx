@@ -15,12 +15,14 @@ import {
   type AccessUser,
 } from '@arta/rbac';
 import { createEventFile } from '@/lib/file-save';
+import { userHasPermission } from '@/lib/access-matrix';
 import { EmptyLite, FileRow, SectionHead, Seg } from '@/components/ui/Lite';
 import { SaveStatus } from '@/components/ui/SaveStatus';
 import { RevisionHistory } from '@/components/ui/RevisionHistory';
 import { ChecklistPicker, checklistBucket, type ChecklistBucket } from '@/components/events/ChecklistPicker';
 import { CHECKLIST_FILE_MODULE } from '@/lib/file-modules';
 import { api } from '@/lib/api';
+import { openGeneratedTab } from '@/lib/open-tab';
 import { useAutosave } from '@/lib/use-autosave';
 import { useDirtyGuard } from '@/lib/use-dirty-guard';
 import { useSaveHotkey } from '@/lib/use-save-hotkey';
@@ -83,6 +85,9 @@ type EventChecklistsPanelProps = {
  * no van aquí: viven al final del documento (junta del 23-10-2026).
  */
 type Drawer = 'pdf' | 'archivos' | 'historial' | null;
+
+/** `?ver=` de la URL → grupo de la lista de formatos. */
+const VER_BUCKET: Record<string, ChecklistBucket> = { pendientes: 'todo', revision: 'review', listos: 'ready' };
 
 /** Casilla con nota corta opcional (proveedor, quién, cuándo…). */
 function CheckRow({
@@ -266,14 +271,13 @@ export function EventChecklistsPanel({
   onFilesChanged,
 }: EventChecklistsPanelProps) {
   const searchParams = useSearchParams();
-  // El aviso de riesgo lleva a los pendientes: `?ver=pendientes` abre «Por completar».
-  const [bucket, setBucket] = useState<ChecklistBucket | 'all'>(() =>
-    searchParams?.get('ver') === 'pendientes' ? 'todo' : 'all',
-  );
-  const verPendientes = searchParams?.get('ver') === 'pendientes';
+  // Cada aviso y mosaico abre su grupo: `?ver=pendientes` → «Por completar», `?ver=revision` →
+  // «Por autorizar» (entregados, falta la firma de autorización), `?ver=listos` → «Listos».
+  const verBucket = VER_BUCKET[searchParams?.get('ver') ?? ''] ?? null;
+  const [bucket, setBucket] = useState<ChecklistBucket | 'all'>(() => verBucket ?? 'all');
   useEffect(() => {
-    if (verPendientes) setBucket('todo');
-  }, [verPendientes]);
+    if (verBucket) setBucket(verBucket);
+  }, [verBucket]);
   const eventDone = isEventDone(event);
   const [drawer, setDrawer] = useState<Drawer>(null);
   const [annotating, setAnnotating] = useState(false);
@@ -291,6 +295,8 @@ export function EventChecklistsPanel({
   const [selectedTemplate, setSelectedTemplate] = useState<string>('');
   const [addMsg, setAddMsg] = useState('');
   const [addBusy, setAddBusy] = useState(false);
+  const [histBusy, setHistBusy] = useState(false);
+  const [histMsg, setHistMsg] = useState('');
 
   const checklistFiles = useMemo(() => {
     if (!activeChecklist) return [] as EventFile[];
@@ -362,6 +368,8 @@ export function EventChecklistsPanel({
   const locked = closed || !canEditThis;
   const canAttach = !closed && canAddFormatImages(access, event.entity, formatKey);
   const readOnly = locked || lockedByStatus;
+  // El historial en PDF (`/audit/resource/CHECKLIST/:id/pdf`) es de dirección, como en el API.
+  const canHistoryPdf = userHasPermission(access.roleKey, access.permissions ?? [], ['users.manage', 'everything']);
   const checklistSlot =
     activeChecklist &&
     (event.slots || []).find((s) => s.kind === 'CHECKLIST' && s.checklistTemplateId === (activeChecklist.template?.id || null)) ||
@@ -510,6 +518,26 @@ export function EventChecklistsPanel({
     setDrawer((cur) => (cur === next ? null : next));
   }
 
+  /**
+   * El API no manda el PDF: genera el archivo y responde `{ url }`. Como las demás
+   * descargas, la pestaña se abre dentro del clic (Safari) y recibe la URL al final.
+   */
+  async function exportHistoryPdf() {
+    if (!activeChecklist || histBusy) return;
+    setHistBusy(true);
+    setHistMsg('');
+    try {
+      await openGeneratedTab(
+        async () => (await api<{ url: string }>(`/audit/resource/CHECKLIST/${activeChecklist.id}/pdf`)).url,
+        'Generando el PDF del historial…',
+      );
+    } catch (e) {
+      setHistMsg(e instanceof Error && e.message ? e.message : 'No se pudo generar el PDF del historial');
+    } finally {
+      setHistBusy(false);
+    }
+  }
+
   /** Las firmas están al final del documento: «Más → Firmas» lleva hasta ellas. */
   function goToSignatures() {
     document.querySelector('details.hub-more')?.removeAttribute('open');
@@ -617,7 +645,7 @@ export function EventChecklistsPanel({
             options={[
               { key: 'all', label: 'Todos', count: counts.all },
               { key: 'todo', label: 'Por completar', count: counts.todo },
-              { key: 'review', label: 'En revisión', count: counts.review },
+              { key: 'review', label: 'Por autorizar', count: counts.review },
               { key: 'ready', label: 'Listos', count: counts.ready },
             ]}
           />
@@ -912,21 +940,21 @@ export function EventChecklistsPanel({
         <section className="surface hub-drawer">
           <div className="surface__head">
             <h3 className="surface__title">Historial de versiones</h3>
-            {activeChecklist ? (
-              <a
-                className="btn-quiet"
-                href={`/api/audit/resource/CHECKLIST/${activeChecklist.id}/pdf`}
-                target="_blank"
-                rel="noreferrer"
-              >
-                Exportar historial PDF
-              </a>
+            {activeChecklist && canHistoryPdf ? (
+              <button className="btn-quiet" type="button" disabled={histBusy} onClick={() => void exportHistoryPdf()}>
+                {histBusy ? 'Generando…' : 'Exportar historial PDF'}
+              </button>
             ) : null}
             <button className="icon-btn" type="button" aria-label="Cerrar" onClick={() => setDrawer(null)}>
               ×
             </button>
           </div>
           <div className="surface__body sx-stack">
+            {histMsg ? (
+              <p className="fx-problem" role="alert">
+                {histMsg}
+              </p>
+            ) : null}
             <RevisionHistory
               path={`/checklists/${activeChecklist.id}/revisions`}
               reloadKey={revision}

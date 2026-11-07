@@ -94,6 +94,7 @@ import com.artaproducciones.ops.data.Rbac
 import com.artaproducciones.ops.data.Session
 import com.artaproducciones.ops.data.api.ApiClient
 import com.artaproducciones.ops.data.api.UserDto
+import com.artaproducciones.ops.data.api.WebSessionBridge
 import com.artaproducciones.ops.demo.DemoMode
 import com.artaproducciones.ops.push.PushRegistration
 import com.artaproducciones.ops.ui.chat.ModerationText
@@ -103,6 +104,7 @@ import com.artaproducciones.ops.ui.common.LegalLinks
 import com.artaproducciones.ops.ui.demo.DEMO_WEB_DETAIL
 import com.artaproducciones.ops.ui.demo.DEMO_WEB_TITLE
 import com.artaproducciones.ops.ui.modules.ModuleNav
+import com.artaproducciones.ops.ui.modules.toast
 import com.artaproducciones.ops.ui.theme.ArtaColors
 import com.artaproducciones.ops.ui.theme.ArtaType
 import com.artaproducciones.ops.ui.theme.LocalActiveEntity
@@ -318,6 +320,7 @@ fun MoreScreen(user: UserDto, nav: ModuleNav) {
     var dndUntil by remember { mutableStateOf<OffsetDateTime?>(null) }
     var dndDialog by remember { mutableStateOf(false) }
     var demoWebNotice by remember { mutableStateOf(false) }
+    var openingBrowser by remember { mutableStateOf(false) }
     val demo = DemoMode.isActive
 
     LaunchedEffect(Unit) {
@@ -420,14 +423,26 @@ fun MoreScreen(user: UserDto, nav: ModuleNav) {
         item(key = "browser") {
             MoreRow(
                 icon = Icons.AutoMirrored.Outlined.OpenInNew,
-                label = "Abrir en el navegador",
+                label = if (openingBrowser) "Abriendo…" else "Abrir en el navegador",
+                supporting = "Con tu sesión, sin volver a entrar",
                 onClick = {
                     // Modo demo: el panel pediría iniciar sesión; se explica en vez de abrirlo.
-                    if (demo) {
-                        demoWebNotice = true
-                    } else {
-                        runCatching {
-                            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(ApiClient.origin + "/dashboard")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                    when {
+                        demo -> demoWebNotice = true
+                        openingBrowser -> Unit
+                        else -> {
+                            openingBrowser = true
+                            scope.launch {
+                                // Firmada con el acceso de un solo uso (como «Abrir en Safari» en iOS): el
+                                // navegador entra con la sesión de la app en vez de pedir contraseña.
+                                val url = WebSessionBridge.signedUrl("/dashboard", WebModules.entityFor(user))
+                                // Sin firma (sin red, o un API sin handoff) el panel va a pedir entrar: se avisa.
+                                if (!url.contains("${WebSessionBridge.HANDOFF_PARAM}=")) toast(context, "Sin conexión: el panel pedirá entrar.")
+                                runCatching {
+                                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                                }.onFailure { toast(context, "No hay navegador para abrir el panel.") }
+                                openingBrowser = false
+                            }
                         }
                     }
                 },

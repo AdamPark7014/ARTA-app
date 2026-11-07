@@ -1,0 +1,98 @@
+/* ── Chat: reportar y bloquear (07-11-2026) ─────────────────────────────────
+   Encima de _chat.scss; solo lo nuevo: la cola de reportes de dirección, el
+   formulario «Reportar» bajo un mensaje y el aviso de persona bloqueada. */
+
+.chat-nav__badge {
+  margin-left: auto;
+}
+
+/* Formulario corto bajo el mensaje (comparte caja con .chat-edit). */
+
+.chat-report select {
+  height: 32px;
+  padding: 0 0.5rem;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 0.85rem;
+}
+
+.chat-report__field {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+/* Cola de reportes. */
+
+.chat-reports {
+  display: grid;
+  gap: 0.6rem;
+  padding: 0.25rem 0.25rem 0;
+}
+
+.chat-reports__tabs {
+  padding-bottom: 0.25rem;
+}
+
+.chat-report-card {
+  display: grid;
+  gap: 0.45rem;
+  padding: 0.7rem 0.8rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg-soft);
+  font-size: 0.84rem;
+}
+
+.chat-report-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.chat-report-card__time {
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.chat-report-card__who,
+.chat-report-card__details {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.chat-report-card__details {
+  color: var(--muted);
+  white-space: pre-wrap;
+}
+
+.chat-report-card__excerpt {
+  margin: 0;
+  padding: 0.35rem 0.6rem;
+  border-left: 2px solid var(--line-strong);
+  color: var(--muted);
+  font-size: 0.8rem;
+  overflow-wrap: anywhere;
+
+  &.is-deleted {
+    font-style: italic;
+  }
+}
+
+.chat-report-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.4rem;
+}
+
+/* «Bloqueaste a X»: en voz baja, al final de la conversación. */
+
+.chat-blocked {
+  margin-top: 0.5rem;
+}

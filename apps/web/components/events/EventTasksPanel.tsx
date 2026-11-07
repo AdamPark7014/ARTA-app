@@ -1,5 +1,6 @@
 'use client';
 
+import { askConfirm } from '@/components/ui/AskDialog';
 import { AvatarStack } from '@/components/ui/AvatarStack';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { EmptyLite, Pill, SectionHead, Seg } from '@/components/ui/Lite';
@@ -28,6 +29,10 @@ type EventTasksPanelProps = {
   onReassignTask?: (taskId: string, assigneeIds: string[]) => Promise<void>;
   onSetTaskDue?: (taskId: string, dueAt: string) => Promise<void>;
   onEditTask?: (taskId: string, patch: { title: string; detail: string }) => Promise<void>;
+  /** Eliminar la tarea (DELETE /tasks/:id). La ve quien la pidió o dirección. */
+  onDeleteTask?: (taskId: string) => Promise<void>;
+  /** Dirección: puede borrar tareas que no pidió. */
+  canDeleteAnyTask?: boolean;
   onTaskUpdated?: (task: Task) => void;
 };
 
@@ -68,6 +73,8 @@ export function EventTasksPanel({
   onReassignTask,
   onSetTaskDue,
   onEditTask,
+  onDeleteTask,
+  canDeleteAnyTask = false,
   onTaskUpdated,
   focusTaskId,
   focusDo,
@@ -75,6 +82,7 @@ export function EventTasksPanel({
   const [section, setSection] = useState<Section>('open');
   const [more, setMore] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
   const [deliveryTask, setDeliveryTask] = useState<Task | null>(null);
   const [editing, setEditing] = useState<{ id: string; title: string; detail: string } | null>(null);
@@ -143,6 +151,24 @@ export function EventTasksPanel({
       setEditing(null);
     } finally {
       setSavingEdit(false);
+    }
+  }
+
+  async function remove(t: Task) {
+    if (!onDeleteTask || deletingId) return;
+    const ok = await askConfirm({
+      title: `¿Eliminar la tarea «${t.title}»?`,
+      body: 'Desaparece para todos; a los responsables les llega el aviso.',
+      confirmLabel: 'Eliminar tarea',
+      danger: true,
+    });
+    if (!ok) return;
+    setDeletingId(t.id);
+    try {
+      await onDeleteTask(t.id);
+      if (openId === t.id) setOpenId(null);
+    } finally {
+      setDeletingId(null);
     }
   }
 
@@ -257,6 +283,7 @@ export function EventTasksPanel({
             const canReview =
               t.status === 'PENDING_APPROVAL' && t.createdById === currentUserId && !isTaskAssignee(t, t.createdById);
             const isEditing = editing?.id === t.id;
+            const canDelete = !!onDeleteTask && !closed && (canDeleteAnyTask || (!!currentUserId && t.createdById === currentUserId));
 
             return (
               <li key={t.id} id={`task-${t.id}`} className={`task2 ${open ? 'is-open' : ''} ${t.status === 'DONE' ? 'is-done' : ''}`}>
@@ -374,6 +401,16 @@ export function EventTasksPanel({
                               onClick={() => onSetTaskStatus(t.id, t.status === 'BLOCKED' ? 'OPEN' : 'BLOCKED')}
                             >
                               {t.status === 'BLOCKED' ? 'Desbloquear' : 'Bloquear'}
+                            </button>
+                          ) : null}
+                          {canDelete ? (
+                            <button
+                              className="btn-quiet btn-danger"
+                              type="button"
+                              disabled={deletingId === t.id}
+                              onClick={() => void remove(t)}
+                            >
+                              {deletingId === t.id ? 'Eliminando…' : 'Eliminar tarea'}
                             </button>
                           ) : null}
                           {t.createdBy ? <span className="t-muted t-small">Lo pidió {t.createdBy.fullName}</span> : null}

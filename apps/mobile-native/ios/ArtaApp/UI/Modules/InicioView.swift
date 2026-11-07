@@ -18,6 +18,8 @@ struct InicioView: View {
     @State private var approvalTasks: [ArtaTask] = []
     @State private var approvalOrders: [PurchaseOrderRow] = []
     @State private var approvalAdvances: [AdvanceRow] = []
+    /// Hoy es día de cobro (`GET purchase-orders/window`): las autorizadas dicen «Pagar»; si no, «Por pagar».
+    @State private var canPayNow = false
     @State private var loading = true
     @State private var loaded = false
     @State private var error: String?
@@ -53,7 +55,8 @@ struct InicioView: View {
     private var totalApprovals: Int { taskApprovals + poApprovals + advanceApprovals }
 
     private var showsApprovals: Bool {
-        profile?.canAuthorizePO == true || profile?.isDirection == true || taskApprovals > 0 || advanceApprovals > 0
+        profile?.canAuthorizePO == true || profile?.canMarkPaid == true || profile?.isDirection == true
+            || taskApprovals > 0 || advanceApprovals > 0
     }
 
     /// Mismo candado que la pestaña del evento (`canSeeModule`), en el negocio activo.
@@ -228,7 +231,8 @@ struct InicioView: View {
         var detail = open == 0 ? "Sin pendientes" : "de \(open) abiertas"
         if overdueCount > 0 { detail = (overdueCount == 1 ? "1 vencida" : "\(overdueCount) vencidas") + " · " + detail }
         return kpi("Vencen hoy", value: "\(dueTodayCount)", detail: detail, id: "inicio-kpi-due") {
-            router.select(.tareas)
+            // Con vencidas, Tareas abre en «Vencidas»; si no, en «Pendientes» (Hoy va arriba).
+            router.openTasks(filter: overdueCount > 0 ? .overdue : .open)
         }
     }
 
@@ -237,7 +241,7 @@ struct InicioView: View {
         guard let event = nextEvent, let start = parseDate(event.startsAt) else {
             // Sin fecha próxima, la palabra va en el lugar de la cifra (nunca una raya suelta).
             return kpi(label, value: "Sin fechas", detail: "Nada próximo en el calendario", quiet: true, id: "inicio-kpi-next") {
-                router.open(AppRoute.web(path: "/calendar", title: "Calendario"))
+                openCalendar()
             }
         }
         let now = Date()
@@ -439,9 +443,10 @@ struct InicioView: View {
                 title: "Orden de compra" + rubro,
                 detail: Self.joined([order.vendorName, order.eventName]),
                 amount: Money.mxn(order.amount?.value),
-                status: "Autorizar",
-                tone: .warn,
-                route: .approvals(focus: order.id)
+                // Por autorizar, o autorizada que me toca pagar («Pagar» solo en día de cobro, como Android).
+                status: order.isPending ? "Autorizar" : (canPayNow ? "Pagar" : "Por pagar"),
+                tone: order.isPending ? .warn : .info,
+                route: .approvals(focus: order.id, web: "/purchase-orders?po=\(order.id)")
             ))
         }
         for advance in approvalAdvances {
@@ -452,7 +457,7 @@ struct InicioView: View {
                 amount: Money.mxn(advance.amount?.value),
                 status: advance.isPending ? "Revisar" : "Por pagar",
                 tone: advance.isPending ? .warn : .info,
-                route: .approvals(focus: advance.id)
+                route: .approvals(focus: advance.id, web: "/advances?advance=\(advance.id)")
             ))
         }
         for task in approvalTasks {
@@ -496,10 +501,17 @@ struct InicioView: View {
                         .buttonStyle(ArtaPressStyle(scale: 0.99))
                     }
                     if approvalItems.count > items.count {
-                        Text("y \(approvalItems.count - items.count) más")
-                            .font(.footnote)
-                            .foregroundStyle(ArtaColor.tertiary)
-                            .padding(.top, ArtaSpace.s)
+                        Button {
+                            router.open(AppRoute.approvals())
+                        } label: {
+                            Text("y \(approvalItems.count - items.count) más en Aprobaciones")
+                                .font(.footnote.weight(.semibold))
+                                .foregroundStyle(ArtaColor.accent)
+                                .padding(.top, ArtaSpace.s)
+                                .artaHitArea(dx: ArtaSpace.s, dy: ArtaSpace.m)
+                        }
+                        .buttonStyle(ArtaPressStyle(scale: 0.97))
+                        .accessibilityIdentifier("inicio-approvals-more")
                     }
                 }
                 // Primera y última fila sin aire de más contra el título y el borde.
@@ -624,7 +636,7 @@ struct InicioView: View {
         }
         if seesCalendar {
             items.append(Shortcut(id: "inicio-calendar", title: "Calendario", icon: "calendar") {
-                router.open(AppRoute.web(path: "/calendar", title: "Calendario"))
+                openCalendar()
             })
         }
         if seesPurchaseOrders {
@@ -632,7 +644,23 @@ struct InicioView: View {
                 router.open(AppRoute.web(path: "/purchase-orders", title: "Órdenes de compra"))
             })
         }
+        // Como en Android: quien ve finanzas tiene los anticipos a un toque (solicitudes e historial, en la web).
+        if profile?.seesFinance == true {
+            items.append(Shortcut(id: "inicio-advances", title: "Anticipos", icon: "banknote") {
+                router.open(AppRoute.web(path: "/advances", title: "Anticipos"))
+            })
+        }
         return items
+    }
+
+    /// El calendario nativo (Eventos en modo mes) para quien opera eventos; el practicante, que solo
+    /// lee los shows, sigue en el calendario de la web.
+    private func openCalendar() {
+        if profile?.activeEventEntity != nil {
+            router.open(AppRoute.events(calendar: true))
+        } else {
+            router.open(AppRoute.web(path: "/calendar", title: "Calendario"))
+        }
     }
 
     /// Dos columnas con renglones del mismo alto; si sobra uno, ocupa el renglón completo
@@ -700,7 +728,7 @@ struct InicioView: View {
             title: "Próximos 7 días",
             trailing: "Calendario",
             trailingId: "inicio-events-calendar",
-            trailingAction: { router.open(AppRoute.web(path: "/calendar", title: "Calendario")) }
+            trailingAction: { openCalendar() }
         ) {
             if upcoming.isEmpty {
                 Label("Sin eventos esta semana.", systemImage: "calendar")
@@ -783,15 +811,25 @@ struct InicioView: View {
         }
         approvalTasks = pending.values.sorted { ($0.submittedAt ?? "") > ($1.submittedAt ?? "") }
 
-        // Solo las órdenes de la entidad activa.
+        // Solo las órdenes de la entidad activa: por autorizar si autorizo, por pagar si marco pagado (como Android).
+        // La lista y el día de cobro se piden a la vez: una sola espera.
         var orders: [PurchaseOrderRow] = []
-        if let entity = me.activeEventEntity, me.authorizesPO(entity: entity),
-           let rows = try? await ApiClient.shared.purchaseOrders(entity: entity) {
-            orders = rows.filter { $0.isPending && !$0.isEventClosed }
+        var payNow = false
+        if let entity = me.activeEventEntity, me.authorizesPO(entity: entity) || me.canMarkPaid {
+            async let fetchedRows = ApiClient.shared.purchaseOrders(entity: entity)
+            async let windowOpen = ApiClient.shared.canPayPurchaseOrdersNow(canMarkPaid: me.canMarkPaid)
+            let rows = (try? await fetchedRows) ?? []
+            payNow = await windowOpen
+            let authorizes = me.authorizesPO(entity: entity)
+            orders = rows.filter { row in
+                guard !row.isEventClosed else { return false }
+                return (row.isPending && authorizes) || (row.isAwaitingPayment && me.canMarkPaid)
+            }
         }
         approvalOrders = orders
+        canPayNow = payNow
 
-        // 404 mientras el API no tenga la ruta: cuenta 0.
+        // `GET finance/advances/pending`: lo que puedo aprobar o pagar. Si falla, cuenta 0 sin tumbar la pantalla.
         let advances = (try? await ApiClient.shared.pendingAdvances()) ?? []
         approvalAdvances = advances.filter { $0.isPending || $0.isApproved }
     }

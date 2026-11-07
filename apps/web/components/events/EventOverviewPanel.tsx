@@ -3,7 +3,8 @@
 import { RefBacklinks } from '@/components/chat/RefCard';
 import { useEffect, useMemo, useState } from 'react';
 import { BoleteraEmbed } from '@/components/events/BoleteraEmbed';
-import { ChecklistPicker } from '@/components/events/ChecklistPicker';
+import { ChecklistPicker, checklistBucket } from '@/components/events/ChecklistPicker';
+import { isEventDone } from '@/components/events/checklist-progress';
 import { EventVendorPins } from '@/components/events/EventVendorPins';
 import {
   EventFields,
@@ -26,7 +27,8 @@ type Props = EventPanelProps & {
   /** Editar los datos del show (contabilidad lo ve, pero no lo edita — junta 23-10-2026). */
   canEdit?: boolean;
   onOpenChecklist: (c: Checklist) => Promise<void>;
-  onGoModule: (tab: Tab) => void;
+  /** `extra.ver` va a la URL: Formatos lee `pendientes` o `revision` para abrir ese grupo. */
+  onGoModule: (tab: Tab, extra?: { ver?: string }) => void;
   /** Pestañas que este usuario puede abrir (para que los mosaicos no lleven a la nada). */
   visibleTabs: Set<Tab>;
 };
@@ -68,6 +70,10 @@ export function EventOverviewPanel({
     : 0;
   const behind = checklists.filter((c) => c.progressPct < 100).length;
   const noFormats = checklists.length === 0;
+  // Mismos grupos que la pestaña Formatos: el mosaico dice lo que falta y abre justo ese grupo.
+  const eventDone = isEventDone(event);
+  const todo = checklists.filter((c) => checklistBucket(c, eventDone) === 'todo').length;
+  const review = checklists.filter((c) => checklistBucket(c, eventDone) === 'review').length;
   const [pinsOpen, setPinsOpen] = useState(false);
 
   const po = useMemo(() => {
@@ -114,7 +120,7 @@ export function EventOverviewPanel({
     }
   }
 
-  const go = (tab: Tab) => (visibleTabs.has(tab) ? () => onGoModule(tab) : undefined);
+  const go = (tab: Tab, extra?: { ver?: string }) => (visibleTabs.has(tab) ? () => onGoModule(tab, extra) : undefined);
 
   return (
     <div className="sx-stack">
@@ -123,8 +129,16 @@ export function EventOverviewPanel({
         <Tile
           label="Formatos"
           value={noFormats ? 'Sin formatos' : `${avg}%`}
-          sub={noFormats ? 'Aún no se agrega ninguno' : behind ? `${behind} por completar` : 'Todo completo'}
-          onClick={go('checklists')}
+          sub={
+            noFormats
+              ? 'Aún no se agrega ninguno'
+              : todo
+                ? `${todo} por completar`
+                : review
+                  ? `${review} por autorizar`
+                  : 'Todo completo'
+          }
+          onClick={go('checklists', todo ? { ver: 'pendientes' } : review ? { ver: 'revision' } : undefined)}
         />
         {visibleTabs.has('ocs') ? (
           <Tile

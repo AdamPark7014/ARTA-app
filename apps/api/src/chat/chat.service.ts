@@ -1671,8 +1671,8 @@ export class ChatService {
         title: text.title,
         body: text.body,
         entity: channel.entity ?? undefined,
-        // Un privado o directo ajeno no se abre: el enlace queda en el chat.
-        linkUrl: channel.kind === ChatChannelKind.PUBLIC || members.has(uid) ? messageUrl : '/chat',
+        // Un privado o directo ajeno no se abre: el enlace lleva a la cola de reportes del chat.
+        linkUrl: channel.kind === ChatChannelKind.PUBLIC || members.has(uid) ? messageUrl : '/chat?reportes=1',
       })),
     );
   }
@@ -1690,7 +1690,7 @@ export class ChatService {
       include: {
         reporter: { select: { id: true, fullName: true } },
         reportedUser: { select: { id: true, fullName: true } },
-        message: { select: { id: true, body: true, channelId: true, channel: { select: { name: true } } } },
+        message: { select: { id: true, body: true, channelId: true, channel: { select: { name: true, kind: true } } } },
       },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       take: PAGE_MAX,
@@ -1704,7 +1704,7 @@ export class ChatService {
       reporter: { id: r.reporter.id, name: r.reporter.fullName },
       reportedUser: r.reportedUser ? { id: r.reportedUser.id, name: r.reportedUser.fullName } : null,
       message: r.message
-        ? { id: r.message.id, body: r.message.body, channelId: r.message.channelId, channelName: r.message.channel.name }
+        ? { id: r.message.id, body: r.message.body, channelId: r.message.channelId, channelName: r.message.channel.name, channelKind: r.message.channel.kind }
         : null,
     }));
   }

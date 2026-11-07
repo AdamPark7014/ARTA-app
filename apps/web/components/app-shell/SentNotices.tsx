@@ -1,11 +1,14 @@
 'use client';
 
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 import { LoadingBlock } from '@/components/ui/LoadingBlock';
 import { api } from '@/lib/api';
+import { openNoticeLink } from '@/lib/notice-open';
 import { noticeAge } from '@/lib/notification-kinds';
 import { useRealtime } from '@/lib/realtime';
+import { useUser } from '@/lib/user-context';
 
 type Recipient = { id: string; fullName: string; seenAt?: string | null; readAt?: string | null };
 
@@ -15,6 +18,8 @@ type SentNotice = {
   title: string;
   body?: string | null;
   linkUrl?: string | null;
+  /** Unidad del aviso: se cambia a ella antes de abrir la liga. */
+  entity?: string | null;
   createdAt: string;
   recipients: Recipient[];
 };
@@ -37,8 +42,21 @@ function summary(recipients: Recipient[]) {
  * que abrió la campana con ese aviso a la vista, no que ya lo resolvió.
  */
 export function SentNotices({ entity }: { entity: string }) {
+  const router = useRouter();
+  const { user, setEntity } = useUser();
   const [rows, setRows] = useState<SentNotice[] | null>(null);
   const [error, setError] = useState('');
+
+  /**
+   * Abre lo que mandaste en su unidad y en su punto exacto (`lib/notice-open.ts`): el `Link` solo
+   * no cambiaba de unidad ni servía para otra OC de la misma pantalla. Ctrl/⌘, Shift o el botón
+   * central siguen abriendo pestaña nueva con el `href`.
+   */
+  function openRow(e: React.MouseEvent<HTMLAnchorElement>, row: SentNotice) {
+    if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    e.preventDefault();
+    openNoticeLink(row, { entity, entities: user?.entities, setEntity, push: router.push });
+  }
 
   const load = useCallback(() => {
     api<SentNotice[]>(`/notifications/sent?entity=${entity}`)
@@ -83,7 +101,7 @@ export function SentNotices({ entity }: { entity: string }) {
           <article key={row.key} className={`sent-row ${pending ? 'is-pending' : ''}`}>
             <div className="sent-row__head">
               {row.linkUrl ? (
-                <Link href={row.linkUrl} className="sent-row__title">
+                <Link href={row.linkUrl} className="sent-row__title" onClick={(e) => openRow(e, row)}>
                   {row.title}
                 </Link>
               ) : (

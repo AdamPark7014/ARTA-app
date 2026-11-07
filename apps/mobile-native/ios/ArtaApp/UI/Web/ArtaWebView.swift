@@ -137,6 +137,7 @@ enum WebSession {
             if (parts.length === 0) { return false; }
             if (parts[0] === 'chat' || parts[0] === 'dashboard' || parts[0] === 'notifications') { return parts.length === 1; }
             if (parts[0] === 'tasks') { return parts.length === 1 || (parts.length === 2 && parts[1] !== 'new'); }
+            if (parts[0] === 'events' && parts.length === 1) { return true; }
             if (parts[0] === 'events' && parts.length === 2 && parts[1] !== 'new') {
               var tab = q.get('tab');
               return q.has('task') || !tab || eventTabs.indexOf(tab) >= 0;

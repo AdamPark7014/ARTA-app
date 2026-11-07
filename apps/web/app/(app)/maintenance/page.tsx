@@ -55,7 +55,7 @@ export default function MaintenancePage() {
         <PageHeader
           title="Mantenimiento"
           description="Formatos de mantenimiento para los eventos de renta del Auditorio Arema."
-          hint="Solo entidad Explanada. Abre el checklist desde la tarjeta o entra al evento para ver el detalle completo."
+          hint="Solo entidad Explanada. Abre el formato desde la tarjeta o entra al evento para ver el detalle completo."
         >
           <ActionLink href="/maintenance/inventario-limpieza" variant="ghost">
             Inventario de limpieza semanal
@@ -77,7 +77,7 @@ export default function MaintenancePage() {
         ) : !events.length ? (
           <EmptyState
             title="No hay eventos Explanada aún"
-            description="Crea un evento de renta para el auditorio; se asignarán checklists de mantenimiento automáticamente."
+            description="Crea un evento de renta para el auditorio; se asignarán los formatos de mantenimiento automáticamente."
             actionHref="/events/new"
             actionLabel="Nuevo evento"
           />
@@ -97,7 +97,6 @@ export default function MaintenancePage() {
                 (c) => c.template?.key === 'MANTENIMIENTO' || /manten/i.test(c.title),
               );
               const list = maint.length ? maint : (ev.checklists || []).slice(0, 3);
-              const primary = list[0];
               return (
                 <div className="kpi stack" key={ev.id}>
                   <div className="label">
@@ -126,14 +125,8 @@ export default function MaintenancePage() {
                     ) : null}
                   </div>
                   <div className="row">
-                    <ActionLink
-                      href={
-                        primary
-                          ? `/events/${ev.id}?tab=checklists&checklist=${primary.id}`
-                          : `/events/${ev.id}`
-                      }
-                      variant="ghost"
-                    >
+                    {/* El evento, no su primer formato: cada tarjeta de arriba ya abre el suyo. */}
+                    <ActionLink href={`/events/${ev.id}`} variant="ghost">
                       Abrir evento
                     </ActionLink>
                   </div>

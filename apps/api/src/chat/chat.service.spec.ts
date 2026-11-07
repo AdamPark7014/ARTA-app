@@ -540,7 +540,8 @@ describe('Reportar y bloquear', () => {
         type: 'chat.report',
         title: 'Reportaron un mensaje en #produccion',
         organizationId: ORG,
-        linkUrl: '/chat',
+        // Dirección no está en ese privado: va a la cola de reportes, no al mensaje.
+        linkUrl: '/chat?reportes=1',
       }),
     );
     expect(sent[0].body).toContain('Acoso o intimidación');
@@ -670,7 +671,7 @@ describe('Reportar y bloquear', () => {
         createdAt: new Date('2026-10-06T12:00:00Z'),
         reporter: { id: 'u1', fullName: 'Ana Ruiz' },
         reportedUser: { id: 'u2', fullName: 'Luis Pérez' },
-        message: { id: 'msg1', body: 'compra ya', channelId: 'c1', channel: { name: 'general' } },
+        message: { id: 'msg1', body: 'compra ya', channelId: 'c1', channel: { name: 'general', kind: 'PUBLIC' } },
       },
     ]);
     await expect(service.listReports(director, 'open')).resolves.toEqual([
@@ -682,7 +683,7 @@ describe('Reportar y bloquear', () => {
         createdAt: '2026-10-06T12:00:00.000Z',
         reporter: { id: 'u1', name: 'Ana Ruiz' },
         reportedUser: { id: 'u2', name: 'Luis Pérez' },
-        message: { id: 'msg1', body: 'compra ya', channelId: 'c1', channelName: 'general' },
+        message: { id: 'msg1', body: 'compra ya', channelId: 'c1', channelName: 'general', channelKind: 'PUBLIC' },
       },
     ]);
     expect(prisma.chatReport.findMany.mock.calls[0][0].where).toEqual({ organizationId: ORG, status: 'OPEN' });

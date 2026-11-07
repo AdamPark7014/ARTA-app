@@ -32,6 +32,24 @@ struct EventDetailView: View {
     @State private var previewURL: URL?
     /// Adendum o testigo cuyo archivo se está bajando para abrirlo.
     @State private var openingFileId: String?
+    /// «Abrir en la web»: pidiendo el acceso de un solo uso.
+    @State private var openingWeb = false
+
+    /// `tab`: pestaña con la que se abre (`tasks`, `adendum`, `testigos`; otra o `nil` = Resumen),
+    /// la misma `?tab=` de la web que llega en un aviso o una liga.
+    init(eventId: String, tab: String? = nil) {
+        self.eventId = eventId
+        _pane = State(initialValue: Self.initialPane(for: tab))
+    }
+
+    private static func initialPane(for tab: String?) -> Pane {
+        switch tab ?? "" {
+        case "tasks": return .tasks
+        case "adendum": return .adendum
+        case "testigos": return .testigos
+        default: return .summary
+        }
+    }
 
     private var openTasks: [ArtaTask] {
         tasks
@@ -131,12 +149,43 @@ struct EventDetailView: View {
                     testigosPane
                         .transition(.opacity)
                 }
+                openInWebButton
             }
             .padding(.horizontal, ArtaLayout.gutter)
             .padding(.vertical, ArtaSpace.l)
         }
         .refreshable { await load() }
         .artaTabBarScrim()
+    }
+
+    /// El evento completo en el navegador con la misma sesión (acceso de un solo uso), como en Android.
+    private var openInWebButton: some View {
+        Button {
+            Haptics.tap()
+            openingWeb = true
+            Task {
+                let url = await WebSession.signedURL(path: "/events/\(eventId)")
+                openURL(url)
+                openingWeb = false
+            }
+        } label: {
+            HStack(spacing: ArtaSpace.xs) {
+                if openingWeb {
+                    ProgressView().controlSize(.small).tint(ArtaColor.tertiary)
+                } else {
+                    Image(systemName: "safari")
+                }
+                Text("Abrir en la web")
+            }
+            .font(.footnote.weight(.semibold))
+            .foregroundStyle(ArtaColor.muted)
+            .padding(.vertical, ArtaSpace.s)
+            .frame(maxWidth: .infinity)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(ArtaPressStyle(scale: 0.98))
+        .disabled(openingWeb)
+        .accessibilityIdentifier("event-open-web")
     }
 
     private func header(_ event: ArtaEventDetail) -> some View {
@@ -485,10 +534,17 @@ struct EventDetailView: View {
                     StatusPill(text: POInfo.statusLabel(po.status), tone: POInfo.statusTone(po.status))
                 }
             }
-            if let file = po.adendumFileUrl, !file.isEmpty {
-                linkButton(fileLabel(po.adendumFileName, fallback: "Ver archivo"), icon: "paperclip", busy: openingFileId == po.id) {
-                    openFile(file, name: po.adendumFileName, id: po.id)
+            HStack(spacing: ArtaSpace.l) {
+                if let file = po.adendumFileUrl, !file.isEmpty {
+                    linkButton(fileLabel(po.adendumFileName, fallback: "Ver archivo"), icon: "paperclip", busy: openingFileId == po.id) {
+                        openFile(file, name: po.adendumFileName, id: po.id)
+                    }
                 }
+                // La orden completa (conceptos, comprobantes, quién la autorizó) vive en la web, seleccionada.
+                linkButton("Ver orden", icon: "arrow.up.right") {
+                    router.open(AppRoute.web(path: "/events/\(eventId)?tab=ocs&po=\(po.id)", title: "Orden de compra"))
+                }
+                Spacer(minLength: 0)
             }
         }
     }

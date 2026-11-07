@@ -13,6 +13,8 @@ struct ApprovalsView: View {
     @EnvironmentObject private var router: AppRouter
     /// La OC o el anticipo del aviso tocado: al cargar se abre o se lleva a la vista.
     var focus: String? = nil
+    /// Su ruta en la web (`/purchase-orders?po=…`, `/advances?advance=…`): se abre si ya no está en las listas.
+    var focusWeb: String? = nil
     @State private var focusHandled = false
     @State private var scrollTarget: String?
     @State private var segment: Segment = .pending
@@ -31,16 +33,28 @@ struct ApprovalsView: View {
     /// `GET finance/advances/pending`; vacío si el API aún no tiene la ruta (404).
     @State private var advances: [AdvanceRow] = []
     @State private var advancesError: String?
+    /// La última carga de anticipos falló por algo pasajero (no 403/404): la lista no es confiable.
+    @State private var advancesFailed = false
     @State private var rejectingAdvance: AdvanceRow?
     @State private var payingAdvance: AdvanceRow?
     @State private var confirmPay = false
     @State private var previewURL: URL?
     /// Anticipo cuyo archivo se está bajando para abrirlo.
     @State private var openingAdvanceId: String?
+    /// `GET purchase-orders/window`: hoy es día de cobro (si no, las autorizadas se ven pero no se pagan).
+    @State private var canPayNow = false
 
     private var pendingOrders: [PurchaseOrderRow] {
         orders
             .filter { $0.isPending && !$0.isEventClosed && profile?.authorizesPO(entity: $0.entity) == true }
+            .sorted { ($0.ageDays ?? 0) > ($1.ageDays ?? 0) }
+    }
+
+    /// Autorizadas que me toca marcar pagadas (`po.mark_paid`), como «Órdenes por pagar» en Android.
+    private var payableOrders: [PurchaseOrderRow] {
+        guard profile?.canMarkPaid == true else { return [] }
+        return orders
+            .filter { $0.isAwaitingPayment && !$0.isEventClosed }
             .sorted { ($0.ageDays ?? 0) > ($1.ageDays ?? 0) }
     }
 
@@ -96,6 +110,8 @@ struct ApprovalsView: View {
             PurchaseOrderSheet(
                 row: row,
                 canDecide: profile?.authorizesPO(entity: row.entity) == true,
+                canMarkPaid: profile?.canMarkPaid == true,
+                canPayNow: canPayNow,
                 onDecided: { status in
                     applyDecision(row.id, status: status)
                 },
@@ -133,10 +149,12 @@ struct ApprovalsView: View {
 
     @ViewBuilder
     private var pendingList: some View {
-        if tasks.isEmpty && pendingOrders.isEmpty && advances.isEmpty {
+        if tasks.isEmpty && pendingOrders.isEmpty && payableOrders.isEmpty && advances.isEmpty {
             emptyScroll(icon: "checkmark.seal",
                         title: "Nada por aprobar",
-                        message: "Cuando alguien entregue una tarea que pediste, haya una orden de compra por autorizar o un anticipo por resolver, aparecerá aquí.")
+                        message: "Cuando alguien entregue una tarea que pediste, haya una orden de compra por autorizar o por pagar, o un anticipo por resolver, aparecerá aquí.",
+                        showsAdvancesError: true,
+                        advancesCard: profile?.seesFinance == true)
         } else {
             ScrollViewReader { proxy in
             ScrollView {
@@ -162,11 +180,28 @@ struct ApprovalsView: View {
                             orderRow(row)
                         }
                     }
+                    if !payableOrders.isEmpty {
+                        VStack(alignment: .leading, spacing: ArtaSpace.s) {
+                            CardSection(title: "Órdenes por pagar", count: payableOrders.count, items: payableOrders) { row in
+                                orderRow(row)
+                            }
+                            if !canPayNow {
+                                Text("Hoy no es día de cobro: los pagos se registran solo en los días de cobro.")
+                                    .font(.footnote)
+                                    .foregroundStyle(ArtaColor.muted)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                    .padding(.horizontal, ArtaSpace.xs)
+                            }
+                        }
+                    }
                     if !advances.isEmpty {
                         CardSection(title: "Anticipos", count: advances.count, items: advances) { advance in
                             advanceRow(advance)
                                 .id("adv-\(advance.id)")
                         }
+                    }
+                    if profile?.seesFinance == true {
+                        advancesWebCard
                     }
                 }
                 .padding(.horizontal, ArtaLayout.gutter)
@@ -295,11 +330,32 @@ struct ApprovalsView: View {
                         .foregroundStyle(ArtaColor.text)
                         .lineLimit(2)
                         .fixedSize(horizontal: false, vertical: true)
-                    Text(advanceEventLine(advance))
-                        .font(.caption)
-                        .foregroundStyle(ArtaColor.muted)
-                        .lineLimit(2)
-                        .fixedSize(horizontal: false, vertical: true)
+                    if let eventId = advance.event?.id {
+                        // El evento del anticipo abre su ficha.
+                        Button {
+                            router.open(AppRoute.event(eventId))
+                        } label: {
+                            HStack(alignment: .firstTextBaseline, spacing: ArtaSpace.xxs) {
+                                Text(advanceEventLine(advance))
+                                    .lineLimit(2)
+                                    .multilineTextAlignment(.leading)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                Image(systemName: "chevron.right")
+                                    .font(.system(size: 9, weight: .semibold))
+                            }
+                            .font(.caption)
+                            .foregroundStyle(ArtaColor.muted)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(ArtaPressStyle(scale: 0.98))
+                        .accessibilityLabel("Abrir evento \(advance.event?.name ?? "")")
+                    } else {
+                        Text(advanceEventLine(advance))
+                            .font(.caption)
+                            .foregroundStyle(ArtaColor.muted)
+                            .lineLimit(2)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                     Text(advanceMeta(advance))
                         .font(.caption)
                         .monospacedDigit()
@@ -443,7 +499,9 @@ struct ApprovalsView: View {
 
     // MARK: Piezas
 
-    private func emptyScroll(icon: String, title: String, message: String) -> some View {
+    /// `showsAdvancesError`: en Pendientes, si los anticipos no cargaron se ve el motivo con «Reintentar» aunque
+    /// lo demás esté vacío. `advancesCard`: quien ve finanzas conserva el acceso a los anticipos (como Android).
+    private func emptyScroll(icon: String, title: String, message: String, showsAdvancesError: Bool = false, advancesCard: Bool = false) -> some View {
         ScrollView {
             VStack(spacing: 12) {
                 if let refreshError {
@@ -452,12 +510,52 @@ struct ApprovalsView: View {
                     }
                     .padding(.horizontal, ArtaLayout.gutter)
                 }
+                if showsAdvancesError, let advancesError {
+                    InlineErrorRow(message: "Anticipos: \(advancesError)") {
+                        Task { await loadAdvances() }
+                    }
+                    .padding(.horizontal, ArtaLayout.gutter)
+                }
                 ModuleEmptyView(icon: icon, title: title, message: message)
-                    .frame(minHeight: 420)
+                    .frame(minHeight: advancesCard ? 320 : 420)
+                if advancesCard {
+                    advancesWebCard
+                        .padding(.horizontal, ArtaLayout.gutter)
+                        .padding(.bottom, ArtaSpace.l)
+                }
             }
         }
         .refreshable { await load() }
         .artaTabBarScrim(glow: false)
+    }
+
+    /// Solicitudes, historial y anticipos de cada evento: en la web (`/advances`), como en Android.
+    private var advancesWebCard: some View {
+        Button {
+            Haptics.tap()
+            router.open(AppRoute.web(path: "/advances", title: "Anticipos"))
+        } label: {
+            HStack(alignment: .top, spacing: ArtaSpace.m) {
+                VStack(alignment: .leading, spacing: ArtaSpace.xs) {
+                    Text("Anticipos")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(ArtaColor.text)
+                    Text("Solicitudes, historial y anticipos de cada evento.")
+                        .font(.caption)
+                        .foregroundStyle(ArtaColor.muted)
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: ArtaSpace.s)
+                Image(systemName: "arrow.up.right")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(ArtaColor.tertiary)
+            }
+            .artaCard()
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(ArtaPressStyle(scale: 0.99))
+        .accessibilityIdentifier("approvals-advances-web")
     }
 
     // MARK: Datos
@@ -478,9 +576,16 @@ struct ApprovalsView: View {
                 pending += team.filter { $0.isPendingApproval && !known.contains($0.id) }
             }
             // Solo la entidad activa (docs/entidades-arta-auditorio.md): antes se juntaban las dos.
+            // Las pide quien autoriza y también quien marca pagado (sus «por pagar» salen de la misma lista).
             var rows: [PurchaseOrderRow] = []
-            if let entity = me.activeEventEntity, me.authorizesPO(entity: entity) {
-                rows = try await ApiClient.shared.purchaseOrders(entity: entity)
+            var payWindowOpen = false
+            if let entity = me.activeEventEntity, me.authorizesPO(entity: entity) || me.canMarkPaid {
+                // La lista y el día de cobro a la vez (como Android); si el día de cobro falla, la orden
+                // se queda en «por pagar» sin tumbar la pantalla.
+                async let fetchedRows = ApiClient.shared.purchaseOrders(entity: entity)
+                async let windowOpen = ApiClient.shared.canPayPurchaseOrdersNow(canMarkPaid: me.canMarkPaid)
+                rows = try await fetchedRows
+                payWindowOpen = await windowOpen
             }
             // La entrega más antigua primero: es la que lleva más tiempo esperando.
             tasks = pending.sorted { ($0.submittedAt ?? "") < ($1.submittedAt ?? "") }
@@ -488,6 +593,7 @@ struct ApprovalsView: View {
                 .filter { $0.isDone && $0.approvedAt != nil }
                 .sorted { ($0.approvedAt ?? "") > ($1.approvedAt ?? "") }
             orders = rows
+            canPayNow = payWindowOpen
             await loadAdvances()
             loaded = true
             error = nil
@@ -501,16 +607,27 @@ struct ApprovalsView: View {
         loading = false
     }
 
-    /// Una sola vez: la OC del aviso abre su detalle; el anticipo se lleva a la vista.
+    /// Una sola vez: la OC del aviso abre su detalle; el anticipo se lleva a la vista. Si ya no está en las
+    /// listas (la resolvió alguien más, es de otra entidad o no me toca), se abre su ruta en la web.
     private func applyFocus() {
         guard let focus, !focusHandled else { return }
         focusHandled = true
         if let row = orders.first(where: { $0.id == focus }) {
-            segment = row.isPending ? .pending : .history
+            let actionable = row.isPending || payableOrders.contains(where: { $0.id == row.id })
+            segment = actionable ? .pending : .history
             selectedOrder = row
         } else if advances.contains(where: { $0.id == focus }) {
             segment = .pending
             scrollTarget = "adv-\(focus)"
+        } else if let focusWeb {
+            if advancesFailed && focusWeb.hasPrefix("/advances") {
+                // Los anticipos no cargaron por algo pasajero: el del aviso puede seguir ahí. Se queda la fila de
+                // error con «Reintentar» (que vuelve a buscarlo) en vez de mandar a la web.
+                segment = .pending
+                focusHandled = false
+            } else {
+                router.open(AppRoute.web(path: focusWeb, title: focusWeb.hasPrefix("/advances") ? "Anticipos" : "Órdenes de compra"))
+            }
         }
     }
 
@@ -530,6 +647,7 @@ struct ApprovalsView: View {
     }
 
     /// Aparte de tareas y órdenes: si falla (o el API aún no tiene la ruta) el resto de la pantalla sigue.
+    /// Al recuperarse, vuelve a buscar el anticipo del aviso si quedó pendiente de enfocar.
     private func loadAdvances() async {
         do {
             let list = try await ApiClient.shared.pendingAdvances()
@@ -540,13 +658,17 @@ struct ApprovalsView: View {
                     return (a.createdAt ?? "") < (b.createdAt ?? "")
                 }
             advancesError = nil
+            advancesFailed = false
+            if loaded { applyFocus() }
         } catch {
             if error.isModuleCancellation { return }
             if let api = error as? ApiError, api.status == 404 || api.status == 403 {
                 advances = []
                 advancesError = nil
+                advancesFailed = false
             } else {
                 advancesError = error.userMessage
+                advancesFailed = true
             }
         }
     }
@@ -593,7 +715,11 @@ struct ApprovalsView: View {
             orders[index].status = status
             if status == "AUTHORIZED" { orders[index].authorizedBy = profile?.fullName }
         }
-        show(status == "AUTHORIZED" ? "Orden de compra autorizada." : "Orden de compra rechazada.")
+        switch status {
+        case "AUTHORIZED": show("Orden de compra autorizada.")
+        case "PAID": show("Orden de compra marcada como pagada.")
+        default: show("Orden de compra rechazada.")
+        }
     }
 
     private func show(_ text: String) {
@@ -610,6 +736,10 @@ struct ApprovalsView: View {
 struct PurchaseOrderSheet: View {
     let row: PurchaseOrderRow
     let canDecide: Bool
+    /// `po.mark_paid`: una autorizada se marca pagada desde aquí (comprobante primero, salvo efectivo).
+    var canMarkPaid = false
+    /// Hoy es día de cobro (`GET purchase-orders/window`); si no, el pago espera al siguiente.
+    var canPayNow = false
     let onDecided: (String) -> Void
     /// La hoja no navega por su cuenta: la pantalla que la abrió la cierra y abre la ruta.
     let onOpen: (AppRoute) -> Void
@@ -622,6 +752,7 @@ struct PurchaseOrderSheet: View {
     @State private var actionError: String?
     @State private var confirmAuthorize = false
     @State private var confirmReject = false
+    @State private var confirmPay = false
     @State private var previewURL: URL?
     /// Qué decisión va en camino: el botón que la mandó enseña la carga.
     @State private var deciding: String?
@@ -671,7 +802,22 @@ struct PurchaseOrderSheet: View {
             } message: {
                 Text("El sistema no guarda el motivo: si hace falta, explícalo en el chat del evento.")
             }
+            .confirmationDialog(hasAmount ? "¿Marcar pagada \(amountText)?" : "¿Marcar pagada esta orden?", isPresented: $confirmPay, titleVisibility: .visible) {
+                Button("Marcar pagada") {
+                    Task { await decide("PAID") }
+                }
+                Button("Cancelar", role: .cancel) {}
+            } message: {
+                Text(payConfirmMessage)
+            }
         }
+    }
+
+    /// «Proveedor · Transferencia. A quien la pidió le llega el aviso.»
+    private var payConfirmMessage: String {
+        let who = detail.map { payeeName($0) } ?? (row.vendorName ?? "Sin proveedor")
+        let method = POInfo.paymentLabel(detail?.paymentMethod ?? row.paymentMethod)
+        return "\(who) · \(method). A quien la pidió le llega el aviso."
     }
 
     private func content(_ po: PurchaseOrderDetail) -> some View {
@@ -846,12 +992,17 @@ struct PurchaseOrderSheet: View {
                     }
                 }
 
+                if canMarkPaid && po.isAwaitingPayment && !po.isEventClosed {
+                    payBlock(po)
+                }
+
                 if let eventId = po.event?.id ?? row.eventId {
                     Button {
-                        onOpen(AppRoute.web(path: "/events/\(eventId)?tab=ocs", title: "Órdenes de compra"))
+                        // La web abre el hub en Órdenes de compra con esta orden seleccionada.
+                        onOpen(AppRoute.web(path: "/events/\(eventId)?tab=ocs&po=\(row.id)", title: "Órdenes de compra"))
                     } label: {
                         HStack(spacing: ArtaSpace.xs) {
-                            Text("Ver las órdenes del evento en la web")
+                            Text("Ver esta orden en la web")
                             Image(systemName: "arrow.up.right").font(.system(size: 11, weight: .semibold))
                         }
                         .font(.footnote.weight(.semibold))
@@ -872,6 +1023,45 @@ struct PurchaseOrderSheet: View {
         if let vendor = po.vendorName, !vendor.isEmpty { return vendor }
         if let person = po.adendumPerson, !person.isEmpty { return person }
         return "Sin proveedor"
+    }
+
+    /// Autorizada y me toca pagarla (mismas reglas que el API y Android): comprobante primero salvo
+    /// efectivo, y solo en día de cobro; si se cumple, «Marcar pagada» con confirmación.
+    @ViewBuilder
+    private func payBlock(_ po: PurchaseOrderDetail) -> some View {
+        let method = po.paymentMethod ?? row.paymentMethod
+        if method != "EFECTIVO" && (po.proofs ?? []).isEmpty {
+            VStack(alignment: .leading, spacing: ArtaSpace.s) {
+                Text("Pago por \(POInfo.paymentLabel(method).lowercased()): falta subir el comprobante para poder marcarla pagada.")
+                    .font(.footnote)
+                    .foregroundStyle(ArtaColor.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+                if let eventId = po.event?.id ?? row.eventId {
+                    Button {
+                        onOpen(AppRoute.web(path: "/events/\(eventId)?tab=ocs&po=\(row.id)", title: "Órdenes de compra"))
+                    } label: {
+                        Label("Subir comprobante", systemImage: "paperclip")
+                    }
+                    .buttonStyle(ArtaSecondaryButtonStyle())
+                }
+            }
+        } else if !canPayNow {
+            Label("Hoy no es día de cobro: el pago se registra en el siguiente día de cobro.", systemImage: "calendar.badge.clock")
+                .font(.footnote)
+                .foregroundStyle(ArtaColor.muted)
+                .fixedSize(horizontal: false, vertical: true)
+        } else {
+            Button {
+                Haptics.tap()
+                confirmPay = true
+            } label: {
+                decisionLabel("Marcar pagada", status: "PAID")
+            }
+            .buttonStyle(ArtaPrimaryButtonStyle())
+            .disabled(busy)
+            .padding(.top, ArtaSpace.xs)
+            .accessibilityIdentifier("po-mark-paid")
+        }
     }
 
     /// Forma de pago ADENDUM: a quién, a qué cuenta, cuánto y su archivo. Solo lectura.
@@ -961,7 +1151,7 @@ struct PurchaseOrderSheet: View {
         actionError = nil
         do {
             try await ApiClient.shared.setPurchaseOrderStatus(row.id, status: status)
-            if status == "AUTHORIZED" { Haptics.success() } else { Haptics.warning() }
+            if status == "REJECTED" { Haptics.warning() } else { Haptics.success() }
             onDecided(status)
             dismiss()
         } catch {

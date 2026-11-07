@@ -1,0 +1,41 @@
+/* ═══ Barrido de funciones (07-11-2026): botones para lo que el API ya hacía ═══
+   Piezas pequeñas de Boletera, Carpetas y Configuración que antes iban en
+   línea en las páginas. */
+
+/* Destino de un `#ancla` (p. ej. `/settings#dias-de-cobro`): la tarjeta queda
+   debajo de la barra superior, no tapada por ella. */
+.anchor-top {
+  scroll-margin-top: 5rem;
+}
+
+/* ── Boletera · Avance de ventas ─────────────────────────────────────────── */
+
+/* Barra y porcentaje en una sola línea dentro de la celda. */
+.bol-sales__row {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* La barra base (`.meter`, 4.5rem) es de las tarjetas del inicio; en la tabla
+   se alarga para que la diferencia entre boleteras se vea a simple vista. */
+.meter.bol-sales__meter {
+  width: 6rem;
+}
+
+/* ── Carpetas · compartir con roles ─────────────────────────────────────── */
+
+/* Píldoras de «Compartida con» bajo el encabezado de la carpeta. */
+.folder-shared {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Casillas de roles del formulario «Editar carpeta». */
+.folder-share-roles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+}

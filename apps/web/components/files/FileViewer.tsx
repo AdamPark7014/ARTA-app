@@ -5,8 +5,11 @@ import { renderAsync } from 'docx-preview';
 import { PdfPages } from './PdfPages';
 import { SheetEditor } from './SheetEditor';
 import { ExpandBox } from '@/components/ui/ExpandBox';
+import { api } from '@/lib/api';
 import { isMobileBrowser } from '@/lib/platform';
 import { fixMojibake } from '@/lib/text';
+import { useUser } from '@/lib/user-context';
+import { isDirectionRole } from '@arta/rbac';
 
 type Props = {
   url: string;
@@ -20,8 +23,40 @@ type Props = {
 
 export function FileViewer({ url, fileName, kind, cacheKey, fileId }: Props) {
   const displayName = fixMojibake(fileName);
+  const { user } = useUser();
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+
+  // El original editable (EventFile) lo baja solo dirección, por `POST /files/:id/download-original`,
+  // que deja constancia en la bitácora. Los demás siguen con el enlace directo.
+  const canOriginal = !!fileId && !!user && isDirectionRole(user.roleKey);
+
+  async function downloadOriginal() {
+    if (!fileId) return;
+    setDownloading(true);
+    setError('');
+    try {
+      const r = await api<{ url: string; fileName?: string }>(`/files/${fileId}/download-original`, { method: 'POST' });
+      const a = document.createElement('a');
+      a.href = r.url;
+      a.download = r.fileName || fileName;
+      a.rel = 'noreferrer';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se pudo descargar el original');
+    } finally {
+      setDownloading(false);
+    }
+  }
+
+  const originalButton = canOriginal ? (
+    <button className="btn ghost btn-sm" type="button" disabled={downloading} onClick={() => void downloadOriginal()}>
+      {downloading ? 'Descargando…' : 'Descargar original'}
+    </button>
+  ) : null;
   const [pdfSrc, setPdfSrc] = useState('');
   const [pdfFailed, setPdfFailed] = useState(false);
   // En teléfono y tableta el iframe enseña solo la primera página, o nada.
@@ -149,6 +184,7 @@ export function FileViewer({ url, fileName, kind, cacheKey, fileId }: Props) {
           <a className="btn ghost btn-sm" href={url} download={displayName}>
             Descargar
           </a>
+          {originalButton}
         </div>
       </div>
       </ExpandBox>
@@ -168,9 +204,12 @@ export function FileViewer({ url, fileName, kind, cacheKey, fileId }: Props) {
           <div className="docview panel-body">
             <div id={docxHtmlId} />
           </div>
-          <a className="btn ghost btn-sm" href={url} target="_blank" rel="noreferrer">
-            Descargar {displayName}
-          </a>
+          <div className="row">
+            <a className="btn ghost btn-sm" href={url} target="_blank" rel="noreferrer">
+              Descargar {displayName}
+            </a>
+            {originalButton}
+          </div>
         </div>
       </ExpandBox>
     );
@@ -183,6 +222,16 @@ export function FileViewer({ url, fileName, kind, cacheKey, fileId }: Props) {
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={url} alt={displayName} />
         </div>
+        {originalButton ? (
+          <div className="row">
+            {originalButton}
+            {error ? (
+              <span className="form-error" role="alert">
+                {error}
+              </span>
+            ) : null}
+          </div>
+        ) : null}
       </ExpandBox>
     );
   }
@@ -193,8 +242,16 @@ export function FileViewer({ url, fileName, kind, cacheKey, fileId }: Props) {
   }
 
   return (
-    <a className="btn ghost btn-sm" href={url} target="_blank" rel="noreferrer">
-      Abrir {displayName}
-    </a>
+    <div className="row">
+      <a className="btn ghost btn-sm" href={url} target="_blank" rel="noreferrer">
+        Abrir {displayName}
+      </a>
+      {originalButton}
+      {originalButton && error ? (
+        <span className="form-error" role="alert">
+          {error}
+        </span>
+      ) : null}
+    </div>
   );
 }

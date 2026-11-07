@@ -47,6 +47,7 @@ import androidx.compose.material.icons.filled.Event
 import androidx.compose.material.icons.filled.Forum
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -79,7 +80,9 @@ import coil.compose.SubcomposeAsyncImage
 import com.artaproducciones.ops.data.ActiveEntity
 import com.artaproducciones.ops.data.EventModule
 import com.artaproducciones.ops.data.Rbac
+import com.artaproducciones.ops.data.Session
 import com.artaproducciones.ops.data.api.ApiClient
+import com.artaproducciones.ops.data.api.DirectBody
 import com.artaproducciones.ops.data.api.EventDetailDto
 import com.artaproducciones.ops.data.api.EventPoRef
 import com.artaproducciones.ops.data.api.ModulesClient
@@ -100,7 +103,20 @@ import kotlinx.coroutines.launch
 import retrofit2.HttpException
 import java.time.LocalDate
 
-private enum class NativeTab { SUMMARY, TASKS, ADENDUM, TESTIGOS, TEAM }
+internal enum class NativeTab {
+    SUMMARY, TASKS, ADENDUM, TESTIGOS, TEAM;
+
+    companion object {
+        /** `?tab=` de una liga `/events/<id>?tab=…` → pestaña con la que abre el hub; lo desconocido cae en Resumen. */
+        fun fromKey(key: String?): NativeTab = when (key?.trim()?.lowercase()) {
+            "tasks", "tareas" -> TASKS
+            "adendum" -> ADENDUM
+            "testigos" -> TESTIGOS
+            "team", "equipo" -> TEAM
+            else -> SUMMARY
+        }
+    }
+}
 
 /** Un módulo del evento: se pinta aquí mismo ([tab]) o vive en la web ([webKey] = `?tab=`). */
 private data class EventModuleTab(val label: String, val tab: NativeTab? = null, val webKey: String? = null)
@@ -124,20 +140,24 @@ private fun eventModules(p: ModulesPerms, entity: String): List<EventModuleTab> 
     add(EventModuleTab("Equipo", tab = NativeTab.TEAM))
 }
 
+/** [initialTab]: el `?tab=` de la liga con la que se llegó (`tasks`, `adendum`, `testigos`, `team`); null = Resumen. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun EventDetailScreen(eventId: String, nav: ModuleNav) {
+fun EventDetailScreen(eventId: String, nav: ModuleNav, initialTab: String? = null) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val haptics = rememberHaptics()
+    val me = Session.currentUser?.id
     var event by remember(eventId) { mutableStateOf(ModulesStore.eventDetails[eventId]) }
     var perms by remember { mutableStateOf(ModulesStore.perms) }
     var refreshing by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var tick by remember { mutableIntStateOf(0) }
-    var tab by rememberSaveable { mutableStateOf(NativeTab.SUMMARY) }
+    var tab by rememberSaveable { mutableStateOf(NativeTab.fromKey(initialTab)) }
     var creatingTask by remember { mutableStateOf(false) }
     var openingChat by remember { mutableStateOf(false) }
+    // Persona del equipo a la que se le está abriendo un directo (una a la vez).
+    var openingDmWith by remember { mutableStateOf<String?>(null) }
     // `GET /testigos/event/:id`; null hasta que se abre la pestaña por primera vez.
     var witnesses by remember(eventId) { mutableStateOf<List<WitnessDto>?>(null) }
     var witnessError by remember(eventId) { mutableStateOf<String?>(null) }
@@ -169,6 +189,23 @@ fun EventDetailScreen(eventId: String, nav: ModuleNav) {
                 toast(context, e.userMessage())
             } finally {
                 openingChat = false
+            }
+        }
+    }
+
+    /** Mensaje directo con alguien del equipo (lo mismo que tocar a un miembro en la info del canal). */
+    fun openDirect(userId: String) {
+        if (openingDmWith != null) return
+        openingDmWith = userId
+        scope.launch {
+            try {
+                val channel = ApiClient.api.openDirect(DirectBody(userId))
+                nav.openChat(channel.id)
+            } catch (e: Exception) {
+                haptics.reject()
+                toast(context, e.userMessage())
+            } finally {
+                openingDmWith = null
             }
         }
     }
@@ -309,7 +346,13 @@ fun EventDetailScreen(eventId: String, nav: ModuleNav) {
                                 if (rows.isEmpty()) {
                                     item { EmptyState("Sin adendums", "Cuando se haga uno, aparecerá aquí.", icon = Icons.Outlined.RequestQuote) }
                                 }
-                                items(rows, key = { "a-${it.id}" }) { po -> AdendumRow(po, Modifier.animateItem()) }
+                                items(rows, key = { "a-${it.id}" }) { po ->
+                                    AdendumRow(
+                                        po,
+                                        onOpenOrder = { nav.openWeb("/events/$eventId?tab=ocs&po=${Uri.encode(po.id)}", "Órdenes de compra") },
+                                        modifier = Modifier.animateItem(),
+                                    )
+                                }
                             }
                             NativeTab.TESTIGOS -> {
                                 // Solo lectura: subirlos sigue siendo del panel web.
@@ -356,11 +399,24 @@ fun EventDetailScreen(eventId: String, nav: ModuleNav) {
                                 }
                                 items(people, key = { "p-${it.id}" }) { person ->
                                     val count = ev.tasks.count { it.status != "DONE" && it.isAssignee(person.id) }
-                                    Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    val isMe = person.id == me
+                                    // Tocar a alguien abre un directo con esa persona (como los miembros en la info del canal).
+                                    Row(
+                                        Modifier
+                                            .fillMaxWidth()
+                                            .clickable(enabled = !isMe, role = Role.Button, onClickLabel = "Escribirle a ${firstName(person.fullName)}") { openDirect(person.id) }
+                                            .heightIn(min = 48.dp)
+                                            .padding(horizontal = 20.dp, vertical = 6.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
                                         Avatar(person.fullName, size = 36.dp)
                                         Spacer(Modifier.width(12.dp))
-                                        Text(person.fullName, modifier = Modifier.weight(1f))
-                                        if (count > 0) Text(if (count == 1) "1 pendiente" else "$count pendientes", style = MaterialTheme.typography.bodySmall, color = ArtaColors.Muted)
+                                        Text(person.fullName + if (isMe) " (tú)" else "", modifier = Modifier.weight(1f))
+                                        if (openingDmWith == person.id) {
+                                            CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = ArtaColors.Gold)
+                                        } else if (count > 0) {
+                                            Text(if (count == 1) "1 pendiente" else "$count pendientes", style = MaterialTheme.typography.bodySmall, color = ArtaColors.Muted)
+                                        }
                                     }
                                 }
                             }
@@ -438,7 +494,8 @@ private fun QuickFacts(ev: EventDetailDto, p: ModulesPerms, entity: String, onTa
     val openTasks = ev.tasks.count { it.status != "DONE" }
     val overdue = ev.tasks.count { it.isOverdue() }
     val progress = ev.checklists.mapNotNull { it.progressPct }.takeIf { it.isNotEmpty() }?.average()?.toInt()
-    val pendingPo = ev.purchaseOrders.filter { it.status == "PENDING_AUTH" || it.status == "DRAFT" }
+    // Solo lo pedido de verdad (como iOS): un borrador todavía no espera a nadie.
+    val pendingPo = ev.purchaseOrders.filter { it.status == "PENDING_AUTH" }
     val items = buildList {
         if (p.canSeeModule(entity, EventModule.TASKS)) {
             add(
@@ -586,12 +643,17 @@ private fun AttachmentLine(label: String, icon: ImageVector, onClick: () -> Unit
     }
 }
 
-/** Un adendum: a quién, a qué cuenta, cuánto, en qué estado y su archivo. */
+/**
+ * Un adendum: a quién, a qué cuenta, cuánto, en qué estado y su archivo. La tarjeta abre el archivo (si lo
+ * hay); la orden misma se abre con su propio renglón ([onOpenOrder]): un toque, un destino.
+ */
 @Composable
-private fun AdendumRow(po: EventPoRef, modifier: Modifier = Modifier) {
+private fun AdendumRow(po: EventPoRef, onOpenOrder: () -> Unit, modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    ModuleCard(modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
+    val file = po.adendumFileUrl?.takeIf { it.isNotBlank() }
+    val openFile: (() -> Unit)? = file?.let { { openRemoteFile(context, scope, it, po.adendumFileName) } }
+    ModuleCard(modifier.padding(horizontal = 16.dp, vertical = 4.dp), onClick = openFile, onClickLabel = "Abrir el archivo del adendum") {
         Row(verticalAlignment = Alignment.Top) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(
@@ -613,11 +675,11 @@ private fun AdendumRow(po: EventPoRef, modifier: Modifier = Modifier) {
                 Pill(poStatusLabel(po.status), poStatusColor(po.status))
             }
         }
-        po.adendumFileUrl?.takeIf { it.isNotBlank() }?.let { file ->
-            AttachmentLine(po.adendumFileName?.takeIf { it.isNotBlank() } ?: "Ver archivo", Icons.Default.AttachFile) {
-                openRemoteFile(context, scope, file, po.adendumFileName)
-            }
+        if (openFile != null) {
+            AttachmentLine(po.adendumFileName?.takeIf { it.isNotBlank() } ?: "Ver archivo", Icons.Default.AttachFile, openFile)
         }
+        // Además del archivo, la orden misma: aquí es de solo lectura y en la web se autoriza y se paga.
+        AttachmentLine("Ver la orden de compra", Icons.AutoMirrored.Filled.OpenInNew, onOpenOrder)
     }
 }
 

@@ -47,6 +47,9 @@ type FinanceAnalytics = {
   alerts: Array<{ severity: string; message: string }>;
 };
 
+/** El aviso «N eventos con neto negativo» del API (`analytics.service.ts`): es el mismo filtro «Solo pérdida». */
+const LOSS_ALERT = /neto negativo/i;
+
 export default function FinancePage() {
   const { entity, user } = useUser();
   const [data, setData] = useState<FinanceAnalytics | null>(null);
@@ -77,6 +80,12 @@ export default function FinancePage() {
   }, [data, q, onlyLoss]);
 
   const t = data?.totals;
+  const filterActive = onlyLoss || !!q.trim();
+
+  function clearFilters() {
+    setOnlyLoss(false);
+    setQ('');
+  }
 
   return (
     <AppShell title="Finanzas">
@@ -100,11 +109,24 @@ export default function FinancePage() {
           <>
             {data?.alerts?.length ? (
               <div className="alert-stack">
-                {data.alerts.map((a) => (
-                  <div key={a.message} className={`ops-alert ops-alert--${a.severity}`}>
-                    <span className="ops-alert__msg">{a.message}</span>
-                  </div>
-                ))}
+                {data.alerts.map((a) =>
+                  LOSS_ALERT.test(a.message) ? (
+                    <button
+                      key={a.message}
+                      type="button"
+                      className={`ops-alert ops-alert--${a.severity} ops-alert--btn`}
+                      aria-pressed={onlyLoss}
+                      onClick={() => setOnlyLoss(!onlyLoss)}
+                    >
+                      <span className="ops-alert__msg">{a.message}</span>
+                      <span className="t-small muted">{onlyLoss ? 'Quitar filtro' : 'Ver solo estos'}</span>
+                    </button>
+                  ) : (
+                    <div key={a.message} className={`ops-alert ops-alert--${a.severity}`}>
+                      <span className="ops-alert__msg">{a.message}</span>
+                    </div>
+                  ),
+                )}
               </div>
             ) : null}
 
@@ -137,11 +159,16 @@ export default function FinancePage() {
                   <div className="value">{t.open}</div>
                   <div className="kpi-sub muted">Con ingresos o egresos</div>
                 </div>
-                <div className={`kpi ${t.lossMaking ? 'kpi--danger' : ''}`}>
+                <button
+                  type="button"
+                  className={`kpi kpi--action ${t.lossMaking ? 'kpi--danger' : ''} ${onlyLoss ? 'kpi--on' : ''}`}
+                  aria-pressed={onlyLoss}
+                  onClick={() => setOnlyLoss(!onlyLoss)}
+                >
                   <div className="label">Neto negativo</div>
                   <div className="value">{t.lossMaking}</div>
-                  <div className="kpi-sub muted">Shows en pérdida</div>
-                </div>
+                  <div className="kpi-sub muted">{onlyLoss ? 'Mostrando solo pérdida' : 'Shows en pérdida'}</div>
+                </button>
               </div>
             ) : null}
 
@@ -230,12 +257,23 @@ export default function FinancePage() {
                       {!rows.length ? (
                         <tr>
                           <td colSpan={8}>
-                            <EmptyState
-                              title="Sin corridas para este filtro"
-                              description="Abre un evento activo y captura ingresos/egresos en la pestaña Finanzas."
-                              actionHref="/events?scope=active"
-                              actionLabel="Ir a eventos activos"
-                            />
+                            {filterActive ? (
+                              <EmptyState
+                                title="Sin corridas para este filtro"
+                                description="Ningún evento coincide con el filtro o la búsqueda."
+                              >
+                                <button type="button" className="btn ghost btn-sm" onClick={clearFilters}>
+                                  Quitar filtro
+                                </button>
+                              </EmptyState>
+                            ) : (
+                              <EmptyState
+                                title="Sin corridas"
+                                description="Abre un evento activo y captura ingresos/egresos en la pestaña Finanzas."
+                                actionHref="/events?scope=active"
+                                actionLabel="Ir a eventos activos"
+                              />
+                            )}
                           </td>
                         </tr>
                       ) : null}

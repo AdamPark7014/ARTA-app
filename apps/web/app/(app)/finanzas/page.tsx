@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 import { AppShell } from '@/components/app-shell/AppShell';
 import { EmptyLite, Pill, Seg, Tile } from '@/components/ui/Lite';
@@ -84,6 +85,7 @@ const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one :
  */
 export default function FinanzasPage() {
   const { entity, user } = useUser();
+  const router = useRouter();
   const [from, setFrom] = useState(firstOfMonth);
   const [to, setTo] = useState(() => isoDay(new Date()));
   const [view, setView] = useState<View>('pay');
@@ -165,6 +167,7 @@ export default function FinanzasPage() {
                 label="Esperando autorización"
                 value={moneyKpi(k.pendingAuth.amount)}
                 sub={plural(k.pendingAuth.count, 'orden', 'órdenes')}
+                onClick={() => router.push('/purchase-orders?estado=unauthorized')}
               />
               <Tile
                 label="Anticipos por pagar"
@@ -177,7 +180,7 @@ export default function FinanzasPage() {
                 value={k.missingProof.count}
                 tone={k.missingProof.count ? 'warn' : undefined}
                 sub={k.missingProof.count ? 'Falta subirlo' : 'Todo en orden'}
-                onClick={k.missingProof.count ? () => setView('paid') : undefined}
+                onClick={k.missingProof.count ? () => router.push('/purchase-orders?estado=paid_no_proof') : undefined}
               />
             </div>
 
@@ -252,7 +255,7 @@ function OrdersTable({
                   {o.requestedBy ? <span className="t-small muted"> · {o.requestedBy}</span> : null}
                 </td>
                 <td className="card-full" data-label="Evento">
-                  <Link href={`/events/${o.event.id}`}>{o.event.name}</Link>
+                  <Link href={`/events/${o.event.id}?tab=ocs&po=${o.id}`}>{o.event.name}</Link>
                 </td>
                 <td data-label="Forma de pago">{o.paymentLabel}</td>
                 <td data-label={dateLabel}>{dayLabel(dateOf(o))}</td>
@@ -310,7 +313,7 @@ function AdendumTable({ rows }: { rows: OrderRow[] }) {
                 </td>
                 <td data-label="Cuenta">{o.adendum?.account || '—'}</td>
                 <td className="card-full" data-label="Evento">
-                  <Link href={`/events/${o.event.id}`}>{o.event.name}</Link>
+                  <Link href={`/events/${o.event.id}?tab=ocs&po=${o.id}`}>{o.event.name}</Link>
                 </td>
                 <td data-label="Monto" className="num">
                   {mxn(o.amount)}
@@ -362,7 +365,9 @@ function AdvancesTable({ rows }: { rows: AdvanceRow[] }) {
                   </Link>
                   {a.requestedBy ? <span className="t-small muted"> · {a.requestedBy}</span> : null}
                 </td>
-                <td className="card-full" data-label="Evento">{a.event?.name || '—'}</td>
+                <td className="card-full" data-label="Evento">
+                  {a.event?.id ? <Link href={`/events/${a.event.id}`}>{a.event.name || 'Evento'}</Link> : '—'}
+                </td>
                 <td data-label="Estado">
                   <Pill tone={a.status === 'PAID' ? 'ok' : 'warn'}>
                     {a.status === 'PAID' ? `Pagado ${dayLabel(a.paidAt)}` : 'Por pagar'}

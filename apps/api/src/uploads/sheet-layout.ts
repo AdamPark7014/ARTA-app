@@ -63,6 +63,9 @@ export type SheetModel = {
   totalHeight: number;
   /** Orientación pedida por el propio libro, si la trae. */
   orientation: 'portrait' | 'landscape' | null;
+
+  /** «Ajustar a una página» del libro: la hoja entera cabe en una hoja de papel. */
+  fitToPage: boolean;
 };
 
 /* ── Colores del tema de Office (los que Excel usa por defecto) ────────── */
@@ -370,6 +373,8 @@ export function formulaOfCell(ws: ExcelJS.Worksheet, row: number, col: number): 
 /* ── Modelo ────────────────────────────────────────────────────────────── */
 
 export function buildSheetModel(ws: ExcelJS.Worksheet, workbook: ExcelJS.Workbook): SheetModel {
+  const fitSetup = ws.pageSetup as { fitToPage?: boolean; fitToHeight?: number } | undefined;
+  const fitToPage = !!fitSetup?.fitToPage && (fitSetup.fitToHeight ?? 1) === 1;
   const merges: Array<{ r1: number; c1: number; r2: number; c2: number }> = [];
   for (const m of (ws.model as { merges?: string[] }).merges ?? []) {
     const p = parseRange(m);
@@ -461,7 +466,7 @@ export function buildSheetModel(ws: ExcelJS.Worksheet, workbook: ExcelJS.Workboo
         text,
         bold: !!font.bold,
         italic: !!font.italic,
-        fontSize: Math.max(6, Math.min(20, typeof font.size === 'number' ? font.size : 11)),
+        fontSize: Math.max(6, Math.min(fitToPage ? 40 : 20, typeof font.size === 'number' ? font.size : 11)),
         color: fontColor,
         fill,
         align,
@@ -499,7 +504,7 @@ export function buildSheetModel(ws: ExcelJS.Worksheet, workbook: ExcelJS.Workboo
     if (w > 4 && h > 4) images.push({ buffer: media.buffer as unknown as Buffer, extension: media.extension, row, col, dx, dy, x, y, w, h });
   }
 
-  const setup = ws.pageSetup as { orientation?: string } | undefined;
+  const setup = ws.pageSetup as { orientation?: string; fitToPage?: boolean; fitToHeight?: number } | undefined;
   return {
     name: ws.name,
     colWidths,
@@ -509,6 +514,7 @@ export function buildSheetModel(ws: ExcelJS.Worksheet, workbook: ExcelJS.Workboo
     totalWidth: colOffsets[colWidths.length] ?? 0,
     totalHeight: rowOffsets[rowHeights.length] ?? 0,
     orientation: setup?.orientation === 'landscape' ? 'landscape' : setup?.orientation === 'portrait' ? 'portrait' : null,
+    fitToPage,
   };
 }
 

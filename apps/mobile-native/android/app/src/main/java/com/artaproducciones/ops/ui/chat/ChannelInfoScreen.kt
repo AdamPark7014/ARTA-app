@@ -21,6 +21,7 @@ import androidx.compose.material.icons.automirrored.outlined.Logout
 import androidx.compose.material.icons.outlined.Archive
 import androidx.compose.material.icons.outlined.Bookmark
 import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.Event
 import androidx.compose.material.icons.outlined.NotificationsNone
 import androidx.compose.material.icons.outlined.NotificationsOff
 import androidx.compose.material.icons.outlined.PersonAdd
@@ -110,6 +111,10 @@ fun ChannelInfoScreen(
     onBack: () -> Unit,
     openChat: (String) -> Unit,
     openMessage: (channelId: String, messageId: String) -> Unit,
+    /** Un fijado o guardado que es respuesta de hilo abre ese hilo, no la conversación en la raíz. */
+    openThread: (channelId: String, rootId: String) -> Unit,
+    /** El canal de un evento lleva a su detalle. */
+    openEvent: (eventId: String) -> Unit,
     onLeft: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
@@ -202,6 +207,10 @@ fun ChannelInfoScreen(
                                 )
                             }
                         }
+                        d.eventId?.takeIf { it.isNotBlank() }?.let { eventId ->
+                            item { SectionHeader("Evento") }
+                            item { InfoRow(Icons.Outlined.Event, "Abrir evento", "Resumen, tareas y equipo") { openEvent(eventId) } }
+                        }
                         if (!direct) {
                             item { SectionHeader("Acerca de") }
                             if (!d.isGroupDm && !default) {
@@ -224,13 +233,14 @@ fun ChannelInfoScreen(
                         }
                         item { SectionHeader("Fijados · ${pins.size}") }
                         if (pins.isEmpty()) item { HintRow("Nada fijado. Mantén presionado un mensaje y elige «Fijar».") }
+                        // Una respuesta de hilo abre el hilo (ahí está el mensaje); lo demás, la conversación en ese mensaje.
                         items(pins, key = { "pin-" + it.id }) { m ->
-                            MessageLinkRow(Icons.Outlined.PushPin, m) { openMessage(channelId, m.parentId ?: m.id) }
+                            MessageLinkRow(Icons.Outlined.PushPin, m) { m.parentId?.let { openThread(channelId, it) } ?: openMessage(channelId, m.id) }
                         }
                         item { SectionHeader("Tus guardados aquí · ${saved.size}") }
                         if (saved.isEmpty()) item { HintRow("No has guardado mensajes de esta conversación.") }
                         items(saved, key = { "saved-" + it.id }) { m ->
-                            MessageLinkRow(Icons.Outlined.Bookmark, m) { openMessage(channelId, m.parentId ?: m.id) }
+                            MessageLinkRow(Icons.Outlined.Bookmark, m) { m.parentId?.let { openThread(channelId, it) } ?: openMessage(channelId, m.id) }
                         }
                         item { SectionHeader("Miembros · ${d.members.size}") }
                         if (canInvite) {

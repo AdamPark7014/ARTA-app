@@ -302,7 +302,8 @@ struct CarteleraStrip: View {
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(alignment: .top, spacing: ArtaSpace.s) {
                             ForEach(shows) { show in
-                                NavigationLink(value: AppRoute.cartelera) {
+                                // Cada póster abre su show; el título de la tira, la cartelera entera.
+                                NavigationLink(value: AppRoute.show(show)) {
                                     VStack(alignment: .leading, spacing: ArtaSpace.xs) {
                                         ShowPosterImage(path: show.coverUrl)
                                             .frame(height: 150)

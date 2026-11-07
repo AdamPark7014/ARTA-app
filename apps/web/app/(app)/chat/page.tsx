@@ -21,6 +21,7 @@ import { EmptyLite } from '@/components/ui/Lite';
 import { api } from '@/lib/api';
 import { joinChannel, leaveChannel, sendTyping, useRealtime, useRealtimeStatus } from '@/lib/realtime';
 import { useUser } from '@/lib/user-context';
+import { isDirectionRole } from '@arta/rbac';
 import { Icon, ICONS, MediaViewer } from '@/components/chat/ChatAttachment';
 import {
   isTaskCommand,
@@ -57,10 +58,13 @@ import {
   type ChannelDetail,
   type ChannelSummary,
   type ChatAttachment,
+  type ChatBlock,
   type ChatMessage,
+  type ChatReport,
   type Colleague,
   type MessagePage,
   type PreparedUpload,
+  type ReportStatus,
   type SavedItem,
 } from '@/components/chat/chat-model';
 import {
@@ -81,7 +85,7 @@ import {
 } from '@/components/chat/chat-ui';
 import { Composer, type MentionPerson } from '@/components/chat/Composer';
 import { MessageStream, type MessageActions } from '@/components/chat/MessageList';
-import { ChannelInfo, LinkedList, MessageResult, PinsList, SavedList } from '@/components/chat/ChatPanels';
+import { ChannelInfo, LinkedList, MessageResult, PinsList, ReportsList, SavedList } from '@/components/chat/ChatPanels';
 import { NewConversation, QuickSwitcher, TaskFromMessage } from '@/components/chat/ChatDialogs';
 
 /*
@@ -92,7 +96,14 @@ import { NewConversation, QuickSwitcher, TaskFromMessage } from '@/components/ch
  */
 
 type Thread = { root: ChatMessage; replies: ChatMessage[] };
-type Panel = { kind: 'thread'; rootId: string } | { kind: 'pins' } | { kind: 'saved' } | { kind: 'info' } | { kind: 'refs' } | null;
+type Panel =
+  | { kind: 'thread'; rootId: string }
+  | { kind: 'pins' }
+  | { kind: 'saved' }
+  | { kind: 'info' }
+  | { kind: 'refs' }
+  | { kind: 'reports' }
+  | null;
 type Store = Record<string, { list: ChatMessage[]; hasMore: boolean }>;
 type TypingMap = Record<string, Record<string, { name: string; at: number }>>;
 type UploadItem = {
@@ -229,6 +240,9 @@ function ChatInner() {
   const threadParam = searchParams.get('thread');
   const withParam = searchParams.get('with');
   const eventParam = searchParams.get('event');
+  /** `?reportes=1`: el aviso «Reportaron un mensaje» abre la cola de reportes (solo dirección). */
+  const reportesParam = searchParams.get('reportes');
+  const isDirection = isDirectionRole(user?.roleKey);
   const narrow = useNarrow();
 
   const [channels, setChannels] = useState<ChannelSummary[] | null>(null);
@@ -272,6 +286,14 @@ function ChatInner() {
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [online, setOnline] = useState<Set<string>>(() => new Set());
   const [prefs, setPrefs] = useState<Prefs | null>(null);
+  /* Reportar y bloquear (docs/chat-reportar-bloquear.md) */
+  const [reports, setReports] = useState<ChatReport[] | null>(null);
+  const [reportsStatus, setReportsStatus] = useState<ReportStatus>('OPEN');
+  const [reportsError, setReportsError] = useState(false);
+  const [openReports, setOpenReports] = useState(0);
+  const [reportBusy, setReportBusy] = useState<string | null>(null);
+  /** Personas que bloqueé (id → nombre); `null` hasta que responde `GET /chat/blocks`. */
+  const [blocks, setBlocks] = useState<Map<string, string> | null>(null);
 
   const storeRef = useRef(store);
   storeRef.current = store;
@@ -432,11 +454,59 @@ function ChatInner() {
 
   const isOnline = useCallback((id: string) => online.has(id), [online]);
 
+  /* bloqueos: una carga al entrar; el estado se actualiza al bloquear o desbloquear */
+
+  useEffect(() => {
+    if (!meId) return;
+    api<ChatBlock[]>('/chat/blocks')
+      .then((rows) => setBlocks(new Map((rows ?? []).map((b) => [b.id, b.name]))))
+      .catch(() => setBlocks(new Map()));
+  }, [meId]);
+
+  /* reportes (solo dirección): la cuenta de abiertos va en la barra lateral */
+
+  const loadReports = useCallback(async (status: ReportStatus) => {
+    setReportsError(false);
+    try {
+      const rows = await api<ChatReport[]>(`/chat/reports?status=${status}`);
+      setReports(rows ?? []);
+      if (status === 'OPEN') setOpenReports((rows ?? []).length);
+    } catch {
+      setReportsError(true);
+      setReports([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!meId || !isDirection) return;
+    api<ChatReport[]>('/chat/reports?status=OPEN')
+      .then((rows) => setOpenReports((rows ?? []).length))
+      .catch(() => undefined);
+  }, [meId, isDirection]);
+
+  const openReportsPanel = useCallback(
+    (status: ReportStatus = 'OPEN') => {
+      setPanel({ kind: 'reports' });
+      setReportsStatus(status);
+      setReports(null);
+      void loadReports(status);
+    },
+    [loadReports],
+  );
+
+  const reportesHandled = useRef<string | null>(null);
+  useEffect(() => {
+    if (!meId || !isDirection || reportesParam !== '1' || reportesHandled.current === reportesParam) return;
+    reportesHandled.current = reportesParam;
+    openReportsPanel('OPEN');
+  }, [meId, isDirection, reportesParam, openReportsPanel]);
+
   const selectChannel = useCallback(
     (id: string, opts: { msg?: string } = {}) => {
       setActiveId(id);
       setView('convo');
-      setPanel((p) => (p?.kind === 'saved' && !narrow ? p : null));
+      // En escritorio, Guardados y Reportes siguen abiertos al cambiar de conversación: desde ahí se salta.
+      setPanel((p) => ((p?.kind === 'saved' || p?.kind === 'reports') && !narrow ? p : null));
       setTouched(null);
       router.replace(`/chat?channel=${encodeURIComponent(id)}${opts.msg ? `&msg=${encodeURIComponent(opts.msg)}` : ''}`, {
         scroll: false,
@@ -475,6 +545,8 @@ function ChatInner() {
     if (!target) return;
     target
       .then((c) => {
+        // Sin conversación de vuelta no se escribe `?channel=undefined` en la URL.
+        if (!c?.id) throw new Error('No se pudo abrir la conversación');
         selectChannel(c.id);
         scheduleChannels();
       })
@@ -1255,6 +1327,18 @@ function ChatInner() {
     refAct: (r, action) => void refAct(r, action),
     refBusy,
     createTask: canTask ? setTaskFrom : undefined,
+    report: async (m, input) => {
+      try {
+        await api(`/chat/messages/${m.id}/report`, {
+          method: 'POST',
+          body: JSON.stringify({ reason: input.reason, details: input.details || undefined }),
+        });
+        showToast('Reporte enviado. Dirección lo revisará.');
+      } catch (e) {
+        showToast(errorText(e, 'No se pudo enviar el reporte'));
+        throw e;
+      }
+    },
     highlight,
     touched,
     setTouched,
@@ -1340,6 +1424,80 @@ function ChatInner() {
     />
   ) : null;
 
+  /* reportes: cerrar o reabrir */
+
+  const resolveReport = async (r: ChatReport, next: ReportStatus) => {
+    setReportBusy(r.id);
+    try {
+      await api(`/chat/reports/${encodeURIComponent(r.id)}`, { method: 'PATCH', body: JSON.stringify({ status: next }) });
+      setReports((list) => (list ? list.filter((x) => x.id !== r.id) : list));
+      setOpenReports((n) => Math.max(0, next === 'RESOLVED' ? n - 1 : n + 1));
+      showToast(next === 'RESOLVED' ? 'Reporte marcado como resuelto' : 'Reporte reabierto');
+    } catch (e) {
+      showToast(errorText(e, 'No se pudo actualizar el reporte'));
+    } finally {
+      setReportBusy(null);
+    }
+  };
+
+  /* bloquear en un directo: el API esconde sus mensajes y cierra el directo en ambos sentidos */
+
+  const activeSummary = channels?.find((c) => c.id === activeId) ?? null;
+  const dmPeer = (head ?? activeSummary)?.kind === 'DIRECT' ? ((head ?? activeSummary)?.peer ?? null) : null;
+  const peerBlocked = Boolean(dmPeer && blocks?.has(dmPeer.id));
+  const peerFirst = dmPeer?.fullName.split(/\s+/)[0] || dmPeer?.fullName || '';
+
+  /** Vuelve a pedir la conversación: lo de la persona bloqueada ya no llega (o vuelve a llegar). */
+  const reloadConversation = () => {
+    if (!activeId) return;
+    setStore((s) => {
+      if (!s[activeId]) return s;
+      const next = { ...s };
+      delete next[activeId];
+      return next;
+    });
+    setReloadKey((k) => k + 1);
+  };
+
+  const toggleBlock = async () => {
+    if (!dmPeer) return;
+    const name = dmPeer.fullName;
+    const path = `/chat/users/${encodeURIComponent(dmPeer.id)}/block`;
+    if (peerBlocked) {
+      if (!(await askConfirm({ title: `¿Desbloquear a ${name}?`, body: 'Vuelves a ver sus mensajes y pueden escribirse otra vez.', confirmLabel: 'Desbloquear' }))) return;
+      try {
+        await api(path, { method: 'DELETE' });
+        setBlocks((b) => {
+          const next = new Map(b ?? []);
+          next.delete(dmPeer.id);
+          return next;
+        });
+        showToast(`Desbloqueaste a ${peerFirst}`);
+        reloadConversation();
+      } catch (e) {
+        showToast(errorText(e, 'No se pudo desbloquear'));
+      }
+      return;
+    }
+    if (
+      !(await askConfirm({
+        title: `¿Bloquear a ${name}?`,
+        body: 'Dejas de ver sus mensajes y ninguno de los dos puede escribir en este directo. Lo puedes desbloquear cuando quieras.',
+        confirmLabel: 'Bloquear',
+        danger: true,
+      }))
+    )
+      return;
+    try {
+      await api(path, { method: 'POST' });
+      setBlocks((b) => new Map(b ?? []).set(dmPeer.id, name));
+      showToast(`Bloqueaste a ${peerFirst}`);
+      reloadConversation();
+    } catch (e) {
+      showToast(errorText(e, 'No se pudo bloquear'));
+    }
+  };
+
   /* No molestar */
 
   const dndActive = Boolean(prefs?.dndUntil && new Date(prefs.dndUntil).getTime() > Date.now());
@@ -1385,6 +1543,9 @@ function ChatInner() {
       },
     },
     { label: 'Detalles', icon: ICONS.info, onSelect: () => setPanel({ kind: 'info' }) },
+    dmPeer
+      ? { label: peerBlocked ? `Desbloquear a ${peerFirst}` : `Bloquear a ${peerFirst}`, icon: ICONS.ban, danger: !peerBlocked, onSelect: () => void toggleBlock() }
+      : null,
   ];
   const muteItems: (MenuItem | null)[] = [
     { label: 'Silenciar 8 horas', icon: ICONS.bellOff, onSelect: () => void setMute(8) },
@@ -1594,7 +1755,24 @@ function ChatInner() {
     ));
 
   const panelTitle =
-    panel?.kind === 'thread' ? 'Hilo' : panel?.kind === 'refs' ? 'Ligados' : panel?.kind === 'pins' ? 'Mensajes fijados' : panel?.kind === 'saved' ? 'Guardados' : 'Detalles';
+    panel?.kind === 'thread'
+      ? 'Hilo'
+      : panel?.kind === 'refs'
+        ? 'Ligados'
+        : panel?.kind === 'pins'
+          ? 'Mensajes fijados'
+          : panel?.kind === 'saved'
+            ? 'Guardados'
+            : panel?.kind === 'reports'
+              ? 'Reportes'
+              : 'Detalles';
+
+  /** Directo con alguien bloqueado: el API ya no manda sus mensajes; aquí se dice en voz baja. */
+  const blockedNotice = peerBlocked ? (
+    <div className="chat-system chat-blocked" role="status">
+      Bloqueaste a {peerFirst}. Ya no verás sus mensajes.
+    </div>
+  ) : null;
 
   const intro = (
     <div className="chat-intro">
@@ -1684,6 +1862,18 @@ function ChatInner() {
                 <Icon d={ICONS.search} size={15} /> Ir a…
                 <kbd className="chat-nav__kbd">Ctrl K</kbd>
               </button>
+              {isDirection ? (
+                <button
+                  type="button"
+                  className={`chat-nav__item${panel?.kind === 'reports' ? ' is-active' : ''}`}
+                  onClick={() => (panel?.kind === 'reports' ? setPanel(null) : openReportsPanel('OPEN'))}
+                >
+                  <Icon d={ICONS.flag} size={15} /> Reportes
+                  {openReports ? (
+                    <span className="chat-row__badge chat-nav__badge">{openReports > 99 ? '99+' : openReports}</span>
+                  ) : null}
+                </button>
+              ) : null}
             </div>
             {results ? (
               <div className="chat-results">
@@ -1836,6 +2026,17 @@ function ChatInner() {
                       <Icon d={ICONS.users} size={15} /> {head.memberCount}
                     </button>
                   ) : null}
+                  {dmPeer && blocks ? (
+                    <button
+                      type="button"
+                      className={`chat-tool${peerBlocked ? ' is-on' : ''}`}
+                      title={peerBlocked ? 'Desbloquear' : 'Bloquear'}
+                      aria-label={peerBlocked ? `Desbloquear a ${dmPeer.fullName}` : `Bloquear a ${dmPeer.fullName}`}
+                      onClick={() => void toggleBlock()}
+                    >
+                      <Icon d={ICONS.ban} size={17} />
+                    </button>
+                  ) : null}
                   <button
                     type="button"
                     className={`chat-tool${panel?.kind === 'refs' ? ' is-on' : ''}`}
@@ -1902,7 +2103,10 @@ function ChatInner() {
                       <StreamGhost />
                     )
                   ) : messages.length === 0 ? (
-                    <div className="chat-stream">{intro}</div>
+                    <div className="chat-stream">
+                      {intro}
+                      {blockedNotice}
+                    </div>
                   ) : (
                     <div className="chat-stream">
                       {entry?.hasMore ? (
@@ -1913,6 +2117,7 @@ function ChatInner() {
                         intro
                       )}
                       <MessageStream list={messages} x={actions} unreadFrom={unreadFrom} receipt={receipt} />
+                      {blockedNotice}
                     </div>
                   )}
                 </div>
@@ -1981,8 +2186,8 @@ function ChatInner() {
                   onFiles={() => pickFiles('main')}
                   onMic={() => void startRecording()}
                   onPaste={onPaste('main')}
-                  disabled={!canPost}
-                  disabledText="Solo dirección publica en este canal"
+                  disabled={!canPost || peerBlocked}
+                  disabledText={peerBlocked ? `Bloqueaste a ${peerFirst}: desbloquea para escribir` : 'Solo dirección publica en este canal'}
                   placeholder={composerPlaceholder(title, { isDirect, isGroup, eventChannel })}
                   inputRef={inputRef}
                   replyTo={activeId ? (replyTo[activeId] ?? null) : null}
@@ -2092,6 +2297,26 @@ function ChatInner() {
                     else selectChannel(it.channel.id, { msg: it.message.parentId ?? it.message.id });
                   }}
                   onUnsave={(it) => actions.save({ ...it.message, saved: true })}
+                />
+              </div>
+            ) : panel.kind === 'reports' ? (
+              <div className="chat-panel__body">
+                <ReportsList
+                  items={reports}
+                  status={reportsStatus}
+                  error={reportsError}
+                  busyId={reportBusy}
+                  now={now}
+                  channels={channels}
+                  onStatus={(s) => openReportsPanel(s)}
+                  onRetry={() => openReportsPanel(reportsStatus)}
+                  onJump={(r) => {
+                    if (!r.message) return;
+                    if (narrow) setPanel(null);
+                    if (r.message.channelId === activeId && document.getElementById(`m-${r.message.id}`)) jumpTo(r.message.id);
+                    else selectChannel(r.message.channelId, { msg: r.message.id });
+                  }}
+                  onResolve={(r, next) => void resolveReport(r, next)}
                 />
               </div>
             ) : (

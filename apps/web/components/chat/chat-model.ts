@@ -125,6 +125,34 @@ export type MessagePage = { messages: ChatMessage[]; hasMore: boolean; hasNewer?
 export type Colleague = { id: string; fullName: string; title?: string | null; email?: string | null };
 export type UploadResult = { url: string; name?: string | null; mime?: string | null; size?: number | null };
 
+/* Reportar y bloquear (docs/chat-reportar-bloquear.md): mismo catálogo que el API. */
+
+export type ReportReason = 'SPAM' | 'ACOSO' | 'OFENSIVO' | 'OTRO';
+export type ReportStatus = 'OPEN' | 'RESOLVED';
+export const REPORT_REASONS: ReportReason[] = ['SPAM', 'ACOSO', 'OFENSIVO', 'OTRO'];
+export const REPORT_REASON_LABELS: Record<ReportReason, string> = { SPAM: 'Spam', ACOSO: 'Acoso', OFENSIVO: 'Ofensivo', OTRO: 'Otro' };
+export const REPORT_DETAILS_MAX = 1000;
+
+/** Fila de `GET /chat/reports` (solo dirección). */
+export type ChatReport = {
+  id: string;
+  reason: ReportReason | string;
+  details?: string | null;
+  status: ReportStatus;
+  createdAt: string;
+  reporter: { id: string; name: string };
+  reportedUser?: { id: string; name: string } | null;
+  /** `channelKind`: PUBLIC | PRIVATE | DIRECT…; un directo o privado ajeno no se abre. */
+  message?: { id: string; body: string; channelId: string; channelName: string; channelKind?: string | null } | null;
+};
+
+/** Persona que bloqueé (`GET /chat/blocks`). */
+export type ChatBlock = { id: string; name: string; blockedAt: string };
+
+export function reportReasonLabel(reason: string) {
+  return REPORT_REASON_LABELS[reason as ReportReason] ?? reason;
+}
+
 /** #general de cada entidad: el de Auditorio lleva el slug `general-auditorio`. */
 export function isGeneralSlug(slug: string | null | undefined) {
   return slug === 'general' || slug === 'general-auditorio';

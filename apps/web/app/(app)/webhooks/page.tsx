@@ -14,6 +14,8 @@ import {
   PageHeader,
 } from '@/components/ui/PageChrome';
 import { api } from '@/lib/api';
+import { userHasPermission } from '@/lib/access-matrix';
+import { useUser } from '@/lib/user-context';
 
 type Endpoint = {
   id: string;
@@ -49,10 +51,17 @@ const eventLabel = (ev: string) => EVENT_LABELS[ev] || 'Aviso del sistema';
 
 type Flash = { text: string; tone: 'success' | 'warn' | 'error' };
 
+/** Lo que devuelve `POST /automations/scan`: conteos del escaneo de la organización. */
+type ScanResult = { poAging: number; eventRisk: number; sigBacklog: number; orgs?: number; failed?: number };
+
 export default function WebhooksPage() {
+  const { user } = useUser();
+  // El escaneo manual es de dirección (mismo permiso que el API: usuarios o todo).
+  const canScan = !!user && userHasPermission(user.roleKey, user.permissions, ['users.manage', 'everything']);
   const [endpoints, setEndpoints] = useState<Endpoint[]>([]);
   const [deliveries, setDeliveries] = useState<Delivery[]>([]);
   const [loading, setLoading] = useState(true);
+  const [scanning, setScanning] = useState(false);
   const [msg, setMsg] = useState<Flash | null>(null);
   const [q, setQ] = useState('');
   const [deliveryQ, setDeliveryQ] = useState('');
@@ -121,6 +130,23 @@ export default function WebhooksPage() {
     }
   }
 
+  /** Corre ahora la revisión que el servidor hace cada hora (riesgo, OC viejas, firmas) y dispara las conexiones. */
+  async function runScan() {
+    setScanning(true);
+    setMsg(null);
+    try {
+      const r = await api<ScanResult>('/automations/scan', { method: 'POST' });
+      const parts = [`Riesgo: ${r.eventRisk ?? 0}`, `OC viejas: ${r.poAging ?? 0}`, `Firmas: ${r.sigBacklog ?? 0}`];
+      if (r.failed) parts.push(`${r.failed} sin revisar`);
+      setMsg({ text: `Escaneo listo · ${parts.join(' · ')}`, tone: r.failed ? 'warn' : 'success' });
+      await load();
+    } catch (err) {
+      setMsg({ text: err instanceof Error ? err.message : 'No se pudo correr el escaneo', tone: 'error' });
+    } finally {
+      setScanning(false);
+    }
+  }
+
   const filteredEndpoints = useMemo(() => {
     if (!q.trim()) return endpoints;
     const n = q.toLowerCase();
@@ -155,6 +181,11 @@ export default function WebhooksPage() {
           title="Conexiones"
           description="Avisa a otros sistemas cuando algo necesita atención: eventos en riesgo, órdenes atrasadas o firmas pendientes."
         >
+          {canScan ? (
+            <button className="btn ghost" type="button" disabled={scanning} onClick={() => void runScan()}>
+              {scanning ? 'Escaneando…' : 'Correr escaneo ahora'}
+            </button>
+          ) : null}
           <button className="btn ghost" type="button" onClick={() => testDispatch()}>
             Enviar prueba
           </button>

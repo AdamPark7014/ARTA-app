@@ -39,6 +39,29 @@ describe('ExcelPdfService.render', () => {
     30_000,
   );
 
+  it('«ajustar a una página» del libro cabe en una hoja aunque tenga 60 filas (y sin él se pagina)', async () => {
+    const build = async (fit: boolean) => {
+      const wb = new ExcelJS.Workbook();
+      const ws = wb.addWorksheet('OC');
+      ws.pageSetup.fitToPage = fit;
+      ws.pageSetup.orientation = 'portrait';
+      for (let r = 1; r <= 60; r += 1) {
+        ws.getRow(r).height = 30;
+        ws.getCell(r, 2).value = `Fila ${r}`;
+        ws.getCell(r, 2).font = { size: 30 };
+        ws.getCell(r, 2).border = { bottom: { style: 'thin' } };
+      }
+      ws.getColumn(2).width = 60;
+      return wb.worksheets.map((s) => buildSheetModel(s, wb));
+    };
+    const one = join(dir, 'fit.pdf');
+    await new ExcelPdfService().render(one, await build(true), { ...meta, fileName: 'fit' });
+    expect(pageCount(one)).toBe(1);
+    const many = join(dir, 'nofit.pdf');
+    await new ExcelPdfService().render(many, await build(false), { ...meta, fileName: 'nofit' });
+    expect(pageCount(many)).toBeGreaterThan(1);
+  });
+
   it('un libro sin hojas con contenido produce una página con aviso', async () => {
     const out = join(dir, 'vacio.pdf');
     await new ExcelPdfService().render(out, [], meta);

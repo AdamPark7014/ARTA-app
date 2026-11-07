@@ -101,6 +101,8 @@ export default function SettingsPage() {
 
         <WebPushCard />
 
+        {/* `#dias-de-cobro`: destino de los avisos de OC fuera de día de cobro; el margen deja la tarjeta bajo la barra. */}
+        <div id="dias-de-cobro" className="anchor-top">
         <SettingsSection
           title="Días de cobro"
           description="Las órdenes de compra se crean cualquier día; los pagos se registran solo en los días que marques."
@@ -194,6 +196,7 @@ export default function SettingsPage() {
             </div>
           ) : null}
         </SettingsSection>
+        </div>
       </div>
     </AppShell>
   );

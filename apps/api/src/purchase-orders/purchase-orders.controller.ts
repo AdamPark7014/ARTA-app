@@ -40,12 +40,13 @@ import { assertSameTenant, tenantIdOf } from '../common/tenant';
 import { assertEventNotClosed } from '../common/event-guards';
 import { NotificationsService } from '../notifications/notifications.service';
 import { ChatRefsService } from '../chat/chat-refs.service';
-import { PurchaseOrderExcelService } from './po-excel.service';
+import { orderFingerprint, PurchaseOrderExcelService } from './po-excel.service';
 import { ExcelPdfService } from '../uploads/excel-pdf.service';
 import { uploadRoot } from '../uploads/upload-storage';
 import { createHash } from 'crypto';
 import { join } from 'path';
-import { readFileSync } from 'fs';
+import { existsSync, readFileSync, unlinkSync } from 'fs';
+import { tmpdir } from 'os';
 import { poNotice, type PoNoticeKind } from '../notifications/notification-text';
 import { payDayOf, payWindowFor, withPoState } from './po-state';
 import {
@@ -989,6 +990,9 @@ export class PurchaseOrdersController {
    * Genera salida Excel + PDF de la OC a partir del machote base /uploads/format-oc.xlsx.
    * Devuelve URL del PDF. La copia Excel queda registrada como EventFile (module 'oc').
    */
+  /** Exportaciones en curso por OC: dos clics a la vez comparten el mismo trabajo en vez de pisarse. */
+  private readonly exportsInFlight = new Map<string, Promise<{ url: string; fileId: string | null; excelUrl: string | null }>>();
+
   @Post(':id/export')
   async exportExcelPdf(
     @Req()
@@ -1005,6 +1009,27 @@ export class PurchaseOrdersController {
     @Param('id') id: string,
     @Body() body?: { variant?: 'default' | 'variant2' },
   ) {
+    const running = this.exportsInFlight.get(id);
+    if (running) return running;
+    const job = this.doExport(req, id, body).finally(() => this.exportsInFlight.delete(id));
+    this.exportsInFlight.set(id, job);
+    return job;
+  }
+
+  private async doExport(
+    req: {
+      user: {
+        id: string;
+        roleKey: string;
+        permissions: string[];
+        entities: string[];
+        organizationId?: string | null;
+        fullName?: string | null;
+      };
+    },
+    id: string,
+    body?: { variant?: 'default' | 'variant2' },
+  ): Promise<{ url: string; fileId: string | null; excelUrl: string | null }> {
     const order = await this.prisma.purchaseOrder.findUnique({
       where: { id },
       include: {
@@ -1016,49 +1041,100 @@ export class PurchaseOrdersController {
     });
     if (!order) throw new NotFoundException('OC no encontrada');
     await this.assertPoView(req.user, order.eventId);
-    assertEventNotClosed(order.event.status);
+    // Ver el PDF de una OC no cambia el evento: también sale con el evento
+    // cerrado (antes el botón «PDF» daba 403 ahí). Lo que no se hace con el
+    // evento cerrado es tocar sus archivos.
+    const readOnly = order.event.status === 'CLOSED' || order.event.status === 'CANCELLED';
 
     const src = body?.variant === 'variant2' ? 'format-oc-variant.xlsx' : 'format-oc.xlsx';
     const srcPath = join(uploadRoot, src);
-    const { excelPath } = await this.poExcel.buildFromTemplate(srcPath, order as never, {
-      name: order.event.name,
-      entity: order.event.entity,
+    const storedName = `oc-${order.id}-v1.xlsx`;
+    const storedUrl = `/uploads/${storedName}`;
+    const existing = await this.prisma.eventFile.findFirst({
+      where: { eventId: order.eventId, module: 'oc', url: storedUrl, deletedAt: null },
+      select: { id: true, version: true, sha256: true },
     });
+    const amountLabel = Number(order.amount).toLocaleString('es-MX', { style: 'currency', currency: 'MXN' });
+    const fileName = `OC ${(order.vendorName || order.rubro || 'orden').trim().slice(0, 60)} (${amountLabel}).xlsx`;
+    const outPath = readOnly ? join(tmpdir(), `arta-oc-${order.id}-${Date.now()}.xlsx`) : undefined;
+    const { excelPath } = await this.poExcel.buildFromTemplate(
+      srcPath,
+      order as never,
+      { name: order.event.name, entity: order.event.entity },
+      outPath,
+    );
 
-    // Registrar Excel como archivo del evento (editable)
-    const buf = readFileSync(excelPath);
-    const excelFile = await this.prisma.eventFile.create({
-      data: {
-        eventId: order.eventId,
-        fileName: `OC ${order.id}.xlsx`,
-        mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        url: `/uploads/${excelPath.split('/').pop()}`,
-        kind: 'excel',
-        module: 'oc',
-        // Robust: if the acting user isn't a real User row (tests, system), leave null
-        updatedById:
-          (await this.prisma.user
-            .findUnique({ where: { id: req.user.id }, select: { id: true } })
-            .then((u) => u?.id)
-            .catch(() => null)) || null,
-        sha256: createHash('sha256').update(buf).digest('hex'),
-      },
-      include: { event: { select: { organizationId: true } } },
-    });
+    let fileId: string | null = existing?.id ?? null;
+    let version = existing?.version ?? 1;
+    if (!readOnly) {
+      // Registrar el Excel como archivo del evento (editable). Exportar otra vez
+      // actualiza el mismo archivo: antes cada clic en «PDF» sumaba una copia.
+      // La huella es de los datos, no de los bytes: el zip cambia de hora en cada
+      // escritura y con bytes la versión subía aunque la OC no hubiera cambiado.
+      const buf = readFileSync(excelPath);
+      const sha256 = orderFingerprint(order as never, { name: order.event.name, entity: order.event.entity });
+      // Robust: if the acting user isn't a real User row (tests, system), leave null
+      const updatedById =
+        (await this.prisma.user
+          .findUnique({ where: { id: req.user.id }, select: { id: true } })
+          .then((u) => u?.id)
+          .catch(() => null)) || null;
+      const saved = existing
+        ? await this.prisma.eventFile.update({
+            where: { id: existing.id },
+            data: {
+              fileName,
+              sha256,
+              sizeBytes: buf.length,
+              updatedById,
+              ...(existing.sha256 !== sha256 ? { version: { increment: 1 } } : {}),
+            },
+            select: { id: true, version: true },
+          })
+        : await this.prisma.eventFile.create({
+            data: {
+              eventId: order.eventId,
+              fileName,
+              mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+              url: storedUrl,
+              sizeBytes: buf.length,
+              kind: 'excel',
+              module: 'oc',
+              updatedById,
+              sha256,
+            },
+            select: { id: true, version: true },
+          });
+      fileId = saved.id;
+      version = saved.version;
+    }
 
     // PDF de salida con encabezado estándar (no reescribe celdas)
-    const { url } = await this.excelPdf.generate(excelFile.id, excelFile.version, excelPath, {
-      eventName: order.event.name,
-      entity: order.event.entity,
-      fileName: excelFile.fileName,
-      exportedBy: req.user.fullName || null,
-    });
+    let url: string;
+    try {
+      ({ url } = await this.excelPdf.generate(fileId || `oc-${order.id}`, version, excelPath, {
+        eventName: order.event.name,
+        entity: order.event.entity,
+        fileName,
+        exportedBy: req.user.fullName || null,
+      }));
+    } finally {
+      if (outPath) {
+        try {
+          unlinkSync(outPath);
+        } catch {
+          /* temporal: si no se borra, lo limpia el sistema */
+        }
+      }
+    }
 
     await this.audit(req.user, order.event.organizationId, 'po.export', id, {
-      excelFileId: excelFile.id,
+      excelFileId: fileId,
       pdfUrl: url,
     });
 
-    return { url, fileId: excelFile.id, excelUrl: excelFile.url };
+    // Con el evento cerrado solo se regresa el Excel si de verdad sigue en disco.
+    const excelUrl = !readOnly ? storedUrl : existing && existsSync(join(uploadRoot, storedName)) ? storedUrl : null;
+    return { url, fileId, excelUrl };
   }
 }

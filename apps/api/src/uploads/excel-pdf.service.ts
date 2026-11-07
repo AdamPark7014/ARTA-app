@@ -24,6 +24,8 @@ const CELL_PAD = 3;
 const MIN_SCALE_PORTRAIT = 0.72;
 /** Siempre cabe a lo ancho (como «ajustar a una página de ancho» en Excel). */
 const MIN_SCALE = 0.3;
+/** Con «ajustar a una página» se encoge hasta aquí para no partir el formato en dos hojas. */
+const MIN_SCALE_FIT = 0.2;
 /** Un texto que no cabe se encoge hasta aquí antes de cortarse con «...». */
 const SHRINK_TO = 0.7;
 const MAX_PAGES = 40;
@@ -133,32 +135,16 @@ export class ExcelPdfService {
     const width = Math.max(model.totalWidth, 1);
     // El libro puede pedir apaisado; «vertical» solo se respeta si aún se lee.
     let layout: 'portrait' | 'landscape' = model.orientation === 'landscape' ? 'landscape' : 'portrait';
-    if (layout === 'portrait' && width > portraitW && portraitW / width < MIN_SCALE_PORTRAIT) layout = 'landscape';
+    // Con «ajustar a una página» el libro ya decidió: se encoge entero en la
+    // orientación que pide, como hace Excel al imprimir.
+    if (layout === 'portrait' && !model.fitToPage && width > portraitW && portraitW / width < MIN_SCALE_PORTRAIT) layout = 'landscape';
     const contentW = layout === 'landscape' ? landscapeW : portraitW;
-    const scale = Math.max(MIN_SCALE, Math.min(1, contentW / width));
+    const floor = model.fitToPage ? MIN_SCALE_FIT : MIN_SCALE;
+    let scale = Math.max(floor, Math.min(1, contentW / width));
 
-    const colW = model.colWidths.map((w) => w * scale);
-    const rowH = model.rowHeights.map((h) => h * scale);
-    const colX = prefix(colW);
-    // La hoja entera cabe a lo ancho; centrada si sobra espacio.
-    const originX = MARGIN + Math.max(0, (contentW - colX[colX.length - 1]) / 2);
-
-    // Alturas reales: una celda con ajuste de texto puede necesitar más de lo que dice el libro.
-    for (const cell of model.cells) {
-      if (!cell.wrap || !cell.text) continue;
-      const boxW = spanWidth(colW, cell.col - 1, cell.colSpan) - CELL_PAD * 2;
-      const size = cell.fontSize * scale;
-      doc.font(fontFor(cell)).fontSize(size);
-      const lines = wrapLines(doc, cell.text, boxW);
-      const needed = lines.length * size * 1.2 + CELL_PAD * 2;
-      const have = spanHeight(rowH, cell.row - 1, cell.rowSpan);
-      if (needed > have) rowH[cell.row + cell.rowSpan - 2] += needed - have;
-    }
-    const rowY = prefix(rowH);
-
-    // Paginación por filas: una fila no se parte.
+    // La página va antes de medir: «ajustar a una página» necesita saber cuánto
+    // alto queda bajo el membrete. Antes una OC de 60 filas salía en dos hojas.
     let pages = pagesSoFar;
-    let page = 0;
     const pageBottom = () => doc.page.height - FOOTER_RESERVE;
     const newPage = (first: boolean) => {
       doc.addPage({ size: 'LETTER', layout, margin: MARGIN });
@@ -167,8 +153,46 @@ export class ExcelPdfService {
       if (draftWatermark) this.branding.draftWatermark(doc);
       return top;
     };
-    let originY = newPage(page === 0);
-    page += 1;
+    let originY = newPage(true);
+    const availH = pageBottom() - originY;
+    if (model.fitToPage && model.totalHeight > 0 && model.totalHeight * scale > availH) {
+      scale = Math.max(floor, Math.min(scale, availH / model.totalHeight));
+    }
+
+    // Alturas reales: una celda con ajuste de texto puede necesitar más de lo
+    // que dice el libro. Con «ajustar a una página» eso puede sacar la última
+    // fila de la hoja, así que se mide y, si hace falta, se encoge otro poco.
+    const measure = (k: number) => {
+      const colW = model.colWidths.map((w) => w * k);
+      const rowH = model.rowHeights.map((h) => h * k);
+      for (const cell of model.cells) {
+        if (!cell.wrap || !cell.text) continue;
+        const boxW = spanWidth(colW, cell.col - 1, cell.colSpan) - CELL_PAD * 2;
+        const size = cell.fontSize * k;
+        doc.font(fontFor(cell)).fontSize(size);
+        const lines = wrapLines(doc, cell.text, boxW);
+        const needed = lines.length * size * 1.2 + CELL_PAD * 2;
+        const have = spanHeight(rowH, cell.row - 1, cell.rowSpan);
+        if (needed > have) rowH[cell.row + cell.rowSpan - 2] += needed - have;
+      }
+      return { colW, rowH };
+    };
+    let measured = measure(scale);
+    if (model.fitToPage) {
+      for (let i = 0; i < 3 && scale > floor; i += 1) {
+        const total = measured.rowH.reduce((a, b) => a + b, 0);
+        if (total <= availH) break;
+        scale = Math.max(floor, scale * (availH / total) * 0.995);
+        measured = measure(scale);
+      }
+    }
+    const { colW, rowH } = measured;
+    const colX = prefix(colW);
+    // La hoja entera cabe a lo ancho; centrada si sobra espacio.
+    const originX = MARGIN + Math.max(0, (contentW - colX[colX.length - 1]) / 2);
+    const rowY = prefix(rowH);
+
+    // Paginación por filas: una fila no se parte.
     let firstRow = 0; // índice de la primera fila visible en la página actual
     let pageTop = originY;
 

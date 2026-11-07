@@ -1,7 +1,8 @@
 'use client';
 
 import { askConfirm } from '@/components/ui/AskDialog';
-import { useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useSearchParams } from 'next/navigation';
 import type {
   EventDetail,
   EventPanelProps,
@@ -95,6 +96,61 @@ function formFromSetup(setup: TicketingSetup, event: EventDetail): Form {
 const money = (n: number) =>
   n.toLocaleString('es-MX', { style: 'currency', currency: 'MXN', minimumFractionDigits: 2 });
 
+/** Mismos hitos que el API (`ticketing-sync.service.ts`): el aviso llega con `?hito=50|75|90|100`. */
+const SOLD_MILESTONES = [50, 75, 90, 100] as const;
+const FOCUS_MS = 4_000;
+
+/** Vendidos contra capacidad; lo vendido de una zona nunca pasa de su aforo (igual que el API). */
+function soldStats(zones: TicketZone[]) {
+  let sold = 0;
+  let capacity = 0;
+  for (const z of zones) {
+    if (z.aforo <= 0) continue;
+    capacity += z.aforo;
+    sold += Math.min(z.sold || 0, z.aforo);
+  }
+  return { sold, capacity, pct: capacity ? Math.floor((sold / capacity) * 100) : 0 };
+}
+
+/** Avance de venta con un renglón por hito: el aviso «vendimos el 75 %» aterriza en el suyo. */
+function SalesMilestones({
+  zones,
+  focus,
+  withIds,
+}: {
+  zones: TicketZone[];
+  focus: number | null;
+  /** Solo la boletera principal lleva `id="hito-N"` (una por evento; sin ids repetidos). */
+  withIds: boolean;
+}) {
+  const { sold, capacity, pct } = soldStats(zones);
+  if (!capacity) return null;
+  return (
+    <div>
+      <p className="bol-sheet__label">Venta</p>
+      <p className="t-small" style={{ margin: '0 0 0.5rem' }}>
+        {sold ? `${sold.toLocaleString('es-MX')} de ${capacity.toLocaleString('es-MX')} boletos · ${pct} %` : 'Sin venta registrada todavía'}
+      </p>
+      <dl className="bol-hitos" aria-label="Hitos de venta">
+        {SOLD_MILESTONES.map((m) => {
+          const reached = pct >= m;
+          const focused = focus === m;
+          return (
+            <div
+              key={m}
+              id={withIds ? `hito-${m}` : undefined}
+              className={`bol-hito${reached ? ' is-done' : ''}${focused ? ' is-focus' : ''}`}
+            >
+              <dt>{m >= 100 ? 'Agotado' : `${m} %`}</dt>
+              <dd className={reached ? undefined : 't-muted'}>{reached ? 'Alcanzado' : 'Pendiente'}</dd>
+            </div>
+          );
+        })}
+      </dl>
+    </div>
+  );
+}
+
 function hostOf(href: string): string {
   try {
     return new URL(href).hostname.replace(/^www\./, '');
@@ -127,10 +183,16 @@ function BoleteraSummary({
   setup,
   event,
   actions,
+  focusHito = null,
+  primary = false,
 }: {
   setup: TicketingSetup;
   event: EventDetail;
   actions: ReactNode;
+  /** Hito de venta que pidió la URL (`?hito=`): se resalta unos segundos. */
+  focusHito?: number | null;
+  /** La boletera principal del evento: la que recibe el foco del aviso. */
+  primary?: boolean;
 }) {
   const sheet = boleteraSheet(setup, event);
   const facts: Array<[string, string]> = [
@@ -198,6 +260,8 @@ function BoleteraSummary({
           ) : (
             <p className="t-muted t-small">Sin zonas capturadas.</p>
           )}
+
+          <SalesMilestones zones={sheet.zones} focus={primary ? focusHito : null} withIds={primary} />
         </div>
 
         <div className="bol-sheet__col">
@@ -257,6 +321,24 @@ export function EventTicketingPanel({ event, closed, canEdit, onChanged, flash }
   const [zones, setZones] = useState<TicketZone[]>(() => cloneTicketZones(DEFAULT_TICKET_ZONES));
   const [busy, setBusy] = useState(false);
   const [pdfId, setPdfId] = useState<string | null>(null);
+
+  // El aviso de venta llega con `?tab=ticketing&hito=75`: se baja hasta ese renglón y se resalta.
+  const searchParams = useSearchParams();
+  const hitoParam = Number(searchParams?.get('hito'));
+  const hito = (SOLD_MILESTONES as readonly number[]).includes(hitoParam) ? hitoParam : null;
+  const [focusHito, setFocusHito] = useState<number | null>(hito);
+  useEffect(() => {
+    if (hito === null) return;
+    setFocusHito(hito);
+    const raf = window.requestAnimationFrame(() =>
+      document.getElementById(`hito-${hito}`)?.scrollIntoView({ block: 'center', behavior: 'smooth' }),
+    );
+    const timer = window.setTimeout(() => setFocusHito((h) => (h === hito ? null : h)), FOCUS_MS);
+    return () => {
+      window.cancelAnimationFrame(raf);
+      window.clearTimeout(timer);
+    };
+  }, [hito]);
 
   function set<K extends keyof Form>(key: K, value: Form[K]) {
     setForm((f) => ({ ...f, [key]: value }));
@@ -511,7 +593,7 @@ export function EventTicketingPanel({ event, closed, canEdit, onChanged, flash }
 
       {creating ? renderForm() : null}
 
-      {setups.map((setup) =>
+      {setups.map((setup, index) =>
         editable && editingId === setup.id ? (
           <div key={setup.id}>{renderForm()}</div>
         ) : (
@@ -519,6 +601,8 @@ export function EventTicketingPanel({ event, closed, canEdit, onChanged, flash }
             key={setup.id}
             setup={setup}
             event={event}
+            primary={index === 0}
+            focusHito={focusHito}
             actions={
               <>
                 <button

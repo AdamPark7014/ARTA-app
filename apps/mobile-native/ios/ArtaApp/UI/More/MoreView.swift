@@ -54,7 +54,7 @@ struct MoreView: View {
             ForEach(sections) { section in
                 Section {
                     ForEach(section.modules) { module in
-                        NavigationLink(value: AppRoute.web(path: module.path, title: module.label)) {
+                        NavigationLink(value: route(for: module)) {
                             rowLabel(module.label, systemImage: module.icon)
                         }
                     }
@@ -229,6 +229,15 @@ struct MoreView: View {
             Spacer(minLength: 0)
         }
         .padding(.vertical, ArtaSpace.s)
+    }
+
+    /// Eventos actuales y pasados tienen pantalla nativa (`EventsView`); el resto abre la vista web.
+    private func route(for module: WebModule) -> AppRoute {
+        switch module.path {
+        case "/events?scope=active": return .events(scope: "active")
+        case "/events?scope=past": return .events(scope: "past")
+        default: return .web(path: module.path, title: module.label)
+        }
     }
 
     /// La misma fila en todo Más: texto en tinta o plata clara e ícono secundario.

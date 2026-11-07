@@ -483,6 +483,28 @@ export class FinanceController {
     return this.withEvents(rows);
   }
 
+  /**
+   * Un anticipo por id, con su evento. Lo usa la liga `/advances?advance=<id>` cuando el anticipo ya salió
+   * de las bandejas (pagado o rechazado): antes la página solo podía decir «ya no está en tus pendientes».
+   * Va después de `pending` y `mine` para que esos nombres no caigan en `:id`.
+   */
+  @Get('advances/:id')
+  async advanceById(@Req() req: { user: AuthUser }, @Param('id') id: string) {
+    const advance = await this.loadAdvance(req.user, id);
+    // Lo ve quien lo pidió, quien lo aprueba o paga en esa entidad y quien ve finanzas; nadie más
+    // (el id viaja en avisos y en el chat, y trae monto, cuenta y comprobante).
+    const me = req.user;
+    const role = me.roleKey as RoleKey;
+    const allowed =
+      advance.uploadedById === me.id ||
+      canApproveAdvance(me, advance.event.entity) ||
+      canPayAdvance(me, advance.event.entity) ||
+      hasPermission(role, me.permissions, PERMISSIONS.FINANCE_VIEW) ||
+      hasPermission(role, me.permissions, PERMISSIONS.FINANCE_EDIT);
+    if (!allowed) throw new ForbiddenException('Ese anticipo no está a tu alcance');
+    return this.withAdvanceInclude(id);
+  }
+
   @Patch('advances/:id/approve')
   async approveAdvance(@Req() req: AuditReq, @Param('id') id: string) {
     const advance = await this.loadAdvance(req.user, id);

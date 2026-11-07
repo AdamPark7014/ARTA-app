@@ -640,7 +640,12 @@
 
 /* Umbrales de riesgo: dos renglones que se leen como una frase («En riesgo a 7 días…»). */
 .org-risk > p {
-  margin: 0 18px 4px;
+  /* Aire bajo la cabecera del panel: antes el texto quedaba pegado a la línea. */
+  margin: 0;
+  padding: 12px 18px 10px;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.45;
 }
 
 .org-risk__row {

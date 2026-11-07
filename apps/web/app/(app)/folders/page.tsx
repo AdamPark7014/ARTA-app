@@ -5,13 +5,20 @@ import { FileViewer, PdfEditor, SheetEditor } from '@/components/files/lazy';
 import { FormEvent, Suspense, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { AppShell } from '@/components/app-shell/AppShell';
-import { EmptyLite, FileRow } from '@/components/ui/Lite';
+import { EmptyLite, FileRow, Pill } from '@/components/ui/Lite';
 import { LoadingBlock } from '@/components/ui/LoadingBlock';
-import { FieldSearch, FlashMessage, PageHeader } from '@/components/ui/PageChrome';
+import { FieldCheck, FieldSearch, FlashMessage, PageHeader } from '@/components/ui/PageChrome';
 import { replaceFolderFile } from '@/lib/file-save';
-import { api } from '@/lib/api';
+import { api, ApiError } from '@/lib/api';
 import { useUser } from '@/lib/user-context';
 import { userHasPermission } from '@/lib/access-matrix';
+import { ALL_ROLES, isDirectionRole, roleLabel } from '@arta/rbac';
+
+/**
+ * Roles con los que se puede compartir una carpeta. Dirección y la administración de la
+ * plataforma ven todas las carpetas, así que no se ofrecen como opción.
+ */
+const SHARE_ROLES: string[] = ALL_ROLES.filter((r) => !isDirectionRole(r));
 
 function isSheet(name: string) {
   return /\.(xlsx?|csv)$/i.test(name);
@@ -73,6 +80,18 @@ function FoldersPageInner() {
   const [openFileId, setOpenFileId] = useState<string | null>(null);
   const [editFileId, setEditFileId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  /**
+   * Edición de la carpeta abierta: nombre, descripción y con qué roles se comparte.
+   * `extraRoles`: los que ya traía la carpeta y no salen como casilla (dirección, roles retirados); se conservan al guardar.
+   */
+  const [editing, setEditing] = useState(false);
+  const [editForm, setEditForm] = useState({
+    name: '',
+    description: '',
+    allowedRoles: [] as string[],
+    extraRoles: [] as string[],
+  });
+  const [savingFolder, setSavingFolder] = useState(false);
 
   const canEdit = user
     ? userHasPermission(user.roleKey, user.permissions, ['folders.edit', 'everything'])
@@ -115,8 +134,52 @@ function FoldersPageInner() {
       setActive(await api<FolderDetail>(`/folders/${id}`));
       setOpenFileId(null);
       setEditFileId(null);
+      setEditing(false);
     } catch (e) {
       setMsg({ text: e instanceof Error ? e.message : 'No se pudo abrir la carpeta', variant: 'error' });
+    }
+  }
+
+  function startEdit(folder: FolderDetail) {
+    const current = folder.allowedRoles || [];
+    setEditForm({
+      name: folder.name,
+      description: folder.description || '',
+      allowedRoles: current.filter((r) => SHARE_ROLES.includes(r)),
+      extraRoles: current.filter((r) => !SHARE_ROLES.includes(r)),
+    });
+    setEditing(true);
+  }
+
+  function toggleShareRole(role: string, on: boolean) {
+    setEditForm((f) => ({
+      ...f,
+      allowedRoles: on ? [...f.allowedRoles.filter((r) => r !== role), role] : f.allowedRoles.filter((r) => r !== role),
+    }));
+  }
+
+  /** `PATCH /folders/:id`: el servidor avisa a quien gana acceso con el cambio de roles. */
+  async function saveFolder(e: FormEvent) {
+    e.preventDefault();
+    if (!active || !editForm.name.trim()) return;
+    setSavingFolder(true);
+    try {
+      await api(`/folders/${active.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          name: editForm.name.trim(),
+          description: editForm.description.trim(),
+          // Casillas + lo que ya traía y no se ofrece como casilla: no se pierde ningún rol al guardar.
+          allowedRoles: Array.from(new Set([...editForm.extraRoles, ...editForm.allowedRoles])),
+        }),
+      });
+      setMsg({ text: 'Carpeta actualizada', variant: 'success' });
+      await openFolder(active.id);
+      await load();
+    } catch (err) {
+      setMsg({ text: err instanceof Error ? err.message : 'No se pudo guardar la carpeta', variant: 'error' });
+    } finally {
+      setSavingFolder(false);
     }
   }
 
@@ -163,7 +226,14 @@ function FoldersPageInner() {
       await openFolder(active.id);
       setMsg({ text: `${file.name} agregado`, variant: 'success' });
     } catch (e) {
-      setMsg({ text: e instanceof Error ? e.message : 'No se pudo subir el archivo', variant: 'error' });
+      // El 403 del servidor llega como «Forbidden»: aquí se dice qué pasó.
+      const text =
+        e instanceof ApiError && e.status === 403
+          ? 'No tienes permiso para subir archivos aquí'
+          : e instanceof Error
+            ? e.message
+            : 'No se pudo subir el archivo';
+      setMsg({ text, variant: 'error' });
     } finally {
       setBusy(false);
     }
@@ -198,11 +268,31 @@ function FoldersPageInner() {
           <PageHeader
             title={active.name}
             description={active.description || `${active.files.length} ${active.files.length === 1 ? 'archivo' : 'archivos'}`}
+            below={
+              active.allowedRoles?.length ? (
+                <div className="folder-shared" role="group" aria-label="Compartida con">
+                  <span className="t-muted t-small">Compartida con</span>
+                  {active.allowedRoles.map((r) => (
+                    <Pill key={r} tone="quiet">
+                      {roleLabel(r)}
+                    </Pill>
+                  ))}
+                </div>
+              ) : null
+            }
           >
             {canEdit ? (
               <>
                 <button className="btn-quiet" type="button" onClick={() => removeFolder(active)}>
                   Eliminar carpeta
+                </button>
+                <button
+                  className="btn-quiet"
+                  type="button"
+                  aria-expanded={editing}
+                  onClick={() => (editing ? setEditing(false) : startEdit(active))}
+                >
+                  {editing ? 'Cerrar edición' : 'Editar'}
                 </button>
                 <label className="btn btn-sm module-upload" aria-disabled={busy}>
                   {busy ? 'Subiendo…' : 'Subir archivo'}
@@ -222,6 +312,54 @@ function FoldersPageInner() {
           </PageHeader>
 
           {flash}
+
+          {editing && canEdit ? (
+            <form className="surface surface--pad fx" onSubmit={saveFolder} aria-label="Editar carpeta">
+              <div className="fx-grid">
+                <label>
+                  Nombre
+                  <input
+                    value={editForm.name}
+                    onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))}
+                    required
+                    autoFocus
+                  />
+                </label>
+                <label>
+                  Descripción <span className="fx-hint">(opcional)</span>
+                  <input
+                    value={editForm.description}
+                    onChange={(e) => setEditForm((f) => ({ ...f, description: e.target.value }))}
+                  />
+                </label>
+              </div>
+              <div className="fx-field">
+                <span>Compartir con</span>
+                <p className="t-muted t-small">
+                  Sin roles marcados la ve todo el equipo de la entidad, menos practicantes. Dirección la ve siempre. A quien
+                  gane acceso le llega un aviso.
+                </p>
+                <div className="folder-share-roles" role="group" aria-label="Compartir con">
+                  {SHARE_ROLES.map((role) => (
+                    <FieldCheck
+                      key={role}
+                      checked={editForm.allowedRoles.includes(role)}
+                      onChange={(on) => toggleShareRole(role, on)}
+                      label={roleLabel(role)}
+                    />
+                  ))}
+                </div>
+              </div>
+              <div className="fx-actions">
+                <button className="btn ghost btn-sm" type="button" onClick={() => setEditing(false)} disabled={savingFolder}>
+                  Cancelar
+                </button>
+                <button className="btn btn-sm" type="submit" disabled={savingFolder || !editForm.name.trim()}>
+                  {savingFolder ? 'Guardando…' : 'Guardar'}
+                </button>
+              </div>
+            </form>
+          ) : null}
 
           {!active.files.length ? (
             <div className="surface">

@@ -35,12 +35,40 @@ type ModuleRow = {
   byRisk: { critical: number; watch: number; healthy: number } | null;
 };
 
+/** Qué módulos se enseñan: todos, o solo los que tienen críticos, incompletos o firmas pendientes. */
+type View = 'all' | 'critical' | 'incomplete' | 'pendingAuth';
+
+const VIEW_LABEL: Record<View, string> = {
+  all: 'formatos',
+  critical: 'críticos',
+  incomplete: 'incompletos',
+  pendingAuth: 'firmas pendientes',
+};
+
+function matchesView(r: ModuleRow, view: View) {
+  if (view === 'all') return true;
+  if (view === 'critical') return (r.kpis?.critical || 0) > 0;
+  if (view === 'incomplete') return (r.kpis?.incomplete || 0) > 0;
+  return (r.kpis?.pendingAuth || 0) > 0;
+}
+
+/**
+ * «Abrir» lleva al módulo filtrado en lo mismo que se está mirando: críticos (`?riesgo=`), firmas
+ * o incompletos (`?estado=`). Sin filtro la fila enseña totales, así que el módulo abre completo.
+ */
+function moduleHref(r: ModuleRow, view: View) {
+  if (view === 'critical' && (r.kpis?.critical || 0) > 0) return `${r.href}?riesgo=critical`;
+  if (view === 'pendingAuth' && (r.kpis?.pendingAuth || 0) > 0) return `${r.href}?estado=firma`;
+  if (view === 'incomplete' && (r.kpis?.incomplete || 0) > 0) return `${r.href}?estado=incompletos`;
+  return r.href;
+}
+
 export default function RiskWorkspacePage() {
   const { entity } = useUser();
   const [rows, setRows] = useState<ModuleRow[]>([]);
   const [msg, setMsg] = useState('');
   const [loading, setLoading] = useState(true);
-  const [criticalOnly, setCriticalOnly] = useState(false);
+  const [view, setView] = useState<View>('all');
 
   useEffect(() => {
     setLoading(true);
@@ -83,12 +111,15 @@ export default function RiskWorkspacePage() {
     { critical: 0, incomplete: 0, pendingAuth: 0, total: 0 },
   );
 
-  const ranked = [...rows].sort((a, b) => (b.kpis?.critical || 0) - (a.kpis?.critical || 0));
-
-  const visible = useMemo(
-    () => (criticalOnly ? ranked.filter((r) => (r.kpis?.critical || 0) > 0) : ranked),
-    [ranked, criticalOnly],
+  const ranked = useMemo(
+    () => [...rows].sort((a, b) => (b.kpis?.critical || 0) - (a.kpis?.critical || 0)),
+    [rows],
   );
+
+  const visible = useMemo(() => ranked.filter((r) => matchesView(r, view)), [ranked, view]);
+
+  /** Un KPI se toca para filtrar y otra vez para quitar el filtro. */
+  const toggleView = (next: View) => setView((cur) => (cur === next ? 'all' : next));
 
   return (
     <AppShell title="Riesgo">
@@ -113,22 +144,46 @@ export default function RiskWorkspacePage() {
         ) : (
           <>
             <div className="grid-cards kpi-grid-dense">
-              <div className={`kpi ${totals.critical ? 'kpi--danger' : ''}`}>
+              <button
+                type="button"
+                className={`kpi kpi--action ${totals.critical ? 'kpi--danger' : ''} ${view === 'critical' ? 'kpi--on' : ''}`}
+                aria-pressed={view === 'critical'}
+                onClick={() => toggleView('critical')}
+              >
                 <div className="label">Críticos</div>
                 <div className="value">{totals.critical}</div>
-              </div>
-              <div className="kpi">
+                <div className="kpi-sub muted">Módulos con críticos</div>
+              </button>
+              <button
+                type="button"
+                className={`kpi kpi--action ${view === 'incomplete' ? 'kpi--on' : ''}`}
+                aria-pressed={view === 'incomplete'}
+                onClick={() => toggleView('incomplete')}
+              >
                 <div className="label">Incompletos</div>
                 <div className="value">{totals.incomplete}</div>
-              </div>
-              <div className="kpi">
+                <div className="kpi-sub muted">Módulos bajo 100%</div>
+              </button>
+              <button
+                type="button"
+                className={`kpi kpi--action ${view === 'pendingAuth' ? 'kpi--on' : ''}`}
+                aria-pressed={view === 'pendingAuth'}
+                onClick={() => toggleView('pendingAuth')}
+              >
                 <div className="label">Firmas pendientes</div>
                 <div className="value">{totals.pendingAuth}</div>
-              </div>
-              <div className="kpi">
-                <div className="label">Checklists</div>
+                <div className="kpi-sub muted">Módulos con firmas por dar</div>
+              </button>
+              <button
+                type="button"
+                className={`kpi kpi--action ${view === 'all' ? 'kpi--on' : ''}`}
+                aria-pressed={view === 'all'}
+                onClick={() => setView('all')}
+              >
+                <div className="label">Formatos</div>
                 <div className="value">{totals.total}</div>
-              </div>
+                <div className="kpi-sub muted">Ver todos los módulos</div>
+              </button>
             </div>
 
             <div className="panel">
@@ -138,23 +193,29 @@ export default function RiskWorkspacePage() {
               <div className="panel-body">
                 <FilterBar meta={`${visible.length} de ${ranked.length} módulos`}>
                   <FieldCheck
-                    checked={criticalOnly}
-                    onChange={setCriticalOnly}
+                    checked={view === 'critical'}
+                    onChange={(v) => setView(v ? 'critical' : 'all')}
                     label="Solo con críticos"
                   />
                 </FilterBar>
                 {!ranked.length || !totals.total ? (
                   <EmptyState
-                    title="Sin checklists en esta entidad"
+                    title="Sin formatos en esta entidad"
                     description="Cuando haya shows con plantillas, el riesgo aparecerá aquí."
                     actionHref="/events"
                     actionLabel="Ir a eventos"
                   />
                 ) : !visible.length ? (
                   <EmptyState
-                    title="Sin módulos con críticos"
-                    description="Ninguna disciplina tiene checklists críticos ahora."
-                  />
+                    title={`Sin módulos con ${VIEW_LABEL[view]}`}
+                    description="Ningún módulo tiene formatos en ese estado ahora."
+                  >
+                    {view !== 'all' ? (
+                      <button className="btn ghost" type="button" onClick={() => setView('all')}>
+                        Quitar filtro
+                      </button>
+                    ) : null}
+                  </EmptyState>
                 ) : (
                   <div className="table-wrap">
                     <table className="table table-sticky">
@@ -196,7 +257,7 @@ export default function RiskWorkspacePage() {
                               )}
                             </td>
                             <td>
-                              <ActionLink href={r.href} variant="ghost">Abrir</ActionLink>
+                              <ActionLink href={moduleHref(r, view)} variant="ghost">Abrir</ActionLink>
                             </td>
                           </tr>
                         ))}

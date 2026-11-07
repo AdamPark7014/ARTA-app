@@ -4,6 +4,7 @@ import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'rea
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { AppShell } from '@/components/app-shell/AppShell';
+import { askConfirm } from '@/components/ui/AskDialog';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { LoadingBlock, LoadingKpis } from '@/components/ui/LoadingBlock';
 import { AssigneesPicker } from '@/components/ui/AssigneesPicker';
@@ -78,6 +79,24 @@ const TEAM_ROLES = new Set([
 ]);
 
 /**
+ * Ligas del inicio y de los avisos (`/tasks?filtro=vencidas&vista=equipo`): la URL manda sobre
+ * lo que la persona dejó elegido la última vez, y los chips quedan como dice la liga.
+ */
+const FILTRO_PARAM: Record<string, QuickFilter> = {
+  vencidas: 'overdue',
+  abiertas: 'open',
+  todas: 'all',
+  bloqueadas: 'blocked',
+  hechas: 'done',
+};
+
+const VISTA_PARAM: Record<string, View> = {
+  mias: 'mine',
+  pedidas: 'requested',
+  equipo: 'team',
+};
+
+/**
  * Las fechas de vencimiento se guardan como medianoche UTC. Comparar con
  * `new Date()` local corría un día en México, así que todo el cálculo se hace
  * sobre la parte `YYYY-MM-DD` de la cadena.
@@ -143,6 +162,9 @@ function TasksPageInner() {
   const searchParams = useSearchParams();
   const focusId = searchParams.get('task');
   const focusDo = searchParams.get('do');
+  const filtroParam = searchParams.get('filtro');
+  const vistaParam = searchParams.get('vista');
+  const nuevaParam = searchParams.get('nueva');
   const [focusTask, setFocusTask] = useState<TaskRecord | null>(null);
   const canSeeTeam = TEAM_ROLES.has(user?.roleKey || '');
   const [view, setView] = useStickyState<View>('tasks.view', canSeeTeam ? 'requested' : 'mine');
@@ -173,6 +195,40 @@ function TasksPageInner() {
   useEffect(() => {
     if (view === 'team' && !canSeeTeam) setView('mine');
   }, [view, canSeeTeam, setView]);
+
+  // `?filtro=` y `?vista=` pisan el estado recordado cada vez que cambian en la URL.
+  useEffect(() => {
+    const quickFromUrl = filtroParam ? FILTRO_PARAM[filtroParam] : undefined;
+    if (quickFromUrl) setQuick(quickFromUrl);
+    const viewFromUrl = vistaParam ? VISTA_PARAM[vistaParam] : undefined;
+    if (viewFromUrl) setView(viewFromUrl === 'team' && !canSeeTeam ? 'mine' : viewFromUrl);
+  }, [filtroParam, vistaParam, canSeeTeam, setQuick, setView]);
+
+  // `?nueva=1`, el botón «Nueva tarea» del inicio: el alta abierta y el cursor en el título. El campo
+  // aparece cuando ya hay sesión y lista, así que se insiste hasta encontrarlo (una vez por liga).
+  const nuevaHandled = useRef(false);
+  useEffect(() => {
+    if (nuevaParam !== '1') {
+      nuevaHandled.current = false;
+      return;
+    }
+    if (nuevaHandled.current) return;
+    setComposing(true);
+    let tries = 0;
+    let frame = 0;
+    const tick = () => {
+      const input = titleRef.current;
+      if (input) {
+        input.focus();
+        nuevaHandled.current = true;
+        return;
+      }
+      // ~2 s a 60 fps: las máquinas de CI tardan en pintar el campo.
+      if (tries++ < 120) frame = window.requestAnimationFrame(tick);
+    };
+    frame = window.requestAnimationFrame(tick);
+    return () => window.cancelAnimationFrame(frame);
+  }, [nuevaParam, user?.id, loading]);
 
   // ARTA y Auditorio van separados (docs/entidades-arta-auditorio.md): todo se pide de la entidad
   // activa, y solo cuando ya se sabe cuál es (antes de /auth/me sería ARTA por defecto → 403).
@@ -241,6 +297,37 @@ function TasksPageInner() {
     setFocusTask((cur) => (cur?.id === task.id ? task : cur));
     setRows((prev) => prev.map((r) => (r.id === task.id ? task : r)));
   }, []);
+
+  /** La misma tarea arriba, con su historial, desde la lista o el tablero. */
+  function openTask(t: TaskRecord) {
+    router.push(`/tasks?task=${t.id}`);
+  }
+
+  /** Borra quien la pidió o quien ve al equipo completo. */
+  function canDelete(t: TaskRecord) {
+    return canSeeTeam || (!!t.createdById && t.createdById === user?.id);
+  }
+
+  async function deleteTask(t: TaskRecord) {
+    const ok = await askConfirm({
+      title: `¿Eliminar la tarea «${t.title}»?`,
+      body: 'Se borra con su historial y sus entregas. No se puede deshacer.',
+      danger: true,
+    });
+    if (!ok) return;
+    setError('');
+    try {
+      await api(`/tasks/${t.id}`, { method: 'DELETE' });
+      setMsg('Tarea eliminada');
+      if (focusTask?.id === t.id) {
+        setFocusTask(null);
+        router.replace('/tasks');
+      }
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se pudo eliminar la tarea');
+    }
+  }
 
   /** Persona y búsqueda: aplican a la lista y al tablero. El estado solo a la lista (el tablero ya va por estado). */
   const searched = useMemo(() => {
@@ -678,6 +765,11 @@ function TasksPageInner() {
               (focusTask.createdById === user?.id || user?.roleKey === 'dir_general' || user?.roleKey === 'dir_adjunta') ? (
                 <TaskApprovalActions task={focusTask} onDone={patchRow} />
               ) : null}
+              {canDelete(focusTask) ? (
+                <button type="button" className="btn ghost btn-sm btn-danger" onClick={() => void deleteTask(focusTask)}>
+                  Eliminar
+                </button>
+              ) : null}
             </div>
             <TaskActivityTimeline task={focusTask} expanded onUpdated={patchRow} />
           </section>
@@ -826,7 +918,7 @@ function TasksPageInner() {
                 tasks={searched}
                 today={today}
                 onMove={moveOnBoard}
-                onOpen={(t) => router.push(`/tasks?task=${t.id}`)}
+                onOpen={openTask}
               />
             ) : !filtered.length ? (
               <div className="panel">
@@ -944,10 +1036,18 @@ function TasksPageInner() {
                                   {done || pending ? '✓' : needsDelivery ? '↑' : ''}
                                 </button>
                                 <div className="task-row__main">
-                                  <div className="task-row__title">{t.title}</div>
+                                  {/* El título abre la tarea arriba (como en el tablero): `--edit` ya la pinta como texto. */}
+                                  <button
+                                    type="button"
+                                    className="task-row__title task-row__title--edit task-row__title--open"
+                                    aria-label={`Abrir ${t.title}`}
+                                    onClick={() => openTask(t)}
+                                  >
+                                    {t.title}
+                                  </button>
                                   <div className="task-row__meta muted kpi-sub">
                                     {t.event ? (
-                                      <Link href={`/events/${t.event.id}?tab=tasks`}>{t.event.name}</Link>
+                                      <Link href={`/events/${t.event.id}?tab=tasks&task=${t.id}`}>{t.event.name}</Link>
                                     ) : (
                                       <span>Sin evento</span>
                                     )}
@@ -1006,6 +1106,16 @@ function TasksPageInner() {
                                       }
                                     >
                                       {t.status === 'BLOCKED' ? 'Desbloquear' : 'Bloquear'}
+                                    </button>
+                                  ) : null}
+                                  {canDelete(t) ? (
+                                    <button
+                                      className="btn ghost btn-sm btn-danger"
+                                      type="button"
+                                      aria-label={`Eliminar ${t.title}`}
+                                      onClick={() => void deleteTask(t)}
+                                    >
+                                      Eliminar
                                     </button>
                                   ) : null}
                                 </div>

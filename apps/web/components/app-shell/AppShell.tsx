@@ -26,16 +26,24 @@ import { UserChip } from '@/components/ui/UserChip';
 export function AppShell({
   children,
   title,
+  backTo,
 }: {
   children: React.ReactNode;
   title?: string;
+  /**
+   * De dónde viene la pantalla, para la miga de la barra. Dentro de un evento sale sola
+   * («Eventos» → actuales); la pantalla del evento puede afinarla, p. ej. un show pasado
+   * regresa a `/events?scope=past`: aquí no se conoce su fecha ni su estado.
+   */
+  backTo?: { href: string; label: string } | null;
 }) {
   const { user, loading, entity, setEntity, logout } = useUser();
   const pathname = usePathname();
   const router = useRouter();
   const [navOpen, setNavOpen] = useState(false);
   // Dentro de un evento, la barra dice de dónde viene y lleva de regreso.
-  const crumb = /^\/events\/(?!new)[^/]+/.test(pathname || '') ? { href: '/events?scope=active', label: 'Eventos' } : null;
+  const crumb =
+    backTo ?? (/^\/events\/(?!new)[^/]+/.test(pathname || '') ? { href: '/events?scope=active', label: 'Eventos' } : null);
   /**
    * Menú que se esconde solo y vuelve al acercar el cursor al borde izquierdo,
    * como el Dock de macOS.

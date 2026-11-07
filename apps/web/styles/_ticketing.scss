@@ -247,3 +247,53 @@
 .bol-error {
   color: var(--danger);
 }
+
+/* ── Venta: hitos 50 / 75 / 90 / agotado (el aviso llega con ?hito=) ─────── */
+
+.bol-hitos {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.5rem;
+  margin: 0;
+}
+
+@media (max-width: 640px) {
+  .bol-hitos {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.bol-hito {
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg-soft);
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.bol-hito dt {
+  margin: 0 0 0.2rem;
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.bol-hito dd {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* Hito alcanzado: relleno suave. */
+.bol-hito.is-done {
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--line));
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg-soft));
+}
+
+/* El hito del aviso que se tocó: contorno, unos segundos. */
+.bol-hito.is-focus {
+  outline: 2px solid var(--text);
+  outline-offset: -2px;
+}

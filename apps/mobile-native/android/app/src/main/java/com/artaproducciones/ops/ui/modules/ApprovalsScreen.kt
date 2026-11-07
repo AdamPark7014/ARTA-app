@@ -1,5 +1,6 @@
 package com.artaproducciones.ops.ui.modules
 
+import android.net.Uri
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -258,7 +259,9 @@ fun ApprovalsScreen(nav: ModuleNav, focusAdvanceId: String? = null, focusPoId: S
     val p = perms
     val d = data
 
-    // El aviso de una OC abre su detalle en cuanto llega la lista fresca.
+    // El aviso de una OC abre su detalle en cuanto llega la lista fresca. Si ya no es mía (la autorizó
+    // otro, se pagó, o no me toca), la orden misma en la web toma el lugar de esta pantalla: nunca la
+    // lista genérica con un aviso, ni la lista asomándose detrás.
     LaunchedEffect(d != null, focusPoId) {
         val id = focusPoId ?: return@LaunchedEffect
         val loaded = data ?: return@LaunchedEffect
@@ -266,7 +269,7 @@ fun ApprovalsScreen(nav: ModuleNav, focusAdvanceId: String? = null, focusPoId: S
         focusHandled = true
         val order = loaded.orders.firstOrNull { it.row.id == id }
         if (order == null) {
-            notify("Esa orden de compra ya no está pendiente de tu parte.")
+            nav.replaceWithWeb("/purchase-orders?po=${Uri.encode(id)}", "Órdenes de compra")
             return@LaunchedEffect
         }
         openPo = order
@@ -281,7 +284,7 @@ fun ApprovalsScreen(nav: ModuleNav, focusAdvanceId: String? = null, focusPoId: S
         tab = 0
         val index = loaded.advanceListIndex(pp, id, hasError = error != null)
         if (index == null) {
-            notify("Ese anticipo ya no está pendiente de tu parte.")
+            nav.replaceWithWeb("/advances?advance=${Uri.encode(id)}", "Anticipos")
             return@LaunchedEffect
         }
         highlightAdvance = id
@@ -328,6 +331,7 @@ fun ApprovalsScreen(nav: ModuleNav, focusAdvanceId: String? = null, focusPoId: S
                         onReject = { rejectTask = it },
                         onOpenPo = { openPo = it },
                         onOpenAdvances = { nav.openWeb("/advances", "Anticipos") },
+                        onOpenEvent = { nav.openEvent(it) },
                         listState = listState,
                         highlightAdvance = highlightAdvance,
                         onOpenFile = { a, url -> openRemoteFile(context, scope, url, a.label) },
@@ -413,6 +417,7 @@ private fun PendingList(
     onReject: (TaskDto) -> Unit,
     onOpenPo: (PoItem) -> Unit,
     onOpenAdvances: () -> Unit,
+    onOpenEvent: (String) -> Unit,
     listState: LazyListState,
     highlightAdvance: String?,
     onOpenFile: (AdvanceDto, String) -> Unit,
@@ -478,6 +483,7 @@ private fun PendingList(
                     advance = a,
                     highlighted = a.id == highlightAdvance,
                     onOpenFile = { url -> onOpenFile(a, url) },
+                    onOpenEvent = onOpenEvent,
                     onApprove = { onApproveAdvance(a) },
                     onReject = { onRejectAdvance(a) },
                     onPaid = { onPaidAdvance(a) },
@@ -666,7 +672,8 @@ private fun PoSheet(
         }
     }
 
-    val ocsPath = "/events/${row.eventId}?tab=ocs"
+    // La web abre justo esta orden (`&po=`), no la pestaña con todas.
+    val ocsPath = "/events/${row.eventId}?tab=ocs&po=${Uri.encode(row.id)}"
 
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState, containerColor = ArtaColors.BgElev) {
         Column(

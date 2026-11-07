@@ -797,7 +797,7 @@ export function EventCampaignPanel({
         <details className="disclose">
           <summary>Otros archivos de campaña ({others.length})</summary>
           <div className="sx-stack">
-            <AuditBlock eventId={event.id} />
+            <AuditBlock eventId={event.id} campaignId={event.campaign?.id ?? null} />
             {others.map((f) => (
               <FileRow key={f.id} kind={isSheet(f) ? 'xlsx' : /\.pdf$/i.test(f.fileName) ? 'pdf' : 'file'} name={f.fileName}>
                 <a className="btn-quiet" href={f.url} target="_blank" rel="noreferrer">
@@ -812,21 +812,41 @@ export function EventCampaignPanel({
   );
 }
 
-function AuditBlock({ eventId }: { eventId: string }) {
-  const [rows, setRows] = useState<
-    Array<{ id: string; action: string; createdAt: string; user?: { fullName?: string | null } | null; metaJson?: unknown }>
-  >([]);
+type AuditRow = { id: string; action: string; createdAt: string; user?: { fullName?: string | null } | null; metaJson?: unknown };
+
+/**
+ * Historial de la campaña. Lo de la campaña se registra con `resource=Campaign` y su
+ * propio id, y lo del evento con `resource=Event`: se piden los dos y se mezclan por
+ * fecha. Quien no es dirección recibe 403 y el bloque simplemente no aparece.
+ */
+function AuditBlock({ eventId, campaignId }: { eventId: string; campaignId?: string | null }) {
+  const [rows, setRows] = useState<AuditRow[]>([]);
   useEffect(() => {
     let alive = true;
-    api(`/audit?resource=Event&resourceId=${encodeURIComponent(eventId)}&take=50`)
-      .then((r) => {
-        if (alive) setRows(Array.isArray(r) ? r : []);
+    const fetchRows = (resource: string, resourceId: string) =>
+      api<AuditRow[]>(`/audit?resource=${resource}&resourceId=${encodeURIComponent(resourceId)}&take=50`).then((r) =>
+        Array.isArray(r) ? r : [],
+      );
+    Promise.all([fetchRows('Event', eventId), campaignId ? fetchRows('Campaign', campaignId) : Promise.resolve([] as AuditRow[])])
+      .then(([ofEvent, ofCampaign]) => {
+        if (!alive) return;
+        const seen = new Set<string>();
+        const merged: AuditRow[] = [];
+        for (const a of [...ofEvent, ...ofCampaign]) {
+          if (seen.has(a.id)) continue;
+          seen.add(a.id);
+          merged.push(a);
+        }
+        merged.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+        setRows(merged);
       })
-      .catch(() => setRows([]));
+      .catch(() => {
+        if (alive) setRows([]);
+      });
     return () => {
       alive = false;
     };
-  }, [eventId]);
+  }, [eventId, campaignId]);
   if (!rows.length) return null;
   return (
     <div className="surface">

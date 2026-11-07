@@ -150,10 +150,14 @@ internal fun SentNotices(now: Instant, openLink: (DeepLink) -> Unit) {
     }
 }
 
-/** Título (abre lo mismo que el aviso), estado en contorno porque solo informa, y cada persona debajo. */
+/**
+ * Título (abre la liga del aviso), estado en contorno porque solo informa, y cada persona debajo.
+ * Sin `type` a propósito (como iOS): lo que yo pedí (`po.requested`) no es algo que yo apruebe, así
+ * que una OC mía abre la orden en la web y no mis Aprobaciones.
+ */
 @Composable
 private fun SentRow(row: SentNoticeDto, now: Instant, divider: Boolean, openLink: (DeepLink) -> Unit) {
-    val link = remember(row.linkUrl, row.type) { DeepLink.from(null, null, row.linkUrl, type = row.type) }
+    val link = remember(row.linkUrl) { DeepLink.from(null, null, row.linkUrl, type = null) }
     val waiting = row.recipients.any { !NoticeKinds.wasSeen(it) }
     Column(Modifier.fillMaxWidth()) {
         Row(

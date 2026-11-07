@@ -99,6 +99,7 @@ import kotlinx.coroutines.launch
 import java.text.NumberFormat
 import java.time.Instant
 import java.time.LocalDate
+import java.time.OffsetDateTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
@@ -219,15 +220,33 @@ enum class DueBucket(val label: String) {
 }
 
 /**
- * El vencimiento se guarda como medianoche UTC (la web manda `AAAA-MM-DD`): se usa la parte
- * de fecha de la cadena; convertir a hora local lo correría un día en México.
+ * Día del vencimiento. Sin hora, la web lo guarda como medianoche UTC (`AAAA-MM-DD` o `…T00:00:00.000Z`)
+ * y se toma la parte de fecha tal cual: convertirla a hora local lo correría un día en México. Con hora
+ * ([dueHasTime]) cuenta el día local, como `MDate.dueDay` en iOS: las 19:00 de Puebla son `…T01:00Z`
+ * del día siguiente y siguen siendo hoy.
  */
-fun dueDate(iso: String?): LocalDate? =
-    iso?.takeIf { it.length >= 10 }?.let { runCatching { LocalDate.parse(it.substring(0, 10)) }.getOrNull() }
+fun dueDate(iso: String?, zone: ZoneId = ZoneId.systemDefault()): LocalDate? {
+    if (iso == null || iso.length < 10) return null
+    if (dueHasTime(iso)) {
+        val instant = parseIso(iso) ?: runCatching { OffsetDateTime.parse(iso).toInstant() }.getOrNull()
+        if (instant != null) return instant.atZone(zone).toLocalDate()
+    }
+    return runCatching { LocalDate.parse(iso.substring(0, 10)) }.getOrNull()
+}
 
-fun TaskDto.bucket(today: LocalDate = LocalDate.now()): DueBucket {
+/**
+ * ¿El vencimiento trae hora? La web guarda el día como medianoche UTC (`…T00:00:00.000Z`) o como
+ * `AAAA-MM-DD`; cualquier otra hora es una cita real (misma regla que `MDate.dueHasTime` en iOS).
+ */
+fun dueHasTime(iso: String?): Boolean {
+    if (iso == null || iso.length <= 10) return false
+    val dateOnly = iso.contains("T00:00:00") && (iso.endsWith("Z") || iso.endsWith("+00:00"))
+    return !dateOnly
+}
+
+fun TaskDto.bucket(today: LocalDate = LocalDate.now(), zone: ZoneId = ZoneId.systemDefault()): DueBucket {
     if (status == "DONE") return DueBucket.DONE
-    val d = dueDate(dueAt) ?: return DueBucket.NONE
+    val d = dueDate(dueAt, zone) ?: return DueBucket.NONE
     val diff = ChronoUnit.DAYS.between(today, d)
     return when {
         diff < 0 -> DueBucket.OVERDUE
@@ -536,8 +555,8 @@ fun Pill(text: String, color: Color, modifier: Modifier = Modifier) {
 }
 
 @Composable
-fun ModuleCard(modifier: Modifier = Modifier, onClick: (() -> Unit)? = null, content: @Composable ColumnScope.() -> Unit) {
-    ArtaCard(modifier = modifier, onClick = onClick, contentPadding = PaddingValues(14.dp), content = content)
+fun ModuleCard(modifier: Modifier = Modifier, onClick: (() -> Unit)? = null, onClickLabel: String? = null, content: @Composable ColumnScope.() -> Unit) {
+    ArtaCard(modifier = modifier, onClick = onClick, onClickLabel = onClickLabel, contentPadding = PaddingValues(14.dp), content = content)
 }
 
 @Composable

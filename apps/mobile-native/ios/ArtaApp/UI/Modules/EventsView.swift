@@ -28,6 +28,15 @@ struct EventsView: View {
     @State private var notes: [CalendarNote] = []
     @State private var notesError: String?
     @State private var editingNote: NoteDraft?
+    /// «Eventos actuales»: si hoy hay algo en curso, la primera carga arranca en «En curso».
+    @State private var preferOngoing = false
+
+    /// `scope`: active | past (como `/events?scope=`); `calendar`: abre en el mes en vez de la lista.
+    init(scope: String? = nil, calendar: Bool = false) {
+        _mode = State(initialValue: calendar ? .calendar : .list)
+        _scope = State(initialValue: scope == "past" ? .past : .upcoming)
+        _preferOngoing = State(initialValue: scope == "active")
+    }
 
     /// Solo la entidad activa: las notas y los eventos ya no se juntan entre Arta y Auditorio.
     private var noteEntities: [String] { profile?.activeEventEntity.map { [$0] } ?? [] }
@@ -81,7 +90,8 @@ struct EventsView: View {
             }
         }
         .searchable(text: $query, prompt: "Buscar evento, artista o lugar")
-        .navigationTitle("Eventos")
+        // El acceso que abre el mes dice «Calendario»: la pantalla se llama igual.
+        .navigationTitle(mode == .list ? "Eventos" : "Calendario")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
@@ -392,6 +402,10 @@ struct EventsView: View {
                 events = try await ApiClient.shared.events(scope: "all", entity: entity)
             } else {
                 events = []
+            }
+            // Con un evento en curso hoy, que se vea al llegar (solo la primera vez: después manda la persona).
+            if !loaded, preferOngoing, events.contains(where: { Self.bucket($0) == .ongoing }) {
+                scope = .ongoing
             }
             loaded = true
             error = nil

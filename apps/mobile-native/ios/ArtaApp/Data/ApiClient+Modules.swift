@@ -139,8 +139,19 @@ extension ApiClient {
     func purchaseOrder(_ id: String) async throws -> PurchaseOrderDetail { try await get("purchase-orders/\(id)") }
 
     /// AUTHORIZED / REJECTED piden `po.authorize`; el API no guarda motivo de rechazo.
+    /// PAID pide `po.mark_paid`, comprobante (salvo efectivo) y día de cobro (`purchaseOrderWindow`).
     func setPurchaseOrderStatus(_ id: String, status: String) async throws {
         try await send("PATCH", "purchase-orders/\(id)/status", body: PurchaseOrderStatusBody(status: status))
+    }
+
+    /// Días de cobro: `canPayNow` dice si hoy se registran pagos. Solo lo consulta quien marca pagado.
+    func purchaseOrderWindow() async throws -> PurchaseOrderWindow { try await get("purchase-orders/window") }
+
+    /// ¿Hoy se pueden marcar pagadas? `false` sin `po.mark_paid` (ni se consulta) o si la consulta falla:
+    /// la orden se queda en «por pagar», como en Android. No lanza, para correr en paralelo con la lista.
+    func canPayPurchaseOrdersNow(canMarkPaid: Bool) async -> Bool {
+        guard canMarkPaid, let window = try? await purchaseOrderWindow() else { return false }
+        return window.canPayNow ?? false
     }
 
     // MARK: Anticipos (docs/ANTICIPOS-CONTRATO.md)

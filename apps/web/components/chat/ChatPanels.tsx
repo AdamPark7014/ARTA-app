@@ -10,10 +10,13 @@ import {
   isGeneralSlug,
   listTime,
   plainText,
+  reportReasonLabel,
   type ChannelDetail,
   type ChannelSummary,
   type ChatMessage,
+  type ChatReport,
   type Colleague,
+  type ReportStatus,
   type SavedItem,
 } from './chat-model';
 import { REF_GROUPS, refKey, type ChatRef, type RefAction } from './chat-refs';
@@ -142,6 +145,135 @@ export function SavedList({
         />
       ))}
     </>
+  );
+}
+
+const EXCERPT_MAX = 180;
+
+/**
+ * Cola de reportes (solo dirección): quién reportó a quién, por qué, el fragmento del
+ * mensaje y dónde está. «Ver mensaje» salta a él; «Marcar resuelto» lo cierra.
+ */
+export function ReportsList({
+  items,
+  status,
+  error,
+  busyId,
+  now,
+  channels,
+  onStatus,
+  onJump,
+  onResolve,
+  onRetry,
+}: {
+  items: ChatReport[] | null;
+  status: ReportStatus;
+  error: boolean;
+  busyId: string | null;
+  now: Date;
+  channels?: ChannelSummary[] | null;
+  onStatus: (next: ReportStatus) => void;
+  onJump: (r: ChatReport) => void;
+  onResolve: (r: ChatReport, next: ReportStatus) => void;
+  onRetry: () => void;
+}) {
+  const tabs = (
+    <div className="chat-info__chips chat-reports__tabs" role="tablist" aria-label="Estado de los reportes">
+      {(['OPEN', 'RESOLVED'] as ReportStatus[]).map((s) => (
+        <button
+          key={s}
+          type="button"
+          role="tab"
+          aria-selected={status === s}
+          className={`chat-chip${status === s ? ' is-on' : ''}`}
+          onClick={() => onStatus(s)}
+        >
+          {s === 'OPEN' ? 'Abiertos' : 'Resueltos'}
+        </button>
+      ))}
+    </div>
+  );
+  let body: ReactNode;
+  if (error) {
+    body = (
+      <PanelEmpty icon={ICONS.flag} title="No se pudieron cargar">
+        <button type="button" className="btn ghost btn-sm" onClick={onRetry}>
+          Reintentar
+        </button>
+      </PanelEmpty>
+    );
+  } else if (items === null) {
+    body = <ListGhost />;
+  } else if (!items.length) {
+    body = (
+      <PanelEmpty icon={ICONS.flag} title={status === 'OPEN' ? 'Sin reportes abiertos' : 'Sin reportes resueltos'}>
+        {status === 'OPEN' ? 'Cuando alguien reporte un mensaje desde su menú ⋯, aparece aquí.' : null}
+      </PanelEmpty>
+    );
+  } else {
+    body = items.map((r) => {
+      const msg = r.message;
+      // Dónde está. Un directo o privado del que no soy parte no se abre (el API lo negaría):
+      // se dice dónde fue y «Ver mensaje» queda apagado.
+      const kind = msg?.channelKind ?? 'PUBLIC';
+      const known = msg ? (channels?.find((c) => c.id === msg.channelId) ?? null) : null;
+      const display = msg ? (known ? channelDisplayName(known) : msg.channelName) : '';
+      const where = !msg
+        ? ''
+        : kind === 'DIRECT'
+          ? `en el directo con ${display.replace(/^#/, '')}`
+          : kind === 'PRIVATE'
+            ? `en ${display.replace(/^#/, '')} (privado)`
+            : `en ${known ? display : `#${display}`}`;
+      const canOpen = Boolean(known) || kind === 'PUBLIC';
+      const text = msg ? plainText(msg.body) : '';
+      const excerpt = text.length > EXCERPT_MAX ? `${text.slice(0, EXCERPT_MAX).trimEnd()}…` : text;
+      return (
+        <article key={r.id} className="chat-report-card" aria-label={`Reporte de ${r.reporter.name}`}>
+          <header className="chat-report-card__head">
+            <span className="chat-badge">{reportReasonLabel(r.reason)}</span>
+            <span className="chat-report-card__time">{listTime(r.createdAt, now)}</span>
+          </header>
+          <p className="chat-report-card__who">
+            <strong>{r.reporter.name}</strong> reportó a <strong>{r.reportedUser?.name ?? 'una persona que ya no está'}</strong>
+            {where ? <> {where}</> : null}
+          </p>
+          {r.details ? <p className="chat-report-card__details">{r.details}</p> : null}
+          {msg ? (
+            <blockquote className="chat-report-card__excerpt">{excerpt || 'Adjunto sin texto'}</blockquote>
+          ) : (
+            <p className="chat-report-card__excerpt is-deleted">El mensaje ya no existe.</p>
+          )}
+          <div className="chat-report-card__actions">
+            {msg ? (
+              <button
+                type="button"
+                className="btn ghost btn-sm"
+                disabled={!canOpen}
+                title={canOpen ? undefined : 'Solo visible para sus miembros'}
+                onClick={() => onJump(r)}
+              >
+                Ver mensaje
+              </button>
+            ) : null}
+            <button
+              type="button"
+              className="btn btn-sm"
+              disabled={busyId === r.id}
+              onClick={() => onResolve(r, status === 'OPEN' ? 'RESOLVED' : 'OPEN')}
+            >
+              {busyId === r.id ? 'Guardando…' : status === 'OPEN' ? 'Marcar resuelto' : 'Reabrir'}
+            </button>
+          </div>
+        </article>
+      );
+    });
+  }
+  return (
+    <div className="chat-reports">
+      {tabs}
+      {body}
+    </div>
   );
 }
 

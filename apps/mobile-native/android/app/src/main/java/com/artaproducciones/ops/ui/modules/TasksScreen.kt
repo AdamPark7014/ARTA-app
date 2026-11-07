@@ -65,19 +65,63 @@ import com.artaproducciones.ops.ui.theme.artaFilterChipBorder
 import com.artaproducciones.ops.ui.theme.artaFilterChipColors
 import java.time.LocalDate
 
-private enum class TaskView(val label: String, val key: String) {
+internal enum class TaskView(val label: String, val key: String) {
     MINE("Mis tareas", "mine"),
     REQUESTED("Pedidas por mí", "requested"),
     TEAM("Todas", "team"),
+    ;
+
+    companion object {
+        /** `?vista=` de la web (`VISTA_PARAM` en `tasks/page.tsx`); lo desconocido no cambia la vista. */
+        fun fromKey(key: String?): TaskView? = when (key?.trim()?.lowercase()) {
+            "mias" -> MINE
+            "pedidas" -> REQUESTED
+            "equipo" -> TEAM
+            else -> null
+        }
+    }
 }
 
-private enum class StatusFilter(val label: String) {
+internal enum class StatusFilter(val label: String) {
     OPEN("Pendientes"),
     OVERDUE("Vencidas"),
     REVIEW("Por aprobar"),
     BLOCKED("Bloqueadas"),
     DONE("Hechas"),
     ALL("Todas"),
+    ;
+
+    companion object {
+        /** `?filtro=` de la web (`FILTRO_PARAM` en `tasks/page.tsx`); lo desconocido no cambia el filtro. */
+        fun fromKey(key: String?): StatusFilter? = when (key?.trim()?.lowercase()) {
+            "vencidas" -> OVERDUE
+            "abiertas" -> OPEN
+            "todas" -> ALL
+            "bloqueadas" -> BLOCKED
+            "hechas" -> DONE
+            else -> null
+        }
+    }
+}
+
+/**
+ * Lo que pide quien manda a la pestaña Tareas (la cifra «Vencen hoy» de Inicio, una liga
+ * `/tasks?filtro=vencidas&vista=equipo`, `/tasks/new`): la pestaña lo aplica en cuanto se ve y lo borra.
+ * Las llaves son las de la web, así la misma liga abre lo mismo en el panel y en la app.
+ */
+object TasksLaunch {
+    internal class Request(val filter: StatusFilter?, val view: TaskView?, val compose: Boolean)
+
+    internal var pending: Request? by mutableStateOf(null)
+        private set
+
+    fun request(filter: String? = null, view: String? = null, compose: Boolean = false) {
+        pending = Request(StatusFilter.fromKey(filter), TaskView.fromKey(view), compose)
+    }
+
+    internal fun consume() {
+        pending = null
+    }
 }
 
 private fun StatusFilter.matches(t: TaskDto, today: LocalDate): Boolean = when (this) {
@@ -123,6 +167,20 @@ fun TasksScreen(nav: ModuleNav) {
 
     LaunchedEffect(Unit) {
         runCatching { ModulesSession.me() }.onSuccess { me -> perms = ModulesPerms(me).also { ModulesStore.perms = it } }
+    }
+
+    // Lo que pidió quien abrió la pestaña (Inicio o una liga): se aplica una vez y se olvida. «Todas» espera a
+    // conocer los permisos (en frío, desde un push, llegan después que la liga); si de verdad no puede verlas,
+    // cae en las mías, como hace la web.
+    val launch = TasksLaunch.pending
+    LaunchedEffect(launch, perms) {
+        val req = launch ?: return@LaunchedEffect
+        val p = perms
+        if (req.view == TaskView.TEAM && p == null) return@LaunchedEffect
+        req.filter?.let { filter = it }
+        req.view?.let { view = if (it == TaskView.TEAM && p?.canSeeTeamTasks != true) TaskView.MINE else it }
+        if (req.compose && p?.canCreateTasks != false) creating = true
+        TasksLaunch.consume()
     }
 
     var shownEntity by remember { mutableStateOf(entity) }
@@ -222,7 +280,16 @@ fun TasksScreen(nav: ModuleNav) {
                                 item(key = "empty") {
                                     val filtered = query.isNotBlank() || filter != StatusFilter.OPEN
                                     when {
-                                        filtered -> EmptyState("Nada coincide", "Prueba con otra búsqueda o filtro.", icon = Icons.Default.Search)
+                                        filtered -> EmptyState(
+                                            "Nada coincide",
+                                            "Prueba con otra búsqueda o filtro.",
+                                            actionLabel = "Limpiar filtros",
+                                            onAction = {
+                                                query = ""
+                                                filter = StatusFilter.OPEN
+                                            },
+                                            icon = Icons.Default.Search,
+                                        )
                                         view == TaskView.MINE -> EmptyState("No tienes tareas pendientes", "Cuando alguien te asigne algo aparecerá aquí.", icon = Icons.Outlined.TaskAlt)
                                         view == TaskView.REQUESTED -> EmptyState("No has pedido tareas", "Crea una con «Nueva tarea» y asígnala a una o varias personas.", icon = Icons.Outlined.TaskAlt)
                                         else -> EmptyState("Sin tareas pendientes", "El equipo está al día.", icon = Icons.Outlined.TaskAlt)

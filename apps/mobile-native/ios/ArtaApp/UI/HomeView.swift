@@ -178,10 +178,10 @@ struct HomeView: View {
         switch route {
         case .task(let taskId):
             TaskDetailView(taskId: taskId)
-        case .event(let eventId):
-            EventDetailView(eventId: eventId)
-        case .approvals(let focus):
-            ApprovalsView(focus: focus)
+        case let .event(eventId, tab):
+            EventDetailView(eventId: eventId, tab: tab)
+        case let .approvals(focus, web):
+            ApprovalsView(focus: focus, focusWeb: web)
         case let .web(path, title):
             // En el modo de muestra no hay sesión que compartir con la web.
             if DemoMode.isActive {
@@ -197,6 +197,10 @@ struct HomeView: View {
             NotificationPreferencesView()
         case .cartelera:
             CarteleraView()
+        case .show(let show):
+            ShowDetailView(show: show)
+        case let .events(scope, calendar):
+            EventsView(scope: scope, calendar: calendar)
         }
     }
 }

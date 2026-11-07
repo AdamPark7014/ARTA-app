@@ -224,7 +224,13 @@ fun EventsScreen(nav: ModuleNav, showBack: Boolean = true) {
                         if (visible.isEmpty()) {
                             item(key = "empty") {
                                 when {
-                                    query.isNotBlank() -> EmptyState("Nada coincide", "Prueba con otro nombre o lugar.", icon = Icons.Default.Search)
+                                    query.isNotBlank() -> EmptyState(
+                                        "Nada coincide",
+                                        "Prueba con otro nombre o lugar.",
+                                        actionLabel = "Limpiar filtros",
+                                        onAction = { query = "" },
+                                        icon = Icons.Default.Search,
+                                    )
                                     segment == EventSegment.LIVE -> EmptyState("Ningún show en curso hoy", icon = Icons.Outlined.EventAvailable)
                                     segment == EventSegment.PAST -> EmptyState("Sin eventos pasados", icon = Icons.Outlined.EventAvailable)
                                     else -> EmptyState("Sin shows próximos", "Los eventos nuevos se crean desde la web.", icon = Icons.Outlined.EventAvailable)

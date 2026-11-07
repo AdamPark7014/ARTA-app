@@ -77,6 +77,12 @@ extension ModulesProfile {
 
     var canAuthorizePO: Bool { can("po.authorize") }
 
+    /// Marca pagadas las órdenes autorizadas (`PATCH purchase-orders/:id/status` con `PAID`).
+    var canMarkPaid: Bool { can("po.mark_paid") }
+
+    /// Ve anticipos y finanzas en la web (`/advances`), como `canSeeFinance` en Android.
+    var seesFinance: Bool { can("finance.view") || can("finance.edit") }
+
     /// El API además limita: gerencia de Arta solo autoriza Arta y Auditorio solo Explanada.
     func authorizesPO(entity: String?) -> Bool {
         guard canAuthorizePO else { return false }
@@ -431,11 +437,18 @@ struct PurchaseOrderRow: Codable, Equatable, Identifiable {
 
     /// DRAFT es una orden regresada a borrador: no espera autorización.
     var isPending: Bool { status == "PENDING_AUTH" }
+    /// Autorizada: le toca a quien marca pagado.
+    var isAwaitingPayment: Bool { status == "AUTHORIZED" }
     var isEventClosed: Bool { eventStatus == "CLOSED" || eventStatus == "CANCELLED" }
 }
 
 struct PurchaseOrderAnalytics: Codable {
     var orders: [PurchaseOrderRow]?
+}
+
+/// `GET purchase-orders/window`: días de cobro. Solo importa si hoy se pueden registrar pagos.
+struct PurchaseOrderWindow: Codable {
+    var canPayNow: Bool?
 }
 
 struct PurchaseOrderLine: Codable, Equatable, Identifiable {
@@ -481,6 +494,7 @@ struct PurchaseOrderDetail: Codable, Equatable, Identifiable {
     var adendumFileName: String?
 
     var isPending: Bool { status == "PENDING_AUTH" }
+    var isAwaitingPayment: Bool { status == "AUTHORIZED" }
     var isEventClosed: Bool { event?.status == "CLOSED" || event?.status == "CANCELLED" }
 }
 

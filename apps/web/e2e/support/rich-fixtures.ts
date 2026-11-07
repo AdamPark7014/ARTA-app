@@ -360,7 +360,9 @@ function eventsHandler(route: Route) {
     e.status === 'CANCELLED' ||
     (!!e.startsAt && new Date(e.endsAt || e.startsAt).getTime() < today);
   const list = scope === 'active' ? EVENTS.filter((e) => !past(e)) : scope === 'past' ? EVENTS.filter(past) : EVENTS;
-  return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(list) });
+  // `pendingAuthorizedChecklists` (07-11): el show de hoy trae un formato entregado sin autorizar.
+  const rows = list.map((e) => ({ ...e, pendingAuthorizedChecklists: e.id === EVT1_ID ? 1 : 0 }));
+  return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(rows) });
 }
 
 /* ── archivos de prueba (Excel y PDF reales, generados en memoria) ────────── */
@@ -3200,7 +3202,94 @@ const PRACTICANTES = [
   },
 ];
 
+/* ── barrido 07-11-2026: reportes del chat, avance de ventas y dispositivos ─ */
+
+const CHAT_REPORTS = [
+  {
+    id: 'rep-rich-1',
+    reason: 'OFENSIVO',
+    details: 'Comentario fuera de lugar sobre el proveedor de transporte, delante de todo el canal, después de que ya se había aclarado el tema.',
+    status: 'OPEN',
+    createdAt: daysAgo(0, 9, 5),
+    reporter: { id: BETO.id, name: BETO.fullName },
+    reportedUser: { id: OCTAVIO.id, name: OCTAVIO.fullName },
+    message: {
+      id: 'm-rich-g04b',
+      body: 'Ya quedó el transporte: dos camiones de 45 y una van para producción. Les paso el itinerario en la tarde.',
+      channelId: G,
+      channelName: 'general',
+    },
+  },
+  {
+    id: 'rep-rich-2',
+    reason: 'SPAM',
+    details: null,
+    status: 'OPEN',
+    createdAt: daysAgo(1, 18, 40),
+    reporter: { id: ANA.id, name: ANA.fullName },
+    reportedUser: { id: PAULINA.id, name: PAULINA.fullName },
+    message: { id: 'm-rich-g02', body: 'Promoción: boletos 2x1 solo hoy, manden mensaje directo.', channelId: G, channelName: 'general' },
+  },
+];
+
+const SELL_THROUGH = {
+  kpis: { setups: 3, capacityTotal: 7400, soldTotal: 4310, sellThroughPct: 58, potentialRevenue: 6120000, realizedRevenue: 3486500, holdRisk: 1 },
+  rows: [
+    {
+      id: 'tk-rich-1',
+      boletera: 'Arema',
+      holdUntil: new Date(NOW.getTime() + 3 * 86400000).toISOString(),
+      holdExpired: false,
+      holdDays: 3,
+      capacity: 3200,
+      sold: 2415,
+      sellThroughPct: 75,
+      potentialRevenue: 2880000,
+      realizedRevenue: 2173500,
+      event: { id: EVT1_ID, name: 'Gira Latinoamericana Sinfónica 2026 — Edición Especial con Orquesta Filarmónica', status: 'ACTIVE' },
+    },
+    {
+      id: 'tk-rich-2',
+      boletera: 'Boletia',
+      holdUntil: daysAgo(2, 12, 0),
+      holdExpired: true,
+      holdDays: -2,
+      capacity: 2600,
+      sold: 1180,
+      sellThroughPct: 45,
+      potentialRevenue: 2080000,
+      realizedRevenue: 944000,
+      event: { id: EVT2_ID, name: 'Ensayo general abierto con escuelas de música', status: 'ACTIVE' },
+    },
+    {
+      id: 'tk-rich-3',
+      boletera: 'Arema',
+      holdUntil: null,
+      holdExpired: false,
+      holdDays: null,
+      capacity: 1600,
+      sold: 715,
+      sellThroughPct: 45,
+      potentialRevenue: 1160000,
+      realizedRevenue: 369000,
+      event: { id: 'evt-rich-3', name: 'Festival de Bandas Emergentes del Auditorio', status: 'ACTIVE' },
+    },
+  ],
+};
+
+const PUSH_DEVICES = [
+  { id: 'dev-rich-1', platform: 'ios', deviceName: 'iPhone 15 Pro', appVersion: '1.0.2 (16)', lastSeenAt: daysAgo(0, 8, 12) },
+  { id: 'dev-rich-2', platform: 'android', deviceName: 'Samsung Galaxy S24', appVersion: '1.0.4 (7)', lastSeenAt: daysAgo(3, 19, 30) },
+  { id: 'dev-rich-3', platform: 'web', deviceName: null, appVersion: null, lastSeenAt: daysAgo(12, 10, 0) },
+];
+
 export const RICH_STUBS: ApiStubs = {
+  // Barrido 07-11-2026: funciones del backend que no tenían botón
+  '/chat/reports': CHAT_REPORTS,
+  '/chat/blocks': [],
+  '/analytics/ticketing': SELL_THROUGH,
+  '/devices': PUSH_DEVICES,
+
   '/auth/me': { user: RICH_USER },
 
   // Inicio, eventos, calendario
@@ -3415,4 +3504,19 @@ export const RICH_ROUTES: Array<{ name: string; path: string; note?: string }> =
   { name: 'ticketing', path: '/ticketing', note: 'Eventos actuales con su boletera (3 configuradas).' },
   { name: 'security', path: '/security', note: '4 sesiones, una sin dispositivo ni IP.' },
   { name: 'organizations', path: '/organizations', note: 'Organización con plan, miembros, invitaciones y 3 organizaciones.' },
+  // Barrido 07-11-2026: destinos exactos y funciones que no tenían botón
+  { name: 'events-revision', path: '/events?scope=active&ver=revision', note: 'Solo los eventos con formatos entregados sin autorizar.' },
+  { name: 'tasks-vencidas', path: '/tasks?filtro=vencidas&vista=equipo', note: 'Desde el inicio: equipo + vencidas.' },
+  { name: 'tasks-nueva', path: '/tasks?nueva=1', note: 'Alta abierta con el cursor en el título.' },
+  { name: 'po-pay', path: '/purchase-orders?seccion=pay', note: 'Torre abierta en «Por pagar».' },
+  { name: 'po-unauthorized', path: '/purchase-orders?estado=unauthorized', note: 'Desde Finanzas: esperando autorización.' },
+  { name: 'event-revision', path: `${E1}?tab=checklists&ver=revision`, note: 'Formatos «Por autorizar».' },
+  { name: 'event-hito', path: `${E1}?tab=ticketing&hito=75`, note: 'Hito de venta resaltado.' },
+  { name: 'chat-reportes', path: '/chat?reportes=1', note: 'Cola de reportes de dirección: 2 abiertos.' },
+  { name: 'risk', path: '/risk', note: 'Riesgo por módulo con KPI que filtran.' },
+  { name: 'hospitality-critico', path: '/hospitality?riesgo=critical', note: 'Módulo filtrado desde Riesgo.' },
+  { name: 'finance', path: '/finance', note: 'Corridas con el filtro «Neto negativo».' },
+  { name: 'audit', path: '/audit', note: 'Movimientos con liga a cada recurso.' },
+  { name: 'webhooks', path: '/webhooks', note: 'Con «Correr escaneo ahora».' },
+  { name: 'calendar-dia', path: `/calendar?date=${NOW.toISOString().slice(0, 10)}`, note: 'Día marcado y «+N más».' },
 ];

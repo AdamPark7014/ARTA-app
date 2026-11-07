@@ -149,6 +149,8 @@ test.describe('App shell', () => {
         { id: 'evt-b', name: 'Noche de Bandas', venue: 'Teatro', startsAt: '2030-02-10T02:00:00.000Z', status: 'ACTIVE' },
       ],
       '/users/directory': [{ id: 'usr-beto', fullName: 'Beto Sandoval', title: 'Logística' }],
+      // El chat abre el directo con `POST /chat/dm` y se queda en `?channel=<id>`.
+      '/chat/dm': { id: 'dm-beto', kind: 'DIRECT', name: 'Beto Sandoval', isGroupDm: false },
     });
     await page.goto('/dashboard');
 
@@ -166,6 +168,8 @@ test.describe('App shell', () => {
 
     await search.fill('beto');
     await results.getByRole('option', { name: /Beto Sandoval/ }).click();
-    await expect(page).toHaveURL(/\/chat\?with=usr-beto/);
+    // El chat solo abre un directo con `with=dm:<id>`; con el id pelón caía en «Elige una conversación».
+    // Al llegar, pide el directo y se queda en su conversación.
+    await expect(page).toHaveURL(/\/chat\?channel=dm-beto/);
   });
 });

@@ -61,6 +61,8 @@ export const ICONS = {
   link: 'M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1',
   refresh: 'M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7',
   compose: 'M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5Z',
+  flag: 'M5 21V4m0 0h12l-2 4 2 4H5',
+  ban: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18ZM5.6 5.6l12.8 12.8',
 };
 
 /** Una sola reproducción a la vez, como en WhatsApp. */

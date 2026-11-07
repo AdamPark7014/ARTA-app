@@ -26,6 +26,8 @@ import { ExpandBox } from '@/components/ui/ExpandBox';
 import { RevisionHistory } from '@/components/ui/RevisionHistory';
 import { useSaveHotkey } from '@/lib/use-save-hotkey';
 import { useDirtyGuard } from '@/lib/use-dirty-guard';
+import { useUser } from '@/lib/user-context';
+import { userHasPermission } from '@/lib/access-matrix';
 import { translateFormula, type SheetOp, type SheetOpKind } from '@/lib/sheet-ops';
 import {
   applyOpToGrid,
@@ -245,6 +247,10 @@ export function SheetEditor({
   const [revKey, setRevKey] = useState(0);
   const [error, setError] = useState('');
   const [msg, setMsg] = useState('');
+  const { user } = useUser();
+  // El historial en PDF (`/audit/resource/FILE/:id/pdf`) es de dirección, como en el API.
+  const canHistoryPdf = !!user && userHasPermission(user.roleKey, user.permissions, ['users.manage', 'everything']);
+  const [historyPdf, setHistoryPdf] = useState(false);
   /** Celda activa (la que tiene el foco). */
   const [sel, setSel] = useState<Pos | null>(null);
   /** Otra esquina del rango seleccionado (igual a `sel` si es una sola celda). */
@@ -1188,6 +1194,23 @@ export function SheetEditor({
       setError(e instanceof Error ? e.message : 'No se pudo generar el PDF');
     } finally {
       setExporting(false);
+    }
+  }
+
+  /** PDF con marca del historial de revisiones del archivo; la pestaña se abre antes del `await` (Safari). */
+  async function exportHistoryPdf() {
+    if (!fileId) return;
+    setHistoryPdf(true);
+    setError('');
+    try {
+      await openGeneratedTab(
+        async () => (await api<{ url: string }>(`/audit/resource/FILE/${fileId}/pdf`)).url,
+        'Generando el historial en PDF…',
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se pudo generar el historial en PDF');
+    } finally {
+      setHistoryPdf(false);
     }
   }
 
@@ -2153,6 +2176,11 @@ export function SheetEditor({
                 <h3 className="sheet-history__title">Historial de ediciones</h3>
                 <p className="sheet-history__sub muted kpi-sub">Quién guardó o generó PDF, y cuándo.</p>
               </div>
+              {canHistoryPdf ? (
+                <button className="btn ghost btn-sm" type="button" disabled={historyPdf} onClick={() => void exportHistoryPdf()}>
+                  {historyPdf ? 'Generando…' : 'Historial en PDF'}
+                </button>
+              ) : null}
               <button className="btn ghost btn-sm" type="button" onClick={() => setShowHistory(false)}>
                 Cerrar
               </button>

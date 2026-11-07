@@ -178,8 +178,9 @@ export class AutomationsService implements OnModuleInit {
           organizationId,
           type: 'checklist.signature_backlog',
           title: `${pendingAuth} formatos esperan firma de autorización`,
-          body: 'Ya se entregaron y nadie los ha autorizado. Fírmalos como «Autorizado» en Formatos.',
-          linkUrl: '/checklists',
+          body: 'Ya se entregaron y nadie los ha autorizado. Fírmalos como «Autorizado» desde su evento.',
+          // Los eventos activos con formatos entregados sin autorizar, no el catálogo de plantillas.
+          linkUrl: '/events?scope=active&ver=revision',
         });
       }
     }

@@ -86,11 +86,25 @@ El API manda siempre `url` = ruta interna del panel (`linkUrl` de `Notifications
 | `/chat?channel=<id>&msg=<id>` | conversación nativa |
 | `/chat?channel=<id>&msg=<id>&thread=<raíz>` (o push con `parent_id`) | conversación en la raíz y encima el hilo |
 | `/tasks?task=<id>` · `/tasks/<id>` · `/events/<eid>?tab=tasks&task=<id>` | tarea nativa |
-| `/events/<id>` (con o sin `?tab=`) | evento nativo (si `tab` no tiene versión nativa, vista web) |
-| `/purchase-orders?po=<id>` con acción pendiente | aprobaciones nativas con el detalle de esa OC abierto |
-| `/advances?advance=<id>` con acción pendiente | aprobaciones nativas con ese anticipo a la vista |
+| `/tasks?filtro=vencidas\|abiertas\|todas\|bloqueadas\|hechas&vista=mias\|pedidas\|equipo` · `/tasks/new` | Tareas nativas con ese filtro y vista (misma clave que la web); `/tasks/new` abre el alta, no una tarea «new» |
+| `/events` · `/events?scope=active\|past` | lista nativa de eventos (iOS `EventsView` desde el 07-11; antes iba a la web) |
+| `/events/<id>?tab=<pestaña>` | evento nativo **en esa pestaña** si tiene versión nativa (`overview`, `tasks`, `adendum`, `testigos`; Android también `team`); si no, vista web con la URL completa (`?tab=ocs&po=`, `?tab=files&doc=`…) |
+| `/purchase-orders?po=<id>` con acción pendiente (`po.requested`, `po.aging`, `po.updated`…) | aprobaciones nativas con esa OC abierta; si la OC ya no está en mi lista (decidida, pagada, de otra unidad), la vista web de esa OC |
+| `/advances?advance=<id>` con acción pendiente | aprobaciones nativas con ese anticipo a la vista; si ya no está, la vista web de ese anticipo |
 | `/calendar?date=<día>` | vista web del calendario en ese día |
 | cualquier otra | vista web en esa ruta |
+
+Dentro de la app (07-11-2026), cada toque va a lo exacto, no a una lista: Inicio «Esperan tu visto bueno» abre esa OC
+o ese anticipo (`ModuleNav.openApproval(poId, advanceId)` / `.approvals(focus:web:)`); «En cartelera» abre ese show
+(`cartelera?show=` / `.show(PublicShow)`); «Vencen hoy» abre Tareas con «Vencidas»; «N más» son botones; el canal de un
+evento tiene «Abrir evento»; una respuesta anclada abre su hilo; la fila de una persona del equipo abre su directo
+(Android); el anticipo abre su evento; «Abrir en el navegador» entra con la sesión firmada (`auth/handoff`) en las dos
+apps; Avisos › Enviados sigue la liga tal cual (sin `type`, para que mi propia OC pedida no abra Aprobaciones); un push
+sin liga abre Avisos. iOS tiene desde el 07-11 «Órdenes por pagar» y «Marcar pagada» (`purchase-orders/window`), como
+Android. Reglas que salieron de la revisión del 07-11: una tarea con hora se ubica por su **día local** (19:00 CDMX es
+hoy aunque en UTC ya sea mañana) en las dos apps; una liga con `vista=equipo` en arranque frío espera a conocer los
+permisos antes de aplicarse; cuando Aprobaciones no encuentra la OC/anticipo, la web la **reemplaza** (no se apila), y
+si la lista de anticipos falló por red no se asume «ya no está».
 
 Desde el 07-11-2026 cada aviso lleva al punto exacto: la OC (`?po=` también dentro del evento, `?tab=ocs&po=`),
 el documento (`?tab=files&doc=`), el archivo (`&file=`), el formato (`&checklist=`), los formatos pendientes del

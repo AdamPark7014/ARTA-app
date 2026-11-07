@@ -1,0 +1,40 @@
+/* ── Barrido de destinos (07-11-2026): lo que se toca abre lo exacto ─────────
+   Tramos de la barra de riesgo que filtran la tabla (ModuleChecklistIndex) y el
+   «+N más» del calendario, que pasó de texto a botón (MonthCalendar). Las reglas
+   base de `.mcal__more` y `.dist-bar__seg` viven en _acabado y globals. */
+
+/* «+N más»: botón sin caja, con el mismo texto y color de cuando era un span. */
+.mcal__more {
+  appearance: none;
+  background: none;
+  border: 0;
+  padding: 0 0 0 4px;
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
+}
+
+.mcal__more:focus-visible {
+  outline: 2px solid var(--text);
+  outline-offset: 1px;
+  border-radius: 3px;
+}
+
+/* Tramo de la barra de riesgo que se puede tocar para filtrar. */
+.dist-bar__seg--btn {
+  appearance: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+
+/* La barra recorta lo que sobresale: el foco va por dentro del tramo. */
+.dist-bar__seg--btn:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--text);
+}
+
+/* Con un filtro puesto, los demás tramos se apagan. */
+.dist-bar__seg--dim {
+  opacity: 0.35;
+}

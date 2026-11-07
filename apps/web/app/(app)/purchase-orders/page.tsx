@@ -1,7 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { Fragment, useEffect, useMemo, useState } from 'react';
+import { Fragment, Suspense, useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { AppShell } from '@/components/app-shell/AppShell';
 import { PageHeader } from '@/components/ui/PageChrome';
 import { LoadingBlock } from '@/components/ui/LoadingBlock';
@@ -69,13 +70,39 @@ const EMPTY_SECTION: Record<PoSection, string> = {
 
 const plural = (n: number) => `${n} ${n === 1 ? 'orden' : 'órdenes'}`;
 
+/** `?seccion=pay`: la liga del inicio abre la torre en una sección. */
+const PO_SECTIONS: readonly PoSection[] = ['auth', 'pay', 'paid', 'all'];
+function isPoSection(v: unknown): v is PoSection {
+  return typeof v === 'string' && (PO_SECTIONS as readonly string[]).includes(v);
+}
+
+/** `useSearchParams` (las ligas `?estado=`, `?seccion=` y `?po=`) pide Suspense en el build. */
+export default function PurchaseOrdersPage() {
+  return (
+    <Suspense
+      fallback={
+        <AppShell title="Órdenes de compra">
+          <div className="sx-stack page-workspace oc-page">
+            <LoadingBlock rows={5} label="Cargando órdenes…" />
+          </div>
+        </AppShell>
+      }
+    >
+      <PurchaseOrdersPageInner />
+    </Suspense>
+  );
+}
+
 /**
  * Todas las órdenes de la entidad: qué falta autorizar, qué falta pagar y qué
  * ya salió. Revisión 11-09-2026 — sin gráficas ni seis KPIs: tres cifras, las
  * secciones y la tabla.
  */
-export default function PurchaseOrdersPage() {
+function PurchaseOrdersPageInner() {
   const { entity, user } = useUser();
+  const searchParams = useSearchParams();
+  /** Una cadena y no el objeto: cambia solo cuando cambia la URL, y con eso se vuelve a leer. */
+  const paramsKey = searchParams.toString();
   const canAuthorize = userHasPermission(user?.roleKey || '', user?.permissions || [], [
     'po.authorize',
     'everything',
@@ -125,19 +152,25 @@ export default function PurchaseOrdersPage() {
     setRows(null);
     setSection(null);
     setOpenId(null);
-    // Sin `useSearchParams` (pide Suspense en el build): la URL se lee una vez al entrar.
-    const params = new URLSearchParams(window.location.search);
+    load().catch(console.error);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entity]);
+
+  // La URL se vuelve a leer cada vez que cambia (una segunda liga a esta misma página) y al
+  // cambiar de entidad, porque arriba se acaba de limpiar la sección.
+  useEffect(() => {
+    const params = new URLSearchParams(paramsKey);
     const estado = params.get('estado');
+    const seccion = params.get('seccion');
     if (isPoStateKey(estado)) {
       setStateFilter(estado);
       setSection(poSectionOfState(estado));
     } else {
       setStateFilter(null);
+      if (isPoSection(seccion)) setSection(seccion);
     }
     setLinkedPo(params.get('po'));
-    load().catch(console.error);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [entity]);
+  }, [paramsKey, entity]);
 
   useEffect(() => {
     if (!linkedPo || !rows) return;
@@ -286,7 +319,7 @@ export default function PurchaseOrdersPage() {
           description={win?.config.enabled ? <PayDaysNote state={win} /> : undefined}
         >
           {win?.canEdit ? (
-            <Link className="btn-quiet" href="/settings">
+            <Link className="btn-quiet" href="/settings#dias-de-cobro">
               Configurar días
             </Link>
           ) : null}
@@ -390,7 +423,7 @@ export default function PurchaseOrdersPage() {
                       <Fragment key={row.id}>
                         <tr className={`oc-row ${open ? 'is-open' : ''}`} onClick={() => toggle(row)}>
                           <td className="card-full" onClick={(e) => e.stopPropagation()}>
-                            <Link className="oc-event" href={`/events/${row.eventId}?tab=ocs`}>
+                            <Link className="oc-event" href={`/events/${row.eventId}?tab=ocs&po=${row.id}`}>
                               {row.eventName}
                             </Link>
                           </td>
@@ -443,7 +476,7 @@ export default function PurchaseOrdersPage() {
                                   >
                                     PDF
                                   </button>
-                                  <Link className="btn-quiet" href={`/events/${row.eventId}?tab=ocs`}>
+                                  <Link className="btn-quiet" href={`/events/${row.eventId}?tab=ocs&po=${row.id}`}>
                                     Abrir evento
                                   </Link>
                                 </PoDetail>

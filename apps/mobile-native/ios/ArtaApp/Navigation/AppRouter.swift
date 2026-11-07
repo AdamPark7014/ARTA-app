@@ -12,6 +12,8 @@ enum PanelTarget: Equatable {
     case screen(AppRoute)
     case tab(AppTab)
     case sentNotices
+    /// `/tasks?filtro=vencidas` (o «Vencen hoy» en Inicio): la pestaña Tareas con ese filtro puesto.
+    case tasks(filter: TasksView.Filter)
 }
 
 /// Traduce las rutas internas del panel (la `url` de cada aviso, los enlaces de
@@ -19,7 +21,7 @@ enum PanelTarget: Equatable {
 enum PanelLink {
     /// Pestañas del hub del evento con versión nativa; las demás se quedan en la web.
     /// `WebSession.interceptScript` repite estas reglas en JavaScript.
-    static let nativeEventTabs: Set<String> = ["overview", "tasks"]
+    static let nativeEventTabs: Set<String> = ["overview", "tasks", "adendum", "testigos"]
 
     /// Avisos que piden una decisión (mismo criterio que `notification-push-meta.ts`).
     /// `po.to_pay` y `po.to_transfer` no van aquí a propósito: su destino es la orden (`/purchase-orders?po=<id>`, vista
@@ -50,7 +52,8 @@ enum PanelLink {
     static func target(path raw: String, type: String? = nil) -> PanelTarget {
         let path = normalize(raw)
         if let native = nativeTarget(path: path) { return native }
-        if isPendingApproval(path: path, type: type) { return .screen(.approvals(focus: approvalFocus(path))) }
+        // La ruta va también como respaldo: si la OC o el anticipo ya no están en Aprobaciones, se abre en la web.
+        if isPendingApproval(path: path, type: type) { return .screen(.approvals(focus: approvalFocus(path), web: path)) }
         return .screen(.web(path: path, title: nil))
     }
 
@@ -75,12 +78,20 @@ enum PanelLink {
             if parts.count == 2 { return parts[1] == "new" ? nil : .screen(.task(parts[1])) }
             guard parts.count == 1 else { return nil }
             if let task = value("task") { return .screen(.task(task)) }
-            return .tab(.tareas)
+            // `?filtro=` del tablero web; otro valor, la pestaña tal cual.
+            switch value("filtro") ?? "" {
+            case "vencidas": return .tasks(filter: .overdue)
+            case "abiertas": return .tasks(filter: .open)
+            default: return .tab(.tareas)
+            }
         case "events":
+            // `/events` y `/events?scope=active|past`: la lista nativa.
+            if parts.count == 1 { return .screen(.events(scope: value("scope"))) }
             guard parts.count == 2, parts[1] != "new" else { return nil }
             if let task = value("task") { return .screen(.task(task)) }
-            if let tab = value("tab"), !nativeEventTabs.contains(tab) { return nil }
-            return .screen(.event(parts[1]))
+            let tab = value("tab")
+            if let tab, !nativeEventTabs.contains(tab) { return nil }
+            return .screen(.event(parts[1], tab: tab))
         case "dashboard":
             return parts.count == 1 ? .tab(.inicio) : nil
         case "notifications":
@@ -179,6 +190,9 @@ final class AppRouter: ObservableObject {
     @Published var masPath: [AppRoute] = []
     /// Pidieron abrir «Enviados». Lo recoge Avisos, que puede no existir todavía si llegó un push.
     @Published var wantsSentNotices = false
+    /// Filtro que Tareas debe poner al aparecer («Vencen hoy» en Inicio, `/tasks?filtro=vencidas`).
+    /// Lo consume `TasksView` y lo deja en `nil`.
+    @Published var pendingTasksFilter: TasksView.Filter?
 
     private init() {}
 
@@ -215,7 +229,16 @@ final class AppRouter: ObservableObject {
             avisosPath = []
             tab = .avisos
             wantsSentNotices = true
+        case .tasks(let filter):
+            openTasks(filter: filter)
         }
+    }
+
+    /// La pestaña Tareas en su raíz con un filtro puesto (Vencidas, Pendientes…).
+    func openTasks(filter: TasksView.Filter) {
+        pendingTasksFilter = filter
+        tareasPath = []
+        tab = .tareas
     }
 
     /// Ruta interna del panel (`url` de un aviso o un enlace). Contrato §4.
@@ -247,6 +270,7 @@ final class AppRouter: ObservableObject {
     func reset() {
         tab = .inicio
         wantsSentNotices = false
+        pendingTasksFilter = nil
         resetStacks()
     }
 
@@ -263,8 +287,8 @@ final class AppRouter: ObservableObject {
     static func home(for route: AppRoute) -> Tab {
         switch route {
         case .task: return .tareas
-        case .event, .approvals: return .inicio
-        case .web, .blockedUsers, .notificationPreferences, .cartelera: return .mas
+        case .event, .approvals, .events: return .inicio
+        case .web, .blockedUsers, .notificationPreferences, .cartelera, .show: return .mas
         case .chat: return .chats
         }
     }

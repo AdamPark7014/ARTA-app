@@ -212,6 +212,8 @@ export default function UsersPage() {
   const [q, setQ] = useState('');
   const [loading, setLoading] = useState(true);
   const [showInactive, setShowInactive] = useState(true);
+  /** Filtro rápido desde los KPI: quien no ha entrado en 30 días o tiene el acceso bloqueado. */
+  const [quick, setQuick] = useState<'none' | 'inactive30' | 'locked'>('none');
 
   async function load() {
     if (!canManage) {
@@ -282,6 +284,8 @@ export default function UsersPage() {
   const filtered = useMemo(() => {
     let list = users;
     if (!showInactive) list = list.filter((u) => u.active);
+    if (quick === 'inactive30') list = list.filter((u) => u.inactive30);
+    if (quick === 'locked') list = list.filter((u) => u.locked);
     if (riskFilter !== 'all') list = list.filter((u) => u.risk === riskFilter);
     if (roleFilter !== 'all') list = list.filter((u) => u.roleKey === roleFilter);
     if (q.trim()) {
@@ -294,7 +298,7 @@ export default function UsersPage() {
       );
     }
     return list;
-  }, [users, riskFilter, roleFilter, q, showInactive]);
+  }, [users, riskFilter, roleFilter, q, showInactive, quick]);
 
   function applyRole(roleKey: string) {
     const meta = roles.find((r) => r.key === roleKey);
@@ -630,27 +634,34 @@ export default function UsersPage() {
               <div className="label">Entraron esta semana</div>
               <div className="value">{k.loggedIn7d}</div>
             </div>
-            <div className={`kpi ${k.inactive30d ? 'kpi--danger' : ''}`}>
+            {/* Los tres KPI de alerta filtran la tabla; se tocan otra vez para quitar el filtro. */}
+            <button
+              type="button"
+              className={`kpi kpi--action ${k.inactive30d ? 'kpi--danger' : ''} ${quick === 'inactive30' ? 'kpi--on' : ''}`}
+              aria-pressed={quick === 'inactive30'}
+              onClick={() => setQuick((cur) => (cur === 'inactive30' ? 'none' : 'inactive30'))}
+            >
               <div className="label">Sin entrar en 30 días</div>
               <div className="value">{k.inactive30d}</div>
-            </div>
-            <div className={`kpi ${k.lockedNow ? 'kpi--danger' : ''}`}>
+            </button>
+            <button
+              type="button"
+              className={`kpi kpi--action ${k.lockedNow ? 'kpi--danger' : ''} ${quick === 'locked' ? 'kpi--on' : ''}`}
+              aria-pressed={quick === 'locked'}
+              onClick={() => setQuick((cur) => (cur === 'locked' ? 'none' : 'locked'))}
+            >
               <div className="label">Bloqueados</div>
               <div className="value">{k.lockedNow}</div>
-            </div>
-            <div
-              className={`kpi ${k.highRisk ? 'kpi--danger' : ''}`}
-              role="button"
-              tabIndex={0}
-              style={{ cursor: 'pointer' }}
-              onClick={() => setRiskFilter('high')}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') setRiskFilter('high');
-              }}
+            </button>
+            <button
+              type="button"
+              className={`kpi kpi--action ${k.highRisk ? 'kpi--danger' : ''} ${riskFilter === 'high' ? 'kpi--on' : ''}`}
+              aria-pressed={riskFilter === 'high'}
+              onClick={() => setRiskFilter((cur) => (cur === 'high' ? 'all' : 'high'))}
             >
               <div className="label">Alto riesgo</div>
               <div className="value">{k.highRisk}</div>
-            </div>
+            </button>
           </div>
         ) : null}
 
@@ -929,6 +940,11 @@ Contraseña: ${creds.password}`}</pre>
                   onChange={setShowInactive}
                   label="Mostrar inactivos"
                 />
+                {quick !== 'none' ? (
+                  <button className="btn ghost btn-sm" type="button" onClick={() => setQuick('none')}>
+                    {quick === 'inactive30' ? 'Quitar «Sin entrar en 30 días»' : 'Quitar «Bloqueados»'}
+                  </button>
+                ) : null}
               </FilterBar>
               {!filtered.length ? (
                 <EmptyState

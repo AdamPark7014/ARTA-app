@@ -23,6 +23,8 @@ type EventRow = {
   endsAt?: string | null;
   schedule?: string | null;
   updatedAt: string;
+  /** Formatos entregados que esperan autorización (un API viejo no lo manda: cuenta como 0). */
+  pendingAuthorizedChecklists?: number;
 };
 
 type HealthItem = { id: string; avgProgress: number; risk: 'critical' | 'watch' | 'healthy' };
@@ -96,6 +98,8 @@ function EventsPageInner() {
   const searchParams = useSearchParams();
   const scopeParam = searchParams.get('scope');
   const scope: Scope = scopeParam === 'past' || scopeParam === 'all' ? scopeParam : 'active';
+  /** `?ver=revision` (la fila «Formatos entregados» del inicio): solo los eventos con formatos por autorizar. */
+  const revision = searchParams.get('ver') === 'revision';
   const [events, setEvents] = useState<EventRow[]>([]);
   const [health, setHealth] = useState<Map<string, HealthItem>>(new Map());
   const [loading, setLoading] = useState(true);
@@ -126,6 +130,7 @@ function EventsPageInner() {
     const n = q.trim().toLowerCase();
     return events
       .filter((e) => scope === 'all' || isPastEvent(e, today) === (scope === 'past'))
+      .filter((e) => !revision || (e.pendingAuthorizedChecklists ?? 0) > 0)
       .filter(
         (e) =>
           !n ||
@@ -138,19 +143,29 @@ function EventsPageInner() {
         const tb = b.startsAt ? new Date(b.startsAt).getTime() : Number.MAX_SAFE_INTEGER;
         return scope === 'past' ? tb - ta : ta - tb;
       });
-  }, [events, scope, q]);
+  }, [events, scope, q, revision]);
+
+  const pageTitle = revision ? 'Formatos por autorizar' : SCOPE_TITLE[scope];
 
   return (
-    <AppShell title={SCOPE_TITLE[scope]}>
+    <AppShell title={pageTitle}>
       <div className="sx-stack page-workspace">
         <PageHeader
-          title={SCOPE_TITLE[scope]}
+          eyebrow={revision ? SCOPE_TITLE[scope] : undefined}
+          title={pageTitle}
           description={loading ? undefined : `${list.length} ${list.length === 1 ? 'evento' : 'eventos'} · ${entity === 'ARTA' ? 'Arta' : 'Auditorio'}`}
           below={
             <Seg
               label="Qué eventos ver"
               value={scope}
-              onChange={(next) => router.push(next === 'active' ? '/events' : `/events?scope=${next}`)}
+              onChange={(next) => {
+                // Cambiar de alcance conserva la revisión de formatos si se venía en ella.
+                const params = new URLSearchParams();
+                if (next !== 'active') params.set('scope', next);
+                if (revision) params.set('ver', 'revision');
+                const qs = params.toString();
+                router.push(qs ? `/events?${qs}` : '/events');
+              }}
               options={[
                 { key: 'active', label: 'Actuales' },
                 { key: 'past', label: 'Pasados' },
@@ -169,6 +184,14 @@ function EventsPageInner() {
 
         {loading ? (
           <LoadingBlock rows={4} label="Cargando eventos…" />
+        ) : !list.length && revision && !q ? (
+          <div className="surface">
+            <EmptyLite icon="✓" title="Nada espera autorización" text="Los formatos entregados ya están autorizados.">
+              <Link className="btn ghost btn-sm" href="/events?scope=active">
+                Ver eventos actuales
+              </Link>
+            </EmptyLite>
+          </div>
         ) : !list.length ? (
           <div className="surface">
             <EmptyLite
@@ -189,8 +212,12 @@ function EventsPageInner() {
               const d = e.startsAt ? new Date(e.startsAt) : null;
               const status = STATUS[e.status];
               const place = [e.venue, e.city].filter(Boolean).join(', ');
+              const pendingAuth = e.pendingAuthorizedChecklists ?? 0;
+              // En revisión la tarjeta entera abre los formatos por autorizar de ese evento: la tarjeta ya
+              // es una liga y no cabe otra adentro, así que el chip es la seña y la tarjeta el destino.
+              const href = revision ? `/events/${e.id}?tab=checklists&ver=revision` : `/events/${e.id}`;
               return (
-                <Link key={e.id} className="ev-card" href={`/events/${e.id}`}>
+                <Link key={e.id} className="ev-card" href={href}>
                   <span className="date-chip" aria-hidden>
                     {d ? (
                       <>
@@ -217,7 +244,9 @@ function EventsPageInner() {
                         </span>
                       ) : null}
                       <span className="ev-card__flag">
-                        {status ? (
+                        {revision && pendingAuth > 0 ? (
+                          <Pill tone="review">{pendingAuth} por autorizar</Pill>
+                        ) : status ? (
                           <Pill tone={status.tone}>{status.label}</Pill>
                         ) : h?.risk === 'critical' ? (
                           <Pill tone="danger">Urgente</Pill>

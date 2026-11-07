@@ -209,6 +209,20 @@ describe('FinanceController · anticipos', () => {
     expect(await controller.pendingAdvances({ user: user('u-gerente') } as never)).toEqual([]);
   });
 
+  it('un anticipo por id se lee con su evento aunque ya esté pagado; fuera de la entidad no se ve', async () => {
+    proofs.push(advance({ id: 'a-pagado', advanceStatus: 'PAID' }));
+    const row = await controller.advanceById({ user: user('u-pide') } as never, 'a-pagado');
+    expect(row.id).toBe('a-pagado');
+    expect(row.advanceStatus).toBe('PAID');
+    expect(row.event).toMatchObject({ id: event.id, name: event.name, entity: event.entity });
+    await expect(controller.advanceById({ user: user('u-pide') } as never, 'no-existe')).rejects.toThrow('Anticipo no encontrado');
+    // Quien ni lo pidió ni aprueba, paga o ve finanzas no lo lee (el id viaja en avisos y en el chat).
+    const catering = { id: 'u-cat', roleKey: 'catering', entities: ['ARTA'], permissions: [] as string[], fullName: 'Cati', organizationId: ORG };
+    await expect(controller.advanceById({ user: catering } as never, 'a-pagado')).rejects.toThrow('no está a tu alcance');
+    // Quien aprueba o paga en la entidad sí.
+    expect((await controller.advanceById({ user: user('u-gob') } as never, 'a-pagado')).id).toBe('a-pagado');
+  });
+
   it('canal y prioridad de cada aviso', () => {
     expect(pushMetaFor('advance.requested')).toEqual({ channel: 'approvals', priority: 'high' });
     expect(pushMetaFor('advance.to_pay')).toEqual({ channel: 'finance', priority: 'high' });

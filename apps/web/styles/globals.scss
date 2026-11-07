@@ -1449,7 +1449,9 @@ select.field option {
   background: var(--hover);
 }
 
-.table a {
+/* Los botones dentro de una tabla (p. ej. el estado vacío de Corridas) conservan su propio color:
+   esta regla los dejaba negros sobre negro. */
+.table a:not(.btn):not(.btn-quiet):not(.icon-btn) {
   color: var(--text);
   font-weight: 500;
   text-decoration: none;
@@ -1457,7 +1459,7 @@ select.field option {
   transition: color 0.12s ease, border-color 0.12s ease;
 }
 
-.table a:hover {
+.table a:not(.btn):not(.btn-quiet):not(.icon-btn):hover {
   color: var(--text);
   border-bottom-color: currentColor;
 }
@@ -6583,3 +6585,8 @@ textarea.pdffield__input--text {
 /* Barrido premium (01-11-2026): diálogos, avisos y movimiento. */
 @import "./premium";
 @import "./noche";
+@import "./chat-extra";
+/* Barrido 07-11-2026: clases que antes eran estilos en línea (inicio, módulos, funciones nuevas). */
+@import "./barrido-inicio";
+@import "./barrido-modulos";
+@import "./barrido-funciones";

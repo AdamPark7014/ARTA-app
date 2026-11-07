@@ -21,9 +21,22 @@ type Session = {
 
 type Setup = { secret: string; qrDataUrl: string; otpauth: string };
 
+/** Fila de `GET /devices`: teléfonos y navegadores dados de alta para avisos push. */
+type PushDevice = {
+  id: string;
+  platform: 'android' | 'ios' | 'web' | string;
+  deviceName?: string | null;
+  appVersion?: string | null;
+  lastSeenAt: string;
+};
+
+const PLATFORM_LABEL: Record<string, string> = { ios: 'iOS', android: 'Android', web: 'Web' };
+const platformLabel = (p: string) => PLATFORM_LABEL[p] || p;
+
 export default function SecurityPage() {
   const { user, refresh } = useUser();
   const [sessions, setSessions] = useState<Session[]>([]);
+  const [devices, setDevices] = useState<PushDevice[] | null>(null);
   const [setup, setSetup] = useState<Setup | null>(null);
   const [code, setCode] = useState('');
   const [password, setPassword] = useState('');
@@ -31,8 +44,13 @@ export default function SecurityPage() {
   const [loading, setLoading] = useState(true);
 
   async function load() {
-    const s = await api<Session[]>('/auth/sessions');
+    // Los dispositivos de avisos se leen aparte: si fallan, las sesiones siguen saliendo.
+    const [s, d] = await Promise.all([
+      api<Session[]>('/auth/sessions'),
+      api<PushDevice[]>('/devices').catch(() => [] as PushDevice[]),
+    ]);
     setSessions(s);
+    setDevices(Array.isArray(d) ? d : []);
   }
 
   useEffect(() => {
@@ -224,6 +242,40 @@ export default function SecurityPage() {
                   >
                     Revocar
                   </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </SettingsSection>
+
+        <SettingsSection
+          title="Dispositivos con notificaciones"
+          description="Teléfonos y navegadores donde llegan tus avisos. Se dan de alta al abrir la app y se quitan al cerrar sesión en ellos."
+        >
+          {loading || devices === null ? (
+            <LoadingBlock rows={2} label="Cargando dispositivos…" />
+          ) : !devices.length ? (
+            <EmptyState
+              title="Sin dispositivos para avisos"
+              description="Abre la app en tu teléfono o activa los avisos del navegador para recibirlos."
+            />
+          ) : (
+            <ul className="session-list" aria-label="Dispositivos con notificaciones">
+              {devices.map((d) => (
+                <li key={d.id} className="session-row">
+                  <span className="session-row__icon" aria-hidden>
+                    <DeviceIcon label={d.platform === 'web' ? 'navegador' : 'móvil'} />
+                  </span>
+                  <span className="session-row__main">
+                    <span className="session-row__device">{d.deviceName || `Dispositivo ${platformLabel(d.platform)}`}</span>
+                    <span className="session-row__meta">
+                      <span>{platformLabel(d.platform)}</span>
+                      {d.appVersion ? <span>v{d.appVersion}</span> : null}
+                      <time dateTime={d.lastSeenAt} title={fullDateTime(d.lastSeenAt)}>
+                        Visto {shortDateTime(d.lastSeenAt)}
+                      </time>
+                    </span>
+                  </span>
                 </li>
               ))}
             </ul>

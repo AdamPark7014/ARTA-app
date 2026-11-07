@@ -111,7 +111,7 @@ function AdvancesPageInner() {
   const [tab, setTab] = useState<Tab | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
-  const [notice, setNotice] = useState<{ text: string; tone: 'ok' | 'error' } | null>(null);
+  const [notice, setNotice] = useState<{ text: string; tone: 'ok' | 'error'; hint?: { href: string; label: string } } | null>(null);
   /** Lo que se acaba de resolver aquí: la tarjeta abierta sigue mostrándolo aunque salga de «Por resolver». */
   const [patched, setPatched] = useState<Record<string, Advance>>({});
   const handledLink = useRef<string | null>(null);
@@ -159,7 +159,8 @@ function AdvancesPageInner() {
   }, [tab, eventId]);
 
   useEffect(() => {
-    if (!notice) return;
+    // Con enlace se queda hasta que se cierre o se navegue: seis segundos no alcanzan para leerlo y abrirlo.
+    if (!notice || notice.hint) return;
     const t = setTimeout(() => setNotice(null), 6000);
     return () => clearTimeout(t);
   }, [notice]);
@@ -178,8 +179,25 @@ function AdvancesPageInner() {
     handledLink.current = linkedId;
     if (pending.some((r) => r.id === linkedId)) setTab('pending');
     else if (mine.some((r) => r.id === linkedId)) setTab('mine');
-    if (all.has(linkedId)) setOpenId(linkedId);
-    else setNotice({ text: 'Ese anticipo ya no está en tus pendientes ni en tus solicitudes.', tone: 'error' });
+    if (all.has(linkedId)) {
+      setOpenId(linkedId);
+      return;
+    }
+    // Ya salió de las bandejas (pagado o rechazado hace tiempo): se pide solo y se abre su tarjeta.
+    // Si tampoco así existe o no se puede ver, Finanzas lista todos.
+    api<Advance>(`/finance/advances/${encodeURIComponent(linkedId)}`)
+      .then((row) => {
+        setPatched((prev) => ({ ...prev, [row.id]: row }));
+        setTab('mine');
+        setOpenId(row.id);
+      })
+      .catch(() =>
+        setNotice({
+          text: 'Ese anticipo ya no está en tus pendientes ni en tus solicitudes.',
+          tone: 'error',
+          hint: { href: '/finanzas', label: 'Búscalo en Finanzas › Anticipos' },
+        }),
+      );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [linkedId, pending, mine]);
 
@@ -227,6 +245,12 @@ function AdvancesPageInner() {
         {notice ? (
           <p className={`oc-flash ${notice.tone === 'error' ? 'is-error' : 'is-ok'}`} role="status">
             {notice.text}
+            {notice.hint ? (
+              <>
+                {' '}
+                <Link href={notice.hint.href}>{notice.hint.label}</Link>
+              </>
+            ) : null}
           </p>
         ) : null}
 

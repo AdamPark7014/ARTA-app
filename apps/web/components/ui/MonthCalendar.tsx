@@ -60,6 +60,9 @@ export function MonthCalendar({
     const d = focusDay && /^\d{4}-\d{2}-\d{2}$/.test(focusDay) ? new Date(`${focusDay}T12:00:00`) : new Date();
     return new Date(d.getFullYear(), d.getMonth(), 1);
   });
+  /** Días con «+N más» abierto: enseñan todos sus chips hasta que se vuelven a cerrar. */
+  const [expandedDays, setExpandedDays] = useState<Record<string, boolean>>({});
+  const toggleExpanded = (key: string) => setExpandedDays((prev) => ({ ...prev, [key]: !prev[key] }));
   useEffect(() => {
     if (!focusDay || !/^\d{4}-\d{2}-\d{2}$/.test(focusDay)) return;
     const d = new Date(`${focusDay}T12:00:00`);
@@ -146,6 +149,8 @@ export function MonthCalendar({
             .filter((it) => it.fromDay <= key && key <= it.toDay)
             .sort((a, b) => (a.tone === 'show' ? -1 : 0) - (b.tone === 'show' ? -1 : 0));
           const out = d.getMonth() !== month.getMonth();
+          const expanded = !!expandedDays[key];
+          const shown = expanded ? active : active.slice(0, MAX_CHIPS);
           return (
             <div
               key={key}
@@ -167,10 +172,19 @@ export function MonthCalendar({
               }
             >
               <span className="mcal__num">{d.getDate()}</span>
-              {active.slice(0, MAX_CHIPS).map((it) => {
+              {shown.map((it) => {
                 const cls = `mcal__chip ${it.tone === 'show' ? 'mcal__chip--show' : ''}`;
                 return it.href ? (
-                  <Link key={it.key} className={cls} href={it.href} title={it.label}>
+                  // El chip vive dentro del día, que también se toca (la nota): abrir el show
+                  // no debe abrir además el cuadro de la nota.
+                  <Link
+                    key={it.key}
+                    className={cls}
+                    href={it.href}
+                    title={it.label}
+                    onClick={(e) => e.stopPropagation()}
+                    onKeyDown={(e) => e.stopPropagation()}
+                  >
                     {it.label}
                   </Link>
                 ) : (
@@ -179,7 +193,20 @@ export function MonthCalendar({
                   </span>
                 );
               })}
-              {active.length > MAX_CHIPS ? <span className="mcal__more">+{active.length - MAX_CHIPS} más</span> : null}
+              {active.length > MAX_CHIPS ? (
+                <button
+                  type="button"
+                  className="mcal__more"
+                  aria-expanded={expanded}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    toggleExpanded(key);
+                  }}
+                  onKeyDown={(e) => e.stopPropagation()}
+                >
+                  {expanded ? 'Ver menos' : `+${active.length - MAX_CHIPS} más`}
+                </button>
+              ) : null}
               {renderDay ? renderDay(key) : null}
             </div>
           );

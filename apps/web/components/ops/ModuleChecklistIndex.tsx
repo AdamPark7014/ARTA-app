@@ -1,9 +1,10 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { Suspense, useEffect, useMemo, useState } from 'react';
+import { canEditEventInfo } from '@arta/rbac';
 import { AppShell } from '@/components/app-shell/AppShell';
-import { DistBar } from '@/components/charts/SparkBars';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { LoadingBlock, LoadingKpis } from '@/components/ui/LoadingBlock';
 import {
@@ -64,6 +65,11 @@ type FieldSpec = { id: string; label: string; sectionId?: string };
 
 type SortKey = 'risk' | 'progress' | 'show';
 
+type RiskFilter = 'all' | 'critical' | 'watch' | 'healthy';
+
+/** Firmas: todo, solo lo que falta por autorizar, o solo lo ya autorizado. */
+type SignFilter = 'all' | 'pending' | 'authorized';
+
 type Props = {
   title: string;
   description: string;
@@ -91,21 +97,127 @@ function pickValue(data: ChecklistData | undefined, field: FieldSpec) {
   return '—';
 }
 
-export function ModuleChecklistIndex({
+/** `?riesgo=critical|warning`: quien llega desde Riesgo ve el módulo ya filtrado. */
+function riskFromParam(value: string | null): RiskFilter | null {
+  if (value === 'critical') return 'critical';
+  if (value === 'warning' || value === 'watch') return 'watch';
+  if (value === 'healthy') return 'healthy';
+  return null;
+}
+
+/** `?estado=incompletos|firma|autorizados`: el mismo filtro que los KPI, pero desde la liga. */
+function stateFromParam(value: string | null): { incomplete: boolean; sign: SignFilter } | null {
+  if (value === 'incompletos') return { incomplete: true, sign: 'all' };
+  if (value === 'firma') return { incomplete: false, sign: 'pending' };
+  if (value === 'autorizados') return { incomplete: false, sign: 'authorized' };
+  return null;
+}
+
+const RISK_SEGMENTS: Array<{ key: Exclude<RiskFilter, 'all'>; label: string; tone: 'danger' | 'warn' | 'ok' }> = [
+  { key: 'critical', label: 'Crítico', tone: 'danger' },
+  { key: 'watch', label: 'Atención', tone: 'warn' },
+  { key: 'healthy', label: 'Saludable', tone: 'ok' },
+];
+
+/**
+ * Reparto de riesgo del módulo. Cada tramo de la barra (y su leyenda) filtra la
+ * tabla; tocarlo otra vez quita el filtro. Sin `DistBar`: ahí los tramos no se tocan.
+ */
+function RiskDistBar({
+  byRisk,
+  value,
+  onChange,
+}: {
+  byRisk: OpsResponse['byRisk'] | null | undefined;
+  value: RiskFilter;
+  onChange: (next: RiskFilter) => void;
+}) {
+  const count = (key: Exclude<RiskFilter, 'all'>) => byRisk?.[key] ?? 0;
+  const total = RISK_SEGMENTS.reduce((sum, seg) => sum + count(seg.key), 0) || 1;
+  return (
+    <div className="stack" style={{ gap: 8 }}>
+      <div className="dist-bar" role="group" aria-label="Distribución de riesgo">
+        {RISK_SEGMENTS.filter((seg) => count(seg.key) > 0).map((seg) => {
+          const on = value === seg.key;
+          return (
+            <button
+              key={seg.key}
+              type="button"
+              className={`dist-bar__seg dist-bar__seg--btn dist-bar__seg--${seg.tone} ${value === 'all' || on ? '' : 'dist-bar__seg--dim'}`}
+              style={{ width: `${(count(seg.key) / total) * 100}%` }}
+              title={`${seg.label}: ${count(seg.key)}`}
+              aria-label={`${seg.label}: ${count(seg.key)}`}
+              aria-pressed={on}
+              onClick={() => onChange(on ? 'all' : seg.key)}
+            />
+          );
+        })}
+      </div>
+      <div className="seg" role="group" aria-label="Filtrar por riesgo desde el reparto">
+        {RISK_SEGMENTS.map((seg) => {
+          const on = value === seg.key;
+          return (
+            <button
+              key={seg.key}
+              type="button"
+              className={`seg__btn ${on ? 'is-on' : ''}`}
+              aria-pressed={on}
+              onClick={() => onChange(on ? 'all' : seg.key)}
+            >
+              {seg.label}
+              <span className="seg__count">{count(seg.key)}</span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/** `useSearchParams` (el filtro con el que se llega desde Riesgo) pide Suspense en el build. */
+export function ModuleChecklistIndex(props: Props) {
+  return (
+    <Suspense
+      fallback={
+        <AppShell title={props.title}>
+          <LoadingBlock rows={6} label={`Cargando ${props.title.toLowerCase()}…`} />
+        </AppShell>
+      }
+    >
+      <ModuleChecklistIndexInner {...props} />
+    </Suspense>
+  );
+}
+
+function ModuleChecklistIndexInner({
   title,
   description,
   hint,
   templateKeys,
   fields = [],
 }: Props) {
-  const { entity } = useUser();
+  const { entity, user } = useUser();
+  const params = useSearchParams();
+  const riesgoParam = params?.get('riesgo') ?? null;
+  const estadoParam = params?.get('estado') ?? null;
   const [data, setData] = useState<OpsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState('');
-  const [riskFilter, setRiskFilter] = useState<'all' | 'critical' | 'watch' | 'healthy'>('all');
-  const [onlyIncomplete, setOnlyIncomplete] = useState(false);
-  const [pendingAuthOnly, setPendingAuthOnly] = useState(false);
+  const [riskFilter, setRiskFilter] = useState<RiskFilter>(() => riskFromParam(riesgoParam) ?? 'all');
+  const [onlyIncomplete, setOnlyIncomplete] = useState(() => stateFromParam(estadoParam)?.incomplete ?? false);
+  const [signFilter, setSignFilter] = useState<SignFilter>(() => stateFromParam(estadoParam)?.sign ?? 'all');
   const [sort, setSort] = useStickyState<SortKey>('ops.sort', 'risk');
+
+  // La liga manda sobre el filtro local: otra fila de Riesgo (otro `?riesgo=`) cambia la tabla
+  // sin recargar, y volver al módulo sin parámetros la deja completa.
+  useEffect(() => {
+    setRiskFilter(riskFromParam(riesgoParam) ?? 'all');
+  }, [riesgoParam]);
+  useEffect(() => {
+    const state = stateFromParam(estadoParam);
+    setOnlyIncomplete(state?.incomplete ?? false);
+    setSignFilter(state?.sign ?? 'all');
+  }, [estadoParam]);
 
   const keysParam = templateKeys.join(',');
 
@@ -121,7 +233,8 @@ export function ModuleChecklistIndex({
     let list = data?.rows || [];
     if (riskFilter !== 'all') list = list.filter((r) => r.risk === riskFilter);
     if (onlyIncomplete) list = list.filter((r) => r.progressPct < 100);
-    if (pendingAuthOnly) list = list.filter((r) => !r.authorizedAt);
+    if (signFilter === 'pending') list = list.filter((r) => !r.authorizedAt);
+    if (signFilter === 'authorized') list = list.filter((r) => !!r.authorizedAt);
     if (q.trim()) {
       const needle = q.toLowerCase();
       list = list.filter(
@@ -143,11 +256,21 @@ export function ModuleChecklistIndex({
       const rank = { critical: 0, watch: 1, healthy: 2 } as const;
       return rank[a.risk] - rank[b.risk] || a.progressPct - b.progressPct;
     });
-  }, [data, q, riskFilter, onlyIncomplete, pendingAuthOnly, sort]);
+  }, [data, q, riskFilter, onlyIncomplete, signFilter, sort]);
 
   const entityName = entity === 'ARTA' ? 'Arta' : 'Auditorio';
   const k = data?.kpis;
-  const filterActive = riskFilter !== 'all' || onlyIncomplete || pendingAuthOnly || !!q.trim();
+  const filterActive = riskFilter !== 'all' || onlyIncomplete || signFilter !== 'all' || !!q.trim();
+  const noData = (data?.rows?.length ?? 0) === 0;
+  // «Crear evento» solo a quien puede crearlo (mismo candado que el menú y Eventos → Nuevo).
+  const canCreate = !!user && canEditEventInfo(user, entity);
+
+  function clearFilters() {
+    setRiskFilter('all');
+    setOnlyIncomplete(false);
+    setSignFilter('all');
+    setQ('');
+  }
 
   return (
     <AppShell title={title}>
@@ -177,12 +300,8 @@ export function ModuleChecklistIndex({
                 <button
                   type="button"
                   className={`kpi kpi--action ${!filterActive ? 'kpi--on' : ''}`}
-                  onClick={() => {
-                    setRiskFilter('all');
-                    setOnlyIncomplete(false);
-                    setPendingAuthOnly(false);
-                    setQ('');
-                  }}
+                  aria-pressed={!filterActive}
+                  onClick={clearFilters}
                 >
                   <div className="label">Instancias</div>
                   <div className="value">{k.total}</div>
@@ -196,6 +315,7 @@ export function ModuleChecklistIndex({
                 <button
                   type="button"
                   className={`kpi kpi--action ${k.critical ? 'kpi--danger' : ''} ${riskFilter === 'critical' ? 'kpi--on' : ''}`}
+                  aria-pressed={riskFilter === 'critical'}
                   onClick={() => setRiskFilter(riskFilter === 'critical' ? 'all' : 'critical')}
                 >
                   <div className="label">Críticos</div>
@@ -204,8 +324,9 @@ export function ModuleChecklistIndex({
                 </button>
                 <button
                   type="button"
-                  className={`kpi kpi--action ${pendingAuthOnly ? 'kpi--on' : ''}`}
-                  onClick={() => setPendingAuthOnly((v) => !v)}
+                  className={`kpi kpi--action ${signFilter === 'pending' ? 'kpi--on' : ''}`}
+                  aria-pressed={signFilter === 'pending'}
+                  onClick={() => setSignFilter(signFilter === 'pending' ? 'all' : 'pending')}
                 >
                   <div className="label">Pend. autorización</div>
                   <div className="value">{k.pendingAuth}</div>
@@ -214,31 +335,31 @@ export function ModuleChecklistIndex({
                 <button
                   type="button"
                   className={`kpi kpi--action ${onlyIncomplete ? 'kpi--on' : ''}`}
+                  aria-pressed={onlyIncomplete}
                   onClick={() => setOnlyIncomplete((v) => !v)}
                 >
                   <div className="label">Incompletos</div>
                   <div className="value">{k.incomplete}</div>
                   <div className="kpi-sub muted">Bajo 100%</div>
                 </button>
-                <div className="kpi">
+                <button
+                  type="button"
+                  className={`kpi kpi--action ${signFilter === 'authorized' ? 'kpi--on' : ''}`}
+                  aria-pressed={signFilter === 'authorized'}
+                  onClick={() => setSignFilter(signFilter === 'authorized' ? 'all' : 'authorized')}
+                >
                   <div className="label">Autorizados</div>
                   <div className="value">{k.authorized}</div>
                   <div className="kpi-sub muted">Cerrados y firmados</div>
-                </div>
+                </button>
               </div>
             ) : null}
 
             {data ? (
               <div className="panel panel--strip">
                 <div className="panel-body">
-                  <div className="kpi-sub muted">Distribución de riesgo</div>
-                  <DistBar
-                    segments={[
-                      { label: 'Crítico', value: data.byRisk?.critical ?? 0, tone: 'danger' },
-                      { label: 'Atención', value: data.byRisk?.watch ?? 0, tone: 'warn' },
-                      { label: 'Saludable', value: data.byRisk?.healthy ?? 0, tone: 'ok' },
-                    ]}
-                  />
+                  <div className="kpi-sub muted">Distribución de riesgo · toca un tramo para filtrar</div>
+                  <RiskDistBar byRisk={data.byRisk} value={riskFilter} onChange={setRiskFilter} />
                 </div>
               </div>
             ) : null}
@@ -253,13 +374,23 @@ export function ModuleChecklistIndex({
               />
               <FieldSelect
                 value={riskFilter}
-                onChange={(v) => setRiskFilter(v as typeof riskFilter)}
+                onChange={(v) => setRiskFilter(v as RiskFilter)}
                 label="Filtrar por riesgo"
                 options={[
                   { value: 'all', label: 'Todo riesgo' },
                   { value: 'critical', label: 'Crítico' },
                   { value: 'watch', label: 'Atención' },
                   { value: 'healthy', label: 'Saludable' },
+                ]}
+              />
+              <FieldSelect
+                value={signFilter}
+                onChange={(v) => setSignFilter(v as SignFilter)}
+                label="Filtrar por firmas"
+                options={[
+                  { value: 'all', label: 'Todas las firmas' },
+                  { value: 'pending', label: 'Pendientes de autorizar' },
+                  { value: 'authorized', label: 'Autorizados' },
                 ]}
               />
               <FieldSelect
@@ -278,16 +409,7 @@ export function ModuleChecklistIndex({
                 label="Solo incompletos"
               />
               {filterActive ? (
-                <button
-                  className="btn ghost btn-sm"
-                  type="button"
-                  onClick={() => {
-                    setRiskFilter('all');
-                    setOnlyIncomplete(false);
-                    setPendingAuthOnly(false);
-                    setQ('');
-                  }}
-                >
+                <button className="btn ghost btn-sm" type="button" onClick={clearFilters}>
                   Limpiar
                 </button>
               ) : null}
@@ -303,29 +425,22 @@ export function ModuleChecklistIndex({
                 {!rows.length ? (
                   <EmptyState
                     title={
-                      (data?.rows?.length ?? 0) === 0
+                      noData
                         ? `Aún no hay formatos de ${title.toLowerCase()} en esta entidad`
                         : 'Sin registros en este filtro'
                     }
                     description={
-                      (data?.rows?.length ?? 0) === 0
-                        ? `Cuando crees un evento se generan los formatos ${templateKeys.join(', ')}. Empieza en Eventos → Nuevo evento y ábrelos desde el hub del show.`
-                        : 'Prueba otro término o quita filtros de riesgo e incompletos.'
+                      noData
+                        ? canCreate
+                          ? `Cuando crees un evento se generan los formatos ${templateKeys.join(', ')}. Empieza en Eventos → Nuevo evento y ábrelos desde el hub del show.`
+                          : `Los formatos ${templateKeys.join(', ')} se generan al crear cada evento; aquí aparecerán en cuanto haya uno en ${entityName}.`
+                        : 'Prueba otro término o quita los filtros de riesgo, firmas e incompletos.'
                     }
-                    actionHref="/events/new"
-                    actionLabel="Crear evento"
+                    actionHref={noData && canCreate ? '/events/new' : undefined}
+                    actionLabel={noData && canCreate ? 'Crear evento' : undefined}
                   >
-                    {filterActive && (data?.rows?.length ?? 0) > 0 ? (
-                      <button
-                        className="btn ghost"
-                        type="button"
-                        onClick={() => {
-                          setRiskFilter('all');
-                          setOnlyIncomplete(false);
-                          setPendingAuthOnly(false);
-                          setQ('');
-                        }}
-                      >
+                    {!noData && filterActive ? (
+                      <button className="btn ghost" type="button" onClick={clearFilters}>
                         Limpiar filtros
                       </button>
                     ) : null}

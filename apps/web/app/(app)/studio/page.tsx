@@ -18,6 +18,7 @@ import { canPublishStudio, type RoleKey } from '@arta/rbac';
 import { api } from '@/lib/api';
 import {
   BLOCK_META,
+  CUSTOM_BLOCK_PREFIX,
   CUSTOM_DEFAULTS,
   CUSTOM_FIELDS,
   DEFAULT_CONTENT,
@@ -74,6 +75,22 @@ const TAB_TO_PAGE: Record<string, string> = {
 
 /** Nombres anteriores de `?bloque=`, cuando cada sección era una entrada. */
 const OLD_BLOCKS: Record<string, string> = { portada: 'inicio', faq: 'preguntas', aliados: 'nosotros', ubicacion: 'contacto' };
+
+/**
+ * `?bloque=` llega de tres formas: la página (`inicio`, `noticias`…), un nombre viejo o, desde el aviso de
+ * «sección en revisión», la clave de la sección (`home_hero`, `bloque_<id>`). Devuelve qué seleccionar.
+ */
+function selectionFor(bloque: string): string {
+  if (OLD_BLOCKS[bloque]) return OLD_BLOCKS[bloque];
+  if (SITE_PAGES.some((p) => p.key === bloque)) return bloque;
+  if (bloque === HERO_KEY) return 'inicio';
+  if (bloque === SETTINGS_KEY || bloque === LAYOUT_KEY) return 'ajustes';
+  const page = SITE_PAGES.find((p) => p.sections.includes(bloque));
+  if (page) return page.key;
+  // Un bloque propio se selecciona por su id (la clave de sección lleva el prefijo).
+  if (bloque.startsWith(CUSTOM_BLOCK_PREFIX)) return bloque.slice(CUSTOM_BLOCK_PREFIX.length);
+  return bloque;
+}
 
 const LINK_SUGGESTIONS = SITE_PAGES.map((page) => ({ value: pageHref(page.key), label: page.label }));
 
@@ -138,7 +155,7 @@ export default function StudioPage() {
       .finally(() => setLoading(false));
     const params = new URLSearchParams(window.location.search);
     const bloque = params.get('bloque');
-    const wanted = (bloque && (OLD_BLOCKS[bloque] || bloque)) || TAB_TO_PAGE[params.get('tab') || ''];
+    const wanted = (bloque && selectionFor(bloque)) || TAB_TO_PAGE[params.get('tab') || ''];
     if (wanted) setSelected(wanted);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);

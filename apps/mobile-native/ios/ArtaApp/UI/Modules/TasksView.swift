@@ -89,6 +89,16 @@ struct TasksView: View {
                 Haptics.selection()
                 Task { await load(resetting: true) }
             }
+            // Inicio («Vencen hoy») o `/tasks?filtro=vencidas` piden un filtro: se pone al llegar o si ya estaba abierta.
+            .onAppear { applyPendingFilter() }
+            .onChange(of: router.pendingTasksFilter) { _, _ in applyPendingFilter() }
+    }
+
+    /// Consume `router.pendingTasksFilter` una sola vez.
+    private func applyPendingFilter() {
+        guard let pending = router.pendingTasksFilter else { return }
+        router.pendingTasksFilter = nil
+        withAnimation(.snappy(duration: 0.22)) { filter = pending }
     }
 
     // MARK: Contenido
@@ -178,7 +188,15 @@ struct TasksView: View {
     @ViewBuilder
     private var emptyView: some View {
         if !query.moduleTrimmed.isEmpty || (filter != .open && !tasks.isEmpty) {
-            ModuleEmptyView(icon: "line.3.horizontal.decrease.circle", title: "Sin resultados", message: "Prueba otro filtro o limpia la búsqueda.")
+            // Un toque regresa a «Pendientes» sin búsqueda, en vez de dejar a la persona adivinando qué filtró.
+            EmptyState(icon: "line.3.horizontal.decrease.circle", title: "Sin resultados", message: "Prueba otro filtro o limpia la búsqueda.",
+                       actionTitle: "Limpiar filtros", action: {
+                           Haptics.tap()
+                           withAnimation(.snappy(duration: 0.22)) {
+                               filter = .open
+                               query = ""
+                           }
+                       })
         } else {
             switch scope {
             case .mine:

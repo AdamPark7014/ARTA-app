@@ -15,7 +15,7 @@ import {
   UseGuards,
   Optional,
 } from '@nestjs/common';
-import { IsArray, IsEmail, IsOptional, IsString, MinLength } from 'class-validator';
+import { IsArray, IsEmail, IsIn, IsOptional, IsString, MinLength } from 'class-validator';
 import { NotificationsService } from '../notifications/notifications.service';
 import * as bcrypt from 'bcryptjs';
 import { EntityKey } from '@prisma/client';
@@ -37,12 +37,16 @@ import { assertSameTenant, tenantIdOf } from '../common/tenant';
 import { entityScope, userEntities } from '../common/entity-scope';
 import { assertUserSeatAvailable } from '../common/plan-limits';
 
-class CreateUserDto {
+export class CreateUserDto {
   @IsEmail() email!: string;
   @IsString() fullName!: string;
   @IsOptional() @IsString() title?: string;
   @IsString() roleKey!: string;
-  entities!: EntityKey[];
+  /**
+   * Entidades que opera (Arta, Auditorio). Sin decorador, el `ValidationPipe` global (`whitelist: true`)
+   * lo quitaba del cuerpo y el alta caía siempre a las entidades por omisión del rol.
+   */
+  @IsOptional() @IsArray() @IsIn(Object.values(EntityKey), { each: true }) entities?: EntityKey[];
   @IsString() @MinLength(6) password!: string;
   @IsOptional() @IsArray() permissions?: string[];
 }
@@ -197,7 +201,7 @@ export class UsersController {
     const permissions = (dto.permissions || []).filter((p) => allowed.has(p));
     const email = dto.email.toLowerCase().trim();
     const entities =
-      dto.entities?.length > 0
+      dto.entities?.length
         ? dto.entities
         : this.canManageUsers(req.user)
           ? ROLE_DEFAULT_ENTITIES[dto.roleKey as RoleKey] || (['ARTA'] as EntityKey[])

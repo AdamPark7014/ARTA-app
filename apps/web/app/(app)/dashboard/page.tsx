@@ -8,7 +8,6 @@ import { FlashMessage, PageHeader } from '@/components/ui/PageChrome';
 import { api } from '@/lib/api';
 import { canAccessEventOps, userHasPermission, visibleNavItems } from '@/lib/access-matrix';
 import { canEditEventInfo, canSeeModule } from '@arta/rbac';
-import { mxn } from '@/lib/price-list';
 import { useUser } from '@/lib/user-context';
 import { moneyKpi } from '@/lib/format';
 
@@ -66,6 +65,14 @@ type DayEvent = { id: string; name: string; artist?: string | null; startsAt: st
 
 /** Avisos que el inicio ya muestra como fila propia (OC, formatos, tareas, eventos en riesgo). */
 const COVERED_ALERTS = new Set(['EVENT_RISK', 'PO_AGING', 'SIG_BACKLOG', 'TASK_OVERDUE']);
+
+/** Quién ve «Todas las tareas» (mismo conjunto que `tasks/page.tsx`): sus ligas abren la vista del equipo. */
+const TEAM_ROLES = new Set(['super_admin', 'dir_general', 'dir_adjunta', 'gerente_arta', 'dir_auditorio', 'convenios']);
+
+/** `2026-11-07` en la zona de la empresa, para abrir el calendario en el día de hoy. */
+function todayInMexico(now: Date) {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Mexico_City' }).format(now);
+}
 
 function startOfDay(d: Date) {
   const x = new Date(d);
@@ -217,6 +224,8 @@ export default function DashboardPage() {
     () => (user ? visibleNavItems(user, entity).some((item) => item.href === '/tasks') : false),
     [user, entity],
   );
+  // Las ligas a Tareas abren la vista que esa persona puede ver: el equipo o solo las suyas.
+  const tasksVista = TEAM_ROLES.has(role) ? 'equipo' : 'mias';
 
   useEffect(() => {
     if (!eventOps) {
@@ -303,7 +312,8 @@ export default function DashboardPage() {
               amount: moneyKpi(k.poPipelineAmount),
               status: 'Revisar',
               tone: 'fill' as const,
-              href: '/purchase-orders',
+              // Con órdenes viejas se ve todo; si no, lo que falta autorizar.
+              href: k.poAgingOver7 ? '/purchase-orders?seccion=all' : '/purchase-orders?seccion=auth',
             }
           : null,
         k.pendingAuthorized > 0
@@ -313,7 +323,7 @@ export default function DashboardPage() {
               sub: `${k.pendingAuthorized} por autorizar`,
               status: 'Autorizar',
               tone: 'fill' as const,
-              href: '/events?scope=active',
+              href: '/events?scope=active&ver=revision',
             }
           : null,
         canSeeTasks && k.overdueTasks > 0
@@ -323,7 +333,7 @@ export default function DashboardPage() {
               sub: `de ${k.openTasks} abiertas`,
               status: 'Atender',
               tone: 'fill' as const,
-              href: '/tasks',
+              href: `/tasks?filtro=vencidas&vista=${tasksVista}`,
             }
           : null,
       ].filter(<T,>(x: T | null): x is T => x !== null)
@@ -346,7 +356,7 @@ export default function DashboardPage() {
           }
         >
           {canSeeTasks ? (
-            <Link className="btn ghost" href="/tasks">
+            <Link className="btn ghost" href="/tasks?nueva=1">
               Nueva tarea
             </Link>
           ) : null}
@@ -427,7 +437,7 @@ export default function DashboardPage() {
                 </span>
               </Link>
               {canSeePo ? (
-                <Link className="kpi-card" href="/purchase-orders">
+                <Link className="kpi-card" href="/purchase-orders?seccion=pay">
                   <span className="cap">Por pagar</span>
                   <span className="kpi-card__value t-num">{moneyKpi(k.poPipelineAmount)}</span>
                   <span className="kpi-card__detail">
@@ -436,7 +446,7 @@ export default function DashboardPage() {
                 </Link>
               ) : null}
               {canSeeTasks ? (
-                <Link className="kpi-card" href="/tasks">
+                <Link className="kpi-card" href={`/tasks?filtro=abiertas&vista=${tasksVista}`}>
                   <span className="cap">Tareas abiertas</span>
                   <span className="kpi-card__value t-num">{k.openTasks}</span>
                   <span className="kpi-card__detail">
@@ -452,7 +462,8 @@ export default function DashboardPage() {
                   </span>
                 </div>
               )}
-              <div className="kpi-card">
+              {/* Con algo por autorizar abre esa revisión; sin nada, los eventos actuales (no un vacío). */}
+              <Link className="kpi-card" href={k.pendingAuthorized > 0 ? '/events?scope=active&ver=revision' : '/events?scope=active'}>
                 <span className="cap">Formatos al día</span>
                 <span className="kpi-card__value t-num">{k.avgOpsProgress}%</span>
                 <span
@@ -468,14 +479,14 @@ export default function DashboardPage() {
                 <span className="kpi-card__detail">
                   {k.pendingAuthorized ? `${k.pendingAuthorized} por autorizar` : 'Avance general'}
                 </span>
-              </div>
+              </Link>
             </div>
 
             <div className="home-panels">
               <section className="home-panel" aria-labelledby="home-today">
                 <div className="home-panel__head">
                   <h3 id="home-today">{singleToday ? `Hoy · ${singleToday.name}` : 'Hoy'}</h3>
-                  <Link className="home-panel__link" href="/events">
+                  <Link className="home-panel__link" href={`/calendar?date=${todayInMexico(now)}`}>
                     Ver eventos
                   </Link>
                 </div>
@@ -505,7 +516,8 @@ export default function DashboardPage() {
                   <p className="home-calm">
                     <span>Sin shows hoy.</span>
                     <small>
-                      El próximo es {agenda.next[0].name}, {daysLabel(daysUntil(agenda.next[0].startsAt, now)).toLowerCase()}.
+                      El próximo es <Link href={`/events/${agenda.next[0].id}`}>{agenda.next[0].name}</Link>,{' '}
+                      {daysLabel(daysUntil(agenda.next[0].startsAt, now)).toLowerCase()}.
                     </small>
                   </p>
                 ) : (
@@ -583,7 +595,7 @@ export default function DashboardPage() {
                           }`}
                           status={e.risk === 'critical' ? 'Urgente' : 'Revisar'}
                           tone={e.risk === 'critical' ? 'fill' : 'line'}
-                          href={`/events/${e.id}`}
+                          href={`/events/${e.id}?tab=checklists&ver=pendientes`}
                         />
                       ))}
                       {otherAlerts.slice(0, 3).map((a) => (

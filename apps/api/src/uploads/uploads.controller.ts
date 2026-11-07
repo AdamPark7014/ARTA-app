@@ -339,17 +339,19 @@ export class UploadsController {
 
     const url = `/uploads/${file.filename}`;
 
-    // Upload suelto (Studio, anticipos, etc.) — requiere permiso explícito
+    // Upload suelto (Studio, anticipos, carpetas, etc.) — requiere permiso explícito.
+    // Las carpetas suben con solo `file`: quien edita carpetas (p. ej. `solo_carpetas`) también pasa.
     if (!body.eventId && !body.checklistId) {
       const perms = req.user.permissions || [];
       const role = req.user.roleKey as RoleKey;
       const allowedLoose =
         hasPermission(role, perms, PERMISSIONS.STUDIO_EDIT) ||
         hasPermission(role, perms, PERMISSIONS.CHECKLIST_EDIT) ||
+        hasPermission(role, perms, PERMISSIONS.FOLDERS_EDIT) ||
         hasPermission(role, perms, PERMISSIONS.EVERYTHING);
       if (!allowedLoose) {
         throw new ForbiddenException(
-          'Subida sin evento requiere permiso Studio o edición de checklists',
+          'Subida sin evento requiere permiso Studio, edición de checklists o de carpetas',
         );
       }
       return { id: null, url, fileName: file.originalname, mimeType: mime, kind, sizeBytes: file.size };

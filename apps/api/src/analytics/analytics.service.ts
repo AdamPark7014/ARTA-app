@@ -356,7 +356,8 @@ export class AnalyticsService {
         severity: 'warning',
         code: 'SIG_BACKLOG',
         message: `${pendingAuthorized} checklists entregados pendientes de autorización`,
-        href: '/checklists',
+        // Los eventos con formatos por revisar, no el catálogo de plantillas.
+        href: '/events?scope=active&ver=revision',
       });
     }
     if (overdueTasks > 0) {
@@ -947,10 +948,13 @@ export class AnalyticsService {
       topActions,
       topUsers,
       byResource,
+      // Con `resourceId` y el evento (en `metaJson.eventId`) la web enlaza cada anomalía a su documento.
       anomalies: anomalies.slice(0, 20).map((a) => ({
         id: a.id,
         action: a.action,
         resource: a.resource,
+        resourceId: a.resourceId ?? null,
+        eventId: metaEventId(a.metaJson),
         at: a.createdAt,
         user: a.user?.fullName || 'Sistema',
       })),

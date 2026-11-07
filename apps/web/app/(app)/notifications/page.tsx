@@ -1,8 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AppShell } from '@/components/app-shell/AppShell';
 import { NoticeRow, reportSeen, type Notice } from '@/components/app-shell/NoticeRow';
 import { SentNotices } from '@/components/app-shell/SentNotices';
@@ -21,8 +21,24 @@ type Filter = 'all' | 'unread' | 'action' | 'sent' | NoticeChannel;
 /**
  * Todos los avisos de la entidad activa: la campana enseña los últimos, aquí está
  * el historial. También es a donde lleva un aviso del navegador que no trae liga.
+ *
+ * `useSearchParams` (la pestaña que pide la liga) pide Suspense en el build.
  */
 export default function NotificationsPage() {
+  return (
+    <Suspense
+      fallback={
+        <AppShell title="Avisos">
+          <LoadingBlock rows={6} label="Cargando avisos…" />
+        </AppShell>
+      }
+    >
+      <NotificationsPageInner />
+    </Suspense>
+  );
+}
+
+function NotificationsPageInner() {
   const router = useRouter();
   const { entity, setEntity, user } = useUser();
   const [items, setItems] = useState<Notice[]>([]);
@@ -33,10 +49,12 @@ export default function NotificationsPage() {
   const [filter, setFilter] = useState<Filter>('all');
   const seenSent = useRef(new Set<string>());
 
-  // `?tab=enviados`: el acuse de varios avisos lleva aquí.
+  // `?tab=enviados`: el acuse de varios avisos y el pie de la campana llevan aquí. Se sigue la
+  // navegación, no solo la carga: desde la propia pantalla de Avisos también cambia la pestaña.
+  const tab = useSearchParams()?.get('tab') ?? null;
   useEffect(() => {
-    if (new URLSearchParams(window.location.search).get('tab') === 'enviados') setFilter('sent');
-  }, []);
+    setFilter(tab === 'enviados' ? 'sent' : 'all');
+  }, [tab]);
 
   const load = useCallback(async () => {
     setError('');

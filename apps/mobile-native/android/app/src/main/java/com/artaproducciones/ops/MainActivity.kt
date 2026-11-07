@@ -27,6 +27,7 @@ import com.artaproducciones.ops.demo.DemoMode
 import com.artaproducciones.ops.push.ArtaPushRenderer
 import com.artaproducciones.ops.ui.ArtaApp
 import com.artaproducciones.ops.ui.DeepLink
+import com.artaproducciones.ops.ui.Tab
 import com.artaproducciones.ops.ui.theme.ArtaTheme
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -126,8 +127,20 @@ class MainActivity : ComponentActivity() {
             forceApprovals = intent.getStringExtra(ArtaPushRenderer.EXTRA_TARGET) == ArtaPushRenderer.TARGET_APPROVALS,
             parentId = intent.getStringExtra(ArtaPushRenderer.EXTRA_PARENT_ID),
         )
-        if (link != null) pendingLink.value = link
+        // Un aviso sin liga (o con una de otro host) no se queda en nada: abre Avisos, como iOS.
+        if (link != null) pendingLink.value = link else if (isFromNotice(intent)) pendingLink.value = DeepLink.Section(Tab.Avisos)
     }
+
+    /** Lo que ponen [ArtaPushRenderer] y sus acciones en el intent; el lanzador y el demo no traen nada de esto. */
+    private fun isFromNotice(intent: Intent): Boolean = listOf(
+        ArtaPushRenderer.EXTRA_URL,
+        ArtaPushRenderer.EXTRA_CHANNEL_ID,
+        ArtaPushRenderer.EXTRA_NOTIFICATION_ID,
+        ArtaPushRenderer.EXTRA_NOTIFICATION_IDS,
+        ArtaPushRenderer.EXTRA_TYPE,
+        ArtaPushRenderer.EXTRA_ENTITY,
+        ArtaPushRenderer.EXTRA_DISMISS_ID,
+    ).any { intent.hasExtra(it) }
 
     /** `arta://chat?channel=…&msg=…` → `/chat?channel=…&msg=…` (mismo formato que las URLs del API). */
     private fun fromUri(uri: Uri): String? =

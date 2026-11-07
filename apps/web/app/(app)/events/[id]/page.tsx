@@ -2,7 +2,7 @@
 
 import { askConfirm } from '@/components/ui/AskDialog';
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useParams, useSearchParams } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { AppShell } from '@/components/app-shell/AppShell';
 import { EventDetailSkeleton } from '@/components/events/EventDetailSkeleton';
 import { EventTabBar } from '@/components/events/EventTabBar';
@@ -21,10 +21,12 @@ import {
   canEditTicketing,
   canSeeModule,
   hasPermission,
+  isDirectionRole,
   type EventModule,
   type RoleKey as RbacRoleKey,
 } from '@arta/rbac';
 import { REVIEW_APPROVER_ROLES } from '@/lib/review-flow';
+import { isEventDone } from '@/components/events/checklist-progress';
 import { EventOverviewPanel } from '@/components/events/EventOverviewPanel';
 import {
   EventAdendumPanel,
@@ -72,10 +74,12 @@ type FlashVariant = 'success' | 'error' | 'info' | 'warn';
 function EventDetailInner() {
   const params = useParams();
   const searchParams = useSearchParams();
+  const router = useRouter();
   const id = params.id as string;
   const { user } = useUser();
   const { tab, selectTab } = useEventTab();
-  const checklistBootRef = useRef(false);
+  /** Último `?checklist=` que se abrió: así un segundo enlace al mismo evento con otro formato sí abre. */
+  const checklistBootRef = useRef<string | null>(null);
   const [event, setEvent] = useState<EventDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
@@ -101,6 +105,11 @@ function EventDetailInner() {
   const [editingMeta, setEditingMeta] = useState(false);
 
   const closed = event?.status === 'CLOSED' || event?.status === 'CANCELLED';
+  /**
+   * Cerrado, cancelado o con su última fecha antes de hoy (hora de Puebla): la miga
+   * de la barra regresa a los eventos pasados, no a los actuales.
+   */
+  const pastEvent = closed || isEventDone(event);
   const role = user?.roleKey || '';
   const has = (perms: string[]) => userHasPermission(role, user?.permissions || [], [...perms, 'everything']);
   // Qué ve y qué edita cada quien, por negocio (01-11-2026, docs/ROLES-Y-PERMISOS.md).
@@ -124,8 +133,10 @@ function EventDetailInner() {
   const canSponsorEdit = has(['convenios.edit']);
   const canPo = see('po');
   const canApproveCampaign = REVIEW_APPROVER_ROLES.has(role);
-  const canReopen = role === 'dir_general' || role === 'dir_adjunta' || role === 'super_admin';
+  const canReopen = isDirectionRole(role);
   const canDeleteEvent = canReopen;
+  /** Dirección borra cualquier tarea del evento; los demás solo la que pidieron. */
+  const canDeleteAnyTask = isDirectionRole(role);
 
   const load = useCallback(async () => {
     const data = await api<EventDetail>(`/events/${id}`);
@@ -181,20 +192,25 @@ function EventDetailInner() {
     }
   }
 
-  function selectModule(next: Tab) {
+  /**
+   * Cambia de pestaña. `extra.ver` es el grupo de Formatos que se abre (`pendientes`,
+   * `revision`); al cambiar de pestaña sin él se quita de la URL, para no arrastrar
+   * un filtro viejo. Una sola navegación: `selectTab` pone o quita todo junto.
+   */
+  function selectModule(next: Tab, extra?: { ver?: string }) {
     if (next !== 'checklists') setActiveChecklist(null);
     setMsg('');
-    selectTab(next);
+    selectTab(next, { ver: extra?.ver ?? null });
   }
 
-  // Deep-link: ?checklist=
+  // Deep-link: ?checklist= — reacciona cada vez que cambia el formato pedido, no solo la primera vez.
   useEffect(() => {
-    if (!event || checklistBootRef.current) return;
+    if (!event) return;
     const qChecklist = searchParams.get('checklist');
-    if (!qChecklist) return;
+    if (!qChecklist || checklistBootRef.current === qChecklist) return;
     const found = event.checklists.find((c) => c.id === qChecklist);
     if (!found) return;
-    checklistBootRef.current = true;
+    checklistBootRef.current = qChecklist;
     openChecklist(found).catch(console.error);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [event?.id, searchParams]);
@@ -336,7 +352,7 @@ function EventDetailInner() {
       });
       applyChecklist({ ...updated, versions: activeChecklist.versions });
       setConflict(null);
-      flash('Checklist guardado · PDF regenerado');
+      flash('Formato guardado · PDF regenerado');
     } catch (e) {
       if (isRevisionConflict(e)) {
         // Nada de pisar ni de perder lo tecleado: decide la persona.
@@ -584,6 +600,17 @@ function EventDetailInner() {
     }
   }
 
+  /** Borra la tarea en el servidor y la quita de la lista; el aviso a los responsables lo manda el API. */
+  async function deleteTask(taskId: string) {
+    try {
+      await api(`/tasks/${taskId}`, { method: 'DELETE' });
+      setEvent((prev) => (prev ? { ...prev, tasks: (prev.tasks || []).filter((t) => t.id !== taskId) } : prev));
+      flash('Tarea eliminada');
+    } catch (e) {
+      flash(e instanceof Error ? e.message : 'No se pudo eliminar la tarea', 'error');
+    }
+  }
+
   /** Cambio optimista de una tarea con vuelta atrás si el servidor lo rechaza. */
   async function patchTask(taskId: string, local: Partial<Task>, body: Record<string, unknown>, ok?: string) {
     const snapshot = event?.tasks || [];
@@ -630,6 +657,8 @@ function EventDetailInner() {
     // En el teléfono, fuera de Resumen, el encabezado esconde sus botones: aquí siguen a la mano.
     ...(tab !== 'overview' && !closed && canEditEvent ? [{ label: 'Editar datos', phoneOnly: true, onClick: editMeta }] : []),
     ...(tab !== 'overview' && closed && canReopen ? [{ label: 'Reabrir', phoneOnly: true, onClick: reopen }] : []),
+    // El canal del evento en el chat (`/chat?event=` lo crea o lo abre).
+    { label: 'Chat del evento', onClick: () => router.push(`/chat?event=${encodeURIComponent(id)}`) },
     ...(!closed && canClose
       ? [
           {
@@ -649,7 +678,7 @@ function EventDetailInner() {
   const panel = { event, closed, onChanged: load, flash };
 
   return (
-    <AppShell title={event.name}>
+    <AppShell title={event.name} backTo={pastEvent ? { href: '/events?scope=past', label: 'Eventos' } : undefined}>
       <div className="stack page-workspace">
         <EventHero
           event={event}
@@ -713,7 +742,12 @@ function EventDetailInner() {
             userFullName={user?.fullName || ''}
             revision={checklistRevision}
             onOpenChecklist={openChecklist}
-            onClearChecklist={() => setActiveChecklist(null)}
+            onClearChecklist={() => {
+              setActiveChecklist(null);
+              // Sin `?checklist=` en la URL, el mismo enlace vuelve a abrir el formato la próxima vez.
+              checklistBootRef.current = null;
+              selectTab('checklists');
+            }}
             onSaveChecklist={saveChecklist}
             onChangeStatus={changeChecklistStatus}
             roleKey={role}
@@ -795,6 +829,8 @@ function EventDetailInner() {
             onEditTask={(taskId, next) =>
               patchTask(taskId, next, { title: next.title, detail: next.detail }, 'Tarea actualizada')
             }
+            onDeleteTask={deleteTask}
+            canDeleteAnyTask={canDeleteAnyTask}
             onTaskUpdated={patchTaskInPlace}
           />
         )}

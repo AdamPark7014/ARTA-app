@@ -52,7 +52,8 @@ function refResult(r: ChatRef): Result {
     section: SECTION_OF[r.kind] ?? 'Resultados',
     title: r.title || r.label,
     detail: [r.statusLabel, r.amount, r.subtitle].filter(Boolean).join(' · '),
-    href: r.href || '/',
+    // Sin liga no hay a dónde ir: el resultado se descarta más abajo en vez de mandar a la portada.
+    href: r.href || '',
     icon: '/',
     path: REF_ICON[r.kind],
   };
@@ -87,6 +88,11 @@ function shortDay(iso?: string | null) {
 function initialsOf(name: string) {
   const parts = name.trim().split(/\s+/);
   return `${parts[0]?.[0] ?? ''}${parts[1]?.[0] ?? ''}`.toUpperCase();
+}
+
+/** Solo se enseña lo que abre algo. */
+function hasHref(result: Result) {
+  return !!result.href;
 }
 
 function eventResult(event: EventHit, section: Result['section']): Result {
@@ -167,7 +173,8 @@ export function TopbarSearch({ items }: Props) {
         .sort((a, b) => new Date(a.startsAt!).getTime() - new Date(b.startsAt!).getTime())
         .slice(0, IDLE_EVENTS)
         .map((e) => eventResult(e, 'Próximos eventos'))
-        .concat(remote.slice(0, IDLE_TASKS).map((r) => ({ ...refResult(r), section: 'Tus tareas' })));
+        .concat(remote.slice(0, IDLE_TASKS).map((r) => ({ ...refResult(r), section: 'Tus tareas' })))
+        .filter(hasHref);
     }
     const words = folded(query).split(/\s+/).filter(Boolean);
     const best = <T,>(rows: T[], text: (row: T) => string) =>
@@ -187,7 +194,8 @@ export function TopbarSearch({ items }: Props) {
         section: 'Personas',
         title: p.fullName,
         detail: p.title || undefined,
-        href: `/chat?with=${encodeURIComponent(p.id)}`,
+        // El chat solo abre la conversación con `with=dm:<id>`; sin el prefijo no hacía nada.
+        href: `/chat?with=dm:${encodeURIComponent(p.id)}`,
         icon: '/chat',
         initials: initialsOf(p.fullName),
       })),
@@ -202,7 +210,7 @@ export function TopbarSearch({ items }: Props) {
           href: navHref(item),
           icon: item.href,
         })),
-    ];
+    ].filter(hasHref);
   }, [query, events, people, items, remote]);
 
   useEffect(() => {
@@ -245,6 +253,13 @@ export function TopbarSearch({ items }: Props) {
     setValue('');
     setOpen(false);
     inputRef.current?.blur();
+    // Varias pantallas leen `?task=`, `?po=` o `?with=` al montarse: elegir algo de la misma
+    // pantalla con `router.push` no hacía nada (igual que en `lib/notice-open.ts`). Ahí se navega completo.
+    const next = new URL(result.href, window.location.origin);
+    if (next.pathname === window.location.pathname) {
+      window.location.assign(next.pathname + next.search + next.hash);
+      return;
+    }
     router.push(result.href);
   }
 

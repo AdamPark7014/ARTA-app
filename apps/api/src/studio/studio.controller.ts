@@ -905,12 +905,17 @@ export class StudioController {
     this.assertStudioWrite(req.user);
     let label = '';
     let tab = 'news';
+    /** Sección propuesta: el aviso abre esa sección (`?bloque=`), no solo la pestaña. */
+    let bloque: string | null = null;
     if (dto.kind === 'news') {
       const post = await this.prisma.newsPost.findUnique({ where: { id: dto.id } });
       if (!post) throw new NotFoundException('Noticia no encontrada');
       if (post.published) throw new BadRequestException('Esa noticia ya está publicada');
       await this.prisma.newsPost.update({ where: { id: post.id }, data: { reviewRequestedAt: new Date() } });
-      label = `la noticia «${post.title}»`;
+      // Un «Evento destacado» vive en la cartelera, no en Noticias: el aviso abre su pestaña.
+      const isShow = post.template === SHOW_TEMPLATE;
+      label = `${isShow ? 'el show' : 'la noticia'} «${post.title}»`;
+      tab = isShow ? 'shows' : 'news';
     } else if (dto.kind === 'slide') {
       const slide = await this.prisma.heroSlide.findUnique({ where: { id: dto.id } });
       if (!slide) throw new NotFoundException('Slide no encontrado');
@@ -932,7 +937,9 @@ export class StudioController {
       if (!proposal) throw new NotFoundException('No hay propuesta para esa sección');
       label = `un cambio a la sección «${proposal.title || dto.id}»`;
       tab = 'sections';
+      bloque = dto.id;
     }
+    const linkUrl = `/studio?tab=${tab}${bloque ? `&bloque=${encodeURIComponent(bloque)}` : ''}`;
 
     let notified = 0;
     if (this.notifications) {
@@ -952,7 +959,7 @@ export class StudioController {
             type: 'studio.review',
             title: `${req.user.fullName || 'Un practicante'} mandó a revisión ${label}`,
             body: 'Revísalo en Studio y publícalo cuando esté listo.',
-            linkUrl: `/studio?tab=${tab}`,
+            linkUrl,
             entity: 'ARTA' as const,
           })),
         )

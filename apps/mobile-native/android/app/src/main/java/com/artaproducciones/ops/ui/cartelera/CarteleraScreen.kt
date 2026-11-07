@@ -134,24 +134,39 @@ private fun share(context: Context, show: PublicShowDto) {
     context.startActivity(Intent.createChooser(send, "Compartir"))
 }
 
-/** Lo que viene y la temporada: la misma cartelera del sitio. Con cuenta o sin ella. */
+/**
+ * Lo que viene y la temporada: la misma cartelera del sitio. Con cuenta o sin ella. Con [initialShowId]
+ * (un póster tocado en Inicio) abre ese show en cuanto llega la lista; si ya no está, se queda la lista.
+ */
 @Composable
-fun CarteleraScreen(onBack: () -> Unit) {
+fun CarteleraScreen(onBack: () -> Unit, initialShowId: String? = null) {
     var data by remember { mutableStateOf<PublicShowsDto?>(null) }
     var failed by remember { mutableStateOf<String?>(null) }
     var attempt by remember { mutableStateOf(0) }
     var selected by remember { mutableStateOf<PublicShowDto?>(null) }
+    var initialHandled by remember { mutableStateOf(false) }
+    // El show se abrió desde un póster de Inicio: atrás regresa a Inicio, no a una lista que nunca se vio.
+    var openedFromPoster by remember { mutableStateOf(false) }
 
     LaunchedEffect(attempt) {
         failed = null
         runCatching { ModulesClient.api.publicShows() }
-            .onSuccess { data = it }
-            .onFailure { failed = it.message ?: "Sin conexión. Revisa tu internet." }
+            .onSuccess { shows ->
+                data = shows
+                if (!initialHandled && initialShowId != null) {
+                    initialHandled = true
+                    selected = (shows.upcoming + shows.past).firstOrNull { it.id == initialShowId }
+                    openedFromPoster = selected != null
+                }
+            }
+            // Nunca el texto crudo de la excepción: la gente no lo entiende y no le dice qué hacer.
+            .onFailure { failed = "No se pudo cargar la cartelera. Revisa tu conexión e inténtalo de nuevo." }
     }
 
     selected?.let { show ->
-        BackHandler { selected = null }
-        ShowDetail(show, onBack = { selected = null })
+        val close: () -> Unit = if (openedFromPoster) onBack else ({ selected = null })
+        BackHandler(onBack = close)
+        ShowDetail(show, onBack = close)
         return
     }
 
@@ -360,9 +375,12 @@ private fun Fact(label: String, value: String, onClick: (() -> Unit)? = null) {
     }
 }
 
-/** En Inicio: los próximos shows, a un toque. Si no hay o no carga, no enseña nada. */
+/**
+ * En Inicio: los próximos shows, a un toque. El encabezado abre la cartelera ([onOpen]); cada póster,
+ * su show ([onOpenShow] con el id). Si no hay o no carga, no enseña nada.
+ */
 @Composable
-fun CarteleraStrip(onOpen: () -> Unit) {
+fun CarteleraStrip(onOpen: () -> Unit, onOpenShow: (String) -> Unit) {
     var shows by remember { mutableStateOf<List<PublicShowDto>>(emptyList()) }
     LaunchedEffect(Unit) {
         shows = runCatching { ModulesClient.api.publicShows().upcoming }.getOrDefault(emptyList())
@@ -388,7 +406,7 @@ fun CarteleraStrip(onOpen: () -> Unit) {
                 Column(
                     Modifier
                         .width(112.dp)
-                        .clickable(onClick = onOpen)
+                        .clickable(onClickLabel = "Abrir ${show.title}") { onOpenShow(show.id) }
                         .semantics { contentDescription = show.title },
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {

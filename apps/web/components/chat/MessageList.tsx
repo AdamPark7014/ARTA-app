@@ -13,11 +13,15 @@ import {
   MAX_LEN,
   plainText,
   QUICK_REACTIONS,
+  REPORT_DETAILS_MAX,
+  REPORT_REASON_LABELS,
+  REPORT_REASONS,
   type ChatAttachment,
   type ChatMessage,
   type ChatReaction,
   type LinkPreview,
   type ReplyRef,
+  type ReportReason,
 } from './chat-model';
 import { ChatInline, ChatMarkdown, firstLink, isEmojiOnly } from './chat-markdown';
 import { REF_ICON, refKey, type ChatRef, type RefAction } from './chat-refs';
@@ -53,6 +57,8 @@ export type MessageActions = {
   refBusy?: string | null;
   /** «Crear tarea» desde un mensaje. */
   createTask?: (m: ChatMessage) => void;
+  /** «Reportar» un mensaje ajeno (POST /chat/messages/:id/report). Resuelve cuando ya se mandó. */
+  report?: (m: ChatMessage, input: { reason: ReportReason; details: string }) => Promise<void>;
   highlight: string | null;
   touched: string | null;
   setTouched: (id: string | null) => void;
@@ -164,6 +170,70 @@ function EditBox({ m, x }: { m: ChatMessage; x: MessageActions }) {
   );
 }
 
+/** Formulario corto bajo el mensaje: motivo y, si hace falta, detalles para dirección. */
+function ReportBox({ m, x, onClose }: { m: ChatMessage; x: MessageActions; onClose: () => void }) {
+  const [reason, setReason] = useState<ReportReason>('SPAM');
+  const [details, setDetails] = useState('');
+  const [busy, setBusy] = useState(false);
+  const send = async () => {
+    if (!x.report || busy) return;
+    setBusy(true);
+    try {
+      await x.report(m, { reason, details: details.trim() });
+      onClose();
+    } catch {
+      /* el aviso de error lo pone la página; el formulario se queda para reintentar */
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <form
+      className="chat-edit chat-report"
+      aria-label="Reportar mensaje"
+      onClick={(e) => e.stopPropagation()}
+      onSubmit={(e) => {
+        e.preventDefault();
+        void send();
+      }}
+    >
+      <label className="chat-report__field">
+        <span>Motivo</span>
+        <select value={reason} autoFocus onChange={(e) => setReason(e.target.value as ReportReason)}>
+          {REPORT_REASONS.map((r) => (
+            <option key={r} value={r}>
+              {REPORT_REASON_LABELS[r]}
+            </option>
+          ))}
+        </select>
+      </label>
+      <textarea
+        value={details}
+        maxLength={REPORT_DETAILS_MAX}
+        rows={2}
+        placeholder="Detalles (opcional)"
+        aria-label="Detalles del reporte"
+        onChange={(e) => setDetails(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape') {
+            e.preventDefault();
+            onClose();
+          }
+        }}
+      />
+      <div className="chat-edit__row">
+        <span className="chat-edit__hint">Lo revisa dirección · {details.length}/{REPORT_DETAILS_MAX}</span>
+        <button type="button" className="btn ghost btn-sm" onClick={onClose} disabled={busy}>
+          Cancelar
+        </button>
+        <button type="submit" className="btn btn-sm" disabled={busy}>
+          {busy ? 'Enviando…' : 'Enviar reporte'}
+        </button>
+      </div>
+    </form>
+  );
+}
+
 export function MessageItem({
   m,
   x,
@@ -177,6 +247,7 @@ export function MessageItem({
 }) {
   const [emojiAt, setEmojiAt] = useState<DOMRect | null>(null);
   const [menuAt, setMenuAt] = useState<DOMRect | null>(null);
+  const [reporting, setReporting] = useState(false);
   const mine = m.author.id === x.meId;
   const isEditing = x.editing?.id === m.id;
   const local = Boolean(m.pending || m.failed);
@@ -279,6 +350,7 @@ export function MessageItem({
             ) : null}
             {link ? <LinkPreviewCard url={link} /> : null}
             {!isEditing && refs.length ? <RefCards refs={refs} onAction={x.refAct} busyKey={x.refBusy} /> : null}
+            {reporting && x.report ? <ReportBox m={m} x={x} onClose={() => setReporting(false)} /> : null}
           </>
         )}
 
@@ -425,6 +497,8 @@ export function MessageItem({
               : null,
             x.canPost && !m.parentId ? { label: m.pinnedAt ? 'Desfijar' : 'Fijar en el canal', icon: ICONS.pin, onSelect: () => x.pin(m) } : null,
             canEdit ? { label: 'Editar', icon: ICONS.edit, hint: '↑', onSelect: () => x.setEditing({ id: m.id, body: plainText(m.body) }) } : null,
+            // Un mensaje propio no se reporta (el API tampoco lo acepta).
+            !mine && x.report ? { label: 'Reportar', icon: ICONS.flag, onSelect: () => setReporting(true) } : null,
             mine || x.canManage ? { label: 'Eliminar', icon: ICONS.trash, danger: true, onSelect: () => x.remove(m) } : null,
           ]}
         />

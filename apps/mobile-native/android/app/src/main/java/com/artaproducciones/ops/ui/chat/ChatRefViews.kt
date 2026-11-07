@@ -482,7 +482,9 @@ fun RefBacklinksSection(kind: String, id: String, onOpen: (String) -> Unit) {
         SectionTitle("Mencionado en el chat", count = links.size)
         links.forEach { l ->
             key(l.messageId) {
+                // Sin `href` del API se arma la liga a ese mensaje: la fila siempre lleva a algún lado.
                 val href = l.href?.takeIf { it.isNotBlank() }
+                    ?: l.channelId.takeIf { it.isNotBlank() }?.let { c -> "/chat?channel=$c" + (l.messageId.takeIf { it.isNotBlank() }?.let { "&msg=$it" } ?: "") }
                 Column(
                     Modifier
                         .fillMaxWidth()

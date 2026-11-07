@@ -64,12 +64,15 @@ archivos («Ana R. subió 3 archivos»). Úsalo en todo lo que pueda llegar en s
 | OC (a quien autoriza o paga) | `/purchase-orders?po=<id>` |
 | OC viejas | una sola: esa OC; varias en el mismo paso: `/purchase-orders?estado=unpaid` o `unauthorized` |
 | Formato | `/events/<e>?tab=checklists&checklist=<id>` |
+| Formatos que esperan firma (`checklist.signature_backlog`, alerta `SIG_BACKLOG`) | `/events?scope=active&ver=revision`: los eventos activos con formatos entregados sin autorizar (cada evento trae `pendingAuthorizedChecklists`), no el catálogo de plantillas |
 | Evento en riesgo | `/events/<e>?tab=checklists&ver=pendientes`: abre «Por completar» |
 | Documento / archivo | `/events/<e>?tab=files&doc=<id>` · `&file=<id>` (subidas en ráfaga: la pestaña) |
 | Mensaje / respuesta en hilo | `/chat?channel=<c>&msg=<m>` · `&thread=<raíz>`; el push lleva `parent_id` |
+| Mensaje reportado (`chat.report`) | `/chat?channel=<c>&msg=<m>` si quien lo recibe está en esa conversación (canal público, dueño o dirección dentro); si es un privado o directo ajeno, `/chat?reportes=1`: la cola de reportes |
+| Revisión en Studio (`studio.review`) | `/studio?tab=<news\|shows\|carousel\|historia\|foto\|aliado>`: un «Evento destacado» va a `shows` (cartelera), no a `news`; una sección propuesta, `/studio?tab=sections&bloque=<sectionKey>` |
 | Carpeta | `/folders?folder=<id>` |
 | Nota del calendario | `/calendar?date=YYYY-MM-DD`: el mes de ese día, con el día marcado |
-| Anticipo | `/advances?advance=<id>` |
+| Anticipo | `/advances?advance=<id>`; si ya no está en «Por resolver» ni en «Mías» (pagado o rechazado hace tiempo), la página lo pide con `GET /finance/advances/<id>` y abre su tarjeta |
 
 El título dice quién, qué hizo y sobre qué (`actionTitle`: «Ana R. agregó el formato «Rider técnico»»); el evento
 va en el cuerpo.

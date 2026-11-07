@@ -193,7 +193,7 @@ export class EventsController {
       }
     }
 
-    return this.prisma.event.findMany({
+    const events = await this.prisma.event.findMany({
       where,
       orderBy: { updatedAt: 'desc' },
       // Safety cap — an org running events for years has no other bound here.
@@ -204,6 +204,23 @@ export class EventsController {
         _count: { select: { checklists: { where: VISIBLE_CHECKLIST_WHERE }, purchaseOrders: true, tasks: true } },
       },
     });
+    if (!events.length) return [];
+    // Formatos entregados que esperan la firma de «Autorizado», por evento, en una sola consulta
+    // (la lista filtra «por revisar» con esto). Solo los formatos que se enseñan, como el conteo de arriba.
+    const pending = await this.prisma.checklistInstance.groupBy({
+      by: ['eventId'],
+      where: {
+        eventId: { in: events.map((e) => e.id) },
+        // Mismo criterio que la pestaña «Por autorizar» de la web (`checklistBucket` → 'review'):
+        // entregado o en revisión, y todavía sin la firma de «Autorizado».
+        authorizedAt: null,
+        status: { notIn: ['SEALED', 'APPROVED'] },
+        AND: [VISIBLE_CHECKLIST_WHERE, { OR: [{ deliveredAt: { not: null } }, { status: 'REVIEW' }] }],
+      },
+      _count: { _all: true },
+    });
+    const pendingByEvent = new Map(pending.map((p) => [p.eventId, p._count._all]));
+    return events.map((e) => ({ ...e, pendingAuthorizedChecklists: pendingByEvent.get(e.id) ?? 0 }));
   }
 
   @Get(':id')

@@ -210,6 +210,20 @@ struct ChannelInfoView: View {
         List {
             Section { header(ch) }
                 .listRowBackground(Color.clear)
+            // Canal de un evento: su ficha a un toque (se abre en Inicio, como desde cualquier lista).
+            if ch.isEvent, let eventId = ch.eventId {
+                Section {
+                    Button {
+                        Haptics.tap()
+                        router.open(AppRoute.event(eventId))
+                    } label: {
+                        Label("Abrir evento", systemImage: "calendar")
+                            .foregroundStyle(ArtaColor.text)
+                    }
+                    .accessibilityIdentifier("channel-open-event")
+                }
+                .listRowBackground(ArtaColor.bgElev)
+            }
             if !ch.isDirect { aboutSection(ch) }
             notificationsSection(ch)
             pinsSection

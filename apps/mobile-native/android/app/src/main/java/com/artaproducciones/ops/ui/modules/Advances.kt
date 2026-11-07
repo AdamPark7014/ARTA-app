@@ -83,6 +83,7 @@ fun AdvanceDto.isActionable(): Boolean = advanceStatus == "PENDING" || advanceSt
 
 fun AdvanceDto.conceptLabel(): String = label?.takeIf { it.isNotBlank() } ?: "Anticipo"
 
+/** [onOpenEvent]: la tarjeta lleva al detalle de su evento (null = no hay a dónde ir); los botones de abajo siguen igual. */
 @Composable
 internal fun AdvanceCard(
     advance: AdvanceDto,
@@ -92,9 +93,12 @@ internal fun AdvanceCard(
     onReject: () -> Unit,
     onPaid: () -> Unit,
     modifier: Modifier = Modifier,
+    onOpenEvent: ((String) -> Unit)? = null,
 ) {
     val outer = modifier.padding(horizontal = 16.dp, vertical = 4.dp)
-    ModuleCard(if (highlighted) outer.border(1.5.dp, ArtaColors.Gold, LocalArtaTokens.current.cardShape) else outer) {
+    val eventId = (advance.event?.id?.takeIf { it.isNotBlank() } ?: advance.eventId)?.takeIf { it.isNotBlank() }
+    val openEvent: (() -> Unit)? = if (eventId != null && onOpenEvent != null) ({ onOpenEvent(eventId) }) else null
+    ModuleCard(if (highlighted) outer.border(1.5.dp, ArtaColors.Gold, LocalArtaTokens.current.cardShape) else outer, onClick = openEvent, onClickLabel = "Abrir el evento") {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 advance.conceptLabel(),

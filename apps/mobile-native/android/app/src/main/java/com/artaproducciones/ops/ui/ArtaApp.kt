@@ -100,6 +100,7 @@ import com.artaproducciones.ops.ui.modules.LocationConsentHost
 import com.artaproducciones.ops.ui.modules.ModuleNav
 import com.artaproducciones.ops.ui.modules.ModulesStore
 import com.artaproducciones.ops.ui.modules.TaskDetailScreen
+import com.artaproducciones.ops.ui.modules.TasksLaunch
 import com.artaproducciones.ops.ui.modules.TasksScreen
 import com.artaproducciones.ops.ui.modules.rememberHaptics
 import com.artaproducciones.ops.ui.more.BlockedUsersScreen
@@ -121,9 +122,17 @@ import kotlinx.coroutines.flow.drop
 /** `navigate("approvals")` sigue valiendo: el argumento es opcional. */
 private const val APPROVALS_ROUTE = "approvals?advance={advance}&po={po}"
 
+/** El hub del evento; `tab` es la pestaña nativa con la que abre (`/events/<id>?tab=tasks`). */
+private const val EVENT_ROUTE = "event/{id}?tab={tab}"
+
+/** La cartelera; con `show` abre ese show de una vez (los pósters de Inicio). */
+private const val CARTELERA_ROUTE = "cartelera?show={show}"
+
 /** Más › Usuarios bloqueados (chat). */
-private const val CARTELERA_ROUTE = "cartelera"
 private const val BLOCKED_USERS_ROUTE = "blocked-users"
+
+/** La vista web del panel en [path]; [title] va en la barra si la página no trae uno. */
+private fun webRoute(path: String, title: String?): String = "web?path=${Uri.encode(path)}&title=${Uri.encode(title.orEmpty())}"
 
 /** Preferencias de avisos (Más y barra de Avisos). */
 private const val NOTIFICATION_PREFS_ROUTE = "notification-prefs"
@@ -154,7 +163,15 @@ sealed interface DeepLink {
     /** [parentId]: raíz del hilo cuando el aviso es de una respuesta; se abre ese hilo. */
     data class Chat(val channelId: String, val messageId: String?, val parentId: String? = null) : DeepLink
     data class Task(val taskId: String) : DeepLink
-    data class Event(val eventId: String) : DeepLink
+
+    /** [tab]: pestaña nativa del hub (`tasks`, `adendum`, `testigos`, `team`); null = Resumen. */
+    data class Event(val eventId: String, val tab: String? = null) : DeepLink
+
+    /**
+     * La pestaña Tareas con algo pedido: [filter] y [view] son las llaves de la web
+     * (`/tasks?filtro=vencidas&vista=equipo`) y [compose] abre el alta (`/tasks/new`).
+     */
+    data class Tasks(val filter: String? = null, val view: String? = null, val compose: Boolean = false) : DeepLink
     data object Approvals : DeepLink
     /** Aprobaciones con la tarjeta de ese anticipo enfocada (`/advances?advance=<id>`). */
     data class Advance(val advanceId: String) : DeepLink
@@ -170,8 +187,15 @@ sealed interface DeepLink {
     val isNative: Boolean get() = this !is Web
 
     companion object {
-        /** Pestañas del hub del evento que tienen versión nativa; las demás abren la web. */
-        private val NATIVE_EVENT_TABS = setOf("", "overview", "summary", "resumen", "tasks", "tareas")
+        /**
+         * Pestañas del hub del evento con versión nativa ([com.artaproducciones.ops.ui.modules.EventDetailScreen]);
+         * las demás (corrida, formatos, OC, documentos…) abren la web con su `?tab=` completo.
+         */
+        private val SUMMARY_TABS = setOf("", "overview", "summary", "resumen")
+        private val NATIVE_EVENT_TABS = SUMMARY_TABS + setOf("tasks", "tareas", "adendum", "testigos", "team", "equipo")
+
+        /** `arta://…`, `https://…`, `mailto:…`: cualquier cosa con esquema. */
+        private val HAS_SCHEME = Regex("^[A-Za-z][A-Za-z0-9+.-]*:")
 
         fun from(
             channelId: String?,
@@ -195,46 +219,71 @@ sealed interface DeepLink {
          * Devuelve null para hosts ajenos.
          */
         fun parse(url: String, type: String? = null): DeepLink? {
-            val uri = Uri.parse(url.trim())
-            if (uri.isAbsolute) {
-                val origin = Uri.parse(ApiClient.origin)
-                if (!uri.host.equals(origin.host, ignoreCase = true)) return null
-            }
-            val segments = uri.pathSegments.orEmpty().filter { it.isNotBlank() }
-            val relative = (uri.encodedPath ?: "/").ifBlank { "/" } + (uri.encodedQuery?.let { "?$it" } ?: "")
-            fun q(name: String) = runCatching { uri.getQueryParameter(name) }.getOrNull()?.takeIf { it.isNotBlank() }
+            val raw = url.trim()
+            if (!HAS_SCHEME.containsMatchIn(raw)) return resolve(raw, type)
+            val uri = Uri.parse(raw)
+            val origin = Uri.parse(ApiClient.origin)
+            if (!uri.host.equals(origin.host, ignoreCase = true)) return null
+            return resolve((uri.encodedPath ?: "/").ifBlank { "/" } + (uri.encodedQuery?.let { "?$it" } ?: ""), type)
+        }
+
+        /**
+         * La ruta ya relativa al panel → destino. Sin Android (se prueba en la JVM): [parse] le quita el
+         * origen a las URL absolutas y todo lo demás pasa por aquí.
+         */
+        internal fun resolve(relative: String, type: String? = null): DeepLink {
+            val clean = relative.trim().substringBefore('#').let { if (it.startsWith("/")) it else "/$it" }
+            val segments = clean.substringBefore('?').split('/').map(::decode).filter { it.isNotBlank() }
+            val params = clean.substringAfter('?', "").split('&').filter { it.isNotBlank() }
+                .associate { decode(it.substringBefore('=')) to decode(it.substringAfter('=', "")) }
+            fun q(name: String) = params[name]?.takeIf { it.isNotBlank() }
 
             return when (segments.firstOrNull()) {
                 null, "dashboard" -> Section(Tab.Inicio)
                 "notifications" -> if (q("tab") == "enviados") SentNotices else Section(Tab.Avisos)
                 "chat" -> q("channel")?.let { Chat(it, q("msg"), q("thread")) } ?: Section(Tab.Chats)
-                "tasks" -> (segments.getOrNull(1) ?: q("task"))?.let(::Task) ?: Section(Tab.Tareas)
+                "tasks" -> when (val id = segments.getOrNull(1)) {
+                    // `/tasks/new` es el alta, no una tarea con id «new».
+                    "new" -> Tasks(compose = true)
+                    null -> q("task")?.let(::Task)
+                        ?: if (q("filtro") != null || q("vista") != null) Tasks(filter = q("filtro"), view = q("vista")) else Section(Tab.Tareas)
+                    else -> Task(id)
+                }
                 // El calendario (con `?date=` del aviso de una nota) vive en la web.
-                "calendar" -> Web(relative)
+                "calendar" -> Web(clean)
                 "events" -> {
                     val id = segments.getOrNull(1)
+                    val tab = (q("tab") ?: "").lowercase()
                     when {
-                        id == null -> if (q("scope") == "past") Web(relative) else Events
-                        id == "new" -> Web(relative)
+                        id == null -> if (q("scope") == "past") Web(clean) else Events
+                        id == "new" -> Web(clean)
                         q("task") != null -> Task(q("task")!!)
-                        segments.size > 2 -> Web(relative)
-                        (q("tab") ?: "").lowercase() in NATIVE_EVENT_TABS -> Event(id)
-                        else -> Web(relative)
+                        segments.size > 2 -> Web(clean)
+                        // Resumen y sus alias viajan sin pestaña: es la misma pantalla de siempre.
+                        tab in NATIVE_EVENT_TABS -> Event(id, tab.takeIf { it !in SUMMARY_TABS })
+                        else -> Web(clean)
                     }
                 }
                 "purchase-orders", "advances" -> when {
-                    !isPendingApproval(type) -> Web(relative)
+                    !isPendingApproval(type) -> Web(clean)
                     segments.first() == "advances" -> q("advance")?.let(::Advance) ?: Approvals
                     else -> q("po")?.let(::Po) ?: Approvals
                 }
-                else -> Web(relative)
+                else -> Web(clean)
             }
         }
 
-        /** `po.to_pay` y `po.to_transfer` no entran: su destino es la orden, en la vista web. */
+        private fun decode(part: String): String =
+            runCatching { java.net.URLDecoder.decode(part.replace("+", "%2B"), "UTF-8") }.getOrDefault(part)
+
+        /**
+         * Lo que se decide en Aprobaciones (mismo criterio que `AppRouter.approvalTypes` en iOS). `po.aging`
+         * es la misma OC que sigue esperando: abre su detalle. `po.to_pay` y `po.to_transfer` no entran:
+         * su destino es la orden, en la vista web. Sin `type` (p. ej. Avisos › Enviados) nada es pendiente.
+         */
         private fun isPendingApproval(type: String?): Boolean {
             val t = type?.trim()?.lowercase().orEmpty()
-            return t == "po.requested" || t == "po.updated" || t == "advance.to_pay" ||
+            return t == "po.requested" || t == "po.updated" || t == "po.aging" || t == "advance.to_pay" ||
                 t.endsWith(".review") || t.endsWith(".requested")
         }
     }
@@ -324,7 +373,23 @@ private fun SignedInNav(user: UserDto, pendingLink: StateFlow<DeepLink?>, onLink
                 if (root != null) nav.navigate("thread/${target.channelId}/$root")
             }
             is DeepLink.Task -> nav.navigate("task/${Uri.encode(target.taskId)}")
-            is DeepLink.Event -> nav.navigate("event/${Uri.encode(target.eventId)}")
+            is DeepLink.Event -> {
+                val route = "event/${Uri.encode(target.eventId)}" + (target.tab?.let { "?tab=${Uri.encode(it)}" } ?: "")
+                // El mismo evento ya en la pila (Evento → chat → info → «Abrir evento»): se vuelve a él con la
+                // pestaña pedida, sin apilar una segunda copia. Otro evento sí se apila: atrás regresa al anterior.
+                val previous = runCatching { nav.getBackStackEntry(EVENT_ROUTE) }.getOrNull()
+                if (previous?.arguments?.getString("id") == target.eventId) {
+                    nav.navigate(route) { popUpTo(EVENT_ROUTE) { inclusive = true } }
+                } else {
+                    nav.navigate(route)
+                }
+            }
+            is DeepLink.Tasks -> {
+                // La pestaña lo lee al verse: el filtro, la vista y, si se pidió, el alta abierta.
+                TasksLaunch.request(filter = target.filter, view = target.view, compose = target.compose)
+                nav.popBackStack("home", inclusive = false)
+                tab = Tab.Tareas
+            }
             DeepLink.Approvals -> nav.navigate("approvals") { launchSingleTop = true }
             is DeepLink.Advance -> nav.navigate("approvals?advance=${Uri.encode(target.advanceId)}")
             is DeepLink.Po -> nav.navigate("approvals?po=${Uri.encode(target.poId)}")
@@ -338,7 +403,7 @@ private fun SignedInNav(user: UserDto, pendingLink: StateFlow<DeepLink?>, onLink
                 tab = Tab.Avisos
                 showSentNotices = true
             }
-            is DeepLink.Web -> nav.navigate("web?path=${Uri.encode(target.path)}&title=${Uri.encode(target.title.orEmpty())}")
+            is DeepLink.Web -> nav.navigate(webRoute(target.path, target.title))
         }
     }
 
@@ -348,7 +413,8 @@ private fun SignedInNav(user: UserDto, pendingLink: StateFlow<DeepLink?>, onLink
         val args = entry.arguments
         return when (target) {
             is DeepLink.Task -> entry.destination.route == "task/{id}" && args?.getString("id") == target.taskId
-            is DeepLink.Event -> entry.destination.route == "event/{id}" && args?.getString("id") == target.eventId
+            // La pestaña también cuenta: desde Resumen, `?tab=tasks` cambia de pestaña en vez de abrir la web.
+            is DeepLink.Event -> entry.destination.route == EVENT_ROUTE && args?.getString("id") == target.eventId && args?.getString("tab") == target.tab
             DeepLink.Approvals -> entry.destination.route == APPROVALS_ROUTE
             is DeepLink.Advance -> entry.destination.route == APPROVALS_ROUTE && args?.getString("advance") == target.advanceId
             is DeepLink.Po -> entry.destination.route == APPROVALS_ROUTE && args?.getString("po") == target.poId
@@ -362,6 +428,14 @@ private fun SignedInNav(user: UserDto, pendingLink: StateFlow<DeepLink?>, onLink
             override fun openTask(id: String) = go(DeepLink.Task(id))
             override fun openEvent(id: String) = go(DeepLink.Event(id))
             override fun openApprovals() = go(DeepLink.Approvals)
+            override fun openApproval(poId: String?, advanceId: String?) = go(
+                when {
+                    !poId.isNullOrBlank() -> DeepLink.Po(poId)
+                    !advanceId.isNullOrBlank() -> DeepLink.Advance(advanceId)
+                    else -> DeepLink.Approvals
+                },
+            )
+            override fun openTasks(filter: String?) = go(if (filter == null) DeepLink.Section(Tab.Tareas) else DeepLink.Tasks(filter = filter))
             override fun openChat(channelId: String) = go(DeepLink.Chat(channelId, null))
             override fun openBlockedUsers() {
                 nav.navigate(BLOCKED_USERS_ROUTE) { launchSingleTop = true }
@@ -369,8 +443,8 @@ private fun SignedInNav(user: UserDto, pendingLink: StateFlow<DeepLink?>, onLink
             override fun openNotificationPrefs() {
                 nav.navigate(NOTIFICATION_PREFS_ROUTE) { launchSingleTop = true }
             }
-            override fun openCartelera() {
-                nav.navigate(CARTELERA_ROUTE) { launchSingleTop = true }
+            override fun openCartelera(showId: String?) {
+                nav.navigate("cartelera" + (showId?.takeIf { it.isNotBlank() }?.let { "?show=${Uri.encode(it)}" } ?: "")) { launchSingleTop = true }
             }
             override fun back() {
                 if (nav.previousBackStackEntry != null) nav.popBackStack() else tab = Tab.Inicio
@@ -380,6 +454,11 @@ private fun SignedInNav(user: UserDto, pendingLink: StateFlow<DeepLink?>, onLink
             override fun openWeb(path: String, title: String?) {
                 val target = DeepLink.parse(path)
                 if (target != null && target.isNative && !isCurrent(target)) go(target) else go(DeepLink.Web(path, title))
+            }
+
+            override fun replaceWithWeb(path: String, title: String?) {
+                val top = nav.currentBackStackEntry?.destination?.id
+                nav.navigate(webRoute(path, title)) { if (top != null) popUpTo(top) { inclusive = true } }
             }
         }
     }
@@ -418,10 +497,17 @@ private fun SignedInNav(user: UserDto, pendingLink: StateFlow<DeepLink?>, onLink
             TaskDetailScreen(taskId = entry.arguments?.getString("id").orEmpty(), nav = moduleNav)
         }
         composable(
-            route = "event/{id}",
-            arguments = listOf(navArgument("id") { type = NavType.StringType }),
+            route = EVENT_ROUTE,
+            arguments = listOf(
+                navArgument("id") { type = NavType.StringType },
+                navArgument("tab") { type = NavType.StringType; nullable = true; defaultValue = null },
+            ),
         ) { entry ->
-            EventDetailScreen(eventId = entry.arguments?.getString("id").orEmpty(), nav = moduleNav)
+            EventDetailScreen(
+                eventId = entry.arguments?.getString("id").orEmpty(),
+                nav = moduleNav,
+                initialTab = entry.arguments?.getString("tab"),
+            )
         }
         composable(
             route = APPROVALS_ROUTE,
@@ -438,7 +524,12 @@ private fun SignedInNav(user: UserDto, pendingLink: StateFlow<DeepLink?>, onLink
         }
         composable("events") { EventsScreen(nav = moduleNav) }
         composable(BLOCKED_USERS_ROUTE) { BlockedUsersScreen(onBack = { nav.popBackStack() }) }
-        composable(CARTELERA_ROUTE) { CarteleraScreen(onBack = { nav.popBackStack() }) }
+        composable(
+            route = CARTELERA_ROUTE,
+            arguments = listOf(navArgument("show") { type = NavType.StringType; nullable = true; defaultValue = null }),
+        ) { entry ->
+            CarteleraScreen(onBack = { nav.popBackStack() }, initialShowId = entry.arguments?.getString("show"))
+        }
         composable(NOTIFICATION_PREFS_ROUTE) { NotificationPrefsScreen(onBack = { nav.popBackStack() }) }
         composable(
             route = "web?path={path}&title={title}",
@@ -487,6 +578,8 @@ private fun SignedInNav(user: UserDto, pendingLink: StateFlow<DeepLink?>, onLink
                 onBack = { nav.popBackStack() },
                 openChat = { id -> nav.navigate("chat/$id") },
                 openMessage = { c, m -> nav.navigate("chat/$c?msg=$m") },
+                openThread = { c, root -> nav.navigate("thread/$c/$root") },
+                openEvent = moduleNav::openEvent,
                 onLeft = { nav.popBackStack("home", inclusive = false) },
             )
         }

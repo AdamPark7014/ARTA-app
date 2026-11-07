@@ -39,7 +39,12 @@ export function useEventTab(defaultTab: Tab = 'overview') {
   }, [searchParams]);
 
   const selectTab = useCallback(
-    (next: Tab, opts?: { checklist?: string }) => {
+    /**
+     * `checklist`: formato abierto (sin él se quita de la URL). `ver`: grupo de la lista de
+     * Formatos (`pendientes`, `revision`, `listos`); un texto lo pone, `null` lo quita y sin
+     * la opción se deja como está. Todo va en una sola navegación.
+     */
+    (next: Tab, opts?: { checklist?: string; ver?: string | null }) => {
       setTabState(next);
       const params = new URLSearchParams(searchParams.toString());
       if (next === 'overview') params.delete('tab');
@@ -47,6 +52,11 @@ export function useEventTab(defaultTab: Tab = 'overview') {
 
       if (opts?.checklist) params.set('checklist', opts.checklist);
       else params.delete('checklist');
+
+      if (opts && 'ver' in opts) {
+        if (opts.ver) params.set('ver', opts.ver);
+        else params.delete('ver');
+      }
 
       const qs = params.toString();
       router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });

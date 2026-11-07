@@ -36,9 +36,11 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.outlined.CalendarMonth
+import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.FactCheck
 import androidx.compose.material.icons.outlined.Payments
 import androidx.compose.material.icons.outlined.ReceiptLong
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -197,7 +199,13 @@ fun InicioScreen(user: UserDto, nav: ModuleNav) {
                     val ops = p.opsEntity != null
                     val todayEvents = if (ops) eventsOn(d.events, today) else emptyList()
                     if (todayEvents.isNotEmpty()) {
-                        item(key = "today") { Box(Modifier.animateItem()) { TodayPanel(todayEvents, today, onOpen = { nav.openEvent(it) }) } }
+                        // Como iOS: en la línea de tiempo entran también mis tareas que vencen hoy a una hora.
+                        val timedTasks = d.myTasks.orEmpty().filter { it.status in ACTIONABLE && it.bucket(today) == DueBucket.TODAY && dueHasTime(it.dueAt) }
+                        item(key = "today") {
+                            Box(Modifier.animateItem()) {
+                                TodayPanel(todayEvents, timedTasks, today, onOpenEvent = { nav.openEvent(it) }, onOpenTask = { nav.openTask(it) })
+                            }
+                        }
                     }
                     val approvals = d.approvals
                     if (approvals != null && (p.approvesMoney || approvals.tasksToReview.isNotEmpty() || approvals.actionableAdvances.isNotEmpty())) {
@@ -205,7 +213,9 @@ fun InicioScreen(user: UserDto, nav: ModuleNav) {
                     }
                     todayTasks(d.myTasks, today, nav)
                     if (ops) upcomingEvents(d.events, today, nav)
-                    if (entity == BizEntity.ARTA) item(key = "cartelera") { CarteleraStrip(onOpen = { nav.openCartelera() }) }
+                    if (entity == BizEntity.ARTA) {
+                        item(key = "cartelera") { CarteleraStrip(onOpen = { nav.openCartelera() }, onOpenShow = { nav.openCartelera(it) }) }
+                    }
                 }
             }
         }
@@ -280,8 +290,8 @@ private class Kpi(
 
 private val ACTIONABLE = setOf("OPEN", "IN_PROGRESS", "BLOCKED")
 
-private fun EventSummaryDto.startLocal(): ZonedDateTime? = parseIso(startsAt)?.atZone(ZoneId.systemDefault())
-private fun EventSummaryDto.endLocal(): ZonedDateTime? = parseIso(endsAt)?.atZone(ZoneId.systemDefault())
+private fun EventSummaryDto.startLocal(zone: ZoneId = ZoneId.systemDefault()): ZonedDateTime? = parseIso(startsAt)?.atZone(zone)
+private fun EventSummaryDto.endLocal(zone: ZoneId = ZoneId.systemDefault()): ZonedDateTime? = parseIso(endsAt)?.atZone(zone)
 
 /** Eventos vivos que tocan [day] (los de varios días cuentan todos sus días). */
 private fun eventsOn(events: List<EventSummaryDto>?, day: LocalDate): List<EventSummaryDto> =
@@ -353,8 +363,10 @@ private fun KpiRow(p: ModulesPerms, d: InicioData, today: LocalDate, entity: Biz
             else -> "de ${plural(actionable.size, "abierta", "abiertas")}"
         },
         alert = overdue > 0,
-        onClick = { nav.openWeb("/tasks", "Tareas") },
-        clickLabel = "Abrir tareas",
+        // Tareas con el filtro puesto (como la liga `/tasks?filtro=vencidas` de la web): las vencidas si las
+        // hay; si no, las pendientes, que ya salen agrupadas con «Hoy» arriba.
+        onClick = { nav.openTasks(if (overdue > 0) "vencidas" else "abiertas") },
+        clickLabel = if (overdue > 0) "Abrir tareas vencidas" else "Abrir tareas pendientes",
     )
 
     Row(
@@ -457,13 +469,29 @@ private fun ShortcutTile(s: Shortcut, modifier: Modifier) {
 
 // ─── Hoy (línea de tiempo) ──────────────────────────────────────────────────
 
-private class Moment(val time: String, val done: Boolean, val title: String, val detail: String?, val eventId: String)
+/** Un renglón de «Hoy»: abre su tarea si la tiene ([taskId]); si no, su evento. [at] ordena; sin hora va primero. */
+internal class Moment(
+    val time: String,
+    val done: Boolean,
+    val title: String,
+    val detail: String?,
+    val eventId: String,
+    val at: ZonedDateTime? = null,
+    val taskId: String? = null,
+)
 
-private fun momentsOf(events: List<EventSummaryDto>, today: LocalDate, now: ZonedDateTime): List<Moment> {
+private fun TaskDto.dueLocal(zone: ZoneId): ZonedDateTime? = parseIso(dueAt)?.atZone(zone)
+
+/**
+ * Inicio y cierre de cada evento de hoy más mis tareas que vencen hoy a una hora, en orden de hora local
+ * (la zona de [now]); lo que no tiene hora («Continúa») va primero.
+ */
+internal fun momentsOf(events: List<EventSummaryDto>, tasks: List<TaskDto>, today: LocalDate, now: ZonedDateTime): List<Moment> {
+    val zone = now.zone
     val single = events.size == 1
-    return events.flatMap { e ->
-        val start = e.startLocal()
-        val end = e.endLocal()
+    val ofEvents = events.flatMap { e ->
+        val start = e.startLocal(zone)
+        val end = e.endLocal(zone)
         val place = e.venue?.takeIf { it.isNotBlank() }
         val live = start != null && !now.isBefore(start) && (end == null || now.isBefore(end))
         val startsToday = start?.toLocalDate() == today
@@ -476,25 +504,31 @@ private fun momentsOf(events: List<EventSummaryDto>, today: LocalDate, now: Zone
                     title = if (single) (if (startsToday) "Inicio" else "Continúa") else e.name,
                     detail = listOfNotNull(place, "en curso".takeIf { live }).joinToString(" · ").ifBlank { null },
                     eventId = e.id,
+                    at = start?.takeIf { startsToday },
                 ),
             )
             if (end != null && end.toLocalDate() == today) {
-                add(Moment(HM.format(end), !now.isBefore(end), "Cierre", if (single) null else e.name, e.id))
+                add(Moment(HM.format(end), !now.isBefore(end), "Cierre", if (single) null else e.name, e.id, at = end))
             }
         }
     }
+    val ofTasks = tasks.mapNotNull { t ->
+        val due = t.dueLocal(zone) ?: return@mapNotNull null
+        Moment(HM.format(due), done = false, title = t.title, detail = t.event?.name?.takeIf { it.isNotBlank() } ?: "Tarea", eventId = (t.eventId ?: t.event?.id).orEmpty(), at = due, taskId = t.id)
+    }
+    return (ofEvents + ofTasks).sortedBy { it.at?.toInstant()?.toEpochMilli() ?: Long.MIN_VALUE }
 }
 
 @Composable
-private fun TodayPanel(events: List<EventSummaryDto>, today: LocalDate, onOpen: (String) -> Unit) {
-    val moments = remember(events, today) { momentsOf(events, today, ZonedDateTime.now()) }
+private fun TodayPanel(events: List<EventSummaryDto>, tasks: List<TaskDto>, today: LocalDate, onOpenEvent: (String) -> Unit, onOpenTask: (String) -> Unit) {
+    val moments = remember(events, tasks, today) { momentsOf(events, tasks, today, ZonedDateTime.now()) }
     ArtaCard(
         Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 8.dp),
     ) {
         PanelHeader("Hoy", if (events.size == 1) events.first().name else plural(events.size, "evento", "eventos"))
         Spacer(Modifier.height(6.dp))
-        moments.forEach { m -> TimelineRow(m) { onOpen(m.eventId) } }
+        moments.forEach { m -> TimelineRow(m) { m.taskId?.let(onOpenTask) ?: onOpenEvent(m.eventId) } }
     }
 }
 
@@ -589,16 +623,17 @@ private fun ApprovalsPanel(a: ApprovalsData, p: ModulesPerms, nav: ModuleNav) {
             val who = t.assigneePeople().firstOrNull()?.fullName?.let(::firstName)
             add(Pending("Entrega · ${t.title}", joinDetail(who, t.event?.name), null, "Revisar", true) { nav.openTask(t.id) })
         }
+        // Cada fila abre justo esa OC o ese anticipo en Aprobaciones (como `.approvals(focus:)` en iOS).
         a.toAuthorize(p).forEach { o ->
-            add(Pending("Orden de compra · ${poRubroLabel(o.row.rubro)}", joinDetail(o.row.vendorName, o.row.eventName), money(o.row.amount), "Autorizar", true) { nav.openApprovals() })
+            add(Pending("Orden de compra · ${poRubroLabel(o.row.rubro)}", joinDetail(o.row.vendorName, o.row.eventName), money(o.row.amount), "Autorizar", true) { nav.openApproval(poId = o.row.id) })
         }
         a.toPay(p).forEach { o ->
             // Fuera de la ventana de pagos no hay nada que hacer todavía: va como informativo.
-            add(Pending("Orden de compra · ${poRubroLabel(o.row.rubro)}", joinDetail(o.row.vendorName, o.row.eventName), money(o.row.amount), if (a.canPayNow) "Pagar" else "Por pagar", a.canPayNow) { nav.openApprovals() })
+            add(Pending("Orden de compra · ${poRubroLabel(o.row.rubro)}", joinDetail(o.row.vendorName, o.row.eventName), money(o.row.amount), if (a.canPayNow) "Pagar" else "Por pagar", a.canPayNow) { nav.openApproval(poId = o.row.id) })
         }
         a.actionableAdvances.forEach { ad ->
             val toApprove = ad.advanceStatus == "PENDING"
-            add(Pending(advanceTitle(ad.conceptLabel()), joinDetail(ad.who(), ad.event?.name), advanceAmountOrNull(ad.amount), if (toApprove) "Aprobar" else "Pagar", true) { nav.openApprovals() })
+            add(Pending(advanceTitle(ad.conceptLabel()), joinDetail(ad.who(), ad.event?.name), advanceAmountOrNull(ad.amount), if (toApprove) "Aprobar" else "Pagar", true) { nav.openApproval(advanceId = ad.id) })
         }
     }
     ArtaCard(
@@ -619,13 +654,24 @@ private fun ApprovalsPanel(a: ApprovalsData, p: ModulesPerms, nav: ModuleNav) {
             PendingRow(item)
         }
         if (items.size > 5) {
-            Text(
-                "${items.size - 5} más en Aprobaciones",
-                style = MaterialTheme.typography.bodySmall,
-                color = ArtaColors.Tertiary,
-                modifier = Modifier.padding(top = 2.dp, bottom = 8.dp),
-            )
+            // Botón, como en iOS: lleva a la lista completa. En acento y con flecha, para que se vea que se toca.
+            MoreLink("${items.size - 5} más en Aprobaciones", modifier = Modifier.padding(bottom = 2.dp)) { nav.openApprovals() }
         }
+    }
+}
+
+/** «N más en…»: botón de texto en acento con flecha, alineado con el texto del panel (sin la sangría del botón). */
+@Composable
+private fun MoreLink(text: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    TextButton(
+        onClick = onClick,
+        colors = ButtonDefaults.textButtonColors(contentColor = ArtaColors.Gold),
+        contentPadding = PaddingValues(horizontal = 0.dp, vertical = 8.dp),
+        modifier = modifier,
+    ) {
+        Text(text, style = MaterialTheme.typography.labelLarge)
+        Spacer(Modifier.width(2.dp))
+        Icon(Icons.Outlined.ChevronRight, contentDescription = null, modifier = Modifier.size(18.dp))
     }
 }
 
@@ -700,12 +746,8 @@ private fun androidx.compose.foundation.lazy.LazyListScope.todayTasks(tasks: Lis
         val more = actionable.size - urgent.take(8).size
         if (more > 0) {
             item(key = "tasks-more") {
-                Text(
-                    "$more pendiente${if (more == 1) "" else "s"} más en Tareas",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = ArtaColors.Tertiary,
-                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
-                )
+                // Botón, como en iOS: la pestaña Tareas con las pendientes.
+                MoreLink("$more pendiente${if (more == 1) "" else "s"} más en Tareas", modifier = Modifier.padding(horizontal = 20.dp)) { nav.openTasks("abiertas") }
             }
         }
     }

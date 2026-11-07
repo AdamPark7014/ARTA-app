@@ -8,6 +8,8 @@ import { ExpandBox } from '@/components/ui/ExpandBox';
 import { RevisionHistory } from '@/components/ui/RevisionHistory';
 import { useSaveHotkey } from '@/lib/use-save-hotkey';
 import { useDirtyGuard } from '@/lib/use-dirty-guard';
+import { useUser } from '@/lib/user-context';
+import { userHasPermission } from '@/lib/access-matrix';
 
 export type DocBlockType = 'h1' | 'h2' | 'p' | 'bullet' | 'divider' | 'table';
 export type DocTextBlock = { type: 'h1' | 'h2' | 'p' | 'bullet' | 'divider'; text: string };
@@ -99,6 +101,10 @@ function fitTextarea(el: HTMLTextAreaElement | null) {
  * corrido sin tocar el ratón.
  */
 export function DocEditor({ doc, canEdit, onSaved, onDeleted, onClose }: Props) {
+  const { user } = useUser();
+  // El historial en PDF (`/audit/resource/DOCUMENT/:id/pdf`) es de dirección, como en el API.
+  const canHistoryPdf = !!user && userHasPermission(user.roleKey, user.permissions, ['users.manage', 'everything']);
+  const [historyPdf, setHistoryPdf] = useState(false);
   const [title, setTitle] = useState(doc.title);
   const [blocks, setBlocks] = useState<DocBlock[]>(() => normalizeBlocks(doc.blocksJson));
   const [dirty, setDirty] = useState(false);
@@ -284,6 +290,22 @@ export function DocEditor({ doc, canEdit, onSaved, onDeleted, onClose }: Props) 
       onDeleted(doc.id);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'No se pudo eliminar');
+    }
+  }
+
+  /** PDF con marca del historial de revisiones; la pestaña se abre antes del `await` (Safari). */
+  async function exportHistoryPdf() {
+    setHistoryPdf(true);
+    setError('');
+    try {
+      await openGeneratedTab(
+        async () => (await api<{ url: string }>(`/audit/resource/DOCUMENT/${doc.id}/pdf`)).url,
+        'Generando el historial en PDF…',
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se pudo generar el historial en PDF');
+    } finally {
+      setHistoryPdf(false);
     }
   }
 
@@ -547,6 +569,16 @@ export function DocEditor({ doc, canEdit, onSaved, onDeleted, onClose }: Props) 
             <div className="docedit-history__head">
               <h3>Quién editó</h3>
               <p className="muted kpi-sub">Cada guardado y cada PDF queda con nombre y fecha.</p>
+              {canHistoryPdf ? (
+                <button
+                  className="btn ghost btn-sm"
+                  type="button"
+                  disabled={historyPdf}
+                  onClick={() => void exportHistoryPdf()}
+                >
+                  {historyPdf ? 'Generando…' : 'Historial en PDF'}
+                </button>
+              ) : null}
             </div>
             <RevisionHistory
               path={`/documents/${doc.id}/revisions`}

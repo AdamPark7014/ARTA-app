@@ -44,6 +44,21 @@ object WebSessionBridge {
         return ApiClient.origin + clean + sep + HANDOFF_PARAM + "=" + code
     }
 
+    /**
+     * URL firmada para abrir [path] fuera de la app (el navegador del teléfono), como
+     * `WebSession.signedURL` en iOS: el acceso de un solo uso entra con la sesión de la app sin
+     * tocar las cookies de la vista web. Si el API no lo da, la URL sin firma (el panel pedirá entrar).
+     */
+    suspend fun signedUrl(path: String, entity: String): String {
+        val clean = normalizePath(path)
+        val code = runCatching { createHandoff(entity, clean) }
+            .onFailure { Log.w(TAG, "Handoff no disponible: ${it.message}") }
+            .getOrNull()
+        if (code.isNullOrBlank()) return ApiClient.origin + clean
+        val sep = if (clean.contains('?')) '&' else '?'
+        return ApiClient.origin + clean + sep + HANDOFF_PARAM + "=" + code
+    }
+
     /** `/ruta` relativa al panel; nunca otra cosa (evita abrir hosts ajenos con la sesión). */
     fun normalizePath(path: String): String {
         val p = path.trim()

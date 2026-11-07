@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { AppShell } from '@/components/app-shell/AppShell';
 import { DistBar } from '@/components/charts/SparkBars';
@@ -25,16 +26,55 @@ type AuditIntel = {
   topActions: Array<{ action: string; count: number }>;
   topUsers: Array<{ user: string; count: number }>;
   byResource: Record<string, number>;
-  anomalies: Array<{ id: string; action: string; resource: string; at: string; user: string }>;
+  anomalies: Array<{
+    id: string;
+    action: string;
+    resource: string;
+    resourceId?: string | null;
+    eventId?: string | null;
+    metaJson?: unknown;
+    at: string;
+    user: string;
+  }>;
   logs: Array<{
     id: string;
     action: string;
     resource: string;
     resourceId?: string | null;
+    /** La fila completa del API: en `metaJson.eventId` viene el evento del formato o la OC. */
+    metaJson?: unknown;
     createdAt: string;
     user?: { fullName: string; email: string } | null;
   }>;
 };
+
+function metaEventId(meta: unknown): string | null {
+  if (!meta || typeof meta !== 'object') return null;
+  const id = (meta as Record<string, unknown>).eventId;
+  return typeof id === 'string' && id ? id : null;
+}
+
+/**
+ * A dónde lleva cada movimiento: el evento, la OC, la tarea o el formato dentro de su evento.
+ * Sin id, o sin el evento del formato, se queda en texto; los archivos no tienen pantalla propia.
+ * Lo borrado tampoco se enlaza: abriría un «ya no existe».
+ */
+function resourceHref(
+  action: string,
+  resource: string,
+  resourceId?: string | null,
+  eventId?: string | null,
+): string | null {
+  if (!resourceId || action.includes('delete')) return null;
+  const id = encodeURIComponent(resourceId);
+  if (resource === 'Event') return `/events/${id}`;
+  if (resource === 'PurchaseOrder') return `/purchase-orders?po=${id}`;
+  if (resource === 'TaskAssignment' || resource === 'Task') return `/tasks?task=${id}`;
+  if (resource === 'ChecklistInstance') {
+    return eventId ? `/events/${encodeURIComponent(eventId)}?tab=checklists&checklist=${id}` : null;
+  }
+  return null;
+}
 
 export default function AuditPage() {
   const [data, setData] = useState<AuditIntel | null>(null);
@@ -152,17 +192,22 @@ export default function AuditPage() {
                       />
                     ) : (
                       <ul className="compact-list">
-                        {(data.anomalies ?? []).map((a) => (
-                          <li key={a.id}>
-                            <span>
-                              <strong>{auditActionLabel(a.action)}</strong>
-                              <div className="muted" style={{ fontSize: 11 }}>
-                                {a.user} · {auditResourceLabel(a.resource)}
-                              </div>
-                            </span>
-                            <span className="muted">{new Date(a.at).toLocaleDateString('es-MX')}</span>
-                          </li>
-                        ))}
+                        {(data.anomalies ?? []).map((a) => {
+                          const href = resourceHref(a.action, a.resource, a.resourceId, a.eventId ?? metaEventId(a.metaJson));
+                          return (
+                            <li key={a.id}>
+                              <span>
+                                <strong>
+                                  {href ? <Link href={href}>{auditActionLabel(a.action)}</Link> : auditActionLabel(a.action)}
+                                </strong>
+                                <div className="muted" style={{ fontSize: 11 }}>
+                                  {a.user} · {auditResourceLabel(a.resource)}
+                                </div>
+                              </span>
+                              <span className="muted">{new Date(a.at).toLocaleDateString('es-MX')}</span>
+                            </li>
+                          );
+                        })}
                       </ul>
                     )}
                   </div>
@@ -246,25 +291,30 @@ export default function AuditPage() {
                         </tr>
                       </thead>
                       <tbody>
-                        {rows.map((r) => (
-                          <tr key={r.id}>
-                            <td className="muted" style={{ whiteSpace: 'nowrap' }}>
-                              {new Date(r.createdAt).toLocaleString('es-MX')}
-                            </td>
-                            <td>
-                              {r.user?.fullName || '—'}
-                              <div className="muted" style={{ fontSize: 11 }}>
-                                {r.user?.email || ''}
-                              </div>
-                            </td>
-                            <td>
-                              <span className={isNotableAction(r.action) ? 'audit-notable' : ''}>
-                                {auditActionLabel(r.action)}
-                              </span>
-                            </td>
-                            <td>{auditResourceLabel(r.resource)}</td>
-                          </tr>
-                        ))}
+                        {rows.map((r) => {
+                          const href = resourceHref(r.action, r.resource, r.resourceId, metaEventId(r.metaJson));
+                          return (
+                            <tr key={r.id}>
+                              <td className="muted" style={{ whiteSpace: 'nowrap' }}>
+                                {new Date(r.createdAt).toLocaleString('es-MX')}
+                              </td>
+                              <td>
+                                {r.user?.fullName || '—'}
+                                <div className="muted" style={{ fontSize: 11 }}>
+                                  {r.user?.email || ''}
+                                </div>
+                              </td>
+                              <td>
+                                <span className={isNotableAction(r.action) ? 'audit-notable' : ''}>
+                                  {auditActionLabel(r.action)}
+                                </span>
+                              </td>
+                              <td>
+                                {href ? <Link href={href}>{auditResourceLabel(r.resource)}</Link> : auditResourceLabel(r.resource)}
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>

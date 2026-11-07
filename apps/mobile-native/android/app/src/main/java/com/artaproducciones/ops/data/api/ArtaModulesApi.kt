@@ -368,7 +368,10 @@ interface ArtaModulesApi {
     @GET("events/{id}")
     suspend fun event(@Path("id") id: String): EventDetailDto
 
-    /** Testigos de publicidad (solo lectura: subirlos es del panel web). 404 = API aún sin la ruta. */
+    /**
+     * Testigos de publicidad (solo lectura: subirlos es del panel web). La ruta existe en el API
+     * (`testigos.controller.ts` › `GET testigos/event/:eventId`); un 404 solo sería un servidor viejo.
+     */
     @GET("testigos/event/{eventId}")
     suspend fun eventWitnesses(@Path("eventId") eventId: String): List<WitnessDto>
 
