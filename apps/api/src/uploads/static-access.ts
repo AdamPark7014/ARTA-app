@@ -5,8 +5,8 @@ import { sha256Hex } from '../common/crypto';
 /**
  * Quién puede bajar un archivo de `/uploads` sin pasar por un endpoint con permisos.
  *
- * Público (sin sesión): solo imágenes sueltas en la raíz de `/uploads` (`/uploads/x.jpg`).
- * Ahí viven las fotos del sitio público (carrusel, noticias, pósters de Studio) y el
+ * Público (sin sesión): solo imágenes sueltas en la raíz de `/uploads` (`/uploads/x.jpg`) y las
+ * imágenes de `uploads/site/` (portada y galería del sitio). Ahí viven las fotos del sitio público (carrusel, noticias, pósters de Studio) y el
  * buscador las indexa (`robots.ts`). Todo lo demás —PDF, Excel, Word, audio, video,
  * y cualquier subcarpeta (`chat/`, `documents/`, `testigos/`, `checklists/`, …)—
  * pide una sesión válida del panel (cookie `arta_access` con sesión viva en BD) o del
@@ -17,13 +17,18 @@ import { sha256Hex } from '../common/crypto';
  */
 const PUBLIC_IMAGE_EXT = new Set(['jpg', 'jpeg', 'png', 'webp', 'gif', 'avif']);
 
-/** `/uploads/foto.jpg` sí; `/uploads/chat/foto.jpg` o `/uploads/x.pdf` no. */
+/** Carpetas cuyas imágenes usa el sitio público (portada y galería viven en `uploads/site/…`). */
+const PUBLIC_IMAGE_DIRS = ['site/'];
+
+/** `/uploads/foto.jpg` y `/uploads/site/galeria/foto.jpg` sí; `/uploads/chat/foto.jpg` o `/uploads/x.pdf` no. */
 export function isPublicUpload(path: string): boolean {
   if (!path.startsWith('/uploads/')) return false;
   const rest = path.slice('/uploads/'.length);
-  if (!rest || rest.includes('/') || rest.includes('\\') || rest.includes('..')) return false;
+  if (!rest || rest.includes('\\') || rest.includes('..') || rest.includes('//')) return false;
   const ext = rest.toLowerCase().split('.').pop() || '';
-  return PUBLIC_IMAGE_EXT.has(ext);
+  if (!PUBLIC_IMAGE_EXT.has(ext)) return false;
+  if (!rest.includes('/')) return true;
+  return PUBLIC_IMAGE_DIRS.some((dir) => rest.startsWith(dir));
 }
 
 type StaffPayload = { sub?: string; jti?: string; roleKey?: string; organizationId?: string | null };

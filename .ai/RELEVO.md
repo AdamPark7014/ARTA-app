@@ -25,6 +25,9 @@ Adam: «ve cómo mejorar lo que falte y asegúrate que mi lap tenga el commit m�
 - **Dockerfiles:** copian también `apps/<ws>/node_modules`: npm dejó next/react y multer/nodemailer dentro del
   workspace y el primer despliegue de 4a51e5f no compiló en Docker (producción siguió en 0f68a31, sin corte).
   Ojo: `npm run build` local no lo detecta; solo `docker compose build`.
+- **Segundo intento (97694e6): rollback** tras ~4 min: la portada y galería viven en `uploads/site/` (46 archivos) y
+  daban 401. `isPublicUpload` ya deja públicas las imágenes de `site/` (nada más de esa carpeta). `uploads/legal/`
+  (1 archivo) sigue con sesión. Producción quedó en 0f68a31; cron de `arta-ops` instalado y primer respaldo OK (21:49).
 - Laptop (`C:\dev\apps\ARTA-app`, no `C:\dev\ARTA-app`): quedó en 222ebbd antes de este commit.
 
 **Verificación:** typecheck API+web, API 1,208 pruebas, build web, e2e Chromium 305/305.
