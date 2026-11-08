@@ -46,12 +46,13 @@ function NotificationsPageInner() {
   const [more, setMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState('');
-  const [filter, setFilter] = useState<Filter>('all');
-  const seenSent = useRef(new Set<string>());
-
   // `?tab=enviados`: el acuse de varios avisos y el pie de la campana llevan aquí. Se sigue la
   // navegación, no solo la carga: desde la propia pantalla de Avisos también cambia la pestaña.
+  // El estado arranca ya en la pestaña de la liga: si arrancara en «Todos», el primer render
+  // (antes del efecto) reportaría como vistos los avisos recibidos al abrir «Enviados».
   const tab = useSearchParams()?.get('tab') ?? null;
+  const [filter, setFilter] = useState<Filter>(() => (tab === 'enviados' ? 'sent' : 'all'));
+  const seenSent = useRef(new Set<string>());
   useEffect(() => {
     setFilter(tab === 'enviados' ? 'sent' : 'all');
   }, [tab]);

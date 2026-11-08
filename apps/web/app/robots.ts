@@ -14,8 +14,8 @@ const PUBLIC_IMAGE_PATTERNS = [
   '/uploads/*.webp$',
 ];
 
-export default function robots(): MetadataRoute.Robots {
-  const host = headers().get('host') || '';
+export default async function robots(): Promise<MetadataRoute.Robots> {
+  const host = (await headers()).get('host') || '';
 
   // Paneles (arta.*, auditorio.*): cada respuesta lleva `X-Robots-Tag: noindex` (middleware). Se deja
   // rastrear para que Google lea ese noindex y saque lo que tuviera; solo se cierran API y archivos.

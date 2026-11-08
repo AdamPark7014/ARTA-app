@@ -13,7 +13,7 @@ import {
   newsArticleGraphJsonLd,
 } from '@/lib/site-seo';
 
-type Props = { params: { slug: string } };
+type Props = { params: Promise<{ slug: string }> };
 
 /** Corta en palabra completa para que la descripción no termine a media palabra. */
 function snippet(text: string, max = 158): string {
@@ -24,12 +24,13 @@ function snippet(text: string, max = 158): string {
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
-  const post = await fetchPublicNews(params.slug);
+  const { slug } = await params;
+  const post = await fetchPublicNews(slug);
   if (!post) {
     return buildPublicMetadata({
       title: 'Noticia no encontrada',
       description: 'La noticia que buscas no está disponible.',
-      path: `${HOME_PATH}/noticias/${params.slug}`,
+      path: `${HOME_PATH}/noticias/${slug}`,
       noIndex: true,
     });
   }
@@ -51,7 +52,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 }
 
 export default async function NewsDetailPage({ params }: Props) {
-  const [post, data] = await Promise.all([fetchPublicNews(params.slug), fetchPublicSiteData('ARTA')]);
+  const { slug } = await params;
+  const [post, data] = await Promise.all([fetchPublicNews(slug), fetchPublicSiteData('ARTA')]);
   if (isPageOff(data, 'noticias')) notFound();
   // Un show publicado antes de la cartelera conserva su liga vieja: la dirección buena es esta.
   if (post?.template === 'evento') redirect(`${HOME_PATH}/cartelera/${post.slug}`);

@@ -8,6 +8,24 @@
   `/root/arta-deploy-20261107-B.log`; respaldo automático en `/root/arta-backups/`). Disco al 69 %: **un despliegue lo subió a 90 %, donde se cae la BD.** Antes de cada
   despliegue, `docker builder prune -af`.
 
+## Turno claude-code (2026-11-08, tarde): Next 15 + React 19 y xlsx
+
+Adam: «ve cómo mejorar lo que falte y asegúrate que mi lap tenga el commit más reciente». **NO desplegado.**
+- **Next 14.2.35 → 15.5.29** (backport con todos los arreglos; 16 trae más cambios de golpe) y **React 18.2 → 19**.
+  Cambios: `headers()` asíncrono (`(app)/layout.tsx`, `page.tsx`, `robots.ts`), `params`/`searchParams` como Promise
+  (`p/arta/{noticias,servicios,cartelera}/[slug]`, `dev/sheet-harness`), tipos de `useRef`/`RefObject`/`JSX` de React 19.
+  Regresión atrapada por e2e: Avisos con `?tab=enviados` marcaba vistos los recibidos en el primer render; el filtro
+  ahora arranca en la pestaña de la liga.
+- **xlsx 0.18.5 → 0.20.3** vía alias `npm:@e965/xlsx@0.20.3` (republica los paquetes oficiales de SheetJS; el CDN de
+  SheetJS está bloqueado desde la nube). Los `import 'xlsx'` no cambian.
+- **postcss** como devDependency de web para que el override llegue a Next (npm no lo aplicaba a la copia anidada).
+- `npm audit --omit=dev`: **0 críticas, 0 altas** (18 moderadas).
+- `.ai/audit/` al `.gitignore`: en la laptop trae un gitleaks.json con el valor de una llave de Google y `relevo.ps1
+  salvar` (git add -A) lo habría subido.
+- Laptop (`C:\dev\apps\ARTA-app`, no `C:\dev\ARTA-app`): quedó en 222ebbd antes de este commit.
+
+**Verificación:** typecheck API+web, API 1,208 pruebas, build web, e2e Chromium 305/305.
+
 ## Turno claude-code (2026-11-08): endurecer producción
 
 Adam: «revisa… si le falta algo para llevarlo a producción»; «todo lo que falte déjalo ya resuelto». Evaluación:

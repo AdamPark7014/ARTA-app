@@ -2036,7 +2036,7 @@ export function SheetEditor({
                         {r + 1}
                       </th>
                       {(() => {
-                        const cells: JSX.Element[] = [];
+                        const cells: React.JSX.Element[] = [];
                         for (let c = 0; c < row.length; c += 1) {
                           // Celda cubierta por el rowSpan/colSpan de una maestra anterior: no se dibuja.
                           if (serverCovered.has(`${r + 1}:${c + 1}`)) continue;

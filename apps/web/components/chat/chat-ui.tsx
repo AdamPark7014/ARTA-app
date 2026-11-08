@@ -141,7 +141,7 @@ export function ChannelGlyph({
 
 const layers: symbol[] = [];
 
-export function useDismiss(ref: RefObject<HTMLElement>, onClose: () => void, enabled = true) {
+export function useDismiss(ref: RefObject<HTMLElement | null>, onClose: () => void, enabled = true) {
   const cb = useRef(onClose);
   cb.current = onClose;
   useEffect(() => {

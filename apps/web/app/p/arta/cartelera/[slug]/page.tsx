@@ -8,7 +8,7 @@ import { pageHref } from '@/lib/site-blocks';
 import { showDateParts } from '@/lib/site-format';
 import { HOME_PATH, buildPublicMetadata, fetchPublicNews, showGraphJsonLd } from '@/lib/site-seo';
 
-type Props = { params: { slug: string } };
+type Props = { params: Promise<{ slug: string }> };
 
 async function fetchShow(slug: string) {
   const post = await fetchPublicNews(slug);
@@ -16,8 +16,9 @@ async function fetchShow(slug: string) {
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
-  const show = await fetchShow(params.slug);
-  const path = `${HOME_PATH}/cartelera/${params.slug}`;
+  const { slug } = await params;
+  const show = await fetchShow(slug);
+  const path = `${HOME_PATH}/cartelera/${slug}`;
   if (!show) {
     return buildPublicMetadata({
       title: 'Show no encontrado',
@@ -40,7 +41,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 }
 
 export default async function ShowPage({ params }: Props) {
-  const [show, data] = await Promise.all([fetchShow(params.slug), fetchPublicSiteData('ARTA')]);
+  const { slug } = await params;
+  const [show, data] = await Promise.all([fetchShow(slug), fetchPublicSiteData('ARTA')]);
   if (isPageOff(data, 'cartelera')) notFound();
   if (!show) {
     return (

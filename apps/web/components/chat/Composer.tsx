@@ -88,7 +88,7 @@ export function Composer({
   disabled?: boolean;
   disabledText?: string;
   placeholder: string;
-  inputRef?: RefObject<HTMLTextAreaElement>;
+  inputRef?: RefObject<HTMLTextAreaElement | null>;
   compact?: boolean;
   replyTo?: ChatMessage | null;
   onCancelReply?: () => void;

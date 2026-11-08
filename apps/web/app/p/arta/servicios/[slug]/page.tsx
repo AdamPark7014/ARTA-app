@@ -7,11 +7,12 @@ import { pageHref, serviceHref } from '@/lib/site-blocks';
 import { isPageOff, servicesOf } from '@/lib/site-model';
 import { buildPublicMetadata, serviceGraphJsonLd } from '@/lib/site-seo';
 
-type Props = { params: { slug: string } };
+type Props = { params: Promise<{ slug: string }> };
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
-  const service = servicesOf(await fetchPublicSiteData('ARTA')).find((s) => s.slug === params.slug);
-  const path = serviceHref(params.slug);
+  const { slug } = await params;
+  const service = servicesOf(await fetchPublicSiteData('ARTA')).find((s) => s.slug === slug);
+  const path = serviceHref(slug);
   if (!service) {
     return buildPublicMetadata({ title: 'Servicio no encontrado', description: 'El servicio que buscas no está disponible.', path, noIndex: true });
   }
@@ -25,9 +26,10 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 }
 
 export default async function ServicioPage({ params }: Props) {
+  const { slug } = await params;
   const data = await fetchPublicSiteData('ARTA');
   if (isPageOff(data, 'servicios')) notFound();
-  const service = servicesOf(data).find((s) => s.slug === params.slug);
+  const service = servicesOf(data).find((s) => s.slug === slug);
   if (!service) {
     return (
       <NotFoundView
