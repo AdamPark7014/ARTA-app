@@ -4,9 +4,105 @@
 - **Fecha:** 2026-11-07
 - **Rama:** main
   (Adam es el único programador).
-- **Producción:** `37981f1` desplegado desde `main` el 2026-11-07 (`bash deploy/update.sh` en `/var/www/arta-app`, log
-  `/root/arta-deploy-20261107-A.log`; respaldo automático en `/root/arta-backups/`). Disco al 68 %: **un despliegue lo subió a 90 %, donde se cae la BD.** Antes de cada
+- **Producción:** `0f68a31` desplegado desde `main` el 2026-11-07 (`bash deploy/update.sh` en `/var/www/arta-app`, log
+  `/root/arta-deploy-20261107-B.log`; respaldo automático en `/root/arta-backups/`). Disco al 69 %: **un despliegue lo subió a 90 %, donde se cae la BD.** Antes de cada
   despliegue, `docker builder prune -af`.
+
+## Turno claude-code (2026-11-07, noche): cada clic a lo exacto, funciones sin botón, barrido premium y la OC que no exportaba
+
+Adam: «mejora aún más las funcionalidades… que cada botón vaya hacia un lugar específico… todas las funcionalidades
+totalmente implementadas»; «ve que todo quede permeado y perfecto… utiliza todo el poder posible»; «antes… un barrido
+premium… total y absoluto». Tres auditorías (web, contrato web↔API, apps), siete frentes en paralelo con archivos
+disjuntos, y después cuatro revisiones de código independientes (web, API, Android, iOS) + auditoría visual de 67
+pantallas × 2 tamaños (`e2e/audit/cortes.audit.ts`, `AUDIT_TAG=premium`). Todo revisado e integrado aquí.
+**Guías: `docs/AVISOS.md`** (tabla de ligas) y **`docs/PARIDAD-MOVIL-CONTRATO.md` §4** (destinos en las apps).
+
+**Producción rota que se arregló (`po-excel.service.ts`, `purchase-orders.controller.ts`):** el botón «PDF» de cada
+OC daba 500 con el machote real (`format-oc.xlsx`): `cell.text` de exceljs revienta en una celda combinada con la
+maestra vacía (D13:H13). Ahora `cellText` seguro; la cabecera (fecha larga en hora de Puebla, solicitante, evento,
+proveedor, forma de pago ADENDUM con persona y cuenta) se escribe en celdas bajo el logo con ajuste de texto; una
+sola X (PROVEEDOR/OTRO y EFECTIVO/TRANSFERENCIA/CHEQUE); partidas con `SUM` y TOTAL con fórmula, **siempre cuadrado con
+el monto autorizado** (con IVA, el IVA es la diferencia; sin IVA, el centavo de redondeo va a la última partida);
+fecha de pago y quien autorizó bajo su etiqueta; fuera los datos de ejemplo y la hoja vieja; con más partidas que
+renglones, la última resume el resto; letra del propio machote (30–36 pt, se imprime encogido) y centavos siempre.
+Si el machote no está o le faltan las etiquetas que lo anclan (PROVEEDOR, CANTIDAD, DESCRIPCIÓN, SUBTOTAL, TOTAL),
+arma una OC limpia en vez de una hoja a medias. Exportar otra vez actualiza el mismo `EventFile` (antes cada clic
+sumaba una copia) y **la versión sube solo si cambió la OC**: la huella (`orderFingerprint`) es de los datos, no de los
+bytes (el zip cambia de hora en cada escritura). Escritura temporal + `rename` y un candado por OC en memoria: dos
+clics a la vez comparten el trabajo. El PDF también sale con el evento cerrado (archivo temporal, `try/finally`).
+`excel-pdf.service.ts` respeta «ajustar a una página» del libro (`fitToPage`: orientación del libro, escala hasta 0.2,
+se vuelve a medir tras el ajuste de texto; antes la OC salía en dos hojas) y `sheet-layout.ts` deja letras hasta 40 pt
+**solo** en libros con `fitToPage` (los demás conservan el tope de 20). Pruebas: `po-excel.service.spec.ts` (11),
+`excel-pdf.service.spec.ts` (+1 de `fitToPage`). El machote real no está en el repo (`uploads/` ignorado); vive en el
+servidor y una copia en el scratchpad de este turno.
+
+**Web, cada clic a lo exacto:** Inicio (riesgo → `?tab=checklists&ver=pendientes`; formatos por autorizar →
+`/events?scope=active&ver=revision` solo si hay alguno; tareas → `/tasks?filtro=vencidas&vista=equipo|mias`; por
+pagar → `/purchase-orders?seccion=pay`; «Nueva tarea» → `?nueva=1`; «Ver eventos» → `/calendar?date=hoy`; el próximo
+show con liga). Tareas lee `filtro`, `vista` y `nueva` de la URL (ganan al estado guardado), la fila en lista abre la
+tarea, liga al evento con `&task=`, y hay «Eliminar» (creador o equipo). OC lee la URL cada vez que cambia (Suspense +
+`useSearchParams`), `?seccion=auth|pay|paid|all`, «Abrir evento» con `&po=`, «Configurar días» → `/settings#dias-de-cobro`.
+Finanzas: «Esperando autorización» → `?estado=unauthorized`, «Pagadas sin comprobante» → `?estado=paid_no_proof`,
+filas con `&po=`, anticipos pagados se abren con `GET /finance/advances/:id` (nuevo; solo quien lo pidió, aprueba,
+paga o ve finanzas). Corridas: alerta y KPI «Neto negativo» filtran. Eventos: `?ver=revision` filtra por
+`pendingAuthorizedChecklists` (nuevo en `GET /events`, mismo criterio que la pestaña «Por autorizar») y el cambio de
+alcance conserva `ver`. Módulos (hospitality, transport, catering, press, arts, pendones): `?riesgo=` y
+`?estado=incompletos|firma|autorizados`; Riesgo enlaza con ellos (filtrado solo cuando el KPI está activo) y sus KPI
+filtran. Calendario: «+N más» expande el día y los chips no abren la nota. Buscador: personas → `/chat?with=dm:<id>`
+(antes caía en «Elige una conversación»), misma página navega completo. Avisos: `?tab=enviados` reactivo; Enviados
+usa `openNoticeLink`. Auditoría enlaza cada recurso salvo lo borrado (la API manda `resourceId` y `eventId` también
+en anomalías). Usuarios: KPI «Sin entrar 30 días» y «Bloqueados» filtran. Mantenimiento «Abrir evento» abre el evento.
+Evento: `?checklist=` reacciona a una segunda liga, `?ver=listos`, tile «Formatos» con `ver=`, «Chat del evento»,
+«Eliminar tarea», historial de campaña incluye `resource=Campaign`, `?hito=50|75|90|100` resalta el hito de boletera
+(`.bol-hitos`), miga a `/events?scope=past` si el evento ya pasó, «Exportar historial PDF» ya abre el PDF (antes abría
+JSON) y solo para quien la API lo permite. Studio: `?bloque=<sectionKey>` abre esa sección. Copy unificado: «formatos»
+(ya no «checklists») en Riesgo, Mantenimiento y el evento; botón del estado vacío de Corridas ya no sale negro sobre
+negro (`.table a:not(.btn)`); «Eventos en riesgo» de Organización con aire. Sin estilos en línea nuevos: parciales
+`_barrido-inicio`, `_barrido-modulos`, `_barrido-funciones`, `_chat-extra`.
+
+**Funciones del backend que no tenían botón, ahora sí:** cola de **Reportes** del chat para dirección (`/chat?reportes=1`,
+`GET/PATCH /chat/reports`, con `channelKind` para no abrir privados ajenos), «Reportar» en el menú del mensaje,
+«Bloquear/Desbloquear» en el directo; carpetas «Editar» (nombre, descripción, compartir con roles, `PATCH /folders/:id`,
+conserva roles que no son casilla); «Descargar original» auditado (`POST /files/:id/download-original`) en FileViewer;
+«Historial en PDF» en DocEditor y SheetEditor; Boletera «Sincronizar vendidos» (`POST /ticketing/sync`) y franja de
+avance de ventas (`GET /analytics/ticketing`); Webhooks «Correr escaneo ahora» (`POST /automations/scan`); Seguridad
+«Dispositivos con notificaciones» (`GET /devices`).
+
+**API:** `CreateUserDto.entities` ahora valida (antes el `whitelist` lo quitaba y las casillas de unidad al dar de alta
+no hacían nada); subida sin evento permitida con `folders.edit`; `checklist.signature_backlog` y la alerta `SIG_BACKLOG`
+→ `/events?scope=active&ver=revision` (antes `/checklists`, el catálogo); Studio manda `tab=shows` para shows y
+`&bloque=` para secciones; reporte de chat en privado ajeno → `/chat?reportes=1`.
+
+**Apps (mismos destinos, `PARIDAD §4`):** Inicio «Esperan tu visto bueno» abre esa OC/anticipo (Android
+`openApproval`, iOS `.approvals(focus:web:)`); si ya no está en la lista, la web de esa OC/anticipo **reemplazando** la
+pantalla (Android) y sin mandar a la web si el fallo fue de red (iOS); «En cartelera» abre el show y «atrás» regresa a
+Inicio; «Vencen hoy» abre Tareas en «Vencidas»; «N más» son botones (dorado + chevron en Android); `/events/<id>?tab=`
+abre esa pestaña nativa (y desde el mismo evento cambia de pestaña, sin apilar copias); `/tasks?filtro=&vista=` (la
+vista «equipo» espera a conocer permisos en arranque frío) y `/tasks/new`; canal de evento → «Abrir evento»; respuesta
+anclada → hilo (Android); equipo → directo (Android); anticipo → evento; Adendum → «Ver la orden»; «Abrir en el
+navegador» con sesión firmada y aviso si no hay red o navegador (Android); Enviados sin `type`; push sin liga → Avisos;
+`po.aging` → esa OC (Android). **Día local para tareas con hora** (Android: una tarea de hoy 19:00 CDMX caía en «Mañana»
+por la fecha UTC). iOS: `EventsView` nativa por fin enlazada (`/events`, Más, Calendario de Inicio; arranca en «En
+curso» si hay show hoy), «Órdenes por pagar» + «Marcar pagada» (`purchase-orders/window`, en paralelo), «Pagar» en
+Inicio solo en día de cobro (si no, «Por pagar»), `filtro=abiertas`, «Abrir en la web» del evento, «Anticipos».
+Android: 186 pruebas (18 nuevas: `DeepLinkTest`, `LinkKeysTest`, `DueDateTest`).
+
+**Verificación:** API 75 suites / 1,198 pruebas (21 nuevas); web `tsc` limpio, e2e 305 de 306 en computadora y 304 de 306 a tamaño iPhone (2 omitidas) (falla solo «Carga real», que pide API de verdad; 4 specs
+nuevos: `destinos-inicio`, `destinos-modulos`, `destinos-evento`, `funciones-web`); auditoría visual sin cortes ni
+encimados nuevos (los «overlap» de `/chat?reportes=1` a 390 px son el panel que tapa la lista, por diseño); Android
+compila y 186 unitarias. iOS solo compila en CI (TestFlight): revisión estática independiente sin riesgos de
+compilación. El repo no tiene ESLint: solo `tsc`.
+
+**Tiendas:** Android 1.0.5 (8) **enviada a revisión de Google** el 07-11 desde el Chrome de Adam (lanzamiento
+completo, publicación gestionada desactivada: se publica al aprobarse; AAB 13.4 MB, descarga 5.72 MB; copia y mapping en
+`Documents\ARTA-builds`). iOS 1.0.3 (17) compilada y subida por CI (run 42427332972), `VALID` en App Store Connect;
+la 1.0.2 (16) seguía `WAITING_FOR_REVIEW`: falta retirarla de revisión, poner 1.0.3 con el build 17 y enviarla
+(App Store Connect en Chrome pidió iniciar sesión; eso es de Adam).
+
+**No verificado / pendiente:** ningún aviso ni destino probado en un teléfono real; Studio sigue sin vista previa
+diferida («Ahora no»); variantes chicas de pósters sin hacer; `FinanceRun` estructurado (`GET event/:id`, `PATCH`,
+`unlock`, `revisions`) sigue sin UI (posible código muerto, decidir); `/calendar?date=` sigue en web en las dos apps;
+los reportes de chat de una respuesta en hilo abren por el id de la respuesta (falta `parentId` en la API).
 
 ## Turno claude-code (2026-11-07): avisos al punto exacto, riesgo con criterio y apps a tiendas
 
