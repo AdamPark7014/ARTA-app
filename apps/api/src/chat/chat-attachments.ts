@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import { BadRequestException } from '@nestjs/common';
 import { closeSync, openSync, readSync } from 'fs';
 import { diskStorage } from 'multer';
@@ -123,7 +124,7 @@ export const CHAT_MULTER_OPTIONS = {
       cb(null, CHAT_UPLOAD_DIR);
     },
     filename: (_req: unknown, file: Express.Multer.File, cb: (e: Error | null, name: string) => void) => {
-      const unique = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+      const unique = `${Date.now()}-${randomUUID()}`;
       cb(null, `${unique}${extname(file.originalname).toLowerCase()}`);
     },
   }),

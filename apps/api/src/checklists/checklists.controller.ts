@@ -12,7 +12,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { DocStatus, DocType, Prisma } from '@prisma/client';
-import { createHash } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
 import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { formatProgress } from '../common/checklist-progress';
@@ -1085,7 +1085,7 @@ export class ChecklistsController {
       const rel = srcUrl.replace(/^\/uploads\//, '');
       const srcPath = `${uploadRoot}/${rel}`;
       if (!existsSync(srcPath)) throw new BadRequestException('La plantilla Excel ya no está en disco');
-      const stamp = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+      const stamp = `${Date.now()}-${randomUUID()}`;
       const fileName = `${body.title || template.name}.xlsx`;
       const destUrl = `/uploads/${stamp}.xlsx`;
       writeFileSync(`${uploadRoot}/${stamp}.xlsx`, readFileSync(srcPath));

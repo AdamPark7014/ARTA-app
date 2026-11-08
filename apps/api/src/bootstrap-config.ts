@@ -9,6 +9,8 @@ import { JwtService } from '@nestjs/jwt';
 import { DirectionService } from './common/rbac/direction.service';
 import type { JwtPayload } from './auth/jwt.strategy';
 import { chatRuleFor } from './chat/chat-attachments';
+import { PrismaService } from './common/prisma/prisma.service';
+import { isPublicUpload, resolveUploadViewer } from './uploads/static-access';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 
 function corsOrigins(): (string | RegExp)[] {
@@ -27,30 +29,31 @@ export async function configureApp(app: INestApplication | NestExpressApplicatio
 
   const jwt = nest.get(JwtService);
   const direction = nest.get(DirectionService);
+  const prisma = nest.get(PrismaService);
   nest.use(async (req: Request, res: Response, next: NextFunction) => {
     if (req.path.startsWith('/uploads/')) {
-      const ext = req.path.toLowerCase().split('.').pop() || '';
-      // Lo compartido en el chat ya lo pueden ver todos los miembros de la conversación.
-      const isEditable = (ext === 'xlsx' || ext === 'xls' || ext === 'docx') && !req.path.startsWith('/uploads/chat/');
-      if (isEditable) {
-        const token = req.cookies?.arta_access || '';
-        let ok = false;
-        if (token) {
-          try {
-            const payload = await jwt.verifyAsync<JwtPayload>(token);
-            if (payload?.sub) {
-              ok = await direction.isDirection(
-                { id: payload.sub, roleKey: payload.roleKey },
-                payload.organizationId || null,
-              );
-            }
-          } catch {
-            ok = false;
-          }
-        }
-        if (!ok) {
-          res.status(403).send('Solo dirección puede descargar originales');
+      // Fotos sueltas del sitio público: sin sesión. Lo demás pide sesión (static-access.ts).
+      if (!isPublicUpload(req.path)) {
+        const viewer = await resolveUploadViewer(req, jwt, prisma);
+        if (!viewer) {
+          res.status(401).send('Inicia sesión para ver este archivo');
           return;
+        }
+        const ext = req.path.toLowerCase().split('.').pop() || '';
+        // Lo compartido en el chat ya lo pueden ver todos los miembros de la conversación.
+        const isEditable = (ext === 'xlsx' || ext === 'xls' || ext === 'docx') && !req.path.startsWith('/uploads/chat/');
+        if (isEditable) {
+          let ok = false;
+          if (viewer.kind === 'staff') {
+            const p = viewer.payload;
+            ok = await direction
+              .isDirection({ id: p.sub!, roleKey: p.roleKey || '' }, p.organizationId || null)
+              .catch(() => false);
+          }
+          if (!ok) {
+            res.status(403).send('Solo dirección puede descargar originales');
+            return;
+          }
         }
       }
       res.setHeader('Content-Security-Policy', "frame-ancestors 'self'");
@@ -95,13 +98,15 @@ export async function configureApp(app: INestApplication | NestExpressApplicatio
     },
   });
 
-  // Swagger (dev/test)
-  const swagger = new DocumentBuilder()
-    .setTitle('ARTA API')
-    .setDescription('Ops platform · eventos, checklists, OC, analytics, automations, multi-org')
-    .setVersion('1.3')
-    .addCookieAuth('arta_access')
-    .build();
-  SwaggerModule.setup('docs', nest, SwaggerModule.createDocument(nest, swagger));
+  // Swagger: solo fuera de producción (publica el mapa completo de la API).
+  // En producción se puede encender a propósito con SWAGGER_ENABLED=1.
+  if (process.env.NODE_ENV !== 'production' || process.env.SWAGGER_ENABLED === '1') {
+    const swagger = new DocumentBuilder()
+      .setTitle('ARTA API')
+      .setDescription('Ops platform · eventos, checklists, OC, analytics, automations, multi-org')
+      .setVersion('1.3')
+      .addCookieAuth('arta_access')
+      .build();
+    SwaggerModule.setup('docs', nest, SwaggerModule.createDocument(nest, swagger));
+  }
 }
-

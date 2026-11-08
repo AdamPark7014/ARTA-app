@@ -7,7 +7,17 @@ import { mockAuthenticatedApi, seedSession } from './support/mock-api';
  * un aviso del sistema y qué llega al teléfono.
  */
 
-const minutesAgo = (m: number) => new Date(Date.now() - m * 60_000).toISOString();
+/**
+ * Reloj fijo a mediodía local: con la hora real, una corrida cerca de medianoche dejaba los avisos
+ * «de hace 5 min» en «Ayer» y la prueba de «Hoy» fallaba (pasó en WebKit el 07-11 a las 00:06 UTC).
+ * Las pruebas que miran fechas fijan el reloj de la página con `page.clock.setFixedTime(NOW)`.
+ */
+const NOW = (() => {
+  const d = new Date();
+  d.setHours(12, 0, 0, 0);
+  return d.getTime();
+})();
+const minutesAgo = (m: number) => new Date(NOW - m * 60_000).toISOString();
 
 const NOTICES = [
   {
@@ -67,6 +77,7 @@ const EVENT_ROUTES = {
 test.describe('Campana', () => {
   test('agrupa por día, separa lo que espera tu decisión y lleva a donde toca', async ({ page, baseURL }) => {
     const read: string[] = [];
+    await page.clock.setFixedTime(NOW);
     await seedSession(page, baseURL!);
     await mockAuthenticatedApi(page, {
       ...EVENT_ROUTES,

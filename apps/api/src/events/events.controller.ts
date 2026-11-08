@@ -36,7 +36,7 @@ import { assertSameTenant, tenantIdOf } from '../common/tenant';
 import { assertEventSlotAvailable } from '../common/plan-limits';
 import { uploadRoot } from '../uploads/upload-storage';
 import { readFileSync, writeFileSync, existsSync } from 'fs';
-import { createHash } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
 import { NotificationsService } from '../notifications/notifications.service';
 import { payWindowFor, withPoState } from '../purchase-orders/po-state';
 import { eventNotice, type Notice } from '../notifications/notification-text';
@@ -394,7 +394,7 @@ export class EventsController {
         const rel = srcUrl.replace(/^\/uploads\//, '');
         const srcPath = `${uploadRoot}/${rel}`;
         if (existsSync(srcPath)) {
-          const stamp = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+          const stamp = `${Date.now()}-${randomUUID()}`;
           const fileName = `${t.name}.xlsx`;
           const destUrl = `/uploads/${stamp}.xlsx`;
           writeFileSync(`${uploadRoot}/${stamp}.xlsx`, readFileSync(srcPath));

@@ -549,6 +549,12 @@ async function main() {
 
 /** Demo portfolio for walkthroughs / analytics — idempotent via notes marker. */
 async function seedDemoPortfolio() {
+  // El seed corre en cada arranque del contenedor: en producción no se siembran eventos de prueba
+  // (si alguien los borra, no deben volver). SEED_DEMO=1 lo fuerza a propósito.
+  if (process.env.NODE_ENV === 'production' && process.env.SEED_DEMO !== '1') {
+    console.log('  · Demo portfolio: omitido en producción');
+    return;
+  }
   const existing = await prisma.event.count({ where: { notes: { contains: '[SEED_DEMO]' } } });
   if (existing > 0) {
     console.log('  · Demo portfolio ya existe — skip');

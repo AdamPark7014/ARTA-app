@@ -1,7 +1,6 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { NestExpressApplication } from '@nestjs/platform-express';
-import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { join } from 'path';
 import { existsSync, mkdirSync } from 'fs';
 import cookieParser from 'cookie-parser';
@@ -42,18 +41,10 @@ async function bootstrap() {
   });
   await configureApp(app);
 
-  const swagger = new DocumentBuilder()
-    .setTitle('ARTA API')
-    .setDescription('Ops platform · eventos, checklists, OC, analytics, automations, multi-org')
-    .setVersion('1.3')
-    .addCookieAuth('arta_access')
-    .build();
-  SwaggerModule.setup('docs', app, SwaggerModule.createDocument(app, swagger));
-
   const port = Number(process.env.API_PORT || 4000);
   await app.listen(port);
   logger.log(
-    `ARTA API on http://localhost:${port} · OpenAPI /docs · health /health · ready /ready` +
+    `ARTA API on http://localhost:${port} · health /health · ready /ready` +
       (sentryOn ? ' · Sentry on' : ''),
   );
 }

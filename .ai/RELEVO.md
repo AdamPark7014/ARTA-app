@@ -1,12 +1,37 @@
 # RELEVO
 
 - **Último turno:** claude-code
-- **Fecha:** 2026-11-07
+- **Fecha:** 2026-11-08
 - **Rama:** main
   (Adam es el único programador).
 - **Producción:** `0f68a31` desplegado desde `main` el 2026-11-07 (`bash deploy/update.sh` en `/var/www/arta-app`, log
   `/root/arta-deploy-20261107-B.log`; respaldo automático en `/root/arta-backups/`). Disco al 69 %: **un despliegue lo subió a 90 %, donde se cae la BD.** Antes de cada
   despliegue, `docker builder prune -af`.
+
+## Turno claude-code (2026-11-08): endurecer producción
+
+Adam: «revisa… si le falta algo para llevarlo a producción»; «todo lo que falte déjalo ya resuelto». Evaluación:
+https://claude.ai/artifact/Wqme32SNsxZbcQpqCUkosd. **NO desplegado todavía.** Guía nueva: **`deploy/OPERACION.md`**.
+
+- **`/uploads` exige sesión** (`uploads/static-access.ts`, `bootstrap-config.ts`): públicas solo las fotos sueltas en la
+  raíz (sitio público). Lo demás (PDF, Office, audio/video, `chat/`, `documents/`, `testigos/`…) pide `arta_access`
+  con sesión viva en BD (caché 60 s) o token de proveedor `arta_vendor`; si no, 401. Originales xlsx/docx siguen solo
+  para dirección. Las apps ya mandaban la cookie en imágenes/audio/video. Nombres de archivo nuevos con `randomUUID`.
+- **Swagger** solo fuera de producción (`SWAGGER_ENABLED=1` lo enciende). **Seed:** sin portafolio demo con
+  `NODE_ENV=production` (`SEED_DEMO=1` lo fuerza); los eventos `[SEED_DEMO]` que ya existan en producción siguen ahí.
+- **Dependencias:** `npm audit --omit=dev` de 35 (2 críticas) a 20 (1 crítica, 1 alta): multer 2.5, nodemailer 10.4,
+  overrides de body-parser, lodash, js-yaml, @grpc/grpc-js, postcss. Quedan **Next 14** (arreglo solo en 15/16, migración
+  aparte) y **xlsx** (el arreglo está en cdn.sheetjs.com, bloqueado desde la nube; solo navegador).
+  Ojo: overrides de npm no se aplican sobre un lock existente; hubo que regenerar desde el lock original.
+- **Operación:** `deploy/backup.sh` (BD + uploads, verificado, rotación, rclone opcional), `monitor.sh` (API/web, disco,
+  respaldo; avisa por `ALERT_WEBHOOK_URL`), `notify.sh`, `install-cron.sh` (`/etc/cron.d/arta-ops`). `update.sh` limpia
+  caché y **aborta si el disco queda ≥80 %**. Logs de Docker con tope (5×20 MB).
+- **Safari CI rojo en 0f68a31:** era la prueba de la campana corriendo a las 00:06 UTC («hace 5 min» caía en «Ayer»);
+  reloj fijo a mediodía en `e2e/notifications.spec.ts`.
+
+**Verificación:** typecheck API+web, API 78 suites / 1,208 pruebas, build web, e2e Chromium 305/305 (sin «Stack real»).
+**Pendiente de Adam en el servidor:** desplegar, `sudo bash deploy/install-cron.sh`, poner `ALERT_WEBHOOK_URL`,
+`ARTA_BACKUP_REMOTE` (+ rclone) y `SENTRY_DSN`. Probar que el sitio público y las apps siguen viendo fotos y adjuntos.
 
 ## Turno claude-code (2026-11-07, noche): cada clic a lo exacto, funciones sin botón, barrido premium y la OC que no exportaba
 

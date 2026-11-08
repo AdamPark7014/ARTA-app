@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import { BadRequestException } from '@nestjs/common';
 import { diskStorage } from 'multer';
 import { closeSync, existsSync, mkdirSync, openSync, readSync, unlinkSync } from 'fs';
@@ -95,7 +96,7 @@ const diskUploads = diskStorage({
     file: Express.Multer.File,
     cb: (e: Error | null, name: string) => void,
   ) => {
-    const unique = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+    const unique = `${Date.now()}-${randomUUID()}`;
     cb(null, `${unique}${extname(file.originalname).toLowerCase()}`);
   },
 });

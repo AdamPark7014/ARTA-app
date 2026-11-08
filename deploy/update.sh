@@ -85,12 +85,29 @@ else
   echo "Skip DB backup (db container not running yet)."
 fi
 
+# Disco: un build llegó a subirlo a 90 %, donde Postgres se cae. Limpia la caché de build
+# antes de construir y no sigas si aún así queda poco espacio.
+disk_used() { df -P "$(docker info --format '{{.DockerRootDir}}' 2>/dev/null || echo /)" | awk 'NR==2 {gsub("%","",$5); print $5}'; }
+echo "Disk before cleanup: $(disk_used)%"
+docker builder prune -af >/dev/null 2>&1 || true
+docker image prune -f >/dev/null 2>&1 || true
+USED="$(disk_used)"
+echo "Disk after cleanup: ${USED}%"
+if [[ "${USED:-0}" -ge "${ARTA_DEPLOY_MAX_DISK:-80}" ]]; then
+  echo "Disk at ${USED}% (limit ${ARTA_DEPLOY_MAX_DISK:-80}%). Aborting before build — free space first (docker system df)."
+  exit 1
+fi
+
 echo "Building images..."
 DOCKER_BUILDKIT=1 COMPOSE_DOCKER_CLI_BUILD=1 \
   docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" build
 
 echo "Starting services..."
 docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d --remove-orphans
+
+# Imágenes sin etiqueta que dejó el build (las :prev se conservan para rollback).
+docker image prune -f >/dev/null 2>&1 || true
+echo "Disk after deploy: $(disk_used)%"
 
 echo "Done."
 docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" ps

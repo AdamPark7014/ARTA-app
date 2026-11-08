@@ -97,7 +97,8 @@ describe('Static /uploads guard order + in-app inline (no DB)', () => {
       entities: ['ARTA', 'EXPLANADA'],
       permissions: [],
       fullName: 'Direction',
-    });
+      jti: 'jti-dir',
+    } as any);
     await request(app.getHttpServer())
       .get(`/uploads/${testFileName}`)
       .set('Cookie', [`arta_access=${token}`])
@@ -112,7 +113,8 @@ describe('Static /uploads guard order + in-app inline (no DB)', () => {
       entities: ['ARTA'],
       permissions: [],
       fullName: 'Logistica',
-    });
+      jti: 'jti-log',
+    } as any);
     await request(app.getHttpServer()).get(`/uploads/${testFileName}`).set('Cookie', [`arta_access=${token}`]).expect(403);
   });
 
@@ -189,8 +191,47 @@ describe('Static /uploads guard order + in-app inline (no DB)', () => {
       .expect(200);
   });
 
-  it('no cookie gets 403 on static .xlsx', async () => {
-    await request(app.getHttpServer()).get(`/uploads/${testFileName}`).expect(403);
+  it('no cookie gets 401 on static .xlsx', async () => {
+    await request(app.getHttpServer()).get(`/uploads/${testFileName}`).expect(401);
+  });
+
+  it('public root image needs no session', async () => {
+    writeFileSync(join(uploadDir, 'portada.jpg'), Buffer.from('jpg'));
+    await request(app.getHttpServer()).get('/uploads/portada.jpg').expect(200);
+  });
+
+  it('private PDF and chat image need a session', async () => {
+    writeFileSync(join(uploadDir, 'comprobante.pdf'), Buffer.from('%PDF'));
+    mkdirSync(join(uploadDir, 'chat'), { recursive: true });
+    writeFileSync(join(uploadDir, 'chat', 'foto.jpg'), Buffer.from('jpg'));
+    await request(app.getHttpServer()).get('/uploads/comprobante.pdf').expect(401);
+    await request(app.getHttpServer()).get('/uploads/chat/foto.jpg').expect(401);
+    const token = await jwt.signAsync({
+      sub: 'u6', email: 'x@b.com', roleKey: 'logistica', entities: ['ARTA'], permissions: [],
+      fullName: 'X', jti: 'jti-x',
+    } as any);
+    await request(app.getHttpServer()).get('/uploads/comprobante.pdf').set('Cookie', [`arta_access=${token}`]).expect(200);
+    await request(app.getHttpServer()).get('/uploads/chat/foto.jpg').set('Cookie', [`arta_access=${token}`]).expect(200);
+  });
+
+  it('revoked session is rejected on private files', async () => {
+    const prisma = app.get(PrismaService) as any;
+    const prev = prisma.userSession.findFirst;
+    prisma.userSession.findFirst = jest.fn().mockResolvedValue({
+      id: 's2', revokedAt: new Date(), expiresAt: new Date(Date.now() + 60_000), lastSeenAt: new Date(),
+    });
+    const token = await jwt.signAsync({
+      sub: 'u7', email: 'r@b.com', roleKey: 'logistica', entities: ['ARTA'], permissions: [],
+      fullName: 'R', jti: 'jti-revoked',
+    } as any);
+    await request(app.getHttpServer()).get('/uploads/comprobante.pdf').set('Cookie', [`arta_access=${token}`]).expect(401);
+    prisma.userSession.findFirst = prev;
+  });
+
+  it('vendor portal token can read private files but not originals', async () => {
+    const token = await jwt.signAsync({ typ: 'vendor', pinId: 'p1' } as any);
+    await request(app.getHttpServer()).get('/uploads/comprobante.pdf').set('Cookie', [`arta_vendor=${token}`]).expect(200);
+    await request(app.getHttpServer()).get(`/uploads/${testFileName}`).set('Cookie', [`arta_vendor=${token}`]).expect(403);
   });
 });
 
