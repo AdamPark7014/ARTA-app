@@ -95,9 +95,10 @@ compilación. El repo no tiene ESLint: solo `tsc`.
 
 **Tiendas:** Android 1.0.5 (8) **enviada a revisión de Google** el 07-11 desde el Chrome de Adam (lanzamiento
 completo, publicación gestionada desactivada: se publica al aprobarse; AAB 13.4 MB, descarga 5.72 MB; copia y mapping en
-`Documents\ARTA-builds`). iOS 1.0.3 (17) compilada y subida por CI (run 42427332972), `VALID` en App Store Connect;
-la 1.0.2 (16) seguía `WAITING_FOR_REVIEW`: falta retirarla de revisión, poner 1.0.3 con el build 17 y enviarla
-(App Store Connect en Chrome pidió iniciar sesión; eso es de Adam).
+`Documents\ARTA-builds`). iOS 1.0.3 (17) compilada y subida por CI (run 42427332972) y **enviada a revisión de Apple** el 07-11
+desde el Chrome de Adam (él entró a App Store Connect): se retiró la 1.0.2 (16) de revisión («Rechazado por el
+desarrollador»), la misma versión pasó a 1.0.3 con el build 17 y novedades nuevas, y se envió («1 artículo enviado»,
+hasta 48 h). Si Apple pide algo, llega por correo.
 
 **No verificado / pendiente:** ningún aviso ni destino probado en un teléfono real; Studio sigue sin vista previa
 diferida («Ahora no»); variantes chicas de pósters sin hacer; `FinanceRun` estructurado (`GET event/:id`, `PATCH`,
