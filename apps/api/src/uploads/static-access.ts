@@ -21,7 +21,16 @@ const PUBLIC_IMAGE_EXT = new Set(['jpg', 'jpeg', 'png', 'webp', 'gif', 'avif']);
 const PUBLIC_IMAGE_DIRS = ['site/'];
 
 /** `/uploads/foto.jpg` y `/uploads/site/galeria/foto.jpg` sí; `/uploads/chat/foto.jpg` o `/uploads/x.pdf` no. */
-export function isPublicUpload(path: string): boolean {
+export function isPublicUpload(rawPath: string): boolean {
+  // El servidor de archivos decodifica la ruta: se revisa ya decodificada para que `%2e%2e` no
+  // salte de `site/` a otra carpeta.
+  let path: string;
+  try {
+    path = decodeURIComponent(rawPath);
+  } catch {
+    return false;
+  }
+  if (path.includes('%') || path.includes('\0')) return false;
   if (!path.startsWith('/uploads/')) return false;
   const rest = path.slice('/uploads/'.length);
   if (!rest || rest.includes('\\') || rest.includes('..') || rest.includes('//')) return false;

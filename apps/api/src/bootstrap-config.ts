@@ -39,9 +39,18 @@ export async function configureApp(app: INestApplication | NestExpressApplicatio
           res.status(401).send('Inicia sesión para ver este archivo');
           return;
         }
-        const ext = req.path.toLowerCase().split('.').pop() || '';
+        // Ruta decodificada: `%2Exlsx` o `chat%2F..` no deben saltarse la regla de originales.
+        let decoded = req.path;
+        try {
+          decoded = decodeURIComponent(req.path);
+        } catch {
+          res.status(400).send('Ruta inválida');
+          return;
+        }
+        const ext = decoded.toLowerCase().split('.').pop() || '';
         // Lo compartido en el chat ya lo pueden ver todos los miembros de la conversación.
-        const isEditable = (ext === 'xlsx' || ext === 'xls' || ext === 'docx') && !req.path.startsWith('/uploads/chat/');
+        const isEditable =
+          (ext === 'xlsx' || ext === 'xls' || ext === 'docx') && !(decoded.startsWith('/uploads/chat/') && !decoded.includes('..'));
         if (isEditable) {
           let ok = false;
           if (viewer.kind === 'staff') {

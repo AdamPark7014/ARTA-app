@@ -13,6 +13,11 @@ describe('isPublicUpload', () => {
     expect(isPublicUpload('/uploads/site/../chat/x.jpg')).toBe(false);
     expect(isPublicUpload('/uploads/sitex/x.jpg')).toBe(false);
     expect(isPublicUpload('/uploads/legal/aviso.pdf')).toBe(false);
+    expect(isPublicUpload('/uploads/site/%2e%2e/chat/foto.jpg')).toBe(false);
+    expect(isPublicUpload('/uploads/site/%2E%2E%2Fchat%2Ffoto.jpg')).toBe(false);
+    expect(isPublicUpload('/uploads/site/%252e%252e/chat/foto.jpg')).toBe(false);
+    expect(isPublicUpload('/uploads/site/%E0%A4%A.jpg')).toBe(false);
+    expect(isPublicUpload('/uploads/site/foto%20bonita.jpg')).toBe(true);
   });
   it('documents, media and subfolders are private', () => {
     expect(isPublicUpload('/uploads/oc-1.pdf')).toBe(false);
