@@ -22,6 +22,9 @@ Adam: «ve cómo mejorar lo que falte y asegúrate que mi lap tenga el commit m�
 - `npm audit --omit=dev`: **0 críticas, 0 altas** (18 moderadas).
 - `.ai/audit/` al `.gitignore`: en la laptop trae un gitleaks.json con el valor de una llave de Google y `relevo.ps1
   salvar` (git add -A) lo habría subido.
+- **Dockerfiles:** copian también `apps/<ws>/node_modules`: npm dejó next/react y multer/nodemailer dentro del
+  workspace y el primer despliegue de 4a51e5f no compiló en Docker (producción siguió en 0f68a31, sin corte).
+  Ojo: `npm run build` local no lo detecta; solo `docker compose build`.
 - Laptop (`C:\dev\apps\ARTA-app`, no `C:\dev\ARTA-app`): quedó en 222ebbd antes de este commit.
 
 **Verificación:** typecheck API+web, API 1,208 pruebas, build web, e2e Chromium 305/305.

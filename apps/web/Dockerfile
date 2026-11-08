@@ -5,10 +5,14 @@ COPY apps/api/package.json apps/api/
 COPY apps/web/package.json apps/web/
 COPY packages ./packages
 RUN npm ci --workspace=apps/web
+# npm deja algunas dependencias dentro del workspace (versiones que chocan con la raíz, p. ej. next/react
+# o multer/nodemailer). La carpeta siempre existe para que el COPY de abajo no falle si un día no hay ninguna.
+RUN mkdir -p apps/web/node_modules
 
 FROM node:20-bookworm-slim AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
+COPY --from=deps /app/apps/web/node_modules ./apps/web/node_modules
 COPY --from=deps /app/packages ./packages
 COPY package.json package-lock.json ./
 COPY apps/web ./apps/web
