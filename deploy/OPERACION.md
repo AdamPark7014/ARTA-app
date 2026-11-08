@@ -58,6 +58,6 @@ Conviene probar una restauración completa en otra máquina una vez al trimestre
 ## Archivos subidos y quién los ve
 
 Desde nov-2026 `/uploads` exige sesión del panel (o del portal de proveedores) salvo las **fotos sueltas en la
-raíz** (`/uploads/x.jpg|png|webp|gif|avif`), que usa el sitio público. PDF, Excel, Word, audio, video y todo lo de
+raíz** (`/uploads/x.jpg|png|webp|gif|avif`) y las imágenes de `uploads/site/` (portada y galería), que usa el sitio público. PDF, Excel, Word, audio, video y todo lo de
 subcarpetas (`chat/`, `documents/`, `testigos/`, `checklists/`…) responde 401 sin sesión. Regla en
 `apps/api/src/uploads/static-access.ts`.
