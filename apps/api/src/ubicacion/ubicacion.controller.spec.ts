@@ -21,15 +21,18 @@ function build() {
   return { prisma, controller: new UbicacionController(prisma as never) };
 }
 
-/** Un instante reciente dentro del horario, para que la prueba no dependa de la hora en que corre. */
+/**
+ * Un instante reciente dentro del horario. El reloj se fija en un martes a mediodía: de viernes a
+ * domingo no hay horario en las últimas 24 horas y la prueba dependería del día en que corre.
+ */
 function recentInWindow() {
-  const t = new Date();
-  for (let i = 0; i < 48; i += 1) {
-    const candidate = new Date(t.getTime() - i * 30 * 60_000);
-    if (enHorario(candidate)) return candidate;
-  }
-  throw new Error('sin hora en horario');
+  jest.useFakeTimers({ now: new Date('2026-11-03T12:30:00.000-06:00'), doNotFake: ['nextTick', 'setImmediate'] });
+  const candidate = new Date(Date.now() - 30 * 60_000);
+  if (!enHorario(candidate)) throw new Error('sin hora en horario');
+  return candidate;
 }
+
+afterEach(() => jest.useRealTimers());
 
 describe('UbicacionController', () => {
   describe('quién se mide', () => {

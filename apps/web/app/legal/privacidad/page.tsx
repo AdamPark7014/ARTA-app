@@ -86,7 +86,7 @@ export default function PrivacidadPage() {
           </li>
           <li>
             <strong>Ubicación:</strong> si tu organización la usa, y solo si la aceptas en la aplicación y das el permiso
-            del teléfono, se registra tu ubicación precisa cada media hora, de 10:00 a 18:00 (hora de Puebla). Fuera de
+            del teléfono, se registra tu ubicación precisa cada media hora, de lunes a jueves de 10:00 a 18:00 (hora de Puebla). Fuera de
             ese horario no se registra. La aplicación explica esto antes de pedir el permiso, y puedes retirarlo cuando
             quieras en los ajustes del teléfono.
           </li>

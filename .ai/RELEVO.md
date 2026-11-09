@@ -1,12 +1,27 @@
 # RELEVO
 
 - **Último turno:** claude-code
-- **Fecha:** 2026-11-08
+- **Fecha:** 2026-11-09
 - **Rama:** main
   (Adam es el único programador).
 - **Producción:** `0f68a31` desplegado desde `main` el 2026-11-07 (`bash deploy/update.sh` en `/var/www/arta-app`, log
   `/root/arta-deploy-20261107-B.log`; respaldo automático en `/root/arta-backups/`). Disco al 69 %: **un despliegue lo subió a 90 %, donde se cae la BD.** Antes de cada
   despliegue, `docker builder prune -af`.
+
+## Turno claude-code (2026-11-09): ubicación solo de lunes a jueves
+
+Adam: «de 10 a.m. a 6 p.m., de lunes a jueves… tipo Nextara, como recorrido del día». La ubicación ya estaba en
+producción (f126be5, mismo método que NEXARA `gps/cadencia-jornada.ts`: 30 min, lotes, cola, modo ahorro). Único cambio:
+**se mide solo de lunes a jueves** (antes los siete días). **NO desplegado.** Rama `claude/project-thread-j24190`
+(la plataforma la exige; falta fusionar a `main`).
+- API: `DIAS_MEDICION` y `esDiaDeMedicion` en `ubicacion/horario.ts`; `enHorario` ya corta viernes–domingo (puntos y latido).
+  `estadoDePersona` da `fuera_de_horario` en esos días. `GET /ubicacion/estado` y `/equipo` devuelven `days: [1,2,3,4]`.
+- Android `LocationRules.DAYS`; la alarma duerme del jueves 18:00 al lunes 10:00. iOS `LocationRules.weekdays`.
+- Textos: consentimiento (Android/iOS), `/ubicacion`, aviso de privacidad, `docs/store/PLAY-STORE.md`, `docs/UBICACION.md`.
+- Una versión de app anterior a este cambio puede seguir midiendo viernes–domingo, pero el servidor ya no guarda nada esos días.
+
+**Verificación:** typecheck API+web, API 1,212 pruebas, e2e ubicación. Kotlin/Swift sin compilar aquí (no hay SDK de Android
+ni Xcode en la nube); las cifras de la alarma se comprobaron con jshell.
 
 ## Turno claude-code (2026-11-08, tarde): Next 15 + React 19 y xlsx
 

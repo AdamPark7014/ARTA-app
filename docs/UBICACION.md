@@ -4,7 +4,11 @@ Adam, 01-11-2026: «incluir geolocalización de todos excepto Chacho y Arturo de
 
 - **A quién:** todos menos `dir_general` (Chacho y Arturo) y `super_admin`. Reglas `isLocationTracked` y `canSeeTeamLocation`
   en `packages/rbac/src/roles.ts`, con copia en el API, `Rbac.swift` y `Rbac.kt`.
-- **Cuándo:** de 10:00 a 17:59, hora de Puebla (`America/Mexico_City`), los siete días. Un punto cada 30 minutos.
+- **Cuándo:** de lunes a jueves, de 10:00 a 17:59, hora de Puebla (`America/Mexico_City`). Un punto cada 30 minutos.
+  Adam, 09-11-2026: «de 10 a.m. a 6 p.m., de lunes a jueves». Viernes, sábado y domingo no se guarda nada y nadie sale
+  «atrasado»; la alarma de Android duerme del jueves a las 18:00 al lunes a las 10:00.
+- **Datos:** como en NEXARA (`gps/cadencia-jornada.ts`): ~16 puntos al día por persona, GPS en modo ahorro (~100 m), lotes
+  de hasta 50 puntos y cola sin conexión. Es el recorrido del día, no un rastreo continuo.
 - **Quién lo ve:** solo Chacho, Arturo y `super_admin`, en `/ubicacion`. Abrir el recorrido de alguien queda en auditoría.
 - **Lo guarda el servidor:** coordenadas, precisión y hora. Se borra solo a los 90 días (`ubicacion-latido.service.ts`).
 
@@ -29,7 +33,8 @@ Si Android lo mata, vuelve al abrir la app.
 
 Todo con la sesión normal. Las apps solo miden con consentimiento, dentro del horario y si `tracked` es verdadero.
 
-- `GET /ubicacion/estado` → `{ tracked, consentAt, inWindow, startHour, endHour, timeZone, intervalMinutes, serverTime }`
+- `GET /ubicacion/estado` → `{ tracked, consentAt, inWindow, startHour, endHour, days, timeZone, intervalMinutes, serverTime }`.
+  `days` son los días que se mide como `Date.getDay()`: `[1, 2, 3, 4]`.
 - `POST /ubicacion/consentimiento` → `{ consentAt }`. 403 si la persona es exenta.
 - `POST /ubicacion/estado` `{ state: 'ok' | 'sin_permiso' | 'apagada' }`. Para que dirección vea el motivo de un hueco.
 - `POST /ubicacion/puntos` `{ platform: 'ios' | 'android', points: [{ lat, lng, accuracyM?, capturedAt }] }` → `{ saved, ignored }`. Máximo 50.

@@ -10,6 +10,23 @@ describe('horario de la ubicación', () => {
     expect(enHorario(puebla('18:00'))).toBe(false);
   });
 
+  it('solo de lunes a jueves: viernes, sábado y domingo no cuentan', () => {
+    // 2026-11-02 es lunes.
+    expect(enHorario(puebla('12:00', '2026-11-02'))).toBe(true);
+    expect(enHorario(puebla('12:00', '2026-11-03'))).toBe(true);
+    expect(enHorario(puebla('12:00', '2026-11-04'))).toBe(true);
+    expect(enHorario(puebla('12:00', '2026-11-05'))).toBe(true);
+    expect(enHorario(puebla('12:00', '2026-11-06'))).toBe(false);
+    expect(enHorario(puebla('12:00', '2026-11-07'))).toBe(false);
+    expect(enHorario(puebla('12:00', '2026-11-08'))).toBe(false);
+  });
+
+  it('el día de la semana es el de Puebla, no el de UTC', () => {
+    // Lunes 10:00 en Puebla (16:00 UTC) sí; domingo 20:00 en Puebla ya es lunes en UTC y no.
+    expect(enHorario(new Date('2026-11-02T16:00:00.000Z'))).toBe(true);
+    expect(enHorario(new Date('2026-11-09T02:00:00.000Z'))).toBe(false);
+  });
+
   it('el día es el de Puebla: las 23:00 de Puebla ya son mañana en UTC', () => {
     expect(diaDe(puebla('23:00'))).toBe('2026-11-03');
     const { desde, hasta } = limitesDelDia('2026-11-03');
@@ -74,6 +91,13 @@ describe('estadoDePersona', () => {
 
   it('antes de las 10 no hay nada que reclamar', () => {
     expect(estadoDePersona({ ...base, ultimoPunto: null, ahora: puebla('09:00') })).toBe('fuera_de_horario');
+  });
+
+  it('de viernes a domingo no se reclama nada', () => {
+    const viernes = { ...base, dia: '2026-11-06', ahora: puebla('12:00', '2026-11-06'), ultimoPunto: null };
+    expect(estadoDePersona(viernes)).toBe('fuera_de_horario');
+    expect(estadoDePersona({ ...viernes, state: 'sin_permiso' })).toBe('fuera_de_horario');
+    expect(estadoDePersona({ ...viernes, ahora: puebla('12:00', '2026-11-09') })).toBe('fuera_de_horario');
   });
 
   it('un día pasado no se marca atrasado', () => {

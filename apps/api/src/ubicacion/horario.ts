@@ -1,6 +1,6 @@
 /**
- * Reglas de la ubicación del equipo (docs/UBICACION.md): de 10:00 a 18:00, hora de Puebla, un punto
- * cada media hora. El servidor las aplica a cualquier versión de la app: fuera del horario no se
+ * Reglas de la ubicación del equipo (docs/UBICACION.md): de lunes a jueves, de 10:00 a 18:00, hora de
+ * Puebla, un punto cada media hora. El servidor las aplica a cualquier versión de la app: fuera del horario no se
  * guarda nada, aunque el teléfono lo mande.
  *
  * Sin Prisma ni Nest: se prueba en `horario.spec.ts`.
@@ -9,6 +9,12 @@
 export const UBICACION_TZ = 'America/Mexico_City';
 export const HORA_INICIO = 10;
 export const HORA_FIN = 18;
+
+/**
+ * Días que se mide, como `Date.getDay()` (0 domingo … 6 sábado). Adam, 09-11-2026: «de lunes a jueves».
+ * Viernes, sábado y domingo no se guarda nada.
+ */
+export const DIAS_MEDICION: readonly number[] = [1, 2, 3, 4];
 
 /** Lo que la app intenta. */
 export const CADENCIA_MINUTOS = 30;
@@ -42,17 +48,30 @@ const partes = new Intl.DateTimeFormat('en-CA', {
   hour: '2-digit',
   minute: '2-digit',
   hourCycle: 'h23',
+  weekday: 'short',
 });
+
+const DIA_SEMANA: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
 
 function enPuebla(fecha: Date) {
   const p = Object.fromEntries(partes.formatToParts(fecha).map((x) => [x.type, x.value]));
-  return { dia: `${p.year}-${p.month}-${p.day}`, hora: Number(p.hour), minuto: Number(p.minute) };
+  return {
+    dia: `${p.year}-${p.month}-${p.day}`,
+    hora: Number(p.hour),
+    minuto: Number(p.minute),
+    diaSemana: DIA_SEMANA[p.weekday] ?? -1,
+  };
 }
 
-/** De 10:00:00 a 17:59:59. */
+/** ¿Ese día (en Puebla) se mide? */
+export function esDiaDeMedicion(fecha: Date): boolean {
+  return DIAS_MEDICION.includes(enPuebla(fecha).diaSemana);
+}
+
+/** De lunes a jueves, de 10:00:00 a 17:59:59. */
 export function enHorario(fecha: Date): boolean {
-  const { hora } = enPuebla(fecha);
-  return hora >= HORA_INICIO && hora < HORA_FIN;
+  const { hora, diaSemana } = enPuebla(fecha);
+  return DIAS_MEDICION.includes(diaSemana) && hora >= HORA_INICIO && hora < HORA_FIN;
 }
 
 export function diaDe(fecha: Date): string {
@@ -108,6 +127,9 @@ export function estadoDePersona(input: {
 }): EstadoPersona {
   const hoy = input.dia === diaDe(input.ahora);
   if (!input.consentAt) return 'sin_aceptar';
+  // Viernes a domingo no se mide: ni permiso ni hueco que reclamar.
+  const mediodia = new Date(limitesDelDia(input.dia).desde.getTime() + 12 * 60 * 60_000);
+  if (!esDiaDeMedicion(mediodia) && !input.ultimoPunto) return 'fuera_de_horario';
   if (input.state === 'sin_permiso') return 'sin_permiso';
   if (input.state === 'apagada') return 'apagada';
   if (!input.ultimoPunto) return hoy && !enHorario(input.ahora) ? 'fuera_de_horario' : 'sin_datos';

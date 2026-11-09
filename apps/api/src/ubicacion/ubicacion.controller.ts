@@ -31,6 +31,7 @@ import {
   ANTIGUEDAD_MAXIMA_MS,
   CADENCIA_MINUTOS,
   diaDe,
+  DIAS_MEDICION,
   enHorario,
   esDiaValido,
   estadoDePersona,
@@ -104,6 +105,7 @@ export class UbicacionController {
       inWindow: enHorario(ahora),
       startHour: HORA_INICIO,
       endHour: HORA_FIN,
+      days: DIAS_MEDICION,
       timeZone: UBICACION_TZ,
       intervalMinutes: CADENCIA_MINUTOS,
       serverTime: ahora,
@@ -196,6 +198,7 @@ export class UbicacionController {
       inWindow: enHorario(ahora),
       startHour: HORA_INICIO,
       endHour: HORA_FIN,
+      days: DIAS_MEDICION,
       people: personas.map((p) => {
         const suyos = porPersona.get(p.id) ?? [];
         const ultimo = suyos[suyos.length - 1] ?? null;

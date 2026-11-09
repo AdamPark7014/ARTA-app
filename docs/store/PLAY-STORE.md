@@ -111,7 +111,7 @@ Permisos sensibles: `RECORD_AUDIO` (notas de voz), `POST_NOTIFICATIONS` y ubicac
 Play Console → Contenido de la app → **Permisos de servicio en primer plano**: tipo `location`.
 Función principal: registrar la ubicación del personal de la organización durante su horario de trabajo.
 Descripción: «ARTA es la herramienta de trabajo del equipo de producción de eventos. Con la aceptación de cada persona,
-registra su ubicación cada media hora de 10:00 a 18:00 para coordinar al equipo durante montajes y eventos. El servicio
+registra su ubicación cada media hora, de lunes a jueves de 10:00 a 18:00, para coordinar al equipo durante montajes y eventos. El servicio
 muestra una notificación fija mientras corre y se detiene solo a las 18:00.»
 Video: súbelo a YouTube como «no listado» y pega el enlace: Play no acepta el archivo. Tiene que enseñar la hoja de
 consentimiento, el permiso, la notificación fija y que se detiene. No lleva `ACCESS_BACKGROUND_LOCATION`.

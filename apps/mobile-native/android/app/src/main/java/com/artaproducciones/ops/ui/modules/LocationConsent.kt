@@ -123,7 +123,7 @@ private fun LocationConsentSheet(busy: Boolean, error: String?, onAccept: () -> 
         ) {
             Text("Compartir tu ubicación", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = ArtaColors.Text)
             Text("Para coordinar al equipo, ARTA registra:", color = ArtaColors.Muted)
-            ConsentRow(Icons.Outlined.Schedule, "Tu ubicación cada media hora, de 10:00 a 18:00, hora de Puebla.")
+            ConsentRow(Icons.Outlined.Schedule, "Tu ubicación cada media hora, de lunes a jueves de 10:00 a 18:00, hora de Puebla.")
             ConsentRow(Icons.Outlined.NotificationsActive, "También con la app cerrada. Mientras se registra, verás un aviso fijo en el teléfono.")
             ConsentRow(Icons.Outlined.Visibility, "Solo la ve dirección general.")
             ConsentRow(Icons.Outlined.Delete, "Se borra a los 90 días.")

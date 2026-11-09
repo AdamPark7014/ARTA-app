@@ -22,6 +22,9 @@ enum LocationRules {
     static let startHour = 10
     static let endHour = 18
 
+    /// Adam, 09-11-2026: «de lunes a jueves». `Calendar.weekday`: 1 domingo … 7 sábado.
+    static let weekdays: Set<Int> = [2, 3, 4, 5]
+
     /// Un punto cada media hora.
     static let cadence: TimeInterval = 30 * 60
 
@@ -47,8 +50,9 @@ enum LocationRules {
         return cal
     }()
 
-    /// De 10:00:00 a 17:59:59.
+    /// De lunes a jueves, de 10:00:00 a 17:59:59.
     static func inWindow(_ date: Date) -> Bool {
+        guard weekdays.contains(calendar.component(.weekday, from: date)) else { return false }
         let hour = calendar.component(.hour, from: date)
         return hour >= startHour && hour < endHour
     }

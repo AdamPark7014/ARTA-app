@@ -67,7 +67,7 @@ test.describe('Ubicación del equipo', () => {
 
   test('el aviso de privacidad ya dice qué se registra', async ({ page }) => {
     await page.goto('/legal/privacidad');
-    await expect(page.getByText(/se registra tu ubicación precisa cada media hora, de 10:00 a 18:00/)).toBeVisible();
+    await expect(page.getByText(/se registra tu ubicación precisa cada media hora, de lunes a jueves de 10:00 a 18:00/)).toBeVisible();
     await expect(page.getByText('no recaba tu ubicación')).toHaveCount(0);
   });
 });

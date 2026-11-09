@@ -41,6 +41,29 @@ class LocationRulesTest {
     }
 
     @Test
+    fun onlyMondayToThursday() {
+        // 2026-11-02 es lunes.
+        listOf("2026-11-02", "2026-11-03", "2026-11-04", "2026-11-05").forEach { day ->
+            assertTrue(day, LocationRules.inWindow(puebla("12:00:00", day)))
+        }
+        listOf("2026-11-06", "2026-11-07", "2026-11-08").forEach { day ->
+            assertFalse(day, LocationRules.inWindow(puebla("12:00:00", day)))
+        }
+    }
+
+    @Test
+    fun afterThursdayTheNextStartIsMonday() {
+        // Jueves 18:00 → lunes 10:00: 3 días y 16 horas.
+        assertEquals((3 * 24 + 16) * hour, LocationRules.msUntilNextStart(puebla("18:00:00", "2026-11-05")))
+        // Viernes 09:00 → lunes 10:00.
+        assertEquals((3 * 24 + 1) * hour, LocationRules.msUntilNextStart(puebla("09:00:00", "2026-11-06")))
+        // Domingo 23:00 → lunes 10:00.
+        assertEquals(11 * hour, LocationRules.msUntilNextStart(puebla("23:00:00", "2026-11-08")))
+        // Fuera de horario la alarma espera al lunes.
+        assertEquals((2 * 24 - 2) * hour, LocationRules.nextAlarmDelayMs(puebla("12:00:00", "2026-11-07"), null, 0))
+    }
+
+    @Test
     fun theWindowIsTheSameWhereverThePhoneIs() {
         listOf("Asia/Tokyo", "America/Tijuana", "UTC", "Europe/Madrid").forEach { zone ->
             withDefaultZone(zone) {

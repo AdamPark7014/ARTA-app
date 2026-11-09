@@ -22,7 +22,7 @@ struct LocationConsentSheet: View {
                     .fixedSize(horizontal: false, vertical: true)
 
                 VStack(alignment: .leading, spacing: ArtaSpace.m) {
-                    row("clock", "Tu ubicación cada media hora, de 10:00 a 18:00, hora de Puebla.")
+                    row("clock", "Tu ubicación cada media hora, de lunes a jueves de 10:00 a 18:00, hora de Puebla.")
                     row("iphone", "Solo mientras la app está abierta. Si está cerrada, te recordamos abrirla.")
                     row("eye", "Solo la ve dirección general.")
                     row("trash", "Se borra a los 90 días.")

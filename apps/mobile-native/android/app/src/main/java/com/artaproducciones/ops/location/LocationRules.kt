@@ -2,6 +2,7 @@ package com.artaproducciones.ops.location
 
 import org.json.JSONArray
 import org.json.JSONObject
+import java.time.DayOfWeek
 import java.time.Duration
 import java.time.Instant
 import java.time.ZoneId
@@ -25,6 +26,9 @@ object LocationRules {
     const val START_HOUR = 10
     const val END_HOUR = 18
 
+    /** Adam, 09-11-2026: «de lunes a jueves». Viernes, sábado y domingo no se mide. */
+    val DAYS: Set<DayOfWeek> = setOf(DayOfWeek.MONDAY, DayOfWeek.TUESDAY, DayOfWeek.WEDNESDAY, DayOfWeek.THURSDAY)
+
     /** Un punto cada media hora. */
     const val CADENCE_MS = 30 * 60_000L
 
@@ -44,8 +48,11 @@ object LocationRules {
     /** Tras un reinicio Android olvida la alarma: pasado esto sin sonar, se da por perdida. */
     private const val LOST_ALARM_SLACK_MS = 5 * 60_000L
 
-    /** De 10:00:00 a 17:59:59. */
-    fun inWindow(now: Instant): Boolean = now.atZone(ZONE).hour.let { it >= START_HOUR && it < END_HOUR }
+    /** De lunes a jueves, de 10:00:00 a 17:59:59. */
+    fun inWindow(now: Instant): Boolean {
+        val local = now.atZone(ZONE)
+        return local.dayOfWeek in DAYS && local.hour >= START_HOUR && local.hour < END_HOUR
+    }
 
     /** El día en Puebla (`2026-11-01`): «Ahora no» vale hasta que cambia. */
     fun dayKey(now: Instant): String = now.atZone(ZONE).toLocalDate().toString()
@@ -55,12 +62,12 @@ object LocationRules {
         return Duration.between(now, end).toMillis()
     }
 
-    /** Hasta las 10:00 de hoy si todavía no llegan, o las de mañana. */
+    /** Hasta las 10:00 de hoy si todavía no llegan y hoy se mide; si no, las del siguiente lunes a jueves. */
     fun msUntilNextStart(now: Instant): Long {
         val today = now.atZone(ZONE).toLocalDate()
-        val startToday = today.atTime(START_HOUR, 0).atZone(ZONE).toInstant()
-        val next = if (now.isBefore(startToday)) startToday else today.plusDays(1).atTime(START_HOUR, 0).atZone(ZONE).toInstant()
-        return Duration.between(now, next).toMillis()
+        var day = if (now.isBefore(today.atTime(START_HOUR, 0).atZone(ZONE).toInstant())) today else today.plusDays(1)
+        while (day.dayOfWeek !in DAYS) day = day.plusDays(1)
+        return Duration.between(now, day.atTime(START_HOUR, 0).atZone(ZONE).toInstant()).toMillis()
     }
 
     /** Un reloj movido hacia atrás (`elapsed < 0`) no deja a nadie sin medir. */

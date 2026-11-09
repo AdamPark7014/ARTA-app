@@ -28,7 +28,7 @@ type Person = {
   last?: { lat: number; lng: number; accuracyM?: number | null; capturedAt: string } | null;
 };
 
-type Team = { date: string; inWindow: boolean; startHour: number; endHour: number; people: Person[] };
+type Team = { date: string; inWindow: boolean; startHour: number; endHour: number; days?: number[]; people: Person[] };
 
 type Route = {
   date: string;
@@ -61,7 +61,7 @@ function clock(iso?: string | null) {
 }
 
 /**
- * Ubicación del equipo, de 10:00 a 18:00 (docs/UBICACION.md). Solo Chacho y Arturo: a ellos no se les
+ * Ubicación del equipo, de lunes a jueves de 10:00 a 18:00 (docs/UBICACION.md). Solo Chacho y Arturo: a ellos no se les
  * mide. Primero el último punto de cada quien; al elegir a alguien, su recorrido del día.
  */
 export default function UbicacionPage() {
@@ -128,7 +128,7 @@ export default function UbicacionPage() {
       <div className="stack page-workspace">
         <PageHeader
           title="Ubicación del equipo"
-          description="Lo que registran las apps de 10:00 a 18:00, un punto cada media hora. Solo dirección general lo ve."
+          description="Lo que registran las apps de lunes a jueves, de 10:00 a 18:00, un punto cada media hora. Solo dirección general lo ve."
         >
           {allowed ? (
             <div className="fx fin-range">
