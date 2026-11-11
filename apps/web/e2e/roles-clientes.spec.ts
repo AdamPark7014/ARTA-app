@@ -81,35 +81,52 @@ async function openEvent(
   await expect(page.getByRole('heading', { name: 'Noche de Bandas' }).first()).toBeVisible();
 }
 
-const tabNames = async (page: Page) =>
-  (await page.locator('.tab-bar__btn').allInnerTexts()).map((t) => t.replace(/\s*\d+\s*$/, '').trim());
+/** Todas las pestañas a las que llega el usuario: abre cada grupo y lee su segunda tira. */
+const tabNames = async (page: Page) => {
+  const names: string[] = [];
+  const groups = page.locator('.event-tabs__desktop .tab-bar__btn');
+  const n = await groups.count();
+  for (let i = 0; i < n; i += 1) {
+    const btn = groups.nth(i);
+    if ((await btn.getAttribute('aria-expanded')) === null) names.push(await btn.innerText());
+    else {
+      await btn.click();
+      await expect(page.locator('.event-subtabs')).toBeVisible();
+      names.push(...(await page.locator('.event-subtabs__btn').allInnerTexts()));
+    }
+  }
+  return names.map((t) => t.replace(/\s*\d+\s*$/, '').trim());
+};
 
 test.describe('Pestañas del evento', () => {
-  test('en Arta van en el orden que pidió el cliente', async ({ page, baseURL }) => {
+  test('en Arta van agrupadas: Resumen, Producción, Dinero y Venta', async ({ page, baseURL }) => {
     await openEvent(page, baseURL!, CHACHO);
+    const groups = (await page.locator('.event-tabs__desktop .tab-bar__btn').allInnerTexts()).map((t) => t.trim());
+    expect(groups).toEqual(['Resumen', 'Producción', 'Dinero', 'Venta']);
     expect(await tabNames(page)).toEqual([
       'Resumen',
-      'Corrida',
-      'Campaña',
       'Formatos',
-      'Órdenes de compra',
-      'Convenios',
-      'Boletera',
       'Tareas',
       'Documentos',
-      'Adendum',
       'Testigos',
+      'Corrida',
+      'Órdenes de compra',
+      'Convenios',
+      'Adendum',
+      'Campaña',
+      'Boletera',
     ]);
   });
 
   test('el Auditorio no lleva corrida, campaña ni convenios', async ({ page, baseURL }) => {
     await openEvent(page, baseURL!, CHACHO, { entity: 'EXPLANADA' }, '?tab=finance');
+    // La liga vieja a la corrida cae en Resumen en vez de una pantalla vacía.
+    await expect(page.locator('.tab-bar__btn.is-active')).toHaveText(/Resumen/);
+    // (`tabNames` abre cada grupo, así que va después.)
     const names = await tabNames(page);
     expect(names).not.toContain('Corrida');
     expect(names).not.toContain('Campaña');
     expect(names).not.toContain('Convenios');
-    // La liga vieja a la corrida cae en Resumen en vez de una pantalla vacía.
-    await expect(page.locator('.tab-bar__btn.is-active')).toHaveText(/Resumen/);
   });
 
   const CASES: Array<[string, ReturnType<typeof person>, string[], string[]]> = [

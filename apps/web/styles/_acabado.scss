@@ -2304,3 +2304,233 @@ html[data-entity] .lg .pass-field input.field:focus-visible {
   background: transparent;
   color: var(--text);
 }
+
+/* ── Pestañas del evento agrupadas (maqueta aprobada 11-11-2026) ─────────── */
+.event-subtabs {
+  display: flex;
+  gap: 1.25rem;
+  padding: 0.55rem 1rem 0.65rem;
+  overflow-x: auto;
+  scrollbar-width: none;
+  border-bottom: 1px solid var(--line);
+}
+
+.event-subtabs::-webkit-scrollbar {
+  display: none;
+}
+
+.event-subtabs__btn {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 36px;
+  padding: 0 0.1rem;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.86rem;
+  font-weight: 550;
+  cursor: pointer;
+  white-space: nowrap;
+
+  &:hover {
+    color: var(--text);
+  }
+
+  &.is-active {
+    border-bottom-color: var(--accent);
+    color: var(--text);
+    font-weight: 650;
+  }
+}
+
+.event-subtabs__count {
+  min-width: 1.3rem;
+  padding: 0 0.35rem;
+  border-radius: 999px;
+  background: var(--fill-soft);
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+@media (max-width: 900px) {
+  .event-subtabs {
+    gap: 1rem;
+    margin-inline: -12px;
+    padding: 0 12px 0.5rem;
+    border-bottom: 0;
+  }
+}
+
+/* ── «Lo siguiente» en el evento (maqueta aprobada 11-11-2026) ───────────── */
+.next-steps {
+  display: grid;
+  gap: 0.85rem;
+  padding: 1rem 1.15rem;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--line));
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--accent) 7%, var(--bg-elev));
+}
+
+.next-steps--warn {
+  border-color: color-mix(in srgb, var(--warn) 60%, var(--line));
+  background: color-mix(in srgb, var(--warn) 8%, var(--bg-elev));
+}
+
+.next-steps--ok {
+  border-color: var(--line);
+  background: var(--bg-elev);
+}
+
+.next-steps__main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem 1rem;
+}
+
+.next-steps__copy {
+  display: grid;
+  gap: 0.2rem;
+  min-width: 0;
+  flex: 1 1 320px;
+}
+
+.next-steps__eyebrow {
+  color: var(--accent-deep, var(--accent));
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.next-steps--warn .next-steps__eyebrow {
+  color: var(--text);
+}
+
+.next-steps__headline {
+  font-size: 1.08rem;
+  font-weight: 650;
+  line-height: 1.3;
+}
+
+.next-steps__detail {
+  color: var(--muted);
+  font-size: 0.86rem;
+}
+
+.next-steps__cta {
+  flex: 0 0 auto;
+  min-height: 44px;
+}
+
+.next-steps__extras {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 0.5rem;
+}
+
+.next-steps__extra {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  min-height: 44px;
+  padding: 0 0.85rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-item);
+  background: var(--bg-elev);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.86rem;
+  text-align: left;
+  cursor: pointer;
+
+  &:hover {
+    border-color: var(--line-strong);
+  }
+}
+
+.next-steps__extra-cta {
+  flex: 0 0 auto;
+  color: var(--accent-deep, var(--accent));
+  font-weight: 600;
+}
+
+@media (max-width: 640px) {
+  .next-steps__cta {
+    width: 100%;
+  }
+
+  .next-steps__extras {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Tarjeta de Eventos: «Lo siguiente» en una línea (dos en teléfono). */
+.ev-card__next {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 0.84rem;
+  line-height: 1.4;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.ev-card__next-label {
+  color: var(--muted);
+}
+
+/* ── Calendario: barras de varios días (maqueta aprobada 11-11-2026) ─────── */
+.mcal__grid {
+  --mcal-lane: 23px;
+  --mcal-bar-top: 36px;
+}
+
+.mcal__lanes {
+  display: block;
+}
+
+.mcal__bar {
+  z-index: 1;
+  align-self: start;
+  min-width: 0;
+  height: calc(var(--mcal-lane) - 3px);
+  margin-inline: 6px;
+  overflow: hidden;
+  text-decoration: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  box-sizing: border-box;
+}
+
+.mcal__bar.is-continued {
+  margin-left: 0;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+
+.mcal__bar.is-continues {
+  margin-right: 0;
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+@media (max-width: 640px) {
+  .mcal__grid {
+    --mcal-lane: 8px;
+    --mcal-bar-top: 31px;
+  }
+
+  .mcal__bar {
+    height: 5px;
+    margin-inline: 2px;
+  }
+}

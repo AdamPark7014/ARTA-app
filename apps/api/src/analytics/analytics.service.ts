@@ -105,6 +105,7 @@ export class AnalyticsService {
           id: true,
           eventId: true,
           title: true,
+          status: true,
           progressPct: true,
           deliveredAt: true,
           authorizedAt: true,
@@ -166,6 +167,21 @@ export class AnalyticsService {
     let pendingDelivered = 0;
     let pendingAuthorized = 0;
 
+    // Lo que la tarjeta del evento dice como «Lo siguiente»: mismos grupos que la pestaña Formatos
+    // (web `checklistBucket`): listo = sellado/aprobado/autorizado; por autorizar = entregado o en revisión.
+    const nextByEvent = new Map<string, { todo: number; review: number; worst: { title: string; pct: number } | null }>();
+    for (const c of checklists) {
+      const n = nextByEvent.get(c.eventId) || { todo: 0, review: 0, worst: null };
+      const ready = c.status === 'SEALED' || c.status === 'APPROVED' || !!c.authorizedAt;
+      const inReview = !ready && (c.status === 'REVIEW' || !!c.deliveredAt);
+      if (inReview) n.review += 1;
+      else if (!ready) {
+        n.todo += 1;
+        if (!n.worst || c.progressPct < n.worst.pct) n.worst = { title: c.title, pct: Math.round(c.progressPct) };
+      }
+      nextByEvent.set(c.eventId, n);
+    }
+
     for (const c of checklists) {
       const bucket = progressByEvent.get(c.eventId) || { sum: 0, n: 0 };
       bucket.sum += c.progressPct;
@@ -209,6 +225,9 @@ export class AnalyticsService {
           checklistCount: p?.n || 0,
           risk,
           daysToShow,
+          todoChecklists: nextByEvent.get(e.id)?.todo || 0,
+          reviewChecklists: nextByEvent.get(e.id)?.review || 0,
+          worstChecklist: nextByEvent.get(e.id)?.worst || null,
         };
       })
       .sort((a, b) => {

@@ -28,7 +28,29 @@ type EventRow = {
   pendingAuthorizedChecklists?: number;
 };
 
-type HealthItem = { id: string; avgProgress: number; risk: 'critical' | 'watch' | 'healthy' };
+type HealthItem = {
+  id: string;
+  avgProgress: number;
+  risk: 'critical' | 'watch' | 'healthy';
+  checklistCount?: number;
+  todoChecklists?: number;
+  reviewChecklists?: number;
+  worstChecklist?: { title: string; pct: number } | null;
+};
+
+/** «Lo siguiente» de la tarjeta (maqueta aprobada 11-11-2026): lo más atrasado, no solo un porcentaje. */
+function nextLine(h: HealthItem | undefined): string {
+  if (!h || h.checklistCount == null) return '';
+  if (!h.checklistCount) return 'Agregar los formatos del show';
+  const todo = h.todoChecklists ?? 0;
+  const review = h.reviewChecklists ?? 0;
+  if (todo && h.worstChecklist) {
+    const more = todo > 1 ? ` · faltan ${todo} formatos` : '';
+    return `${h.worstChecklist.title} al ${h.worstChecklist.pct} %${more}`;
+  }
+  if (review) return `${review} ${review === 1 ? 'formato espera' : 'formatos esperan'} autorización`;
+  return 'Formatos al día';
+}
 
 type Scope = 'active' | 'past' | 'all';
 
@@ -227,6 +249,11 @@ function EventsPageInner() {
                   <span className="ev-card__body">
                     <span className="ev-card__name">{e.name}</span>
                     <span className="ev-card__meta">{[whenLabel(e), place].filter(Boolean).join(' · ') || 'Sin fecha'}</span>
+                    {scope !== 'past' && nextLine(h) ? (
+                      <span className="ev-card__next">
+                        <span className="ev-card__next-label">Lo siguiente:</span> {nextLine(h)}
+                      </span>
+                    ) : null}
                     {/* Avance y estado en el mismo renglón: el nombre ya no compite con la píldora. */}
                     <span className="ev-card__foot">
                       {h && scope !== 'past' ? (
@@ -245,7 +272,9 @@ function EventsPageInner() {
                         ) : h?.risk === 'critical' ? (
                           <Pill tone="danger">Urgente</Pill>
                         ) : h?.risk === 'watch' ? (
-                          <Pill tone="review">Revisar</Pill>
+                          <Pill tone="review">Atrasado</Pill>
+                        ) : h?.checklistCount && scope !== 'past' ? (
+                          <Pill tone="ok">A tiempo</Pill>
                         ) : null}
                       </span>
                     </span>

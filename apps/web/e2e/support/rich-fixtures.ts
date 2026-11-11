@@ -1842,6 +1842,12 @@ const OVERVIEW = {
     avgProgress: HEALTH[e.id].avgProgress,
     risk: HEALTH[e.id].risk,
     daysToShow: daysTo(e.startsAt),
+    // «Lo siguiente» de la tarjeta: lo más atrasado de cada evento.
+    checklistCount: HEALTH[e.id].avgProgress >= 100 ? 4 : 6,
+    todoChecklists: HEALTH[e.id].avgProgress >= 100 ? 0 : 3,
+    reviewChecklists: 1,
+    worstChecklist:
+      HEALTH[e.id].avgProgress >= 100 ? null : { title: 'Rueda de prensa', pct: Math.max(0, HEALTH[e.id].avgProgress - 30) },
   })),
   topMargin: [
     { eventId: EVT1_ID, name: EVT1.name, net: 4_397_188, income: 7_124_000, expense: 2_726_812 },

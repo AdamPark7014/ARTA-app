@@ -6,6 +6,8 @@ import { BoleteraEmbed } from '@/components/events/BoleteraEmbed';
 import { ChecklistPicker, checklistBucket } from '@/components/events/ChecklistPicker';
 import { isEventDone } from '@/components/events/checklist-progress';
 import { EventVendorPins } from '@/components/events/EventVendorPins';
+import { NextStepsStrip } from '@/components/events/NextStepsStrip';
+import { eventNextSteps } from '@/components/events/next-steps';
 import {
   EventFields,
   eventFormFromDetail,
@@ -122,8 +124,16 @@ export function EventOverviewPanel({
 
   const go = (tab: Tab, extra?: { ver?: string }) => (visibleTabs.has(tab) ? () => onGoModule(tab, extra) : undefined);
 
+  const next = closed ? null : eventNextSteps(event, { done: eventDone, visible: (t) => visibleTabs.has(t) });
+
   return (
     <div className="sx-stack">
+      {next ? (
+        <NextStepsStrip
+          steps={next}
+          onAction={(a) => (a.checklist ? void onOpenChecklist(a.checklist) : onGoModule(a.tab, a.ver ? { ver: a.ver } : undefined))}
+        />
+      ) : null}
       <div className="tiles">
         {/* Sin formatos no hay avance que medir: «0 % · Todo completo» se contradecía. */}
         <Tile

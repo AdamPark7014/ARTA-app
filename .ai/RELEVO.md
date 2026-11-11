@@ -24,8 +24,18 @@ Adam: «la app no te dice nada… homologarlo». Recorrido en `/mnt/project-file
   desvanecen a la derecha para que se note que hay más; `title` en nombres que se cortan (Inicio, tablero, chat).
 - **Apps nativas:** solo chat, avisos, tareas y OC; su texto ya está en español claro. Lo demás abre el panel web.
 - Maqueta para visto bueno: https://claude.ai/artifact/JHUC8N18Kg3w2V41yVXkX5
-- Pendiente con visto bueno de Adam (cambio visual): franja «Lo siguiente» en evento/tarjetas, pestañas agrupadas,
-  calendario con barras de varios días.
+- **Maqueta aprobada por Adam (11-11, «Sí, aplícala así») y aplicada:**
+  - Evento: franja «Lo siguiente» (`components/events/next-steps.ts` + `NextStepsStrip.tsx`) con el formato más
+    atrasado y su botón, más atajos (campaña, boletera, OC por autorizar, tareas vencidas).
+  - Pestañas agrupadas (`EventTabBar.tsx`, `TAB_GROUPS`): Resumen · Producción (Formatos, Tareas, Documentos,
+    Testigos) · Dinero (Corrida, OC, Convenios, Adendum) · Venta (Campaña, Boletera); el grupo abierto enseña una
+    segunda tira. Un grupo con un solo módulo visible se llama como el módulo.
+  - Tarjetas de Eventos: «Lo siguiente» y píldora A tiempo / Atrasado / Urgente. El API (`/analytics/overview`,
+    `eventHealth`) ahora manda `todoChecklists`, `reviewChecklists`, `worstChecklist`.
+  - Calendario (`MonthCalendar.tsx`): una barra por semana para shows de varios días, en carriles; lo que no cabe
+    (más de 3) queda en «+N más».
+  - Capturas antes/después: `/mnt/project-files/produccion/capturas-homologacion/`.
+  - Los formatos no tienen responsable en el modelo: «quién lo debe» de la maqueta solo sale donde hay dato.
 
 ## Turno claude-code (2026-11-08, tarde): Next 15 + React 19 y xlsx
 
