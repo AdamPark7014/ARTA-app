@@ -124,7 +124,9 @@ function LinkPreviewCard({ url }: { url: string }) {
       <span className="chat-preview__copy">
         <span className="chat-preview__site">{p.siteName || host}</span>
         {p.title ? <span className="chat-preview__title">{p.title}</span> : null}
-        {p.description ? <span className="chat-preview__desc">{p.description}</span> : null}
+        {p.description ? <span className="chat-preview__desc" title={p.description}>
+            {p.description}
+          </span> : null}
       </span>
       {p.image && !noImage ? (
         // eslint-disable-next-line @next/next/no-img-element

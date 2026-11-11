@@ -8,6 +8,7 @@ import { EmptyLite, Pill, Seg } from '@/components/ui/Lite';
 import { LoadingBlock } from '@/components/ui/LoadingBlock';
 import { FieldSearch, PageHeader } from '@/components/ui/PageChrome';
 import { api } from '@/lib/api';
+import { eventWhen } from '@/lib/format';
 import { canAccessEventOps, userHasPermission } from '@/lib/access-matrix';
 import { canEditEventInfo } from '@arta/rbac';
 import { useUser } from '@/lib/user-context';
@@ -60,14 +61,7 @@ function isPastEvent(e: EventRow, today: number) {
 }
 
 function whenLabel(e: EventRow) {
-  if (!e.startsAt) return '';
-  const start = new Date(e.startsAt);
-  start.setHours(0, 0, 0, 0);
-  const days = Math.round((start.getTime() - startOfToday()) / 86400000);
-  if (days === 0) return 'Hoy';
-  if (days === 1) return 'Mañana';
-  if (days > 1 && days <= 60) return `En ${days} días`;
-  return start.toLocaleDateString('es-MX', { year: 'numeric', month: 'long' });
+  return eventWhen(e.startsAt, e.endsAt);
 }
 
 export default function EventsPage() {

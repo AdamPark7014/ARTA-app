@@ -63,3 +63,45 @@ export function fullDateTime(iso: string | Date | null | undefined): string {
   if (!d) return '';
   return d.toLocaleString('es-MX', { dateStyle: 'long', timeStyle: 'short' });
 }
+
+const WEEKDAYS = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'];
+
+function dayStart(d: Date): number {
+  const x = new Date(d);
+  x.setHours(0, 0, 0, 0);
+  return x.getTime();
+}
+
+/**
+ * Fecha de un show, siempre igual en tarjetas y listas: «sáb 9 dic · en 29 días»,
+ * «15 – 17 ene · en 65 días», «vie 14 nov · en curso», «6 feb 2027». Antes la lista
+ * de Eventos decía «En 29 días» junto a «febrero de 2027».
+ */
+export function eventWhen(
+  startsAt: string | Date | null | undefined,
+  endsAt?: string | Date | null,
+  now = new Date(),
+): string {
+  const s = valid(startsAt);
+  if (!s) return '';
+  const e = valid(endsAt);
+  const multi = !!e && dayStart(e) > dayStart(s);
+  const year = s.getFullYear() !== now.getFullYear() || (multi && e!.getFullYear() !== now.getFullYear());
+  let date: string;
+  if (multi) {
+    const sameMonth = s.getMonth() === e!.getMonth() && s.getFullYear() === e!.getFullYear();
+    const from = sameMonth ? `${s.getDate()}` : `${s.getDate()} ${MONTHS[s.getMonth()]}`;
+    date = `${from} – ${e!.getDate()} ${MONTHS[e!.getMonth()]}${year ? ` ${e!.getFullYear()}` : ''}`;
+  } else {
+    date = `${WEEKDAYS[s.getDay()]} ${s.getDate()} ${MONTHS[s.getMonth()]}${year ? ` ${s.getFullYear()}` : ''}`;
+  }
+  const today = dayStart(now);
+  const days = Math.round((dayStart(s) - today) / 86400000);
+  const lastDay = dayStart(e || s);
+  let rel = '';
+  if (days === 0) rel = 'hoy';
+  else if (days === 1) rel = 'mañana';
+  else if (days > 1 && days <= 90) rel = `en ${days} días`;
+  else if (days < 0 && lastDay >= today) rel = 'en curso';
+  return rel ? `${date} · ${rel}` : date;
+}

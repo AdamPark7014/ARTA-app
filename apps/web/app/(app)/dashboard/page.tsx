@@ -140,9 +140,13 @@ function NextShow({
       </span>
       <span className="next-show__copy">
         <span className="next-show__eyebrow">Siguiente show · {when}</span>
-        <span className="next-show__name">{show.name}</span>
+        <span className="next-show__name" title={show.name}>
+          {show.name}
+        </span>
         {show.artist && !show.name.toLowerCase().includes(show.artist.toLowerCase()) ? (
-          <span className="next-show__artist">{show.artist}</span>
+          <span className="next-show__artist" title={show.artist}>
+            {show.artist}
+          </span>
         ) : null}
       </span>
       <span className="next-show__progress">

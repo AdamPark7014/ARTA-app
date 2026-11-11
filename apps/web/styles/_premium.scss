@@ -2215,6 +2215,9 @@ html[data-entity] .sx-head__sub {
 }
 
 .board {
+  /* Sin esto el tablero ensancha la página entera en teléfono en vez de desplazarse dentro. */
+  min-width: 0;
+  max-width: 100%;
   display: grid;
   grid-auto-flow: column;
   grid-auto-columns: minmax(230px, 1fr);
@@ -2572,8 +2575,10 @@ html[data-entity] select.board-card__move:focus {
     gap: 0.35rem;
     margin-inline: -4px;
     overflow-x: auto;
-    padding: 1px 4px;
+    padding: 1px 28px 1px 4px;
     scrollbar-width: none;
+    /* Se nota que hay más fichas a la derecha. */
+    mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
 
     &::-webkit-scrollbar {
       display: none;

@@ -19,6 +19,11 @@ Adam: «la app no te dice nada… homologarlo». Recorrido en `/mnt/project-file
   (dos eventos «FINDE»), `financeRuns` ordenado por `updatedAt` (antes `[0]` era arbitrario).
 - **Avisos de Inicio** sin jerga («formatos al N % · faltan N días», «formatos entregados esperan tu autorización»).
 - **Tareas:** la ficha «Pendientes» cuenta lo mismo que filtra (todo lo no aprobado, incluye «Por aprobar» y bloqueadas).
+- **Fechas:** `eventWhen` en `lib/format.ts` («sáb 9 dic · en 29 días», «15 – 17 ene», «en curso»); lo usa la lista de Eventos.
+- **Teléfono:** el tablero de Tareas ya no ensancha la página (`.board { min-width: 0 }`); las fichas de filtro se
+  desvanecen a la derecha para que se note que hay más; `title` en nombres que se cortan (Inicio, tablero, chat).
+- **Apps nativas:** solo chat, avisos, tareas y OC; su texto ya está en español claro. Lo demás abre el panel web.
+- Maqueta para visto bueno: https://claude.ai/artifact/JHUC8N18Kg3w2V41yVXkX5
 - Pendiente con visto bueno de Adam (cambio visual): franja «Lo siguiente» en evento/tarjetas, pestañas agrupadas,
   calendario con barras de varios días.
 

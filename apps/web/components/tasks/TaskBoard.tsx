@@ -96,7 +96,9 @@ export function TaskBoard({
                   >
                     <button type="button" className="board-card__open" onClick={() => onOpen(t)}>
                       <span className="board-card__title">{t.title}</span>
-                      {t.event ? <span className="board-card__event">{t.event.name}</span> : null}
+                      {t.event ? <span className="board-card__event" title={t.event.name}>
+                          {t.event.name}
+                        </span> : null}
                     </button>
                     <footer className="board-card__foot">
                       {names.length ? (
