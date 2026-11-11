@@ -29,7 +29,7 @@ import {
 } from '../common/rbac/roles';
 import { ChecklistPdfService } from '../checklists/checklist-pdf.service';
 import { VISIBLE_CHECKLIST_WHERE } from '../checklists/checklist-visibility';
-import { formatProgress } from '../common/checklist-progress';
+import { eventCurrentWhere, eventPastWhere, formatProgress } from '../common/checklist-progress';
 import { completeDoneEvents, recalcEventChecklists } from '../checklists/event-progress';
 import { bindFormatToEvent, normalizeFormatData } from '../common/format-schema';
 import { assertSameTenant, tenantIdOf } from '../common/tenant';
@@ -179,19 +179,10 @@ export class EventsController {
         ? { entity, organizationId: orgId }
         : { entity: { in: allowed }, organizationId: orgId };
 
-    if (scope === 'past' || scope === 'active') {
-      const startOfToday = new Date();
-      startOfToday.setHours(0, 0, 0, 0);
-      const pastOr: Prisma.EventWhereInput[] = [
-        { status: { in: ['CLOSED', 'CANCELLED'] } },
-        { startsAt: { lt: startOfToday } },
-      ];
-      if (scope === 'past') {
-        where.OR = pastOr;
-      } else {
-        where.NOT = { OR: pastOr };
-      }
-    }
+    // Misma frontera que «Eventos activos» de Inicio (common/checklist-progress.ts), en hora de Puebla
+    // y por el último día del evento: un show de tres días sigue «actual» hasta que termina.
+    if (scope === 'past') where.AND = [eventPastWhere()];
+    else if (scope === 'active') where.AND = [eventCurrentWhere()];
 
     const events = await this.prisma.event.findMany({
       where,

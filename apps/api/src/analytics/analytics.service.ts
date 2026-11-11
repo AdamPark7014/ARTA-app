@@ -3,7 +3,7 @@ import { ChecklistTemplateKey, EntityKey } from '@prisma/client';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { financeTotals } from '../finance/finance-totals';
 import { VISIBLE_CHECKLIST_WHERE } from '../checklists/checklist-visibility';
-import { isEventDone } from '../common/checklist-progress';
+import { isEventCurrent, isEventDone } from '../common/checklist-progress';
 import { eventRisk, riskRulesOf, type RiskRules } from '../common/event-risk';
 import { payWindowFor, poStateCounts, poStateOf, PO_STATE_ORDER, type PoStateKey } from '../purchase-orders/po-state';
 
@@ -337,8 +337,8 @@ export class AnalyticsService {
       alerts.push({
         severity: e.risk === 'critical' ? 'critical' : 'warning',
         code: 'EVENT_RISK',
-        message: `${e.name}: avance ops ${e.avgProgress}%${
-          e.daysToShow != null ? ` · show en ${e.daysToShow}d` : ''
+        message: `${e.name}: formatos al ${e.avgProgress}%${
+          e.daysToShow != null ? ` · faltan ${e.daysToShow} ${e.daysToShow === 1 ? 'día' : 'días'}` : ''
         }`,
         href: `/events/${e.id}`,
       });
@@ -347,7 +347,7 @@ export class AnalyticsService {
       alerts.push({
         severity: 'warning',
         code: 'PO_AGING',
-        message: `${poAgingOver7} OC con más de 7 días sin pagar/autorizar`,
+        message: `${poAgingOver7} órdenes de compra llevan más de 7 días sin pagar o autorizar`,
         href: '/purchase-orders',
       });
     }
@@ -355,7 +355,7 @@ export class AnalyticsService {
       alerts.push({
         severity: 'warning',
         code: 'SIG_BACKLOG',
-        message: `${pendingAuthorized} checklists entregados pendientes de autorización`,
+        message: `${pendingAuthorized} formatos entregados esperan tu autorización`,
         // Los eventos con formatos por revisar, no el catálogo de plantillas.
         href: '/events?scope=active&ver=revision',
       });
@@ -372,7 +372,7 @@ export class AnalyticsService {
       alerts.push({
         severity: 'critical',
         code: 'PORTFOLIO_LOSS',
-        message: `Portfolio neto negativo: $${(portfolioIncome - portfolioExpense).toLocaleString('es-MX')}`,
+        message: `Todos los eventos juntos van en pérdida: $${(portfolioIncome - portfolioExpense).toLocaleString('es-MX')}`,
         href: '/finance',
       });
     }
@@ -384,7 +384,9 @@ export class AnalyticsService {
       entity,
       kpis: {
         eventsTotal: events.length,
-        eventsActive: byStatus.ACTIVE || 0,
+        // «En curso», igual que la lista de Eventos actuales (antes: status ACTIVE, con shows ya pasados).
+        eventsActive: events.filter((e) => isEventCurrent(e, now)).length,
+        eventsActiveStatus: byStatus.ACTIVE || 0,
         eventsDraft: byStatus.DRAFT || 0,
         eventsClosed: byStatus.CLOSED || 0,
         eventsCancelled: byStatus.CANCELLED || 0,
@@ -438,7 +440,10 @@ export class AnalyticsService {
         artist: true,
         status: true,
         startsAt: true,
-        financeRuns: { select: { id: true, title: true, locked: true, dataJson: true, updatedAt: true } },
+        financeRuns: {
+          select: { id: true, title: true, locked: true, dataJson: true, updatedAt: true },
+          orderBy: { updatedAt: 'desc' },
+        },
       },
       orderBy: { updatedAt: 'desc' },
     });

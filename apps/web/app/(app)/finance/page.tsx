@@ -18,12 +18,14 @@ import { StatusBadge } from '@/components/ui/StatusBadge';
 import { api } from '@/lib/api';
 import { useUser } from '@/lib/user-context';
 import { userHasPermission } from '@/lib/access-matrix';
+import { shortDate } from '@/lib/format';
 
 type FinanceRow = {
   eventId: string;
   name: string;
   artist?: string | null;
   status: string;
+  startsAt?: string | null;
   income: number;
   expense: number;
   net: number;
@@ -135,29 +137,32 @@ export default function FinancePage() {
                 <div className="kpi">
                   <div className="label">Ingresos</div>
                   <div className="value value--money">{money(t.income)}</div>
-                  <div className="kpi-sub muted">Portfolio acumulado</div>
+                  <div className="kpi-sub muted">Suma de todas las corridas</div>
                 </div>
                 <div className="kpi">
                   <div className="label">Egresos</div>
                   <div className="value value--money">{money(t.expense)}</div>
-                  <div className="kpi-sub muted">Gastos registrados</div>
+                  <div className="kpi-sub muted">
+                    Capturados en las corridas.{' '}
+                    <Link href="/purchase-orders">Las órdenes de compra van aparte</Link>
+                  </div>
                 </div>
                 <div className={`kpi ${t.net < 0 ? 'kpi--danger' : ''}`}>
-                  <div className="label">Neto portfolio</div>
+                  <div className="label">Neto</div>
                   <div className="value value--money">{money(t.net)}</div>
                   <div className="kpi-sub muted">
                     {t.net >= 0 ? 'Resultado positivo' : 'Resultado negativo'}
                   </div>
                 </div>
                 <div className="kpi">
-                  <div className="label">Corridas locked</div>
+                  <div className="label">Corridas cerradas</div>
                   <div className="value">{t.locked}</div>
-                  <div className="kpi-sub muted">Selladas / solo lectura</div>
+                  <div className="kpi-sub muted">Ya no se pueden editar</div>
                 </div>
                 <div className="kpi">
-                  <div className="label">Abiertas c/movimiento</div>
+                  <div className="label">Corridas abiertas</div>
                   <div className="value">{t.open}</div>
-                  <div className="kpi-sub muted">Con ingresos o egresos</div>
+                  <div className="kpi-sub muted">Con ingresos o egresos capturados</div>
                 </div>
                 <button
                   type="button"
@@ -209,7 +214,7 @@ export default function FinancePage() {
                     <thead>
                       <tr>
                         <th>Evento</th>
-                        <th>Status</th>
+                        <th>Estado</th>
                         <th className="num">Ingresos</th>
                         <th className="num">Egresos</th>
                         <th className="num">Neto</th>
@@ -223,7 +228,9 @@ export default function FinancePage() {
                         <tr key={e.eventId}>
                           <td>
                             <strong>{e.name}</strong>
-                            <div className="muted kpi-sub">{e.artist || '—'}</div>
+                            <div className="muted kpi-sub">
+                              {[shortDate(e.startsAt), e.artist].filter(Boolean).join(' · ') || '—'}
+                            </div>
                           </td>
                           <td>
                             <StatusBadge value={e.status} kind="event" />
@@ -242,7 +249,7 @@ export default function FinancePage() {
                             {e.marginPct == null ? '—' : `${e.marginPct}%`}
                           </td>
                           <td>
-                            {e.title || '—'} {e.locked ? <span className="badge">LOCKED</span> : null}
+                            {e.title || '—'} {e.locked ? <span className="badge">Cerrada</span> : null}
                           </td>
                           <td>
                             <Link

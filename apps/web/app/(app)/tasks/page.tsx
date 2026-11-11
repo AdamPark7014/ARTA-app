@@ -393,7 +393,8 @@ function TasksPageInner() {
 
   const kpis = useMemo(
     () => ({
-      open: rows.filter((t) => t.status === 'OPEN' || t.status === 'IN_PROGRESS').length,
+      // Igual que el filtro «Pendientes»: todo lo que no está aprobado (incluye bloqueadas y por aprobar).
+      open: rows.filter((t) => t.status !== 'DONE').length,
       overdue: rows.filter((t) => isOverdue(t, today)).length,
       blocked: rows.filter((t) => t.status === 'BLOCKED').length,
       unassigned: rows.filter((t) => !taskAssigneeIds(t).length && t.status !== 'DONE').length,

@@ -1,12 +1,26 @@
 # RELEVO
 
 - **Último turno:** claude-code
-- **Fecha:** 2026-11-08
+- **Fecha:** 2026-11-11
 - **Rama:** main
   (Adam es el único programador).
 - **Producción:** `0f68a31` desplegado desde `main` el 2026-11-07 (`bash deploy/update.sh` en `/var/www/arta-app`, log
   `/root/arta-deploy-20261107-B.log`; respaldo automático en `/root/arta-backups/`). Disco al 69 %: **un despliegue lo subió a 90 %, donde se cae la BD.** Antes de cada
   despliegue, `docker builder prune -af`.
+
+## Turno claude-code (2026-11-11): homologar cifras y texto (UI/UX, fase 1)
+
+Adam: «la app no te dice nada… homologarlo». Recorrido en `/mnt/project-files/produccion/hallazgos-uiux-web-2026-11-11.md`. **NO desplegado.**
+- **Eventos activos (Inicio) = Eventos → Actuales:** `isEventCurrent` / `eventCurrentWhere` / `eventPastWhere` en
+  `common/checklist-progress.ts`. Antes Inicio contaba todo `status=ACTIVE` (8, con shows pasados sin cerrar) y la lista
+  cortaba por inicio en UTC (3). `eventsActiveStatus` conserva el conteo viejo. Prueba: `event-current.spec.ts`.
+- **Finanzas:** etiquetas en español («Corridas cerradas», «Estado», «Cerrada», «Neto»), Egresos aclara que las OC van
+  aparte (no están sincronizadas con las corridas: OC pagadas $50,280 vs egresos $0), fecha del evento en cada fila
+  (dos eventos «FINDE»), `financeRuns` ordenado por `updatedAt` (antes `[0]` era arbitrario).
+- **Avisos de Inicio** sin jerga («formatos al N % · faltan N días», «formatos entregados esperan tu autorización»).
+- **Tareas:** la ficha «Pendientes» cuenta lo mismo que filtra (todo lo no aprobado, incluye «Por aprobar» y bloqueadas).
+- Pendiente con visto bueno de Adam (cambio visual): franja «Lo siguiente» en evento/tarjetas, pestañas agrupadas,
+  calendario con barras de varios días.
 
 ## Turno claude-code (2026-11-08, tarde): Next 15 + React 19 y xlsx
 

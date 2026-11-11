@@ -168,6 +168,43 @@ export function eventDoneWhere(now = new Date()): Prisma.EventWhereInput {
 }
 
 /**
+ * «En curso»: lo que cuentan Inicio («Eventos activos») y la lista de Eventos actuales. Ni cerrado ni
+ * cancelado, y su último día (fin, o inicio si no tiene fin) es hoy o después, en hora de Puebla. Un
+ * borrador con fecha futura también cuenta: es trabajo vivo. Antes Inicio contaba solo `status=ACTIVE`
+ * (incluía shows ya pasados sin cerrar) y la lista cortaba por el día de inicio en UTC (un show de varios
+ * días salía de «actuales» desde su primer día).
+ */
+export function isEventCurrent(
+  event: (EventDoneState & { status: string }) | null | undefined,
+  now = new Date(),
+): boolean {
+  if (!event) return false;
+  if (event.status === 'CLOSED' || event.status === 'CANCELLED') return false;
+  return !isEventDone(event, now);
+}
+
+/** La misma frontera que `isEventCurrent`, para filtrar en la base. */
+export function eventCurrentWhere(now = new Date()): Prisma.EventWhereInput {
+  const cutoff = startOfPueblaDay(now);
+  return {
+    status: { notIn: ['CLOSED', 'CANCELLED'] },
+    OR: [{ endsAt: { gte: cutoff } }, { endsAt: null, startsAt: { gte: cutoff } }, { endsAt: null, startsAt: null }],
+  };
+}
+
+/** Lo contrario de `eventCurrentWhere`: «Pasados». */
+export function eventPastWhere(now = new Date()): Prisma.EventWhereInput {
+  const cutoff = startOfPueblaDay(now);
+  return {
+    OR: [
+      { status: { in: ['CLOSED', 'CANCELLED'] } },
+      { endsAt: { lt: cutoff } },
+      { endsAt: null, startsAt: { lt: cutoff } },
+    ],
+  };
+}
+
+/**
  * El avance que se GUARDA en `progressPct` y que leen la lista de formatos, el
  * resumen del evento, la analítica («Formatos al día», riesgo), los digests y
  * las apps.
