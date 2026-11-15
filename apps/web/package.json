@@ -17,29 +17,29 @@
   },
   "dependencies": {
     "@arta/rbac": "*",
-    "docx-preview": "^0.3.5",
+    "docx-preview": "^0.3.7",
     "fast-formula-parser": "^1.0.19",
     "firebase": "^11.10.0",
-    "maplibre-gl": "6.11.2",
+    "maplibre-gl": "6.18.0",
     "next": "^15.5.29",
     "pdf-lib": "^1.17.1",
     "pdfjs-dist": "^4.10.38",
     "pngjs": "^7.0.0",
-    "react": "^19.2.0",
-    "react-dom": "^19.2.0",
-    "socket.io-client": "^4.8.1",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "socket.io-client": "^4.8.4",
     "xlsx": "npm:@e965/xlsx@0.20.3"
   },
   "devDependencies": {
-    "@playwright/test": "^1.62.1",
-    "@types/node": "^20.11.30",
+    "@playwright/test": "^1.65.1",
+    "@types/node": "^20.19.43",
     "@types/pngjs": "^6.0.5",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
-    "jszip": "^3.10.1",
-    "mammoth": "^1.9.0",
-    "sass": "^1.83.4",
-    "typescript": "^5.0.0",
-    "postcss": "^8.5.32"
+    "jszip": "^3.10.2",
+    "mammoth": "^1.13.0",
+    "postcss": "^8.5.33",
+    "sass": "^1.108.2",
+    "typescript": "^5.9.3"
   }
 }

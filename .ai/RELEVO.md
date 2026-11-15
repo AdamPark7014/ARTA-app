@@ -1,5 +1,21 @@
 # RELEVO
 
+- **2026-11-15 (claude-code) — Dependencias al día con Node 26.13.1 / npm 12.2.2 (solo parches y menores). NO desplegado.**
+  - Subidas: maplibre-gl 6.18.0 (sus `.mjs` copiados a `apps/web/public/maplibre/`), mammoth 1.13, sass 1.108,
+    @sentry/node 10.78, stripe 22.6, otplib 13.6, nodemailer 10.5, @nestjs/throttler 6.7, playwright 1.65, socket.io-client
+    4.8.4, postcss 8.5.33, docx-preview 0.3.7 y especificadores de Nest 10.4.22 / Prisma 5.22 / React 19.3 (ya en el lock).
+  - **npm 12 bloquea los scripts de instalación:** `package.json` lleva `allowScripts` (Prisma, @parcel/watcher,
+    protobufjs, @firebase/util, @nestjs/core). npm 10 de Docker (`node:20-bookworm-slim`) lo ignora.
+  - Trampa de `overrides` + workspaces: npm 12 dejó `postcss` 8.5.32 en el lock aunque la web pedía `^8.5.33` y el npm 10
+    de Docker lo rechazaba en `npm ci`; se forzó con `npm install postcss@^8.5.33 -w apps/web`. El lock final pasa
+    `npm ci --dry-run` con npm 10.8.2 para api y web.
+  - Verificado con Node 26: typecheck, pruebas de API, build (turbo), `AppModule` carga, e2e 306/307. La que falla
+    (`real-stack-files.spec.ts`) necesita la API real en `:4000` y no corre sin ella. `mammoth` 1.13 da el mismo HTML que
+    la 1.9 con los tres `.docx` de `apps/api/assets/format-sources`.
+  - Ojo e2e: `start:e2e` fija `-p 3100`; si ese puerto está ocupado (hoy lo usa BOLETERA), levantar el build a mano en
+    otro puerto con las variables de `playwright.config.ts` y correr con `E2E_PORT=<puerto>`.
+  - Mayores pendientes y su costo: `C:\dev\.ai\dependencias-2026-11.md`.
+
 - **2026-11-14 (claude-code) — Limpieza de documentación (Adam: «quita documentación y unifica»).** Borrados 11 documentos obsoletos sin referencias (auditorías, planes y prompts viejos; están en el historial de git). Índice único del repo: `docs/INDICE.md`; índice de todos los proyectos: `C:\dev\DOCS.md`; memoria compartida de Codex/Claude/Cursor/Grok: `C:\dev\.ai\memoria`. RELEVO recortado a los 3 turnos más recientes.
 
 - **Último turno:** claude-code
