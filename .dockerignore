@@ -15,3 +15,5 @@ apps/web/.env.local
 .turbo
 **/.turbo
 *.log
+# respaldos nocturnos de produccion (no van a imagenes)
+.respaldos-prod
