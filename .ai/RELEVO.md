@@ -1,5 +1,16 @@
 # RELEVO
 
+- **2026-11-15 (claude-code) — Imágenes de Docker de `node:20-bookworm-slim` a `node:22-bookworm-slim` (Node 20 ya sin soporte). NO desplegado.**
+  - `apps/api/Dockerfile` y `apps/web/Dockerfile` (las tres etapas de cada uno). CI (`ci.yml`, `medir-safari.yml`,
+    `web-safari.yml`) también pasa a `node-version: 22`. No hay `engines` ni `.nvmrc` que fijen Node 20.
+  - `node:22-bookworm-slim` trae Node 22.23.5 y npm 10.9.9: el lock pasa `npm ci --dry-run --ignore-scripts` con
+    npm 10.9.9 para `apps/api` y `apps/web`.
+  - Imágenes construidas en la laptop: API (Prisma carga, `dist/main.js` existe) y web (arranca en 247 ms, `/login` 200).
+  - Pruebas de la API **dentro de Node 22** (etapa `builder`): 1216 pasan, 1 omitida. En el contenedor hay que crear
+    `apps/api/uploads` y montar `apps/web/lib` (no van en la imagen) o caen `excel-templates` y `sheet-ops` por ENOENT.
+  - Con Node 26 de la laptop: `npm run test` igual que antes (API verde, e2e 306/307; la que falla necesita la API en `:4000`).
+  - Para desplegar: el script de siempre reconstruye con la imagen nueva; lo decide Adam.
+
 - **2026-11-15 (claude-code) — Dependencias al día con Node 26.13.1 / npm 12.2.2 (solo parches y menores). NO desplegado.**
   - Subidas: maplibre-gl 6.18.0 (sus `.mjs` copiados a `apps/web/public/maplibre/`), mammoth 1.13, sass 1.108,
     @sentry/node 10.78, stripe 22.6, otplib 13.6, nodemailer 10.5, @nestjs/throttler 6.7, playwright 1.65, socket.io-client
