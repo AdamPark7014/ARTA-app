@@ -35,7 +35,8 @@ type HealthItem = {
   checklistCount?: number;
   todoChecklists?: number;
   reviewChecklists?: number;
-  worstChecklist?: { title: string; pct: number } | null;
+  overdueChecklists?: number;
+  worstChecklist?: { title: string; pct: number; owner?: string | null; dueAt?: string | null } | null;
 };
 
 /** «Lo siguiente» de la tarjeta (maqueta aprobada 11-11-2026): lo más atrasado, no solo un porcentaje. */
@@ -46,7 +47,9 @@ function nextLine(h: HealthItem | undefined): string {
   const review = h.reviewChecklists ?? 0;
   if (todo && h.worstChecklist) {
     const more = todo > 1 ? ` · faltan ${todo} formatos` : '';
-    return `${h.worstChecklist.title} al ${h.worstChecklist.pct} %${more}`;
+    // Solo el nombre de pila: la tarjeta es angosta.
+    const who = h.worstChecklist.owner ? `, lo debe ${h.worstChecklist.owner.split(' ')[0]}` : ', sin responsable';
+    return `${h.worstChecklist.title} al ${h.worstChecklist.pct} %${who}${more}`;
   }
   if (review) return `${review} ${review === 1 ? 'formato espera' : 'formatos esperan'} autorización`;
   return 'Formatos al día';

@@ -172,41 +172,41 @@ model OrgMembership {
 // ─── Usuarios / RBAC ─────────────────────────────────────────────────────────
 model User {
   /// Perfil por temporada (practicantes): pasada esta fecha ya no entra. Se puede renovar.
-  accessExpiresAt DateTime?
+  accessExpiresAt   DateTime?
   /// Etiqueta de la temporada: «Primavera 2027».
-  accessLabel     String?
-  publicityProofs PublicityProof[] @relation("PublicityProofAuthor")
+  accessLabel       String?
+  publicityProofs   PublicityProof[] @relation("PublicityProofAuthor")
   /// Aceptó que la app registre su ubicación de 10:00 a 18:00 (docs/UBICACION.md).
   locationConsentAt DateTime?
   /// ok | sin_permiso | apagada: el motivo de un hueco, para dirección.
   locationState     String?
   locationStateAt   DateTime?
   locationPoints    LocationPoint[]
-  id               String        @id @default(cuid())
-  email            String        @unique
-  passwordHash     String
-  fullName         String
-  title            String?
-  phone            String?
-  active           Boolean       @default(true)
-  roleKey          String // ver roles.ts
+  id                String           @id @default(cuid())
+  email             String           @unique
+  passwordHash      String
+  fullName          String
+  title             String?
+  phone             String?
+  active            Boolean          @default(true)
+  roleKey           String // ver roles.ts
   /// Tenant primario (SaaS multi-org)
-  organizationId   String?
-  organization     Organization? @relation(fields: [organizationId], references: [id])
+  organizationId    String?
+  organization      Organization?    @relation(fields: [organizationId], references: [id])
   /// Entidades a las que puede entrar: ["ARTA"], ["EXPLANADA"], ["ARTA","EXPLANADA"]
-  entities         EntityKey[]
+  entities          EntityKey[]
   /// Permisos finos opcionales (campaña, corrida, usuarios, studio…)
-  permissions      String[]      @default([])
+  permissions       String[]         @default([])
   /// Anti-brute force persistente
-  failedLoginCount Int           @default(0)
-  lockedUntil      DateTime?
-  lastLoginAt      DateTime?
+  failedLoginCount  Int              @default(0)
+  lockedUntil       DateTime?
+  lastLoginAt       DateTime?
   /// 2FA TOTP
-  totpSecret       String?
-  totpEnabled      Boolean       @default(false)
-  totpVerifiedAt   DateTime?
-  createdAt        DateTime      @default(now())
-  updatedAt        DateTime      @updatedAt
+  totpSecret        String?
+  totpEnabled       Boolean          @default(false)
+  totpVerifiedAt    DateTime?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
 
   eventsCreated        Event[]                    @relation("EventCreator")
   checklistEdits       ChecklistInstance[]        @relation("ChecklistLastEditor")
@@ -237,6 +237,7 @@ model User {
   taskEvidences        TaskEvidence[]
   taskActivities       TaskActivity[]
   checklistsCreated    ChecklistInstance[]        @relation("ChecklistCreator")
+  checklistsOwned      ChecklistInstance[]        @relation("ChecklistOwner")
   financeRunsCreated   FinanceRun[]               @relation("FinanceCreator")
   financeRunsEdited    FinanceRun[]               @relation("FinanceEditor")
   docRevisions         DocRevision[]              @relation("RevisionAuthor")
@@ -426,6 +427,10 @@ model ChecklistInstance {
   sealedAt            DateTime?
   /// Obligatorio al reabrir algo sellado: queda en el historial.
   reopenReason        String?
+  /// Quién debe llenarlo y para cuándo (21-11-2026): la app dice quién debe qué.
+  ownerId             String?
+  owner               User?             @relation("ChecklistOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  dueAt               DateTime?
   createdAt           DateTime          @default(now())
   updatedAt           DateTime          @updatedAt
 
@@ -435,6 +440,7 @@ model ChecklistInstance {
 
   @@index([eventId])
   @@index([templateId])
+  @@index([ownerId])
 }
 
 /// Firma de un formato. `contentHash` es la prueba de QUÉ se firmó: sin él no
@@ -472,34 +478,34 @@ model ChecklistVersion {
 
 // ─── Órdenes de compra ───────────────────────────────────────────────────────
 model PurchaseOrder {
-  id             String          @id @default(cuid())
-  eventId        String
-  event          Event           @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  rubro          String // audio, luces, hospedaje, catering…
-  vendorName     String?
-  description    String?
-  amount         Decimal         @db.Decimal(14, 2)
-  currency       String          @default("MXN")
-  status         PoStatus        @default(DRAFT)
+  id              String          @id @default(cuid())
+  eventId         String
+  event           Event           @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  rubro           String // audio, luces, hospedaje, catering…
+  vendorName      String?
+  description     String?
+  amount          Decimal         @db.Decimal(14, 2)
+  currency        String          @default("MXN")
+  status          PoStatus        @default(DRAFT)
   /// Forma de pago. EFECTIVO no requiere comprobante; el resto sí.
-  paymentMethod  PoPaymentMethod @default(TRANSFERENCIA)
+  paymentMethod   PoPaymentMethod @default(TRANSFERENCIA)
   /// Machote: a quién se paga — PROVEEDOR u OTRO.
-  payeeType      String          @default("PROVEEDOR")
+  payeeType       String          @default("PROVEEDOR")
   /// Si el total lleva IVA (16 %) encima del subtotal de partidas.
-  withIva        Boolean         @default(false)
+  withIva         Boolean         @default(false)
   /// Forma de pago ADENDUM: a quién, a qué cuenta y su identificación (imagen o PDF).
   adendumPerson   String?
   adendumAccount  String?
   adendumFileUrl  String?
   adendumFileName String?
-  createdById    String?
-  createdBy      User?           @relation("PoCreator", fields: [createdById], references: [id])
-  authorizedById String?
-  authorizedBy   User?           @relation("PoAuthorizer", fields: [authorizedById], references: [id])
-  authorizedAt   DateTime?
-  paidAt         DateTime?
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
+  createdById     String?
+  createdBy       User?           @relation("PoCreator", fields: [createdById], references: [id])
+  authorizedById  String?
+  authorizedBy    User?           @relation("PoAuthorizer", fields: [authorizedById], references: [id])
+  authorizedAt    DateTime?
+  paidAt          DateTime?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
 
   lines  PurchaseOrderLine[]
   proofs PaymentProof[]

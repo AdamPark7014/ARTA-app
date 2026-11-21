@@ -712,7 +712,8 @@ export type ChecklistNoticeKind =
   | 'returned'
   | 'reopened'
   | 'signature_needed'
-  | 'signed';
+  | 'signed'
+  | 'assigned';
 
 /** «Ana R. mandó a revisión: Rider técnico» + evento + qué se espera. */
 export function checklistNotice(
@@ -737,6 +738,8 @@ export function checklistNotice(
       return notice(`${actor} firmó la entrega: ${doc}`, event, 'Falta la firma de autorización.');
     case 'signed':
       return notice(`${actor} firmó como Autorizado: ${doc}`, event, 'Queda autorizado.');
+    case 'assigned':
+      return notice(`${actor} te asignó el formato: ${doc}`, event, 'Te toca llenarlo y entregarlo.');
   }
 }
 

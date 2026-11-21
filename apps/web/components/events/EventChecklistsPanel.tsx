@@ -279,6 +279,19 @@ export function EventChecklistsPanel({
     if (verBucket) setBucket(verBucket);
   }, [verBucket]);
   const eventDone = isEventDone(event);
+  // A quién se le puede asignar un formato: la gente activa que trabaja en la entidad del evento.
+  const [people, setPeople] = useState<Array<{ id: string; fullName: string }>>([]);
+  const canAssign = !closed && canCreateFormats(access, event.entity);
+  useEffect(() => {
+    if (!canAssign) return;
+    let alive = true;
+    api<Array<{ id: string; fullName: string }>>(`/users/directory?entity=${encodeURIComponent(event.entity)}`)
+      .then((rows) => alive && setPeople(rows.map((r) => ({ id: r.id, fullName: r.fullName }))))
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, [canAssign, event.entity]);
   const [drawer, setDrawer] = useState<Drawer>(null);
   const [annotating, setAnnotating] = useState(false);
   /**
@@ -656,6 +669,17 @@ export function EventChecklistsPanel({
             onSelect={(c) => {
               onOpenChecklist(c).catch(console.error);
             }}
+            assign={
+              !closed && canCreateFormats(access, event.entity)
+                ? {
+                    people,
+                    onAssign: async (c, patch) => {
+                      await api(`/checklists/${c.id}/assignment`, { method: 'PATCH', body: JSON.stringify(patch) });
+                      await onFilesChanged();
+                    },
+                  }
+                : undefined
+            }
           />
         </div>
       </div>

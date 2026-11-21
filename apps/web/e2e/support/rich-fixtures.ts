@@ -761,6 +761,9 @@ type ChecklistFixture = {
   deliveredBy?: { fullName: string } | null;
   authorizedAt?: string | null;
   authorizedBy?: { fullName: string } | null;
+  ownerId?: string | null;
+  owner?: { id: string; fullName: string } | null;
+  dueAt?: string | null;
   pdfUrl: string | null;
   pdfGeneratedAt: string | null;
   data: FormatData;
@@ -776,6 +779,9 @@ const CHECKLISTS: ChecklistFixture[] = [
     template: { id: 'tpl-rich-produccion', key: 'PRODUCCION_TECNICA' },
     lastEditedAt: minutesAgo(48),
     lastEditedBy: nameOnly(OCTAVIO),
+    ownerId: OCTAVIO.id,
+    owner: { id: OCTAVIO.id, fullName: OCTAVIO.fullName },
+    dueAt: at(3, 18, 0),
     pdfUrl: '/uploads/checklists/chk-rich-produccion-r7.pdf',
     pdfGeneratedAt: minutesAgo(48),
     data: PRODUCCION_DATA,
@@ -1847,7 +1853,9 @@ const OVERVIEW = {
     todoChecklists: HEALTH[e.id].avgProgress >= 100 ? 0 : 3,
     reviewChecklists: 1,
     worstChecklist:
-      HEALTH[e.id].avgProgress >= 100 ? null : { title: 'Rueda de prensa', pct: Math.max(0, HEALTH[e.id].avgProgress - 30) },
+      HEALTH[e.id].avgProgress >= 100
+        ? null
+        : { title: 'Rueda de prensa', pct: Math.max(0, HEALTH[e.id].avgProgress - 30), owner: 'Mariela Fuentes', dueAt: null },
   })),
   topMargin: [
     { eventId: EVT1_ID, name: EVT1.name, net: 4_397_188, income: 7_124_000, expense: 2_726_812 },

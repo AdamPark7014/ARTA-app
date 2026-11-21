@@ -472,6 +472,7 @@ export class ChecklistsController {
         lastEditedBy: { select: { id: true, fullName: true, email: true } },
         deliveredBy: { select: { id: true, fullName: true } },
         authorizedBy: { select: { id: true, fullName: true } },
+        owner: { select: { id: true, fullName: true } },
       },
       orderBy: { title: 'asc' },
     });
@@ -488,6 +489,7 @@ export class ChecklistsController {
         lastEditedBy: { select: { id: true, fullName: true, email: true } },
         deliveredBy: { select: { id: true, fullName: true } },
         authorizedBy: { select: { id: true, fullName: true } },
+        owner: { select: { id: true, fullName: true } },
         versions: {
           take: 20,
           orderBy: { createdAt: 'desc' },
@@ -633,6 +635,75 @@ export class ChecklistsController {
   }
 
   /** Historial de revisiones del formato, con el diff ya calculado. */
+  /**
+   * Responsable y fecha límite del formato (21-11-2026). Antes un formato no tenía dueño y la app no
+   * podía decir quién debía qué. Lo asigna quien puede editar formatos en ese evento; el responsable
+   * tiene que ser alguien activo de la misma organización. `null` quita el dato; sin la llave no se toca.
+   */
+  @Patch(':id/assignment')
+  async assign(
+    @Req() req: { user: AuthUser },
+    @Param('id') id: string,
+    @Body() body: { ownerId?: string | null; dueAt?: string | null },
+  ) {
+    this.assertChecklistEdit(req.user);
+    const doc = await this.prisma.checklistInstance.findUnique({
+      where: { id },
+      include: { event: true },
+    });
+    if (!doc) throw new BadRequestException('Formato no encontrado');
+    this.assertEventAccess(req.user, doc.event);
+    assertEventNotClosed(doc.event.status);
+
+    const data: Prisma.ChecklistInstanceUncheckedUpdateInput = {};
+    if (body.ownerId !== undefined) {
+      if (body.ownerId) {
+        const owner = await this.prisma.user.findFirst({
+          where: { id: body.ownerId, active: true, organizationId: doc.event.organizationId ?? undefined },
+          select: { id: true },
+        });
+        if (!owner) throw new BadRequestException('Esa persona no está activa en tu organización');
+      }
+      data.ownerId = body.ownerId || null;
+    }
+    if (body.dueAt !== undefined) {
+      const due = body.dueAt ? new Date(body.dueAt) : null;
+      if (due && Number.isNaN(due.getTime())) throw new BadRequestException('Fecha límite inválida');
+      data.dueAt = due;
+    }
+    if (!Object.keys(data).length) throw new BadRequestException('Nada que cambiar');
+
+    const updated = await this.prisma.checklistInstance.update({
+      where: { id },
+      data,
+      select: { id: true, ownerId: true, dueAt: true, owner: { select: { id: true, fullName: true } } },
+    });
+    await this.prisma.auditLog.create({
+      data: {
+        userId: req.user.id,
+        action: 'checklist.assign',
+        resource: 'ChecklistInstance',
+        resourceId: id,
+        metaJson: { eventId: doc.eventId, ownerId: updated.ownerId, dueAt: updated.dueAt?.toISOString() ?? null },
+      },
+    });
+    // Solo cuando cambia de manos: mover la fecha no vuelve a avisar.
+    if (this.notifications && updated.ownerId && updated.ownerId !== doc.ownerId) {
+      await this.notifications
+        .notify({
+          userId: updated.ownerId,
+          organizationId: doc.event.organizationId ?? null,
+          actorId: req.user.id,
+          type: 'checklist.assigned',
+          ...checklistNotice('assigned', { actor: req.user.fullName, doc, event: doc.event }),
+          linkUrl: `/events/${doc.eventId}?tab=checklists&checklist=${doc.id}`,
+          entity: doc.event.entity as EntityKey,
+        })
+        .catch(() => undefined);
+    }
+    return updated;
+  }
+
   @Get(':id/revisions')
   async revisionHistory(@Req() req: { user: AuthUser }, @Param('id') id: string) {
     const item = await this.prisma.checklistInstance.findUnique({

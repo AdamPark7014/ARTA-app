@@ -2569,3 +2569,130 @@ html[data-entity] .lg .pass-field input.field:focus-visible {
     transform: none;
   }
 }
+
+/* ── Responsable y fecha límite de cada formato (21-11-2026) ─────────────── */
+.fmt-item {
+  display: grid;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--bg-elev);
+  transition: border-color 0.15s ease;
+}
+
+.fmt-item:hover {
+  border-color: color-mix(in srgb, var(--accent) 38%, var(--line));
+}
+
+.fmt-item.is-late {
+  border-color: color-mix(in srgb, var(--danger) 45%, var(--line));
+}
+
+/* La fila ya no lleva su propio marco: lo pone la ficha que la envuelve. */
+.fmt-item > .fmt-row {
+  border: 0;
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  background: none;
+}
+
+.fmt-owner {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-height: 40px;
+  padding: 0.3rem 0.6rem 0.3rem 1.05rem;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.fmt-owner__who {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 0;
+  color: var(--text);
+}
+
+.fmt-owner__who--none {
+  color: var(--muted);
+}
+
+.fmt-owner__face {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  background: var(--fill-soft);
+  color: var(--text);
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.fmt-owner__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fmt-owner__due {
+  flex: 0 0 auto;
+  font-variant-numeric: tabular-nums;
+}
+
+.fmt-owner__due::before {
+  content: '·';
+  margin-right: 0.6rem;
+}
+
+.fmt-owner__due.is-late {
+  color: var(--danger);
+  font-weight: 600;
+}
+
+.fmt-owner__edit {
+  flex: 0 0 auto;
+  min-height: 32px;
+  margin-left: auto;
+}
+
+.fmt-assign {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  gap: 0.6rem 0.75rem;
+  padding: 0.7rem 1.05rem 0.9rem;
+  border-top: 1px solid var(--line);
+  animation: ds-drop 160ms var(--ease-out) backwards;
+}
+
+.fmt-assign label {
+  display: grid;
+  gap: 0.25rem;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 0.76rem;
+}
+
+.fmt-assign :is(select, input) {
+  width: 100%;
+  min-height: 40px;
+}
+
+.fmt-assign .fx-problem {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
+@media (max-width: 640px) {
+  .fmt-assign {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fmt-assign {
+    animation: none;
+  }
+}

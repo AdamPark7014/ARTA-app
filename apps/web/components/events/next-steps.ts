@@ -1,4 +1,4 @@
-import { checklistBucket } from './ChecklistPicker';
+import { checklistBucket, dueLabel } from './ChecklistPicker';
 import type { Checklist, Tab } from './event-detail.types';
 
 /**
@@ -64,12 +64,18 @@ export function eventNextSteps(
     const worst = [...todo].sort((a, b) => (a.progressPct || 0) - (b.progressPct || 0))[0];
     const pct = Math.round(worst.progressPct || 0);
     steps = {
-      tone: days != null && days <= 14 ? 'warn' : 'info',
+      tone: (days != null && days <= 14) || dueLabel(worst)?.late ? 'warn' : 'info',
       headline:
         todo.length === 1
           ? `Falta un formato: ${worst.title} (${pct} %)`
           : `Faltan ${todo.length} formatos. El más atrasado es ${worst.title} (${pct} %)`,
-      detail: [when, review.length ? `${plural(review.length, 'formato espera', 'formatos esperan')} autorización` : '']
+      // Quién lo debe y para cuándo va primero: es lo que la franja no podía decir antes.
+      detail: [
+        worst.owner ? `Lo debe ${worst.owner.fullName}` : 'Sin responsable',
+        dueLabel(worst)?.text,
+        when,
+        review.length ? `${plural(review.length, 'formato espera', 'formatos esperan')} autorización` : '',
+      ]
         .filter(Boolean)
         .join(' · '),
       action: { label: 'Abrir formato', tab: 'checklists', checklist: worst },

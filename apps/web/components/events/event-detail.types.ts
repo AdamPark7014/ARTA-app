@@ -45,6 +45,10 @@ export type Checklist = {
       h: number;
     }>;
   } | null;
+  /** Quién debe llenarlo y para cuándo (21-11-2026). */
+  ownerId?: string | null;
+  owner?: { id: string; fullName: string } | null;
+  dueAt?: string | null;
   deliveredAt?: string | null;
   deliveredBy?: { fullName: string } | null;
   deliveredSignature?: SigPayload | null;

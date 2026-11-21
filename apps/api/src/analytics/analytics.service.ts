@@ -106,6 +106,8 @@ export class AnalyticsService {
           eventId: true,
           title: true,
           status: true,
+          dueAt: true,
+          owner: { select: { fullName: true } },
           progressPct: true,
           deliveredAt: true,
           authorizedAt: true,
@@ -169,15 +171,26 @@ export class AnalyticsService {
 
     // Lo que la tarjeta del evento dice como «Lo siguiente»: mismos grupos que la pestaña Formatos
     // (web `checklistBucket`): listo = sellado/aprobado/autorizado; por autorizar = entregado o en revisión.
-    const nextByEvent = new Map<string, { todo: number; review: number; worst: { title: string; pct: number } | null }>();
+    const nextByEvent = new Map<
+      string,
+      {
+        todo: number;
+        review: number;
+        overdue: number;
+        worst: { title: string; pct: number; owner: string | null; dueAt: Date | null } | null;
+      }
+    >();
     for (const c of checklists) {
-      const n = nextByEvent.get(c.eventId) || { todo: 0, review: 0, worst: null };
+      const n = nextByEvent.get(c.eventId) || { todo: 0, review: 0, overdue: 0, worst: null };
       const ready = c.status === 'SEALED' || c.status === 'APPROVED' || !!c.authorizedAt;
       const inReview = !ready && (c.status === 'REVIEW' || !!c.deliveredAt);
       if (inReview) n.review += 1;
       else if (!ready) {
         n.todo += 1;
-        if (!n.worst || c.progressPct < n.worst.pct) n.worst = { title: c.title, pct: Math.round(c.progressPct) };
+        if (c.dueAt && c.dueAt < now) n.overdue += 1;
+        if (!n.worst || c.progressPct < n.worst.pct) {
+          n.worst = { title: c.title, pct: Math.round(c.progressPct), owner: c.owner?.fullName ?? null, dueAt: c.dueAt };
+        }
       }
       nextByEvent.set(c.eventId, n);
     }
@@ -227,6 +240,7 @@ export class AnalyticsService {
           daysToShow,
           todoChecklists: nextByEvent.get(e.id)?.todo || 0,
           reviewChecklists: nextByEvent.get(e.id)?.review || 0,
+          overdueChecklists: nextByEvent.get(e.id)?.overdue || 0,
           worstChecklist: nextByEvent.get(e.id)?.worst || null,
         };
       })

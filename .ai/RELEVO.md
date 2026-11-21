@@ -1,5 +1,18 @@
 # RELEVO
 
+- **2026-11-21 (claude-code) — Responsable y fecha límite por formato (Adam lo eligió en tarjeta). NO desplegado.**
+  - **Migración** `20261121000000_formato_responsable`: `ChecklistInstance.ownerId` (FK a User, SET NULL) y `dueAt`.
+    Aditiva e idempotente; el despliegue la aplica con `prisma migrate deploy`.
+  - **API:** `PATCH /checklists/:id/assignment` `{ ownerId?, dueAt? }` (`null` quita). Lo asigna quien edita
+    formatos en el evento; el responsable debe estar activo en la organización. Bitácora `checklist.assign` y
+    aviso `checklist.assigned` solo cuando cambia de manos. El detalle del evento y `/checklists/event/:id` mandan
+    `owner` y `dueAt`; `eventHealth.worstChecklist` trae `owner` y `dueAt`, más `overdueChecklists`.
+  - **Web:** en Formatos cada ficha dice su responsable y «vence…» y se asigna ahí mismo (`ChecklistPicker`,
+    prop `assign`); «Lo siguiente» y las tarjetas de Eventos dicen quién lo debe o «sin responsable».
+  - Pruebas: `checklists.assign.spec.ts`, `e2e/formato-responsable.spec.ts`.
+  - **Sigue (Adam, 21-11):** «que cada módulo se vea increíble, como de diseñador experto». Regla del repo:
+    maqueta y visto bueno antes de cambios visuales notables.
+
 - **2026-11-21 (claude-code) — Adam: «mejora aún más la UI/UX y el funcionamiento». NO desplegado.**
   - **Finanzas:** columna «Órdenes pagadas» por evento (`analytics.finance()` → `poPaid`, `poPaidCount`, totales
     `poPaid`/`poWithoutExpense`). No se suma a los egresos (la corrida puede traer ya ese gasto). Aviso y filtro
