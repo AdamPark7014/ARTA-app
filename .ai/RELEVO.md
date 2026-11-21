@@ -1,5 +1,13 @@
 # RELEVO
 
+- **2026-11-21 (claude-code) — Mosaico a fondo (Adam: «continua full»). NO desplegado.**
+  - **Evento:** «Lo siguiente» es el mosaico de tinta de la pantalla (las cifras de abajo quedan en blanco).
+  - **Eventos:** tarjetas sin borde y la fecha en tinta. **Usuarios:** sin tarjeta dentro de tarjeta.
+  - **Barra de arriba:** el buscador cede espacio y ya no tapa «Más» (pasaba en el Auditorio).
+  - **Auditorio oscuro:** revisado a ojo con el marco nuevo (Inicio, Tareas, Boletera, evento).
+  - **Capturas de Android:** `capturas-cartelera.py` abre el primer show de la cartelera en vez de «Soy Luna»; si
+    no hay shows, omite la cuarta captura sin fallar.
+
 - **2026-11-21 (claude-code) — Dirección Mosaico en toda la web (Adam la eligió entre tres: «C · Mosaico»). NO desplegado.**
   - **Marco:** ya no hay menú lateral fijo. Barra de arriba con la marca, navegación en píldora
     (`components/app-shell/TopNav.tsx`: Inicio, Eventos, Calendario, Tareas, Chat, Órdenes, Finanzas, Boletera,
@@ -14,7 +22,6 @@
     una barra bajo la cifra (Boletera, Usuarios). Tareas: columnas de responsable, fecha y acción alineadas.
   - **Teléfono:** barra inferior flotante en píldora de tinta.
   - **Pruebas:** `openMenu(page)` en `e2e/support/mock-api.ts` abre «Más» antes de revisar el menú completo.
-  - Sin revisar a ojo: el tema oscuro del Auditorio con el marco nuevo (usa los mismos tokens).
   - Capturas: `/mnt/project-files/produccion/capturas-mosaico/` (nube).
   - **Capturas de tiendas:** iOS salió bien (run 44954301942). Android falla en la 4ª captura porque
     `apps/mobile-native/android/scripts/capturas-cartelera.py` busca el show «Soy Luna», que ya no está en cartelera.

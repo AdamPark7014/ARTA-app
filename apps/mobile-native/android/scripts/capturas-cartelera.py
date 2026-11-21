@@ -89,7 +89,32 @@ captura('03-cartelera-baja')
 
 shell('input', 'swipe', '540', '500', '540', '1700', '500')
 time.sleep(2)
-tocar(por_texto('Soy Luna'), 'abrir un show', 15)
-time.sleep(6)
-captura('04-show')
+
+
+def primer_show(n):
+    """La primera tarjeta de la cartelera: algo que se toca, ancho y alto, debajo del encabezado."""
+    if n.get('clickable') != 'true':
+        return False
+    m = re.match(r'\[(\d+),(\d+)\]\[(\d+),(\d+)\]', n.get('bounds', ''))
+    if not m:
+        return False
+    x1, y1, x2, y2 = map(int, m.groups())
+    return y1 >= 300 and (x2 - x1) >= 500 and (y2 - y1) >= 250
+
+
+# La cartelera cambia con los shows a la venta: se abre el primero que haya, no uno por nombre.
+punto = None
+for _ in range(15):
+    punto = buscar(primer_show)
+    if punto:
+        break
+    time.sleep(1)
+if punto:
+    shell('input', 'tap', str(punto[0]), str(punto[1]))
+    print('tocó: abrir un show', punto, flush=True)
+    time.sleep(6)
+    captura('04-show')
+else:
+    # Sin shows a la venta no hay detalle que capturar; la entrada y la cartelera ya salieron.
+    print('sin shows en la cartelera: se omite 04-show', flush=True)
 print('listo', SALIDA, flush=True)

@@ -92,7 +92,7 @@
 
   .shell .topbar-left {
     display: flex;
-    flex: 1 1 auto;
+    flex: 0 0 auto;
     align-items: center;
     gap: 18px;
     min-width: 0;
@@ -186,23 +186,35 @@
   .shell .content {
     padding-top: 12px;
   }
+
+  /* El buscador cede el espacio; la navegación nunca queda debajo. */
+  .shell .topbar .topbar-search {
+    flex: 1 1 150px;
+    min-width: 150px;
+    margin-left: auto;
+  }
+
+  [data-entity='EXPLANADA'] .topbar-brand {
+    font-size: 22px;
+    letter-spacing: -0.6px;
+  }
 }
 
-@media (min-width: 769px) and (max-width: 1380px) {
+@media (min-width: 769px) and (max-width: 1440px) {
   .pnav__pill[data-rank='8'],
   .pnav__pill[data-rank='7'] {
     display: none;
   }
 }
 
-@media (min-width: 769px) and (max-width: 1180px) {
+@media (min-width: 769px) and (max-width: 1240px) {
   .pnav__pill[data-rank='6'],
   .pnav__pill[data-rank='5'] {
     display: none;
   }
 }
 
-@media (min-width: 769px) and (max-width: 940px) {
+@media (min-width: 769px) and (max-width: 1000px) {
   .pnav__pill[data-rank='4'],
   .pnav__pill[data-rank='3'] {
     display: none;
@@ -1115,4 +1127,129 @@ a.mz-turn.is-lead:focus-visible {
     min-height: 0;
     border-radius: 20px;
   }
+}
+
+/* ── Eventos: tarjetas en mosaico, la fecha en tinta ──────────────────────── */
+
+.ev-grid {
+  gap: 16px;
+}
+
+.ev-card {
+  padding: 18px;
+  border: 0;
+  border-radius: var(--radius-lg);
+  box-shadow: none;
+}
+
+.ev-card:hover,
+.ev-card:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--text);
+  transform: none;
+  outline: none;
+}
+
+.ev-card .date-chip {
+  width: 3.4rem;
+  height: 3.4rem;
+  border: 0;
+  border-radius: 16px;
+  background: var(--tile-ink);
+  color: var(--tile-ink-fg);
+}
+
+.ev-card .date-chip .date-chip__month {
+  color: var(--tile-ink-muted);
+}
+
+/* ── Evento: «Lo siguiente» es el mosaico de tinta de la pantalla ─────────── */
+
+.next-steps:not(.next-steps--ok) {
+  gap: 16px;
+  padding: 22px;
+  border: 0;
+  background: var(--tile-ink);
+  color: var(--tile-ink-fg);
+}
+
+.next-steps--ok {
+  padding: 22px;
+  border: 0;
+}
+
+.next-steps:not(.next-steps--ok) .next-steps__eyebrow,
+.next-steps:not(.next-steps--ok) .next-steps__detail {
+  color: var(--tile-ink-muted);
+}
+
+.next-steps--warn .next-steps__eyebrow::before {
+  content: '';
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 8px;
+  border-radius: 8px;
+  background: #ff8a7a;
+}
+
+.next-steps .next-steps__headline {
+  font-family: var(--font-display);
+  font-size: clamp(20px, 2vw, 26px);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+}
+
+.next-steps:not(.next-steps--ok) .next-steps__cta {
+  border-color: transparent;
+  background: var(--tile-ink-fg);
+  box-shadow: none;
+  color: var(--tile-ink);
+}
+
+.next-steps:not(.next-steps--ok) .next-steps__extra {
+  border: 0;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--tile-ink-fg) 10%, transparent);
+  color: var(--tile-ink-fg);
+}
+
+.next-steps:not(.next-steps--ok) .next-steps__extra:hover {
+  background: color-mix(in srgb, var(--tile-ink-fg) 18%, transparent);
+}
+
+.next-steps:not(.next-steps--ok) .next-steps__extra-cta {
+  color: var(--tile-ink-fg);
+}
+
+/* Con «Lo siguiente» en tinta, las cifras del evento se quedan en blanco. */
+.next-steps:not(.next-steps--ok) ~ .tiles > .tile:first-child,
+.next-steps:not(.next-steps--ok) ~ * .tiles > .tile:first-child {
+  background: var(--card-bg);
+  color: var(--text);
+}
+
+.next-steps:not(.next-steps--ok) ~ .tiles > .tile:first-child .tile__label,
+.next-steps:not(.next-steps--ok) ~ .tiles > .tile:first-child .tile__sub,
+.next-steps:not(.next-steps--ok) ~ * .tiles > .tile:first-child .tile__label,
+.next-steps:not(.next-steps--ok) ~ * .tiles > .tile:first-child .tile__sub {
+  color: var(--muted);
+}
+
+.next-steps:not(.next-steps--ok) ~ .tiles > .tile:first-child .tile__value,
+.next-steps:not(.next-steps--ok) ~ * .tiles > .tile:first-child .tile__value {
+  color: var(--text);
+}
+
+/* ── Usuarios: sin tarjeta dentro de tarjeta ──────────────────────────────── */
+
+.users-stack .filter-bar,
+.users-stack .dtable-wrap {
+  border: 0;
+  box-shadow: none;
+}
+
+.users-stack .filter-bar {
+  border-radius: 16px;
+  background: var(--tile-soft);
 }
