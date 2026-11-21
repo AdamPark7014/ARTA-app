@@ -520,6 +520,17 @@ export class PurchaseOrdersController {
     return withPoState(order, await this.stateWindow(event.organizationId), order.event.status);
   }
 
+  /**
+   * Una orden sin proveedor (o con «pa») no se puede autorizar ni pagar con certeza: en producción había
+   * una «Sin proveedor» con 65 días esperando comprobante. El adendum se paga a una persona, no a un proveedor.
+   */
+  private assertVendorName(vendorName: string | null | undefined, paymentMethod?: string | null) {
+    if (paymentMethod === 'ADENDUM') return;
+    if ((vendorName || '').trim().length < 3) {
+      throw new BadRequestException('Escribe el nombre del proveedor (al menos 3 letras)');
+    }
+  }
+
   @Post()
   async create(
     @Req()
@@ -559,6 +570,7 @@ export class PurchaseOrdersController {
         'La orden necesita un monto: captura al menos una partida con cantidad y precio',
       );
     }
+    this.assertVendorName(dto.vendorName, dto.paymentMethod);
     const created = await this.prisma.purchaseOrder.create({
       data: {
         eventId: dto.eventId,
@@ -627,6 +639,10 @@ export class PurchaseOrdersController {
     const event = await this.assertEventOpsOpen(req.user, order.eventId);
     if (order.status === 'PAID' || order.status === 'AUTHORIZED') {
       throw new ForbiddenException('OC autorizada/pagada no se edita');
+    }
+
+    if (body.vendorName !== undefined) {
+      this.assertVendorName(body.vendorName, body.paymentMethod ?? order.paymentMethod);
     }
 
     const wasWithIva = !!order.withIva;

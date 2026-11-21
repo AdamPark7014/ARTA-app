@@ -32,6 +32,9 @@ type FinanceRow = {
   marginPct: number | null;
   locked: boolean;
   title?: string | null;
+  /** Pagado en órdenes de compra de este evento (un API viejo no lo manda). */
+  poPaid?: number;
+  poPaidCount?: number;
 };
 
 type FinanceAnalytics = {
@@ -42,6 +45,8 @@ type FinanceAnalytics = {
     locked: number;
     open: number;
     lossMaking: number;
+    poPaid?: number;
+    poWithoutExpense?: number;
   };
   byStatus: Record<string, { income: number; expense: number; net: number; count: number }>;
   ranking: FinanceRow[];
@@ -51,6 +56,10 @@ type FinanceAnalytics = {
 
 /** El aviso «N eventos con neto negativo» del API (`analytics.service.ts`): es el mismo filtro «Solo pérdida». */
 const LOSS_ALERT = /neto negativo/i;
+/** El aviso de eventos que pagaron órdenes de compra sin egresos en su corrida: filtra justo esos. */
+const PO_GAP_ALERT = /pag(ó|aron) órdenes de compra/i;
+
+const isPoGap = (r: FinanceRow) => (r.poPaid ?? 0) > 0 && r.expense === 0;
 
 export default function FinancePage() {
   const { entity, user } = useUser();
@@ -58,6 +67,7 @@ export default function FinancePage() {
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState('');
   const [onlyLoss, setOnlyLoss] = useState(false);
+  const [onlyPoGap, setOnlyPoGap] = useState(false);
 
   useEffect(() => {
     setLoading(true);
@@ -72,6 +82,7 @@ export default function FinancePage() {
   const rows = useMemo(() => {
     let list = data?.ranking || [];
     if (onlyLoss) list = list.filter((r) => r.net < 0);
+    if (onlyPoGap) list = list.filter(isPoGap);
     if (q.trim()) {
       const n = q.toLowerCase();
       list = list.filter(
@@ -79,13 +90,14 @@ export default function FinancePage() {
       );
     }
     return list;
-  }, [data, q, onlyLoss]);
+  }, [data, q, onlyLoss, onlyPoGap]);
 
   const t = data?.totals;
-  const filterActive = onlyLoss || !!q.trim();
+  const filterActive = onlyLoss || onlyPoGap || !!q.trim();
 
   function clearFilters() {
     setOnlyLoss(false);
+    setOnlyPoGap(false);
     setQ('');
   }
 
@@ -123,6 +135,17 @@ export default function FinancePage() {
                       <span className="ops-alert__msg">{a.message}</span>
                       <span className="t-small muted">{onlyLoss ? 'Quitar filtro' : 'Ver solo estos'}</span>
                     </button>
+                  ) : PO_GAP_ALERT.test(a.message) ? (
+                    <button
+                      key={a.message}
+                      type="button"
+                      className={`ops-alert ops-alert--${a.severity} ops-alert--btn`}
+                      aria-pressed={onlyPoGap}
+                      onClick={() => setOnlyPoGap(!onlyPoGap)}
+                    >
+                      <span className="ops-alert__msg">{a.message}</span>
+                      <span className="t-small muted">{onlyPoGap ? 'Quitar filtro' : 'Ver cuáles'}</span>
+                    </button>
                   ) : (
                     <div key={a.message} className={`ops-alert ops-alert--${a.severity}`}>
                       <span className="ops-alert__msg">{a.message}</span>
@@ -144,7 +167,9 @@ export default function FinancePage() {
                   <div className="value value--money">{money(t.expense)}</div>
                   <div className="kpi-sub muted">
                     Capturados en las corridas.{' '}
-                    <Link href="/purchase-orders">Las órdenes de compra van aparte</Link>
+                    <Link href="/purchase-orders?seccion=paid">
+                      {t.poPaid ? `Aparte, ${money(t.poPaid)} pagados en órdenes de compra` : 'Las órdenes de compra van aparte'}
+                    </Link>
                   </div>
                 </div>
                 <div className={`kpi ${t.net < 0 ? 'kpi--danger' : ''}`}>
@@ -177,7 +202,7 @@ export default function FinancePage() {
               </div>
             ) : null}
 
-            {data ? (
+            {data?.rows?.length ? (
               <div className="panel">
                 <div className="panel-body">
                   <div className="dist-head">Neto por estado del evento</div>
@@ -217,6 +242,7 @@ export default function FinancePage() {
                         <th>Estado</th>
                         <th className="num">Ingresos</th>
                         <th className="num">Egresos</th>
+                        <th className="num">Órdenes pagadas</th>
                         <th className="num">Neto</th>
                         <th className="num">Margen</th>
                         <th>Corrida</th>
@@ -237,6 +263,16 @@ export default function FinancePage() {
                           </td>
                           <td className="num">{money(e.income)}</td>
                           <td className="num">{money(e.expense)}</td>
+                          <td className="num">
+                            {e.poPaid ? (
+                              <>
+                                {money(e.poPaid)}
+                                {isPoGap(e) ? <div className="kpi-sub muted">Sin egresos en la corrida</div> : null}
+                              </>
+                            ) : (
+                              <span className="muted">—</span>
+                            )}
+                          </td>
                           <td className="num">
                             <strong>{money(e.net)}</strong>
                             {e.net < 0 ? (
@@ -263,7 +299,7 @@ export default function FinancePage() {
                       ))}
                       {!rows.length ? (
                         <tr>
-                          <td colSpan={8}>
+                          <td colSpan={9}>
                             {filterActive ? (
                               <EmptyState
                                 title="Sin corridas para este filtro"
@@ -276,7 +312,7 @@ export default function FinancePage() {
                             ) : (
                               <EmptyState
                                 title="Sin corridas"
-                                description="Abre un evento activo y captura ingresos/egresos en la pestaña Finanzas."
+                                description="Abre un evento y captura sus ingresos y egresos en Dinero › Corrida."
                                 actionHref="/events?scope=active"
                                 actionLabel="Ir a eventos activos"
                               />

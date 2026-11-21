@@ -197,7 +197,14 @@ test.describe('Órdenes de compra · crear', () => {
     await page.getByLabel('Cantidad, partida 1').fill('2');
     await page.getByLabel('Precio, partida 1').fill('7500');
 
-    await expect(page.getByRole('button', { name: /^Crear orden · \$/ })).toBeEnabled();
+    // Sin proveedor (o con dos letras) todavía no: así se colaban las órdenes «Sin proveedor».
+    const crear = page.getByRole('button', { name: /^Crear orden · \$/ });
+    await expect(crear).toBeDisabled();
+    await expect(page.getByText('Escribe el nombre del proveedor')).toBeVisible();
+    await page.getByLabel('Nombre de proveedor').fill('pa');
+    await expect(crear).toBeDisabled();
+    await page.getByLabel('Nombre de proveedor').fill('Audio Puebla');
+    await expect(crear).toBeEnabled();
   });
 
   test('elegir efectivo avisa que no habrá comprobante', async ({ page, baseURL }) => {

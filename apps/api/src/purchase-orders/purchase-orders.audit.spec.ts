@@ -199,6 +199,7 @@ describe('PurchaseOrdersController · comprobante, días de cobro y auditoría',
       await controller.create({ user: user('compras') } as never, {
         eventId: 'ev-1',
         rubro: 'audio',
+        vendorName: 'Audio Puebla',
         lines: [{ concept: 'Audio', qty: 1, unitPrice: 5000 }],
       } as never);
       expect(created).toMatchObject({ amount: 5000, status: 'PENDING_AUTH' });
@@ -280,6 +281,7 @@ describe('PurchaseOrdersController · comprobante, días de cobro y auditoría',
       controller.create({ user: user('compras') } as never, {
         eventId: 'ev-1',
         rubro: 'audio',
+        vendorName: 'Audio Puebla',
         lines,
       } as never);
 
@@ -298,6 +300,15 @@ describe('PurchaseOrdersController · comprobante, días de cobro y auditoría',
       ).rejects.toThrow(/monto/);
     });
 
+    it('sin proveedor, o con un nombre de dos letras, no se crea', async () => {
+      const body = { eventId: 'ev-1', rubro: 'audio', lines: [{ concept: 'Audio', qty: 1, unitPrice: 5000 }] };
+      for (const vendorName of [undefined, '  ', 'pa']) {
+        await expect(
+          controller.create({ user: user('compras') } as never, { ...body, vendorName } as never),
+        ).rejects.toThrow(/proveedor/);
+      }
+    });
+
     it('con partidas de verdad sí se crea, y queda registrado', async () => {
       await create([{ concept: 'Audio', qty: 2, unitPrice: 9000 }]);
       expect(find('po.create')?.metaJson).toMatchObject({ amount: 18000, rubro: 'audio' });
@@ -309,6 +320,7 @@ describe('PurchaseOrdersController · comprobante, días de cobro y auditoría',
       controller.create({ user: user('compras') } as never, {
         eventId: 'ev-1',
         rubro: 'audio',
+        vendorName: 'Audio Puebla',
         lines: [{ concept: 'Audio', qty: 2, unitPrice: 9000 }],
         ...extra,
       } as never);
@@ -396,7 +408,7 @@ describe('PurchaseOrdersController · comprobante, días de cobro y auditoría',
 
     const auditorio = { id: 'ev-1', entity: 'EXPLANADA', status: 'ACTIVE', organizationId: ORG };
     const both = ['ARTA', 'EXPLANADA'];
-    const poBody = { eventId: 'ev-1', rubro: 'audio', lines: [{ concept: 'Audio', qty: 1, unitPrice: 5000 }] };
+    const poBody = { eventId: 'ev-1', rubro: 'audio', vendorName: 'Audio Puebla', lines: [{ concept: 'Audio', qty: 1, unitPrice: 5000 }] };
 
     // 01-11-2026: la gerencia ya no autoriza; la barrera de entidad queda para quien traiga el permiso extra.
     it('la gerencia de Arta no autoriza OC, ni de Arta ni del Auditorio', async () => {

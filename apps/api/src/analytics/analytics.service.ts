@@ -467,6 +467,17 @@ export class AnalyticsService {
       orderBy: { updatedAt: 'desc' },
     });
 
+    // Lo pagado en órdenes de compra por evento. Va en su propia columna y NO se suma a los egresos:
+    // la corrida puede traer ya ese gasto capturado a mano y se contaría dos veces. Antes Finanzas
+    // decía $0 de egresos junto a $50,280 pagados en OC sin explicar nada (recorrido 11-11-2026).
+    const paid = await this.prisma.purchaseOrder.groupBy({
+      by: ['eventId'],
+      where: { status: 'PAID', event: { entity, organizationId } },
+      _sum: { amount: true },
+      _count: { _all: true },
+    });
+    const paidByEvent = new Map(paid.map((p) => [p.eventId, { amount: Number(p._sum.amount || 0), count: p._count._all }]));
+
     const rows = events.map((e) => {
       const run = e.financeRuns[0];
       const t = financeTotals(run?.dataJson);
@@ -481,6 +492,8 @@ export class AnalyticsService {
         title: run?.title || null,
         locked: !!run?.locked,
         ...t,
+        poPaid: paidByEvent.get(e.id)?.amount || 0,
+        poPaidCount: paidByEvent.get(e.id)?.count || 0,
         marginPct,
         updatedAt: run?.updatedAt || null,
       };
@@ -494,9 +507,12 @@ export class AnalyticsService {
         if (r.locked) acc.locked += 1;
         if (!r.locked && (r.income > 0 || r.expense > 0)) acc.open += 1;
         if (r.net < 0) acc.lossMaking += 1;
+        acc.poPaid += r.poPaid;
+        // Pagó órdenes de compra y su corrida no trae ni un egreso: casi seguro falta capturarlos.
+        if (r.poPaid > 0 && r.expense === 0) acc.poWithoutExpense += 1;
         return acc;
       },
-      { income: 0, expense: 0, net: 0, locked: 0, open: 0, lossMaking: 0 },
+      { income: 0, expense: 0, net: 0, locked: 0, open: 0, lossMaking: 0, poPaid: 0, poWithoutExpense: 0 },
     );
 
     const byStatus: Record<string, { income: number; expense: number; net: number; count: number }> = {};
@@ -520,6 +536,17 @@ export class AnalyticsService {
               {
                 severity: 'critical' as const,
                 message: `${totals.lossMaking} eventos con neto negativo`,
+              },
+            ]
+          : []),
+        ...(totals.poWithoutExpense
+          ? [
+              {
+                severity: 'warning' as const,
+                message:
+                  totals.poWithoutExpense === 1
+                    ? 'Un evento pagó órdenes de compra y su corrida no tiene egresos capturados'
+                    : `${totals.poWithoutExpense} eventos pagaron órdenes de compra y su corrida no tiene egresos capturados`,
               },
             ]
           : []),

@@ -1,5 +1,17 @@
 # RELEVO
 
+- **2026-11-21 (claude-code) — Adam: «mejora aún más la UI/UX y el funcionamiento». NO desplegado.**
+  - **Finanzas:** columna «Órdenes pagadas» por evento (`analytics.finance()` → `poPaid`, `poPaidCount`, totales
+    `poPaid`/`poWithoutExpense`). No se suma a los egresos (la corrida puede traer ya ese gasto). Aviso y filtro
+    «pagó órdenes y su corrida no tiene egresos». Prueba: `analytics-finance.spec.ts`.
+  - **OC:** ya no se crea ni se edita una orden sin proveedor o con nombre de menos de 3 letras (salvo adendum,
+    que se paga a una persona). API `assertVendorName` + formulario.
+  - **Movimiento:** el módulo del evento entra con `pulido-in` al cambiar de pestaña; la segunda tira baja.
+  - **Teléfono:** segunda tira de pestañas con desvanecido. El tablero de Tareas mide 390 de ancho (el aviso
+    `hscroll` de la auditoría en «tablero» es de su propio paso, no de la página).
+  - **Apps nativas:** sin cambios; en la nube no hay SDK de Android ni Xcode para compilarlas.
+  - Playwright 1.65 pide `chromium_headless_shell-1255` (en la nube: symlink al 1243 de /opt/pw-browsers).
+
 - **2026-11-15 (claude-code) — Imágenes de Docker de `node:20-bookworm-slim` a `node:22-bookworm-slim` (Node 20 ya sin soporte). NO desplegado.**
   - `apps/api/Dockerfile` y `apps/web/Dockerfile` (las tres etapas de cada uno). CI (`ci.yml`, `medir-safari.yml`,
     `web-safari.yml`) también pasa a `node-version: 22`. No hay `engines` ni `.nvmrc` que fijen Node 20.

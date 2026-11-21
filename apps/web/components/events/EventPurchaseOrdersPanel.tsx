@@ -269,7 +269,10 @@ function PoForm({ mode, initial, facts, eventId, busy, onCancel, onSubmit }: PoF
       ? 'Falta cantidad o precio'
       : !rubro
         ? 'Escribe el rubro'
-        : d.paymentMethod === 'ADENDUM' && (!d.adendumPerson.trim() || !d.adendumAccount.trim())
+        : // Sin esto se colaban órdenes «Sin proveedor» y proveedores llamados «pa» (recorrido 11-11-2026).
+          d.paymentMethod !== 'ADENDUM' && d.vendorName.trim().length < 3
+          ? 'Escribe el nombre del proveedor'
+          : d.paymentMethod === 'ADENDUM' && (!d.adendumPerson.trim() || !d.adendumAccount.trim())
           ? 'Falta la persona o la cuenta del adendum'
           : '';
 

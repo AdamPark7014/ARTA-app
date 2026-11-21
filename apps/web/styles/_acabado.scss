@@ -2362,8 +2362,10 @@ html[data-entity] .lg .pass-field input.field:focus-visible {
   .event-subtabs {
     gap: 1rem;
     margin-inline: -12px;
-    padding: 0 12px 0.5rem;
+    padding: 0 28px 0.5rem 12px;
     border-bottom: 0;
+    /* Se nota que hay más módulos a la derecha. */
+    mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
   }
 }
 
@@ -2532,5 +2534,38 @@ html[data-entity] .lg .pass-field input.field:focus-visible {
   .mcal__bar {
     height: 5px;
     margin-inline: 2px;
+  }
+}
+
+/* ── Movimiento al cambiar de pestaña en el evento (21-11-2026) ─────────────
+   Cada módulo se monta de nuevo al elegirlo: entra igual que una pantalla (`pulido-in`),
+   y la segunda tira baja desde las pestañas. Antes el cambio era un corte seco. */
+.event-tabs ~ *:last-child {
+  animation: pulido-in 180ms cubic-bezier(0.2, 0.7, 0.2, 1) backwards;
+}
+
+.event-subtabs {
+  animation: ds-drop 160ms var(--ease-out) backwards;
+}
+
+.next-steps__extra,
+.ev-card {
+  transition: border-color 0.12s ease, transform 0.12s ease, box-shadow 0.12s ease;
+}
+
+.next-steps__extra:active,
+.next-steps__cta:active {
+  transform: scale(0.985);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .event-tabs ~ *:last-child,
+  .event-subtabs {
+    animation: none;
+  }
+
+  .next-steps__extra:active,
+  .next-steps__cta:active {
+    transform: none;
   }
 }
