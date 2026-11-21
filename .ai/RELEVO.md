@@ -1,5 +1,24 @@
 # RELEVO
 
+- **2026-11-21 (claude-code) — Dirección Mosaico en toda la web (Adam la eligió entre tres: «C · Mosaico»). NO desplegado.**
+  - **Marco:** ya no hay menú lateral fijo. Barra de arriba con la marca, navegación en píldora
+    (`components/app-shell/TopNav.tsx`: Inicio, Eventos, Calendario, Tareas, Chat, Órdenes, Finanzas, Boletera,
+    según permisos) y «Más», que abre el menú completo (el mismo `aside#app-sidebar`, ahora panel flotante con
+    Arta | Auditorio y todos los grupos). Escape o un clic fuera lo cierra. Se quitó «Esconder el menú».
+  - **Estilos:** todo en `styles/_mosaico.scss`, importado **al final** de `globals.scss`. Fondo `#efeeea`,
+    mosaicos blancos de 24 px sin borde ni sombra, un mosaico de tinta por pantalla (`--tile-ink*`).
+  - **Inicio:** mosaico de tinta con el saludo y el show que sigue, «Te toca a ti» con el número grande por fila,
+    tres mosaicos con gráfica (Por pagar con barras por estado de `poStates`, Tareas con barra partida, Formatos
+    con anillo) y la tira de 14 días (cada día abre el evento o el calendario).
+  - **Demás módulos:** `FigureStrip` y `Tile` son mosaicos sueltos con el primero en tinta; `Figure.meter` pinta
+    una barra bajo la cifra (Boletera, Usuarios). Tareas: columnas de responsable, fecha y acción alineadas.
+  - **Teléfono:** barra inferior flotante en píldora de tinta.
+  - **Pruebas:** `openMenu(page)` en `e2e/support/mock-api.ts` abre «Más» antes de revisar el menú completo.
+  - Sin revisar a ojo: el tema oscuro del Auditorio con el marco nuevo (usa los mismos tokens).
+  - Capturas: `/mnt/project-files/produccion/capturas-mosaico/` (nube).
+  - **Capturas de tiendas:** iOS salió bien (run 44954301942). Android falla en la 4ª captura porque
+    `apps/mobile-native/android/scripts/capturas-cartelera.py` busca el show «Soy Luna», que ya no está en cartelera.
+
 - **2026-11-21 (claude-code) — Diseño por módulo aplicado (Adam aprobó la maqueta: «Sí, aplícalo en todos»). NO desplegado.**
   - **Mismo orden en cada pantalla:** una frase que dice qué pasa (`PageHeader` prop `lead`), un solo botón
     principal, una franja de cifras (`components/ui/FigureStrip.tsx`, la primera manda) y listas agrupadas.

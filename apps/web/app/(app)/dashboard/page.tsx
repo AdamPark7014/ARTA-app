@@ -1,11 +1,10 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { AppShell } from '@/components/app-shell/AppShell';
 import { EmptyLite } from '@/components/ui/Lite';
 import { FlashMessage, PageHeader } from '@/components/ui/PageChrome';
-import { FigureStrip, type Figure } from '@/components/ui/FigureStrip';
 import { api } from '@/lib/api';
 import { canAccessEventOps, userHasPermission, visibleNavItems } from '@/lib/access-matrix';
 import { canEditEventInfo, canSeeModule } from '@arta/rbac';
@@ -115,54 +114,180 @@ function shortDate(iso: string) {
     .replace('.', '');
 }
 
-/** Lo que viene, al frente: cuánto falta, cómo va y un toque para entrar. */
-function NextShow({
+/** Mosaico de tinta: el saludo, el show que sigue, cómo va y un toque para entrar. */
+function HeroTile({
   show,
   now,
+  hello,
+  date,
+  children,
 }: {
-  show: { id: string; name: string; artist?: string | null; startsAt: string; avgProgress: number };
+  show: DayEvent | null;
   now: Date;
+  hello: string;
+  date: string;
+  children?: ReactNode;
 }) {
-  const days = daysUntil(show.startsAt, now);
-  const progress = Math.max(0, Math.min(100, Math.round(show.avgProgress)));
-  const when =
-    days <= 0 ? hhmm(show.startsAt) : days === 1 ? `Mañana · ${hhmm(show.startsAt)}` : `${shortDate(show.startsAt)} · ${hhmm(show.startsAt)}`;
+  const days = show ? daysUntil(show.startsAt, now) : 0;
+  const progress = show ? Math.max(0, Math.min(100, Math.round(show.avgProgress))) : 0;
+  const evening = show ? new Date(show.startsAt).getHours() >= 19 : false;
+  const when = !show
+    ? ''
+    : days <= 0
+      ? `${evening ? 'Esta noche' : 'Hoy'}, ${hhmm(show.startsAt)}`
+      : days === 1
+        ? `Mañana, ${hhmm(show.startsAt)}`
+        : `En ${days} días · ${shortDate(show.startsAt)}, ${hhmm(show.startsAt)}`;
   return (
-    <Link className="next-show" href={`/events/${show.id}`}>
-      <span className="next-show__count" aria-hidden={days > 1 ? undefined : true}>
-        {days <= 0 ? (
-          <b className="next-show__today">Hoy</b>
-        ) : (
-          <>
-            <b className="t-num">{days}</b>
-            <small>{days === 1 ? 'día' : 'días'}</small>
-          </>
-        )}
-      </span>
-      <span className="next-show__copy">
-        <span className="next-show__eyebrow">Siguiente show · {when}</span>
-        <span className="next-show__name" title={show.name}>
-          {show.name}
-        </span>
-        {show.artist && !show.name.toLowerCase().includes(show.artist.toLowerCase()) ? (
-          <span className="next-show__artist" title={show.artist}>
-            {show.artist}
+    <section className="mz-tile mz-hero" aria-labelledby="home-hello">
+      <span className="mz-hero__ring mz-hero__ring--a" aria-hidden />
+      <span className="mz-hero__ring mz-hero__ring--b" aria-hidden />
+      <div className="mz-hero__top">
+        <p className="mz-hero__eyebrow">
+          <span className="mz-hero__date">{date}</span>
+          <span aria-hidden> · </span>
+          <span id="home-hello" role="heading" aria-level={2}>
+            {hello}
           </span>
-        ) : null}
+        </p>
+        {children ? <div className="mz-hero__actions">{children}</div> : null}
+      </div>
+      {show ? (
+        <>
+          <p className="mz-hero__headline">
+            <span className="mz-hero__when">{when}</span>
+            <span className="mz-hero__name" title={show.name}>
+              {show.name}
+            </span>
+          </p>
+          <div className="mz-hero__foot">
+            <div className="mz-hero__progress">
+              <div className="mz-hero__progress-head">
+                <span>Formatos listos</span>
+                <span className="t-num">{progress} %</span>
+              </div>
+              <span className="mz-hero__bar" aria-hidden>
+                <i style={{ width: `${progress}%` }} />
+              </span>
+              {show.artist && !show.name.toLowerCase().includes(show.artist.toLowerCase()) ? (
+                <p className="mz-hero__note" title={show.artist}>
+                  {show.artist}
+                </p>
+              ) : null}
+            </div>
+            <Link className="mz-hero__go" href={`/events/${show.id}`}>
+              Abrir evento
+            </Link>
+          </div>
+        </>
+      ) : (
+        <p className="mz-hero__headline">
+          <span className="mz-hero__when">Sin shows cerca</span>
+          <span className="mz-hero__name">No hay shows en los próximos 14 días.</span>
+        </p>
+      )}
+    </section>
+  );
+}
+
+/** Fila de «Te toca a ti»: cuántas, qué son y el botón que las resuelve. La primera va en tinta. */
+function TurnRow({
+  title,
+  count,
+  sub,
+  amount,
+  status,
+  href,
+  lead,
+}: {
+  title: string;
+  count?: number;
+  sub?: string;
+  amount?: string;
+  status: string;
+  href?: string;
+  lead: boolean;
+}) {
+  const detail = [amount, sub].filter(Boolean).join(' · ');
+  const body = (
+    <>
+      {count != null ? <span className="mz-turn__n t-num">{count}</span> : null}
+      <span className="mz-turn__main">
+        <span className="mz-turn__title">{title}</span>
+        {detail ? <small className="mz-turn__sub">{detail}</small> : null}
       </span>
-      <span className="next-show__progress">
-        <span className="next-show__pct t-num">{progress}%</span>
-        <span className="next-show__label">de formatos</span>
-        <span className="next-show__bar" aria-hidden>
-          <i style={{ width: `${progress}%` }} />
+      <span className="mz-turn__act">{status}</span>
+    </>
+  );
+  const cls = `mz-turn ${lead ? 'is-lead' : ''}`;
+  return (
+    <li>
+      {href ? (
+        <Link className={cls} href={href}>
+          {body}
+        </Link>
+      ) : (
+        <div className={cls}>{body}</div>
+      )}
+    </li>
+  );
+}
+
+const DAY_LETTER = ['D', 'L', 'M', 'M', 'J', 'V', 'S'];
+
+function isoDay(d: Date) {
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${d.getFullYear()}-${m}-${day}`;
+}
+
+/** Los próximos 14 días en una tira: un punto por show y un toque para abrir el día. */
+function FortnightStrip({ events, now }: { events: DayEvent[]; now: Date }) {
+  const days = Array.from({ length: 14 }, (_, i) => {
+    const d = startOfDay(now);
+    d.setDate(d.getDate() + i);
+    return { d, i, shows: events.filter((e) => daysUntil(e.startsAt, now) === i) };
+  });
+  const total = days.reduce((n, x) => n + x.shows.length, 0);
+  return (
+    <section className="mz-tile mz-days" aria-labelledby="home-days">
+      <div className="mz-tile__head">
+        <h3 id="home-days">Próximos 14 días</h3>
+        <span className="mz-tile__meta">
+          {total === 0 ? 'Sin shows' : total === 1 ? '1 show' : `${total} shows`} · toca un día para abrirlo
         </span>
-      </span>
-      <span className="next-show__go" aria-hidden>
-        <svg viewBox="0 0 24 24" width="18" height="18" focusable="false">
-          <path d="M5 12h14M13 6l6 6-6 6" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      </span>
-    </Link>
+      </div>
+      <ol className="mz-days__row">
+        {days.map(({ d, i, shows }) => {
+          const label = `${d.toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' })}${
+            shows.length ? `, ${shows.length === 1 ? shows[0].name : `${shows.length} shows`}` : ', sin shows'
+          }`;
+          const href = shows.length === 1 ? `/events/${shows[0].id}` : `/calendar?date=${isoDay(d)}`;
+          return (
+            <li key={i}>
+              <Link
+                className={`mz-day ${i === 0 ? 'is-today' : ''} ${shows.length ? 'has-shows' : ''}`}
+                href={href}
+                aria-label={label}
+                title={shows.map((e) => e.name).join(' · ') || undefined}
+              >
+                <span className="mz-day__w" aria-hidden>
+                  {DAY_LETTER[d.getDay()]}
+                </span>
+                <span className="mz-day__n t-num" aria-hidden>
+                  {d.getDate()}
+                </span>
+                <span className="mz-day__dots" aria-hidden>
+                  {shows.slice(0, 3).map((e) => (
+                    <i key={e.id} />
+                  ))}
+                </span>
+              </Link>
+            </li>
+          );
+        })}
+      </ol>
+    </section>
   );
 }
 
@@ -176,6 +301,7 @@ function ApprovalRow({
   href,
 }: {
   title: string;
+  count?: number;
   sub?: string;
   amount?: string;
   status: string;
@@ -284,7 +410,8 @@ export default function DashboardPage() {
           {
             key: `po-${row.key}`,
             title: row.title,
-            sub: `${ordenes(st.count)} · ${st.over7 ? `${st.over7} con más de 7 días` : row.hint}`,
+            count: st.count,
+            sub: `${st.over7 ? `${st.over7} con más de 7 días` : row.hint}`,
             amount: moneyKpi(st.amount),
             status: row.status,
             tone: row.tone,
@@ -293,19 +420,6 @@ export default function DashboardPage() {
         ];
       })
     : null;
-  // «2 sin autorizar · 1 sin comprobante · 3 sin pagar»: qué hay detrás del monto por pagar.
-  const poCount = (keys: string[]) =>
-    (data?.poStates ?? []).filter((x) => keys.includes(x.key)).reduce((n, x) => n + x.count, 0);
-  const poBreakdown = data?.poStates
-    ? [
-        [poCount(['unauthorized']), 'sin autorizar'],
-        [poCount(['no_proof']), 'sin comprobante'],
-        [poCount(['unpaid', 'off_pay_day']), 'sin pagar'],
-      ]
-        .filter(([n]) => (n as number) > 0)
-        .map(([n, label]) => `${n} ${label}`)
-        .join(' · ')
-    : '';
   const approvals = k
     ? [
         ...(poRows ?? []),
@@ -313,6 +427,7 @@ export default function DashboardPage() {
           ? {
               key: 'po',
               title: 'Órdenes de compra',
+              count: undefined as number | undefined,
               sub: k.poAgingOver7 ? `${k.poAgingOver7} con más de 7 días` : 'Por autorizar o pagar',
               amount: moneyKpi(k.poPipelineAmount),
               status: 'Revisar',
@@ -325,7 +440,8 @@ export default function DashboardPage() {
           ? {
               key: 'formats',
               title: 'Formatos entregados',
-              sub: `${k.pendingAuthorized} por autorizar`,
+              count: k.pendingAuthorized as number | undefined,
+              sub: 'Esperan tu autorización',
               status: 'Autorizar',
               tone: 'fill' as const,
               href: '/events?scope=active&ver=revision',
@@ -335,6 +451,7 @@ export default function DashboardPage() {
           ? {
               key: 'tasks',
               title: 'Tareas vencidas',
+              count: k.overdueTasks as number | undefined,
               sub: `de ${k.openTasks} abiertas`,
               status: 'Atender',
               tone: 'fill' as const,
@@ -359,82 +476,50 @@ export default function DashboardPage() {
       : 0) +
     (k && k.pendingAuthorized > 0 ? k.pendingAuthorized : 0) +
     (k && canSeeTasks ? k.overdueTasks : 0);
-  const todayShow = agenda.today.find((e) => new Date(e.startsAt).getTime() > now.getTime());
-  const lead =
-    !data || !k || !eventOps ? null : (
-      <>
-        <strong>
-          {waiting
-            ? `${waiting} ${waiting === 1 ? 'cosa espera' : 'cosas esperan'} tu visto bueno`
-            : 'Nada espera tu visto bueno'}
-        </strong>
-        {todayShow
-          ? ` y hoy hay show a las ${hhmm(todayShow.startsAt)}.`
-          : agenda.next[0]
-            ? `. El próximo show es ${daysLabel(daysUntil(agenda.next[0].startsAt, now)).toLowerCase()}.`
-            : '.'}
-      </>
-    );
-  const tasksFigure: Figure | null = k
-    ? {
-        label: 'Tareas abiertas',
-        value: k.openTasks,
-        sub: k.overdueTasks ? `${k.overdueTasks} vencidas` : 'Al día',
-                href: canSeeTasks ? `/tasks?filtro=abiertas&vista=${tasksVista}` : undefined,
-      }
-    : null;
-  const figures: Figure[] = k
-    ? [
-        ...(canSeePo
-          ? [
-              {
-                label: 'Por pagar',
-                value: moneyKpi(k.poPipelineAmount),
-                sub: poBreakdown || (k.poAgingOver7 ? `${k.poAgingOver7} con más de 7 días` : 'Órdenes de compra'),
-                href: '/purchase-orders?seccion=pay',
-              } satisfies Figure,
-            ]
-          : []),
-        {
-          label: 'Eventos activos',
-          value: k.eventsActive,
-          sub: k.upcoming14d === 1 ? '1 en los próximos 14 días' : `${k.upcoming14d} en los próximos 14 días`,
-          href: '/events',
-        },
-        ...(tasksFigure ? [tasksFigure] : []),
-        {
-          label: 'Formatos al día',
-          value: `${k.avgOpsProgress} %`,
-          sub: k.pendingAuthorized ? `${k.pendingAuthorized} por autorizar` : 'Avance general',
-          // Con algo por autorizar abre esa revisión; sin nada, los eventos actuales (no un vacío).
-          href: k.pendingAuthorized > 0 ? '/events?scope=active&ver=revision' : '/events?scope=active',
-        },
-      ]
-    : [];
+  // Qué hay detrás del monto por pagar: una barra por lo que le falta a cada grupo de órdenes.
+  const PO_BAR_LABEL: Record<string, string> = {
+    unauthorized: 'Sin autorizar',
+    no_proof: 'Sin comprobante',
+    unpaid: 'Sin pagar',
+    off_pay_day: 'Fuera de día de cobro',
+  };
+  const poBars = (data?.poStates ?? [])
+    .filter((x) => PO_BAR_LABEL[x.key] && x.amount > 0)
+    .map((x) => ({ key: x.key, label: PO_BAR_LABEL[x.key], amount: x.amount, count: x.count }));
+  const poBarMax = Math.max(1, ...poBars.map((b) => b.amount));
+  const onTime = k ? Math.max(0, k.openTasks - k.overdueTasks) : 0;
+  const stripEvents = [...agenda.today, ...(data?.upcoming ?? []).filter((e) => daysUntil(e.startsAt, now) > 0)];
+  const mosaic = !!data && !!k && eventOps && role !== 'practicante' && !loading && !error;
+  const actions = (
+    <>
+      {canSeeTasks ? (
+        <Link className="btn ghost" href="/tasks?nueva=1">
+          Nueva tarea
+        </Link>
+      ) : null}
+      {canCreate ? (
+        <Link className="btn" href="/events/new">
+          {entity === 'EXPLANADA' ? 'Nuevo show' : 'Nuevo evento'}
+        </Link>
+      ) : null}
+    </>
+  );
 
   return (
     <AppShell title="Inicio">
       <div className="page-workspace home">
-        <PageHeader
-          eyebrow={longDate(now)}
-          lead={lead}
-          title={
-            <>
-              {greeting(now)}, <b>{firstName}</b>
-            </>
-          }
-        >
-          {canSeeTasks ? (
-            <Link className="btn ghost" href="/tasks?nueva=1">
-              Nueva tarea
-            </Link>
-          ) : null}
-          {canCreate ? (
-            <Link className="btn" href="/events/new">
-              {entity === 'EXPLANADA' ? 'Nuevo show' : 'Nuevo evento'}
-            </Link>
-          ) : null}
-        </PageHeader>
+        {mosaic ? null : (
+          <PageHeader
+            eyebrow={longDate(now)}
+            title={
+              <>
+                {greeting(now)}, <b>{firstName}</b>
+              </>
+            }
+          >
+            {actions}
+          </PageHeader>
+        )}
 
         {role === 'practicante' ? (
           // Junta 23-10-2026: el practicante entra al sitio (Studio) y al calendario, nada más.
@@ -496,28 +581,22 @@ export default function DashboardPage() {
           <FlashMessage variant="error">{error}</FlashMessage>
         ) : data && k ? (
           <>
-            {nextShow ? <NextShow show={nextShow} now={now} /> : null}
-            <FigureStrip label="Cifras de hoy" items={figures} />
+            <div className="mz mz--top">
+              <HeroTile show={nextShow} now={now} hello={`${greeting(now)}, ${firstName}`} date={longDate(now)}>
+                {actions}
+              </HeroTile>
 
-            <div className="home-panels">
-              <section className="home-panel" aria-labelledby="home-approvals">
-                <div className="home-panel__head">
+              <section className="mz-tile mz-turns" aria-labelledby="home-approvals">
+                <div className="mz-tile__head">
                   <h3 id="home-approvals">Te toca a ti</h3>
-                  {canSeePo ? (
-                    <Link className="home-panel__link" href="/purchase-orders">
-                      Ver todo
-                    </Link>
-                  ) : canSeeTasks ? (
-                    <Link className="home-panel__link" href="/tasks">
-                      Ver todo
-                    </Link>
-                  ) : null}
+                  <span className="mz-tile__meta">
+                    {waiting ? `${waiting} ${waiting === 1 ? 'pendiente' : 'pendientes'}` : 'Al día'}
+                  </span>
                 </div>
-
                 {approvals.length ? (
-                  <ul className="ap-list">
-                    {approvals.map(({ key, ...row }) => (
-                      <ApprovalRow key={key} {...row} />
+                  <ul className="mz-turns__list">
+                    {approvals.map(({ key, tone: _tone, ...row }, i) => (
+                      <TurnRow key={key} {...row} lead={i === 0} />
                     ))}
                   </ul>
                 ) : (
@@ -526,38 +605,137 @@ export default function DashboardPage() {
                     <small>Las órdenes, formatos y tareas por revisar aparecen aquí.</small>
                   </p>
                 )}
+              </section>
+            </div>
 
-                {hasRisks ? (
-                  <>
-                    <p className="cap home-panel__sub">Requiere atención</p>
-                    <ul className="ap-list">
-                      {data.atRisk.slice(0, 4).map((e) => (
-                        <ApprovalRow
-                          key={e.id}
-                          title={e.name}
-                          sub={`${e.avgProgress}% de formatos${
-                            e.daysToShow != null && e.daysToShow >= 0
-                              ? ` · ${daysLabel(e.daysToShow).toLowerCase()}`
-                              : ''
-                          }`}
-                          status={e.risk === 'critical' ? 'Urgente' : 'Revisar'}
-                          tone={e.risk === 'critical' ? 'fill' : 'line'}
-                          href={`/events/${e.id}?tab=checklists&ver=pendientes`}
-                        />
-                      ))}
-                      {otherAlerts.slice(0, 3).map((a) => (
-                        <ApprovalRow
-                          key={`${a.code}-${a.message}`}
-                          title={a.message}
-                          status={a.severity === 'critical' ? 'Urgente' : 'Aviso'}
-                          tone={a.severity === 'critical' ? 'fill' : 'line'}
-                          href={a.href}
-                        />
+            <div className="mz mz--figs">
+              {canSeePo ? (
+                <section className="mz-tile mz-fig" aria-labelledby="home-fig-po">
+                  <Link className="mz-fig__head" href="/purchase-orders?seccion=pay">
+                    <span className="mz-fig__label" id="home-fig-po">
+                      Por pagar
+                    </span>
+                    <span className="mz-fig__value t-num">{moneyKpi(k.poPipelineAmount)}</span>
+                  </Link>
+                  {poBars.length ? (
+                    <ul className="mz-bars">
+                      {poBars.map((b) => (
+                        <li key={b.key}>
+                          <Link className="mz-bars__row" href={`/purchase-orders?estado=${b.key}`}>
+                            <span className="mz-bars__top">
+                              <span>
+                                {b.label} <small>{ordenes(b.count)}</small>
+                              </span>
+                              <span className="t-num">{moneyKpi(b.amount)}</span>
+                            </span>
+                            <span className="mz-bars__bar" aria-hidden>
+                              <i style={{ width: `${Math.max(4, Math.round((b.amount / poBarMax) * 100))}%` }} />
+                            </span>
+                          </Link>
+                        </li>
                       ))}
                     </ul>
-                  </>
-                ) : null}
-              </section>
+                  ) : (
+                    <p className="mz-fig__sub">
+                      {k.poAgingOver7 ? `${k.poAgingOver7} con más de 7 días` : 'Órdenes de compra por autorizar o pagar'}
+                    </p>
+                  )}
+                </section>
+              ) : null}
+
+              {canSeeTasks ? (
+                <Link className="mz-tile mz-fig" href={`/tasks?filtro=abiertas&vista=${tasksVista}`}>
+                  <span className="mz-fig__label">Tareas abiertas</span>
+                  <span className="mz-fig__line">
+                    <span className="mz-fig__value t-num">{k.openTasks}</span>
+                    {k.overdueTasks ? (
+                      <span className="mz-fig__flag">
+                        {k.overdueTasks} {k.overdueTasks === 1 ? 'vencida' : 'vencidas'}
+                      </span>
+                    ) : (
+                      <span className="mz-fig__calm">Al día</span>
+                    )}
+                  </span>
+                  <span className="mz-seg" aria-hidden>
+                    {k.overdueTasks ? <i className="is-late" style={{ flexGrow: k.overdueTasks }} /> : null}
+                    {onTime || !k.overdueTasks ? <i style={{ flexGrow: onTime || 1 }} /> : null}
+                  </span>
+                  <span className="mz-legend">
+                    <span>
+                      <i className="is-late" aria-hidden />
+                      Vencidas {k.overdueTasks}
+                    </span>
+                    <span>
+                      <i aria-hidden />
+                      En tiempo {onTime}
+                    </span>
+                  </span>
+                </Link>
+              ) : null}
+
+              <Link
+                className="mz-tile mz-fig"
+                href={k.pendingAuthorized > 0 ? '/events?scope=active&ver=revision' : '/events?scope=active'}
+              >
+                <span className="mz-fig__label">Formatos al día</span>
+                <span className="mz-ringrow">
+                  <span
+                    className="mz-ring"
+                    style={{ ['--pct' as string]: Math.max(0, Math.min(100, k.avgOpsProgress)) }}
+                    aria-hidden
+                  >
+                    <span className="mz-ring__in t-num">{k.avgOpsProgress} %</span>
+                  </span>
+                  <span className="mz-ringrow__list">
+                    <strong>
+                      {k.pendingAuthorized ? `${k.pendingAuthorized} por autorizar` : 'Nada por autorizar'}
+                    </strong>
+                    <span>
+                      {data.atRisk.length === 1 ? '1 evento en riesgo' : `${data.atRisk.length} eventos en riesgo`}
+                    </span>
+                    <span>{k.eventsActive === 1 ? '1 evento activo' : `${k.eventsActive} eventos activos`}</span>
+                  </span>
+                </span>
+                <span className="sr-only">{k.avgOpsProgress} % de formatos al día</span>
+              </Link>
+            </div>
+
+            <FortnightStrip events={stripEvents} now={now} />
+
+            <div className="home-panels">
+              {hasRisks ? (
+                <section className="home-panel" aria-labelledby="home-risks">
+                  <div className="home-panel__head">
+                    <h3 id="home-risks">Requiere atención</h3>
+                    <Link className="home-panel__link" href="/events?scope=active">
+                      Ver eventos
+                    </Link>
+                  </div>
+                  <ul className="ap-list">
+                    {data.atRisk.slice(0, 4).map((e) => (
+                      <ApprovalRow
+                        key={e.id}
+                        title={e.name}
+                        sub={`${e.avgProgress}% de formatos${
+                          e.daysToShow != null && e.daysToShow >= 0 ? ` · ${daysLabel(e.daysToShow).toLowerCase()}` : ''
+                        }`}
+                        status={e.risk === 'critical' ? 'Urgente' : 'Revisar'}
+                        tone={e.risk === 'critical' ? 'fill' : 'line'}
+                        href={`/events/${e.id}?tab=checklists&ver=pendientes`}
+                      />
+                    ))}
+                    {otherAlerts.slice(0, 3).map((a) => (
+                      <ApprovalRow
+                        key={`${a.code}-${a.message}`}
+                        title={a.message}
+                        status={a.severity === 'critical' ? 'Urgente' : 'Aviso'}
+                        tone={a.severity === 'critical' ? 'fill' : 'line'}
+                        href={a.href}
+                      />
+                    ))}
+                  </ul>
+                </section>
+              ) : null}
               <section className="home-panel" aria-labelledby="home-today">
                 <div className="home-panel__head">
                   <h3 id="home-today">{singleToday ? `Hoy · ${singleToday.name}` : 'Hoy'}</h3>

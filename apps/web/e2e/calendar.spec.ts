@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import type { Route } from '@playwright/test';
 
-import { mockAuthenticatedApi, seedSession } from './support/mock-api';
+import { mockAuthenticatedApi, seedSession, openMenu } from './support/mock-api';
 
 test.describe('Calendario de eventos', () => {
   test('nav + mes renderizan shows con startsAt', async ({ page, baseURL, isMobile }) => {
@@ -13,6 +13,7 @@ test.describe('Calendario de eventos', () => {
       await page.goto('/calendar');
     } else {
       await page.goto('/dashboard');
+      await openMenu(page);
       const nav = page.getByRole('navigation', { name: 'Módulos del panel' });
       await expect(nav.getByRole('link', { name: 'Calendario' })).toBeVisible();
       await nav.getByRole('link', { name: 'Calendario' }).click();

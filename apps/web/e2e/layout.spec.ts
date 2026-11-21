@@ -11,7 +11,7 @@ import { mockAuthenticatedApi, seedSession } from './support/mock-api';
  * izquierdo, como en Mac.
  */
 
-test.describe('Ver en grande y menú automático', () => {
+test.describe('Ver en grande', () => {
   test('el formato se agranda al pedir pantalla completa', async ({ page, baseURL }) => {
     await seedSession(page, baseURL!);
     await mockAuthenticatedApi(page, FORMAT_STUBS);
@@ -38,34 +38,5 @@ test.describe('Ver en grande y menú automático', () => {
     await page.keyboard.press('Escape');
     await expect(page.locator('.expandbox--full')).toHaveCount(0);
     await expect(page.getByRole('button', { name: /Ampliar a pantalla completa/ })).toBeVisible();
-  });
-
-  test('el menú se esconde y vuelve al acercar el cursor al borde', async ({ page, baseURL }) => {
-    await seedSession(page, baseURL!);
-    await mockAuthenticatedApi(page);
-    await page.setViewportSize({ width: 1500, height: 1000 });
-
-    await page.goto('/dashboard');
-    await page.waitForSelector('nav[aria-label="Módulos del panel"]');
-
-    // El pie del menú (rediseño 15-09) lo etiqueta «Esconder el menú».
-    await page.getByRole('button', { name: /Esconder el menú/ }).click();
-    // El clic deja el cursor y el foco en el propio menú, y mientras esté
-    // encima no se esconde — que es lo correcto. Hay que apartarse.
-    await page.mouse.move(1000, 500);
-
-    const sidebar = page.locator('aside.sidebar');
-    await expect.poll(async () => (await sidebar.boundingBox())!.x).toBeLessThan(-100);
-
-    // El contenido ocupa todo el ancho, no se queda en una columna
-    const main = (await page.locator('.main').boundingBox())!;
-    expect(main.width).toBeGreaterThan(1400);
-
-    // Acercar el cursor al borde izquierdo lo trae de vuelta
-    await page.mouse.move(4, 500);
-    await expect.poll(async () => (await sidebar.boundingBox())!.x).toBeGreaterThanOrEqual(-2);
-
-    // Y sigue siendo navegable
-    await expect(sidebar.getByRole('link', { name: 'Eventos actuales' })).toBeVisible();
   });
 });

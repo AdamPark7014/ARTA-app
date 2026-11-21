@@ -1,6 +1,6 @@
 import { expect, test, type Page, type Route } from '@playwright/test';
 
-import { mockApi, seedSession, TEST_USER } from './support/mock-api';
+import { mockApi, seedSession, TEST_USER, openMenu } from './support/mock-api';
 
 /**
  * Reglas de acceso del cliente, 01-11-2026 (docs/ROLES-Y-PERMISOS.md): quién ve cada pestaña del
@@ -294,17 +294,21 @@ test.describe('Menú', () => {
 
   test('Finanzas va arriba para Paula y para dirección; Juan Pablo no la ve', async ({ page, baseURL }) => {
     await openEvent(page, baseURL!, PAULA);
+    await openMenu(page);
     const links = await nav(page).getByRole('link').allInnerTexts();
     expect(links.findIndex((t) => /Finanzas/.test(t))).toBeLessThanOrEqual(1);
 
     await openEvent(page, baseURL!, JP);
+    await openMenu(page);
     await expect(nav(page).getByRole('link', { name: 'Finanzas' })).toHaveCount(0);
   });
 
   test('Usuarios es solo de Chacho y Arturo', async ({ page, baseURL }) => {
     await openEvent(page, baseURL!, LEIDA);
+    await openMenu(page);
     await expect(nav(page).getByRole('link', { name: 'Usuarios' })).toHaveCount(0);
     await openEvent(page, baseURL!, CHACHO);
+    await openMenu(page);
     await expect(nav(page).getByRole('link', { name: 'Usuarios' })).toHaveCount(1);
   });
 
@@ -312,6 +316,7 @@ test.describe('Menú', () => {
     await seedSession(page, baseURL!);
     await mockApi(page, { '/auth/me': { user: person('Rodrigo López', 'dir_auditorio', ['EXPLANADA']) } } as never);
     await page.goto('/dashboard');
+    await openMenu(page);
     await expect(nav(page).getByRole('link', { name: 'Inicio' })).toBeVisible();
     await expect(nav(page).getByRole('link', { name: 'Campañas' })).toHaveCount(0);
   });
@@ -321,6 +326,7 @@ test.describe('Menú', () => {
     await mockApi(page, { '/auth/me': { user: PRACTICANTE }, '/testigos/events': [] } as never);
     await page.goto('/testigos');
     await expect(page.getByRole('heading', { name: 'Testigos de publicidad' }).first()).toBeVisible();
+    await openMenu(page);
     await expect(nav(page).getByRole('link', { name: 'Testigos de publicidad' })).toHaveCount(1);
     await expect(nav(page).getByRole('link', { name: 'Eventos actuales' })).toHaveCount(0);
     await expect(nav(page).getByRole('link', { name: 'Órdenes de compra' })).toHaveCount(0);

@@ -246,3 +246,14 @@ export async function seedSession(page: Page, origin: string): Promise<void> {
 export async function mockAuthenticatedApi(page: Page, stubs: ApiStubs = {}): Promise<void> {
   await mockApi(page, { '/auth/me': { user: TEST_USER }, ...stubs });
 }
+
+/**
+ * El menú completo vive detrás de «Más» (barra de arriba en escritorio, barra
+ * inferior en teléfono). Lo abre para poder revisar sus entradas.
+ */
+export async function openMenu(page: Page): Promise<void> {
+  const nav = page.getByRole('navigation', { name: 'Módulos del panel' });
+  if (await nav.isVisible()) return;
+  await page.getByRole('button', { name: 'Más', exact: true }).click();
+  await nav.waitFor({ state: 'visible' });
+}

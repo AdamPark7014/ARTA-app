@@ -11,11 +11,13 @@ export type Figure = {
   onClick?: () => void;
   /** Cuando la cifra es un filtro que se prende y apaga. */
   pressed?: boolean;
+  /** Avance de 0 a 100: pinta una barra bajo la cifra. Solo cuando la cifra es parte de un total. */
+  meter?: number;
 };
 
 /**
- * Franja de cifras (diseño por módulo, 21-11-2026): una sola tarjeta, la
- * primera cifra es la que manda y va más grande. Estilos en `_acabado.scss`.
+ * Franja de cifras (diseño por módulo, 21-11-2026): mosaicos sueltos; la
+ * primera cifra es la que manda y va en tinta. Estilos en `_modulos.scss` y `_mosaico.scss`.
  */
 export function FigureStrip({ items, label }: { items: Figure[]; label: string }) {
   return (
@@ -24,8 +26,15 @@ export function FigureStrip({ items, label }: { items: Figure[]; label: string }
         const body = (
           <>
             <span className="fstrip__label">{it.label}</span>
-            <span className={`fstrip__value ${it.tone ? `is-${it.tone}` : ''}`}>{it.value}</span>
-            {it.sub ? <span className="fstrip__sub">{it.sub}</span> : null}
+            <span className="fstrip__foot">
+              <span className={`fstrip__value ${it.tone ? `is-${it.tone}` : ''}`}>{it.value}</span>
+              {it.meter != null ? (
+                <span className="fstrip__meter" aria-hidden>
+                  <i style={{ width: `${Math.max(0, Math.min(100, it.meter))}%` }} />
+                </span>
+              ) : null}
+              {it.sub ? <span className="fstrip__sub">{it.sub}</span> : null}
+            </span>
           </>
         );
         if (it.href) {

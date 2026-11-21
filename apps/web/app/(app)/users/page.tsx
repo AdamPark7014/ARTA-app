@@ -648,7 +648,12 @@ export default function UsersPage() {
           <FigureStrip
             label="Cifras del equipo"
             items={[
-              { label: 'Personas activas', value: k.active, sub: `de ${k.total} ${k.total === 1 ? 'usuario' : 'usuarios'}` },
+              {
+                label: 'Personas activas',
+                value: k.active,
+                sub: `de ${k.total} ${k.total === 1 ? 'usuario' : 'usuarios'}`,
+                meter: k.total ? (k.active / k.total) * 100 : undefined,
+              },
               { label: 'Entraron esta semana', value: k.loggedIn7d, sub: 'en los últimos 7 días' },
               /* Las cifras de alerta filtran la tabla; se tocan otra vez para quitar el filtro. */
               {

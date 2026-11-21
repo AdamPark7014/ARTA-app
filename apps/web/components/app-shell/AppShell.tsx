@@ -14,15 +14,16 @@ import { NotificationBell } from './NotificationBell';
 import { RouteProgress } from './RouteProgress';
 import { BottomNav } from './BottomNav';
 import { SidebarNav } from './SidebarNav';
+import { TopNav } from './TopNav';
 import { TopbarSearch } from './TopbarSearch';
 import { useEntityTheme } from './useEntityTheme';
 import { useShellPolish } from './useShellPolish';
 import { UserChip } from '@/components/ui/UserChip';
 
 /**
- * Marco del panel (docs/diseno/SISTEMA-VISUAL.md): menú lateral de 228 px con
- * logo, Arta | Auditorio y grupos con contador; barra superior de 58 px con el
- * título, el buscador (Ctrl K), la campana y el avatar.
+ * Marco del panel (docs/diseno/SISTEMA-VISUAL.md, dirección Mosaico): barra de
+ * arriba con la marca, la navegación en píldora, el buscador (Ctrl K), la campana
+ * y el avatar. «Más» abre el menú completo con Arta | Auditorio y todos los grupos.
  */
 export function AppShell({
   children,
@@ -45,46 +46,10 @@ export function AppShell({
   // Dentro de un evento, la barra dice de dónde viene y lleva de regreso.
   const crumb =
     backTo ?? (/^\/events\/(?!new)[^/]+/.test(pathname || '') ? { href: '/events?scope=active', label: 'Eventos' } : null);
-  /**
-   * Menú que se esconde solo y vuelve al acercar el cursor al borde izquierdo,
-   * como el Dock de macOS.
-   *
-   * Arranca APAGADO: escondido de fábrica, quien entra por primera vez no
-   * encuentra la navegación — solo queda un filo de 6 px que hay que adivinar.
-   * Se activa desde «Esconder menú» y a partir de ahí se recuerda.
-   */
-  const [autoHide, setAutoHide] = useState(false);
-  const [autoHideReady, setAutoHideReady] = useState(false);
-
   // Mientras carga la sesión manda el tema que dejó el script del layout.
   useEntityTheme(!loading && user ? entity : null);
   // Desvanecidos de borde, línea de la barra al bajar y textos cortados con su `title`.
   useShellPolish(!loading && !!user);
-
-  useEffect(() => {
-    try {
-      const stored = localStorage.getItem('arta_nav_autohide');
-      if (stored === '1' || stored === '0') setAutoHide(stored === '1');
-    } catch {
-      /* modo privado: se queda fijo */
-    }
-    setAutoHideReady(true);
-  }, []);
-
-  function toggleAutoHide(e: React.MouseEvent<HTMLButtonElement>) {
-    // El botón vive dentro del menú: si conserva el foco, `:focus-within` deja
-    // el menú abierto y parece que el botón no hizo nada.
-    e.currentTarget.blur();
-    setAutoHide((prev) => {
-      const next = !prev;
-      try {
-        localStorage.setItem('arta_nav_autohide', next ? '1' : '0');
-      } catch {
-        /* sin persistencia, pero funciona en esta sesión */
-      }
-      return next;
-    });
-  }
 
   useEffect(() => {
     if (!loading && !user) router.replace('/login');
@@ -93,6 +58,15 @@ export function AppShell({
   useEffect(() => {
     setNavOpen(false);
   }, [pathname, entity]);
+
+  useEffect(() => {
+    if (!navOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setNavOpen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [navOpen]);
 
   const nav = useMemo(() => (user ? visibleNavItems(user, entity) : []), [user, entity]);
 
@@ -155,15 +129,12 @@ export function AppShell({
   }
 
   const can = (e: EntityKey) => user.entities.includes(e);
-  const menuHidden = autoHideReady && autoHide;
 
   return (
     <div
-      className={`shell ${navOpen ? 'shell--nav-open' : ''} ${menuHidden ? 'shell--nav-auto' : ''}`}
+      className={`shell ${navOpen ? 'shell--nav-open' : ''}`}
       data-entity={entity}
     >
-      {/* Franja sensible: al pasar el cursor, el menú entra (estilo Dock macOS). */}
-      {menuHidden ? <div className="shell-hot-edge" aria-hidden title="Menú" /> : null}
       {navOpen ? (
         <button
           type="button"
@@ -227,19 +198,6 @@ export function AppShell({
         <div className="sidebar-foot sidebar-foot--lite">
           <UserChip name={user.fullName} subtitle={user.title || undefined} short />
           <div className="sidebar-foot__actions">
-            <button
-              type="button"
-              className="icon-btn"
-              aria-pressed={autoHide}
-              onClick={toggleAutoHide}
-              title={autoHide ? 'Fijar el menú' : 'Esconder el menú (vuelve al acercar el cursor al borde)'}
-              aria-label={autoHide ? 'Fijar el menú' : 'Esconder el menú'}
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
-                <rect x="3" y="4" width="18" height="16" rx="2" stroke="currentColor" strokeWidth="1.7" />
-                <path d="M9 4v16" stroke="currentColor" strokeWidth="1.7" />
-              </svg>
-            </button>
             <button type="button" className="icon-btn" onClick={logout} title="Salir" aria-label="Salir">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
                 <path
@@ -270,16 +228,12 @@ export function AppShell({
               <span />
               <span className="sr-only">Menú</span>
             </button>
-            {menuHidden ? (
-              <button
-                type="button"
-                className="btn ghost btn-sm topbar-pin-nav"
-                onClick={toggleAutoHide}
-                title="Fijar el menú lateral"
-              >
-                Fijar menú
-              </button>
-            ) : null}
+            <Link href="/dashboard" className="topbar-brand" aria-label="Ir al inicio">
+              {entity === 'ARTA' ? 'arta' : 'Explanada'}
+            </Link>
+            <Suspense fallback={<nav className="pnav" aria-hidden />}>
+              <TopNav items={nav} moreOpen={navOpen} onMore={() => setNavOpen((v) => !v)} />
+            </Suspense>
             {crumb ? (
               <Link href={crumb.href} className="topbar-crumb">
                 {crumb.label}

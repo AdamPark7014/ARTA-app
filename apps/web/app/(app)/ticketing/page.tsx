@@ -264,16 +264,21 @@ export default function TicketingPage() {
                 sub: sales?.kpis.capacityTotal
                   ? `de ${n(sales.kpis.capacityTotal)} a la venta · ${sales.kpis.sellThroughPct} %`
                   : 'Aún no hay boletos a la venta',
+                meter: sales?.kpis.capacityTotal ? sales.kpis.sellThroughPct : undefined,
               },
               {
                 label: 'Ingreso por boletos',
                 value: moneyKpi(sales?.kpis.realizedRevenue ?? 0),
                 sub: sales?.kpis.potentialRevenue ? `de ${moneyKpi(sales.kpis.potentialRevenue)} posibles` : 'Sin ventas registradas',
+                meter: sales?.kpis.potentialRevenue
+                  ? (sales.kpis.realizedRevenue / sales.kpis.potentialRevenue) * 100
+                  : undefined,
               },
               {
                 label: 'Con boletera',
                 value: `${withSetup} de ${merged.length}`,
                 sub: missing ? `${missing} ${missing === 1 ? 'evento sin crear' : 'eventos sin crear'}` : 'Todos los eventos actuales',
+                meter: merged.length ? (withSetup / merged.length) * 100 : undefined,
               },
               {
                 label: 'Apartados por vencer',

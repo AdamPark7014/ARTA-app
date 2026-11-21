@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 
-import { mockApi, seedSession, TEST_USER } from './support/mock-api';
+import { mockApi, seedSession, TEST_USER, openMenu } from './support/mock-api';
 
 /** Ubicación del equipo (docs/UBICACION.md): la ven Chacho y Arturo, y dice por qué falta alguien. */
 const person = (fullName: string, roleKey: string) => ({ ...TEST_USER, id: `u-${roleKey}`, fullName, roleKey, permissions: [] });
@@ -31,6 +31,7 @@ test.describe('Ubicación del equipo', () => {
     await seedSession(page, baseURL!);
     await mockApi(page, { '/auth/me': { user: person('José Luis Arista', 'dir_general') }, '/ubicacion/equipo': TEAM } as never);
     await page.goto('/ubicacion');
+    await openMenu(page);
     await expect(nav(page).getByRole('link', { name: 'Ubicación' })).toBeVisible();
 
     const row = (name: string) => page.locator('.geo-row', { hasText: name });

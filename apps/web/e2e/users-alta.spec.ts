@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import type { Route } from '@playwright/test';
 
-import { mockAuthenticatedApi, seedSession, TEST_USER } from './support/mock-api';
+import { mockAuthenticatedApi, seedSession, TEST_USER, openMenu } from './support/mock-api';
 
 /**
  * Desde 01-11-2026 (docs/ROLES-Y-PERMISOS.md) solo Chacho y Arturo manejan usuarios: dirección adjunta
@@ -108,6 +108,7 @@ test.describe('Usuarios · alta con permiso extra', () => {
     await mockAuthenticatedApi(page, { '/auth/me': { user: ADJUNTA } });
 
     await page.goto('/dashboard');
+    await openMenu(page);
 
     const nav = page.getByRole('navigation', { name: 'Módulos del panel' });
     await expect(nav.getByRole('link', { name: 'Inicio' })).toBeVisible();

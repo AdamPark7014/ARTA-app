@@ -198,3 +198,19 @@ Todas las pantallas de módulo se arman igual (`styles/_modulos.scss`, al final 
 
 En teléfono: barra inferior con cinco destinos (`BottomNav`) y las tablas se vuelven tarjetas (`dtable--cards`).
 Maqueta: https://claude.ai/artifact/JHUC8N18Kg3w2V41yVXkX5
+
+## Mosaico (21-11-2026, dirección elegida por Adam)
+
+Adam vio tres direcciones (Editorial, Noche, Mosaico) y eligió Mosaico. Manda sobre lo anterior donde difieran.
+
+- **Fondo y mosaicos:** fondo `#efeeea`; cada bloque es un mosaico blanco de 24 px de radio, sin borde ni sombra,
+  separado 16 px del siguiente. En teléfono, 20 px de radio y 10 px de separación.
+- **Un mosaico de tinta por pantalla:** el dato que manda va en negro con texto blanco (`--tile-ink`,
+  `--tile-ink-fg`, `--tile-ink-muted`). En Inicio es el show que sigue; en los demás módulos, la primera cifra.
+- **Navegación en píldora:** barra de arriba con la marca, los módulos de todos los días y «Más» para el menú
+  completo. La píldora activa va en tinta. En teléfono, barra inferior flotante en píldora.
+- **Gráficas dentro del mosaico:** barras, barra partida, anillo y tira de días, siempre en tinta; el rojo solo
+  marca lo vencido. Ninguna gráfica inventa datos: si la API no manda el desglose, el mosaico muestra solo la cifra.
+- **Títulos:** Inter Tight 600, hasta 42 px, interletra apretada.
+- Estilos en `apps/web/styles/_mosaico.scss` (se importa al final).
+

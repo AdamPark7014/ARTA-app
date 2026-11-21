@@ -6592,3 +6592,6 @@ textarea.pdffield__input--text {
 @import "./barrido-funciones";
 // Diseño por módulo (21-11-2026): al final, para que mande sobre las capas anteriores.
 @import "./modulos";
+
+/* Dirección Mosaico: al final, manda sobre todo lo anterior. */
+@import "./mosaico";

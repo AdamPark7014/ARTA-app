@@ -242,9 +242,12 @@ test.describe('Órdenes de compra · inicio', () => {
       '/purchase-orders?estado=unauthorized',
     );
     await expect(panel.getByRole('link', { name: /OC autorizadas sin comprobante/ })).toBeVisible();
-    await expect(panel.getByText('2 órdenes · 1 con más de 7 días')).toBeVisible();
+    await expect(panel.getByRole('link', { name: /OC sin autorizar/ })).toContainText('1 con más de 7 días');
     // Lo pagado y completo no espera a nadie.
     await expect(panel.getByText(/completa/i)).toHaveCount(0);
-    await expect(page.getByText('2 sin autorizar · 1 sin comprobante')).toBeVisible();
+    // El mosaico «Por pagar» desglosa el monto por lo que le falta a cada grupo.
+    const bars = page.locator('.mz-bars');
+    await expect(bars.getByRole('link', { name: /Sin autorizar/ })).toContainText('2 órdenes');
+    await expect(bars.getByRole('link', { name: /Sin comprobante/ })).toContainText('1 orden');
   });
 });

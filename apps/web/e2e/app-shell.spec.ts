@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 
-import { mockAuthenticatedApi, mockApi, seedSession, TEST_USER } from './support/mock-api';
+import { mockAuthenticatedApi, mockApi, seedSession, TEST_USER, openMenu } from './support/mock-api';
 
 /**
  * Smoke del AppShell.
@@ -30,6 +30,7 @@ test.describe('App shell', () => {
     await mockAuthenticatedApi(page);
 
     await page.goto('/dashboard');
+    await openMenu(page);
 
     const nav = page.getByRole('navigation', { name: 'Módulos del panel' });
     await expect(nav).toBeVisible();
@@ -56,6 +57,7 @@ test.describe('App shell', () => {
     await mockAuthenticatedApi(page);
 
     await page.goto('/dashboard');
+    await openMenu(page);
 
     const nav = page.getByRole('navigation', { name: 'Módulos del panel' });
     await expect(nav.getByRole('link', { name: 'Eventos actuales' })).toBeVisible();
@@ -78,6 +80,7 @@ test.describe('App shell', () => {
     await mockAuthenticatedApi(page);
 
     await page.goto('/dashboard');
+    await openMenu(page);
 
     await page
       .getByRole('navigation', { name: 'Módulos del panel' })
@@ -107,6 +110,7 @@ test.describe('App shell', () => {
     });
 
     await page.goto('/dashboard');
+    await openMenu(page);
 
     const nav = page.getByRole('navigation', { name: 'Módulos del panel' });
     await expect(nav.getByRole('link', { name: 'Carpetas generales' })).toBeVisible();
@@ -120,6 +124,7 @@ test.describe('App shell', () => {
     await mockAuthenticatedApi(page);
 
     await page.goto('/dashboard');
+    await openMenu(page);
 
     const nav = page.getByRole('navigation', { name: 'Módulos del panel' });
     await expect(nav.getByRole('link', { name: 'Corridas' })).toHaveCount(0);
@@ -128,6 +133,32 @@ test.describe('App shell', () => {
 
     await expect(nav.getByRole('link', { name: 'Corridas' })).toBeVisible();
     await expect(nav.getByRole('link', { name: 'Plantillas' })).toBeVisible();
+  });
+
+  test('la barra en píldora lleva a los módulos de todos los días y «Más» abre el resto', async ({
+    page,
+    baseURL,
+    isMobile,
+  }) => {
+    test.skip(isMobile, 'en teléfono manda la barra inferior');
+    await seedSession(page, baseURL!);
+    await mockAuthenticatedApi(page);
+
+    await page.goto('/dashboard');
+
+    const pills = page.getByRole('navigation', { name: 'Navegación rápida' });
+    await expect(pills.getByRole('link', { name: 'Inicio' })).toHaveAttribute('aria-current', 'page');
+    // El menú completo no estorba hasta que se pide.
+    const menu = page.getByRole('navigation', { name: 'Módulos del panel' });
+    await expect(menu).toBeHidden();
+    await pills.getByRole('button', { name: 'Más' }).click();
+    await expect(menu.getByRole('link', { name: 'Eventos pasados' })).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(menu).toBeHidden();
+
+    await pills.getByRole('link', { name: 'Eventos actuales' }).click();
+    await page.waitForURL('**/events?scope=active');
+    await expect(pills.getByRole('link', { name: 'Eventos actuales' })).toHaveAttribute('aria-current', 'page');
   });
 
   test('«Eventos pasados» deja fuera los shows que aún no ocurren', async ({ page, baseURL }) => {
