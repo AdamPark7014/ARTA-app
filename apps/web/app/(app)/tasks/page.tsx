@@ -10,7 +10,6 @@ import { LoadingBlock, LoadingKpis } from '@/components/ui/LoadingBlock';
 import { AssigneesPicker } from '@/components/ui/AssigneesPicker';
 import { BulkBar, SelectCheck } from '@/components/ui/BulkBar';
 import {
-  ActionLink,
   FieldSearch,
   FilterBar,
   FlashMessage,
@@ -600,6 +599,7 @@ function TasksPageInner() {
     if (failed) setError(`${failed} tarea${failed === 1 ? '' : 's'} no se pudo actualizar`);
   }
 
+  const dueToday = rows.filter((t) => t.status !== 'DONE' && (t.dueAt || '').slice(0, 10) === today).length;
   const filterActive = quick !== 'open' || !!q.trim() || who !== 'all';
   const views = (canSeeTeam ? ['mine', 'requested', 'team'] : ['mine', 'requested']) as View[];
 
@@ -609,13 +609,28 @@ function TasksPageInner() {
         <PageHeader
           className="ph--tasks"
           title="Tareas"
-          description={`Lo que el equipo tiene pendiente en ${entity === 'ARTA' ? 'Arta Producciones' : 'Auditorio Arema'}.`}
+          lead={
+            loading ? null : kpis.open ? (
+              <>
+                {view === 'mine' ? 'Tienes ' : view === 'requested' ? 'Pediste ' : 'El equipo tiene '}
+                <strong>
+                  {kpis.open} {kpis.open === 1 ? 'abierta' : 'abiertas'}
+                </strong>
+                {kpis.overdue || dueToday
+                  ? `: ${[
+                      kpis.overdue ? `${kpis.overdue} ${kpis.overdue === 1 ? 'vencida' : 'vencidas'}` : '',
+                      dueToday ? `${dueToday} para hoy` : '',
+                    ]
+                      .filter(Boolean)
+                      .join(' y ')}.`
+                  : ', ninguna vencida.'}
+              </>
+            ) : (
+              <strong>Sin tareas abiertas.</strong>
+            )
+          }
           hint="Al entregar una tarea que pediste a otra persona, el responsable sube evidencia (nota + archivo) y tú la apruebas o rechazas en «Que pedí». Todo queda en el historial."
-        >
-          <ActionLink href="/events" variant="ghost">
-            Ir a eventos
-          </ActionLink>
-        </PageHeader>
+        />
 
         {msg ? (
           <FlashMessage variant="success" onDismiss={() => setMsg('')}>
@@ -633,7 +648,7 @@ function TasksPageInner() {
             ref={titleRef}
             className="quick-add__title composer__title"
             value={form.title}
-            placeholder="Nueva tarea… (ej. Cotizar transporte del staff)"
+            placeholder="Escribe una tarea y presiona Enter"
             aria-label="Tarea"
             onFocus={() => setComposing(true)}
             onChange={(e) => setForm({ ...form, title: e.target.value })}

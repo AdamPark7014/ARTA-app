@@ -1,5 +1,29 @@
 # RELEVO
 
+- **2026-11-21 (claude-code) — Diseño por módulo aplicado (Adam aprobó la maqueta: «Sí, aplícalo en todos»). NO desplegado.**
+  - **Mismo orden en cada pantalla:** una frase que dice qué pasa (`PageHeader` prop `lead`), un solo botón
+    principal, una franja de cifras (`components/ui/FigureStrip.tsx`, la primera manda) y listas agrupadas.
+    Estilos en `styles/_modulos.scss`, que se importa **al final** de `globals.scss` (después de `_premium` y
+    `_noche`; lo que se agregue en `_acabado.scss` puede quedar tapado por esas capas).
+  - **Inicio:** frase «N cosas esperan tu visto bueno…», franja de cifras, «Te toca a ti» primero y los próximos
+    shows con barra de avance.
+  - **Órdenes de compra:** título «Órdenes de compra», órdenes agrupadas por evento con su suma (`tr.grp-row`);
+    la liga del grupo lleva `&po=` cuando el evento tiene una sola orden. Espera en días, rojo solo pasada la semana.
+  - **Finanzas:** franja (Utilidad, Ingresos, Egresos, En pérdida como filtro), dos barras por evento, renglón de
+    total; se quitó la gráfica por estado y el aviso de «neto negativo» (lo cubre la cifra «En pérdida»).
+  - **Boletera:** una sola tabla (evento, barra de vendidos, ingreso, apartado) en lugar de dos; la región sigue
+    llamándose «Avance de ventas».
+  - **Usuarios:** una persona por renglón a todo lo ancho; el alta se abre con «Nuevo integrante» (quien solo da
+    altas la ve abierta). Las cifras de alerta siguen filtrando.
+  - **Teléfono:** barra inferior `BottomNav` (Inicio, Eventos, Tareas, Chat, Más); «Más» abre el menú y el botón
+    de hamburguesa ya no se pinta. En modo app (`data-shell='app'`) no sale: la barra la pone la app nativa.
+    Finanzas, Boletera y Usuarios usan `dtable--cards` (tarjetas, sin scroll lateral).
+  - **Tiendas (Adam, 21-11):** al subir la actualización a iOS y Android, las capturas de la ficha deben ser las
+    de blanco y negro, no las doradas viejas. Las apps y el gráfico de Play ya son monocromo (`ArtaColors.Gold` es
+    solo el nombre histórico del acento); faltan capturas nuevas con `ios-screenshots.yml` y `android-capturas.yml`
+    y subirlas en App Store Connect y Play Console.
+  - Capturas de cada módulo: `/mnt/project-files/produccion/capturas-diseno-modulos/` (nube).
+
 - **2026-11-21 (claude-code) — Responsable y fecha límite por formato (Adam lo eligió en tarjeta). NO desplegado.**
   - **Migración** `20261121000000_formato_responsable`: `ChecklistInstance.ownerId` (FK a User, SET NULL) y `dueAt`.
     Aditiva e idempotente; el despliegue la aplica con `prisma migrate deploy`.

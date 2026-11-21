@@ -1,0 +1,630 @@
+/* ═══ Diseño por módulo (21-11-2026, aprobado por Adam) ═════════════════════
+   Mismo orden en cada pantalla: una frase que dice qué pasa, un solo botón
+   principal, una franja de cifras y listas agrupadas. */
+
+.ph__lead {
+  margin: 0;
+  max-width: 70ch;
+  color: var(--muted);
+  font-size: 16px;
+  line-height: 1.45;
+  text-wrap: pretty;
+}
+
+.ph__lead strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+/* Franja de cifras: una tarjeta, la primera cifra manda. */
+.fstrip {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1.35fr);
+  align-items: stretch;
+  min-width: 0;
+  border-radius: var(--radius-lg);
+  background: var(--card-bg);
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+}
+
+.fstrip__item {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 4px;
+  min-width: 0;
+  padding: 18px 22px;
+  border: 0;
+  border-left: 1px solid var(--line);
+  border-radius: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  text-decoration: none;
+  container-type: inline-size;
+}
+
+.fstrip__item:first-child {
+  border-left: 0;
+}
+
+.fstrip__item.is-action {
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.fstrip__item.is-action:hover {
+  background: var(--hover);
+}
+
+.fstrip__item.is-on {
+  background: var(--seg-bg);
+}
+
+.fstrip__item:focus-visible {
+  outline: 2px solid var(--text);
+  outline-offset: -2px;
+}
+
+.fstrip__label {
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.3;
+}
+
+.fstrip__value {
+  font-family: var(--font-display);
+  font-size: clamp(20px, 13cqi, 28px);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.5px;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
+.fstrip__item:first-child .fstrip__value {
+  font-size: clamp(26px, 15cqi, 40px);
+}
+
+.fstrip__value.is-danger {
+  color: var(--danger);
+}
+
+.fstrip__value.is-warn {
+  color: var(--warn);
+}
+
+.fstrip__sub {
+  min-height: 1.35em;
+  color: var(--text-3);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.fstrip__sub a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+@media (max-width: 760px) {
+  .fstrip {
+    grid-auto-flow: row;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .fstrip__item {
+    padding: 14px 16px;
+    border-top: 1px solid var(--line);
+  }
+
+  .fstrip__item:first-child {
+    grid-column: 1 / -1;
+    border-top: 0;
+  }
+
+  .fstrip__item:nth-child(even) {
+    border-left: 0;
+  }
+
+  /* Una cifra suelta al final ocupa el renglón entero, no medio. */
+  .fstrip__item:last-child:nth-child(even) {
+    grid-column: 1 / -1;
+  }
+}
+
+/* Renglón de grupo dentro de una tabla: el evento una sola vez, con su suma. */
+.dtable tr.grp-row td {
+  padding: 12px 0.75rem 9px;
+  background: var(--bg-soft);
+  border-bottom: 1px solid var(--line);
+}
+
+.dtable tr.grp-row:hover td {
+  background: var(--bg-soft);
+}
+
+.grp-row__in {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 10px;
+  min-width: 0;
+}
+
+.grp-row__name {
+  color: var(--text);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+a.grp-row__name:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.grp-row__meta {
+  color: var(--text-3);
+  font-size: 13px;
+}
+
+.grp-row__sum {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.grp-row__sum strong {
+  color: var(--text);
+}
+
+/* Encabezados de tabla en frase, como el resto del sistema. */
+.dtable th {
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+/* Espera en días: solo se pinta cuando ya es demasiado. */
+.wait-late {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--danger) 9%, transparent);
+  color: var(--danger);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* Aviso con acción bajo una tabla. */
+.note-act {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 16px;
+  padding: 14px 22px;
+  border-radius: var(--radius-lg);
+  background: var(--card-bg);
+  box-shadow: var(--shadow-card);
+}
+
+.note-act.is-warn {
+  box-shadow: var(--shadow-card), inset 3px 0 0 var(--warn);
+}
+
+.note-act__copy {
+  flex: 1 1 280px;
+  min-width: 0;
+}
+
+.note-act__title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.note-act__text {
+  margin: 2px 0 0;
+  color: var(--text-3);
+  font-size: 13px;
+}
+
+/* Finanzas: dos barras por evento y la pérdida como único rojo. */
+.fin-table__name {
+  color: var(--text);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.fin-table__name:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.fin-table__gap {
+  color: var(--warn);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.fin-table td.num {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.fin-table__net {
+  font-weight: 600;
+}
+
+.fin-table .is-loss,
+.fin-table__loss {
+  color: var(--danger);
+}
+
+.fin-bars {
+  display: grid;
+  gap: 3px;
+  min-width: 120px;
+}
+
+.fin-bars__in,
+.fin-bars__out {
+  display: block;
+  height: 6px;
+  border-radius: 6px;
+  background: var(--text);
+}
+
+.fin-bars__out {
+  background: color-mix(in srgb, var(--text) 28%, transparent);
+}
+
+.dtable tr.fin-table__total td {
+  border-top: 1px solid var(--line-strong);
+  font-weight: 600;
+}
+
+.fin-legend {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.fin-legend__k {
+  display: inline-block;
+  width: 18px;
+  height: 6px;
+  margin-left: 10px;
+  border-radius: 6px;
+  background: var(--text);
+}
+
+.fin-legend__k.is-out {
+  background: color-mix(in srgb, var(--text) 28%, transparent);
+}
+
+.fin-legend__n {
+  margin-left: 14px;
+}
+
+@media (max-width: 640px) {
+  .fin-hide-sm,
+  .fin-legend__k {
+    display: none;
+  }
+
+  .fin-legend {
+    font-size: 0;
+  }
+
+  .fin-legend__n {
+    margin: 0;
+    font-size: 12px;
+  }
+}
+
+/* Boletera: una tabla, cada evento con su barra de venta. */
+.bol-list .bol-sales__row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.bol-list .bol-sales__meter {
+  flex: 1 1 90px;
+  min-width: 60px;
+  max-width: 220px;
+}
+
+.bol-sales__n {
+  color: var(--muted);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.bol-sales__n strong {
+  color: var(--text);
+}
+
+@media (max-width: 640px) {
+  .bol-hide-sm {
+    display: none;
+  }
+
+  .bol-list .bol-sales__row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 4px;
+  }
+
+  .bol-list .bol-sales__meter {
+    flex: none;
+    max-width: none;
+  }
+}
+
+/* Inicio: avance de formatos como barra en cada próximo show. */
+.tl__row:has(.tl__meter) {
+  grid-template-columns: 56px 14px minmax(0, 1fr) auto;
+}
+
+.tl__meter {
+  display: inline-flex;
+  align-items: center;
+  align-self: center;
+  gap: 10px;
+  white-space: nowrap;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.tl__bar {
+  display: block;
+  width: 110px;
+  height: 4px;
+  border-radius: 4px;
+  background: var(--line);
+  overflow: hidden;
+}
+
+.tl__bar i {
+  display: block;
+  height: 100%;
+  border-radius: 4px;
+  background: var(--text);
+}
+
+@media (max-width: 640px) {
+  .tl__bar {
+    display: none;
+  }
+}
+
+/* Usuarios: una persona por renglón; el alta se abre con el botón del encabezado. */
+.users-stack {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+
+.users-form[hidden] {
+  display: none;
+}
+
+.users-form {
+  max-width: 720px;
+}
+
+.users-person {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.users-person__av {
+  display: inline-flex;
+  flex: 0 0 34px;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: var(--seg-bg);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.users-person__copy {
+  min-width: 0;
+}
+
+.users-person__copy :is(strong, .user-contact) {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.users-table .row-actions {
+  justify-content: flex-end;
+  flex-wrap: nowrap;
+}
+
+@media (max-width: 640px) {
+  .users-hide-sm {
+    display: none;
+  }
+}
+
+/* Barra inferior en teléfono: cinco destinos a un toque; «Más» abre el menú. */
+.bnav {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .bnav {
+    position: fixed;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 60;
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 1fr);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    border-top: 1px solid var(--line);
+    background: var(--bg-elev, var(--card-bg));
+  }
+
+  .bnav__tab {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-height: 56px;
+    padding: 0 2px;
+    border: 0;
+    background: none;
+    color: var(--text-3);
+    font: inherit;
+    font-size: 12px;
+    text-decoration: none;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .bnav__mark {
+    width: 6px;
+    height: 4px;
+    border-radius: 4px;
+    background: transparent;
+    transition: width 0.18s ease, background 0.18s ease;
+  }
+
+  .bnav__tab.is-on {
+    color: var(--text);
+    font-weight: 700;
+  }
+
+  .bnav__tab.is-on .bnav__mark {
+    width: 22px;
+    background: var(--text);
+  }
+
+  .bnav__tab:focus-visible {
+    outline: 2px solid var(--text);
+    outline-offset: -4px;
+  }
+
+  /* El contenido deja libre el alto de la barra. */
+  :root:not([data-shell='app']) body:not([data-shell='app']) .shell .content {
+    padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px));
+  }
+
+  /* Con la barra abajo, el botón de menú de arriba sobra. */
+  .shell .topbar .nav-toggle {
+    display: none;
+  }
+
+  [data-shell='app'] .bnav {
+    display: none;
+  }
+}
+
+@media (max-width: 768px) and (prefers-reduced-motion: reduce) {
+  .bnav__mark {
+    transition: none;
+  }
+}
+
+/* Órdenes en teléfono: el renglón de grupo es un rótulo, no otra tarjeta. */
+@media (max-width: 760px) {
+  .dtable--cards tbody tr.grp-row {
+    padding: 10px 4px 0;
+    border: 0;
+    background: none;
+    box-shadow: none;
+  }
+
+  .dtable--cards tbody tr.grp-row td,
+  .dtable--cards tbody tr.grp-row:hover td {
+    padding: 0;
+    background: none;
+    border: 0;
+  }
+}
+
+/* Tablero de tareas: la fecha no se parte en dos renglones. */
+.board-card__foot time,
+.board-card__due {
+  white-space: nowrap;
+}
+
+/* Usuarios: el puesto largo no pasa de dos renglones. */
+.users-table__title {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+
+/* Tarjetas de tabla en teléfono: etiquetas en frase y renglón de total sin sombra doble. */
+@media (max-width: 640px) {
+  .dtable--cards td.num[data-label]::before {
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0;
+    text-transform: none;
+  }
+
+  .dtable--cards tbody tr.fin-table__total td {
+    border-top: 0;
+  }
+
+  .dtable--cards.users-table .row-actions {
+    justify-content: flex-end;
+  }
+
+  .dtable--cards.users-table {
+    min-width: 0;
+  }
+
+  .dtable--cards.users-table td:nth-child(2) {
+    grid-column: 1 / -1;
+  }
+}
+
+/* Tareas: el título pesa como en el resto de las listas y la fecha cabe entera en teléfono. */
+html[data-entity] .task-row__title {
+  font-size: 14.5px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.task-group--urgent .task-group__toggle h2 {
+  color: var(--danger);
+}
+
+@media (max-width: 640px) {
+  .task-row {
+    grid-template-columns: auto auto minmax(0, 1fr) 10.75rem;
+  }
+}
+
+/* Usuarios: acceso y última entrada en un renglón. */
+.users-table td.users-hide-sm {
+  white-space: nowrap;
+}

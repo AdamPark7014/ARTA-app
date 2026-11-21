@@ -185,3 +185,16 @@ El sitio de Arta dejó el dorado: es tinta y papel como el panel, con más escal
 - **Páginas:** cabecera con foto a color o tinta con el motivo, y migas. El menú marca dónde estás.
 - **Fotos:** a color con un ajuste discreto (`--photo`), pedido de Adam el 01-11-2026; pósters tal cual; logos de aliados y mapa en un tono.
 - **Foto de Nosotros:** recorte en arco, el de las letras de la marca.
+
+## Diseño por módulo (21-11-2026, aprobado por Adam)
+
+Todas las pantallas de módulo se arman igual (`styles/_modulos.scss`, al final de `globals.scss`):
+
+1. **Una frase que dice qué pasa**, bajo el título, con la cifra en negritas (`PageHeader` → `lead`).
+2. **Un solo botón principal** (relleno de tinta); lo demás en contorno.
+3. **Una franja de cifras** (`FigureStrip`): una sola tarjeta y la primera cifra más grande (40 px contra 28).
+4. **Listas agrupadas** por evento o por urgencia (`tr.grp-row`), con fechas como «mar 24 nov».
+5. **Color solo para avisar**: rojo, ámbar y verde marcan estados; la espera se pinta pasada la semana.
+
+En teléfono: barra inferior con cinco destinos (`BottomNav`) y las tablas se vuelven tarjetas (`dtable--cards`).
+Maqueta: https://claude.ai/artifact/JHUC8N18Kg3w2V41yVXkX5

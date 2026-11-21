@@ -130,7 +130,7 @@ const OVERLAYS: Step[] = [
     path: '/dashboard',
     mobileOnly: true,
     action: async (page) => {
-      await page.locator('.nav-toggle').click();
+      await page.locator('.bnav button').click();
       await page.waitForTimeout(400);
     },
   },

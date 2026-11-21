@@ -6,6 +6,8 @@ type PageHeaderProps = {
   /** Etiqueta pequeña arriba del título (fecha, entidad, sección). */
   eyebrow?: ReactNode;
   title?: ReactNode;
+  /** Una frase que dice qué pasa hoy en la pantalla, con la cifra en negritas (`<strong>`). */
+  lead?: ReactNode;
   /** Un renglón: qué es la pantalla. La ayuda larga va en la propia pantalla, no aquí. */
   description?: ReactNode;
   /** Ayuda larga: oculta en todo el panel (`.page-intro__hint`), se conserva por compatibilidad. */
@@ -22,13 +24,14 @@ type PageHeaderProps = {
  * descripción de un renglón, acciones a la derecha y, si hace falta, un renglón
  * de pestañas o filtros. Mismo espaciado en todo el panel (`styles/_acabado.scss`).
  */
-export function PageHeader({ eyebrow, title, description, hint, children, below, className = '' }: PageHeaderProps) {
+export function PageHeader({ eyebrow, title, lead, description, hint, children, below, className = '' }: PageHeaderProps) {
   return (
     <header className={`ph ${className}`.trim()}>
       <div className="ph__row">
         <div className="ph__copy">
           {eyebrow ? <p className="ph__eyebrow">{eyebrow}</p> : null}
           {title ? <h2 className="ph__title">{title}</h2> : null}
+          {lead ? <p className="ph__lead">{lead}</p> : null}
           {description ? <div className="ph__desc">{description}</div> : null}
           {hint ? <p className="muted page-intro__hint">{hint}</p> : null}
         </div>

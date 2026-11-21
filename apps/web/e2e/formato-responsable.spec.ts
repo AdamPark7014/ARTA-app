@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Route } from '@playwright/test';
 import { mockApi, seedSession } from './support/mock-api';
 import { RICH_STUBS, RICH_USER } from './support/rich-fixtures';
 
@@ -13,7 +13,7 @@ test.describe('Formatos · responsable', () => {
     await mockApi(page, {
       ...RICH_STUBS,
       '/auth/me': { user: RICH_USER },
-      '/checklists/chk-rich-transporte/assignment': async (route) => {
+      '/checklists/chk-rich-transporte/assignment': async (route: Route) => {
         sent.push({ url: route.request().url(), body: route.request().postDataJSON() });
         await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
       },

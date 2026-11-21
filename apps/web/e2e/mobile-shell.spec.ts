@@ -168,7 +168,11 @@ test.describe('Navegador de teléfono', () => {
     await bell.tap();
     await expect(page.locator('.notif-panel')).toHaveCount(0);
 
-    const burger = page.locator('button.nav-toggle');
+    // En teléfono el menú se abre desde «Más», en la barra inferior.
+    const bar = page.getByRole('navigation', { name: 'Navegación principal' });
+    await expect(bar).toBeInViewport();
+    await expect(bar.getByRole('link', { name: 'Inicio' })).toHaveAttribute('aria-current', 'page');
+    const burger = bar.getByRole('button', { name: 'Más' });
     await expect(burger).toBeVisible();
     await burger.tap();
     await expect(sidebar).toBeInViewport({ ratio: 1 });

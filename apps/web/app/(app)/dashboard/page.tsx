@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { AppShell } from '@/components/app-shell/AppShell';
 import { EmptyLite } from '@/components/ui/Lite';
 import { FlashMessage, PageHeader } from '@/components/ui/PageChrome';
+import { FigureStrip, type Figure } from '@/components/ui/FigureStrip';
 import { api } from '@/lib/api';
 import { canAccessEventOps, userHasPermission, visibleNavItems } from '@/lib/access-matrix';
 import { canEditEventInfo, canSeeModule } from '@arta/rbac';
@@ -348,11 +349,75 @@ export default function DashboardPage() {
   const nextShow =
     agenda.today.find((e) => new Date(e.startsAt).getTime() > now.getTime()) ?? agenda.next[0] ?? agenda.today[0] ?? null;
 
+  // La frase del encabezado: cuánto espera a esta persona y qué show sigue hoy.
+  const waiting =
+    (data?.poStates
+      ? PO_APPROVAL_ROWS.reduce((n, row) => {
+          if (row.who === 'authorize' ? !canAuthorizePo : !canPayPo) return n;
+          return n + (data.poStates?.find((x) => x.key === row.key)?.count ?? 0);
+        }, 0)
+      : 0) +
+    (k && k.pendingAuthorized > 0 ? k.pendingAuthorized : 0) +
+    (k && canSeeTasks ? k.overdueTasks : 0);
+  const todayShow = agenda.today.find((e) => new Date(e.startsAt).getTime() > now.getTime());
+  const lead =
+    !data || !k || !eventOps ? null : (
+      <>
+        <strong>
+          {waiting
+            ? `${waiting} ${waiting === 1 ? 'cosa espera' : 'cosas esperan'} tu visto bueno`
+            : 'Nada espera tu visto bueno'}
+        </strong>
+        {todayShow
+          ? ` y hoy hay show a las ${hhmm(todayShow.startsAt)}.`
+          : agenda.next[0]
+            ? `. El próximo show es ${daysLabel(daysUntil(agenda.next[0].startsAt, now)).toLowerCase()}.`
+            : '.'}
+      </>
+    );
+  const tasksFigure: Figure | null = k
+    ? {
+        label: 'Tareas abiertas',
+        value: k.openTasks,
+        sub: k.overdueTasks ? `${k.overdueTasks} vencidas` : 'Al día',
+                href: canSeeTasks ? `/tasks?filtro=abiertas&vista=${tasksVista}` : undefined,
+      }
+    : null;
+  const figures: Figure[] = k
+    ? [
+        ...(canSeePo
+          ? [
+              {
+                label: 'Por pagar',
+                value: moneyKpi(k.poPipelineAmount),
+                sub: poBreakdown || (k.poAgingOver7 ? `${k.poAgingOver7} con más de 7 días` : 'Órdenes de compra'),
+                href: '/purchase-orders?seccion=pay',
+              } satisfies Figure,
+            ]
+          : []),
+        {
+          label: 'Eventos activos',
+          value: k.eventsActive,
+          sub: k.upcoming14d === 1 ? '1 en los próximos 14 días' : `${k.upcoming14d} en los próximos 14 días`,
+          href: '/events',
+        },
+        ...(tasksFigure ? [tasksFigure] : []),
+        {
+          label: 'Formatos al día',
+          value: `${k.avgOpsProgress} %`,
+          sub: k.pendingAuthorized ? `${k.pendingAuthorized} por autorizar` : 'Avance general',
+          // Con algo por autorizar abre esa revisión; sin nada, los eventos actuales (no un vacío).
+          href: k.pendingAuthorized > 0 ? '/events?scope=active&ver=revision' : '/events?scope=active',
+        },
+      ]
+    : [];
+
   return (
     <AppShell title="Inicio">
       <div className="page-workspace home">
         <PageHeader
           eyebrow={longDate(now)}
+          lead={lead}
           title={
             <>
               {greeting(now)}, <b>{firstName}</b>
@@ -432,61 +497,67 @@ export default function DashboardPage() {
         ) : data && k ? (
           <>
             {nextShow ? <NextShow show={nextShow} now={now} /> : null}
-            <div className="kpi-row">
-              <Link className="kpi-card" href="/events">
-                <span className="cap">Eventos activos</span>
-                <span className="kpi-card__value t-num">{k.eventsActive}</span>
-                <span className="kpi-card__detail">
-                  {k.upcoming14d === 1 ? '1 en los próximos 14 días' : `${k.upcoming14d} en los próximos 14 días`}
-                </span>
-              </Link>
-              {canSeePo ? (
-                <Link className="kpi-card" href="/purchase-orders?seccion=pay">
-                  <span className="cap">Por pagar</span>
-                  <span className="kpi-card__value t-num">{moneyKpi(k.poPipelineAmount)}</span>
-                  <span className="kpi-card__detail">
-                    {poBreakdown || (k.poAgingOver7 ? `${k.poAgingOver7} con más de 7 días` : 'Órdenes de compra')}
-                  </span>
-                </Link>
-              ) : null}
-              {canSeeTasks ? (
-                <Link className="kpi-card" href={`/tasks?filtro=abiertas&vista=${tasksVista}`}>
-                  <span className="cap">Tareas abiertas</span>
-                  <span className="kpi-card__value t-num">{k.openTasks}</span>
-                  <span className="kpi-card__detail">
-                    {k.overdueTasks ? `${k.overdueTasks} vencidas` : 'Al día'}
-                  </span>
-                </Link>
-              ) : (
-                <div className="kpi-card">
-                  <span className="cap">Tareas abiertas</span>
-                  <span className="kpi-card__value t-num">{k.openTasks}</span>
-                  <span className="kpi-card__detail">
-                    {k.overdueTasks ? `${k.overdueTasks} vencidas` : 'Al día'}
-                  </span>
-                </div>
-              )}
-              {/* Con algo por autorizar abre esa revisión; sin nada, los eventos actuales (no un vacío). */}
-              <Link className="kpi-card" href={k.pendingAuthorized > 0 ? '/events?scope=active&ver=revision' : '/events?scope=active'}>
-                <span className="cap">Formatos al día</span>
-                <span className="kpi-card__value t-num">{k.avgOpsProgress}%</span>
-                <span
-                  className="kpi-card__bar"
-                  role="progressbar"
-                  aria-label="Avance general de formatos"
-                  aria-valuemin={0}
-                  aria-valuemax={100}
-                  aria-valuenow={k.avgOpsProgress}
-                >
-                  <i style={{ width: `${Math.max(0, Math.min(100, k.avgOpsProgress))}%` }} />
-                </span>
-                <span className="kpi-card__detail">
-                  {k.pendingAuthorized ? `${k.pendingAuthorized} por autorizar` : 'Avance general'}
-                </span>
-              </Link>
-            </div>
+            <FigureStrip label="Cifras de hoy" items={figures} />
 
             <div className="home-panels">
+              <section className="home-panel" aria-labelledby="home-approvals">
+                <div className="home-panel__head">
+                  <h3 id="home-approvals">Te toca a ti</h3>
+                  {canSeePo ? (
+                    <Link className="home-panel__link" href="/purchase-orders">
+                      Ver todo
+                    </Link>
+                  ) : canSeeTasks ? (
+                    <Link className="home-panel__link" href="/tasks">
+                      Ver todo
+                    </Link>
+                  ) : null}
+                </div>
+
+                {approvals.length ? (
+                  <ul className="ap-list">
+                    {approvals.map(({ key, ...row }) => (
+                      <ApprovalRow key={key} {...row} />
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="home-calm">
+                    <span>Nada espera tu visto bueno.</span>
+                    <small>Las órdenes, formatos y tareas por revisar aparecen aquí.</small>
+                  </p>
+                )}
+
+                {hasRisks ? (
+                  <>
+                    <p className="cap home-panel__sub">Requiere atención</p>
+                    <ul className="ap-list">
+                      {data.atRisk.slice(0, 4).map((e) => (
+                        <ApprovalRow
+                          key={e.id}
+                          title={e.name}
+                          sub={`${e.avgProgress}% de formatos${
+                            e.daysToShow != null && e.daysToShow >= 0
+                              ? ` · ${daysLabel(e.daysToShow).toLowerCase()}`
+                              : ''
+                          }`}
+                          status={e.risk === 'critical' ? 'Urgente' : 'Revisar'}
+                          tone={e.risk === 'critical' ? 'fill' : 'line'}
+                          href={`/events/${e.id}?tab=checklists&ver=pendientes`}
+                        />
+                      ))}
+                      {otherAlerts.slice(0, 3).map((a) => (
+                        <ApprovalRow
+                          key={`${a.code}-${a.message}`}
+                          title={a.message}
+                          status={a.severity === 'critical' ? 'Urgente' : 'Aviso'}
+                          tone={a.severity === 'critical' ? 'fill' : 'line'}
+                          href={a.href}
+                        />
+                      ))}
+                    </ul>
+                  </>
+                ) : null}
+              </section>
               <section className="home-panel" aria-labelledby="home-today">
                 <div className="home-panel__head">
                   <h3 id="home-today">{singleToday ? `Hoy · ${singleToday.name}` : 'Hoy'}</h3>
@@ -545,9 +616,13 @@ export default function DashboardPage() {
                             <span className="tl__dot" aria-hidden />
                             <span className="tl__body">
                               <span className="tl__title">{e.name}</span>
-                              <small>
-                                {daysLabel(daysUntil(e.startsAt, now))} · {e.avgProgress}% de formatos
-                              </small>
+                              <small>{daysLabel(daysUntil(e.startsAt, now))}</small>
+                            </span>
+                            <span className="tl__meter" aria-label={`${e.avgProgress} % de formatos`}>
+                              <span className="tl__bar" aria-hidden>
+                                <i style={{ width: `${Math.max(0, Math.min(100, e.avgProgress))}%` }} />
+                              </span>
+                              <span className="t-num">{Math.round(e.avgProgress)} %</span>
                             </span>
                           </Link>
                         </li>
@@ -557,64 +632,6 @@ export default function DashboardPage() {
                 ) : null}
               </section>
 
-              <section className="home-panel" aria-labelledby="home-approvals">
-                <div className="home-panel__head">
-                  <h3 id="home-approvals">Esperan tu visto bueno</h3>
-                  {canSeePo ? (
-                    <Link className="home-panel__link" href="/purchase-orders">
-                      Ver todo
-                    </Link>
-                  ) : canSeeTasks ? (
-                    <Link className="home-panel__link" href="/tasks">
-                      Ver todo
-                    </Link>
-                  ) : null}
-                </div>
-
-                {approvals.length ? (
-                  <ul className="ap-list">
-                    {approvals.map(({ key, ...row }) => (
-                      <ApprovalRow key={key} {...row} />
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="home-calm">
-                    <span>Nada espera tu visto bueno.</span>
-                    <small>Las órdenes, formatos y tareas por revisar aparecen aquí.</small>
-                  </p>
-                )}
-
-                {hasRisks ? (
-                  <>
-                    <p className="cap home-panel__sub">Requiere atención</p>
-                    <ul className="ap-list">
-                      {data.atRisk.slice(0, 4).map((e) => (
-                        <ApprovalRow
-                          key={e.id}
-                          title={e.name}
-                          sub={`${e.avgProgress}% de formatos${
-                            e.daysToShow != null && e.daysToShow >= 0
-                              ? ` · ${daysLabel(e.daysToShow).toLowerCase()}`
-                              : ''
-                          }`}
-                          status={e.risk === 'critical' ? 'Urgente' : 'Revisar'}
-                          tone={e.risk === 'critical' ? 'fill' : 'line'}
-                          href={`/events/${e.id}?tab=checklists&ver=pendientes`}
-                        />
-                      ))}
-                      {otherAlerts.slice(0, 3).map((a) => (
-                        <ApprovalRow
-                          key={`${a.code}-${a.message}`}
-                          title={a.message}
-                          status={a.severity === 'critical' ? 'Urgente' : 'Aviso'}
-                          tone={a.severity === 'critical' ? 'fill' : 'line'}
-                          href={a.href}
-                        />
-                      ))}
-                    </ul>
-                  </>
-                ) : null}
-              </section>
             </div>
           </>
         ) : null}

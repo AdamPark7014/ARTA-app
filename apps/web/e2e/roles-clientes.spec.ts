@@ -461,6 +461,8 @@ test.describe('Usuarios', () => {
       '/users': [],
     } as never);
     await page.goto('/users');
+    // El alta se abre con el botón del encabezado.
+    await page.getByRole('button', { name: 'Nuevo integrante' }).click();
     await page.getByRole('radio', { name: /Catering/ }).check({ force: true });
     await expect(page.getByText('Iliana: ve la información general y edita solo catering.')).toBeVisible();
     const preview = page.locator('.role-preview__entity').first();

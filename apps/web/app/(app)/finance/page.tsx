@@ -3,18 +3,11 @@
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { AppShell } from '@/components/app-shell/AppShell';
-import { DistBar, money } from '@/components/charts/SparkBars';
-import { pipelineStatusLabel } from '@/components/ui/StatusBadge';
+import { money } from '@/components/charts/SparkBars';
+import { FigureStrip } from '@/components/ui/FigureStrip';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { LoadingBlock, LoadingKpis } from '@/components/ui/LoadingBlock';
-import {
-  ActionLink,
-  FieldCheck,
-  FieldSearch,
-  FilterBar,
-  PageHeader,
-} from '@/components/ui/PageChrome';
-import { StatusBadge } from '@/components/ui/StatusBadge';
+import { ActionLink, FieldCheck, FieldSearch, FilterBar, PageHeader } from '@/components/ui/PageChrome';
 import { api } from '@/lib/api';
 import { useUser } from '@/lib/user-context';
 import { userHasPermission } from '@/lib/access-matrix';
@@ -59,6 +52,9 @@ const LOSS_ALERT = /neto negativo/i;
 /** El aviso de eventos que pagaron órdenes de compra sin egresos en su corrida: filtra justo esos. */
 const PO_GAP_ALERT = /pag(ó|aron) órdenes de compra/i;
 
+/** La pérdida se escribe «−$34,000», con el signo antes del peso. */
+const signed = (v: number) => (v < 0 ? `−${money(Math.abs(v))}` : money(v));
+
 const isPoGap = (r: FinanceRow) => (r.poPaid ?? 0) > 0 && r.expense === 0;
 
 export default function FinancePage() {
@@ -101,14 +97,38 @@ export default function FinancePage() {
     setQ('');
   }
 
+  /** La frase del encabezado: cómo va el dinero antes de leer la tabla. */
+  const all = data?.ranking || [];
+  const withData = all.filter((r) => r.income > 0 || r.expense > 0);
+  const winning = withData.filter((r) => r.net >= 0).length;
+  const losing = withData.filter((r) => r.net < 0).length;
+  const gaps = all.filter(isPoGap).length;
+  const lead = !data ? null : !withData.length ? (
+    <>
+      <strong>Todavía no hay corridas con datos.</strong> Se capturan en cada evento, en Dinero › Corrida.
+    </>
+  ) : (
+    <>
+      <strong>
+        {winning} de {withData.length} {withData.length === 1 ? 'evento va' : 'eventos van'} con utilidad.
+      </strong>
+      {losing ? ` ${losing} ${losing === 1 ? 'va' : 'van'} en pérdida.` : ''}
+      {gaps ? ` ${gaps} ${gaps === 1 ? 'pagó' : 'pagaron'} órdenes sin capturar egresos.` : ''}
+      {canEdit ? '' : ' Solo lectura.'}
+    </>
+  );
+  /** Las dos barras de cada renglón se miden contra la cifra más grande de la lista. */
+  const barMax = Math.max(1, ...rows.map((r) => Math.max(r.income, r.expense)));
+  const marginTotal = t && t.income > 0 ? Math.round((t.net / t.income) * 100) : null;
+  const sum = rows.reduce(
+    (acc, r) => ({ income: acc.income + r.income, expense: acc.expense + r.expense, net: acc.net + r.net }),
+    { income: 0, expense: 0, net: 0 },
+  );
+
   return (
     <AppShell title="Finanzas">
-      <div className="stack page-workspace">
-        <PageHeader
-          title="Finanzas"
-          description={`Corridas de todos los eventos: margen, pérdidas y cierre.${canEdit ? '' : ' Solo lectura.'}`}
-          hint="Filtra neto negativo para priorizar shows en pérdida. Abrir lleva directo a la corrida del evento."
-        >
+      <div className="stack page-workspace fin-page">
+        <PageHeader title="Finanzas" lead={lead}>
           <ActionLink href="/events?scope=active" variant="ghost">
             Eventos activos
           </ActionLink>
@@ -116,26 +136,51 @@ export default function FinancePage() {
 
         {loading ? (
           <>
-            <LoadingKpis count={6} />
+            <LoadingKpis count={4} />
             <LoadingBlock rows={5} label="Cargando corridas…" />
           </>
         ) : (
           <>
+            {t ? (
+              <FigureStrip
+                label="Cifras de finanzas"
+                items={[
+                  {
+                    label: 'Utilidad',
+                    value: signed(t.net),
+                    tone: t.net < 0 ? 'danger' : undefined,
+                    sub: marginTotal == null ? 'Sin ingresos capturados' : `Margen de ${marginTotal} %`,
+                  },
+                  {
+                    label: 'Ingresos',
+                    value: money(t.income),
+                    sub: `${t.open + t.locked} ${t.open + t.locked === 1 ? 'corrida' : 'corridas'} · ${t.locked} ${t.locked === 1 ? 'cerrada' : 'cerradas'}`,
+                  },
+                  {
+                    label: 'Egresos',
+                    value: money(t.expense),
+                    sub: (
+                      <Link href="/purchase-orders?seccion=paid">
+                        {t.poPaid ? `Aparte, ${money(t.poPaid)} pagados en órdenes de compra` : 'Las órdenes de compra van aparte'}
+                      </Link>
+                    ),
+                  },
+                  {
+                    label: 'En pérdida',
+                    value: t.lossMaking,
+                    tone: t.lossMaking ? 'danger' : undefined,
+                    sub: onlyLoss ? 'Mostrando solo estos' : t.lossMaking ? 'Ver solo estos' : 'Ningún evento',
+                    onClick: () => setOnlyLoss(!onlyLoss),
+                    pressed: onlyLoss,
+                  },
+                ]}
+              />
+            ) : null}
+
             {data?.alerts?.length ? (
               <div className="alert-stack">
                 {data.alerts.map((a) =>
-                  LOSS_ALERT.test(a.message) ? (
-                    <button
-                      key={a.message}
-                      type="button"
-                      className={`ops-alert ops-alert--${a.severity} ops-alert--btn`}
-                      aria-pressed={onlyLoss}
-                      onClick={() => setOnlyLoss(!onlyLoss)}
-                    >
-                      <span className="ops-alert__msg">{a.message}</span>
-                      <span className="t-small muted">{onlyLoss ? 'Quitar filtro' : 'Ver solo estos'}</span>
-                    </button>
-                  ) : PO_GAP_ALERT.test(a.message) ? (
+                  LOSS_ALERT.test(a.message) ? null : PO_GAP_ALERT.test(a.message) ? (
                     <button
                       key={a.message}
                       type="button"
@@ -155,176 +200,137 @@ export default function FinancePage() {
               </div>
             ) : null}
 
-            {t ? (
-              <div className="grid-cards kpi-grid-dense">
-                <div className="kpi">
-                  <div className="label">Ingresos</div>
-                  <div className="value value--money">{money(t.income)}</div>
-                  <div className="kpi-sub muted">Suma de todas las corridas</div>
-                </div>
-                <div className="kpi">
-                  <div className="label">Egresos</div>
-                  <div className="value value--money">{money(t.expense)}</div>
-                  <div className="kpi-sub muted">
-                    Capturados en las corridas.{' '}
-                    <Link href="/purchase-orders?seccion=paid">
-                      {t.poPaid ? `Aparte, ${money(t.poPaid)} pagados en órdenes de compra` : 'Las órdenes de compra van aparte'}
-                    </Link>
-                  </div>
-                </div>
-                <div className={`kpi ${t.net < 0 ? 'kpi--danger' : ''}`}>
-                  <div className="label">Neto</div>
-                  <div className="value value--money">{money(t.net)}</div>
-                  <div className="kpi-sub muted">
-                    {t.net >= 0 ? 'Resultado positivo' : 'Resultado negativo'}
-                  </div>
-                </div>
-                <div className="kpi">
-                  <div className="label">Corridas cerradas</div>
-                  <div className="value">{t.locked}</div>
-                  <div className="kpi-sub muted">Ya no se pueden editar</div>
-                </div>
-                <div className="kpi">
-                  <div className="label">Corridas abiertas</div>
-                  <div className="value">{t.open}</div>
-                  <div className="kpi-sub muted">Con ingresos o egresos capturados</div>
-                </div>
-                <button
-                  type="button"
-                  className={`kpi kpi--action ${t.lossMaking ? 'kpi--danger' : ''} ${onlyLoss ? 'kpi--on' : ''}`}
-                  aria-pressed={onlyLoss}
-                  onClick={() => setOnlyLoss(!onlyLoss)}
-                >
-                  <div className="label">Neto negativo</div>
-                  <div className="value">{t.lossMaking}</div>
-                  <div className="kpi-sub muted">{onlyLoss ? 'Mostrando solo pérdida' : 'Shows en pérdida'}</div>
-                </button>
+            {!all.length ? (
+              <div className="surface">
+                <EmptyState
+                  title="Sin corridas"
+                  description="Abre un evento y captura sus ingresos y egresos en Dinero › Corrida."
+                  actionHref="/events?scope=active"
+                  actionLabel="Ir a eventos activos"
+                />
               </div>
-            ) : null}
-
-            {data?.rows?.length ? (
-              <div className="panel">
-                <div className="panel-body">
-                  <div className="dist-head">Neto por estado del evento</div>
-                  <DistBar
-                    variant="mono"
-                    label="Neto por estado del evento"
-                    segments={Object.entries(data.byStatus ?? {}).map(([status, v]) => ({
-                      label: pipelineStatusLabel(status),
-                      value: Math.max(0, v.net) || v.count,
-                    }))}
-                  />
-                </div>
-              </div>
-            ) : null}
-
-            <FilterBar meta={`${rows.length} corridas`}>
-              <FieldSearch
-                value={q}
-                onChange={setQ}
-                placeholder="Buscar evento o artista…"
-                label="Buscar corrida"
-                maxWidth={320}
-              />
+            ) : (
+              <>
+            <FilterBar
+              meta={
+                <span className="fin-legend">
+                  <span className="fin-legend__k is-in" aria-hidden /> Ingresos
+                  <span className="fin-legend__k is-out" aria-hidden /> Egresos
+                  <span className="fin-legend__n">{rows.length} {rows.length === 1 ? 'corrida' : 'corridas'}</span>
+                </span>
+              }
+            >
+              <FieldSearch value={q} onChange={setQ} placeholder="Buscar evento o artista…" label="Buscar corrida" maxWidth={320} />
               <FieldCheck checked={onlyLoss} onChange={setOnlyLoss} label="Solo pérdida" />
             </FilterBar>
 
-            <div className="panel">
-              <div className="panel-head">
-                <h2>Corridas · {entity}</h2>
-              </div>
-              <div className="panel-body">
-                <div className="table-wrap">
-                  <table className="table table-sticky">
-                    <thead>
-                      <tr>
-                        <th>Evento</th>
-                        <th>Estado</th>
-                        <th className="num">Ingresos</th>
-                        <th className="num">Egresos</th>
-                        <th className="num">Órdenes pagadas</th>
-                        <th className="num">Neto</th>
-                        <th className="num">Margen</th>
-                        <th>Corrida</th>
-                        <th></th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {rows.map((e) => (
-                        <tr key={e.eventId}>
-                          <td>
-                            <strong>{e.name}</strong>
-                            <div className="muted kpi-sub">
-                              {[shortDate(e.startsAt), e.artist].filter(Boolean).join(' · ') || '—'}
+            <div className="dtable-wrap">
+              <table className="dtable fin-table dtable--cards">
+                <thead>
+                  <tr>
+                    <th>Evento</th>
+                    <th className="num">Ingresos</th>
+                    <th className="num">Egresos</th>
+                    <th className="fin-hide-sm">Comparación</th>
+                    <th className="num">Utilidad</th>
+                    <th className="num fin-hide-sm">Margen</th>
+                    <th className="col-act">
+                      <span className="sr-only">Abrir</span>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((e) => {
+                    const has = e.income > 0 || e.expense > 0;
+                    const loss = e.net < 0;
+                    return (
+                      <tr key={e.eventId}>
+                        <td className="card-full">
+                          <Link className="fin-table__name" href={`/events/${e.eventId}?tab=finance`}>
+                            {e.name}
+                          </Link>
+                          <div className="t-muted t-small">
+                            {[shortDate(e.startsAt), e.artist, e.locked ? 'Corrida cerrada' : null].filter(Boolean).join(' · ') || '—'}
+                          </div>
+                          {isPoGap(e) ? (
+                            <div className="fin-table__gap">
+                              Pagó {money(e.poPaid ?? 0)} en órdenes de compra · Sin egresos en la corrida
                             </div>
-                          </td>
-                          <td>
-                            <StatusBadge value={e.status} kind="event" />
-                          </td>
-                          <td className="num">{money(e.income)}</td>
-                          <td className="num">{money(e.expense)}</td>
-                          <td className="num">
-                            {e.poPaid ? (
-                              <>
-                                {money(e.poPaid)}
-                                {isPoGap(e) ? <div className="kpi-sub muted">Sin egresos en la corrida</div> : null}
-                              </>
-                            ) : (
-                              <span className="muted">—</span>
-                            )}
-                          </td>
-                          <td className="num">
-                            <strong>{money(e.net)}</strong>
-                            {e.net < 0 ? (
-                              <div className="kpi-sub">
-                                <StatusBadge value="critical" kind="risk" />
-                              </div>
-                            ) : null}
-                          </td>
-                          <td className="num muted">
-                            {e.marginPct == null ? '—' : `${e.marginPct}%`}
-                          </td>
-                          <td>
-                            {e.title || '—'} {e.locked ? <span className="badge">Cerrada</span> : null}
-                          </td>
-                          <td>
-                            <Link
-                              className="btn ghost btn-sm"
-                              href={`/events/${e.eventId}?tab=finance`}
+                          ) : e.poPaid ? (
+                            <div className="t-muted t-small">Órdenes pagadas: {money(e.poPaid)}</div>
+                          ) : null}
+                        </td>
+                        <td className="num" data-label="Ingresos">{has ? money(e.income) : <span className="t-muted">—</span>}</td>
+                        <td className="num" data-label="Egresos">{has ? money(e.expense) : <span className="t-muted">—</span>}</td>
+                        <td className="fin-hide-sm">
+                          {has ? (
+                            <span
+                              className="fin-bars"
+                              role="img"
+                              aria-label={`Ingresos ${money(e.income)}, egresos ${money(e.expense)}`}
                             >
-                              Abrir
-                            </Link>
-                          </td>
-                        </tr>
-                      ))}
-                      {!rows.length ? (
-                        <tr>
-                          <td colSpan={9}>
-                            {filterActive ? (
-                              <EmptyState
-                                title="Sin corridas para este filtro"
-                                description="Ningún evento coincide con el filtro o la búsqueda."
-                              >
-                                <button type="button" className="btn ghost btn-sm" onClick={clearFilters}>
-                                  Quitar filtro
-                                </button>
-                              </EmptyState>
-                            ) : (
-                              <EmptyState
-                                title="Sin corridas"
-                                description="Abre un evento y captura sus ingresos y egresos en Dinero › Corrida."
-                                actionHref="/events?scope=active"
-                                actionLabel="Ir a eventos activos"
-                              />
-                            )}
-                          </td>
-                        </tr>
-                      ) : null}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
+                              <span className="fin-bars__in" style={{ width: `${Math.max(2, (e.income / barMax) * 100)}%` }} />
+                              <span className="fin-bars__out" style={{ width: `${Math.max(2, (e.expense / barMax) * 100)}%` }} />
+                            </span>
+                          ) : (
+                            <span className="t-muted t-small">Sin corrida capturada</span>
+                          )}
+                        </td>
+                        <td className={`num fin-table__net ${loss ? 'is-loss' : ''}`} data-label="Utilidad">
+                          {has ? signed(e.net) : <span className="t-muted">—</span>}
+                        </td>
+                        <td className={`num fin-hide-sm ${loss ? 'fin-table__loss' : 't-muted'}`}>
+                          {e.marginPct == null ? '—' : `${String(e.marginPct).replace('-', '−')} %`}
+                        </td>
+                        <td className="col-act">
+                          <Link className="btn ghost btn-sm" href={`/events/${e.eventId}?tab=finance`}>
+                            Abrir
+                          </Link>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {rows.length > 1 ? (
+                    <tr className="fin-table__total">
+                      <td className="card-full">Total</td>
+                      <td className="num" data-label="Ingresos">{money(sum.income)}</td>
+                      <td className="num" data-label="Egresos">{money(sum.expense)}</td>
+                      <td className="fin-hide-sm" />
+                      <td className={`num ${sum.net < 0 ? 'is-loss' : ''}`} data-label="Utilidad">{signed(sum.net)}</td>
+                      <td className="num fin-hide-sm">
+                        {sum.income > 0 ? `${Math.round((sum.net / sum.income) * 100)} %` : '—'}
+                      </td>
+                      <td className="col-act card-empty" />
+                    </tr>
+                  ) : null}
+                  {!rows.length ? (
+                    <tr>
+                      <td colSpan={7}>
+                        {filterActive ? (
+                          <EmptyState
+                            title="Sin corridas para este filtro"
+                            description="Ningún evento coincide con el filtro o la búsqueda."
+                          >
+                            <button type="button" className="btn ghost btn-sm" onClick={clearFilters}>
+                              Quitar filtro
+                            </button>
+                          </EmptyState>
+                        ) : (
+                          <EmptyState
+                            title="Sin corridas"
+                            description="Abre un evento y captura sus ingresos y egresos en Dinero › Corrida."
+                            actionHref="/events?scope=active"
+                            actionLabel="Ir a eventos activos"
+                          />
+                        )}
+                      </td>
+                    </tr>
+                  ) : null}
+                </tbody>
+              </table>
             </div>
+              </>
+            )}
           </>
         )}
       </div>

@@ -3,7 +3,7 @@
 import { askConfirm } from '@/components/ui/AskDialog';
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { AppShell } from '@/components/app-shell/AppShell';
-import { DistBar } from '@/components/charts/SparkBars';
+import { FigureStrip, type Figure } from '@/components/ui/FigureStrip';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { LoadingBlock, LoadingKpis } from '@/components/ui/LoadingBlock';
 import {
@@ -172,6 +172,11 @@ function extraPermissions(u: { roleKey: string; permissions: string[] }) {
   return u.permissions.filter((p) => !fromRole.includes(p)).length;
 }
 
+function initials(name: string) {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  return ((parts[0]?.[0] || '') + (parts[1]?.[0] || '')).toUpperCase() || '·';
+}
+
 export default function UsersPage() {
   const { user: me } = useUser();
   /** Editar, cambiar rol, dar de baja o reactivar a alguien que ya existe: solo dirección general. */
@@ -214,6 +219,8 @@ export default function UsersPage() {
   const [showInactive, setShowInactive] = useState(true);
   /** Filtro rápido desde los KPI: quien no ha entrado en 30 días o tiene el acceso bloqueado. */
   const [quick, setQuick] = useState<'none' | 'inactive30' | 'locked'>('none');
+  /** El formulario de alta se abre con el botón del encabezado; quien solo da altas lo ve abierto. */
+  const [formOpen, setFormOpen] = useState(false);
 
   async function load() {
     if (!canManage) {
@@ -583,23 +590,40 @@ export default function UsersPage() {
   return (
     <AppShell title="Usuarios">
       <div className="page-workspace stack">
-        {canManage ? (
-          <PageHeader
-            title="Usuarios"
-            description="Altas, roles, entidades, permisos y bajas del equipo. Solo dirección general."
-            hint="Alta inmediata: les das correo y contraseña. Invitar: eligen su contraseña con un enlace que dura 7 días."
-          />
-        ) : (
-          <>
-            <PageHeader
-              title="Usuarios"
-              description={`Alta de gente nueva en ${grantable.map(entityLabel).join(' y ') || 'tus entidades'}: les das correo y contraseña.`}
-            />
-            {/* `.page-intro__hint` está oculto en todo el panel: este aviso tiene que verse. */}
-            <FlashMessage variant="info">
-              Puedes dar de alta gente nueva; para editar o dar de baja a alguien, pídeselo a dirección general.
-            </FlashMessage>
-          </>
+        <PageHeader
+          title="Usuarios"
+          lead={
+            loading || !k ? (
+              canManage ? null : (
+                `Alta de gente nueva en ${grantable.map(entityLabel).join(' y ') || 'tus entidades'}: les das correo y contraseña.`
+              )
+            ) : (
+              <>
+                <strong>
+                  {k.active} {k.active === 1 ? 'persona activa' : 'personas activas'}.
+                </strong>
+                {k.inactive30d ? ` ${k.inactive30d} sin entrar en 30 días.` : ' Todas entraron en los últimos 30 días.'}
+                {k.lockedNow ? ` ${k.lockedNow} con el acceso bloqueado.` : ''}
+              </>
+            )
+          }
+        >
+          {canManage ? (
+            <button
+              className={formOpen ? 'btn ghost' : 'btn'}
+              type="button"
+              aria-expanded={formOpen}
+              onClick={() => setFormOpen((v) => !v)}
+            >
+              {formOpen ? 'Cerrar alta' : 'Nuevo integrante'}
+            </button>
+          ) : null}
+        </PageHeader>
+        {canManage ? null : (
+          /* `.page-intro__hint` está oculto en todo el panel: este aviso tiene que verse. */
+          <FlashMessage variant="info">
+            Puedes dar de alta gente nueva; para editar o dar de baja a alguien, pídeselo a dirección general.
+          </FlashMessage>
         )}
 
         {error ? (
@@ -621,68 +645,42 @@ export default function UsersPage() {
         ) : null}
 
         {!loading && k ? (
-          <div className="grid-cards kpi-grid-dense">
-            <div className="kpi">
-              <div className="label">Usuarios</div>
-              <div className="value">{k.total}</div>
-            </div>
-            <div className="kpi">
-              <div className="label">Activos</div>
-              <div className="value">{k.active}</div>
-            </div>
-            <div className="kpi">
-              <div className="label">Entraron esta semana</div>
-              <div className="value">{k.loggedIn7d}</div>
-            </div>
-            {/* Los tres KPI de alerta filtran la tabla; se tocan otra vez para quitar el filtro. */}
-            <button
-              type="button"
-              className={`kpi kpi--action ${k.inactive30d ? 'kpi--danger' : ''} ${quick === 'inactive30' ? 'kpi--on' : ''}`}
-              aria-pressed={quick === 'inactive30'}
-              onClick={() => setQuick((cur) => (cur === 'inactive30' ? 'none' : 'inactive30'))}
-            >
-              <div className="label">Sin entrar en 30 días</div>
-              <div className="value">{k.inactive30d}</div>
-            </button>
-            <button
-              type="button"
-              className={`kpi kpi--action ${k.lockedNow ? 'kpi--danger' : ''} ${quick === 'locked' ? 'kpi--on' : ''}`}
-              aria-pressed={quick === 'locked'}
-              onClick={() => setQuick((cur) => (cur === 'locked' ? 'none' : 'locked'))}
-            >
-              <div className="label">Bloqueados</div>
-              <div className="value">{k.lockedNow}</div>
-            </button>
-            <button
-              type="button"
-              className={`kpi kpi--action ${k.highRisk ? 'kpi--danger' : ''} ${riskFilter === 'high' ? 'kpi--on' : ''}`}
-              aria-pressed={riskFilter === 'high'}
-              onClick={() => setRiskFilter((cur) => (cur === 'high' ? 'all' : 'high'))}
-            >
-              <div className="label">Alto riesgo</div>
-              <div className="value">{k.highRisk}</div>
-            </button>
-          </div>
+          <FigureStrip
+            label="Cifras del equipo"
+            items={[
+              { label: 'Personas activas', value: k.active, sub: `de ${k.total} ${k.total === 1 ? 'usuario' : 'usuarios'}` },
+              { label: 'Entraron esta semana', value: k.loggedIn7d, sub: 'en los últimos 7 días' },
+              /* Las cifras de alerta filtran la tabla; se tocan otra vez para quitar el filtro. */
+              {
+                label: 'Sin entrar en 30 días',
+                value: k.inactive30d,
+                tone: k.inactive30d ? 'warn' : undefined,
+                sub: quick === 'inactive30' ? 'Mostrando solo estos' : k.inactive30d ? 'Ver quiénes' : 'Nadie',
+                onClick: () => setQuick((cur) => (cur === 'inactive30' ? 'none' : 'inactive30')),
+                pressed: quick === 'inactive30',
+              },
+              {
+                label: 'Bloqueados',
+                value: k.lockedNow,
+                tone: k.lockedNow ? 'danger' : undefined,
+                sub: quick === 'locked' ? 'Mostrando solo estos' : k.lockedNow ? 'Ver quiénes' : 'Nadie',
+                onClick: () => setQuick((cur) => (cur === 'locked' ? 'none' : 'locked')),
+                pressed: quick === 'locked',
+              },
+              {
+                label: 'Alto riesgo',
+                value: k.highRisk,
+                tone: k.highRisk ? 'danger' : undefined,
+                sub: riskFilter === 'high' ? 'Mostrando solo estos' : k.highRisk ? 'Ver quiénes' : 'Nadie',
+                onClick: () => setRiskFilter((cur) => (cur === 'high' ? 'all' : 'high')),
+                pressed: riskFilter === 'high',
+              },
+            ] satisfies Figure[]}
+          />
         ) : null}
 
-        {!loading && gov && Object.keys(gov.byRole ?? {}).length ? (
-          <div className="panel">
-            <div className="panel-body">
-              <div className="dist-head">Personas por rol</div>
-              <DistBar
-                variant="mono"
-                label="Personas por rol"
-                segments={Object.entries(gov.byRole ?? {}).map(([key, value]) => ({
-                  label: roleLabel(key),
-                  value,
-                }))}
-              />
-            </div>
-          </div>
-        ) : null}
-
-        <div className="users-layout">
-          <div className="panel">
+        <div className="users-stack">
+          <div className="panel users-form" hidden={canManage && !formOpen}>
             <div className="panel-head">
               <h2>Nuevo integrante</h2>
             </div>
@@ -952,29 +950,21 @@ Contraseña: ${creds.password}`}</pre>
                   description={
                     users.length
                       ? 'Ajusta búsqueda o filtros.'
-                      : 'Crea el primer usuario con el formulario de la izquierda.'
+                      : 'Crea el primer usuario con «Nuevo integrante».'
                   }
                 />
               ) : (
-                <div className="table-wrap">
-                  <table className="table table-sticky users-table">
-                    <colgroup>
-                      <col />
-                      <col style={{ width: 150 }} />
-                      <col style={{ width: 96 }} />
-                      <col style={{ width: 104 }} />
-                      <col style={{ width: 108 }} />
-                      {canManage ? <col style={{ width: 128 }} /> : null}
-                    </colgroup>
+                <div className="dtable-wrap">
+                  <table className="dtable users-table dtable--cards">
                     <thead>
                       <tr>
-                        <th>Nombre</th>
-                        <th>Rol</th>
-                        <th>Entidades</th>
+                        <th>Persona</th>
+                        <th>Puesto</th>
+                        <th className="users-hide-sm">Acceso</th>
+                        <th className="users-hide-sm">Última entrada</th>
                         <th>Estado</th>
-                        <th>Último acceso</th>
                         {canManage ? (
-                          <th>
+                          <th className="col-act">
                             <span className="sr-only">Acciones</span>
                           </th>
                         ) : null}
@@ -983,29 +973,27 @@ Contraseña: ${creds.password}`}</pre>
                     <tbody>
                       {filtered.map((u) => (
                         <tr key={u.id} className={!u.active ? 'is-muted' : undefined}>
-                          <td>
-                            <strong>{u.fullName}</strong>
-                            <div className="muted kpi-sub user-contact">
-                              {u.email}
-                              {u.title ? ` · ${u.title}` : ''}
+                          <td className="card-full">
+                            <div className="users-person">
+                              <span className="users-person__av" aria-hidden>
+                                {initials(u.fullName)}
+                              </span>
+                              <div className="users-person__copy">
+                                <strong>{u.fullName}</strong>
+                                <div className="t-muted t-small user-contact">{u.email}</div>
+                              </div>
                             </div>
                           </td>
                           <td>
-                            <div>{roleLabel(u.roleKey)}</div>
-                            {extraPermissions(u) ? (
-                              <div className="muted kpi-sub">
-                                {extraPermissions(u) === 1 ? '+1 permiso' : `+${extraPermissions(u)} permisos`}
-                              </div>
-                            ) : null}
+                            <div className="users-table__title" title={u.title || undefined}>{u.title || roleLabel(u.roleKey)}</div>
+                            <div className="t-muted t-small">
+                              {[u.title ? roleLabel(u.roleKey) : '', extraPermissions(u) ? (extraPermissions(u) === 1 ? '+1 permiso' : `+${extraPermissions(u)} permisos`) : '']
+                                .filter(Boolean)
+                                .join(' · ')}
+                            </div>
                           </td>
-                          <td className="muted kpi-sub">
-                            {u.entities.map(entityLabel).join(' · ') || '—'}
-                          </td>
-                          <td>
-                            <span className={`state-dot ${u.active ? 'is-on' : ''}`}>{u.active ? 'Activo' : 'Inactivo'}</span>
-                            {u.locked ? <div className="t-alert kpi-sub">Acceso bloqueado</div> : null}
-                          </td>
-                          <td className="muted kpi-sub t-num">
+                          <td className="t-muted users-hide-sm">{u.entities.map(entityLabel).join(' · ') || '—'}</td>
+                          <td className="t-muted t-num users-hide-sm">
                             {u.lastLoginAt ? (
                               <time dateTime={u.lastLoginAt} title={fullDateTime(u.lastLoginAt)}>
                                 {shortDateTime(u.lastLoginAt)}
@@ -1014,9 +1002,13 @@ Contraseña: ${creds.password}`}</pre>
                               'Nunca'
                             )}
                           </td>
+                          <td>
+                            <span className={`state-dot ${u.active ? 'is-on' : ''}`}>{u.active ? 'Activo' : 'Inactivo'}</span>
+                            {u.locked ? <div className="t-alert kpi-sub">Acceso bloqueado</div> : null}
+                          </td>
                           {/* Editar, reactivar, desbloquear o dar de baja: solo dirección general (users.manage). */}
                           {canManage ? (
-                            <td>
+                            <td className="col-act">
                               <div className="row-actions">
                                 <button
                                   className="btn ghost btn-sm"

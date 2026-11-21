@@ -12,6 +12,7 @@ import { createSecureHandoffUrl } from '@/lib/cross-entity-handoff';
 import { AccountMenu } from './AccountMenu';
 import { NotificationBell } from './NotificationBell';
 import { RouteProgress } from './RouteProgress';
+import { BottomNav } from './BottomNav';
 import { SidebarNav } from './SidebarNav';
 import { TopbarSearch } from './TopbarSearch';
 import { useEntityTheme } from './useEntityTheme';
@@ -294,6 +295,7 @@ export function AppShell({
         </header>
         <div className="content">{children}</div>
       </div>
+      <BottomNav items={nav} moreOpen={navOpen} onMore={() => setNavOpen((v) => !v)} />
       {/* `useSearchParams` pide su propio Suspense para no volver dinámica la pantalla. */}
       <Suspense fallback={null}>
         <RouteProgress />

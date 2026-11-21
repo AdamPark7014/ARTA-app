@@ -6,7 +6,8 @@ import { useSearchParams } from 'next/navigation';
 import { AppShell } from '@/components/app-shell/AppShell';
 import { PageHeader } from '@/components/ui/PageChrome';
 import { LoadingBlock } from '@/components/ui/LoadingBlock';
-import { EmptyLite, Pill, quietTone, Seg, Tile } from '@/components/ui/Lite';
+import { EmptyLite, Pill, quietTone, Seg } from '@/components/ui/Lite';
+import { FigureStrip } from '@/components/ui/FigureStrip';
 import { PayDaysNote } from '@/components/purchase-orders/PoWindowBanner';
 import { PoStateChips } from '@/components/purchase-orders/PoStateChips';
 import { PoDetail } from '@/components/events/EventPurchaseOrdersPanel';
@@ -103,14 +104,8 @@ function PurchaseOrdersPageInner() {
   const searchParams = useSearchParams();
   /** Una cadena y no el objeto: cambia solo cuando cambia la URL, y con eso se vuelve a leer. */
   const paramsKey = searchParams.toString();
-  const canAuthorize = userHasPermission(user?.roleKey || '', user?.permissions || [], [
-    'po.authorize',
-    'everything',
-  ]);
-  const canMarkPaid = userHasPermission(user?.roleKey || '', user?.permissions || [], [
-    'po.mark_paid',
-    'everything',
-  ]);
+  const canAuthorize = userHasPermission(user?.roleKey || '', user?.permissions || [], ['po.authorize', 'everything']);
+  const canMarkPaid = userHasPermission(user?.roleKey || '', user?.permissions || [], ['po.mark_paid', 'everything']);
   const win = usePoWindow();
   const blocked = payBlockedLabel(win);
 
@@ -127,7 +122,10 @@ function PurchaseOrdersPageInner() {
   const [details, setDetails] = useState<Record<string, Po>>({});
   const [loadingDetail, setLoadingDetail] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
-  const [notice, setNotice] = useState<{ text: string; tone: 'ok' | 'error' } | null>(null);
+  const [notice, setNotice] = useState<{
+    text: string;
+    tone: 'ok' | 'error';
+  } | null>(null);
 
   /** Cambiar de sección quita el chip si ese estado no vive en ella. */
   function pickSection(k: PoSection) {
@@ -209,6 +207,66 @@ function PurchaseOrdersPageInner() {
       );
   }, [inSection, stateFilter, q]);
 
+  /** Las órdenes visibles, agrupadas por evento: el nombre del show sale una vez, con su suma. */
+  const groups = useMemo(() => {
+    const map = new Map<
+      string,
+      {
+        eventId: string;
+        eventName: string;
+        rows: PoRow[];
+        sum: number;
+        oldest: number;
+      }
+    >();
+    for (const r of visible) {
+      const g = map.get(r.eventId) ?? {
+        eventId: r.eventId,
+        eventName: r.eventName,
+        rows: [],
+        sum: 0,
+        oldest: 0,
+      };
+      g.rows.push(r);
+      g.sum += r.amount;
+      g.oldest = Math.max(g.oldest, r.ageDays);
+      map.set(r.eventId, g);
+    }
+    // Primero el evento con la orden que más lleva esperando.
+    return [...map.values()].sort((a, b) => b.oldest - a.oldest || b.sum - a.sum);
+  }, [visible]);
+
+  /** La frase del encabezado: qué pasa hoy con las órdenes. */
+  const lead = useMemo(() => {
+    if (!rows?.length) return null;
+    const late = rows.filter((r) => poIsPending(r.status) && r.ageDays > LATE_DAYS).length;
+    const lateText = late ? ` ${late} ${late === 1 ? 'lleva' : 'llevan'} más de ${LATE_DAYS} días.` : '';
+    if (stats.auth.count) {
+      return (
+        <>
+          <strong>
+            {stats.auth.count} {stats.auth.count === 1 ? 'espera' : 'esperan'}{' '}
+            {canAuthorize ? 'tu autorización' : 'autorización'}.
+          </strong>
+          {lateText}
+        </>
+      );
+    }
+    if (stats.pay.count) {
+      return (
+        <>
+          <strong>Nada por autorizar.</strong> {plural(stats.pay.count)} por pagar.
+        </>
+      );
+    }
+    return <strong>Todo autorizado y pagado.</strong>;
+  }, [rows, stats, canAuthorize]);
+
+  const authEvents = useMemo(
+    () => new Set((rows ?? []).filter((r) => poIsPending(r.status)).map((r) => r.eventId)).size,
+    [rows],
+  );
+
   /** Trae las órdenes del evento (con partidas y comprobantes) y las guarda por id. */
   async function fetchEventOrders(eventId: string) {
     const list = await api<Po[]>(`/purchase-orders/event/${eventId}`);
@@ -226,7 +284,10 @@ function PurchaseOrdersPageInner() {
     try {
       await fetchEventOrders(row.eventId);
     } catch (e) {
-      setNotice({ text: e instanceof Error ? e.message : 'No se pudo abrir el detalle', tone: 'error' });
+      setNotice({
+        text: e instanceof Error ? e.message : 'No se pudo abrir el detalle',
+        tone: 'error',
+      });
     } finally {
       setLoadingDetail(null);
     }
@@ -245,13 +306,19 @@ function PurchaseOrdersPageInner() {
         method: 'PATCH',
         body: JSON.stringify({ status }),
       });
-      setNotice({ text: status === 'PAID' ? 'Orden pagada' : 'Orden autorizada', tone: 'ok' });
+      setNotice({
+        text: status === 'PAID' ? 'Orden pagada' : 'Orden autorizada',
+        tone: 'ok',
+      });
       await Promise.all([
         load(),
         details[row.id] ? fetchEventOrders(row.eventId).catch(() => undefined) : Promise.resolve(),
       ]);
     } catch (e) {
-      setNotice({ text: e instanceof Error ? e.message : 'No se pudo actualizar la orden', tone: 'error' });
+      setNotice({
+        text: e instanceof Error ? e.message : 'No se pudo actualizar la orden',
+        tone: 'error',
+      });
     } finally {
       setBusy(null);
     }
@@ -265,7 +332,11 @@ function PurchaseOrdersPageInner() {
     setBusy(`pdf-${row.id}`);
     try {
       const { downloadPurchaseOrderPdf } = await import('@/lib/po-pdf');
-      await downloadPurchaseOrderPdf({ po, event: { name: row.eventName }, payDaysLabel: payDaysLabel(win) });
+      await downloadPurchaseOrderPdf({
+        po,
+        event: { name: row.eventName },
+        payDaysLabel: payDaysLabel(win),
+      });
     } catch (e) {
       console.error(e);
       setNotice({ text: 'No se pudo generar el PDF', tone: 'error' });
@@ -315,7 +386,8 @@ function PurchaseOrdersPageInner() {
     <AppShell title="Órdenes de compra">
       <div className="sx-stack page-workspace oc-page">
         <PageHeader
-          title="Pagos y autorizaciones"
+          title="Órdenes de compra"
+          lead={lead}
           description={win?.config.enabled ? <PayDaysNote state={win} /> : undefined}
         >
           {win?.canEdit ? (
@@ -343,27 +415,31 @@ function PurchaseOrdersPageInner() {
 
         {rows && rows.length ? (
           <>
-            <div className="tiles">
-              <Tile
-                label="Por autorizar"
-                value={stats.auth.count}
-                sub={stats.auth.amount > 0 ? moneyKpi(stats.auth.amount) : 'Nada pendiente'}
-                onClick={() => pickSection('auth')}
-              />
-              <Tile
-                label="Por pagar"
-                value={moneyKpi(stats.pay.amount)}
-                sub={plural(stats.pay.count)}
-                tone="accent"
-                onClick={() => pickSection('pay')}
-              />
-              <Tile
-                label="Pagadas"
-                value={moneyKpi(stats.paid.amount)}
-                sub={plural(stats.paid.count)}
-                onClick={() => pickSection('paid')}
-              />
-            </div>
+            <FigureStrip
+              label="Cifras de órdenes de compra"
+              items={[
+                {
+                  label: 'Por autorizar',
+                  value: moneyKpi(stats.auth.amount),
+                  sub: stats.auth.count
+                    ? `${plural(stats.auth.count)} en ${authEvents} ${authEvents === 1 ? 'evento' : 'eventos'}`
+                    : 'Nada pendiente',
+                  onClick: () => pickSection('auth'),
+                },
+                {
+                  label: 'Por pagar',
+                  value: moneyKpi(stats.pay.amount),
+                  sub: plural(stats.pay.count),
+                  onClick: () => pickSection('pay'),
+                },
+                {
+                  label: 'Pagadas',
+                  value: moneyKpi(stats.paid.amount),
+                  sub: plural(stats.paid.count),
+                  onClick: () => pickSection('paid'),
+                },
+              ]}
+            />
 
             <div className="oc-toolbar">
               <Seg
@@ -399,10 +475,9 @@ function PurchaseOrdersPageInner() {
               <table className="dtable oc-table dtable--cards">
                 <thead>
                   <tr>
-                    <th>Evento</th>
                     <th>Proveedor</th>
                     <th className="num">Total</th>
-                    <th className="num oc-hide-sm">Espera</th>
+                    <th className="num oc-hide-sm">Esperando</th>
                     <th>Estado</th>
                     <th className="col-act">
                       <span className="sr-only">Acciones</span>
@@ -410,90 +485,108 @@ function PurchaseOrdersPageInner() {
                   </tr>
                 </thead>
                 <tbody>
-                  {visible.map((row) => {
-                    const open = openId === row.id;
-                    const state = poStateView(row);
-                    const pill = poStatePill(state);
-                    const waiting = poIsPending(row.status) || row.status === 'AUTHORIZED';
-                    const detail = details[row.id];
-                    const closedEvent = !!row.eventStatus && CLOSED_EVENT.has(row.eventStatus);
-                    // Un solo relleno por fila: si hay botón de acción, el estado va en contorno.
-                    const act = action(row);
-                    return (
-                      <Fragment key={row.id}>
-                        <tr className={`oc-row ${open ? 'is-open' : ''}`} onClick={() => toggle(row)}>
-                          <td className="card-full" onClick={(e) => e.stopPropagation()}>
-                            <Link className="oc-event" href={`/events/${row.eventId}?tab=ocs&po=${row.id}`}>
-                              {row.eventName}
+                  {groups.map((g) => (
+                    <Fragment key={g.eventId}>
+                      <tr className="grp-row">
+                        <td colSpan={5}>
+                          <div className="grp-row__in">
+                            <Link className="grp-row__name oc-event" href={`/events/${g.eventId}?tab=ocs${g.rows.length === 1 ? `&po=${g.rows[0].id}` : ''}`}>
+                              {g.eventName}
                             </Link>
-                          </td>
-                          <td>
-                            <button
-                              type="button"
-                              className="oc-vendor"
-                              aria-expanded={open}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                toggle(row);
-                              }}
-                            >
-                              <span className="oc-vendor__name">{row.vendorName || 'Sin proveedor'}</span>
-                              <span className="oc-vendor__sub">{poRubroLabel(row.rubro)}</span>
-                            </button>
-                          </td>
-                          <td className="num t-money oc-amount">{mxn(row.amount)}</td>
-                          <td className="num oc-hide-sm">
-                            {waiting ? (
-                              <span className={`oc-age ${row.ageDays > LATE_DAYS ? 'is-late' : ''}`}>
-                                {row.ageDays} d
-                              </span>
-                            ) : (
-                              <span className="t-muted">—</span>
-                            )}
-                          </td>
-                          <td title={state.hint || undefined}>
-                            <Pill tone={act ? quietTone(pill.tone) : pill.tone}>{pill.label}</Pill>
-                          </td>
-                          <td className={`col-act ${act ? '' : 'card-empty'}`} onClick={(e) => e.stopPropagation()}>
-                            <div className="oc-actions">{act}</div>
-                          </td>
-                        </tr>
-                        {open ? (
-                          <tr className="oc-detail-row">
-                            <td className="dtable__detail" colSpan={6}>
-                              {detail ? (
-                                <PoDetail
-                                  po={detail}
-                                  eventId={row.eventId}
-                                  closed={closedEvent}
-                                  onProofsChange={() => refreshRow(row)}
+                            <span className="grp-row__meta">{plural(g.rows.length)}</span>
+                            <span className="grp-row__sum">
+                              Suma <strong>{mxn(g.sum)}</strong>
+                            </span>
+                          </div>
+                        </td>
+                      </tr>
+                      {g.rows.map((row) => {
+                        const open = openId === row.id;
+                        const state = poStateView(row);
+                        const pill = poStatePill(state);
+                        const waiting = poIsPending(row.status) || row.status === 'AUTHORIZED';
+                        const detail = details[row.id];
+                        const closedEvent = !!row.eventStatus && CLOSED_EVENT.has(row.eventStatus);
+                        // Un solo relleno por fila: si hay botón de acción, el estado va en contorno.
+                        const act = action(row);
+                        return (
+                          <Fragment key={row.id}>
+                            <tr className={`oc-row ${open ? 'is-open' : ''}`} onClick={() => toggle(row)}>
+                              <td className="card-full">
+                                <button
+                                  type="button"
+                                  className="oc-vendor"
+                                  aria-expanded={open}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    toggle(row);
+                                  }}
                                 >
-                                  <button
-                                    type="button"
-                                    className="btn-quiet"
-                                    disabled={busy === `pdf-${row.id}`}
-                                    onClick={() => downloadPdf(detail, row)}
-                                  >
-                                    PDF
-                                  </button>
-                                  <Link className="btn-quiet" href={`/events/${row.eventId}?tab=ocs&po=${row.id}`}>
-                                    Abrir evento
-                                  </Link>
-                                </PoDetail>
-                              ) : (
-                                <p className="t-muted t-small oc-loading">
-                                  {loadingDetail === row.id ? 'Cargando…' : 'No se pudo cargar el detalle.'}
-                                </p>
-                              )}
-                            </td>
-                          </tr>
-                        ) : null}
-                      </Fragment>
-                    );
-                  })}
+                                  <span className="oc-vendor__name">{row.vendorName || 'Sin proveedor'}</span>
+                                  <span className="oc-vendor__sub">{poRubroLabel(row.rubro)}</span>
+                                </button>
+                              </td>
+                              <td className="num t-money oc-amount">{mxn(row.amount)}</td>
+                              <td className="num oc-hide-sm">
+                                {waiting ? (
+                                  row.ageDays > LATE_DAYS ? (
+                                    <span className="wait-late">{row.ageDays} días</span>
+                                  ) : (
+                                    <span className="oc-age">
+                                      {row.ageDays === 0
+                                        ? 'hoy'
+                                        : `${row.ageDays} ${row.ageDays === 1 ? 'día' : 'días'}`}
+                                    </span>
+                                  )
+                                ) : (
+                                  <span className="t-muted">—</span>
+                                )}
+                              </td>
+                              <td title={state.hint || undefined}>
+                                <Pill tone={act ? quietTone(pill.tone) : pill.tone}>{pill.label}</Pill>
+                              </td>
+                              <td className={`col-act ${act ? '' : 'card-empty'}`} onClick={(e) => e.stopPropagation()}>
+                                <div className="oc-actions">{act}</div>
+                              </td>
+                            </tr>
+                            {open ? (
+                              <tr className="oc-detail-row">
+                                <td className="dtable__detail" colSpan={5}>
+                                  {detail ? (
+                                    <PoDetail
+                                      po={detail}
+                                      eventId={row.eventId}
+                                      closed={closedEvent}
+                                      onProofsChange={() => refreshRow(row)}
+                                    >
+                                      <button
+                                        type="button"
+                                        className="btn-quiet"
+                                        disabled={busy === `pdf-${row.id}`}
+                                        onClick={() => downloadPdf(detail, row)}
+                                      >
+                                        PDF
+                                      </button>
+                                      <Link className="btn-quiet" href={`/events/${row.eventId}?tab=ocs&po=${row.id}`}>
+                                        Abrir evento
+                                      </Link>
+                                    </PoDetail>
+                                  ) : (
+                                    <p className="t-muted t-small oc-loading">
+                                      {loadingDetail === row.id ? 'Cargando…' : 'No se pudo cargar el detalle.'}
+                                    </p>
+                                  )}
+                                </td>
+                              </tr>
+                            ) : null}
+                          </Fragment>
+                        );
+                      })}
+                    </Fragment>
+                  ))}
                   {!visible.length ? (
                     <tr>
-                      <td colSpan={6} className="oc-empty-row">
+                      <td colSpan={5} className="oc-empty-row">
                         {q.trim()
                           ? 'Nada coincide con la búsqueda.'
                           : stateFilter
