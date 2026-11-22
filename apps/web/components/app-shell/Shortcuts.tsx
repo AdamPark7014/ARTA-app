@@ -36,6 +36,8 @@ export function Shortcuts({ items }: { items: NavItem[] }) {
     return GO_TO.filter((g) => g.href === '/notifications' || hrefs.has(g.href));
   }, [items]);
 
+  const canTask = reachable.some((g) => g.href === '/tasks');
+
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey || isTyping(e.target)) return;
@@ -60,10 +62,16 @@ export function Shortcuts({ items }: { items: NavItem[] }) {
         return;
       }
       if (key === 'g') chord.current = Date.now();
+      // «n»: tarea nueva desde cualquier pantalla, para quien tiene Tareas.
+      else if (key === 'n' && canTask) {
+        e.preventDefault();
+        setOpen(false);
+        router.push('/tasks?nueva=1');
+      }
     }
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [reachable, router]);
+  }, [reachable, router, canTask]);
 
   if (!open) return null;
   return (
@@ -96,6 +104,14 @@ export function Shortcuts({ items }: { items: NavItem[] }) {
               <dd>{g.label}</dd>
             </div>
           ))}
+          {canTask ? (
+            <div>
+              <dt>
+                <kbd>n</kbd>
+              </dt>
+              <dd>Nueva tarea</dd>
+            </div>
+          ) : null}
           <div>
             <dt>
               <kbd>?</kbd>

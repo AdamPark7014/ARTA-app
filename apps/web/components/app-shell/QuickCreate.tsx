@@ -14,8 +14,8 @@ export function QuickCreate({ items, eventLabel }: { items: NavItem[]; eventLabe
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const options = [
-    items.some((i) => i.href === '/tasks') ? { href: '/tasks?nueva=1', label: 'Nueva tarea', hint: 'Para ti o para alguien del equipo' } : null,
-    items.some((i) => i.href === '/events/new') ? { href: '/events/new', label: eventLabel, hint: 'Con sus formatos y fechas' } : null,
+    items.some((i) => i.href === '/tasks') ? { href: '/tasks?nueva=1', label: 'Nueva tarea', hint: 'Para ti o para alguien del equipo', keys: 'n' } : null,
+    items.some((i) => i.href === '/events/new') ? { href: '/events/new', label: eventLabel, hint: 'Con sus formatos y fechas', keys: '' } : null,
   ].filter(<T,>(x: T | null): x is T => x !== null);
 
   useEffect(() => setOpen(false), [pathname]);
@@ -56,7 +56,10 @@ export function QuickCreate({ items, eventLabel }: { items: NavItem[]; eventLabe
         <div className="qc__menu" role="menu" aria-label="Crear">
           {options.map((o) => (
             <Link key={o.href} href={o.href} role="menuitem" className="qc__item" onClick={() => setOpen(false)}>
-              <span className="qc__label">{o.label}</span>
+              <span className="qc__label">
+                {o.label}
+                {o.keys ? <kbd aria-hidden>{o.keys}</kbd> : null}
+              </span>
               <small>{o.hint}</small>
             </Link>
           ))}

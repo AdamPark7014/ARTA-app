@@ -1,5 +1,20 @@
 # RELEVO
 
+- **2026-11-22 (claude-code) — 30 pasadas de mejora sobre Mosaico (Adam: «dale unas 30 pasadas más»). NO desplegado.**
+  - **Método:** `e2e/audit/cortes.audit.ts` en 66 pantallas (1536, 1280 y 390 de ancho, Arta y Auditorio), hojas de
+    contacto para verlas a ojo, corregir y volver a medir. En teléfono el scroll lateral quedó en 0.
+  - **Barra:** botón «+» (`components/app-shell/QuickCreate.tsx`) para crear tarea o evento desde cualquier pantalla;
+    las píldoras dicen su atajo al pasar el cursor; «n» abre la tarea nueva (está en la lista de «?»).
+  - **Inicio:** la carga tiene la forma del Inicio cargado (nada salta) y ya no repite los botones de crear.
+  - **Teléfono:** el tablero de tareas no ensancha la página (`.board { position: relative }` y la rejilla del marco
+    con `minmax(0, 1fr)`); las tablas como tarjetas parten cuentas y nombres largos; punto de chat sin leer en la
+    barra inferior.
+  - **Eficiencia:** `useChatUnread` se llama una sola vez en `AppShell` y se pasa a `TopNav`, `SidebarNav` y `BottomNav`.
+  - **Accesibilidad:** «Saltar al contenido», el foco entra al menú «Más» y regresa al cerrarlo, contraste del aviso
+    de chat en el Auditorio, `prefers-reduced-motion` en lo nuevo, `--text-3` más oscuro sobre el fondo cálido.
+  - **Pestaña del navegador:** `AppShell` pone «Pantalla · ARTA»; la campana conserva su contador.
+  - Pendiente conocido: el paso `chat-ligados` de la auditoría no encuentra su botón en teléfono (ya pasaba antes).
+
 - **2026-11-21 (claude-code) — Mosaico a fondo (Adam: «continua full»). NO desplegado.**
   - **Evento:** «Lo siguiente» es el mosaico de tinta de la pantalla (las cifras de abajo quedan en blanco).
   - **Eventos:** tarjetas sin borde y la fecha en tinta. **Usuarios:** sin tarjeta dentro de tarjeta.

@@ -161,6 +161,26 @@ test.describe('App shell', () => {
     await expect(pills.getByRole('link', { name: 'Eventos actuales' })).toHaveAttribute('aria-current', 'page');
   });
 
+  test('el botón «+» crea tarea o evento desde cualquier pantalla y «n» abre la tarea nueva', async ({
+    page,
+    baseURL,
+  }) => {
+    await seedSession(page, baseURL!);
+    await mockAuthenticatedApi(page);
+
+    await page.goto('/dashboard');
+    await page.getByRole('button', { name: 'Crear', exact: true }).click();
+    const menu = page.getByRole('menu', { name: 'Crear' });
+    await expect(menu.getByRole('menuitem', { name: /Nuevo evento/ })).toHaveAttribute('href', '/events/new');
+    await expect(menu.getByRole('menuitem', { name: /Nueva tarea/ })).toHaveAttribute('href', '/tasks?nueva=1');
+    await page.keyboard.press('Escape');
+    await expect(menu).toHaveCount(0);
+
+    await page.locator('#contenido').focus();
+    await page.keyboard.press('n');
+    await page.waitForURL('**/tasks?nueva=1');
+  });
+
   test('«Eventos pasados» deja fuera los shows que aún no ocurren', async ({ page, baseURL }) => {
     await seedSession(page, baseURL!);
     await mockAuthenticatedApi(page);

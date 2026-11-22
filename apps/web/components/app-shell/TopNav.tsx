@@ -6,13 +6,14 @@ import { useMemo } from 'react';
 import { activeNavKey, navHref, navKey, type NavItem } from '@/lib/access-matrix';
 
 /** Los destinos de la barra, en orden de uso. Solo salen los que esta persona puede ver. */
-const PILLS: Array<{ href: string; query?: string; label: string }> = [
-  { href: '/dashboard', label: 'Inicio' },
-  { href: '/events', query: 'scope=active', label: 'Eventos' },
-  { href: '/calendar', label: 'Calendario' },
-  { href: '/tasks', label: 'Tareas' },
-  { href: '/chat', label: 'Chat' },
-  { href: '/purchase-orders', label: 'Órdenes' },
+/** `keys`: el atajo de teclado (g y la letra), para decirlo al pasar el cursor. */
+const PILLS: Array<{ href: string; query?: string; label: string; keys?: string }> = [
+  { href: '/dashboard', label: 'Inicio', keys: 'i' },
+  { href: '/events', query: 'scope=active', label: 'Eventos', keys: 'e' },
+  { href: '/calendar', label: 'Calendario', keys: 'k' },
+  { href: '/tasks', label: 'Tareas', keys: 't' },
+  { href: '/chat', label: 'Chat', keys: 'c' },
+  { href: '/purchase-orders', label: 'Órdenes', keys: 'o' },
   { href: '/finanzas', label: 'Finanzas' },
   { href: '/ticketing', label: 'Boletera' },
 ];
@@ -40,7 +41,7 @@ export function TopNav({
     () =>
       PILLS.flatMap((p) => {
         const item = items.find((i) => i.href === p.href && (p.query ? i.query === p.query : true) && !i.hidden);
-        return item ? [{ label: p.label, full: item.label, key: navKey(item), to: navHref(item) }] : [];
+        return item ? [{ label: p.label, full: item.label, key: navKey(item), to: navHref(item), keys: p.keys }] : [];
       }),
     [items],
   );
@@ -61,6 +62,7 @@ export function TopNav({
             data-rank={i + 1}
             className={`pnav__pill ${p.key === onKey && !moreOpen ? 'is-on' : ''}`}
             aria-current={p.key === onKey ? 'page' : undefined}
+            title={p.keys ? `${p.full} · atajo: g y luego ${p.keys}` : undefined}
             aria-label={badge ? `${p.label}, ${badge} sin leer` : p.label === p.full ? undefined : p.full}
           >
             {p.label}
