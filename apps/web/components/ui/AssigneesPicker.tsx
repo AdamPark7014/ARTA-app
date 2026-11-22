@@ -186,7 +186,7 @@ export function AssigneesPicker({
                     <input type="checkbox" checked={on} onChange={() => toggle(u.id)} />
                     <span className="assignees-pop__name">
                       {u.fullName}
-                      {u.title ? <span className="assignees-pop__title"> · {u.title}</span> : null}
+                      {u.title ? <span className="assignees-pop__title">{u.title}</span> : null}
                     </span>
                     {on && chosen.length > 1 ? <span className="assignees-pop__order">{index + 1}</span> : null}
                   </label>

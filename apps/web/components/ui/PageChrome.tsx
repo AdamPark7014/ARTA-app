@@ -16,6 +16,14 @@ type PageHeaderProps = {
   children?: ReactNode;
   /** Renglón opcional debajo: pestañas o filtros de la pantalla. */
   below?: ReactNode;
+  /**
+   * La descripción depende de datos que aún no llegan (o fallaron): se reserva su
+   * renglón con un esqueleto de 14 px y la cabecera no salta al cargar. Nunca se
+   * pinta «0 eventos» mientras se carga o si la carga falló.
+   *
+   *   <PageHeader title="Eventos" pending={status !== 'ok'} description={`${n} eventos activos`} />
+   */
+  pending?: boolean;
   className?: string;
 };
 
@@ -24,15 +32,21 @@ type PageHeaderProps = {
  * descripción de un renglón, acciones a la derecha y, si hace falta, un renglón
  * de pestañas o filtros. Mismo espaciado en todo el panel (`styles/_acabado.scss`).
  */
-export function PageHeader({ eyebrow, title, lead, description, hint, children, below, className = '' }: PageHeaderProps) {
+export function PageHeader({ eyebrow, title, lead, description, hint, children, below, pending = false, className = '' }: PageHeaderProps) {
   return (
     <header className={`ph ${className}`.trim()}>
       <div className="ph__row">
         <div className="ph__copy">
           {eyebrow ? <p className="ph__eyebrow">{eyebrow}</p> : null}
           {title ? <h2 className="ph__title">{title}</h2> : null}
-          {lead ? <p className="ph__lead">{lead}</p> : null}
-          {description ? <div className="ph__desc">{description}</div> : null}
+          {lead && !pending ? <p className="ph__lead">{lead}</p> : null}
+          {pending ? (
+            <div className="ph__desc ph__desc--pending" aria-hidden>
+              <span className="skel skel--title" />
+            </div>
+          ) : description ? (
+            <div className="ph__desc">{description}</div>
+          ) : null}
           {hint ? <p className="muted page-intro__hint">{hint}</p> : null}
         </div>
         {children ? <div className="ph__actions">{children}</div> : null}

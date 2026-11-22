@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
+import { useLayer, useLayerHost } from './Modal';
 
 /**
  * Las preguntas del panel, en su propio diálogo y no en el `confirm`/`prompt` del
@@ -14,11 +15,19 @@ import { createPortal } from 'react-dom';
  *
  * Basta montar `<AskDialogHost />` una vez (va en `(app)/layout`). Lo que tenga
  * que contestar sin esperar —salir con cambios sin guardar— sigue con `confirm`.
+ *
+ * El botón dice la acción, nunca «Aceptar»: pasa `confirmLabel` («Eliminar tarea»,
+ * «Desactivar», «Cerrar evento»). Si falta, sale del verbo del título
+ * («¿Eliminar la carpeta «X»?» → «Eliminar carpeta»). Cuando la acción misma es
+ * cancelar algo («¿Cancelar el evento?») los botones son «Sí, cancelar evento» y
+ * «No, volver». En una pregunta destructiva el foco empieza en «Cancelar»: un Enter
+ * de más no borra nada.
  */
 
 export type AskConfirm = {
   title: string;
   body?: ReactNode;
+  /** El verbo de la acción («Eliminar tarea»). Sin él se arma con el verbo del título. */
   confirmLabel?: string;
   cancelLabel?: string;
   /** La acción destruye algo: el botón va en rojo. */
@@ -63,15 +72,45 @@ export function AskDialogHost() {
   }, []);
 
   if (!pending) return null;
-  return createPortal(<AskDialog key={pending.opts.title} pending={pending} onDone={() => setPending(null)} />, document.body);
+  return <AskDialog key={pending.opts.title} pending={pending} onDone={() => setPending(null)} />;
+}
+
+const SKIP = new Set(['el', 'la', 'los', 'las', 'este', 'esta', 'estos', 'estas', 'ese', 'esa', 'esos', 'esas', 'un', 'una', 'tu', 'su', 'todo', 'toda', 'todos', 'todas', 'de', 'a']);
+
+/**
+ * Botón a partir del título: «¿Eliminar la carpeta «X»?» → «Eliminar carpeta»,
+ * «¿Quitar «X»?» → «Quitar». Si el título no empieza con un verbo, «Continuar».
+ */
+export function actionFromTitle(title: string): { verb: string; label: string } {
+  const words = title.replace(/^[¿\s]+/, '').split(/\s+/);
+  const verb = words[0]?.replace(/[?¿,.:;!]+$/, '') || '';
+  if (!/^[A-ZÁÉÍÓÚÑa-záéíóúñ]+(ar|er|ir)(lo|la|los|las|le|les)?$/.test(verb)) return { verb: '', label: 'Continuar' };
+  const rest = words.slice(1);
+  while (rest.length && SKIP.has(rest[0].toLowerCase())) rest.shift();
+  const noun = rest[0]?.replace(/[?¿,.:;!]+$/, '') || '';
+  const STOP = new Set(['por', 'para', 'con', 'en', 'al', 'del', 'sin', 'y', 'o', 'que', 'como', 'ya']);
+  const plain = /^[a-záéíóúñ]+[?¿,.:;!]*$/.test(rest[0] || '') && !STOP.has(noun);
+  const nice = verb.charAt(0).toUpperCase() + verb.slice(1).toLowerCase();
+  return { verb: nice, label: plain ? `${nice} ${noun}` : nice };
 }
 
 function AskDialog({ pending, onDone }: { pending: Pending; onDone: () => void }) {
   const [value, setValue] = useState(pending.kind === 'prompt' ? pending.opts.defaultValue || '' : '');
+  const host = useLayerHost(true);
   const boxRef = useRef<HTMLFormElement | null>(null);
+  const titleId = useId();
+  const bodyId = useId();
   const { opts } = pending;
-  const danger = pending.kind === 'confirm' && pending.opts.danger;
+  const danger = pending.kind === 'confirm' && !!pending.opts.danger;
   const blocked = pending.kind === 'prompt' && pending.opts.required && !value.trim();
+
+  const derived = actionFromTitle(opts.title);
+  // La acción es cancelar algo: «Sí, cancelar evento» / «No, volver», nunca «Cancelar» contra «Cancelar».
+  const cancelsSomething = derived.verb === 'Cancelar';
+  const confirmText =
+    opts.confirmLabel || (cancelsSomething ? `Sí, ${derived.label.toLowerCase()}` : derived.label);
+  const cancelText =
+    (pending.kind === 'confirm' && pending.opts.cancelLabel) || (cancelsSomething || /^cancelar\b/i.test(confirmText) ? 'No, volver' : 'Cancelar');
 
   function finish(ok: boolean) {
     if (pending.kind === 'confirm') pending.resolve(ok);
@@ -84,43 +123,16 @@ function AskDialog({ pending, onDone }: { pending: Pending; onDone: () => void }
     if (!blocked) finish(true);
   }
 
-  // Foco adentro y de regreso al botón que abrió la pregunta; la página de atrás no se mueve.
-  useEffect(() => {
-    const before = document.activeElement as HTMLElement | null;
-    const overflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    boxRef.current?.querySelector<HTMLElement>('[data-ask-focus]')?.focus();
-    return () => {
-      document.body.style.overflow = overflow;
-      before?.focus?.();
-    };
-  }, []);
+  const onKeyDown = useLayer({
+    host,
+    box: boxRef,
+    onEscape: () => finish(false),
+    focusFirst: () => boxRef.current?.querySelector<HTMLElement>('[data-ask-focus]')?.focus({ preventScroll: true }),
+  });
 
-  function onKeyDown(e: React.KeyboardEvent) {
-    if (e.key === 'Escape') {
-      e.preventDefault();
-      e.stopPropagation();
-      finish(false);
-      return;
-    }
-    if (e.key !== 'Tab') return;
-    const items = Array.from(
-      boxRef.current?.querySelectorAll<HTMLElement>('input, button:not(:disabled)') ?? [],
-    );
-    if (!items.length) return;
-    const first = items[0];
-    const last = items[items.length - 1];
-    const active = document.activeElement;
-    if (e.shiftKey && active === first) {
-      e.preventDefault();
-      last.focus();
-    } else if (!e.shiftKey && active === last) {
-      e.preventDefault();
-      first.focus();
-    }
-  }
+  if (!host) return null;
 
-  return (
+  return createPortal(
     <div
       className="askd-backdrop"
       role="presentation"
@@ -130,17 +142,23 @@ function AskDialog({ pending, onDone }: { pending: Pending; onDone: () => void }
     >
       <form
         ref={boxRef}
-        className="askd"
+        className={`askd ${danger ? 'askd--danger' : ''}`.trim()}
         role="alertdialog"
         aria-modal="true"
-        aria-labelledby="askd-title"
+        aria-labelledby={titleId}
+        aria-describedby={opts.body ? bodyId : undefined}
         onSubmit={submit}
         onKeyDown={onKeyDown}
+        noValidate
       >
-        <h2 className="askd__title" id="askd-title">
+        <h2 className="askd__title" id={titleId}>
           {opts.title}
         </h2>
-        {opts.body ? <div className="askd__body">{opts.body}</div> : null}
+        {opts.body ? (
+          <div className="askd__body" id={bodyId}>
+            {opts.body}
+          </div>
+        ) : null}
         {pending.kind === 'prompt' ? (
           <label className="askd__field">
             {pending.opts.label ? <span>{pending.opts.label}</span> : null}
@@ -155,19 +173,25 @@ function AskDialog({ pending, onDone }: { pending: Pending; onDone: () => void }
           </label>
         ) : null}
         <div className="askd__actions">
-          <button className="btn ghost" type="button" onClick={() => finish(false)}>
-            {pending.kind === 'confirm' ? pending.opts.cancelLabel || 'Cancelar' : 'Cancelar'}
+          <button
+            className="btn ghost"
+            type="button"
+            onClick={() => finish(false)}
+            data-ask-focus={pending.kind === 'confirm' && danger ? true : undefined}
+          >
+            {cancelText}
           </button>
           <button
-            className={`btn ${danger ? 'danger' : ''}`}
+            className={`btn ${danger ? 'danger' : ''}`.trim()}
             type="submit"
             disabled={blocked}
-            data-ask-focus={pending.kind === 'confirm' ? true : undefined}
+            data-ask-focus={pending.kind === 'confirm' && !danger ? true : undefined}
           >
-            {opts.confirmLabel || (danger ? 'Eliminar' : 'Aceptar')}
+            {confirmText}
           </button>
         </div>
       </form>
-    </div>
+    </div>,
+    host,
   );
 }

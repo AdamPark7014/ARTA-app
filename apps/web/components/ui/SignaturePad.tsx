@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { userMessage } from '@/lib/api';
+import { shortDateTime } from '@/lib/format';
 
 type Props = {
   label: string;
@@ -87,7 +89,7 @@ export function SignaturePad({ label, signerName, onSign, disabled, existing, on
       const imageDataUrl = canvas.toDataURL('image/png');
       await onSign({ imageDataUrl, signerName: name.trim() || signerName });
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'No se pudo firmar');
+      setError(userMessage(e, 'guardar la firma'));
     } finally {
       setBusy(false);
     }
@@ -100,7 +102,7 @@ export function SignaturePad({ label, signerName, onSign, disabled, existing, on
         <img src={existing.imageDataUrl} alt={`Firma ${label}`} className="sig-preview" />
         <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>
           {existing.signerName}
-          {existing.signedAt ? ` · ${new Date(existing.signedAt).toLocaleString('es-MX')}` : ''}
+          {existing.signedAt ? ` · ${shortDateTime(existing.signedAt)}` : ''}
         </div>
       </div>
     );
@@ -137,7 +139,7 @@ export function SignaturePad({ label, signerName, onSign, disabled, existing, on
           {busy ? 'Guardando…' : `Firmar ${label.toLowerCase()}`}
         </button>
       </div>
-      {error ? <div className="form-error" style={{ marginTop: 8 }}>{error}</div> : null}
+      {error ? <div className="form-error" role="alert" style={{ marginTop: 8 }}>{error}</div> : null}
     </div>
   );
 }

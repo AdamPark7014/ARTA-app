@@ -65,6 +65,33 @@ test.describe('Tareas y avisos', () => {
     expect(directory.every((u) => new URL(u).searchParams.get('entity') === 'ARTA')).toBe(true);
   });
 
+  /** Megapasada 5: un error del servidor llega como una línea que dice qué hacer, sin «Error 500» ni texto crudo. */
+  test('si guardar falla, el aviso dice qué hacer y no enseña el código del servidor', async ({ page, baseURL }) => {
+    await seedSession(page, baseURL!);
+    await mockAuthenticatedApi(page, {
+      '/users/directory': TEST_DIRECTORY,
+      '/tasks/mine': [],
+      '/tasks/requested': [],
+      '/tasks': (route: Route) =>
+        route.request().method() === 'POST'
+          ? route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ message: 'Internal server error' }) })
+          : route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }),
+    });
+
+    await page.goto('/tasks');
+    await page.getByLabel('Tarea', { exact: true }).fill('Cotizar transporte del staff');
+    await page.getByRole('button', { name: 'Asignar tarea' }).click();
+
+    const alert = page.locator('.flash--error');
+    await expect(alert).toContainText('No se pudo guardar. Intenta de nuevo en un momento.');
+    await expect(alert).not.toContainText(/500|Internal|server/i);
+    // Los errores no se cierran solos: esperan a que se lean y se cierran con su ×.
+    await page.waitForTimeout(5500);
+    await expect(alert).toBeVisible();
+    await alert.getByRole('button', { name: 'Cerrar aviso' }).click();
+    await expect(alert).toHaveCount(0);
+  });
+
   /** Correcciones 30-09-2026: «dejar que se puedan asignar tareas a 1 o más personas». */
   test('una tarea se asigna a dos personas a la vez', async ({ page, baseURL }) => {
     const posted: Array<Record<string, unknown>> = [];

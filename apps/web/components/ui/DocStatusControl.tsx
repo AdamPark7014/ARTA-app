@@ -64,14 +64,15 @@ export function DocStatusControl({ status, roleKey, canApprove: canApproveHere, 
   if (status === 'SEALED') {
     if (!canUnseal) {
       return (
-        <span className="muted kpi-sub">Sellado — solo dirección puede reabrirlo</span>
+        <span className="muted kpi-sub">Sellado. Solo dirección puede reabrirlo.</span>
       );
     }
     return reopening ? (
       <div className="status-reopen">
         <input
           className="field"
-          placeholder="¿Por qué se reabre? (queda en el historial)"
+          aria-label="Motivo para reabrir"
+          placeholder="Motivo (queda en el historial)"
           value={reason}
           autoFocus
           onChange={(e) => setReason(e.target.value)}

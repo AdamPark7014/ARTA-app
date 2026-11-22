@@ -22,9 +22,13 @@
 [data-entity='EXPLANADA'] {
   --radius: 16px;
   --radius-lg: 24px;
-  --tile-ink: #f2f2f4;
-  --tile-ink-fg: #0a0a0b;
-  --tile-ink-muted: #55555c;
+  --radius-ctl: 999px;
+  --radius-item: 12px;
+  /* En oscuro el mosaico de tinta es carbón, nunca un bloque claro que deslumbre (auditorio-01):
+     separa 1.32:1 del mosaico #111114, lo mismo que el blanco del fondo en ARTA. */
+  --tile-ink: #2a2a30;
+  --tile-ink-fg: #f2f2f4;
+  --tile-ink-muted: #a1a1aa;
   --tile-soft: rgba(255, 255, 255, 0.06);
 }
 

@@ -1,7 +1,9 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { api, type FieldChange } from '@/lib/api';
+import { api, userMessage, type FieldChange } from '@/lib/api';
+import { fullDateTime, shortDateTime } from '@/lib/format';
+import { ErrorState, Skeleton } from '@/components/ui/LoadState';
 import { FieldDiff } from '@/components/ui/FieldDiff';
 
 type Revision = {
@@ -47,21 +49,23 @@ export function RevisionHistory({
   const [error, setError] = useState('');
   const [openId, setOpenId] = useState<string | null>(null);
 
-  const load = useCallback(() => {
-    api<Revision[]>(path)
-      .then((data) => {
-        setRows(data);
-        setError('');
-      })
-      .catch((e) => setError(e instanceof Error ? e.message : 'No se pudo cargar el historial'));
-  }, [path]);
+  const load = useCallback(
+    () =>
+      api<Revision[]>(path)
+        .then((data) => {
+          setRows(data);
+          setError('');
+        })
+        .catch((e) => setError(userMessage(e, 'cargar el historial'))),
+    [path],
+  );
 
   useEffect(() => {
     load();
   }, [load, reloadKey]);
 
-  if (error) return <p className="form-error">{error}</p>;
-  if (!rows) return <p className="muted kpi-sub">Cargando historial…</p>;
+  if (error) return <ErrorState compact title="No pudimos leer el historial" detail="Intenta de nuevo en un momento." onRetry={load} />;
+  if (!rows) return <Skeleton shape="list" count={3} label="Cargando historial" />;
   if (!rows.length) {
     return (
       <p className="muted kpi-sub">
@@ -88,10 +92,9 @@ export function RevisionHistory({
               <span className="revision-item__main">
                 <span className="revision-item__who">{r.author?.fullName || 'Sistema'}</span>
                 <span className="muted kpi-sub">
-                  {new Date(r.createdAt).toLocaleString('es-MX', {
-                    dateStyle: 'short',
-                    timeStyle: 'short',
-                  })}
+                  <time dateTime={r.createdAt} title={fullDateTime(r.createdAt)}>
+                    {shortDateTime(r.createdAt)}
+                  </time>
                   {' · '}
                   {r.diffJson ? describe(r.diffJson) : 'Versión histórica (sin diff)'}
                   {r.note ? ` · ${r.note}` : ''}

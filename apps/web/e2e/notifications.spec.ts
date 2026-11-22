@@ -336,10 +336,20 @@ test.describe('Preguntas del panel', () => {
     await page.getByRole('menuitem', { name: /Eliminar/ }).click();
     const dialog = page.getByRole('alertdialog', { name: '¿Eliminar el evento?' });
     await expect(dialog).toBeVisible();
+    // Pregunta destructiva: el botón dice la acción y el foco empieza en «Cancelar» (un Enter de más no borra).
+    await expect(dialog.getByRole('button', { name: 'Eliminar evento' })).toBeVisible();
+    await expect(dialog.getByRole('button', { name: 'Cancelar' })).toBeFocused();
+
+    // El Tab no sale de la pregunta.
+    await page.keyboard.press('Tab');
     await expect(dialog.getByRole('button', { name: 'Eliminar evento' })).toBeFocused();
+    await page.keyboard.press('Tab');
+    await expect(dialog.getByRole('button', { name: 'Cancelar' })).toBeFocused();
 
     await page.keyboard.press('Escape');
     await expect(dialog).toHaveCount(0);
     expect(deleted).toEqual([]);
+    // El foco vuelve a la página (el resto del panel ya no está `inert`).
+    expect(await page.locator('[inert]').count()).toBe(0);
   });
 });

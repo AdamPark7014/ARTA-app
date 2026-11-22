@@ -1,0 +1,1299 @@
+// Megapasadas 22-11-2026: sis-base. Lo escribe un solo agente; ver docs/diseno/SISTEMA-VISUAL.md.
+//
+// Piezas base de Mosaico en su versión canónica. Se importa después de _mosaico.scss, así que manda sobre
+// las capas viejas; las parciales mp-* (por módulo) vienen después y pueden afinar su pantalla.
+//
+// Regla de especificidad: cada pieza se declara con la misma especificidad que su regla base (o la del
+// contexto que la rompía, cuando se nombra a propósito), para que gane por orden y no por fuerza. Lo que es
+// papel (hoja de formato, editores de hoja, documento, PDF) queda fuera: tiene su propia tipografía.
+//
+// Índice: 1 tokens · 2 texto · 3 botones · 4 campos · 5 estados y contadores · 6 segmentado y pestañas ·
+// 7 superficie · 8 cifra · 9 títulos · 10 tabla · 11 foco · 12 teléfono y toque · 13 Auditorio · 14 arreglos
+
+// Lo que es papel: ninguna pieza de aquí lo toca.
+$paper: '.fsheet, .fsheet-wrap, .sheet, .sheet--excel, .sheet-ribbon, .sheet-toolbar, .fsign, .docedit, .pdfedit';
+
+/* ═══ 1 · Tokens ═════════════════════════════════════════════════════════════
+   Escala cerrada: tamaños 12/14/16/20/28/40, pesos 400/500/600, interlineados en múltiplos de 4,
+   espacios de 4 en 4, radios por papel. Los colores viven en los bloques de entidad (globals y mosaico). */
+
+:root {
+  --fs-12: 12px;
+  --fs-14: 14px;
+  --fs-16: 16px;
+  --fs-20: 20px;
+  --fs-28: 28px;
+  --fs-40: 40px;
+  --fw-400: 400;
+  --fw-500: 500;
+  --fw-600: 600;
+  --lh-12: 16px;
+  --lh-14: 20px;
+  --lh-16: 24px;
+  --lh-20: 26px;
+  --lh-28: 32px;
+  --lh-40: 44px;
+  --lh-tight: 1.1;
+  --lh-snug: 1.3;
+  --lh-body: 1.5;
+  --sp-4: 4px;
+  --sp-8: 8px;
+  --sp-12: 12px;
+  --sp-16: 16px;
+  --sp-24: 24px;
+  --sp-32: 32px;
+  --sp-40: 40px;
+  --sp-48: 48px;
+  --radius-pill: 999px;
+  --radius-row: 12px;
+  --radius-inner: 16px;
+  --radius-tile: 24px;
+  /* Alto de control: botón, campo, segmentado. 32 solo para botones dentro de filas de tabla. */
+  --control-h: 40px;
+  --control-h-sm: 32px;
+  --tap: 44px;
+  --gap-tile: 16px;
+  --tile-pad: 24px;
+  --motion: 0.18s ease;
+}
+
+[data-entity='ARTA'] {
+  /* Foco: línea del color del texto de la superficie; sobre tinta se redefine con --tile-ink-fg. */
+  --focus-ring: #0c0c0d;
+  --seg-on-bg: #ffffff;
+  --count-on-bg: #0c0c0d;
+  --count-on-fg: #ffffff;
+}
+
+[data-entity='EXPLANADA'] {
+  --focus-ring: #f2f2f4;
+  /* El segmento activo se enciende un grado (carbón), no se pinta de plata. */
+  --seg-on-bg: #2a2a30;
+  --count-on-bg: #f2f2f4;
+  --count-on-fg: #0a0a0b;
+}
+
+@media (max-width: 768px) {
+  :root,
+  [data-entity] {
+    --control-h: 44px;
+    --control-h-sm: 44px;
+    --gap-tile: 10px;
+    --tile-pad: 16px;
+    --radius-lg: 20px;
+    --radius-tile: 20px;
+  }
+}
+
+/* Lo oscuro dentro de la pantalla (mosaico de tinta, «Lo siguiente», barra inferior, menú lateral, foto del
+   acceso): el foco de lo que vive adentro se dibuja con el texto de esa superficie. */
+.mz-hero *,
+.mz-turn.is-lead *,
+.next-steps:not(.next-steps--ok) *,
+.tiles > .tile:first-child *,
+.tile--ink *,
+.fstrip .fstrip__item:first-child *,
+.fstrip__item--ink *,
+.bnav *,
+.lg-brand * {
+  --focus-ring: var(--tile-ink-fg, #ffffff);
+}
+
+[data-entity='ARTA'] .sidebar * {
+  --focus-ring: #ffffff;
+}
+
+/* ═══ 2 · Texto ══════════════════════════════════════════════════════════════ */
+
+html[data-entity] body {
+  line-height: var(--lh-body);
+}
+
+/* ═══ 3 · Botones ════════════════════════════════════════════════════════════
+   Principal (.btn, uno por pantalla), secundario (.btn.ghost), de texto (.btn-quiet), de icono (.icon-btn)
+   y de peligro (.btn.danger solo en la confirmación final; en filas, gris que se pone rojo al pasar). */
+
+/* El encabezado de pantalla bajaba sus botones a 36 (o los dejaba chicos): misma medida que todos. */
+.ph__actions > .btn,
+.ph__actions > .btn.btn-sm,
+.ph__actions > a.btn {
+  min-height: var(--control-h);
+  padding: 0 20px;
+  font-size: var(--fs-14);
+}
+
+.btn {
+  min-height: var(--control-h);
+  gap: var(--sp-8);
+  padding: 0 20px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-pill);
+  background: var(--accent-fill);
+  color: var(--on-accent);
+  font-size: var(--fs-14);
+  font-weight: var(--fw-600);
+  line-height: var(--lh-14);
+  letter-spacing: 0;
+  box-shadow: none;
+  transition:
+    background-color var(--motion),
+    border-color var(--motion),
+    color var(--motion),
+    transform 0.15s ease;
+}
+
+.btn:hover:not(:disabled):not([aria-disabled='true']) {
+  background: var(--accent-hover, var(--accent-fill));
+  filter: none;
+}
+
+html[data-entity] .btn:not(.ghost):hover:not(:disabled) {
+  box-shadow: none;
+}
+
+.btn:active:not(:disabled):not([aria-disabled='true']) {
+  transform: scale(0.98);
+}
+
+.btn.ghost {
+  border-color: var(--line-strong);
+  background: transparent;
+  color: var(--text);
+}
+
+.btn.ghost:hover:not(:disabled):not([aria-disabled='true']) {
+  background: var(--hover-strong);
+}
+
+.btn.danger {
+  border-color: transparent;
+  background: var(--danger);
+  color: var(--on-danger);
+}
+
+.btn.danger:hover:not(:disabled):not([aria-disabled='true']) {
+  background: var(--danger);
+  filter: brightness(1.08);
+}
+
+/* Apagado: se ve apagado sin perder su medida (auditorio-23). */
+.btn:disabled,
+.btn[aria-disabled='true'],
+.btn:not(.ghost):not(.danger):disabled,
+.btn:not(.ghost):not(.danger)[aria-disabled='true'] {
+  border-color: transparent;
+  background: var(--fill-soft);
+  color: var(--text-3);
+  opacity: 1;
+  box-shadow: none;
+}
+
+.btn.ghost:disabled,
+.btn.ghost[aria-disabled='true'] {
+  border-color: var(--line);
+  background: transparent;
+  color: var(--text-3);
+}
+
+/* Botón chico: solo dentro de filas de escritorio. */
+.btn-sm,
+.btn.btn-sm,
+.oc-actions .btn-sm {
+  min-height: var(--control-h-sm);
+  padding: 0 14px;
+  font-size: var(--fs-14);
+  line-height: var(--lh-14);
+}
+
+/* De texto: sin borde, gris, píldora al pasar encima. */
+.btn-quiet,
+.ph__actions > .btn-quiet {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-8);
+  min-height: var(--control-h-sm);
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--muted);
+  font-size: var(--fs-14);
+  font-weight: var(--fw-500);
+  line-height: var(--lh-14);
+  transition:
+    background-color var(--motion),
+    color var(--motion);
+}
+
+.btn-quiet:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+/* La variante de acento («Editar», «+ Zona», «Subir comprobante») sigue en el color del texto. */
+.btn-quiet.btn-quiet--accent {
+  color: var(--text);
+}
+
+/* Nombre de adjunto que abre el archivo: es texto de renglón, no botón gris; conserva su corte en dos líneas. */
+.btn-quiet.hub-attach__name {
+  display: -webkit-box;
+  justify-content: flex-start;
+  padding: 0;
+  color: var(--text);
+  text-align: left;
+}
+
+.btn-quiet.hub-attach__name:hover {
+  background: transparent;
+  text-decoration: underline;
+}
+
+/* De icono. */
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--control-h);
+  height: var(--control-h);
+  min-width: var(--control-h);
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--muted);
+  font-size: var(--fs-16);
+  transition:
+    background-color var(--motion),
+    color var(--motion);
+}
+
+.icon-btn:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+/* En filas de tabla y listas densas, el de icono baja a 32 (en teléfono vuelve a 44). */
+.dtable .icon-btn,
+.table .icon-btn,
+.file-row .icon-btn,
+.task-row .icon-btn {
+  width: var(--control-h-sm);
+  height: var(--control-h-sm);
+  min-width: var(--control-h-sm);
+}
+
+/* Peligro en filas: gris en reposo, rojo solo encima o con foco; nada de contorno rojo permanente. */
+.btn-danger,
+.btn-quiet--danger,
+.icon-btn--danger {
+  color: var(--muted) !important;
+}
+
+.btn-danger:hover,
+.btn-danger:focus-visible,
+.btn-quiet--danger:hover,
+.btn-quiet--danger:focus-visible,
+.icon-btn--danger:hover,
+.icon-btn--danger:focus-visible {
+  background: color-mix(in srgb, var(--danger) 8%, transparent) !important;
+  color: var(--danger) !important;
+}
+
+.btn-danger {
+  border-color: var(--line-strong) !important;
+}
+
+.btn.btn-danger {
+  background: transparent;
+}
+
+/* Sin «ghost», el botón de peligro es el final de una confirmación: relleno rojo. */
+.btn.btn-danger:not(.ghost),
+.btn.btn-danger:not(.ghost):hover:not(:disabled) {
+  border-color: transparent !important;
+  background: var(--danger) !important;
+  color: var(--on-danger) !important;
+}
+
+/* ═══ 4 · Campos ═════════════════════════════════════════════════════════════
+   Una sola altura para texto, número, fecha, hora y select; el área de texto crece desde 96. */
+
+.field,
+select.field,
+:where(.shell, .panel, .tpl-editor, .form) :is(.fx, .form, .oc-form, .set-sec, .askd, .modal, .filter-bar, .ph)
+  :is(input:not([type='checkbox'], [type='radio'], [type='range'], [type='color'], [type='file'], [type='hidden']), select):not(.cell):not(.fx-input-lg) {
+  height: var(--control-h);
+  min-height: var(--control-h);
+  padding-top: 0;
+  padding-bottom: 0;
+  border: 1px solid var(--line-field);
+  border-radius: var(--radius-field);
+  font-size: var(--fs-14);
+  font-weight: var(--fw-400);
+  line-height: var(--lh-14);
+}
+
+select.field {
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+}
+
+.field:is(textarea),
+:where(.shell, .panel, .tpl-editor, .form) :is(.fx, .form, .oc-form, .set-sec, .askd, .modal) textarea:not(.cell) {
+  height: auto;
+  min-height: 96px;
+  padding: 10px 14px;
+  border-radius: var(--radius-field);
+  font-size: var(--fs-14);
+  line-height: var(--lh-14);
+}
+
+.fx input.fx-input-lg,
+.shell .fx input.fx-input-lg {
+  height: 52px;
+  padding: 0 16px;
+  border-radius: var(--radius-field);
+  font-size: var(--fs-20);
+  font-weight: var(--fw-500);
+}
+
+/* Etiqueta: 14/500, sin mayúsculas ni interletra. */
+.fx label,
+.fx .fx-field,
+.field-label {
+  font-size: var(--fs-14);
+  font-weight: var(--fw-500);
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.fx .fx-hint,
+.field-hint {
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+}
+
+/* Foco del campo: borde y anillo de 2 px del color del foco (accesibilidad-18). */
+.shell input:focus-visible,
+.shell select:focus-visible,
+.shell textarea:focus-visible,
+.form input:focus-visible,
+.form select:focus-visible,
+.form textarea:focus-visible,
+.field:focus {
+  outline: none;
+  border-color: var(--focus-ring);
+  box-shadow: 0 0 0 1px var(--focus-ring);
+}
+
+.topbar-search:focus-within {
+  border-color: var(--focus-ring);
+  box-shadow: 0 0 0 1px var(--focus-ring);
+}
+
+/* ═══ 5 · Estados y contadores ═══════════════════════════════════════════════
+   Píldora de estado: 24 px, 0 10px, píldora, 12/500, sin mayúsculas. Ninguna rellena de tinta salvo la
+   de acción explícita (.pill--fill). El rojo es solo para lo vencido. */
+
+.pill,
+.badge,
+.state,
+.state-dot,
+.set-state,
+.ref-pill,
+.sent-row__state,
+.chat-badge,
+.wait-late,
+.ev-when {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 24px;
+  padding: 0 10px;
+  border-radius: var(--radius-pill);
+  font-size: var(--fs-12);
+  font-weight: var(--fw-500);
+  line-height: var(--lh-12);
+  letter-spacing: 0;
+  text-transform: none;
+  white-space: nowrap;
+}
+
+/* «En revisión» / «Atrasado»: punto de tinta, no relleno que compita con el principal (critica-1-11). */
+.pill--review {
+  border-color: var(--pill-line, var(--line-strong));
+  background: transparent;
+  color: var(--text);
+}
+
+.pill--review::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--text);
+}
+
+.ev-when.is-today {
+  border-color: transparent;
+}
+
+/* Contador: 18 px, 12/600 tabular; gris en un control apagado, tinta en el activo. */
+.count,
+.seg__count,
+.tab-bar__count,
+.event-subtabs__count,
+.chip__count,
+.pnav__badge,
+.nav-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: var(--radius-pill);
+  background: var(--fill-soft);
+  color: var(--muted);
+  font-size: var(--fs-12);
+  font-weight: var(--fw-600);
+  line-height: 1;
+  letter-spacing: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.seg__btn.is-on .seg__count,
+.tab-bar__btn.is-active .tab-bar__count,
+.event-subtabs__btn.is-active .event-subtabs__count {
+  background: var(--fill-soft);
+  color: var(--text);
+}
+
+/* Sin leer en la navegación: tinta, no rojo (no es vencido). */
+.pnav__badge {
+  background: var(--count-on-bg);
+  color: var(--count-on-fg);
+}
+
+/* ═══ 6 · Segmentado, filtros y pestañas ═════════════════════════════════════
+   Elegir una vista = segmentado (riel gris, activo en superficie, sin sombra). Los chips de filtro toman la
+   misma medida y el activo deja de ir en tinta. Navegar entre secciones = pestañas subrayadas de 44. */
+
+.seg,
+.seg.task-layout {
+  gap: var(--sp-4);
+  padding: var(--sp-4);
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--seg-bg);
+}
+
+.seg__btn,
+.task-layout .seg__btn,
+html[data-entity] .notif-panel__seg .seg__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-8);
+  min-height: calc(var(--control-h) - 8px);
+  padding: 0 14px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--muted);
+  font-size: var(--fs-14);
+  font-weight: var(--fw-500);
+  line-height: var(--lh-14);
+  white-space: nowrap;
+  transition:
+    background-color var(--motion),
+    color var(--motion);
+}
+
+.seg__btn:hover {
+  color: var(--text);
+}
+
+.seg__btn.is-on,
+.task-layout .seg__btn.is-on,
+[data-entity='EXPLANADA'] .seg__btn.is-on {
+  background: var(--seg-on-bg);
+  color: var(--text);
+  font-weight: var(--fw-600);
+  box-shadow: none;
+}
+
+[data-entity='EXPLANADA'] .seg__btn.is-on .seg__count {
+  background: var(--fill-soft);
+  color: var(--text);
+}
+
+/* Chips de filtro (Avisos, Plantillas, Reportes, Ajustes): misma medida que el segmento; el activo se
+   marca con superficie y contorno de tinta, no con relleno negro. */
+.nt-chip,
+.chip,
+.chat-chip,
+.choice__opt {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-8);
+  min-height: calc(var(--control-h) - 8px);
+  height: auto;
+  padding: 0 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--muted);
+  font-size: var(--fs-14);
+  font-weight: var(--fw-500);
+  line-height: var(--lh-14);
+  white-space: nowrap;
+}
+
+.nt-chip:hover,
+.chip:hover,
+.chat-chip:hover,
+.choice__opt:hover {
+  color: var(--text);
+}
+
+.nt-chip.is-on,
+.chip.is-on,
+.chat-chip.is-on,
+.choice__opt.is-on {
+  border-color: var(--text);
+  background: var(--seg-on-bg);
+  color: var(--text);
+  font-weight: var(--fw-600);
+}
+
+.chip.is-on .chip__count {
+  background: var(--fill-soft);
+  color: var(--text);
+}
+
+/* Pestañas subrayadas: 44 de alto, 14; activa 600 con línea de 2 px. */
+.tab-bar__btn,
+.event-tabs .tab-bar__btn {
+  min-height: var(--tap);
+  padding: 0 16px;
+  font-size: var(--fs-14);
+  font-weight: var(--fw-500);
+  line-height: var(--lh-14);
+}
+
+.tab-bar__btn.is-active {
+  font-weight: var(--fw-600);
+}
+
+.event-subtabs__btn {
+  min-height: var(--tap);
+  font-size: var(--fs-14);
+  font-weight: var(--fw-500);
+  line-height: var(--lh-14);
+}
+
+.event-subtabs__btn.is-active {
+  font-weight: var(--fw-600);
+}
+
+/* ═══ 7 · Superficie de mosaico ═════════════════════════════════════════════
+   Una sola: fondo de tarjeta, radio 24 (20 en teléfono), sin borde ni sombra. Las cajas internas (tablero,
+   testigos) pasan a superficie suave sin borde. */
+
+.panel,
+.surface,
+.dtable-wrap,
+.ev-hero,
+.filter-bar,
+.task-group,
+.task2,
+.adv-card,
+.folder-card,
+.set-sec__body,
+.org-card,
+.tpl-card,
+.kpi,
+.file-row,
+.fstrip,
+.mz-tile {
+  border: 0;
+  border-radius: var(--radius-lg);
+  box-shadow: none;
+}
+
+.panel,
+.surface,
+.dtable-wrap,
+.task-group,
+.task2,
+.adv-card,
+.folder-card,
+.set-sec__body,
+.org-card,
+.tpl-card,
+.kpi,
+.file-row {
+  background: var(--card-bg);
+}
+
+.ev-hero {
+  background: var(--card-bg);
+}
+
+/* El panel también sirve de capa (.modal.panel): ahí conserva su sombra de capa flotante. */
+.modal.panel {
+  box-shadow: var(--shadow-md);
+}
+
+/* Tarjetas en rejilla (plantillas): 20 para que sus tres acciones quepan en un renglón. */
+.tpl-card {
+  padding: 20px;
+}
+
+.tpl-card__actions .btn-quiet {
+  padding: 0 10px;
+}
+
+/* Relleno de mosaico: 24 (16 en teléfono). */
+.folder-card,
+.set-sec__body,
+.org-card,
+.ev-hero:not(.ev-hero--compact):not(.ev-hero--dense) {
+  padding: var(--tile-pad);
+}
+
+.set-sec__body:has(> .session-list) {
+  padding: var(--sp-4) 0;
+}
+
+.adv-card,
+.file-row {
+  padding: var(--sp-16) var(--tile-pad);
+}
+
+.filter-bar {
+  padding: var(--sp-12) var(--sp-16);
+}
+
+/* Cabecera y cuerpo de mosaico: sin línea divisoria; la separa el espacio. */
+.panel-head,
+.surface__head {
+  gap: var(--sp-12);
+  padding: var(--tile-pad) var(--tile-pad) 0;
+  border-bottom: 0;
+}
+
+.panel-body,
+.surface__body {
+  padding: var(--tile-pad);
+}
+
+.panel-head + .panel-body,
+.surface__head + .surface__body {
+  padding-top: var(--sp-16);
+}
+
+/* Cajas internas: superficie suave, radio 16, sin borde ni sombra. */
+.board-card,
+.witness-card {
+  border: 0;
+  border-radius: var(--radius-inner);
+  background: var(--tile-soft, var(--bg-soft));
+  box-shadow: none;
+}
+
+/* Pilas de bloques: 16 entre mosaicos (10 en teléfono). */
+.stack,
+.sx-stack,
+.tiles,
+.fstrip,
+.ev-grid,
+.home .home-panels,
+.home-panels,
+.witness-grid,
+.tpl-grid {
+  gap: var(--gap-tile);
+}
+
+.sx-stack > .ph {
+  margin-bottom: calc(var(--sp-24) - var(--gap-tile));
+}
+
+/* ═══ 8 · Cifra (mosaico de cifra) ══════════════════════════════════════════
+   Etiqueta 14 arriba, cifra Inter Tight 600 (28 en los blancos, 40 en el de tinta), detalle 14 abajo,
+   relleno 24, sin cqi: la cifra nunca encoge por falta de ancho. La tinta se pide con .tile--ink o
+   .fstrip__item--ink; mientras no se pida, sigue en la primera cifra. */
+
+.tiles > .tile,
+.fstrip .fstrip__item {
+  min-height: 132px;
+  padding: var(--tile-pad);
+  border: 0;
+  border-radius: var(--radius-lg);
+  box-shadow: none;
+}
+
+/* Estructura fija: etiqueta, 8, cifra pegada a la etiqueta; barra y detalle al pie. Así todas las cifras de
+   una franja caen a la misma altura, tengan barra o no (tipografia-16). */
+.fstrip .fstrip__item {
+  justify-content: flex-start;
+  gap: var(--sp-8);
+}
+
+.fstrip .fstrip__foot {
+  flex: 1 1 auto;
+  gap: var(--sp-8);
+}
+
+.fstrip .fstrip__foot > .fstrip__value + * {
+  margin-top: auto;
+}
+
+.tiles > .tile .tile__label,
+.fstrip__label {
+  color: var(--muted);
+  font-size: var(--fs-14);
+  font-weight: var(--fw-400);
+  line-height: var(--lh-14);
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.tile__value,
+.tiles > .tile .tile__value,
+.fstrip__value,
+.kpi .value,
+html[data-entity] .kpi-grid-dense > .kpi > .value {
+  font-family: var(--font-display);
+  font-size: var(--fs-28);
+  font-weight: var(--fw-600);
+  line-height: var(--lh-tight);
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.tiles > .tile:first-child .tile__value,
+.tiles > .tile--ink .tile__value,
+.fstrip__item:first-child .fstrip__value,
+.fstrip__item--ink .fstrip__value,
+.mz-fig__value {
+  font-size: var(--fs-40);
+  line-height: 1;
+  letter-spacing: -0.03em;
+}
+
+.tile__sub,
+.fstrip__sub {
+  font-size: var(--fs-14);
+  line-height: var(--lh-14);
+}
+
+.mz-fig__label {
+  font-size: var(--fs-14);
+  line-height: var(--lh-14);
+}
+
+/* Tinta explícita y, con ella, la primera deja de serlo. */
+.tiles > .tile--ink,
+.fstrip .fstrip__item--ink {
+  background: var(--tile-ink);
+  color: var(--tile-ink-fg);
+}
+
+.tiles > .tile--ink :is(.tile__label, .tile__sub),
+.fstrip .fstrip__item--ink :is(.fstrip__label, .fstrip__sub) {
+  color: var(--tile-ink-muted);
+}
+
+.tiles > .tile--ink .tile__value,
+.fstrip .fstrip__item--ink .fstrip__value {
+  color: var(--tile-ink-fg);
+}
+
+.tiles:has(> .tile--ink) > .tile:first-child:not(.tile--ink),
+.fstrip:has(> .fstrip__item--ink) > .fstrip__item:first-child:not(.fstrip__item--ink) {
+  background: var(--card-bg);
+  color: var(--text);
+}
+
+.tiles:has(> .tile--ink) > .tile:first-child:not(.tile--ink) :is(.tile__label, .tile__sub),
+.fstrip:has(> .fstrip__item--ink) > .fstrip__item:first-child:not(.fstrip__item--ink) :is(.fstrip__label, .fstrip__sub) {
+  color: var(--muted);
+}
+
+.tiles:has(> .tile--ink) > .tile:first-child:not(.tile--ink) .tile__value,
+.fstrip:has(> .fstrip__item--ink) > .fstrip__item:first-child:not(.fstrip__item--ink) .fstrip__value {
+  color: var(--text);
+  font-size: var(--fs-28);
+}
+
+/* Si «Lo siguiente» ya es la tinta del evento, la primera cifra vuelve a 28 como las demás. */
+.next-steps:not(.next-steps--ok) ~ .tiles > .tile:first-child .tile__value,
+.next-steps:not(.next-steps--ok) ~ * .tiles > .tile:first-child .tile__value {
+  font-size: var(--fs-28);
+}
+
+/* La cifra no se pinta de rojo o ámbar: el tono va en un punto junto a la etiqueta (critica-4-12). */
+.fstrip__value.is-danger,
+.fstrip__value.is-warn,
+.fstrip .fstrip__item:first-child .fstrip__value.is-danger,
+.fstrip .fstrip__item:first-child .fstrip__value.is-warn,
+[data-entity='EXPLANADA'] .fstrip .fstrip__item:first-child .fstrip__value.is-danger,
+[data-entity='EXPLANADA'] .fstrip .fstrip__item:first-child .fstrip__value.is-warn {
+  color: inherit;
+}
+
+.fstrip__item:has(.fstrip__value.is-danger) .fstrip__label::before,
+.fstrip__item:has(.fstrip__value.is-warn) .fstrip__label::before {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 8px;
+  border-radius: 50%;
+  background: var(--danger);
+  vertical-align: 2px;
+}
+
+.fstrip__item:has(.fstrip__value.is-warn) .fstrip__label::before {
+  background: var(--warn);
+}
+
+/* KPI viejos (Riesgo, Auditoría, Resúmenes): misma superficie y medida de cifra. */
+.kpi,
+html[data-entity] .kpi-grid-dense > .kpi {
+  padding: var(--sp-16) var(--tile-pad);
+  border: 0;
+  border-radius: var(--radius-lg);
+  box-shadow: none;
+}
+
+.kpi .label {
+  color: var(--muted);
+  font-size: var(--fs-14);
+  font-weight: var(--fw-400);
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+/* ═══ 9 · Títulos ════════════════════════════════════════════════════════════
+   Pantalla 40 (28 en teléfono); sección y mosaico 20; subgrupo dentro de una lista 14/500 gris. */
+
+.ph .ph__title,
+.ph__title {
+  font-family: var(--font-display);
+  font-size: var(--fs-40);
+  font-weight: var(--fw-600);
+  line-height: var(--lh-40);
+  letter-spacing: -0.03em;
+}
+
+.ph__desc {
+  font-size: var(--fs-16);
+  line-height: var(--lh-16);
+}
+
+.sx-head__title,
+.panel-head h2,
+.mz-tile__head h3,
+.home-panel__head h3,
+.surface__title,
+.set-sec__title,
+.mcal__title {
+  font-family: var(--font-display);
+  font-size: var(--fs-20);
+  font-weight: var(--fw-600);
+  line-height: var(--lh-20);
+  letter-spacing: -0.01em;
+}
+
+.nt-group {
+  color: var(--muted);
+  font-size: var(--fs-14);
+  font-weight: var(--fw-500);
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+/* Vacío: título 16/600, texto 14 con interlineado 20 (tipografia-30). */
+.empty-state h3 {
+  font-size: var(--fs-16);
+  font-weight: var(--fw-600);
+  line-height: var(--lh-16);
+}
+
+.empty-state p {
+  max-width: 44ch;
+  font-size: var(--fs-14);
+  line-height: var(--lh-14);
+}
+
+/* ═══ 10 · Tabla ═════════════════════════════════════════════════════════════
+   Encabezado 12/500 gris sin fondo con línea inferior; celda 14 con relleno 12×16 y 24 en los bordes;
+   números tabulares; encima, el gris de hover. */
+
+.dtable,
+.table {
+  font-size: var(--fs-14);
+  line-height: var(--lh-14);
+}
+
+.dtable th,
+.table th {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line);
+  background: transparent;
+  color: var(--muted);
+  font-size: var(--fs-12);
+  font-weight: var(--fw-500);
+  line-height: var(--lh-12);
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.dtable td,
+.table td {
+  padding: 12px 16px;
+}
+
+.dtable :is(th, td):first-child,
+.table :is(th, td):first-child {
+  padding-left: var(--tile-pad);
+}
+
+.dtable :is(th, td):last-child,
+.table :is(th, td):last-child {
+  padding-right: var(--tile-pad);
+}
+
+.dtable td.num,
+.dtable th.num,
+.table td.num {
+  font-variant-numeric: tabular-nums;
+}
+
+.dtable tr.grp-row td {
+  padding-top: 12px;
+  padding-bottom: 8px;
+  background: var(--bg-soft);
+}
+
+.dtable tbody tr:hover td,
+.table tr:hover td {
+  background: var(--hover);
+  transition: background-color 0.15s ease;
+}
+
+/* ═══ 11 · Foco ══════════════════════════════════════════════════════════════
+   Una línea de 2 px a 2 px del borde con el token --focus-ring, que cada superficie oscura redefine. */
+
+html[data-entity] :is(a, button, summary, [role='tab'], [role='option'], [tabindex]):focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+html[data-entity] :focus-visible {
+  outline-color: var(--focus-ring) !important;
+}
+
+/* El papel conserva su tinta de papel. */
+html[data-entity] :is(#{$paper}) {
+  --focus-ring: #0c0c0d;
+}
+
+/* ═══ 12 · Teléfono y toque ══════════════════════════════════════════════════
+   44 px para todo lo que se aprieta; los dibujos chicos (casillas, interruptores) crecen su zona de toque
+   con un pseudo-elemento sin agrandar el dibujo. */
+
+@media (max-width: 768px) {
+  .btn,
+  .btn-sm,
+  .btn.btn-sm,
+  .oc-actions .btn-sm,
+  .btn-quiet,
+  .ph__actions > .btn,
+  .ph__actions > .btn.btn-sm,
+  .ph__actions > .btn-quiet {
+    min-height: var(--tap);
+  }
+
+  .icon-btn,
+  .dtable .icon-btn,
+  .table .icon-btn,
+  .file-row .icon-btn,
+  .task-row .icon-btn {
+    width: var(--tap);
+    height: var(--tap);
+    min-width: var(--tap);
+  }
+
+  .seg__btn,
+  .task-layout .seg__btn,
+  html[data-entity] .notif-panel__seg .seg__btn,
+  .nt-chip,
+  .chip,
+  .chat-chip,
+  .choice__opt {
+    min-height: 40px;
+  }
+
+  /* Campos: 16 px para que Safari no acerque la pantalla. */
+  .field,
+  select.field,
+  :where(.shell, .panel, .tpl-editor, .form) :is(.fx, .form, .oc-form, .set-sec, .askd, .modal, .filter-bar, .ph)
+    :is(input:not([type='checkbox'], [type='radio'], [type='range'], [type='color'], [type='file'], [type='hidden']), select, textarea):not(.cell):not(.fx-input-lg) {
+    font-size: var(--fs-16);
+  }
+
+  /* El mes del calendario comparte renglón con tres botones de 44: a 20 empujaba las flechas a otra línea. */
+  .mcal__title {
+    min-width: 0;
+    font-size: var(--fs-16);
+    line-height: var(--lh-16);
+  }
+
+  .mcal__head .sx-actions {
+    flex-wrap: nowrap;
+    gap: 0;
+  }
+
+  .ph .ph__title,
+  .ph__title {
+    font-size: var(--fs-28);
+    line-height: var(--lh-28);
+    letter-spacing: -0.02em;
+  }
+
+  /* Cifra: la de tinta conserva 40 a todo lo ancho; las blancas 28 en fila de dos (critica-2-55). */
+  .tiles > .tile,
+  .fstrip .fstrip__item {
+    min-height: 0;
+  }
+
+  .tiles > .tile:first-child:not(:has(~ .tile--ink)),
+  .tiles > .tile--ink,
+  .fstrip .fstrip__item:first-child:not(:has(~ .fstrip__item--ink)),
+  .fstrip .fstrip__item--ink {
+    grid-column: 1 / -1;
+  }
+
+  .next-steps:not(.next-steps--ok) ~ .tiles > .tile:first-child,
+  .next-steps:not(.next-steps--ok) ~ * .tiles > .tile:first-child {
+    grid-column: auto;
+  }
+
+  .mz-fig__value {
+    font-size: var(--fs-28);
+  }
+}
+
+/* Con la primera a todo lo ancho, la cifra suelta es la última en posición par (no la non, como suponía
+   _pulido): así no queda media fila vacía junto a ella (Anticipos: «Mis solicitudes» sola). */
+@media (max-width: 640px) {
+  .tiles:not(:has(> .tile--ink)) > .tile:first-child ~ .tile:last-child:nth-child(odd) {
+    grid-column: auto;
+  }
+
+  .tiles:not(:has(> .tile--ink)) > .tile:first-child ~ .tile:last-child:nth-child(even) {
+    grid-column: 1 / -1;
+  }
+
+  .next-steps:not(.next-steps--ok) ~ .tiles > .tile:first-child ~ .tile:last-child:nth-child(odd),
+  .next-steps:not(.next-steps--ok) ~ * .tiles > .tile:first-child ~ .tile:last-child:nth-child(odd) {
+    grid-column: 1 / -1;
+  }
+
+  .next-steps:not(.next-steps--ok) ~ .tiles > .tile:first-child ~ .tile:last-child:nth-child(even),
+  .next-steps:not(.next-steps--ok) ~ * .tiles > .tile:first-child ~ .tile:last-child:nth-child(even) {
+    grid-column: auto;
+  }
+}
+
+@media (max-width: 768px) {
+  .dtable :is(th, td):first-child,
+  .table :is(th, td):first-child {
+    padding-left: var(--sp-16);
+  }
+
+  .dtable :is(th, td):last-child,
+  .table :is(th, td):last-child {
+    padding-right: var(--sp-16);
+  }
+}
+
+/* Casillas y palomitas: zona de toque de 44 alrededor del dibujo. */
+@media (max-width: 768px), (pointer: coarse) {
+  .task-row__check,
+  .task2__check,
+  .oc-switch,
+  .nt-switch,
+  .set-switch {
+    position: relative;
+  }
+
+  .task-row__check::after,
+  .task2__check::after,
+  .oc-switch::after,
+  .nt-switch::after,
+  .set-switch::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: max(100%, var(--tap));
+    height: max(100%, var(--tap));
+    transform: translate(-50%, -50%);
+  }
+
+  .icon-btn,
+  .btn-quiet {
+    min-width: var(--tap);
+  }
+}
+
+/* ═══ 13 · Auditorio ════════════════════════════════════════════════════════
+   Mismas formas que ARTA; solo cambia el color. Lo único claro: el botón principal y la píldora activa. */
+
+/* Lo encendido en el Auditorio es plano (sin degradado plata). */
+[data-entity='EXPLANADA'] :is(.pnav__pill.is-on, .qc__btn, .account__btn) {
+  background: var(--accent-fill);
+  color: var(--on-accent);
+}
+
+/* Botones dentro de un mosaico claro de Inicio: en oscuro van claros como el principal. */
+[data-entity='EXPLANADA'] .mz-turn:not(.is-lead) .mz-turn__act {
+  background: var(--accent-fill);
+  color: var(--on-accent);
+}
+
+/* Restos del tema «recto»: radios de 1 a 4 px solo en el Auditorio. */
+[data-entity='EXPLANADA'] {
+  --check-radius: 5px;
+}
+
+[data-entity='EXPLANADA'] :is(.state, .nav a .nav-badge, .topbar-search__kbd, .nt-ico, .topbar-search__avatar, .av-stack__face) {
+  border-radius: var(--radius-pill);
+}
+
+[data-entity='EXPLANADA'] :is(.oc-switch__track, .oc-switch__knob) {
+  border-radius: var(--radius-pill);
+}
+
+[data-entity='EXPLANADA'] .mcal__num {
+  border-radius: var(--radius-pill);
+}
+
+[data-entity='EXPLANADA'] :is(.mcal__chip, .mcal__more) {
+  border-radius: 6px;
+}
+
+[data-entity='EXPLANADA'] .empty-lite__icon {
+  border-radius: var(--radius-pill);
+}
+
+/* Barras de gráfica en plata plana, más finas que el número (auditorio-22). */
+[data-entity='EXPLANADA'] .mz-seg i:not(.is-late):not(.is-danger) {
+  background: var(--bar-fill);
+}
+
+/* ═══ 14 · Arreglos de piezas ════════════════════════════════════════════════ */
+
+/* Modo tarjeta en teléfono: solo las filas propias de la tabla, nunca las de una tabla anidada
+   (detalle de OC: Subtotal, IVA y Total salían como tarjetas sueltas, critica-4-36). Sin borde ni sombra. */
+@media (max-width: 640px) {
+  .dtable--cards > tbody > tr {
+    border: 0;
+    border-radius: var(--radius-lg);
+    box-shadow: none;
+  }
+
+  /* Tabla anidada (conceptos de la OC): vuelve a ser tabla, con sus montos a la derecha. */
+  .dtable--cards td table {
+    display: table;
+    width: 100%;
+  }
+
+  .dtable--cards td table thead {
+    display: table-header-group;
+  }
+
+  .dtable--cards td table tbody {
+    display: table-row-group;
+  }
+
+  .dtable--cards td table tfoot {
+    display: table-footer-group;
+  }
+
+  .dtable--cards td table tr,
+  .dtable--cards td table tbody tr {
+    display: table-row;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .dtable--cards td table :is(td, th),
+  .dtable--cards td table tbody td {
+    display: table-cell;
+    padding: 8px 4px;
+    border-bottom: 1px solid var(--line);
+    background: transparent;
+  }
+
+  .dtable--cards td table td[data-label]::before {
+    content: none;
+  }
+
+  /* En la tarjeta cada dato vive en media columna: la píldora larga («Autorizada · sin comprobante») se
+     parte en dos renglones en vez de montarse sobre la celda vecina. */
+  .dtable--cards > tbody > tr > td :is(.pill, .badge, .state) {
+    max-width: 100%;
+    padding-block: 2px;
+    white-space: normal;
+  }
+}
+
+/* El desvanecido del scroll lateral no se pinta sobre papel: dejaba una franja del fondo (negra en el
+   Auditorio) sobre la hoja blanca (auditorio-19). */
+html [data-fade-x]:has(.fsheet, .sheet, .sheet--excel, .pdfedit) {
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+
+/* El aviso flotante no tapa la barra inferior del teléfono (estados-40, formularios-39). */
+@media (max-width: 768px) {
+  html[data-entity] .shell:has(.bnav) .flash--float {
+    bottom: calc(80px + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+/* Pestañas del evento en teléfono: la activa se marca con contorno de tinta, no con relleno (ninguna pestaña
+   rellena compite con el botón principal). */
+@media (max-width: 900px) {
+  html[data-entity] .event-tabs .tab-bar__btn {
+    min-height: var(--tap);
+    padding: 0 16px;
+    font-size: var(--fs-14);
+    font-weight: var(--fw-500);
+  }
+
+  html[data-entity] .event-tabs .tab-bar__btn.is-active {
+    border-color: var(--text);
+    background: var(--seg-on-bg);
+    color: var(--text);
+    font-weight: var(--fw-600);
+  }
+
+  html[data-entity] .event-tabs .tab-bar__btn.is-active .tab-bar__count {
+    background: var(--fill-soft);
+    color: var(--text);
+  }
+}

@@ -1,0 +1,1142 @@
+// Megapasadas 22-11-2026: sis-capas. Lo escribe un solo agente; ver docs/diseno/SISTEMA-VISUAL.md.
+//
+// Capas, estados, errores y piezas compartidas de components/ui:
+//   1. Tokens de capa (radio, sombra, fondo, velo) y escala de z-index.
+//   2. Ventana del sistema (`Modal` → .layer) y la ventana vieja (.modal) con la misma piel.
+//   3. Preguntas (`AskDialog` → .askd).
+//   4. Avisos: en línea (.flash) y flotantes (.flash--float, .ltoasts) por encima de la barra del teléfono.
+//   5. Carga con forma (`Skeleton`, `LoadingBlock`) y falla con «Reintentar» (`ErrorState`).
+//   6. Cifras sin dato (`Tile`), segmentado (`Seg`) y vacíos (`EmptyState`, `EmptyLite`, `NoAccess`).
+//   7. Subir archivos (`UploadButton`, `FilePick`).
+//   Misma forma en ARTA y Auditorio: solo cambian colores.
+
+/* ── 1. Tokens ─────────────────────────────────────────────────────────────── */
+
+:root {
+  /* Las capas del sistema van por encima del visor y los diálogos del chat (1000-1003): una
+     pregunta abierta desde ahí no queda escondida detrás. */
+  --z-nav: 100;
+  --z-dropdown: 300;
+  --z-modal: 1100;
+  --z-ask: 1200;
+  --z-toast: 1300;
+
+  --layer-radius: 24px;
+  --layer-radius-menu: 16px;
+  --layer-pad: 24px;
+  --layer-bg: var(--card-bg, #ffffff);
+  --layer-line: transparent;
+  --layer-shadow: 0 24px 60px rgba(12, 12, 13, 0.18);
+  --layer-veil: rgba(12, 12, 13, 0.4);
+  --layer-in: 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
+
+  /* Lo que ocupa la barra inferior flotante del teléfono (44 + 12 de relleno + 10 de aire). */
+  --bnav-clear: 0px;
+
+  --skel-base: rgba(12, 12, 13, 0.06);
+  --skel-glow: rgba(12, 12, 13, 0.03);
+}
+
+[data-entity='EXPLANADA'] {
+  --layer-bg: #16161a;
+  --layer-line: rgba(255, 255, 255, 0.1);
+  --layer-shadow: 0 24px 60px rgba(0, 0, 0, 0.6);
+  --layer-veil: rgba(0, 0, 0, 0.62);
+  --skel-base: rgba(255, 255, 255, 0.07);
+  --skel-glow: rgba(255, 255, 255, 0.05);
+}
+
+@media (max-width: 768px) {
+  body:has(.bnav) {
+    --bnav-clear: calc(66px + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+@media (max-width: 640px) {
+  :root {
+    --layer-pad: 20px;
+  }
+}
+
+@keyframes layer-veil-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes layer-rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+}
+
+@keyframes layer-sheet {
+  from {
+    transform: translateY(100%);
+  }
+}
+
+/* ── 2. Ventana del sistema (`Modal`) ─────────────────────────────────────── */
+
+.layer-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: var(--layer-veil);
+  animation: layer-veil-in 150ms ease-out;
+}
+
+.layer {
+  display: flex;
+  flex-direction: column;
+  width: min(560px, 100%);
+  max-height: min(88dvh, 880px);
+  border: 1px solid var(--layer-line);
+  border-radius: var(--layer-radius);
+  background: var(--layer-bg);
+  color: var(--text);
+  box-shadow: var(--layer-shadow);
+  overflow: hidden;
+  animation: layer-rise var(--layer-in);
+}
+
+.layer--sm {
+  width: min(420px, 100%);
+}
+
+.layer--lg {
+  width: min(760px, 100%);
+}
+
+.layer__grip {
+  display: none;
+}
+
+.layer__head {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: var(--layer-pad) var(--layer-pad) 16px;
+}
+
+.layer__heading {
+  flex: 1;
+  min-width: 0;
+}
+
+.layer__title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: -0.2px;
+  overflow-wrap: anywhere;
+}
+
+.layer__title:focus {
+  outline: none;
+}
+
+.layer__desc {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.layer__close {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  margin: -10px -10px 0 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition:
+    background-color 150ms ease,
+    color 150ms ease;
+}
+
+.layer__close:hover:not(:disabled) {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.layer__close:focus-visible {
+  outline: 2px solid var(--focus-ring, var(--text));
+  outline-offset: 2px;
+}
+
+.layer__body {
+  flex: 1;
+  min-height: 0;
+  padding: 0 var(--layer-pad) var(--layer-pad);
+  overflow: auto;
+  overscroll-behavior: contain;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.layer__foot {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 16px var(--layer-pad);
+  border-top: 1px solid var(--line);
+  background: var(--layer-bg);
+}
+
+/* Teléfono: hoja desde abajo, agarradera, pie fijo y botones a todo lo ancho. */
+@media (max-width: 640px) {
+  .layer-backdrop {
+    align-items: flex-end;
+    padding: 0;
+  }
+
+  .layer,
+  .layer--sm,
+  .layer--lg {
+    width: 100%;
+    max-height: 92dvh;
+    border-width: 1px 0 0;
+    border-radius: var(--layer-radius) var(--layer-radius) 0 0;
+    animation: layer-sheet 240ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+
+  .layer__grip {
+    display: block;
+    flex: none;
+    width: 40px;
+    height: 4px;
+    margin: 8px auto 0;
+    border-radius: 999px;
+    background: var(--line-strong);
+  }
+
+  .layer__head {
+    padding-top: 12px;
+  }
+
+  .layer__foot {
+    display: grid;
+    grid-auto-columns: minmax(0, 1fr);
+    grid-auto-flow: column;
+    padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .layer__foot .btn,
+  .layer__foot .btn-quiet {
+    justify-content: center;
+    min-height: 48px;
+  }
+}
+
+/* La ventana vieja (.modal: entregar tarea, detalle de anticipo) toma la misma piel mientras migra a `Modal`. */
+html[data-entity] .modal-backdrop {
+  z-index: var(--z-modal);
+  padding: 24px;
+  background: var(--layer-veil);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  animation: layer-veil-in 150ms ease-out;
+}
+
+html[data-entity] .modal,
+html[data-entity] .modal.panel {
+  max-height: min(88dvh, 880px);
+  border: 1px solid var(--layer-line);
+  border-radius: var(--layer-radius);
+  background: var(--layer-bg);
+  box-shadow: var(--layer-shadow);
+  animation: layer-rise var(--layer-in);
+}
+
+@media (max-width: 640px) {
+  html[data-entity] .modal-backdrop {
+    align-items: flex-end;
+    padding: 0;
+  }
+
+  html[data-entity] .modal,
+  html[data-entity] .modal.panel {
+    width: 100%;
+    height: auto;
+    max-height: 92dvh;
+    padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+    border-width: 1px 0 0;
+    border-radius: var(--layer-radius) var(--layer-radius) 0 0;
+    animation: layer-sheet 240ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+}
+
+/* ── 3. Preguntas (`AskDialog`) ───────────────────────────────────────────── */
+
+html[data-entity] .askd-backdrop {
+  z-index: var(--z-ask);
+  padding: 24px;
+  background: var(--layer-veil);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  animation: layer-veil-in 150ms ease-out;
+}
+
+html[data-entity] .askd {
+  gap: 8px;
+  width: min(440px, 100%);
+  padding: var(--layer-pad);
+  border: 1px solid var(--layer-line);
+  border-radius: var(--layer-radius);
+  background: var(--layer-bg);
+  box-shadow: var(--layer-shadow);
+  animation: layer-rise var(--layer-in);
+}
+
+html[data-entity] .askd__title {
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: -0.2px;
+}
+
+html[data-entity] .askd__body {
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+html[data-entity] .askd__field {
+  gap: 8px;
+  margin-top: 8px;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+html[data-entity] .askd__field input {
+  min-height: 44px;
+  padding: 0 14px;
+  border-radius: 12px;
+  font-weight: 400;
+}
+
+html[data-entity] .askd__actions {
+  gap: 8px;
+  margin-top: 16px;
+}
+
+html[data-entity] .askd__actions .btn {
+  min-height: 44px;
+  padding: 0 20px;
+}
+
+@media (max-width: 640px) {
+  html[data-entity] .askd-backdrop {
+    align-items: flex-end;
+    padding: 0;
+  }
+
+  html[data-entity] .askd {
+    width: 100%;
+    padding: 20px 20px calc(16px + env(safe-area-inset-bottom, 0px));
+    border-width: 1px 0 0;
+    border-radius: var(--layer-radius) var(--layer-radius) 0 0;
+    animation: layer-sheet 240ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+
+  html[data-entity] .askd::before {
+    content: '';
+    display: block;
+    width: 40px;
+    height: 4px;
+    margin: -8px auto 8px;
+    border-radius: 999px;
+    background: var(--line-strong);
+  }
+
+  html[data-entity] .askd__actions .btn {
+    min-height: 48px;
+  }
+}
+
+/* ── 4. Avisos ────────────────────────────────────────────────────────────── */
+
+/* En línea: dentro del mosaico, arriba de lo que falló. Una línea, sin borde. */
+html[data-entity] .flash:not(.flash--float) {
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border: 0;
+  border-radius: 16px;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.45;
+}
+
+html[data-entity] .flash--info:not(.flash--float) {
+  background: var(--fill-soft);
+  color: var(--text);
+}
+
+html[data-entity] .flash--success:not(.flash--float) {
+  background: color-mix(in srgb, var(--ok) 10%, transparent);
+  color: var(--text);
+}
+
+html[data-entity] .flash--warn:not(.flash--float) {
+  background: color-mix(in srgb, var(--warn) 12%, transparent);
+  color: var(--text);
+}
+
+html[data-entity] .flash--error:not(.flash--float) {
+  background: color-mix(in srgb, var(--danger) 9%, transparent);
+  color: var(--danger);
+}
+
+/* Flotante: píldora de tinta abajo al centro, por encima de la barra inferior del teléfono. */
+html[data-entity] .flash--float {
+  bottom: calc(24px + var(--bnav-clear) + env(safe-area-inset-bottom, 0px));
+  z-index: var(--z-toast);
+  gap: 4px;
+  min-height: 48px;
+  padding: 4px 4px 4px 20px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--tile-ink);
+  color: var(--tile-ink-fg);
+  box-shadow: 0 16px 40px rgba(12, 12, 13, 0.24);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+[data-entity='EXPLANADA'] .flash--float {
+  box-shadow:
+    0 0 0 1px var(--layer-line),
+    0 16px 40px rgba(0, 0, 0, 0.6);
+}
+
+html[data-entity] .flash--float:not(:has(.flash__dismiss)) {
+  padding-right: 20px;
+}
+
+html[data-entity] .flash--float .flash__body {
+  padding: 8px 0;
+}
+
+html[data-entity] .flash--float.flash--success .flash__body::before {
+  background: #3ccb7f;
+}
+
+html[data-entity] .flash--float.flash--error .flash__body::before {
+  background: #ff8a7a;
+}
+
+[data-entity='EXPLANADA'] .flash--float.flash--success .flash__body::before {
+  background: var(--ok);
+}
+
+[data-entity='EXPLANADA'] .flash--float.flash--error .flash__body::before {
+  background: var(--danger);
+}
+
+html[data-entity] .flash__dismiss {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border-radius: 999px;
+  opacity: 0.8;
+  transition:
+    background-color 150ms ease,
+    opacity 150ms ease;
+}
+
+html[data-entity] .flash__dismiss:hover {
+  background: color-mix(in srgb, currentColor 12%, transparent);
+  opacity: 1;
+}
+
+html[data-entity] .flash__dismiss:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 1px;
+}
+
+@media (max-width: 640px) {
+  html[data-entity] .flash--float {
+    right: 12px;
+    left: 12px;
+    width: auto;
+    max-width: none;
+    bottom: calc(16px + var(--bnav-clear) + env(safe-area-inset-bottom, 0px));
+    transform: none;
+    animation-name: flash-rise-phone;
+  }
+
+  html[data-entity] .flash__dismiss {
+    width: 44px;
+    height: 44px;
+  }
+}
+
+@keyframes flash-rise-phone {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+
+/* Tarjetas de avisos en vivo: misma piel de capa; × de 44 px en el teléfono. */
+html[data-entity] .ltoasts {
+  z-index: var(--z-toast);
+}
+
+html[data-entity] .ltoast {
+  border: 1px solid var(--layer-line);
+  border-radius: 20px;
+  background: var(--layer-bg);
+  box-shadow: var(--layer-shadow);
+}
+
+html[data-entity] .ltoast__close {
+  top: 4px;
+  right: 4px;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+}
+
+@media (max-width: 640px) {
+  html[data-entity] .ltoast__open {
+    padding-right: 48px;
+  }
+
+  html[data-entity] .ltoast__close {
+    width: 44px;
+    height: 44px;
+  }
+}
+
+/* ── 5. Carga con forma y falla con «Reintentar» ─────────────────────────── */
+
+@keyframes skel-appear {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes skel-pulse {
+  50% {
+    opacity: 0.55;
+  }
+}
+
+html[data-entity] .loading-block {
+  padding: 0;
+}
+
+/* Aparece a los 300 ms: una carga rápida no parpadea. */
+.skel-tile,
+.skel-grid,
+.skel-figs {
+  animation: skel-appear 200ms ease-out 300ms both;
+}
+
+.skel-tile {
+  display: grid;
+  padding: 8px 24px;
+  border-radius: var(--radius-lg, 24px);
+  background: var(--card-bg);
+}
+
+.skel {
+  display: block;
+  border-radius: 8px;
+  background: var(--skel-base);
+  animation: skel-pulse 1.6s ease-in-out infinite;
+}
+
+.skel--avatar {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+}
+
+.skel--title {
+  height: 14px;
+}
+
+.skel--note {
+  height: 12px;
+}
+
+.skel--line {
+  height: 12px;
+}
+
+.skel--label {
+  width: 46%;
+  height: 12px;
+}
+
+.skel--pill {
+  flex: none;
+  width: 72px;
+  height: 24px;
+  border-radius: 999px;
+}
+
+.skel--chip {
+  width: 64px;
+  height: 24px;
+  border-radius: 999px;
+}
+
+.skel--bar {
+  width: 100%;
+  height: 8px;
+  margin-top: auto;
+}
+
+.skel--figure {
+  width: 58%;
+  height: 40px;
+  border-radius: 12px;
+}
+
+.skel-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-height: 64px;
+  border-top: 1px solid var(--line);
+}
+
+.skel-row:first-of-type {
+  border-top: 0;
+}
+
+.skel-row__copy {
+  display: grid;
+  flex: 1;
+  gap: 8px;
+  min-width: 0;
+}
+
+.skel-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: var(--gap-tile, 16px);
+}
+
+.skel-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 184px;
+  padding: 24px;
+  border-radius: var(--radius-lg, 24px);
+  background: var(--card-bg);
+}
+
+.skel-card .skel--title {
+  height: 20px;
+}
+
+.skel-table__head,
+.skel-table__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  min-height: 48px;
+}
+
+.skel-table__head {
+  border-bottom: 1px solid var(--line);
+}
+
+.skel-table__row + .skel-table__row {
+  border-top: 1px solid var(--line);
+}
+
+.skel-text {
+  gap: 12px;
+  padding: 24px;
+}
+
+/* Cifras: misma caja que FigureStrip, la primera en tinta. */
+.skel-figs .skel-fig {
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.skel-figs .skel-fig .skel--note {
+  width: 40%;
+}
+
+.skel-figs .skel-fig:first-of-type .skel {
+  background: color-mix(in srgb, var(--tile-ink-fg) 16%, transparent);
+}
+
+/* La franja de carga tiene el mismo alto en teléfono que la real. */
+@media (max-width: 760px) {
+  .skel-tile {
+    padding: 4px 16px;
+    border-radius: 20px;
+  }
+
+  .skel-grid {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .skel-card {
+    min-height: 152px;
+    padding: 20px;
+    border-radius: 20px;
+  }
+
+  .skel-row .skel--pill {
+    display: none;
+  }
+
+  .skel-table__row .skel:nth-child(n + 3),
+  .skel-table__head .skel:nth-child(n + 3) {
+    display: none;
+  }
+}
+
+/* Falla de carga: el mismo mosaico del vacío, con «Reintentar». */
+.errstate {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  padding: 40px 24px;
+  border-radius: var(--radius-lg, 24px);
+  background: var(--card-bg);
+  color: var(--text);
+  text-align: center;
+}
+
+.errstate__icon {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  margin-bottom: 4px;
+  border-radius: 999px;
+  background: var(--fill-soft);
+  color: var(--text);
+}
+
+.errstate__title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.errstate__line {
+  max-width: 44ch;
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.errstate__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.errstate__actions .btn {
+  min-height: 44px;
+}
+
+/* Dentro de un mosaico que ya existe (bloque secundario): una línea, sin caja propia. */
+.errstate--compact {
+  display: flex;
+  align-items: center;
+  justify-items: start;
+  gap: 12px;
+  padding: 12px 8px 12px 16px;
+  border-radius: 16px;
+  background: var(--fill-soft);
+  text-align: left;
+}
+
+.errstate--compact .errstate__icon {
+  width: 24px;
+  height: 24px;
+  margin: 0;
+  background: transparent;
+}
+
+.errstate--compact .errstate__icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.errstate--compact .errstate__line {
+  flex: 1;
+  max-width: none;
+  color: var(--muted);
+}
+
+.errstate--compact .errstate__line strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.errstate--compact .errstate__retry {
+  flex: none;
+  min-height: 44px;
+}
+
+@media (max-width: 760px) {
+  .errstate {
+    padding: 32px 20px;
+    border-radius: 20px;
+  }
+}
+
+/* ── 6. Cifras sin dato, segmentado y vacíos ─────────────────────────────── */
+
+.tile__value--nodata {
+  color: var(--text-3);
+}
+
+.tile--nodata .tile__sub {
+  color: var(--text-3);
+}
+
+/* Segmentado: la medida (14 px, 44 de toque en teléfono, desliza si no cabe) vive en _sis-base; aquí no se repite. */
+/* Dentro de una columna flexible (panel de avisos) el riel con desborde lateral se encogía a lo alto: los botones
+   quedaban cortados y con el desvanecido vertical encima. Desliza solo de lado y nunca es más bajo que su contenido. */
+html[data-entity] .seg {
+  min-height: min-content;
+  overflow-y: hidden;
+}
+
+/* Vacío único: icono de línea, título 16/600, una línea 14 y la acción. */
+html[data-entity] .empty-state {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  max-width: none;
+  padding: 40px 24px;
+  border-radius: var(--radius-lg, 24px);
+  background: var(--card-bg);
+  text-align: center;
+}
+
+html[data-entity] .empty-state h3 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+html[data-entity] .empty-state p {
+  max-width: 44ch;
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+html[data-entity] .empty-state ol {
+  margin: 4px auto 0;
+  font-size: 14px;
+}
+
+html[data-entity] .empty-state > .btn {
+  margin-top: 12px;
+}
+
+.noaccess .empty-lite__icon {
+  color: var(--text);
+}
+
+/* Selector de responsables: nombre y puesto en dos renglones, sin punto medio. */
+html[data-entity] .assignees-pop__name {
+  display: grid;
+  gap: 2px;
+  white-space: normal;
+}
+
+html[data-entity] .assignees-pop__name,
+html[data-entity] .assignees-pop__title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+html[data-entity] .assignees-pop__title {
+  display: block;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+/* ── 7. Subir archivos ────────────────────────────────────────────────────── */
+
+.upbtn {
+  position: relative;
+  display: inline-flex;
+}
+
+.upbtn__btn {
+  gap: 8px;
+}
+
+.upbtn__icon {
+  flex: none;
+}
+
+/* El input queda fuera de la vista y del orden de Tab: lo abre el botón. */
+.upbtn__input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+}
+
+@keyframes upbtn-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.upbtn__spin {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 999px;
+  animation: upbtn-spin 0.8s linear infinite;
+}
+
+.fpick {
+  display: grid;
+  gap: 8px;
+}
+
+.fpick__label {
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.fpick__zone {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px 12px;
+  min-height: 96px;
+  padding: 16px;
+  border: 1px dashed var(--line-strong);
+  border-radius: 16px;
+  background: var(--fill-soft);
+  color: var(--muted);
+  font-size: 14px;
+  transition:
+    border-color 150ms ease,
+    background-color 150ms ease;
+}
+
+.fpick.is-over .fpick__zone {
+  border-color: var(--text);
+  background: var(--hover);
+}
+
+.fpick.is-invalid .fpick__zone {
+  border-color: var(--danger);
+}
+
+.fpick__hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.fpick__error {
+  margin: 0;
+  color: var(--danger);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.fpick__list {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.fpick__item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 48px;
+  border-top: 1px solid var(--line);
+}
+
+.fpick__item:first-child {
+  border-top: 0;
+}
+
+.fpick__name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 14px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fpick__size {
+  flex: none;
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.fpick__remove {
+  flex: none;
+  min-height: 44px;
+}
+
+@media (max-width: 640px) {
+  .fpick__text {
+    display: none;
+  }
+
+  .fpick__zone .fpick__btn {
+    min-height: 44px;
+  }
+}
+
+/* ── Movimiento reducido: las capas aparecen sin desplazarse. ────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  .layer-backdrop,
+  .layer,
+  html[data-entity] .modal-backdrop,
+  html[data-entity] .modal,
+  html[data-entity] .askd-backdrop,
+  html[data-entity] .askd,
+  html[data-entity] .flash--float,
+  .skel,
+  .skel-tile,
+  .skel-grid,
+  .skel-figs,
+  .upbtn__spin {
+    animation: none !important;
+  }
+}
+
+/* ── 8. Cabecera en carga, campo con etiqueta y barra de avance ─────────────── */
+
+/* El renglón de la descripción se reserva mientras llegan los datos: la cabecera no salta. */
+.ph__desc--pending {
+  display: flex;
+  align-items: center;
+  min-height: 1.45em;
+}
+
+.ph__desc--pending .skel {
+  width: min(320px, 40%);
+}
+
+.fieldx {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.fieldx__label {
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.3;
+}
+
+.fieldx__optional {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.fieldx__hint {
+  margin: -4px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.fieldx__error {
+  margin: -4px 0 0;
+  color: var(--danger);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.fieldx.is-invalid :is(.field, input, select, textarea) {
+  border-color: var(--danger);
+  box-shadow: 0 0 0 1px var(--danger);
+}
+
+.meterx {
+  display: block;
+  height: 8px;
+  border-radius: 8px;
+  background: var(--fill-soft);
+  overflow: hidden;
+}
+
+.meterx i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--text);
+  transition: width 200ms ease;
+}
+
+.meterx--danger i {
+  background: var(--danger);
+}

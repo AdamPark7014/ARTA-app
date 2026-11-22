@@ -16,3 +16,20 @@ export function fixMojibake(name: string): string {
   }
 }
 
+
+/**
+ * Conteo con su sustantivo en singular o plural: «1 mensaje», «3 mensajes».
+ *
+ *   plural(n, 'mensaje')                    → «1 mensaje» · «2 mensajes»
+ *   plural(n, 'mensaje nuevo', 'mensajes nuevos')
+ *   plural(n, 'evento', undefined, false)   → «evento» · «eventos» (sin número)
+ */
+export function plural(n: number, one: string, many?: string, withNumber = true): string {
+  const word = n === 1 ? one : many ?? (/[aeiouáéó]$/i.test(one) ? `${one}s` : /z$/i.test(one) ? `${one.slice(0, -1)}ces` : `${one}es`);
+  return withNumber ? `${n.toLocaleString('es-MX')} ${word}` : word;
+}
+
+/** Une datos de una fila con un solo separador y sin huecos: `meta(['Hoy', null, 'Auditorio'])` → «Hoy · Auditorio». */
+export function meta(parts: Array<string | null | undefined | false>, sep = ' · '): string {
+  return parts.filter((p): p is string => !!p && !!p.trim()).join(sep);
+}

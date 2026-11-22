@@ -61,6 +61,8 @@ test.describe('App shell', () => {
 
     const nav = page.getByRole('navigation', { name: 'Módulos del panel' });
     await expect(nav.getByRole('link', { name: 'Eventos actuales' })).toBeVisible();
+    // Al abrirse, el menú lleva el foco a la pantalla activa (AppShell lo hace a los 60 ms); se busca después.
+    await expect(nav.getByRole('link', { name: 'Inicio' })).toBeFocused();
 
     await page.getByLabel('Buscar en ARTA').fill('corrida');
 

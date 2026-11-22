@@ -61,7 +61,8 @@ export function shortDateTime(iso: string | Date | null | undefined, now = new D
 export function fullDateTime(iso: string | Date | null | undefined): string {
   const d = valid(iso);
   if (!d) return '';
-  return d.toLocaleString('es-MX', { dateStyle: 'long', timeStyle: 'short' });
+  // 24 h siempre: «22 de noviembre de 2026, 16:09», nunca «4:09 p.m.».
+  return `${d.toLocaleDateString('es-MX', { dateStyle: 'long' })}, ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 }
 
 const WEEKDAYS = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'];
@@ -104,4 +105,34 @@ export function eventWhen(
   else if (days > 1 && days <= 90) rel = `en ${days} días`;
   else if (days < 0 && lastDay >= today) rel = 'en curso';
   return rel ? `${date} · ${rel}` : date;
+}
+
+/**
+ * Porcentaje con espacio fino no separable, igual en todo el panel: «64 %».
+ * `null`/`undefined` (sin dato) da «—», nunca «0 %».
+ */
+export function pct(value: number | string | null | undefined, digits = 0): string {
+  if (value === null || value === undefined || value === '') return '—';
+  const n = Number(value);
+  if (!Number.isFinite(n)) return '—';
+  return `${n.toLocaleString('es-MX', { minimumFractionDigits: 0, maximumFractionDigits: digits })} %`;
+}
+
+/** Hora en 24 h: «09:30». */
+export function hhmm(iso: string | Date | null | undefined): string {
+  const d = valid(iso);
+  if (!d) return '';
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+
+/** Fecha de un evento sin hora ni «de»: «dom 22 nov 2026» (año siempre). */
+export function eventDate(iso: string | Date | null | undefined): string {
+  const d = valid(iso);
+  if (!d) return '';
+  return `${WEEKDAYS[d.getDay()]} ${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
+}
+
+/** Cifra de mosaico o «—» cuando no se sabe (cargando o falló). Nunca $0 por falta de dato. */
+export function moneyKpiOrDash(value: number | string | null | undefined): string {
+  return value === null || value === undefined || value === '' ? '—' : moneyKpi(value);
 }

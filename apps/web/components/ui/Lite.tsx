@@ -1,6 +1,6 @@
 'use client';
 
-import type { ReactNode } from 'react';
+import { useRef, type KeyboardEvent, type ReactNode } from 'react';
 import { fixMojibake } from '@/lib/text';
 import { REVIEW_LABELS, REVIEW_STEPS, REVIEW_TONES, type ReviewStep } from '@/lib/review-flow';
 
@@ -31,9 +31,18 @@ export function SectionHead({
   );
 }
 
-export type SegOption<K extends string> = { key: K; label: string; count?: number };
+export type SegOption<K extends string> = {
+  key: K;
+  label: string;
+  /** Conteo de la sección. `null` = todavía no se sabe (cargando o falló): no se pinta, nunca «0». */
+  count?: number | null;
+};
 
-/** Control segmentado: secciones de una lista (Por autorizar · Por pagar · …). */
+/**
+ * Control segmentado: secciones de una lista (Por autorizar · Por pagar · …).
+ * Se comporta como pestañas de verdad: solo la activa entra en el orden de Tab y
+ * las flechas (← →, Inicio, Fin) mueven entre opciones y la eligen.
+ */
 export function Seg<K extends string>({
   value,
   options,
@@ -45,14 +54,34 @@ export function Seg<K extends string>({
   onChange: (key: K) => void;
   label: string;
 }) {
+  const ref = useRef<HTMLDivElement | null>(null);
+  const current = Math.max(
+    0,
+    options.findIndex((o) => o.key === value),
+  );
+
+  function onKeyDown(e: KeyboardEvent<HTMLDivElement>) {
+    const last = options.length - 1;
+    let next = -1;
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') next = current >= last ? 0 : current + 1;
+    else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') next = current <= 0 ? last : current - 1;
+    else if (e.key === 'Home') next = 0;
+    else if (e.key === 'End') next = last;
+    if (next < 0) return;
+    e.preventDefault();
+    onChange(options[next].key);
+    ref.current?.querySelectorAll<HTMLButtonElement>('[role="tab"]')[next]?.focus();
+  }
+
   return (
-    <div className="seg" role="tablist" aria-label={label}>
-      {options.map((o) => (
+    <div className="seg" role="tablist" aria-label={label} ref={ref} onKeyDown={onKeyDown}>
+      {options.map((o, i) => (
         <button
           key={o.key}
           type="button"
           role="tab"
           aria-selected={value === o.key}
+          tabIndex={i === current ? 0 : -1}
           className={`seg__btn ${value === o.key ? 'is-on' : ''}`}
           onClick={() => onChange(o.key)}
         >
@@ -145,35 +174,54 @@ export function EmptyLite({
   );
 }
 
-/** Mosaico de cifra: clicable si trae `onClick`. */
+/**
+ * Mosaico de cifra: clicable si trae `onClick`.
+ * `value` null o undefined = sin dato (cargando o la carga falló): se pinta «—» en el
+ * mismo tamaño con la nota «Sin datos», nunca 0 ni $0.
+ *
+ *   <Tile label="Por pagar" value={loaded ? moneyKpi(total) : null} />
+ */
 export function Tile({
   label,
   value,
   sub,
   onClick,
   tone,
+  noDataSub = 'Sin datos',
 }: {
   label: string;
-  value: ReactNode;
+  value: ReactNode | null | undefined;
   sub?: ReactNode;
   onClick?: () => void;
   tone?: 'warn' | 'ok' | 'accent';
+  /** Nota bajo el «—» cuando no hay dato. */
+  noDataSub?: ReactNode;
 }) {
+  const empty = value === null || value === undefined || value === false;
   const body = (
     <>
       <span className="tile__label">{label}</span>
-      <span className={`tile__value ${tone ? `tile__value--${tone}` : ''}`}>{value}</span>
-      {sub ? <span className="tile__sub">{sub}</span> : null}
+      <span className={`tile__value ${tone && !empty ? `tile__value--${tone}` : ''} ${empty ? 'tile__value--nodata' : ''}`}>
+        {empty ? (
+          <>
+            <span aria-hidden>—</span>
+            {noDataSub ? null : <span className="sr-only">Sin dato</span>}
+          </>
+        ) : (
+          value
+        )}
+      </span>
+      {empty ? (noDataSub ? <span className="tile__sub">{noDataSub}</span> : null) : sub ? <span className="tile__sub">{sub}</span> : null}
     </>
   );
   if (onClick) {
     return (
-      <button type="button" className="tile" onClick={onClick}>
+      <button type="button" className={`tile ${empty ? 'tile--nodata' : ''}`.trim()} onClick={onClick}>
         {body}
       </button>
     );
   }
-  return <div className="tile">{body}</div>;
+  return <div className={`tile ${empty ? 'tile--nodata' : ''}`.trim()}>{body}</div>;
 }
 
 /** Fila de archivo: tipo, nombre, metadato y acciones. */
