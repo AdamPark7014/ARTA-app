@@ -771,6 +771,14 @@ private fun androidx.compose.foundation.lazy.LazyListScope.summaryItems(ev: Even
                 Text(c.title ?: c.template?.name ?: "Formato", modifier = Modifier.weight(1f), maxLines = 2, overflow = TextOverflow.Ellipsis)
                 Text("${pct.toInt()} %", style = MaterialTheme.typography.bodySmall.copy(fontFeatureSettings = TABULAR), color = ArtaColors.Muted)
             }
+            Text(
+                c.assignmentLine(),
+                style = MaterialTheme.typography.bodySmall,
+                color = ArtaColors.Muted,
+                modifier = Modifier.padding(top = 4.dp),
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
             Spacer(Modifier.height(8.dp))
             ProgressLine((pct / 100.0).toFloat())
         }

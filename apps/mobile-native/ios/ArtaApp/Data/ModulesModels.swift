@@ -292,6 +292,21 @@ struct EventChecklistRef: Codable, Equatable, Identifiable {
     var title: String?
     var progressPct: Double?
     var status: String?
+    /// Responsable del formato (`GET events/:id`, 21-11-2026). Falta en el API viejo.
+    var owner: PersonRef?
+    var dueAt: String?
+
+    /// «Lo debe Ana · vence hoy» (paridad web).
+    func assignmentLine(now: Date = Date()) -> String {
+        let who: String = {
+            if let name = owner?.fullName?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty {
+                return "Lo debe \(name)"
+            }
+            return "Sin responsable"
+        }()
+        guard let due = MDate.dueText(dueAt) else { return who }
+        return "\(who) · \(due)"
+    }
 }
 
 struct EventPurchaseOrderRef: Codable, Equatable, Identifiable {

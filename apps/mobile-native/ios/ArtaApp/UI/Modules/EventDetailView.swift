@@ -367,6 +367,11 @@ struct EventDetailView: View {
                                             .monospacedDigit()
                                             .foregroundStyle(ArtaColor.muted)
                                     }
+                                    Text(checklist.assignmentLine())
+                                        .font(.caption)
+                                        .foregroundStyle(ArtaColor.muted)
+                                        .lineLimit(2)
+                                        .multilineTextAlignment(.leading)
                                     // La misma barra de 3 pt de las tarjetas de cifra.
                                     ProgressBar(value: (checklist.progressPct ?? 0) / 100)
                                 }

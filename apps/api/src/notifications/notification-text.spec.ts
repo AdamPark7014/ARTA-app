@@ -257,6 +257,16 @@ describe('notification-text · formatos y campañas', () => {
     );
   });
 
+  it('formato asignado: quién, cuál y qué hacer', () => {
+    const n = checklistNotice('assigned', {
+      actor: 'Gerencia Arta',
+      doc: { title: 'Rueda de prensa' },
+      event: { name: 'Concierto' },
+    });
+    expect(n.title).toBe('Gerencia A. te asignó el formato: Rueda de prensa');
+    expect(n.body).toBe('Concierto. Te toca llenarlo y entregarlo.');
+  });
+
   it('campaña a revisión: de qué evento, cuándo es y qué hacer', () => {
     const n = campaignNotice('REVIEW', {
       actor: 'Ana Ruiz',

@@ -86,4 +86,30 @@ class EventModulesDtoTest {
         assertEquals("Transferencia", poPaymentLabel(null))
         assertTrue(poNeedsProof("ADENDUM"))
     }
+
+    @Test
+    fun readsChecklistOwnerAndDue() {
+        val event = moshi.adapter(EventDetailDto::class.java).fromJson(
+            """
+            {
+              "id": "e1", "name": "Show",
+              "checklists": [
+                {
+                  "id": "c1", "title": "Rider", "progressPct": 35,
+                  "owner": { "id": "u1", "fullName": "Mariela Fuentes" },
+                  "dueAt": "2026-12-04T18:00:00.000Z"
+                },
+                { "id": "c2", "title": "Artes" }
+              ]
+            }
+            """.trimIndent(),
+        )!!
+        val withOwner = event.checklists[0]
+        assertEquals("Mariela Fuentes", withOwner.owner?.fullName)
+        assertEquals("2026-12-04T18:00:00.000Z", withOwner.dueAt)
+        assertNull(event.checklists[1].owner)
+        val today = java.time.LocalDate.of(2026, 12, 4)
+        assertEquals("Lo debe Mariela Fuentes · vence hoy", checklistAssignmentLine(withOwner.owner?.fullName, withOwner.dueAt, today))
+        assertEquals("Sin responsable", checklistAssignmentLine(null, null, today))
+    }
 }

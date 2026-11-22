@@ -138,6 +138,9 @@ data class EventChecklistRef(
     val progressPct: Double? = null,
     val status: String? = null,
     val template: EventTemplateRef? = null,
+    /** Responsable del formato (GET events/:id, 21-11-2026). Falta en el API viejo. */
+    val owner: PersonRef? = null,
+    val dueAt: String? = null,
 )
 
 data class EventTemplateRef(val key: String? = null, val name: String? = null)
