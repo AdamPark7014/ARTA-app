@@ -175,7 +175,7 @@
     padding: 1px 5px;
     border-radius: 999px;
     background: var(--danger);
-    color: #fff;
+    color: var(--on-danger, #fff);
     font-size: 11px;
     font-weight: 700;
     font-variant-numeric: tabular-nums;
@@ -1252,4 +1252,216 @@ a.mz-turn.is-lead:focus-visible {
 .users-stack .filter-bar {
   border-radius: 16px;
   background: var(--tile-soft);
+}
+
+/* ── Botón «+» de la barra ────────────────────────────────────────────────── */
+
+.qc {
+  position: relative;
+}
+
+.qc__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--tile-ink, var(--text));
+  color: var(--tile-ink-fg, var(--bg));
+  cursor: pointer;
+  transition: transform 0.15s ease;
+}
+
+.qc__btn:hover {
+  transform: scale(1.05);
+}
+
+.qc__btn:focus-visible {
+  outline: 2px solid var(--text);
+  outline-offset: 2px;
+}
+
+.qc__btn[aria-expanded='true'] svg {
+  transform: rotate(45deg);
+}
+
+.qc__btn svg {
+  transition: transform 0.15s ease;
+}
+
+.qc__menu {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 260px;
+  padding: 8px;
+  border-radius: 20px;
+  background: var(--bg-elev);
+  box-shadow: 0 24px 60px rgba(12, 12, 13, 0.22);
+}
+
+.qc__item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  color: var(--text);
+  text-decoration: none;
+}
+
+.qc__item:hover,
+.qc__item:focus-visible {
+  background: var(--tile-soft);
+  outline: none;
+}
+
+.qc__label {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.qc__item small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+@media (max-width: 768px) {
+  .qc__btn {
+    width: 36px;
+    height: 36px;
+  }
+}
+
+/* Carga del Inicio con la misma forma que el Inicio ya cargado: nada salta. */
+.home-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.mz-skel .skeleton {
+  opacity: 0.22;
+}
+
+/* El tablero de tareas se desplaza dentro de sí mismo; la página no se ensancha. */
+.stack.page-workspace,
+.sx-stack.page-workspace {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.page-workspace > .board {
+  min-width: 0;
+  max-width: 100%;
+}
+
+@media (min-width: 901px) {
+  .task-row {
+    grid-template-columns: auto auto minmax(0, 1fr) 13rem 9.5rem 14rem;
+  }
+}
+
+.shell {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.shell > .main,
+.shell .content {
+  min-width: 0;
+}
+
+/* Lo posicionado dentro del tablero se recorta con él (si no, ensancha la página en teléfono). */
+.board {
+  position: relative;
+}
+
+@media (max-width: 640px) {
+  /* Tablas como tarjetas: una cuenta o un nombre de archivo largo se parte, no se encima. */
+  .dtable--cards tbody td {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .next-steps .next-steps__headline {
+    font-size: 19px;
+    line-height: 1.2;
+  }
+}
+
+.next-steps .next-steps__headline {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  text-wrap: balance;
+}
+
+@media (max-width: 768px) {
+  .shell .bnav .bnav__tab {
+    position: relative;
+  }
+
+  .bnav__dot {
+    position: absolute;
+    top: 9px;
+    right: calc(50% - 24px);
+    width: 8px;
+    height: 8px;
+    border-radius: 8px;
+    background: #ff6b5a;
+  }
+}
+
+/* Texto terciario con contraste holgado sobre el fondo cálido. */
+[data-entity='ARTA'] {
+  --text-3: #62626a;
+}
+
+/* Quien pide menos movimiento no ve escalas ni desplazamientos. */
+@media (prefers-reduced-motion: reduce) {
+  .qc__btn,
+  .qc__btn svg,
+  .mz-hero__go,
+  .pnav__pill,
+  .shell.shell--nav-open:not(.x) > .sidebar {
+    transition: none;
+  }
+
+  .qc__btn:hover,
+  .mz-hero__go:hover {
+    transform: none;
+  }
+}
+
+/* Saltar al contenido: solo aparece al tabular. */
+.skip-link {
+  position: fixed;
+  top: 10px;
+  left: 10px;
+  z-index: 100;
+  padding: 10px 16px;
+  border-radius: 999px;
+  background: var(--tile-ink, var(--text));
+  color: var(--tile-ink-fg, var(--bg));
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+  transform: translateY(-200%);
+}
+
+.skip-link:focus-visible {
+  transform: none;
+  outline: 2px solid var(--text);
+  outline-offset: 2px;
+}
+
+.shell .content:focus {
+  outline: none;
 }

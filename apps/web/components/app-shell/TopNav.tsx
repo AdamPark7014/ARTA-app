@@ -4,7 +4,6 @@ import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { useMemo } from 'react';
 import { activeNavKey, navHref, navKey, type NavItem } from '@/lib/access-matrix';
-import { useChatUnread } from './useChatUnread';
 
 /** Los destinos de la barra, en orden de uso. Solo salen los que esta persona puede ver. */
 const PILLS: Array<{ href: string; query?: string; label: string }> = [
@@ -23,10 +22,19 @@ const PILLS: Array<{ href: string; query?: string; label: string }> = [
  * días a un clic en la barra de arriba y «Más» abre el menú completo, con la
  * entidad y el resto de las herramientas. En teléfono manda la barra inferior.
  */
-export function TopNav({ items, onMore, moreOpen }: { items: NavItem[]; onMore: () => void; moreOpen: boolean }) {
+export function TopNav({
+  items,
+  onMore,
+  moreOpen,
+  chatUnread = 0,
+}: {
+  items: NavItem[];
+  onMore: () => void;
+  moreOpen: boolean;
+  chatUnread?: number;
+}) {
   const pathname = usePathname() || '';
   const searchParams = useSearchParams();
-  const chatUnread = useChatUnread(items.some((item) => item.href === '/chat') && pathname !== '/chat');
 
   const pills = useMemo(
     () =>

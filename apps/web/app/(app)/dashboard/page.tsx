@@ -508,7 +508,7 @@ export default function DashboardPage() {
   return (
     <AppShell title="Inicio">
       <div className="page-workspace home">
-        {mosaic ? null : (
+        {mosaic || (loading && eventOps && role !== 'practicante') ? null : (
           <PageHeader
             eyebrow={longDate(now)}
             title={
@@ -555,26 +555,33 @@ export default function DashboardPage() {
           </section>
         ) : loading ? (
           <div className="home-skeleton" aria-busy="true" aria-label="Cargando el inicio">
-            <div className="kpi-row">
-              {Array.from({ length: 4 }).map((_, i) => (
-                <div key={i} className="kpi-card">
+            <div className="mz mz--top">
+              <div className="mz-tile mz-hero mz-skel">
+                <div className="skeleton skeleton--label" style={{ width: '38%' }} />
+                <div className="skeleton skeleton--value" style={{ width: '70%', height: 38, marginTop: 18 }} />
+                <div className="skeleton skeleton--value" style={{ width: '52%', height: 38, marginTop: 8 }} />
+              </div>
+              <div className="mz-tile mz-turns">
+                <div className="skeleton skeleton--label" style={{ width: '40%' }} />
+                <div className="skeleton-stack">
+                  {Array.from({ length: 3 }).map((_, i) => (
+                    <div key={i} className="skeleton skeleton--row" style={{ height: 58, borderRadius: 16 }} />
+                  ))}
+                </div>
+              </div>
+            </div>
+            <div className="mz mz--figs">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <div key={i} className="mz-tile mz-fig">
                   <div className="skeleton skeleton--label" />
-                  <div className="skeleton skeleton--value" style={{ height: 30 }} />
-                  <div className="skeleton skeleton--row" style={{ width: '60%', height: 10 }} />
+                  <div className="skeleton skeleton--value" style={{ height: 40, width: '55%' }} />
+                  <div className="skeleton skeleton--row" style={{ width: '100%', height: 12, marginTop: 'auto' }} />
                 </div>
               ))}
             </div>
-            <div className="home-panels">
-              {Array.from({ length: 2 }).map((_, i) => (
-                <div key={i} className="home-panel">
-                  <div className="skeleton skeleton--label" style={{ width: '40%' }} />
-                  <div className="skeleton-stack">
-                    <div className="skeleton skeleton--row" style={{ width: '86%' }} />
-                    <div className="skeleton skeleton--row" style={{ width: '72%' }} />
-                    <div className="skeleton skeleton--row" style={{ width: '64%' }} />
-                  </div>
-                </div>
-              ))}
+            <div className="mz-tile mz-days">
+              <div className="skeleton skeleton--label" style={{ width: '18%' }} />
+              <div className="skeleton skeleton--row" style={{ height: 62, borderRadius: 14 }} />
             </div>
           </div>
         ) : error ? (
@@ -582,9 +589,7 @@ export default function DashboardPage() {
         ) : data && k ? (
           <>
             <div className="mz mz--top">
-              <HeroTile show={nextShow} now={now} hello={`${greeting(now)}, ${firstName}`} date={longDate(now)}>
-                {actions}
-              </HeroTile>
+              <HeroTile show={nextShow} now={now} hello={`${greeting(now)}, ${firstName}`} date={longDate(now)} />
 
               <section className="mz-tile mz-turns" aria-labelledby="home-approvals">
                 <div className="mz-tile__head">

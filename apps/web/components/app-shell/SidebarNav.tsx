@@ -11,12 +11,13 @@ import {
   type NavItem,
 } from '@/lib/access-matrix';
 import { NavIcon } from './NavIcon';
-import { useChatUnread } from './useChatUnread';
 
 type Props = {
   /** Items ya filtrados por rol / permisos / entidad */
   items: NavItem[];
   query: string;
+  /** Mensajes sin leer; los consulta una sola vez el marco. */
+  chatUnread?: number;
 };
 
 /**
@@ -31,12 +32,11 @@ type Props = {
  * Vive en su propio componente porque `useSearchParams` obliga a un límite de
  * Suspense; encerrarlo aquí evita volver dinámicas todas las páginas del panel.
  */
-export function SidebarNav({ items, query }: Props) {
+export function SidebarNav({ items, query, chatUnread = 0 }: Props) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const searching = !!query.trim();
   const [showMore, setShowMore] = useState(false);
-  const chatUnread = useChatUnread(items.some((item) => item.href === '/chat') && pathname !== '/chat');
 
   const hiddenItems = useMemo(() => items.filter((item) => item.hidden), [items]);
 

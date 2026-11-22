@@ -15,7 +15,9 @@ import { RouteProgress } from './RouteProgress';
 import { BottomNav } from './BottomNav';
 import { SidebarNav } from './SidebarNav';
 import { TopNav } from './TopNav';
+import { QuickCreate } from './QuickCreate';
 import { TopbarSearch } from './TopbarSearch';
+import { useChatUnread } from './useChatUnread';
 import { useEntityTheme } from './useEntityTheme';
 import { useShellPolish } from './useShellPolish';
 import { UserChip } from '@/components/ui/UserChip';
@@ -59,6 +61,26 @@ export function AppShell({
     setNavOpen(false);
   }, [pathname, entity]);
 
+  // Cada pestaña del navegador dice en qué pantalla está («Tareas · ARTA»); la campana le antepone el contador.
+  useEffect(() => {
+    if (!title) return;
+    const count = document.title.match(/^\(\d+\+?\)\s/)?.[0] ?? '';
+    document.title = `${count}${title} · ${entity === 'EXPLANADA' ? 'Explanada' : 'ARTA'}`;
+  }, [title, entity]);
+
+  // Al abrir el menú el foco entra en él; al cerrarlo con teclado vuelve a «Más».
+  useEffect(() => {
+    if (!navOpen) return;
+    const opener = document.activeElement as HTMLElement | null;
+    const menu = document.getElementById('app-sidebar');
+    const target = menu?.querySelector<HTMLElement>('.nav a.active') ?? menu?.querySelector<HTMLElement>('.nav a');
+    const id = window.setTimeout(() => target?.focus({ preventScroll: true }), 60);
+    return () => {
+      window.clearTimeout(id);
+      if (menu?.contains(document.activeElement)) opener?.focus({ preventScroll: true });
+    };
+  }, [navOpen]);
+
   useEffect(() => {
     if (!navOpen) return;
     const onKey = (e: KeyboardEvent) => {
@@ -69,6 +91,9 @@ export function AppShell({
   }, [navOpen]);
 
   const nav = useMemo(() => (user ? visibleNavItems(user, entity) : []), [user, entity]);
+
+  // Una sola consulta de mensajes sin leer para la barra, el menú y la barra inferior.
+  const chatUnread = useChatUnread(nav.some((item) => item.href === '/chat') && pathname !== '/chat');
 
   async function switchEntity(next: EntityKey) {
     if (!user || next === entity) return;
@@ -135,6 +160,9 @@ export function AppShell({
       className={`shell ${navOpen ? 'shell--nav-open' : ''}`}
       data-entity={entity}
     >
+      <a className="skip-link" href="#contenido">
+        Saltar al contenido
+      </a>
       {navOpen ? (
         <button
           type="button"
@@ -191,7 +219,7 @@ export function AppShell({
         </div>
 
         <Suspense fallback={<nav className="nav" aria-hidden />}>
-          <SidebarNav items={nav} query="" />
+          <SidebarNav items={nav} query="" chatUnread={chatUnread} />
         </Suspense>
 
         {/* Junta 11-09-2026: el pie del menú era un bloque de texto; ahora es la persona y dos iconos. */}
@@ -232,7 +260,7 @@ export function AppShell({
               {entity === 'ARTA' ? 'arta' : 'Explanada'}
             </Link>
             <Suspense fallback={<nav className="pnav" aria-hidden />}>
-              <TopNav items={nav} moreOpen={navOpen} onMore={() => setNavOpen((v) => !v)} />
+              <TopNav items={nav} chatUnread={chatUnread} moreOpen={navOpen} onMore={() => setNavOpen((v) => !v)} />
             </Suspense>
             {crumb ? (
               <Link href={crumb.href} className="topbar-crumb">
@@ -243,13 +271,16 @@ export function AppShell({
           </div>
           <TopbarSearch items={nav} />
           <div className="topbar-actions">
+            <QuickCreate items={nav} eventLabel={entity === 'EXPLANADA' ? 'Nuevo show' : 'Nuevo evento'} />
             <NotificationBell />
             <AccountMenu name={user.fullName} title={user.title} onLogout={logout} />
           </div>
         </header>
-        <div className="content">{children}</div>
+        <div className="content" id="contenido" tabIndex={-1}>
+          {children}
+        </div>
       </div>
-      <BottomNav items={nav} moreOpen={navOpen} onMore={() => setNavOpen((v) => !v)} />
+      <BottomNav items={nav} chatUnread={chatUnread} moreOpen={navOpen} onMore={() => setNavOpen((v) => !v)} />
       {/* `useSearchParams` pide su propio Suspense para no volver dinámica la pantalla. */}
       <Suspense fallback={null}>
         <RouteProgress />
