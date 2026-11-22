@@ -5,6 +5,7 @@ import { expect, test, type Page } from '@playwright/test';
 
 import { mockApi, mockAuthenticatedApi } from '../support/mock-api';
 import { RICH_ROUTES, RICH_STUBS, RICH_USER } from '../support/rich-fixtures';
+import { clean, hideDevBadge, LOCALE, quietDevReload, settle } from './asentar';
 import { domAudit, type AuditResult } from './dom-audit';
 
 /**
@@ -176,33 +177,6 @@ const OVERLAYS: Step[] = [
   },
 ];
 
-async function settle(page: Page) {
-  await page.waitForLoadState('domcontentloaded');
-  await Promise.race([page.waitForLoadState('networkidle'), page.waitForTimeout(8000)]);
-  await page
-    .waitForFunction(() => !document.querySelector('.shell--loading'), null, { timeout: 30000 })
-    .catch(() => undefined);
-  await page
-    .waitForFunction(() => document.querySelectorAll('.skeleton, [aria-busy="true"]').length === 0, null, {
-      timeout: 10000,
-    })
-    .catch(() => undefined);
-  await page.evaluate(() => document.fonts.ready.then(() => true));
-  await page.waitForTimeout(450);
-}
-
-function clean(r: AuditResult): AuditResult {
-  const keep = (i: { path: string }) => !i.path.startsWith('nextjs-portal') && !i.path.includes('nextjs-portal');
-  return {
-    ...r,
-    text: r.text.filter(keep),
-    clip: r.clip.filter(keep),
-    scrollers: r.scrollers.filter(keep),
-    overlap: r.overlap.filter((i) => keep(i) && !/nextjs|__next-build/.test(i.detail || '')),
-    contrast: r.contrast.filter(keep),
-  };
-}
-
 mkdirSync(OUT, { recursive: true });
 
 for (const entity of ENTITIES) {
@@ -245,12 +219,14 @@ for (const entity of ENTITIES) {
         const context = await browser.newContext({
           viewport: { width: vp.w, height: vp.h },
           reducedMotion: 'reduce',
+          locale: LOCALE,
           isMobile: vp.w < 768,
           hasTouch: vp.w < 768,
           deviceScaleFactor: 1,
         });
         const page = await context.newPage();
         page.setDefaultTimeout(20_000);
+        await quietDevReload(page);
         await page.addInitScript((ent) => {
           try {
             localStorage.setItem('arta_entity', ent);
@@ -292,6 +268,7 @@ for (const entity of ENTITIES) {
           const res = clean(await page.evaluate(domAudit));
           results.push({ name: step.name, ...res });
           if (SHOTS) {
+            await hideDevBadge(page);
             await page.screenshot({ path: `${base}-${step.name}.png`, fullPage: FULL });
           }
         } catch (err) {

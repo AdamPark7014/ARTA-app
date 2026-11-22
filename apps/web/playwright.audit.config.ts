@@ -6,6 +6,9 @@ import { defineConfig, devices } from '@playwright/test';
  * que `playwright.config.ts`; si no hay servidor, lo construye y lo levanta.
  */
 const PORT = Number(process.env.E2E_PORT || 3100);
+const SYSTEM_ENV = Object.fromEntries(
+  Object.entries(process.env).filter((e): e is [string, string] => e[1] !== undefined),
+);
 
 export default defineConfig({
   testDir: './e2e/audit',
@@ -18,6 +21,8 @@ export default defineConfig({
   use: {
     launchOptions: {
       args: ['--host-resolver-rules=MAP *.localhost 127.0.0.1'],
+      // Con el idioma del sistema en español, los campos nativos de fecha salen día/mes/año, como los ve el equipo.
+      env: { ...SYSTEM_ENV, LANGUAGE: 'es_MX', LC_ALL: 'es_MX.UTF-8', LANG: 'es_MX.UTF-8' },
     },
   },
   projects: [
