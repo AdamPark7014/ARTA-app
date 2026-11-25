@@ -10,7 +10,7 @@ import {
   STANDARD_FORMATS,
   storedFormatVersion,
 } from '../src/checklists/format-catalog';
-import { NEW_TEAM_MEMBERS } from './new-team-members';
+import { leerEquipo } from './equipo';
 import { seedStudioContent } from './seed-studio';
 
 const prisma = new PrismaClient();
@@ -85,125 +85,6 @@ function withSignatures(schema: Schema): Schema {
   const has = schema.sections.some((s) => s.id === 'firmas');
   return has ? schema : { sections: [...schema.sections, signaturesSection()] };
 }
-
-/** Vistas/módulos que debe ver cada persona (documentación viva del seed) */
-const USER_VIEWS: Record<
-  string,
-  {
-    entities: EntityKey[];
-    homeEntity: EntityKey;
-    modules: string[];
-    notes: string;
-  }
-> = {
-  'arturo@artaproducciones.com': {
-    entities: ['ARTA', 'EXPLANADA'],
-    homeEntity: 'ARTA',
-    modules: [
-      'dashboard',
-      'events',
-      'checklists',
-      'finance',
-      'purchase-orders',
-      'campaigns',
-      'ticketing',
-      'studio',
-      'users',
-      'site',
-    ],
-    notes: 'TODO en ambas entidades · usuarios · corrida · cierre',
-  },
-  'chacho@artaproducciones.com': {
-    entities: ['ARTA', 'EXPLANADA'],
-    homeEntity: 'ARTA',
-    modules: [
-      'dashboard',
-      'events',
-      'checklists',
-      'finance',
-      'purchase-orders',
-      'campaigns',
-      'ticketing',
-      'studio',
-      'users',
-      'site',
-    ],
-    notes: 'TODO en ambas · usuarios · corrida · cierre',
-  },
-  'rodrigo@artaproducciones.com': {
-    entities: ['EXPLANADA', 'ARTA'],
-    homeEntity: 'EXPLANADA',
-    modules: [
-      'dashboard',
-      'events',
-      'checklists',
-      'finance',
-      'purchase-orders',
-      'campaigns',
-      'ticketing',
-      'studio',
-      'site',
-      'mantenimiento',
-    ],
-    notes: 'Home Auditorio · TODO Explanada · generales Arta · autoriza OC Auditorio',
-  },
-  'williams@artaproducciones.com': {
-    entities: ['ARTA', 'EXPLANADA'],
-    homeEntity: 'ARTA',
-    modules: ['folders'],
-    notes: 'Junta 11-09-2026 · solo carpetas generales de Arta y Auditorio',
-  },
-  'monse@artaproducciones.com': {
-    entities: ['ARTA', 'EXPLANADA'],
-    homeEntity: 'ARTA',
-    modules: ['dashboard', 'events', 'checklists', 'campaigns', 'ticketing', 'folders', 'site'],
-    notes: 'Alta junta 2026-08-28 · operación Arta',
-  },
-  'kika@artaproducciones.com': {
-    entities: ['ARTA', 'EXPLANADA'],
-    homeEntity: 'ARTA',
-    modules: ['dashboard', 'events', 'checklists', 'campaigns', 'ticketing', 'folders', 'site'],
-    notes: 'Alta junta 2026-08-28 · operación Arta',
-  },
-  'marisol@artaproducciones.com': {
-    entities: ['ARTA', 'EXPLANADA'],
-    homeEntity: 'ARTA',
-    modules: [
-      'dashboard',
-      'events',
-      'checklists',
-      'finance',
-      'purchase-orders',
-      'campaigns',
-      'ticketing',
-      'studio',
-      'site',
-    ],
-    notes: 'Dirección adjunta (16-09-2026) · lo mismo que Arturo, sin usuarios',
-  },
-  'leida@artaproducciones.com': {
-    entities: ['ARTA', 'EXPLANADA'],
-    homeEntity: 'ARTA',
-    modules: [
-      'dashboard',
-      'events',
-      'checklists',
-      'finance',
-      'purchase-orders',
-      'campaigns',
-      'ticketing',
-      'studio',
-      'site',
-    ],
-    notes: 'Dirección adjunta (16-09-2026) · lo mismo que Arturo, sin usuarios',
-  },
-  'jp@artaproducciones.com': {
-    entities: ['ARTA', 'EXPLANADA'],
-    homeEntity: 'ARTA',
-    modules: ['folders'],
-    notes: 'Junta 11-09-2026 · solo carpetas generales de Arta y Auditorio',
-  },
-};
 
 /**
  * Plantillas retiradas. Las estándar viven en `src/checklists/format-catalog.ts`:
@@ -297,83 +178,6 @@ const LEGACY_TEMPLATES: Array<{
   },
 ];
 
-type SeedUser = {
-  email: string;
-  fullName: string;
-  title: string;
-  roleKey: RoleKey;
-  entities: EntityKey[];
-  permissions: string[];
-  /** Override password via env SEED_PASS_<ALIAS> */
-  passAlias: string;
-  /** Sin SEED_PASS_<ALIAS>: contraseña aleatoria (no SEED_PASSWORD). Ver new-team-members.ts. */
-  randomPasswordUnlessEnv?: boolean;
-};
-
-const USERS: SeedUser[] = [
-  {
-    email: 'arturo@artaproducciones.com',
-    fullName: 'Arturo Taja',
-    title: 'Director general de Arta',
-    roleKey: ROLES.DIR_GENERAL,
-    entities: ['ARTA', 'EXPLANADA'],
-    permissions: [...ROLE_PERMISSIONS[ROLES.DIR_GENERAL]],
-    passAlias: 'ARTURO',
-  },
-  {
-    email: 'chacho@artaproducciones.com',
-    fullName: 'José Luis Arista',
-    title: 'Director general de Arta',
-    roleKey: ROLES.DIR_GENERAL,
-    entities: ['ARTA', 'EXPLANADA'],
-    permissions: [...ROLE_PERMISSIONS[ROLES.DIR_GENERAL]],
-    passAlias: 'CHACHO',
-  },
-  {
-    // Es del equipo de Arta: supervisa y revisa el Auditorio (21-10-2026, Adam: «arema no tiene nada que
-    // ver en esos usuarios»). Antes `rodrigo@arema.mx`; ver RENAMED_EMAILS.
-    email: 'rodrigo@artaproducciones.com',
-    fullName: 'Rodrigo López',
-    title: 'Supervisión del Auditorio',
-    roleKey: ROLES.DIR_AUDITORIO,
-    entities: ['EXPLANADA', 'ARTA'],
-    permissions: [...ROLE_PERMISSIONS[ROLES.DIR_AUDITORIO]],
-    passAlias: 'RODRIGO',
-  },
-  {
-    email: 'williams@artaproducciones.com',
-    fullName: 'Williams Taja',
-    title: 'Logística y producción',
-    // Junta 11-09-2026: solo carpetas generales de Arta y Auditorio.
-    roleKey: ROLES.SOLO_CARPETAS,
-    entities: ['ARTA', 'EXPLANADA'],
-    permissions: [...ROLE_PERMISSIONS[ROLES.SOLO_CARPETAS]],
-    passAlias: 'WILLIAMS',
-  },
-  {
-    email: 'leida@artaproducciones.com',
-    fullName: 'Leida Osorio',
-    title: 'Convenios y patrocinios',
-    // 16-09-2026: los mismos permisos que Arturo y José Luis, sin gestionar usuarios.
-    roleKey: ROLES.DIR_ADJUNTA,
-    entities: ['ARTA', 'EXPLANADA'],
-    permissions: [...ROLE_PERMISSIONS[ROLES.DIR_ADJUNTA]],
-    passAlias: 'LEIDA',
-  },
-  {
-    email: 'jp@artaproducciones.com',
-    fullName: 'Juan Pablo Ramírez',
-    title: 'Enlace gobierno y pagos',
-    // Junta 11-09-2026: solo carpetas generales de Arta y Auditorio.
-    roleKey: ROLES.SOLO_CARPETAS,
-    entities: ['ARTA', 'EXPLANADA'],
-    permissions: [...ROLE_PERMISSIONS[ROLES.SOLO_CARPETAS]],
-    passAlias: 'JP',
-  },
-  // Altas de la junta 2026-08-28 (Monse, Sol, Kika) — ver new-team-members.ts
-  ...NEW_TEAM_MEMBERS,
-];
-
 function passwordFor(alias: string, randomUnlessEnv = false) {
   const specific = process.env[`SEED_PASS_${alias}`];
   if (specific && specific.length >= 6) return specific;
@@ -382,18 +186,10 @@ function passwordFor(alias: string, randomUnlessEnv = false) {
   if (randomUnlessEnv) return `Arta-${randomBytes(18).toString('base64url')}`;
   const fallback = process.env.SEED_PASSWORD;
   if (fallback && fallback.length >= 6) return fallback;
-  // Dev-only fallback — never shown on login UI
-  return 'ArtaDevLocal-1';
+  // Sin variable no hay contraseña por omisión: al azar, y se repone desde Panel → Usuarios.
+  return `Arta-${randomBytes(18).toString('base64url')}`;
 }
 
-
-/**
- * Cuentas cuyo correo cambió (viejo → nuevo). Todos los usuarios son del equipo de Arta, también los que
- * solo supervisan el Auditorio: ninguno lleva dominio de Arema.
- */
-const RENAMED_EMAILS: Record<string, string> = {
-  'rodrigo@arema.mx': 'rodrigo@artaproducciones.com',
-};
 
 async function main() {
   console.log('Seeding ARTA users, templates, studio…');
@@ -419,9 +215,12 @@ async function main() {
   });
   console.log(`  ✓ Organización ${org.slug} (${org.id})`);
 
+  const { equipo, renombrados } = leerEquipo();
+  if (!equipo.length) console.log('  · Sin equipo local (SEED_EQUIPO): no se crea ni se toca ninguna cuenta');
+
   // Correos que cambiaron: se renombra la misma cuenta (historial, sesiones y contraseña intactos). Si el
   // upsert de abajo viera solo el correo nuevo, crearía a una segunda persona.
-  for (const [from, to] of Object.entries(RENAMED_EMAILS)) {
+  for (const [from, to] of Object.entries(renombrados)) {
     const old = await prisma.user.findUnique({ where: { email: from }, select: { id: true } });
     if (!old) continue;
     const taken = await prisma.user.findUnique({ where: { email: to }, select: { id: true } });
@@ -433,10 +232,9 @@ async function main() {
     console.log(`  ✓ Correo ${from} → ${to}`);
   }
 
-  for (const u of USERS) {
+  for (const u of equipo) {
     const plain = passwordFor(u.passAlias, u.randomPasswordUnlessEnv);
     const passwordHash = await bcrypt.hash(plain, 12);
-    const views = USER_VIEWS[u.email];
     const user = await prisma.user.upsert({
       where: { email: u.email },
       create: {
@@ -476,7 +274,7 @@ async function main() {
     });
 
     console.log(
-      `  ✓ ${u.fullName} · ${u.entities.join('+')} · módulos: ${(views?.modules || []).join(', ')}`,
+      `  ✓ ${u.fullName} · ${u.entities.join('+')} · módulos: ${u.modules.join(', ')}`,
     );
   }
 
@@ -544,7 +342,7 @@ async function main() {
 
   console.log('\nSeed OK.');
   console.log('Passwords: SEED_PASSWORD o SEED_PASS_<ALIAS> (ARTURO, CHACHO, RODRIGO…).');
-  console.log('Default dev (si no hay env): ArtaDevLocal-1');
+  console.log('Sin variable: contraseña al azar; se repone desde Panel → Usuarios.');
 }
 
 /** Demo portfolio for walkthroughs / analytics — idempotent via notes marker. */
@@ -561,10 +359,11 @@ async function seedDemoPortfolio() {
     return;
   }
 
-  const arturo = await prisma.user.findUnique({ where: { email: 'arturo@artaproducciones.com' } });
-  const rodrigo = await prisma.user.findUnique({ where: { email: 'rodrigo@artaproducciones.com' } });
-  const williams = await prisma.user.findUnique({ where: { email: 'williams@artaproducciones.com' } });
-  const creatorId = arturo?.id || rodrigo?.id;
+  const porRol = (roleKey: RoleKey) => prisma.user.findFirst({ where: { roleKey, active: true }, orderBy: { createdAt: 'asc' } });
+  const direccion = await porRol(ROLES.DIR_GENERAL);
+  const auditorio = await porRol(ROLES.DIR_AUDITORIO);
+  const apoyo = await porRol(ROLES.SOLO_CARPETAS);
+  const creatorId = direccion?.id || auditorio?.id;
   if (!creatorId) {
     console.log('  · Sin usuarios seed — skip demo events');
     return;
@@ -721,10 +520,10 @@ async function seedDemoPortfolio() {
           title: t.name,
           dataJson: data as Prisma.InputJsonValue,
           progressPct: delivered ? 100 : Math.max(0, Math.min(100, Math.round(progressPct))),
-          lastEditedById: williams?.id || creatorId,
+          lastEditedById: apoyo?.id || creatorId,
           lastEditedAt: new Date(now.getTime() - Math.random() * 5 * 86_400_000),
           deliveredAt: progressPct > 70 ? new Date(now.getTime() - 2 * 86_400_000) : undefined,
-          deliveredById: progressPct > 70 ? (williams?.id || creatorId) : undefined,
+          deliveredById: progressPct > 70 ? (apoyo?.id || creatorId) : undefined,
           authorizedAt: progressPct > 90 ? new Date(now.getTime() - 1 * 86_400_000) : undefined,
           authorizedById: progressPct > 90 ? creatorId : undefined,
         },
@@ -773,8 +572,8 @@ async function seedDemoPortfolio() {
           authorizedById:
             po.status === 'AUTHORIZED' || po.status === 'PAID'
               ? d.entity === 'EXPLANADA'
-                ? rodrigo?.id
-                : arturo?.id
+                ? auditorio?.id
+                : direccion?.id
               : undefined,
           authorizedAt: po.status === 'AUTHORIZED' || po.status === 'PAID' ? createdAt : undefined,
           paidAt: po.status === 'PAID' ? now : undefined,
@@ -793,11 +592,11 @@ async function seedDemoPortfolio() {
       });
     }
 
-    if (williams) {
+    if (apoyo) {
       await prisma.taskAssignment.create({
         data: {
           eventId: event.id,
-          assigneeId: williams.id,
+          assigneeId: apoyo.id,
           title: `Seguimiento ops · ${d.name}`,
           module: 'producción',
           status: d.progressBias > 70 ? 'DONE' : 'OPEN',

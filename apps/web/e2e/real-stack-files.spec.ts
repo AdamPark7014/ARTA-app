@@ -98,8 +98,8 @@ test.describe('Stack real: Excel + Word con archivos reales', () => {
     // 2) Login con usuario seed
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/login');
-    await page.locator('input[name="email"]').fill('arturo@artaproducciones.com');
-    await page.locator('input[name="password"]').fill('ArtaDevLocal-1');
+    await page.locator('input[name="email"]').fill(process.env.E2E_EMAIL ?? '');
+    await page.locator('input[name="password"]').fill(process.env.E2E_PASSWORD ?? '');
     await page.getByRole('button', { name: 'Entrar', exact: true }).click();
     await page.waitForURL('**/dashboard');
     // Global: avoid sticky app header covering screenshots

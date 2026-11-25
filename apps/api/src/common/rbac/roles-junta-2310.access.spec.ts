@@ -11,9 +11,6 @@ import { UsersController } from '../../users/users.controller';
 import { PracticantesController } from '../../practicantes/practicantes.controller';
 import { ChatService, type ChatUser } from '../../chat/chat.service';
 import { CampaignsController } from '../../campaigns/campaigns.controller';
-import { NEW_TEAM_MEMBERS } from '../../../prisma/new-team-members';
-import { isInsideRepo } from '../../../scripts/alta-paula-contabilidad-2310';
-import * as path from 'path';
 
 /**
  * Junta 23-10-2026: los dos roles nuevos, probados contra los controladores reales.
@@ -643,28 +640,5 @@ describe('contabilidad · fuera de su alcance', () => {
   it('un evento que no existe sigue siendo 404 (no se confunde con permisos)', async () => {
     const po = new PurchaseOrdersController({ event: { findUnique: async () => null } } as never, {} as never);
     await expect(po.list({ user: paula } as never, 'nada')).rejects.toBeInstanceOf(NotFoundException);
-  });
-});
-
-describe('alta de Paula Farfán', () => {
-  it('está en las altas del seed como contabilidad en las dos entidades, sin contraseña conocida', () => {
-    const p = NEW_TEAM_MEMBERS.find((m) => m.email === 'paula@artaproducciones.com');
-    expect(p).toMatchObject({
-      fullName: 'Paula Farfán',
-      title: 'Contabilidad y comercial',
-      roleKey: 'contabilidad',
-      entities: ['ARTA', 'EXPLANADA'],
-      passAlias: 'PAULA',
-      randomPasswordUnlessEnv: true,
-    });
-  });
-
-  it('el script nunca escribe la contraseña dentro del repo', () => {
-    const repo = path.resolve(__dirname, '..', '..', '..', '..', '..');
-    expect(isInsideRepo(path.join(repo, 'paula.txt'), repo)).toBe(true);
-    expect(isInsideRepo(path.join(repo, 'apps', 'api', 'x.txt'), repo)).toBe(true);
-    expect(isInsideRepo(repo, repo)).toBe(true);
-    expect(isInsideRepo(path.join(path.dirname(repo), 'fuera', 'paula.txt'), repo)).toBe(false);
-    expect(isInsideRepo(path.join(repo + '-otro', 'paula.txt'), repo)).toBe(false);
   });
 });

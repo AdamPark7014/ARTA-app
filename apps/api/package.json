@@ -11,7 +11,6 @@
     "prisma:migrate": "prisma migrate dev --name init",
     "prisma:deploy": "prisma migrate deploy",
     "prisma:seed": "ts-node --transpile-only prisma/seed.ts",
-    "users:provision": "ts-node --transpile-only scripts/provision-new-users.ts",
     "checklists:backfill-pdf-fields": "ts-node --transpile-only scripts/backfill-checklist-pdf-fields.ts",
     "test": "jest --config jest.config.js",
     "test:watch": "jest --config jest.config.js --watch",

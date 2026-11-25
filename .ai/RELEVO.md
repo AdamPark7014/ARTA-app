@@ -6,6 +6,18 @@
   (Adam es el único programador).
 - **Producción:** sigue en `0f68a31` (2026-11-07). **NO desplegado / NO push este turno.**
 
+## Turno claude-code — 25-11-2026: las personas del seed salen del repo público
+
+- **Hecho (pedido de Adam):** `prisma/seed.ts` ya no trae personas, correos ni contraseña por omisión. El equipo va en un
+  JSON local (`prisma/equipo.local.json` o `SEED_EQUIPO`; copia en `C:/dev/secrets/seeders/arta`). Lector: `prisma/equipo.ts`.
+  Salieron del repo `new-team-members.ts`, `provision-new-users.ts` y `alta-paula-contabilidad-2310.ts` (copia local).
+- **Producción:** el seed del arranque sigue con formatos y Studio; sin el JSON no crea ni toca cuentas (ya existen todas).
+  Antes solo actualizaba nombre y puesto; eso ahora queda en Panel → Usuarios.
+- **CI:** el stack real entra con una cuenta inventada (`test/equipo-prueba.json`) y contraseña nueva en cada corrida.
+- **Pruebas:** API 1,227; tipos de API y web; seed en Postgres desechable con equipo, sin equipo y repetido. El bloque
+  «alta de Paula» de `roles-junta-2310.access.spec.ts` salió con su dato; lo cubre `equipo-local.spec.ts`.
+- **Sin desplegar.** El historial de git conserva lo anterior.
+
 ## Turno cursor (2026-11-22 noche): paridad responsable de formatos
 
 Adam: CONTINUAR noche 22-11; 1-3 huecos + tests; commits locales OK; sin push/deploy; ollama_implement→revisar→Write.

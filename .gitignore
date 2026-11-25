@@ -32,3 +32,6 @@ docs/ACCESS.md
 
 # Reportes de escaneo locales (pueden traer valores de llaves): nunca al repo
 .ai/audit/
+
+# Personas del seed: solo locales (copia en secrets/seeders/arta). El repo es público.
+apps/api/prisma/equipo*.json

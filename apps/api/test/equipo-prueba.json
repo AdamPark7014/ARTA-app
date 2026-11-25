@@ -1,0 +1,17 @@
+{
+  "equipo": [
+    {
+      "email": "direccion@prueba.example",
+      "fullName": "Dirección de prueba",
+      "title": "Dirección",
+      "roleKey": "dir_general",
+      "entities": [
+        "ARTA",
+        "EXPLANADA"
+      ],
+      "passAlias": "PRUEBA",
+      "randomPasswordUnlessEnv": true
+    }
+  ],
+  "renombrados": {}
+}

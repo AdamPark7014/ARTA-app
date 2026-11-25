@@ -25,7 +25,7 @@ import * as ExcelJS from 'exceljs';
 import * as fs from 'fs';
 import * as path from 'path';
 import { ROLE_LABELS, type RoleKey } from '../src/common/rbac/roles';
-import { NEW_TEAM_MEMBERS } from '../prisma/new-team-members';
+import { leerEquipo } from '../prisma/equipo';
 
 const ORG_ID = process.env.ARTA_ORG_ID || 'org_arta_internal';
 
@@ -34,15 +34,7 @@ const ORG_ID = process.env.ARTA_ORG_ID || 'org_arta_internal';
  * de un seed anterior (`@arta.mx`) con roles que ya no aplican: no se les
  * entregan credenciales salvo que se pida `--all`.
  */
-const TEAM_EMAILS = [
-  'arturo@artaproducciones.com',
-  'chacho@artaproducciones.com',
-  'rodrigo@artaproducciones.com',
-  'williams@artaproducciones.com',
-  'leida@artaproducciones.com',
-  'jp@artaproducciones.com',
-  ...NEW_TEAM_MEMBERS.map((m) => m.email),
-];
+const TEAM_EMAILS = leerEquipo().equipo.map((p) => p.email);
 
 /** Sin letras ni números que se confunden al dictarlos (0/O, 1/I/L). */
 const ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';

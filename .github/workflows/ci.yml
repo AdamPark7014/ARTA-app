@@ -149,7 +149,12 @@ jobs:
         run: |
           npx prisma generate
           npx prisma migrate deploy
-          SEED_PASSWORD="ArtaDevLocal-1" npx ts-node --transpile-only prisma/seed.ts
+          # Cuenta inventada con contraseña nueva en cada corrida; el equipo real es local.
+          E2E_PASSWORD="Aa1$(openssl rand -hex 12)"
+          echo "::add-mask::$E2E_PASSWORD"
+          echo "E2E_EMAIL=direccion@prueba.example" >> "$GITHUB_ENV"
+          echo "E2E_PASSWORD=$E2E_PASSWORD" >> "$GITHUB_ENV"
+          SEED_EQUIPO=test/equipo-prueba.json SEED_PASS_PRUEBA="$E2E_PASSWORD" npx ts-node --transpile-only prisma/seed.ts
 
       - name: Build API
         working-directory: apps/api
